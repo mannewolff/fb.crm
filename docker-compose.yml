@@ -1,0 +1,99 @@
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-manban}
+      POSTGRES_USER: ${POSTGRES_USER:-manban}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-manban}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-manban} -d ${POSTGRES_DB:-manban}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  minio:
+    # quay.io statt Docker Hub: `minio/minio` existiert dort nicht mehr. Fester Tag statt
+    # `latest`, damit ein Deployment nicht erneut an einer bewegten Referenz scheitert.
+    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-manban}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-manban-minio}
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  manban-api:
+    build: .
+    environment:
+      MANBAN_BASE_URL: ${MANBAN_BASE_URL:-https://localhost}
+      # Dies ist der lokale Entwicklungs-Stack: Der Schalter erlaubt den Start mit den
+      # unsicheren Defaults unten — die Anwendung warnt dabei. Das Produktions-Overlay
+      # (docker-compose.prod.yml) setzt ihn fest auf false und erbt diesen Wert nicht.
+      MANBAN_DEV_MODE: ${MANBAN_DEV_MODE:-true}
+      # Secret zum Signieren der Session-Tokens. Der Default unten gilt nur im
+      # Entwicklungsbetrieb (MANBAN_DEV_MODE=true) — die Anwendung warnt dann beim Start.
+      # In Produktion verweigert sie ihn; dort zwingend über die .env durch einen
+      # zufälligen 32+-Byte-Wert ersetzen.
+      MANBAN_SESSION_SECRET: ${MANBAN_SESSION_SECRET:-dev-only-insecure-secret-change-me}
+      # Session-Cookie nur über HTTPS ausliefern. Hinter TLS (Prod) true; für reines HTTP-Lokal ggf. false.
+      MANBAN_COOKIE_SECURE: ${MANBAN_COOKIE_SECURE:-true}
+      # Einmal-Token für den ersten Plattform-Admin (leer = deaktiviert; greift nur ohne Admin).
+      MANBAN_BOOTSTRAP_ADMIN_TOKEN: ${MANBAN_BOOTSTRAP_ADMIN_TOKEN:-}
+      MANBAN_DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-manban}
+      MANBAN_DB_USER: ${POSTGRES_USER:-manban}
+      MANBAN_DB_PASSWORD: ${POSTGRES_PASSWORD:-manban}
+      MANBAN_MAIL_ENABLED: ${MANBAN_MAIL_ENABLED:-false}
+      MANBAN_MAIL_FROM: ${MANBAN_MAIL_FROM:-no-reply@manban.local}
+      MANBAN_SMTP_HOST: ${MANBAN_SMTP_HOST:-}
+      MANBAN_SMTP_PORT: ${MANBAN_SMTP_PORT:-1025}
+      MANBAN_SMTP_USER: ${MANBAN_SMTP_USER:-}
+      MANBAN_SMTP_PASSWORD: ${MANBAN_SMTP_PASSWORD:-}
+      MANBAN_SMTP_AUTH: ${MANBAN_SMTP_AUTH:-true}
+      MANBAN_SMTP_STARTTLS: ${MANBAN_SMTP_STARTTLS:-true}
+      MANBAN_MINIO_ENDPOINT: http://minio:9000
+      MANBAN_MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-manban}
+      MANBAN_MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-manban-minio}
+      # Aufraeum- und Zustell-Automatiken. Sie haengen hier, weil eine Variable, die im
+      # environment-Block fehlt, den Container gar nicht erreicht — wer sie nach docs/betrieb.md
+      # in der .env abschaltet, erzielte sonst keine Wirkung, ohne dass etwas anschlaegt.
+      # Jede mit Default: @ConditionalOnProperty(havingValue = "true") liest einen Leerstring als
+      # "nicht true", die Jobs fielen bei der Form ${NAME:-} also stillschweigend weg.
+      MANBAN_CLEANUP_ENABLED: ${MANBAN_CLEANUP_ENABLED:-true}
+      MANBAN_DONE_RETENTION_DAYS: ${MANBAN_DONE_RETENTION_DAYS:-30}
+      MANBAN_OUTBOX_ENABLED: ${MANBAN_OUTBOX_ENABLED:-true}
+      MANBAN_OUTBOX_POLL_INTERVAL_MS: ${MANBAN_OUTBOX_POLL_INTERVAL_MS:-5000}
+      MANBAN_OUTBOX_MAX_ATTEMPTS: ${MANBAN_OUTBOX_MAX_ATTEMPTS:-8}
+      MANBAN_OUTBOX_RETENTION_DAYS: ${MANBAN_OUTBOX_RETENTION_DAYS:-7}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+
+  caddy:
+    image: caddy:2
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      MANBAN_DOMAIN: ${MANBAN_DOMAIN:-localhost}
+      MANBAN_ACME_EMAIL: ${MANBAN_ACME_EMAIL:-admin@localhost}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - manban-api
+
+volumes:
+  postgres_data:
+  minio_data:
+  caddy_data:
+  caddy_config:

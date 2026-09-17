@@ -1,0 +1,21 @@
+# Caddy stellt manban öffentlich bereit und terminiert TLS.
+# Automatisches HTTPS mit HTTP->HTTPS-Redirect:
+#   - Domain "localhost" (Default) -> lokale interne CA (self-signed)
+#   - echte Domain (MANBAN_DOMAIN gesetzt) -> automatisch Let's-Encrypt-Zertifikat
+{
+	email {$MANBAN_ACME_EMAIL:admin@localhost}
+}
+
+{$MANBAN_DOMAIN:localhost} {
+	# Server-Sent-Events (Live-Board, GET /api/boards/*/events) laufen ohne Zusatz-Config:
+	# Caddys reverse_proxy erkennt text/event-stream und flusht solche Streams sofort durch
+	# (kein Buffering, keine gzip-Kompression auf Event-Streams). Kein flush_interval nötig.
+	encode gzip
+	# X-Forwarded-For wird ersetzt, nicht angehaengt: Caddy haengt den Wert sonst hinten an,
+	# und ein vom Client mitgeschickter Eintrag bliebe stehen. Die Zaehlbremse liest zwar von
+	# rechts und kaeme damit zurecht (Issue #899, E2) — aber diese zweite Linie im Proxy haelt
+	# die Umgehung auch dann geschlossen, wenn spaeter trusted-proxy-count oder die
+	# Filterreihenfolge geaendert wird, ohne dass es jemandem auffaellt.
+	header_up X-Forwarded-For {remote_host}
+	reverse_proxy manban-api:8080
+}

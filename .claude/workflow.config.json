@@ -1,0 +1,33 @@
+{
+  "codeHost": "github",
+  "issueTracker": "toolbox",
+  "buildChecks": [],
+  "mutationCommand": "",
+  "mainBranch": "main",
+  "productionBranch": "production",
+  "reviewScope": "diff",
+  "reviewModel": "claude-opus-5",
+  "triggers": {
+    "go": "GO",
+    "push": "push main",
+    "merge": "merge production"
+  },
+  "local": {
+    "issuesDir": "issues"
+  },
+  "columns": {
+    "backlog": "Backlog",
+    "ready": "Ready",
+    "in_progress": "In progress",
+    "in_review": "In review",
+    "done": "Done"
+  },
+  "spec": {
+    "seit": "2026-09-08",
+    "bereiche": {
+      "beispiel": [
+        "src/**"
+      ]
+    }
+  }
+}

@@ -1,0 +1,67 @@
+# Releasing
+
+kanban-kit trägt eine dreiteilige Betriebsversion **X.Y.Z**, gepflegt in [`VERSION`](VERSION)
+(Quelle der Wahrheit) und von dort in `pom.xml` sowie `frontend/package.json`/
+`package-lock.json` synchronisiert. Jede Erhöhung setzt die niedrigeren Teile auf `0` zurück
+(Z zählt „Pushes seit dem letzten Production-Release", Y „Production-Releases seit dem
+letzten Major").
+
+Dieses Dokument wird von den Skills `push-main` und `merge-production` gelesen — sie führen
+die unten genannten Schritte automatisch als Teil des jeweiligen Triggers aus.
+
+## push main
+
+Bei jedem `push main`: Patch-Teil erhöhen (Z+1).
+
+```
+node scripts/bump-version.mjs patch
+```
+
+**Zusätzlich (automatisch, kein manueller Schritt hier):** Jeder Push auf `main` löst
+[.github/workflows/sonarqube.yml](.github/workflows/sonarqube.yml) aus — Backend-/Frontend-Tests
+inkl. Coverage, SonarQube-Cloud-Scan, danach automatischer Sync neuer Findings als Karten ins
+Backlog des Sonar-Boards (kanbancompat-Ingest mit `externalKey`-Idempotenz, siehe
+[scripts/sync-sonar-issues-to-board.mjs](scripts/sync-sonar-issues-to-board.mjs),
+Issue #534–#536; ursprünglich GitHub-Issues, #111/#112). Nicht mehr an den `production`-Merge
+gebunden: SonarCloud (Free-Tier) kennt
+ohnehin nur den `main`-Branch, ein zusätzlicher Scan bei `merge production` wäre nur eine
+redundante Zweitanalyse desselben Commits (main -> production per PR-Merge, siehe unten).
+
+## merge production
+
+Bei jedem `merge production`: Minor-Teil erhöhen (Y+1, Z→0), Changelog schreiben und den
+Release taggen. Schrittfolge:
+
+```
+node scripts/bump-version.mjs minor # VERSION/pom/package auf die neue Version setzen
+node scripts/gen-changelog.mjs      # Changelog-Block der NEUEN Version oben in CHANGELOG.md
+# Release-Commit (VERSION, pom.xml, package(-lock).json, CHANGELOG.md)
+node scripts/bump-version.mjs tag   # annotated Tag vX.Y.Z auf den Release-Commit setzen
+git push origin main --follow-tags  # main + Tag pushen (annotated Tag wird mitgenommen)
+# PR main -> production erstellen (Mannes Merge ist der Stop-Punkt)
+# nach dem Merge: GitHub Release zum Tag vX.Y.Z anlegen (Changelog-Block als Beschreibung)
+```
+
+Reihenfolge beachten: **erst** der Version-Bump, **dann** `gen-changelog.mjs`, **dann** der
+Release-Commit, **erst danach** `bump-version.mjs tag` — das Skript liest die Zielversion aus
+`VERSION` für den Blocktitel; liefe `gen-changelog.mjs` vor dem Bump, entstünde ein Block für die
+alte Version. Der Tag muss nach dem Release-Commit gesetzt werden, sonst zeigt er auf den Commit
+davor statt auf den eigentlichen Release-Stand.
+
+`gen-changelog.mjs` grenzt den Range über den Tag der Vorversion ab (roher Dump der Commit-Titel,
+Keep-a-Changelog-Format). `bump-version.mjs tag` setzt den annotated Tag `vX.Y.Z` (annotated statt
+lightweight, damit `git push --follow-tags` ihn mitnimmt — kein separater Tag-Push nötig), der beim
+nächsten Release wiederum die Range-Untergrenze bildet. Ein `push main` (Patch-Bump) erzeugt
+bewusst weder Changelog-Block noch Tag.
+
+## Major-Version erhöhen
+
+**Nur auf Mannes explizite Anordnung** — er tippt im Chat genau die Phrase
+„Major-Version erhöhen". Kein automatischer Trigger, nicht Teil von `push main` oder
+`merge production`.
+
+```
+node scripts/bump-version.mjs major
+```
+
+Erhöht den Major-Teil (X+1, Y→0, Z→0).
