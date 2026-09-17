@@ -5,3 +5,4 @@
 .claude/workflow.config.local.json
 .claude/board-meta-cache.json
 .DS_Store
+.env
