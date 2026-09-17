@@ -39,17 +39,11 @@ Der Dev-Server (Vite, `:5173`) leitet `/api/*` per Proxy an Spring Boot (`:8080`
 
 ### Performance-Budget
 
-Messung 2026-07-11 nach Einführung von Route-Level Lazy Loading (Issue #63):
-
-| Chunk | Größe (minified) | Gzip | Limit | Status |
-|---|---|---|---|---|
-| `index.js` (Vendor) | ~408 kB | ~131 kB | 600 kB | ✅ Floor: React + MUI + Router |
-| `EpicBadge.js` (react-markdown/remark) | ~170 kB | ~52 kB | 600 kB | ✅ lazy nachgeladen |
-| Alle Route-Chunks | < 10 kB | < 4 kB | 600 kB | ✅ |
+**Grenze: 600 kB je Chunk (minified).** Die Zahlen des laufenden Builds gehören in eine Tabelle an dieser Stelle, sobald es einen Build gibt; der Vendor-Chunk (React + MUI + Router) ist dabei der Boden, alles andere kommt lazy dazu.
 
 **Regeln:**
 - **Route-Level Lazy Loading ist Pflicht** für alle Top-Level-Routen in `App.tsx` (via `React.lazy` + `Suspense`). Kein direktes Import einer Page-Komponente in `App.tsx` ohne `lazy()`.
-- **Neuer Chunk > 600 kB** → Pflicht-Review: lässt sich die Komponente aufteilen? Wenn nein, dokumentierter Ausnahmefall in dieser Tabelle.
+- **Neuer Chunk > 600 kB** → Pflicht-Review: lässt sich die Komponente aufteilen? Wenn nein, dokumentierter Ausnahmefall an dieser Stelle.
 - **Vendor-Bundle** (`index.js`) wird durch MUI-Basis bestimmt. Keine zusätzlichen Abhängigkeiten ins Vendor-Bundle einschleppen, ohne Größe zu prüfen.
 - `build.chunkSizeWarningLimit: 600` in `vite.config.ts` ist die Grenze für Build-Warnungen — entspricht dem dokumentierten Budget.
 
@@ -71,15 +65,15 @@ Messung 2026-07-11 nach Einführung von Route-Level Lazy Loading (Issue #63):
 
 ### Code-Organisation
 
-Aktuelle Struktur unter `frontend/src/`:
+Aufbau unter `frontend/src/` — welche Komponenten, Seiten und Domänen-Module es gibt, entsteht mit den Fachplänen; wohin sie gehören, steht hier:
 
-- `components/` — geteilte UI-Bausteine inkl. `AppShell` (AppBar oben, permanenter Drawer links, Main-Bereich mit `<Outlet />`), `BoardView`, `CardDetailModal`, `NewCardModal`, `EpicBadge`, `AuthCard`, `AttachmentPreview`.
-- `layout/` — `navItems` (Navigationsstruktur der Sidebar).
-- `pages/` — Routen-Komponenten (`ProjectsPage`, `ProjectBoardsPage`, `BoardPage`, `BoardListPage`, `EpicsPage`, `ProjectMembersPage`, `AdminPage`, `RolesPage` + Auth-Seiten Login/Signup/Verify/Forgot/Reset/Bootstrap/AcceptInvitation).
+- `components/` — geteilte UI-Bausteine, darunter `AppShell` (Schiene links, Kopf oben, Inhaltsbereich mit `<Outlet />`) und `AuthCard`.
+- `layout/` — `navItems` (Einträge der Schiene).
+- `pages/` — Routen-Komponenten: die Auth-Seiten (Login/Signup/Verify/Forgot/Reset/Bootstrap) plus je eine Komponente pro fachlicher Ansicht.
 - `routes/` — `ProtectedRoute` (Session-Guard).
 - `auth/` — `AuthContext` (Session-basierter Auth-State).
-- `api/` — Typisierte API-Aufrufe (`client.ts` als fetch-Wrapper, je Domäne eine eigene Datei: `auth`, `projects`, `boards`, `cards`, `epics`, `comments`, `attachments`, `members`, `roles`, `admin`, `config`).
-- `lib/` — Frontend-Hilfslogik (`statusColors`, `boardOps`, `roles`, `epicMeta`, …) — reine, gut testbare Module.
+- `api/` — Typisierte API-Aufrufe: `client.ts` als fetch-Wrapper, je Domäne eine eigene Datei.
+- `lib/` — Frontend-Hilfslogik — reine, gut testbare Module ohne React-Bezug.
 - `theme.ts` — MUI-Theme zentral (Tokens laut CLAUDE-design.md).
 - `main.tsx` — React-Root, `BrowserRouter`, `ThemeProvider`, `CssBaseline`.
 - `App.tsx` — `<Routes>` mit `React.lazy`-Pages in `<Suspense>`.
@@ -122,7 +116,7 @@ Aktuelle Struktur unter `frontend/src/`:
 ## 🌐 Datenzugriff & APIs
 
 - Externer Input ist unsicher, bis er validiert und gemappt wurde. Sicherheitsrelevante Endpoints übergeben dem Wrapper einen `parse`-Type-Guard (z. B. `authApi.me`/`login` → `parseMe`), der die Antwort zur Laufzeit verengt.
-- API-Aufrufe gehören in `frontend/src/api/` (aktuell `client.ts` + Domänen-Module wie `boards.ts`, `cards.ts`, `projects.ts`), nicht direkt in Komponenten.
+- API-Aufrufe gehören in `frontend/src/api/` (`client.ts` + ein Domänen-Modul je Fachbereich), nicht direkt in Komponenten.
 - **Fehlerbehandlung an der Quelle:** Das Backend antwortet mit RFC-9457 Problem Details (`application/problem+json`, `GlobalExceptionHandler`); der `client.ts`-Wrapper wirft `ApiError` mit Statuscode, `detail`/`title` als Message und optionalem, typisiertem `fieldErrors`. UI mappt das auf nutzerverständliche Fehler.
 - **Keine leeren `catch`-Blöcke.**
 - **Keine technischen Fehlertexte (Stacktraces, Endpoints, Tokens) im UI.**
@@ -169,14 +163,14 @@ Aktuelle Struktur unter `frontend/src/`:
 - Routenkomponenten bleiben schlank — Datenladen und Komposition in Sub-Komponenten oder Hooks.
 - Lade- und Fehlerzustände auf Routenebene behandeln, wenn dort geladen wird.
 - URL-Parameter validieren oder defensiv interpretieren (`Number.parseInt(id, 10)` + Range-Check, nicht naked `+id`).
-- React Router läuft mit Browser-History — der serverseitige SPA-Fallback (Spring `SpaWebConfig`) sorgt dafür, dass Direktaufrufe von Sub-URLs funktionieren.
+- React Router läuft mit Browser-History — der serverseitige SPA-Fallback in Spring (Web-Konfiguration unter `config/`) sorgt dafür, dass Direktaufrufe von Sub-URLs funktionieren.
 
 ---
 
 ## 🧪 Tests
 
 - Neue oder geänderte Logik braucht Tests (Vitest + React Testing Library).
-- **Coverage-Gate:** `npm run test:coverage` (v8-Provider) bricht bei Unterschreitung der Schwellen in `vite.config.ts` (Stand 2026-07-16: 93 % Lines/Statements, 90 % Branches, 79 % Functions — ehrlicher Ist-Floor gegen Rückschritt). Ausschlüsse einzeln begründet in der Config; läuft auch in CI.
+- **Coverage-Gate:** `npm run test:coverage` (v8-Provider) bricht bei Unterschreitung der Schwellen in `vite.config.ts`. Die Schwellen sind der ehrliche Ist-Floor gegen Rückschritt und werden nur angehoben, nie gesenkt. Ausschlüsse einzeln begründet in der Config; läuft auch in CI.
 - Verhalten testen, nicht Implementierungsdetails — Tests sollen aus Nutzerperspektive lesbar sein.
 - **Asynchrones Erscheinen:** `await screen.findByX(...)` statt `await waitFor(() => expect(screen.getByX(...)).toBeInTheDocument())` — die ESLint-Regel `testing-library/prefer-find-by` erzwingt das (autofixbar). `waitFor` bleibt legitim für mehrere Assertions oder Nicht-Query-Bedingungen (z. B. `expect(mock).toHaveBeenCalled()`).
 - Kritische UI-Zustände abdecken: Loading, Error, Empty, Success, Disabled.
@@ -219,7 +213,7 @@ Aktuelle Struktur unter `frontend/src/`:
 cd frontend && npm run lint   # ESLint auf src/
 ```
 
-**Konfiguration:** [`eslint.config.js`](frontend/eslint.config.js) (flat config, ESLint 9+)
+**Konfiguration:** `frontend/eslint.config.js` (flat config, ESLint 9+)
 - `typescript-eslint` (recommended): TypeScript-Korrektheit, kein `any`
 - `eslint-plugin-react` (recommended + jsx-runtime): React-Regeln
 - `eslint-plugin-react-hooks` (recommended): Hooks-Regeln, `exhaustive-deps`
@@ -229,7 +223,7 @@ cd frontend && npm run lint   # ESLint auf src/
 
 **Leitplanke im Gate statt Doku, die bittet.** Wenn ein Modell wiederholt dasselbe veraltete/nicht-idiomatische Muster reproduziert (es kennt das *häufigste*, nicht das *aktuellste* aus dem Trainingskorpus — so entstanden die `prefer-find-by`- und `inputProps`-Wellen, die erst spät bei Sonar auffielen), ist die wirksame Antwort eine **harte ESLint-Regel im Pflicht-Gate**, nicht ein Satz in dieser Datei. Doku wird übersehen; das Gate nicht.
 
-**Regel-Deaktivierungen** stehen einzeln begründet in der Config — pauschales Abschalten von Kategorien ist verboten. **Neue `eslint-disable`-Kommentare** im Produktivcode brauchen einen Begründungskommentar direkt darüber (etabliertes Beispiel: die zwei dokumentierten `exhaustive-deps`-Ausnahmen für das Auto-Routing in ProjectsPage/ProjectBoardsPage).
+**Regel-Deaktivierungen** stehen einzeln begründet in der Config — pauschales Abschalten von Kategorien ist verboten. **Neue `eslint-disable`-Kommentare** im Produktivcode brauchen einen Begründungskommentar direkt darüber, der sagt, warum die Regel hier nicht greift.
 
 **Pflichtchecks vor Push (Frontend):**
 
@@ -245,7 +239,7 @@ cd frontend && npm test         # Vitest
 
 - **Ist:** React 18.3, Vite 5.4, MUI 6.1, React Router 6.28, TypeScript 5.6, Vitest 2.1.
 - **Zielkorridor (jeweils eigener Plan, kein Nebenbei-Upgrade):** React 19 + **React Compiler** (macht manuelles `useMemo`/`useCallback`/`React.memo` weitgehend obsolet — bis dahin gilt die Memoization-Zurückhaltung aus §Performance), Vite 7, MUI 7, React Router 7, Vitest 3+.
-- **Bewusst offene Architektur-Optionen** (bei Bedarf eigener `/plan`, nicht nebenbei einführen): TanStack Query für Server-State (würde die handgeschriebenen Cancellation-Flags ersetzen), Playwright-E2E für Login-/Board-Golden-Paths.
+- **Bewusst offene Architektur-Optionen** (bei Bedarf eigener `/plan`, nicht nebenbei einführen): TanStack Query für Server-State (würde die handgeschriebenen Cancellation-Flags ersetzen), Playwright-E2E für die Golden Paths.
 
 ---
 

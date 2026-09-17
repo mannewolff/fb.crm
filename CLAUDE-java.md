@@ -11,7 +11,7 @@ Ergänzend zu [CLAUDE.md](CLAUDE.md), [CLAUDE-security.md](CLAUDE-security.md) u
 - **Sprache:** Java 25 (LTS), keine Preview-Features ohne explizite Freigabe. Die Version wird durch `maven-enforcer-plugin` erzwungen (`requireJavaVersion=[25,26)`), der Build bricht auf jeder anderen JDK-Hauptversion ab. Wenn lokal eine andere JDK aktiv ist, entweder `JAVA_HOME=/opt/homebrew/opt/openjdk@25/libexec/openjdk.jdk/Contents/Home` setzen oder `maven-toolchains-plugin` über `~/.m2/toolchains.xml` konfigurieren (Beispiel im Repo: `infra/toolchains.xml.example`).
 - **Framework:** Spring Boot 3.5.
 - **Build:** Maven 3.9+. Compiler läuft mit `-Xlint:all -Werror`; jede Warnung bricht den Build. Enforcer prüft zusätzlich `dependencyConvergence` und `banDuplicatePomDependencyVersions`.
-- **Datenbank:** PostgreSQL 16 (Testcontainers in Integrationstests). Objektspeicher für Anhänge: MinIO (S3-kompatibel).
+- **Datenbank:** PostgreSQL 16 (Testcontainers in Integrationstests). Objektspeicher: MinIO (S3-kompatibel) für Anhänge an Vorgängen und für die archivierten Dokumente (Angebot, Rechnung, Leistungsnachweis).
 - **Schema-Migration:** Flyway (`src/main/resources/db/migration/`, `V<n>__<beschreibung>.sql`).
 - **Paradigma:** Strenges Test-Driven Development (TDD) nach Kent Beck — **Red → Green → Refactor**.
 - **Qualitätsziel:** 100 % Zeilenabdeckung, 100 % Branch-Abdeckung, 100 % Mutationsabdeckung. Keine Ausnahmen ohne dokumentierte Begründung im Code.
@@ -130,17 +130,18 @@ Ausgeschlossen werden **ausschließlich**:
 - DTOs/Records/Projektionen **nur**, wenn sie keinerlei Logik enthalten (keine compact constructors, keine berechneten Felder).
 - **Infrastruktur-Adapter, Entities und Spring-Data-Repositories, die nur gegen echte
   Infrastruktur sinnvoll testbar sind** und dort per Testcontainers-`*IT` zu 100 % abgedeckt
-  werden (real: die `*Entity`-Klassen, `*JpaRepository`, `*RepositoryAdapter`/`Jdbc*` sowie die
-  Mail-/S3-Adapter `JavaMail*`/`MinioObjectStorage`). Sie bleiben ausgeschlossen, weil sie ohne
+  werden (Muster: die `*Entity`-Klassen, `*JpaRepository`, `*RepositoryAdapter`/`Jdbc*` sowie
+  die Mail-/S3-Adapter). Sie bleiben ausgeschlossen, weil sie ohne
   echte Infrastruktur nicht sinnvoll prüfbar sind — **nicht**, weil IT-Coverage technisch nicht
   ankäme: Surefire und Failsafe erben dieselbe JaCoCo-`argLine` und schreiben beide in
-  `jacoco.exec` (die frühere Aussage an dieser Stelle war falsch, siehe Issue #495). **Nicht**
+  `jacoco.exec` (die frühere Aussage an dieser Stelle war falsch, siehe kanban-kit#495). **Nicht**
   ausgeschlossen werden Klassen, die mit gemockten Ports unit-testbar
-  sind — Controller, Security-Filter und `Sha256TokenCryptoAdapter` sind deshalb unit-getestet
-  und **in** der Coverage.
+  sind — Controller, Security-Filter und Krypto-Adapter mit reiner Rechenlogik sind deshalb
+  unit-getestet und **in** der Coverage.
 - **Krypto-Plumbing mit nachweislich nicht erreichbaren Zweigen** (Checked-Exceptions garantiert
-  verfügbarer JCA-Provider): real `SecureTokens` (klassenweise) und der `hmac`-Catch in
-  `SignedSessionTokens` (methodengenau via `@ExcludeFromJacocoGeneratedReport`, s. §5.4).
+  verfügbarer JCA-Provider): etwa die Token-Erzeugung `SecureTokens` (klassenweise) und der
+  `hmac`-Catch der Session-Token-Signatur (methodengenau via
+  `@ExcludeFromJacocoGeneratedReport`, s. §5.4).
 
 Jeder Ausschluss steht **explizit** (klassenweise, keine Paket-Wildcards) in der `pom.xml` und
 ist dort begründet. Pauschale Paket-Ausschlüsse sind verboten. Für jede ausgeschlossene Klasse
@@ -179,7 +180,7 @@ Wenn 100 % unmöglich erscheinen, lautet die Antwort **nicht** „Schwellwert se
 - **Records bevorzugen** für unveränderliche Daten.
 - **`final` als Default** für Felder, Parameter, lokale Variablen — Veränderlichkeit muss begründet sein.
 - **Null vermeiden:** `Optional` für Rückgabewerte, niemals als Parameter oder Feld. Sammlungen niemals null, immer leer.
-  - **Erzwungen durch JSpecify + NullAway (Issue #0080):** Jedes Fachpackage trägt `@NullMarked` (`package-info.java`) — Referenzen sind damit per Default non-null. Wo `null` fachlich legitim ist (z. B. `Card.movedToDoneAt`, `parentId`, IDs vor der Persistierung), steht explizit `org.jspecify.annotations.Nullable` an der Komponente/dem Parameter. NullAway läuft als Error-Prone-Plugin im JSpecify-Modus mit `-Xep:NullAway:ERROR`: jedes Finding bricht den Build. Findings werden behoben (echte Lücke schließen oder `@Nullable` dort, wo es fachlich stimmt), nie unterdrückt. Die ID persistierter Instanzen liefert `Identifiable.requireId()` statt verstreuter `requireNonNull`-Aufrufe. Das Gate gilt für Produktivcode; Testcode kompiliert ohne NullAway (Tests konstruieren absichtlich mit `null`), Error Prone bleibt dort aktiv.
+  - **Erzwungen durch JSpecify + NullAway (kanban-kit#0080):** Jedes Fachpackage trägt `@NullMarked` (`package-info.java`) — Referenzen sind damit per Default non-null. Wo `null` fachlich legitim ist (z. B. ein Datum, das erst später gesetzt wird, oder IDs vor der Persistierung), steht explizit `org.jspecify.annotations.Nullable` an der Komponente/dem Parameter. NullAway läuft als Error-Prone-Plugin im JSpecify-Modus mit `-Xep:NullAway:ERROR`: jedes Finding bricht den Build. Findings werden behoben (echte Lücke schließen oder `@Nullable` dort, wo es fachlich stimmt), nie unterdrückt. Die ID persistierter Instanzen liefert `Identifiable.requireId()` statt verstreuter `requireNonNull`-Aufrufe. Das Gate gilt für Produktivcode; Testcode kompiliert ohne NullAway (Tests konstruieren absichtlich mit `null`), Error Prone bleibt dort aktiv.
 - **Keine Exceptions zur Ablaufsteuerung.** Checked Exceptions nur, wenn der Aufrufer reagieren kann; sonst eigene unchecked Domänenexceptions.
 - **Keine statischen Hilfsmethoden mit Zustand.** Keine `Calendar`/`Date` — nur `java.time`.
 - **`Clock` injizieren** statt `LocalDateTime.now()` direkt aufzurufen. Sonst sind Zeitlogiken untestbar.
@@ -192,12 +193,12 @@ Wenn 100 % unmöglich erscheinen, lautet die Antwort **nicht** „Schwellwert se
 - **Keine Geschäftslogik in Controllern.** Controller validieren, delegieren, mappen Statuscodes — mehr nicht.
 - **Transaktionsgrenzen** in der Application-Schicht (`@Transactional` auf Use-Case-Klassen), nicht auf Repositories oder Controllern.
 - **Konfiguration über `@ConfigurationProperties`-Records** mit Bean Validation (`@Validated`).
-- **Fehlerbehandlung nach außen:** zentral im globalen `@RestControllerAdvice` [`GlobalExceptionHandler`](src/main/java/org/mwolff/manban/common/web/GlobalExceptionHandler.java) — die einzige Stelle für Fehler-Mapping. Er mappt die `@ResponseStatus`-annotierten Domänenexceptions (Statuscode generisch aus der Annotation) und Bean-Validation-Fehler (400 + `fieldErrors`-Extension) auf RFC-9457 Problem Details (`ProblemDetail`, `application/problem+json`); unerwartete Fehler ergeben 500 mit generischem `detail` — keine Stacktraces/internen Details nach außen.
+- **Fehlerbehandlung nach außen:** zentral im globalen `@RestControllerAdvice` `GlobalExceptionHandler` (`org.mwolff.fbcrm.common.web`) — die einzige Stelle für Fehler-Mapping. Er mappt die `@ResponseStatus`-annotierten Domänenexceptions (Statuscode generisch aus der Annotation) und Bean-Validation-Fehler (400 + `fieldErrors`-Extension) auf RFC-9457 Problem Details (`ProblemDetail`, `application/problem+json`); unerwartete Fehler ergeben 500 mit generischem `detail` — keine Stacktraces/internen Details nach außen.
 
 ### 6.4 Datenbank
 
 - Schemamigrationen ausschließlich über **Flyway**. Niemals `hibernate.ddl-auto=update/create` außerhalb von Tests. In Produktion: `validate`.
-- Integrationstests verwenden **dieselbe DB-Engine** wie Produktion (PostgreSQL via Testcontainers). Alle `*IT` erben von `AbstractIntegrationTest`: **eine** geteilte Postgres-/MinIO-Singleton-Instanz für die ganze Suite (`@ServiceConnection`, Start im statischen Initialisierer — bewusst ohne `@Container`, die JUnit-Extension würde pro Klasse stoppen). Datenisolation: vor jeder Testmethode werden alle Fachtabellen geleert (Seed-Tabellen `permission`/`role_permission` bleiben).
+- Integrationstests verwenden **dieselbe DB-Engine** wie Produktion (PostgreSQL via Testcontainers). Alle `*IT` erben von `AbstractIntegrationTest` (`org.mwolff.fbcrm`): **eine** geteilte Postgres-/MinIO-Singleton-Instanz für die ganze Suite (`@ServiceConnection`, Start im statischen Initialisierer — bewusst ohne `@Container`, die JUnit-Extension würde pro Klasse stoppen). Datenisolation: vor jeder Testmethode werden alle Fachtabellen geleert (Seed-Tabellen `permission`/`role_permission` bleiben).
 - Repository-Tests prüfen tatsächliche SQL-Ausführung, nicht nur Spring-Data-Methodennamen.
 - **Prepared Statements / Parameter-Bindung** ist Pflicht. Niemals Benutzereingaben in JPQL/SQL konkatenieren. Siehe [CLAUDE-security.md](CLAUDE-security.md).
 

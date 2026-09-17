@@ -22,7 +22,7 @@ Diese Datei ist der Einstiegspunkt für alle Engineering-Regeln in diesem Projek
 | **CLAUDE.md** (diese Datei) | Projekt-Übersicht + Pflichtchecks | ❌ Projekt |
 | [CLAUDE-java.md](CLAUDE-java.md) | Java 25, Spring Boot 3, TDD, Coverage, Mutationstests | ✅ Allgemein |
 | [CLAUDE-react.md](CLAUDE-react.md) | React 18, Vite, TypeScript, MUI, Lazy Loading, ESLint/A11y | ✅ Allgemein |
-| [CLAUDE-design.md](CLAUDE-design.md) | Palette, Font, Radien, Tiefe, Kontrast des Leitstands | ❌ Projekt |
+| [CLAUDE-design.md](CLAUDE-design.md) | Palette, Font, Radien, Tiefe, Kontrast von fb.crm | ❌ Projekt |
 | [CLAUDE-security.md](CLAUDE-security.md) | Spring Security, JPA, Frontend-XSS, Secrets, Session-/Token-Handling | ✅ Allgemein |
 | [CLAUDE-workflow.md](.claude/CLAUDE-workflow.md) | 9-Schritte-Workflow, Issues, Git, Pflichtchecks | ✅ Allgemein |
 
@@ -30,7 +30,9 @@ Diese Datei ist der Einstiegspunkt für alle Engineering-Regeln in diesem Projek
 
 ## 🌐 Projektkontext
 
-**Ziel:** **kanban-kit** (Repo `manban`) — ein self-hostbares, mandantenfähiges Kanban-Board als schlanke Trello-Alternative zum Selbstbetreiben. Projekte, Boards mit konfigurierbaren Spalten, Karten mit Markdown, Vorhaben, Datei-Anhänge (Bild-/PDF-Vorschau) und eine rollenbasierte Rechteverwaltung (Projekt- und Plattform-Rollen). UI im Stil eines Dashboards: linke Navigation, rechter Inhaltsbereich.
+**Ziel:** **fb.crm** — ein self-hostbares Mini-CRM für Freiberufler nach [`mini-crm-spezifikation.pdf`](mini-crm-spezifikation.pdf). Es bildet die Kette von der ersten Anfrage bis zum Zahlungseingang an einer Stelle ab: Anfrage, Angebot, Auftrag, Rechnung, Zahlung. Klammer darüber ist der **Vorgang** — er trägt die durchgehende Historie aus Kommentaren, eingefügten Nachrichten und Anhängen, während Angebot, Auftrag und Rechnung eigenständige Dokumente mit eigenem Lebenszyklus sind (Spezifikation R2, Kapitel 03). Dazu Zeiterfassung gegen Auftragspositionen mit Budgetüberwachung, Angebot/Rechnung/Leistungsnachweis als PDF mit Nummernkreis und Festschreibung, Fälligkeits- und Zahlungsüberwachung sowie die Auswertungen Pipeline, Auftragsbestand und Umsatz. UI im Stil eines Dashboards: linke Navigation, rechter Inhaltsbereich.
+
+**Nicht im Umfang** (Kapitel 01 der Spezifikation): Buchhaltung, Umsatzsteuervoranmeldung und Steuererklärung; Kalender, Aufgabenverwaltung und Terminplanung; automatischer Abgleich von Kontoumsätzen (Zahlungseingänge werden manuell erfasst). **Eine bewusste Ausnahme:** Mehrbenutzerbetrieb, Rollen und Rechte schließt die Spezifikation aus — die Anwendung bringt sie trotzdem mit, in der Form unten unter *Identity / Auth* (Entscheidung Manne, 2026-09-17).
 
 **Stack:**
 
@@ -40,7 +42,7 @@ Diese Datei ist der Einstiegspunkt für alle Engineering-Regeln in diesem Projek
 | Backend-Framework | Spring Boot 3.5, Spring Data JPA, Spring Web |
 | Build (Backend) | Maven (inkl. `frontend-maven-plugin` für den Vite-Build) |
 | Datenbank | PostgreSQL 16 |
-| Objektspeicher | MinIO (S3-kompatibel) für Datei-Anhänge |
+| Objektspeicher | MinIO (S3-kompatibel) für Anhänge an Vorgängen und archivierte Dokumente (Angebot, Rechnung, Leistungsnachweis — Spezifikation R10) |
 | Schema-Migrationen | Flyway (`db/migration/V<n>__…sql`) |
 | Test (Backend) | JUnit 5, AssertJ, Mockito, Testcontainers, ArchUnit, PIT |
 | Frontend-Sprache | TypeScript (`strict: true`) |
@@ -49,51 +51,52 @@ Diese Datei ist der Einstiegspunkt für alle Engineering-Regeln in diesem Projek
 | UI-Library | Material UI 6 (MUI) + Emotion |
 | Test (Frontend) | Vitest + React Testing Library |
 | Containerisierung | Docker (Multi-Stage: Node + Maven + JRE), Docker Compose |
-| Reverse-Proxy | Caddy 2 (automatisches TLS, `https://localhost` bzw. `MANBAN_DOMAIN`) |
+| Reverse-Proxy | Caddy 2 (automatisches TLS, `https://localhost` bzw. `FBCRM_DOMAIN`) |
 | Identity / Auth | Eigenes E-Mail/Passwort-Auth mit Session-Cookies (kein Keycloak/OIDC) |
 
-**Verbindung Frontend↔Backend:** Im Dev leitet der Vite-Dev-Server (`:5173`) `/api/*` an Spring Boot auf `:8080` weiter. In Produktion serviert Spring Boot den React-Build aus `classpath:/static/` (SPA-Forwarding über [`SpaWebConfig`](src/main/java/org/mwolff/manban/config/SpaWebConfig.java)); davor liegt Caddy als Reverse-Proxy mit TLS. Eine Origin, kein CORS.
+**Verbindung Frontend↔Backend:** Im Dev leitet der Vite-Dev-Server (`:5173`) `/api/*` an Spring Boot auf `:8080` weiter. In Produktion serviert Spring Boot den React-Build aus `classpath:/static/` (SPA-Forwarding über eine eigene Web-Konfiguration in `config/`); davor liegt Caddy als Reverse-Proxy mit TLS. Eine Origin, kein CORS.
 
-**Identity / Auth:** Authentifizierung ist projekteigen — kein externer Identity-Provider. Registrierung mit E-Mail-Verifikation, Passwort-Reset per Token/Mail, ein per Bootstrap-Token angelegter erster Plattform-Admin, sowie signierte Session-Tokens (HttpOnly-Cookie). Für den Kanban-kompatiblen Ingest ohne Login gibt es projektgebundene Access-Tokens (`accesstoken` + `kanbancompat`). Autorisierung ist rollenbasiert: **Projekt-Rollen** (RBAC pro Projekt) plus **Plattform-Admin**. Rollen- und Rechte-Matrix: [docs/rollen-und-rechte.md](docs/rollen-und-rechte.md).
+**Identity / Auth:** Authentifizierung ist projekteigen — kein externer Identity-Provider. Registrierung mit E-Mail-Verifikation, Passwort-Reset per Einmal-Token/Mail, ein per Bootstrap-Token angelegter erster Plattform-Admin, sowie signierte, zustandslose Session-Tokens (HttpOnly-Cookie) mit kontogebundener Sitzungs-Generation; Passwörter mit Argon2id. Autorisierung ist rollenbasiert: **Plattform-Admin** plus weitere Rollen. Welche Rollen es gibt und worauf sie wirken, entsteht mit dem ersten Fachplan, der Rechte berührt — fb.crm kennt keine Projekt-Klammer, an der Rollen hängen könnten. Regeln dazu: [CLAUDE-security.md](CLAUDE-security.md).
 
 ---
 
 ## 📂 Projektstruktur
 
+Das Folgende ist die **Soll-Struktur**. Sie steht hier, damit jedes Arbeitspaket weiß, wohin es legt, was es baut — nicht als Bestandsaufnahme: Gerüst (`pom.xml`, `Dockerfile`, `.env.example`, `frontend/`) und fachliche Module entstehen mit dem ersten Durchstich.
+
 ```
 /
 ├── CLAUDE*.md                          # Guide-Familie (Workflow-Guide unter .claude/)
+├── mini-crm-spezifikation.pdf          # fachliche Spezifikation (Quelle des Projektziels)
+├── docs/entwurf-leitstand.html         # Gestaltungsvorlage „Kupferwarte" (siehe CLAUDE-design.md)
 ├── pom.xml                             # Maven-Konfiguration (inkl. frontend-maven-plugin)
 ├── Dockerfile, docker-compose.yml      # Multi-Stage-Image + lokale Composition (Postgres, MinIO, Caddy)
+├── docker-compose.prod.yml             # Produktions-Overlay hinter Traefik (Host aus FBCRM_DOMAIN)
 ├── Caddyfile                           # Reverse-Proxy + automatisches TLS
 ├── .env.example                        # DB-, MinIO- und App-Konfig-Vorlage
-├── .claude/workflow.config.json        # issueTracker: toolbox — Issues auf dem Board https://kanban.mwolff.org (node .claude/kit/board.mjs)
-├── src/main/java/org/mwolff/manban/    # Backend (je Modul: domain/application/web/infrastructure)
-│   ├── ManbanApplication.java
+├── .claude/workflow.config.json        # issueTracker: toolbox — Issues auf dem Board (node .claude/kit/board.mjs)
+├── src/main/java/org/mwolff/fbcrm/     # Backend (je Modul: domain/application/web/infrastructure)
+│   ├── FbCrmApplication.java
 │   ├── auth/                           # Registrierung, Login, Session, Passwort-Reset, Bootstrap-Admin
-│   ├── project/                        # Projekte, Mitgliedschaften, RBAC (Projekt-Rollen)
-│   ├── board/                          # Boards + konfigurierbare Spalten
-│   ├── card/                           # Karten, Vorhaben, Abhängigkeiten, Done-Retention-Job
-│   ├── comment/                        # Kommentare an Karten
-│   ├── attachment/                     # Datei-Anhänge (MinIO-Speicher, Bild-/PDF-Vorschau)
-│   ├── accesstoken/                    # Projektgebundene API-/Ingest-Tokens
-│   ├── kanbancompat/                   # Kanban-kompatibler Ingest (Token→Board-Binding)
-│   ├── config/                         # SpaWebConfig (SPA-Forwarding)
-│   └── common/                         # SecureTokens, gemeinsame Token-Utilities
+│   ├── config/                         # SPA-Forwarding und sonstiges Wiring
+│   ├── common/                         # SecureTokens, gemeinsame Token-Utilities
+│   └── …                               # fachliche Module (Vorgang, Angebot, Auftrag, Zeit,
+│                                       #   Rechnung, Zahlung, …) — Schnitt und Namen entstehen
+│                                       #   mit den Plänen, nicht hier
 ├── src/main/resources/                 # application.yml + Flyway-Migrationen
 │   └── db/migration/                   # V1__baseline.sql … (Flyway-Konvention, Postgres)
-├── src/test/java/org/mwolff/manban/    # Tests (*Test = Unit/Slice, *IT = Testcontainers-Integration)
+├── src/test/java/org/mwolff/fbcrm/     # Tests (*Test = Unit/Slice, *IT = Testcontainers-Integration)
 └── frontend/                           # React-App
     ├── package.json, vite.config.ts, tsconfig*.json
     ├── index.html
     └── src/
         ├── main.tsx, App.tsx, theme.ts
         ├── auth/                       # AuthContext (Session-basiert)
-        ├── layout/                     # navItems
-        ├── components/                 # geteilte UI-Bausteine (AppShell, BoardView, Modals, …)
-        ├── pages/                      # Routen-Komponenten (Projects, Boards, Vorhaben, Admin, Auth-Seiten)
+        ├── layout/                     # navItems (Einträge der Schiene)
+        ├── components/                 # geteilte UI-Bausteine (AppShell mit Schiene und Kopf, …)
+        ├── pages/                      # Routen-Komponenten (Auth-Seiten + fachliche Ansichten)
         ├── routes/                     # ProtectedRoute
-        ├── lib/                        # Frontend-Hilfsfunktionen (statusColors, boardOps, …)
+        ├── lib/                        # reine Frontend-Hilfsfunktionen
         ├── api/                        # client.ts (fetch-Wrapper) + <domain>.ts
         └── test/                       # Vitest-Setup
 ```
@@ -142,16 +145,16 @@ Keine kurzfristige Bequemlichkeit rechtfertigt unsicheren, untypisierten oder sc
 
 ---
 
-**TL;DR:** Java 25 + Spring Boot 3 (TDD-pflichtig, 100 % Coverage) auf PostgreSQL 16 + MinIO. React 18 + TypeScript strict + MUI. Eigenes Session-Auth, rollenbasierte Rechte. Sicherheit > Korrektheit > Komfort. Vor jedem Push: `mvn verify` und `npm run build`/`lint`/`test` grün. Plan-Mode und Board-Issues sind verbindlich (siehe Workflow).
+**TL;DR:** fb.crm ist ein Mini-CRM für Freiberufler — Anfrage bis Zahlungseingang, der Vorgang als Klammer. Java 25 + Spring Boot 3 (TDD-pflichtig, 100 % Coverage) auf PostgreSQL 16 + MinIO. React 18 + TypeScript strict + MUI im Erscheinungsbild „Kupferwarte". Eigenes Session-Auth, rollenbasierte Rechte. Sicherheit > Korrektheit > Komfort. Vor jedem Push: `mvn verify` und `npm run build`/`lint`/`test` grün. Plan-Mode und Board-Issues sind verbindlich (siehe Workflow).
 
 ## Gedächtnis (Obsidian-Vault)
 
 Über den MCP-Server obsidian-memory hast du Zugriff auf meinen
 Gedächtnis-Vault unter /Users/manfredwolff/Nextcloud/ClaudeMemory.
 
-- Lies zu Sessionbeginn Projekte/kanban-kit/kanban-kit.md (Projektstand,
+- Lies zu Sessionbeginn Projekte/fb.crm/fb.crm.md (Projektstand,
   Entscheidungen, offene Punkte).
 - Lies Index.md und Profil.md nur bei Bedarf.
 - Wenn ich "Tagesabschluss" sage: Halte neue Entscheidungen und
-  den erreichten Stand in Projekte/kanban-kit/kanban-kit.md fest und ergänze
+  den erreichten Stand in Projekte/fb.crm/fb.crm.md fest und ergänze
   in Index.md unter "Zuletzt aktualisiert" eine Zeile.

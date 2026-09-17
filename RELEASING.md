@@ -1,6 +1,6 @@
 # Releasing
 
-kanban-kit trägt eine dreiteilige Betriebsversion **X.Y.Z**, gepflegt in [`VERSION`](VERSION)
+fb.crm trägt eine dreiteilige Betriebsversion **X.Y.Z**, gepflegt in [`VERSION`](VERSION)
 (Quelle der Wahrheit) und von dort in `pom.xml` sowie `frontend/package.json`/
 `package-lock.json` synchronisiert. Jede Erhöhung setzt die niedrigeren Teile auf `0` zurück
 (Z zählt „Pushes seit dem letzten Production-Release", Y „Production-Releases seit dem
@@ -16,16 +16,6 @@ Bei jedem `push main`: Patch-Teil erhöhen (Z+1).
 ```
 node scripts/bump-version.mjs patch
 ```
-
-**Zusätzlich (automatisch, kein manueller Schritt hier):** Jeder Push auf `main` löst
-[.github/workflows/sonarqube.yml](.github/workflows/sonarqube.yml) aus — Backend-/Frontend-Tests
-inkl. Coverage, SonarQube-Cloud-Scan, danach automatischer Sync neuer Findings als Karten ins
-Backlog des Sonar-Boards (kanbancompat-Ingest mit `externalKey`-Idempotenz, siehe
-[scripts/sync-sonar-issues-to-board.mjs](scripts/sync-sonar-issues-to-board.mjs),
-Issue #534–#536; ursprünglich GitHub-Issues, #111/#112). Nicht mehr an den `production`-Merge
-gebunden: SonarCloud (Free-Tier) kennt
-ohnehin nur den `main`-Branch, ein zusätzlicher Scan bei `merge production` wäre nur eine
-redundante Zweitanalyse desselben Commits (main -> production per PR-Merge, siehe unten).
 
 ## merge production
 

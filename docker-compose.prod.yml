@@ -1,28 +1,28 @@
-# Produktions-Overlay: manban hinter dem vorhandenen Traefik des Hostinger-Servers.
+# Produktions-Overlay: fb.crm hinter dem vorhandenen Traefik des Hostinger-Servers.
 #
 # Aufruf auf dem Server:
 #   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
 #
 # Unterschiede zum lokalen Basis-Stack (docker-compose.yml):
-#   - manban-api haengt am externen Traefik-Netz "web" und wird ueber Traefik-Labels
-#     unter https://kanban.mwolff.org veroeffentlicht (TLS via certresolver "mytlschallenge").
+#   - fbcrm-api haengt am externen Traefik-Netz "web" und wird ueber Traefik-Labels
+#     unter https://${FBCRM_DOMAIN} veroeffentlicht (TLS via certresolver "mytlschallenge").
 #   - Caddy (lokaler self-signed-Proxy) laeuft NICHT: er ist dem Profil "local-tls"
 #     zugeordnet und wird ohne aktives Profil nicht gestartet.
 #   - Postgres/MinIO bleiben unveraendert rein intern (keine Host-Ports).
 services:
-  manban-api:
+  fbcrm-api:
     environment:
       # Fester Wert, bewusst KEINE ${...}-Interpolation: Das Overlay erbt den
-      # environment:-Block des Basis-Compose (dort MANBAN_DEV_MODE=true) und ueberschreibt
+      # environment:-Block des Basis-Compose (dort FBCRM_DEV_MODE=true) und ueberschreibt
       # nur die hier genannten Schluessel. Ohne eigenen Eintrag reiste "true" nach
-      # Produktion. Kaeme der Wert aus der .env, genuegte ein MANBAN_DEV_MODE=true fuer
+      # Produktion. Kaeme der Wert aus der .env, genuegte ein FBCRM_DEV_MODE=true fuer
       # den lokalen Betrieb, um die Ausnahme auch im Prod-Lauf stillschweigend
       # einzuschalten — dieselbe Luecke mit einem Zwischenschritt.
-      MANBAN_DEV_MODE: "false"
+      FBCRM_DEV_MODE: "false"
       # Prod-kritische Werte MUESSEN aus der Server-.env kommen (kein unsicherer Default).
-      MANBAN_SESSION_SECRET: ${MANBAN_SESSION_SECRET:?MANBAN_SESSION_SECRET muss in .env gesetzt sein}
-      MANBAN_BASE_URL: ${MANBAN_BASE_URL:?MANBAN_BASE_URL muss in .env gesetzt sein (z. B. https://kanban.mwolff.org)}
-      # Uebrige Prod-Envs (MANBAN_COOKIE_SECURE, MANBAN_BOOTSTRAP_ADMIN_TOKEN, MANBAN_MAIL_*,
+      FBCRM_SESSION_SECRET: ${FBCRM_SESSION_SECRET:?FBCRM_SESSION_SECRET muss in .env gesetzt sein}
+      FBCRM_BASE_URL: ${FBCRM_BASE_URL:?FBCRM_BASE_URL muss in .env gesetzt sein (z. B. https://crm.example.org)}
+      # Uebrige Prod-Envs (FBCRM_COOKIE_SECURE, FBCRM_BOOTSTRAP_ADMIN_TOKEN, FBCRM_MAIL_*,
       # DB-/MinIO-Zugang) werden vom Basis-Compose aus der .env gelesen.
     networks:
       - default
@@ -30,19 +30,22 @@ services:
     labels:
       - traefik.enable=true
       - traefik.docker.network=web
-      - traefik.http.routers.manban.rule=Host(`kanban.mwolff.org`)
-      - traefik.http.routers.manban.tls=true
-      - traefik.http.routers.manban.entrypoints=web,websecure
-      - traefik.http.routers.manban.tls.certresolver=mytlschallenge
-      - traefik.http.services.manban.loadbalancer.server.port=8080
+      # Die Domain steht nicht im Repo: Sie kommt als Pflichtvariable aus der Server-.env.
+      # Ohne FBCRM_DOMAIN bricht `docker compose config` mit der Meldung unten ab, statt
+      # einen falschen Host still zu veroeffentlichen.
+      - traefik.http.routers.fbcrm.rule=Host(`${FBCRM_DOMAIN:?FBCRM_DOMAIN muss in .env gesetzt sein (Host der Anwendung)}`)
+      - traefik.http.routers.fbcrm.tls=true
+      - traefik.http.routers.fbcrm.entrypoints=web,websecure
+      - traefik.http.routers.fbcrm.tls.certresolver=mytlschallenge
+      - traefik.http.services.fbcrm.loadbalancer.server.port=8080
       # Security-Header (analog n8n-Stack): HSTS, MIME-Sniffing- und XSS-Schutz.
-      - traefik.http.routers.manban.middlewares=manban-sec
-      - traefik.http.middlewares.manban-sec.headers.stsSeconds=31536000
-      - traefik.http.middlewares.manban-sec.headers.stsIncludeSubdomains=true
-      - traefik.http.middlewares.manban-sec.headers.stsPreload=true
-      - traefik.http.middlewares.manban-sec.headers.forceSTSHeader=true
-      - traefik.http.middlewares.manban-sec.headers.contentTypeNosniff=true
-      - traefik.http.middlewares.manban-sec.headers.browserXssFilter=true
+      - traefik.http.routers.fbcrm.middlewares=fbcrm-sec
+      - traefik.http.middlewares.fbcrm-sec.headers.stsSeconds=31536000
+      - traefik.http.middlewares.fbcrm-sec.headers.stsIncludeSubdomains=true
+      - traefik.http.middlewares.fbcrm-sec.headers.stsPreload=true
+      - traefik.http.middlewares.fbcrm-sec.headers.forceSTSHeader=true
+      - traefik.http.middlewares.fbcrm-sec.headers.contentTypeNosniff=true
+      - traefik.http.middlewares.fbcrm-sec.headers.browserXssFilter=true
 
   # Lokaler TLS-Proxy — in Produktion nicht gestartet (Profil ohne Aktivierung).
   # In Prod uebernimmt Traefik die TLS-Terminierung.

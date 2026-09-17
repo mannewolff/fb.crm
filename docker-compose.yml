@@ -2,13 +2,13 @@ services:
   postgres:
     image: postgres:16
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-manban}
-      POSTGRES_USER: ${POSTGRES_USER:-manban}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-manban}
+      POSTGRES_DB: ${POSTGRES_DB:-fbcrm}
+      POSTGRES_USER: ${POSTGRES_USER:-fbcrm}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-fbcrm}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-manban} -d ${POSTGRES_DB:-manban}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-fbcrm} -d ${POSTGRES_DB:-fbcrm}"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -19,8 +19,8 @@ services:
     image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
     command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-manban}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-manban-minio}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-fbcrm}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-fbcrm-minio}
     volumes:
       - minio_data:/data
     healthcheck:
@@ -29,48 +29,47 @@ services:
       timeout: 5s
       retries: 10
 
-  manban-api:
+  fbcrm-api:
     build: .
     environment:
-      MANBAN_BASE_URL: ${MANBAN_BASE_URL:-https://localhost}
+      FBCRM_BASE_URL: ${FBCRM_BASE_URL:-https://localhost}
       # Dies ist der lokale Entwicklungs-Stack: Der Schalter erlaubt den Start mit den
       # unsicheren Defaults unten — die Anwendung warnt dabei. Das Produktions-Overlay
       # (docker-compose.prod.yml) setzt ihn fest auf false und erbt diesen Wert nicht.
-      MANBAN_DEV_MODE: ${MANBAN_DEV_MODE:-true}
+      FBCRM_DEV_MODE: ${FBCRM_DEV_MODE:-true}
       # Secret zum Signieren der Session-Tokens. Der Default unten gilt nur im
-      # Entwicklungsbetrieb (MANBAN_DEV_MODE=true) — die Anwendung warnt dann beim Start.
+      # Entwicklungsbetrieb (FBCRM_DEV_MODE=true) — die Anwendung warnt dann beim Start.
       # In Produktion verweigert sie ihn; dort zwingend über die .env durch einen
       # zufälligen 32+-Byte-Wert ersetzen.
-      MANBAN_SESSION_SECRET: ${MANBAN_SESSION_SECRET:-dev-only-insecure-secret-change-me}
+      FBCRM_SESSION_SECRET: ${FBCRM_SESSION_SECRET:-dev-only-insecure-secret-change-me}
       # Session-Cookie nur über HTTPS ausliefern. Hinter TLS (Prod) true; für reines HTTP-Lokal ggf. false.
-      MANBAN_COOKIE_SECURE: ${MANBAN_COOKIE_SECURE:-true}
+      FBCRM_COOKIE_SECURE: ${FBCRM_COOKIE_SECURE:-true}
       # Einmal-Token für den ersten Plattform-Admin (leer = deaktiviert; greift nur ohne Admin).
-      MANBAN_BOOTSTRAP_ADMIN_TOKEN: ${MANBAN_BOOTSTRAP_ADMIN_TOKEN:-}
-      MANBAN_DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-manban}
-      MANBAN_DB_USER: ${POSTGRES_USER:-manban}
-      MANBAN_DB_PASSWORD: ${POSTGRES_PASSWORD:-manban}
-      MANBAN_MAIL_ENABLED: ${MANBAN_MAIL_ENABLED:-false}
-      MANBAN_MAIL_FROM: ${MANBAN_MAIL_FROM:-no-reply@manban.local}
-      MANBAN_SMTP_HOST: ${MANBAN_SMTP_HOST:-}
-      MANBAN_SMTP_PORT: ${MANBAN_SMTP_PORT:-1025}
-      MANBAN_SMTP_USER: ${MANBAN_SMTP_USER:-}
-      MANBAN_SMTP_PASSWORD: ${MANBAN_SMTP_PASSWORD:-}
-      MANBAN_SMTP_AUTH: ${MANBAN_SMTP_AUTH:-true}
-      MANBAN_SMTP_STARTTLS: ${MANBAN_SMTP_STARTTLS:-true}
-      MANBAN_MINIO_ENDPOINT: http://minio:9000
-      MANBAN_MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-manban}
-      MANBAN_MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-manban-minio}
-      # Aufraeum- und Zustell-Automatiken. Sie haengen hier, weil eine Variable, die im
-      # environment-Block fehlt, den Container gar nicht erreicht — wer sie nach docs/betrieb.md
-      # in der .env abschaltet, erzielte sonst keine Wirkung, ohne dass etwas anschlaegt.
-      # Jede mit Default: @ConditionalOnProperty(havingValue = "true") liest einen Leerstring als
-      # "nicht true", die Jobs fielen bei der Form ${NAME:-} also stillschweigend weg.
-      MANBAN_CLEANUP_ENABLED: ${MANBAN_CLEANUP_ENABLED:-true}
-      MANBAN_DONE_RETENTION_DAYS: ${MANBAN_DONE_RETENTION_DAYS:-30}
-      MANBAN_OUTBOX_ENABLED: ${MANBAN_OUTBOX_ENABLED:-true}
-      MANBAN_OUTBOX_POLL_INTERVAL_MS: ${MANBAN_OUTBOX_POLL_INTERVAL_MS:-5000}
-      MANBAN_OUTBOX_MAX_ATTEMPTS: ${MANBAN_OUTBOX_MAX_ATTEMPTS:-8}
-      MANBAN_OUTBOX_RETENTION_DAYS: ${MANBAN_OUTBOX_RETENTION_DAYS:-7}
+      FBCRM_BOOTSTRAP_ADMIN_TOKEN: ${FBCRM_BOOTSTRAP_ADMIN_TOKEN:-}
+      FBCRM_DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-fbcrm}
+      FBCRM_DB_USER: ${POSTGRES_USER:-fbcrm}
+      FBCRM_DB_PASSWORD: ${POSTGRES_PASSWORD:-fbcrm}
+      FBCRM_MAIL_ENABLED: ${FBCRM_MAIL_ENABLED:-false}
+      FBCRM_MAIL_FROM: ${FBCRM_MAIL_FROM:-no-reply@fbcrm.local}
+      FBCRM_SMTP_HOST: ${FBCRM_SMTP_HOST:-}
+      FBCRM_SMTP_PORT: ${FBCRM_SMTP_PORT:-1025}
+      FBCRM_SMTP_USER: ${FBCRM_SMTP_USER:-}
+      FBCRM_SMTP_PASSWORD: ${FBCRM_SMTP_PASSWORD:-}
+      FBCRM_SMTP_AUTH: ${FBCRM_SMTP_AUTH:-true}
+      FBCRM_SMTP_STARTTLS: ${FBCRM_SMTP_STARTTLS:-true}
+      FBCRM_MINIO_ENDPOINT: http://minio:9000
+      FBCRM_MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-fbcrm}
+      FBCRM_MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-fbcrm-minio}
+      # Transaktionale Zustellung der Seiteneffekte (Mail, Speicher). Die Variablen haengen
+      # hier, weil eine Variable, die im environment-Block fehlt, den Container gar nicht
+      # erreicht — wer sie in der .env abschaltet, erzielte sonst keine Wirkung, ohne dass
+      # etwas anschlaegt. Jede mit Default: @ConditionalOnProperty(havingValue = "true") liest
+      # einen Leerstring als "nicht true", der Job fiele bei der Form ${NAME:-} also
+      # stillschweigend weg.
+      FBCRM_OUTBOX_ENABLED: ${FBCRM_OUTBOX_ENABLED:-true}
+      FBCRM_OUTBOX_POLL_INTERVAL_MS: ${FBCRM_OUTBOX_POLL_INTERVAL_MS:-5000}
+      FBCRM_OUTBOX_MAX_ATTEMPTS: ${FBCRM_OUTBOX_MAX_ATTEMPTS:-8}
+      FBCRM_OUTBOX_RETENTION_DAYS: ${FBCRM_OUTBOX_RETENTION_DAYS:-7}
     depends_on:
       postgres:
         condition: service_healthy
@@ -83,14 +82,14 @@ services:
       - "80:80"
       - "443:443"
     environment:
-      MANBAN_DOMAIN: ${MANBAN_DOMAIN:-localhost}
-      MANBAN_ACME_EMAIL: ${MANBAN_ACME_EMAIL:-admin@localhost}
+      FBCRM_DOMAIN: ${FBCRM_DOMAIN:-localhost}
+      FBCRM_ACME_EMAIL: ${FBCRM_ACME_EMAIL:-admin@localhost}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
     depends_on:
-      - manban-api
+      - fbcrm-api
 
 volumes:
   postgres_data:

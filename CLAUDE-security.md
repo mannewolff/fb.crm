@@ -25,20 +25,18 @@ Verbindliche Sicherheits-Regeln für Spring-Boot-Backend und React-Frontend. Die
 
 ### Session-Cookie — Sicherheitsmodell
 
-**Ist-Stand:** Nach dem Login setzt das Backend ein **signiertes, zustandsloses Session-Cookie** ([`SessionCookieManager`](src/main/java/org/mwolff/manban/auth/web/security/SessionCookieManager.java), [`SignedSessionTokens`](src/main/java/org/mwolff/manban/auth/infrastructure/security/SignedSessionTokens.java)). Der Cookie-Wert ist per HMAC (`AuthProperties.sessionSecret`) signiert; es gibt **keine** Server-Session und **kein** Token im JS-zugänglichen Storage. Ein externer Identity-Provider (Keycloak/OIDC) wird bewusst nicht eingesetzt.
+**Soll:** Nach dem Login setzt das Backend ein **signiertes, zustandsloses Session-Cookie**. Der Cookie-Wert ist per HMAC (`AuthProperties.sessionSecret`) signiert; es gibt **keine** Server-Session und **kein** Token im JS-zugänglichen Storage. Ein externer Identity-Provider (Keycloak/OIDC) wird bewusst nicht eingesetzt.
 
 **Eigenschaften des Cookies:**
 - `HttpOnly` — per JavaScript nicht lesbar; ein XSS kann das Session-Token nicht exfiltrieren.
-- `SameSite=Strict` — wird nie cross-site gesendet; damit ist der zustandslose Cookie-Ansatz CSRF-resistent, ein CSRF-Synchronizer-Token entfällt bewusst (siehe [`SecurityConfig`](src/main/java/org/mwolff/manban/auth/infrastructure/security/SecurityConfig.java)).
+- `SameSite=Strict` — wird nie cross-site gesendet; damit ist der zustandslose Cookie-Ansatz CSRF-resistent, ein CSRF-Synchronizer-Token entfällt bewusst. Diese Entscheidung steht begründet in der `SecurityConfig`.
 - `Secure` (Default `true` über `AuthProperties.cookieSecure`; TLS terminiert der Caddy-Reverse-Proxy) — nur über HTTPS.
 - Begrenzte Gültigkeit über `AuthProperties.sessionTtl`; abgelaufene/ungültige Cookies werden vom `SessionAuthenticationFilter` mit `401` abgewiesen.
-- **Sitzungs-Generation** — das Token trägt die kontogebundene Generation seiner Ausstellung ([`SessionGenerations`](src/main/java/org/mwolff/manban/auth/application/SessionGenerations.java)); weicht sie von der aktuellen Generation des Kontos ab, gilt das Token nicht mehr. Ein **Passwort-Reset zählt die Generation hoch und beendet damit alle Sitzungen des Kontos** — auf jedem Gerät, auch dem auslösenden. Wer sich mit dem alten Passwort angemeldet hatte, verliert den Zugang in dem Moment, in dem der rechtmäßige Besitzer ein neues Passwort vergibt. Das bloße Anfordern eines Resets beendet noch nichts; erst das Einlösen des Einmal-Tokens zählt hoch. **Projektgebundene Ingest-Access-Tokens bleiben davon unberührt** — sie hängen nicht an einer Anmeldesitzung (siehe *Access-Tokens (Ingest)* unten).
+- **Sitzungs-Generation** — das Token trägt die kontogebundene Generation seiner Ausstellung; weicht sie von der aktuellen Generation des Kontos ab, gilt das Token nicht mehr. Ein **Passwort-Reset zählt die Generation hoch und beendet damit alle Sitzungen des Kontos** — auf jedem Gerät, auch dem auslösenden. Wer sich mit dem alten Passwort angemeldet hatte, verliert den Zugang in dem Moment, in dem der rechtmäßige Besitzer ein neues Passwort vergibt. Das bloße Anfordern eines Resets beendet noch nichts; erst das Einlösen des Einmal-Tokens zählt hoch.
 
-**Passwörter:** ausschließlich über Spring Securitys `PasswordEncoder` (**Argon2id**, `Argon2PasswordEncoder.defaultsForSpringSecurity_v5_8()`, siehe [`AuthConfig`](src/main/java/org/mwolff/manban/auth/infrastructure/AuthConfig.java)) gehasht — nie im Klartext gespeichert, übertragen oder geloggt.
+**Passwörter:** ausschließlich über Spring Securitys `PasswordEncoder` (**Argon2id**, `Argon2PasswordEncoder.defaultsForSpringSecurity_v5_8()`) gehasht — nie im Klartext gespeichert, übertragen oder geloggt.
 
-**Registrierung / E-Mail-Verifikation / Passwort-Reset:** über einmalige, zeitlich begrenzte, nicht ratbare Tokens ([`SecureTokens`](src/main/java/org/mwolff/manban/common/SecureTokens.java)), per Mail zugestellt. Der erste Plattform-Admin wird über einen Bootstrap-Token angelegt.
-
-**Access-Tokens (Ingest):** Der Kanban-kompatible Ingest ohne Login nutzt projektgebundene Access-Tokens (`accesstoken` + `kanbancompat`), getrennt vom Session-Login. Die Token-Verwaltung selbst ist nur per Cookie-Login erreichbar (Least Privilege), nicht per Access-Token.
+**Registrierung / E-Mail-Verifikation / Passwort-Reset:** über einmalige, zeitlich begrenzte, nicht ratbare Tokens (`SecureTokens`), per Mail zugestellt. Der erste Plattform-Admin wird über einen Bootstrap-Token angelegt.
 
 ### Input & XSS
 
@@ -118,7 +116,7 @@ Verbindliche Sicherheits-Regeln für Spring-Boot-Backend und React-Frontend. Die
 
 ### Error-Handling & Logging
 
-- Globaler Handler via `@RestControllerAdvice` ([GlobalExceptionHandler.java](src/main/java/org/mwolff/api/common/GlobalExceptionHandler.java)). Nach außen: HTTP-Statuscode + generische Message + (bei Validation) `fieldErrors`. **Niemals** Stacktrace, SQL, interne Klassen.
+- Globaler Handler via `@RestControllerAdvice` (`GlobalExceptionHandler`). Nach außen: HTTP-Statuscode + generische Message + (bei Validation) `fieldErrors`. **Niemals** Stacktrace, SQL, interne Klassen.
 - Logging über SLF4J/Logback. **Niemals** Secrets, Tokens, Passwörter, Klartext-PII, vollständige SQL-Queries mit Werten loggen.
 - Logge nicht den kompletten Request-Body von Auth-Endpunkten.
 - `printStackTrace()` ist verboten.
@@ -168,6 +166,6 @@ Verbindliche Sicherheits-Regeln für Spring-Boot-Backend und React-Frontend. Die
 - [CLAUDE.md](CLAUDE.md) — Projekt-Übersicht
 - [CLAUDE-java.md](CLAUDE-java.md) — JPA, Spring-Designregeln
 - [CLAUDE-react.md](CLAUDE-react.md) — XSS, Storage, Frontend-Patterns
-- [CLAUDE-workflow.md](CLAUDE-workflow.md) — Pflichtchecks vor Push
-- [GlobalExceptionHandler.java](src/main/java/org/mwolff/api/common/GlobalExceptionHandler.java) — zentrale Fehler-Mappings
-- [application.yml](src/main/resources/application.yml) — Konfiguration mit Env-Vars
+- [CLAUDE-workflow.md](.claude/CLAUDE-workflow.md) — Pflichtchecks vor Push
+- `GlobalExceptionHandler` (`org.mwolff.fbcrm.common.web`) — zentrale Fehler-Mappings
+- `src/main/resources/application.yml` — Konfiguration mit Env-Vars
