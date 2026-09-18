@@ -23,6 +23,18 @@ spring:
     enabled: true
     locations: classpath:db/migration
 
+# Schalter der Anmeldung (AuthProperties).
+#
+# FBCRM_SESSION_SECRET hat bewusst KEINEN brauchbaren Default: Der leere Wert unten laesst die
+# Validierung (mindestens 32 Zeichen) scheitern, und die Anwendung startet nicht. Ein
+# Vorgabegeheimnis im Repository waere ein bekanntes Geheimnis (CLAUDE-security.md).
+fbcrm:
+  auth:
+    session-secret: ${FBCRM_SESSION_SECRET:}
+    session-ttl: ${FBCRM_SESSION_TTL:P1D}
+    cookie-name: ${FBCRM_SESSION_COOKIE_NAME:fbcrm_session}
+    cookie-secure: ${FBCRM_SESSION_COOKIE_SECURE:true}
+
 management:
   endpoints:
     web:

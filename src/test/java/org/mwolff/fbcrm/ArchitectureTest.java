@@ -1,11 +1,14 @@
 package org.mwolff.fbcrm;
 
+import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.classes;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 import static com.tngtech.archunit.library.dependencies.SlicesRuleDefinition.slices;
 
 import com.tngtech.archunit.core.domain.JavaClasses;
 import com.tngtech.archunit.core.importer.ClassFileImporter;
 import com.tngtech.archunit.core.importer.ImportOption;
+import java.security.MessageDigest;
+import java.util.Arrays;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -45,6 +48,31 @@ class ArchitectureTest {
         .dependOnClassesThat()
         .resideInAPackage("..infrastructure..")
         .because("Controller delegieren an die Application-Schicht, nicht an Adapter")
+        .allowEmptyShould(true)
+        .check(CLASSES);
+  }
+
+  @Test
+  void sessionTokenCodec_thenComparesSignaturesWithMessageDigest() {
+    classes()
+        .that()
+        .haveSimpleName("SessionTokenCodec")
+        .should()
+        .callMethod(MessageDigest.class, "isEqual", byte[].class, byte[].class)
+        .because("der Signaturvergleich laeuft ohne frueh abbrechenden Vergleich")
+        .check(CLASSES);
+  }
+
+  @Test
+  void authInfrastructure_thenNeverComparesByteArraysWithArraysEquals() {
+    noClasses()
+        .that()
+        .resideInAPackage("..auth.infrastructure..")
+        .should()
+        .callMethod(Arrays.class, "equals", byte[].class, byte[].class)
+        .because(
+            "Arrays.equals bricht beim ersten abweichenden Byte ab und verraet damit ueber die"
+                + " Laufzeit, wie weit eine geratene Signatur stimmte (CLAUDE-security.md)")
         .allowEmptyShould(true)
         .check(CLASSES);
   }
