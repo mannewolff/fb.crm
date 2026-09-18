@@ -6,9 +6,9 @@ import static org.mockito.Mockito.when;
 
 import java.time.Duration;
 import java.time.Instant;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mwolff.fbcrm.auth.application.GetCurrentAccountUseCase;
@@ -45,7 +45,20 @@ class AuthControllerTest {
   @Mock private GetCurrentAccountUseCase currentAccount;
   @Mock private ClientIpResolver clientIp;
 
-  @InjectMocks private AuthController controller;
+  private AuthController controller;
+
+  /*
+   * Die Cookie-Fabrik ist ein eigener reiner Dienst ohne I/O und wird deshalb echt eingesetzt,
+   * nicht gemockt (CLAUDE-java.md §4). Ein Mock an dieser Stelle pruefte nur, dass der Controller
+   * irgendetwas delegiert — die Eigenschaften des Cookies weist SessionCookieFactoryTest nach,
+   * und die Tests hier sehen sie durch die echte Fabrik hindurch.
+   */
+  @BeforeEach
+  void baueDenController() {
+    controller =
+        new AuthController(
+            loginUseCase, logoutUseCase, currentAccount, clientIp, new SessionCookieFactory());
+  }
 
   private static Account konto() {
     return new Account(KONTO_ID, MAIL, "Manne", "hash", Role.ADMIN, 3, JETZT, JETZT);

@@ -33,6 +33,17 @@ public abstract class AbstractIntegrationTest {
     POSTGRES.start();
   }
 
+  /**
+   * Die geteilte Datenbank der Suite.
+   *
+   * <p>Fuer die wenigen {@code *IT}, die den Anwendungskontext selbst hochfahren, statt von dieser
+   * Klasse zu erben — etwa {@code StartupValidatorIT}, dessen Gegenstand der gescheiterte Start
+   * ist. Sie brauchen dieselbe Instanz, damit nicht je Testklasse ein zweiter Container anlaeuft.
+   */
+  public static PostgreSQLContainer<?> datenbank() {
+    return POSTGRES;
+  }
+
   @DynamicPropertySource
   static void datasourceProperties(final DynamicPropertyRegistry registry) {
     registry.add("spring.datasource.url", POSTGRES::getJdbcUrl);

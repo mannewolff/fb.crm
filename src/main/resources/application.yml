@@ -38,6 +38,16 @@ spring:
 # FBCRM_TRUSTED_PROXIES ist bewusst leer: Nur wenn die Gegenstelle einer Anfrage hier steht,
 # glaubt die Anwendung ihrem X-Forwarded-For. Leer heisst, es zaehlt die Peer-Adresse (E9).
 fbcrm:
+  # Betriebsschalter (OperationsProperties, StartupValidator). Default false — der strengere der
+  # beiden Faelle: Wer den Entwicklungsbetrieb will, sagt es ausdruecklich. Bei true startet die
+  # Anwendung mit dem voreingestellten Signaturgeheimnis und warnt; bei false verweigert sie den
+  # Start (E27).
+  dev-mode: ${FBCRM_DEV_MODE:false}
+  # Einmal-Schluessel fuer den ersten Plattform-Admin (SetupProperties). Leer heisst deaktiviert,
+  # und zwar wirklich: Bei leerem Wert wird gar nicht erst verglichen, sondern jeder Aufruf von
+  # POST /api/setup abgewiesen — auch der mit leerer Eingabe (E5).
+  setup:
+    bootstrap-token: ${FBCRM_BOOTSTRAP_ADMIN_TOKEN:}
   auth:
     session-secret: ${FBCRM_SESSION_SECRET:}
     session-ttl: ${FBCRM_SESSION_TTL:P1D}

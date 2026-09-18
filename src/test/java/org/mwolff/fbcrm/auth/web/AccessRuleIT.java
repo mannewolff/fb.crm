@@ -30,8 +30,13 @@ class AccessRuleIT extends AbstractIntegrationTest {
    *
    * <p>{@code /error} gehoert dazu, weil Spring jede Fehlerlage intern dorthin weiterreicht; waere
    * der Pfad verschlossen, antwortete die Anwendung auf jeden Fehler mit 401.
+   *
+   * <p>Die beiden Pfade der Einrichtung stehen hier aus demselben Grund wie die Anmeldung: Eine
+   * frische Instanz hat kein Konto, also kann niemand eine Sitzung vorweisen. Was sie schuetzt, ist
+   * nicht die Zugangsregel, sondern der Einmal-Schluessel und das vorhandene Konto (K3, E5, E11).
    */
-  private static final Set<String> OFFEN = Set.of("/api/auth/login", "/error");
+  private static final Set<String> OFFEN =
+      Set.of("/api/auth/login", "/api/setup", "/api/setup/status", "/error");
 
   private final TestRestTemplate rest;
   private final RequestMappingHandlerMapping mappings;
@@ -78,6 +83,24 @@ class AccessRuleIT extends AbstractIntegrationTest {
 
     // Then
     assertThat(antwort).isNotEqualTo(HttpStatus.UNAUTHORIZED);
+  }
+
+  @Test
+  void setupEndpoint_withoutASession_thenIsReachable() {
+    // When — ohne offenen Einrichtungspfad koennte eine frische Instanz nie eingerichtet werden.
+    final HttpStatus antwort = status("/api/setup", HttpMethod.POST);
+
+    // Then
+    assertThat(antwort).isNotEqualTo(HttpStatus.UNAUTHORIZED);
+  }
+
+  @Test
+  void setupStatusEndpoint_withoutASession_thenIsReachable() {
+    // When — E11: die unangemeldete Oberflaeche fragt hier, wohin sie fuehren soll.
+    final HttpStatus antwort = status("/api/setup/status", HttpMethod.GET);
+
+    // Then
+    assertThat(antwort).isEqualTo(HttpStatus.OK);
   }
 
   @Test
