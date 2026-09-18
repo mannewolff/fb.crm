@@ -12,7 +12,11 @@ import java.util.Base64;
 import java.util.regex.Pattern;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
+import org.mwolff.fbcrm.auth.AuthProperties;
+import org.mwolff.fbcrm.auth.domain.SessionTokenDecoding;
+import org.mwolff.fbcrm.auth.domain.SessionTokens;
 import org.mwolff.fbcrm.common.ExcludeFromJacocoGeneratedReport;
+import org.springframework.stereotype.Component;
 
 /**
  * Das Session-Token: {@code base64url(payload).base64url(hmacSha256)} (E2).
@@ -27,7 +31,8 @@ import org.mwolff.fbcrm.common.ExcludeFromJacocoGeneratedReport;
  * Verglichen wird ausschliesslich mit {@link MessageDigest#isEqual} — ein frueh abbrechender
  * Vergleich verriete ueber die Laufzeit, wie weit eine geratene Signatur stimmte.
  */
-public final class SessionTokenCodec {
+@Component
+public final class SessionTokenCodec implements SessionTokens {
 
   private static final String HMAC_ALGORITHM = "HmacSHA256";
   private static final int PAYLOAD_BYTES = 4 * Long.BYTES;
@@ -52,6 +57,7 @@ public final class SessionTokenCodec {
    * @param issuedAt Ausstellungszeitpunkt
    * @param ttl Laufzeit ab Ausstellung
    */
+  @Override
   public String encode(
       final long accountId,
       final long sessionGeneration,
@@ -72,6 +78,7 @@ public final class SessionTokenCodec {
    *
    * @return einer der vier Faelle aus {@link SessionTokenDecoding} — nie {@code null}
    */
+  @Override
   public SessionTokenDecoding decode(final String token) {
     final String[] teile = SEPARATOR_PATTERN.split(token, -1);
     if (teile.length != 2) {

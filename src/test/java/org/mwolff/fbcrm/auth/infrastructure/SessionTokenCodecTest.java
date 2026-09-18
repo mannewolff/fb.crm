@@ -7,7 +7,10 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.Base64;
+import java.util.List;
 import org.junit.jupiter.api.Test;
+import org.mwolff.fbcrm.auth.AuthProperties;
+import org.mwolff.fbcrm.auth.domain.SessionTokenDecoding;
 
 /**
  * Das Session-Token-Format {@code base64url(payload).base64url(hmacSha256)} (E2).
@@ -27,7 +30,8 @@ class SessionTokenCodecTest {
 
   private static SessionTokenCodec codec(final String geheimnis, final Instant jetzt) {
     return new SessionTokenCodec(
-        new AuthProperties(geheimnis, LAUFZEIT, "fbcrm_session", true),
+        new AuthProperties(
+            geheimnis, LAUFZEIT, "fbcrm_session", true, 10, Duration.ofMinutes(15), List.of()),
         Clock.fixed(jetzt, ZoneOffset.UTC));
   }
 

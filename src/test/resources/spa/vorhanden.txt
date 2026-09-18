@@ -1,0 +1,1 @@
+Steht fuer eine gebaute Datei des Frontends (ein Bundle, ein Bild).

@@ -5,6 +5,12 @@
 spring:
   application:
     name: fb-crm
+  # Ohne diese Ausnahme legte der Security-Starter einen Standardbenutzer mit zufaelligem Passwort
+  # an und schriebe es ins Log. Angemeldet wird ausschliesslich ueber das eigene Session-Cookie
+  # (SecurityConfig); einen Benutzer im Speicher gibt es nicht.
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration
   datasource:
     url: ${FBCRM_DB_URL:jdbc:postgresql://localhost:5432/fbcrm}
     username: ${FBCRM_DB_USER:fbcrm}
@@ -28,12 +34,18 @@ spring:
 # FBCRM_SESSION_SECRET hat bewusst KEINEN brauchbaren Default: Der leere Wert unten laesst die
 # Validierung (mindestens 32 Zeichen) scheitern, und die Anwendung startet nicht. Ein
 # Vorgabegeheimnis im Repository waere ein bekanntes Geheimnis (CLAUDE-security.md).
+#
+# FBCRM_TRUSTED_PROXIES ist bewusst leer: Nur wenn die Gegenstelle einer Anfrage hier steht,
+# glaubt die Anwendung ihrem X-Forwarded-For. Leer heisst, es zaehlt die Peer-Adresse (E9).
 fbcrm:
   auth:
     session-secret: ${FBCRM_SESSION_SECRET:}
     session-ttl: ${FBCRM_SESSION_TTL:P1D}
     cookie-name: ${FBCRM_SESSION_COOKIE_NAME:fbcrm_session}
     cookie-secure: ${FBCRM_SESSION_COOKIE_SECURE:true}
+    login-max-attempts: ${FBCRM_LOGIN_MAX_ATTEMPTS:10}
+    login-attempt-window: ${FBCRM_LOGIN_ATTEMPT_WINDOW:PT15M}
+    trusted-proxies: ${FBCRM_TRUSTED_PROXIES:}
 
 management:
   endpoints:

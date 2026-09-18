@@ -88,12 +88,12 @@
       <version>${jspecify.version}</version>
     </dependency>
 
-    <!-- Nur die Krypto-Bausteine von Spring Security, ausdruecklich ohne Starter: der Starter
-         brachte seine Autokonfiguration mit und verriegelte /actuator/health, solange keine
-         SecurityConfig existiert. Er kommt mit dem Paket, das Filter und Endpunkte baut. -->
+    <!-- Der Starter kommt mit diesem Paket (Issue #23): Ab hier existiert eine SecurityConfig,
+         die die Zugangsregel selbst setzt, statt die Autokonfiguration raten zu lassen. Er zieht
+         spring-security-crypto mit, das den Argon2-Hasher aus #22 traegt. -->
     <dependency>
-      <groupId>org.springframework.security</groupId>
-      <artifactId>spring-security-crypto</artifactId>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-security</artifactId>
     </dependency>
     <dependency>
       <groupId>org.bouncycastle</groupId>
@@ -507,6 +507,13 @@
               <excludedClasses>
                 <!-- Reine main-Methode ohne Fachlogik (CLAUDE-java.md §5.2). -->
                 <param>org.mwolff.fbcrm.FbCrmApplication</param>
+                <!-- Bean-Wiring ohne eigene Entscheidung im Code (CLAUDE-java.md §5.2). Beide
+                     bauen nur eine Spring-DSL zusammen; was sie bewirken, weisen AccessRuleIT
+                     und SecurityHeadersIT gegen den laufenden Server nach. Die Pfadregel des
+                     SPA-Fallbacks steht in SpaResourceResolver und ist dort unit-getestet —
+                     diese Klasse bleibt in Abdeckung und Mutationstest. -->
+                <param>org.mwolff.fbcrm.auth.web.SecurityConfig</param>
+                <param>org.mwolff.fbcrm.config.SpaForwardingConfig</param>
               </excludedClasses>
               <mutators>
                 <mutator>STRONGER</mutator>
