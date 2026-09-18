@@ -2,17 +2,31 @@
   "codeHost": "github",
   "issueTracker": "toolbox",
   "buildChecks": [
-    { "cmd": "mvn verify", "areas": ["backend"] },
-    { "cmd": "npm --prefix frontend run build", "areas": ["frontend"] },
-    { "cmd": "npm --prefix frontend run lint", "areas": ["frontend"] },
-    { "cmd": "npm --prefix frontend run test:coverage", "areas": ["frontend"] }
+    {
+      "cmd": "mvn verify",
+      "areas": [
+        "backend"
+      ]
+    },
+    {
+      "cmd": "npm --prefix frontend run build",
+      "areas": [
+        "frontend"
+      ]
+    },
+    {
+      "cmd": "npm --prefix frontend run lint",
+      "areas": [
+        "frontend"
+      ]
+    },
+    {
+      "cmd": "npm --prefix frontend run test:coverage",
+      "areas": [
+        "frontend"
+      ]
+    }
   ],
-  "checkAreas": {
-    "backend": ["pom.xml", "mvnw", "mvnw.cmd", ".mvn/**", "src/**", "config/**"],
-    "frontend": ["frontend/**"],
-    "doku": ["**/*.md", "docs/**", "specs/**", "*.pdf"],
-    "betrieb": [".claude/**", ".githooks/**", ".gitignore", "install.mjs", "Caddyfile", "Dockerfile", "docker-compose*.yml", ".env.example"]
-  },
   "mutationCommand": "mvn -Ppit -Dskip.frontend=true test",
   "mainBranch": "main",
   "productionBranch": "production",
@@ -31,6 +45,46 @@
     "in_progress": "In progress",
     "in_review": "In review",
     "done": "Done"
+  },
+  "checkAreas": {
+    "backend": [
+      "pom.xml",
+      "mvnw",
+      "mvnw.cmd",
+      ".mvn/**",
+      "src/**",
+      "config/**"
+    ],
+    "frontend": [
+      "frontend/**"
+    ],
+    "doku": [
+      "**/*.md",
+      "docs/**",
+      "specs/**",
+      "*.pdf"
+    ],
+    "betrieb": [
+      ".claude/**",
+      ".githooks/**",
+      ".gitignore",
+      "install.mjs",
+      "Caddyfile",
+      "Dockerfile",
+      "docker-compose*.yml",
+      ".env.example"
+    ]
+  },
+  "stufen": {
+    "schwer": {
+      "modell": "claude-opus-5"
+    },
+    "mittel": {
+      "modell": "claude-sonnet-5"
+    },
+    "leicht": {
+      "modell": "claude-sonnet-5"
+    }
   },
   "reviewCommand": "codex exec --model gpt-6-astra -c model_reasoning_effort=\"high\"",
   "formatFixCommand": "mvn spotless:apply",
