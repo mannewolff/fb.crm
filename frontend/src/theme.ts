@@ -45,6 +45,15 @@ export interface KupferwarteFarben {
   readonly textSchwach: string;
   readonly kupfer: string;
   readonly kupferHell: string;
+  /**
+   * Das dunkle Ende eines Kupferverlaufs und der Rand einer Kupferfuellung.
+   *
+   * Die Vorlage schreibt ihn am Markenmal (Z. 225) fest hin und mischt ihn an der
+   * Kupfertaste (Z. 340) aus Kupfer und Schwarz — in beiden Erscheinungsbildern derselbe
+   * Ton. Hier steht er als Token, damit keine Ansicht einen Farbwert fuehren muss
+   * (CLAUDE-design.md).
+   */
+  readonly kupferTief: string;
   readonly kupferSchimmer: string;
   /** Schrift auf der Kupferfuellung. */
   readonly kupferSchrift: string;
@@ -99,6 +108,9 @@ const DUNKEL_KANTE = 'rgba(255,255,255,.075)';
 const DUNKEL_KUPFER = '#D08A52';
 const DUNKEL_KUPFER_SCHIMMER = 'rgba(208,138,82,.18)';
 
+/** Vorlage Z. 225: das dunkle Ende des Kupferverlaufs, in beiden Erscheinungsbildern gleich. */
+const KUPFER_TIEF = '#7B421C';
+
 /** Titel und Anzeige (Vorlage Z. 164–169). */
 const ARCHIVO = '"Archivo Variable", Archivo, system-ui, sans-serif';
 /** Fliesstext (Vorlage Z. 158). */
@@ -134,6 +146,7 @@ const hellFarben: KupferwarteFarben = {
   textSchwach: '#585F6B',
   kupfer: '#A85F2C',
   kupferHell: '#C2743C',
+  kupferTief: KUPFER_TIEF,
   kupferSchimmer: HELL_KUPFER_SCHIMMER,
   // Vorlage `.taste-kupfer` Z. 322–345: weisse Schrift auf der Kupferfuellung, 4,84:1.
   kupferSchrift: '#FFFFFF',
@@ -165,6 +178,7 @@ const dunkelFarben: KupferwarteFarben = {
   textSchwach: '#838B97',
   kupfer: DUNKEL_KUPFER,
   kupferHell: '#E3A26C',
+  kupferTief: KUPFER_TIEF,
   kupferSchimmer: DUNKEL_KUPFER_SCHIMMER,
   // Vorlage `.taste-kupfer`: weisse Schrift ergaebe hier nur 2,82:1 (CLAUDE-design.md,
   // Verfehlung 3). Dunkel traegt die Kupfertaste deshalb die Grundtinte — 6,75:1.
