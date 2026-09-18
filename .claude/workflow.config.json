@@ -8,7 +8,7 @@
     { "cmd": "npm --prefix frontend run test:coverage", "areas": ["frontend"] }
   ],
   "checkAreas": {
-    "backend": ["pom.xml", "mvnw", ".mvn/**", "src/**"],
+    "backend": ["pom.xml", "mvnw", "mvnw.cmd", ".mvn/**", "src/**", "config/**"],
     "frontend": ["frontend/**"],
     "doku": ["**/*.md", "docs/**", "specs/**", "*.pdf"],
     "betrieb": [".claude/**", ".githooks/**", ".gitignore", "install.mjs", "Caddyfile", "Dockerfile", "docker-compose*.yml", ".env.example"]

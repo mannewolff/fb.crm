@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  fb.crm — SpotBugs-Ausschlussfilter (CLAUDE-java.md §7).
+
+  Ausgeschlossen sind ausschliesslich die zwei EI_EXPOSE_REP-Stilmuster, die sich aus
+  Konstruktorinjektion (Spring-Singletons) und aus unveraenderlichen Records ergeben. Alle
+  Bug-Detektoren bleiben scharf; es gibt keinen Klassen- oder Paketausschluss.
+-->
+<FindBugsFilter xmlns="https://github.com/spotbugs/filter/3.1.0"
+                xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                xsi:schemaLocation="https://github.com/spotbugs/filter/3.1.0 https://raw.githubusercontent.com/spotbugs/spotbugs/master/spotbugs/etc/findbugsfilter.xsd">
+
+  <!--
+    Konstruktorinjektion (CLAUDE-java.md §6.3): Spring reicht Singleton-Beans in den
+    Konstruktor, die Klasse haelt die Referenz. Eine defensive Kopie waere hier sinnlos —
+    es gibt genau eine Instanz und niemand veraendert sie.
+  -->
+  <Match>
+    <Bug pattern="EI_EXPOSE_REP2"/>
+  </Match>
+
+  <!--
+    Unveraenderliche Records geben ihre Komponenten ueber die erzeugten Accessoren heraus.
+    Die Komponenten selbst sind unveraenderlich (Records, String, java.time, List.copyOf),
+    also gibt es keine Repraesentation, die entwischen koennte.
+  -->
+  <Match>
+    <Bug pattern="EI_EXPOSE_REP"/>
+  </Match>
+</FindBugsFilter>

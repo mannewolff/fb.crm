@@ -6,3 +6,6 @@
 .claude/board-meta-cache.json
 .DS_Store
 .env
+
+# Maven-Build
+target/

@@ -1,0 +1,40 @@
+# fb.crm — Grundkonfiguration.
+#
+# Ausschliesslich Platzhalter mit Default (${VAR:default}); echte Zugangsdaten stehen in der
+# Umgebung bzw. in .env und niemals hier (CLAUDE-security.md).
+spring:
+  application:
+    name: fb-crm
+  datasource:
+    url: ${FBCRM_DB_URL:jdbc:postgresql://localhost:5432/fbcrm}
+    username: ${FBCRM_DB_USER:fbcrm}
+    password: ${FBCRM_DB_PASSWORD:fbcrm}
+  jpa:
+    # Das Schema gehoert Flyway. update/create waere ausserhalb von Tests ein Datenrisiko
+    # (CLAUDE-java.md §6.4).
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: never
+      show-components: never
+
+server:
+  error:
+    include-stacktrace: never
+    include-message: never
+    include-binding-errors: never
