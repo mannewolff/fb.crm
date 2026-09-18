@@ -39,7 +39,17 @@ Der Dev-Server (Vite, `:5173`) leitet `/api/*` per Proxy an Spring Boot (`:8080`
 
 ### Performance-Budget
 
-**Grenze: 600 kB je Chunk (minified).** Die Zahlen des laufenden Builds gehören in eine Tabelle an dieser Stelle, sobald es einen Build gibt; der Vendor-Chunk (React + MUI + Router) ist dabei der Boden, alles andere kommt lazy dazu.
+**Grenze: 600 kB je Chunk (minified).** Der Vendor-Chunk (React + MUI + Router) ist dabei der Boden, alles andere kommt lazy dazu.
+
+**Stand des ersten Builds (Issue #21, 2026-09-18):**
+
+| Datei | Roh | gzip |
+|---|---:|---:|
+| `assets/index-*.js` (Vendor + Rahmen) | 247,05 kB | 83,04 kB |
+| `assets/StartPage-*.js` (lazy) | 1,92 kB | 0,99 kB |
+| `assets/index-*.css` | 13,45 kB | 1,48 kB |
+
+Dazu die Schriften als eigene Dateien (Archivo variabel, IBM Plex Sans und Mono), die größte mit 34,93 kB. Sie werden vom Browser einzeln und nur bei Bedarf geladen und zählen nicht gegen die Chunk-Grenze.
 
 **Regeln:**
 - **Route-Level Lazy Loading ist Pflicht** für alle Top-Level-Routen in `App.tsx` (via `React.lazy` + `Suspense`). Kein direktes Import einer Page-Komponente in `App.tsx` ohne `lazy()`.

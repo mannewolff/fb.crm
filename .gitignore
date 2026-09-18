@@ -9,3 +9,8 @@
 
 # Maven-Build
 target/
+
+# Vite-Build und Abhaengigkeiten des Frontends
+frontend/node_modules/
+frontend/dist/
+frontend/coverage/

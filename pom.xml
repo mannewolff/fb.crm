@@ -22,9 +22,13 @@
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 
     <!-- Schalter aus .claude/workflow.config.json (mutationCommand nutzt -Dskip.frontend=true).
-         Das frontend-maven-plugin kommt erst mit dem Frontend-Paket; die Property steht schon
-         jetzt, damit der Mutationslauf unveraendert bleibt, wenn es dazukommt. -->
+         Das gesamte frontend-maven-plugin haengt daran, damit
+         mvn -Ppit -Dskip.frontend=true test ohne Node durchlaeuft. -->
     <skip.frontend>false</skip.frontend>
+
+    <frontend-maven-plugin.version>1.15.1</frontend-maven-plugin.version>
+    <node.version>v22.11.0</node.version>
+    <npm.version>10.9.0</npm.version>
 
     <jspecify.version>1.0.1</jspecify.version>
     <archunit.version>1.5.0</archunit.version>
@@ -366,6 +370,81 @@
             <goals>
               <goal>check</goal>
             </goals>
+          </execution>
+        </executions>
+      </plugin>
+
+      <!-- Der Vite-Build laeuft im Maven-Lauf mit einer eigenen, festgelegten Node-Version;
+           das Ergebnis liegt danach unter target/classes/static und wird von Spring Boot aus
+           classpath:/static/ serviert. Node und npm landen unter target/ und nicht im
+           Arbeitsbaum. Das gesamte Plugin haengt an skip.frontend, damit
+           mvn -Ppit -Dskip.frontend=true test ohne Node durchlaeuft. -->
+      <plugin>
+        <groupId>com.github.eirslett</groupId>
+        <artifactId>frontend-maven-plugin</artifactId>
+        <version>${frontend-maven-plugin.version}</version>
+        <configuration>
+          <workingDirectory>frontend</workingDirectory>
+          <installDirectory>${project.build.directory}</installDirectory>
+          <skip>${skip.frontend}</skip>
+        </configuration>
+        <executions>
+          <execution>
+            <id>install-node-and-npm</id>
+            <phase>generate-resources</phase>
+            <goals>
+              <goal>install-node-and-npm</goal>
+            </goals>
+            <configuration>
+              <nodeVersion>${node.version}</nodeVersion>
+              <npmVersion>${npm.version}</npmVersion>
+            </configuration>
+          </execution>
+          <execution>
+            <id>npm-ci</id>
+            <phase>generate-resources</phase>
+            <goals>
+              <goal>npm</goal>
+            </goals>
+            <configuration>
+              <!-- ci statt install: der Lauf haelt sich an package-lock.json und aendert sie
+                   nicht, damit der Arbeitsbaum nach mvn verify unveraendert bleibt. -->
+              <arguments>ci</arguments>
+            </configuration>
+          </execution>
+          <execution>
+            <id>npm-run-build</id>
+            <phase>generate-resources</phase>
+            <goals>
+              <goal>npm</goal>
+            </goals>
+            <configuration>
+              <arguments>run build</arguments>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-resources-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>copy-frontend-build</id>
+            <phase>process-resources</phase>
+            <goals>
+              <goal>copy-resources</goal>
+            </goals>
+            <configuration>
+              <!-- Derselbe Schalter: ohne Frontend-Build gibt es nichts zu kopieren. -->
+              <skip>${skip.frontend}</skip>
+              <outputDirectory>${project.build.outputDirectory}/static</outputDirectory>
+              <resources>
+                <resource>
+                  <directory>frontend/dist</directory>
+                </resource>
+              </resources>
+            </configuration>
           </execution>
         </executions>
       </plugin>
