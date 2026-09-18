@@ -31,7 +31,14 @@ class SessionTokenCodecTest {
   private static SessionTokenCodec codec(final String geheimnis, final Instant jetzt) {
     return new SessionTokenCodec(
         new AuthProperties(
-            geheimnis, LAUFZEIT, "fbcrm_session", true, 10, Duration.ofMinutes(15), List.of()),
+            geheimnis,
+            LAUFZEIT,
+            Duration.ofHours(1),
+            "fbcrm_session",
+            true,
+            10,
+            Duration.ofMinutes(15),
+            List.of()),
         Clock.fixed(jetzt, ZoneOffset.UTC));
   }
 

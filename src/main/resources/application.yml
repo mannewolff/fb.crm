@@ -28,6 +28,21 @@ spring:
   flyway:
     enabled: true
     locations: classpath:db/migration
+  # Der SMTP-Zugang des Postausgangsfachs. spring.mail.host steht hier mit Default, damit die
+  # Autokonfiguration den JavaMailSender in jedem Fall baut — sonst haette eine Instanz mit
+  # FBCRM_MAIL_ENABLED=false und leerem Host keine Bean, und der Hintergrundjob liesse sich
+  # nicht verdrahten. Ob ueberhaupt etwas hinausgeht, entscheidet allein fbcrm.mail.enabled.
+  mail:
+    host: ${FBCRM_SMTP_HOST:localhost}
+    port: ${FBCRM_SMTP_PORT:1025}
+    username: ${FBCRM_SMTP_USER:}
+    password: ${FBCRM_SMTP_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: ${FBCRM_SMTP_AUTH:true}
+          starttls:
+            enable: ${FBCRM_SMTP_STARTTLS:true}
 
 # Schalter der Anmeldung (AuthProperties).
 #
@@ -51,11 +66,29 @@ fbcrm:
   auth:
     session-secret: ${FBCRM_SESSION_SECRET:}
     session-ttl: ${FBCRM_SESSION_TTL:P1D}
+    # Laufzeit eines Reset-Links (K7: „nur begrenzte Zeit"). Deutlich kuerzer als eine Sitzung —
+    # der Link liegt in einem Postfach, und ein Postfach wird mitgelesen.
+    password-reset-ttl: ${FBCRM_PASSWORD_RESET_TTL:PT1H}
     cookie-name: ${FBCRM_SESSION_COOKIE_NAME:fbcrm_session}
     cookie-secure: ${FBCRM_SESSION_COOKIE_SECURE:true}
     login-max-attempts: ${FBCRM_LOGIN_MAX_ATTEMPTS:10}
     login-attempt-window: ${FBCRM_LOGIN_ATTEMPT_WINDOW:PT15M}
     trusted-proxies: ${FBCRM_TRUSTED_PROXIES:}
+  # Der Mailversand (MailProperties). Default aus: Wer Mail hinausschicken will, sagt es
+  # ausdruecklich. FBCRM_BASE_URL ist die oeffentliche Adresse der Instanz; aus ihr entsteht der
+  # Link in der Reset-Mail. Aus der Anfrage laesst er sich nicht ableiten — ein aus Kopfzeilen
+  # gebauter Link waere faelschbar (CLAUDE-security.md).
+  mail:
+    enabled: ${FBCRM_MAIL_ENABLED:false}
+    from: ${FBCRM_MAIL_FROM:no-reply@fbcrm.local}
+    base-url: ${FBCRM_BASE_URL:https://localhost}
+  # Das transaktionale Postausgangsfach (OutboxProperties, E7). Default aus, wie bei dev-mode und
+  # mail.enabled der strengere der beiden Faelle; docker-compose.yml Z. 69 schaltet es ein.
+  outbox:
+    enabled: ${FBCRM_OUTBOX_ENABLED:false}
+    poll-interval-ms: ${FBCRM_OUTBOX_POLL_INTERVAL_MS:5000}
+    max-attempts: ${FBCRM_OUTBOX_MAX_ATTEMPTS:8}
+    retention-days: ${FBCRM_OUTBOX_RETENTION_DAYS:7}
 
 management:
   endpoints:
@@ -66,6 +99,14 @@ management:
     health:
       show-details: never
       show-components: never
+  health:
+    # Der Mail-Starter meldet die Erreichbarkeit des SMTP-Servers als Teil der Gesundheit der
+    # Anwendung. Sie gehoert nicht dazu: Das Postausgangsfach faengt genau den Fall ab, dass der
+    # Mailserver gerade nicht da ist (E7) — waere er Teil des Healthchecks, naehme der Container
+    # sich bei jeder Wartung des Mailservers selbst aus dem Verkehr. Ausserdem oeffnete jede
+    # Abfrage von /actuator/health eine SMTP-Verbindung, und dieser Pfad steht offen.
+    mail:
+      enabled: false
 
 server:
   error:

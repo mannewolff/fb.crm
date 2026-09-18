@@ -34,9 +34,19 @@ class AccessRuleIT extends AbstractIntegrationTest {
    * <p>Die beiden Pfade der Einrichtung stehen hier aus demselben Grund wie die Anmeldung: Eine
    * frische Instanz hat kein Konto, also kann niemand eine Sitzung vorweisen. Was sie schuetzt, ist
    * nicht die Zugangsregel, sondern der Einmal-Schluessel und das vorhandene Konto (K3, E5, E11).
+   *
+   * <p>Die Pfade des Passwort-Resets stehen hier aus genau demselben Grund: Wer sein Passwort
+   * vergessen hat, kann keine Sitzung vorweisen — sonst braeuchte er den Weg nicht. Was sie
+   * schuetzt, ist der Einmal-Token, den ausschliesslich der Besitzer des Postfachs bekommt (K7).
    */
   private static final Set<String> OFFEN =
-      Set.of("/api/auth/login", "/api/setup", "/api/setup/status", "/error");
+      Set.of(
+          "/api/auth/login",
+          "/api/auth/password-reset",
+          "/api/auth/password-reset/confirm",
+          "/api/setup",
+          "/api/setup/status",
+          "/error");
 
   private final TestRestTemplate rest;
   private final RequestMappingHandlerMapping mappings;
@@ -101,6 +111,35 @@ class AccessRuleIT extends AbstractIntegrationTest {
 
     // Then
     assertThat(antwort).isEqualTo(HttpStatus.OK);
+  }
+
+  @Test
+  void passwordResetRequest_withoutASession_thenIsReachable() {
+    // When — K7: wer sein Passwort vergessen hat, kann keine Sitzung vorweisen.
+    final HttpStatus antwort = status("/api/auth/password-reset", HttpMethod.POST);
+
+    // Then
+    assertThat(antwort).isNotEqualTo(HttpStatus.UNAUTHORIZED);
+  }
+
+  @Test
+  void passwordResetCheck_withoutASession_thenIsReachable() {
+    // When — die Voranfrage entscheidet, ob ein Formular erscheint (E24); sie kommt vor jeder
+    // Anmeldung.
+    final HttpStatus antwort =
+        status("/api/auth/password-reset/ein-token-das-es-nie-gab", HttpMethod.GET);
+
+    // Then
+    assertThat(antwort).isEqualTo(HttpStatus.GONE);
+  }
+
+  @Test
+  void passwordResetConfirm_withoutASession_thenIsReachable() {
+    // When
+    final HttpStatus antwort = status("/api/auth/password-reset/confirm", HttpMethod.POST);
+
+    // Then
+    assertThat(antwort).isNotEqualTo(HttpStatus.UNAUTHORIZED);
   }
 
   @Test

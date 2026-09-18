@@ -51,7 +51,10 @@ services:
       FBCRM_DB_PASSWORD: ${POSTGRES_PASSWORD:-fbcrm}
       FBCRM_MAIL_ENABLED: ${FBCRM_MAIL_ENABLED:-false}
       FBCRM_MAIL_FROM: ${FBCRM_MAIL_FROM:-no-reply@fbcrm.local}
-      FBCRM_SMTP_HOST: ${FBCRM_SMTP_HOST:-}
+      # Zeigt auf den Auffangserver unten (Profil dev-mail). Ohne dieses Profil laeuft dort
+      # nichts — was nichts ausmacht, solange FBCRM_MAIL_ENABLED auf false steht: Dann wird
+      # gar nicht erst zugestellt, und die Auftraege bleiben mit attempts = 0 liegen.
+      FBCRM_SMTP_HOST: ${FBCRM_SMTP_HOST:-mailpit}
       FBCRM_SMTP_PORT: ${FBCRM_SMTP_PORT:-1025}
       FBCRM_SMTP_USER: ${FBCRM_SMTP_USER:-}
       FBCRM_SMTP_PASSWORD: ${FBCRM_SMTP_PASSWORD:-}
@@ -75,6 +78,27 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
+
+  # Auffangserver fuer den lokalen Entwicklungsbetrieb (E8): nimmt alles an, stellt nichts zu
+  # und zeigt jede Nachricht in seiner Weboberflaeche. Nur unter dem Profil dev-mail, damit der
+  # normale Stack ihn nicht mitstartet:
+  #
+  #   docker compose --profile dev-mail up -d
+  #
+  # Danach FBCRM_MAIL_ENABLED=true setzen — der Default FBCRM_SMTP_HOST zeigt bereits hierher,
+  # ebenso FBCRM_SMTP_PORT:-1025. Mailpit spricht ohne Anmeldung und ohne TLS; dafuer stehen
+  # FBCRM_SMTP_AUTH und FBCRM_SMTP_STARTTLS in der .env auf false.
+  mailpit:
+    image: axllent/mailpit:v1.21
+    profiles: ["dev-mail"]
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
   caddy:
     image: caddy:2

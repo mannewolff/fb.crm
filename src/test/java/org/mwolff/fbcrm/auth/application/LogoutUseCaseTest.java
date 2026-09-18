@@ -17,6 +17,7 @@ class LogoutUseCaseTest {
         new AuthProperties(
             "geheimnis-mit-mindestens-32-zeichen-laenge",
             LAUFZEIT,
+            Duration.ofHours(1),
             "fbcrm_session",
             secure,
             10,

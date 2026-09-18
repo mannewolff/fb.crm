@@ -69,6 +69,13 @@
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-actuator</artifactId>
     </dependency>
+    <!-- Der Zustellweg des Postausgangsfachs (Issue #25, E7). Geprueft wird die Zeile im
+         Postausgangsfach, nicht der SMTP-Verkehr (E25); der Starter liefert JavaMailSender
+         und damit den Fremdcode hinter dem Port MailGateway. -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-mail</artifactId>
+    </dependency>
     <dependency>
       <groupId>org.flywaydb</groupId>
       <artifactId>flyway-core</artifactId>

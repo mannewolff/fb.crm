@@ -2,6 +2,7 @@ package org.mwolff.fbcrm.auth.web;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.time.Duration;
@@ -11,10 +12,12 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.mwolff.fbcrm.auth.application.ConfirmPasswordResetUseCase;
 import org.mwolff.fbcrm.auth.application.GetCurrentAccountUseCase;
 import org.mwolff.fbcrm.auth.application.LoginResult;
 import org.mwolff.fbcrm.auth.application.LoginUseCase;
 import org.mwolff.fbcrm.auth.application.LogoutUseCase;
+import org.mwolff.fbcrm.auth.application.RequestPasswordResetUseCase;
 import org.mwolff.fbcrm.auth.application.SessionCookie;
 import org.mwolff.fbcrm.auth.domain.Account;
 import org.mwolff.fbcrm.auth.domain.Role;
@@ -43,6 +46,8 @@ class AuthControllerTest {
   @Mock private LoginUseCase loginUseCase;
   @Mock private LogoutUseCase logoutUseCase;
   @Mock private GetCurrentAccountUseCase currentAccount;
+  @Mock private RequestPasswordResetUseCase requestReset;
+  @Mock private ConfirmPasswordResetUseCase confirmReset;
   @Mock private ClientIpResolver clientIp;
 
   private AuthController controller;
@@ -57,7 +62,13 @@ class AuthControllerTest {
   void baueDenController() {
     controller =
         new AuthController(
-            loginUseCase, logoutUseCase, currentAccount, clientIp, new SessionCookieFactory());
+            loginUseCase,
+            logoutUseCase,
+            currentAccount,
+            requestReset,
+            confirmReset,
+            clientIp,
+            new SessionCookieFactory());
   }
 
   private static Account konto() {
@@ -177,5 +188,32 @@ class AuthControllerTest {
 
     // Then
     assertThat(antwort).isEqualTo(new AccountResponse(KONTO_ID, "Manne", MAIL));
+  }
+
+  @Test
+  void requestPasswordReset_thenPassesOnlyTheAddress() {
+    // When — der Controller entscheidet nichts; ob die Adresse bekannt ist, sieht er nie (K7).
+    controller.requestPasswordReset(new PasswordResetRequest(MAIL));
+
+    // Then
+    verify(requestReset).request(MAIL);
+  }
+
+  @Test
+  void checkPasswordResetToken_thenAsksWhetherTheLinkIsStillValid() {
+    // When
+    controller.checkPasswordResetToken(TOKEN);
+
+    // Then — E24: die Voranfrage prueft, sie loest nicht ein.
+    verify(confirmReset).ensureRedeemable(TOKEN);
+  }
+
+  @Test
+  void confirmPasswordReset_thenPassesTokenAndNewPassword() {
+    // When
+    controller.confirmPasswordReset(new PasswordResetConfirmRequest(TOKEN, PASSWORT));
+
+    // Then
+    verify(confirmReset).confirm(TOKEN, PASSWORT);
   }
 }

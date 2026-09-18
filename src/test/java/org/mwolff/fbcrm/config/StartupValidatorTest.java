@@ -51,6 +51,7 @@ class StartupValidatorTest {
     return new AuthProperties(
         geheimnis,
         Duration.ofDays(1),
+        Duration.ofHours(1),
         "fbcrm_session",
         true,
         10,

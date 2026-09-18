@@ -59,7 +59,14 @@ class SessionAuthenticationFilterTest {
 
   private static AuthProperties schalter(final String geheimnis) {
     return new AuthProperties(
-        geheimnis, LAUFZEIT, COOKIE_NAME, true, 10, Duration.ofMinutes(15), List.of());
+        geheimnis,
+        LAUFZEIT,
+        Duration.ofHours(1),
+        COOKIE_NAME,
+        true,
+        10,
+        Duration.ofMinutes(15),
+        List.of());
   }
 
   private static SessionTokens codec(final String geheimnis, final Instant jetzt) {

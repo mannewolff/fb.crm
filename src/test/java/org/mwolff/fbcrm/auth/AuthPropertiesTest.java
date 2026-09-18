@@ -23,6 +23,7 @@ class AuthPropertiesTest {
   private static final String[] VOLLSTAENDIG = {
     "fbcrm.auth.session-secret=" + GEHEIMNIS,
     "fbcrm.auth.session-ttl=P1D",
+    "fbcrm.auth.password-reset-ttl=PT1H",
     "fbcrm.auth.cookie-name=fbcrm_session",
     "fbcrm.auth.cookie-secure=true",
     "fbcrm.auth.login-max-attempts=10",
@@ -45,6 +46,7 @@ class AuthPropertiesTest {
         .withPropertyValues(
             mit(
                 "fbcrm.auth.session-ttl=PT12H",
+                "fbcrm.auth.password-reset-ttl=PT30M",
                 "fbcrm.auth.cookie-secure=false",
                 "fbcrm.auth.login-max-attempts=5",
                 "fbcrm.auth.login-attempt-window=PT1M",
@@ -56,11 +58,20 @@ class AuthPropertiesTest {
                         new AuthProperties(
                             GEHEIMNIS,
                             Duration.ofHours(12),
+                            Duration.ofMinutes(30),
                             "fbcrm_session",
                             false,
                             5,
                             Duration.ofMinutes(1),
                             List.of("10.0.0.1", "10.0.0.2"))));
+  }
+
+  @Test
+  void binding_givenNoPasswordResetTtl_thenTheContextFails() {
+    // When / Then — K7 verlangt eine begrenzte Zeit; ohne Angabe gaebe es keine.
+    runner
+        .withPropertyValues(mit("fbcrm.auth.password-reset-ttl="))
+        .run(context -> assertThat(context).hasFailed());
   }
 
   @Test
@@ -105,7 +116,14 @@ class AuthPropertiesTest {
     // When
     final AuthProperties schalter =
         new AuthProperties(
-            GEHEIMNIS, Duration.ofDays(1), "fbcrm_session", true, 10, Duration.ofMinutes(15), roh);
+            GEHEIMNIS,
+            Duration.ofDays(1),
+            Duration.ofHours(1),
+            "fbcrm_session",
+            true,
+            10,
+            Duration.ofMinutes(15),
+            roh);
 
     // Then
     assertThat(schalter.trustedProxies()).containsExactly("10.0.0.1");
