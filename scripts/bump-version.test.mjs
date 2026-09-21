@@ -119,8 +119,10 @@ describe('mitPomVersion', () => {
   });
 
   test('aendert sonst nichts an der Datei', () => {
+    // Der Ist-Wert kommt aus der Datei selbst: `push main` erhoeht ihn bei jedem Lauf, und eine
+    // hartkodierte Version liesse den Test genau dann scheitern (Issue #33).
     const vorher = readFileSync(path.join(REPO, 'pom.xml'), 'utf8');
-    const nachher = mitPomVersion(vorher, '0.1.0');
+    const nachher = mitPomVersion(vorher, pomProjektVersion(REPO));
     expect(nachher).toBe(vorher);
   });
 
@@ -171,18 +173,20 @@ describe('mitJsonVersion', () => {
 
 describe('main', () => {
   test('patch zieht alle vier Dateien gemeinsam nach', () => {
-    // Given
+    // Given — ein eigener Startwert statt des Repo-Stands, den `push main` laufend erhoeht
+    // (Issue #33). Die uebrigen drei Dateien bleiben die echten.
     const klon = wegwerfKlon();
+    writeFileSync(path.join(klon, 'VERSION'), '0.3.4\n');
 
     // When
     const neu = main(['patch'], { wurzel: klon });
 
     // Then
-    expect(neu).toBe('0.1.1');
-    expect(lies(klon, 'VERSION')).toBe('0.1.1\n');
-    expect(pomProjektVersion(klon)).toBe('0.1.1');
-    expect(jsonVersion(klon, 'frontend/package.json')).toBe('0.1.1');
-    expect(jsonVersion(klon, 'frontend/package-lock.json')).toBe('0.1.1');
+    expect(neu).toBe('0.3.5');
+    expect(lies(klon, 'VERSION')).toBe('0.3.5\n');
+    expect(pomProjektVersion(klon)).toBe('0.3.5');
+    expect(jsonVersion(klon, 'frontend/package.json')).toBe('0.3.5');
+    expect(jsonVersion(klon, 'frontend/package-lock.json')).toBe('0.3.5');
   });
 
   test('minor setzt den Patch-Teil zurueck', () => {
@@ -214,14 +218,15 @@ describe('main', () => {
   test('tag setzt einen annotierten Tag auf die Version aus VERSION', () => {
     // Given — ein echtes Wegwerf-Repository, damit wirklich git laeuft.
     const { ziel, git } = wegwerfRepo();
+    writeFileSync(path.join(ziel, 'VERSION'), '0.3.4\n');
 
     // When
     const tag = main(['tag'], { wurzel: ziel });
 
     // Then — annotiert, damit git push --follow-tags ihn mitnimmt (RELEASING.md).
-    expect(tag).toBe('v0.1.0');
-    expect(git(['tag', '--list'])).toContain('v0.1.0');
-    expect(git(['cat-file', '-t', 'v0.1.0']).trim()).toBe('tag');
+    expect(tag).toBe('v0.3.4');
+    expect(git(['tag', '--list'])).toContain('v0.3.4');
+    expect(git(['cat-file', '-t', 'v0.3.4']).trim()).toBe('tag');
   });
 });
 
@@ -229,16 +234,17 @@ describe('als Kommandozeilenwerkzeug', () => {
   test('node scripts/bump-version.mjs patch laeuft ohne weiteren Repo-Kontext', () => {
     // Given — kein npm install, kein mvn, nur node und die vier Dateien.
     const klon = wegwerfKlon();
+    writeFileSync(path.join(klon, 'VERSION'), '0.3.4\n');
 
     // When
     const lauf = spawnSync(process.execPath, [SKRIPT, 'patch'], { cwd: klon, encoding: 'utf8' });
 
     // Then
     expect(lauf.status).toBe(0);
-    expect(lauf.stdout.trim()).toBe('0.1.1');
-    expect(lies(klon, 'VERSION')).toBe('0.1.1\n');
-    expect(pomProjektVersion(klon)).toBe('0.1.1');
-    expect(jsonVersion(klon, 'frontend/package.json')).toBe('0.1.1');
+    expect(lauf.stdout.trim()).toBe('0.3.5');
+    expect(lies(klon, 'VERSION')).toBe('0.3.5\n');
+    expect(pomProjektVersion(klon)).toBe('0.3.5');
+    expect(jsonVersion(klon, 'frontend/package.json')).toBe('0.3.5');
   });
 
   test('ein unbekanntes Argument scheitert mit einem Exit-Code ungleich 0', () => {
