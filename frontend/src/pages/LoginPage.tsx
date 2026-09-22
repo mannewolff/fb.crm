@@ -1,16 +1,17 @@
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
 import Link from '@mui/material/Link';
 import TextField from '@mui/material/TextField';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
-import { Link as RouterLink, useNavigate } from 'react-router-dom';
+import { Link as RouterLink, useLocation, useNavigate } from 'react-router-dom';
 
+import { setupStatus } from '../api/auth';
 import { ApiError } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
 import AuthCard from '../components/AuthCard';
-import { CARD_RADIUS } from '../theme';
+import KupferTaste from '../components/KupferTaste';
+import { hinweisAus } from '../lib/feldmeldung';
 
 /**
  * Die Anmeldeseite (K4, K5).
@@ -26,6 +27,11 @@ import { CARD_RADIUS } from '../theme';
  *       stammen: Sonst haengt die Zusage daran, dass der Server fuer beide Faelle zufaellig
  *       denselben Text schickt (K5).</li>
  * </ul>
+ *
+ * Eine frische Instanz hat noch kein Konto, an dem sich jemand anmelden koennte. Die Seite fragt
+ * deshalb beim Aufruf den Einrichtungsstand (E11) und fuehrt auf `/einrichten`. Ist er nicht zu
+ * erfahren, bleibt sie, wo sie ist — die Anmeldung scheitert dann schlimmstenfalls wie jede
+ * andere.
  */
 
 /** Der eine Satz fuer jede gescheiterte Anmeldung (K5). */
@@ -46,10 +52,25 @@ function meldungZu(ursache: unknown): string {
 export default function LoginPage() {
   const { anmelden } = useAuth();
   const navigate = useNavigate();
+  // Der Zustand einer Navigation ist fuer React Router `any`; hier wird er, was er ist: unbekannt.
+  const zustand: unknown = useLocation().state;
+  const hinweis = hinweisAus(zustand);
   const [email, setEmail] = useState('');
   const [passwort, setPasswort] = useState('');
   const [fehler, setFehler] = useState<string | null>(null);
   const [laeuft, setLaeuft] = useState(false);
+
+  useEffect(() => {
+    setupStatus()
+      .then((antwort) => {
+        if (!antwort.initialized) {
+          navigate('/einrichten', { replace: true });
+        }
+      })
+      .catch(() => {
+        // Nichts zu tun: ohne Auskunft bleibt die Anmeldeseite stehen.
+      });
+  }, [navigate]);
 
   const absenden = async (ereignis: FormEvent<HTMLFormElement>) => {
     ereignis.preventDefault();
@@ -80,6 +101,11 @@ export default function LoginPage() {
         }}
         sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}
       >
+        {hinweis === null ? null : (
+          <Alert severity="success" role="status">
+            {hinweis}
+          </Alert>
+        )}
         {fehler === null ? null : <Alert severity="error">{fehler}</Alert>}
         <TextField
           label="E-Mail-Adresse"
@@ -103,25 +129,7 @@ export default function LoginPage() {
           required
           fullWidth
         />
-        <Button
-          type="submit"
-          disabled={laeuft}
-          sx={(theme) => ({
-            borderRadius: `${CARD_RADIUS}px`,
-            paddingBlock: '9px',
-            color: theme.vars.palette.kupferwarte.kupferSchrift,
-            background: `linear-gradient(180deg, ${theme.vars.palette.kupferwarte.kupferHell}, ${theme.vars.palette.kupferwarte.kupfer})`,
-            border: `1px solid ${theme.vars.palette.kupferwarte.kupferTief}`,
-            boxShadow: theme.vars.palette.kupferwarte.schatten.taste,
-            '&:hover': {
-              background: `linear-gradient(180deg, ${theme.vars.palette.kupferwarte.kupferHell}, ${theme.vars.palette.kupferwarte.kupfer})`,
-              boxShadow: theme.vars.palette.kupferwarte.schatten.platte,
-            },
-            '&:active': { transform: 'translateY(1px)' },
-          })}
-        >
-          Anmelden
-        </Button>
+        <KupferTaste disabled={laeuft}>Anmelden</KupferTaste>
       </Box>
     </AuthCard>
   );

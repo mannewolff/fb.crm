@@ -32,7 +32,7 @@ function fetchLiefertVerzoegert(bauen: () => Response) {
 
 /** Spiegelt den Sitzungszustand und bietet die beiden Wege daraus an. */
 function Spiegel() {
-  const { sitzung, anmelden, abmelden } = useAuth();
+  const { sitzung, anmelden, einrichten, abmelden } = useAuth();
   return (
     <div>
       <p>Zustand: {sitzung.status}</p>
@@ -44,6 +44,20 @@ function Spiegel() {
         }}
       >
         anmelden
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          void einrichten({
+            email: 'info@mwolff.org',
+            emailRepeat: 'info@mwolff.org',
+            displayName: 'Manfred Wolff',
+            password: 'geheim-genug',
+            bootstrapToken: 'einmal',
+          });
+        }}
+      >
+        einrichten
       </button>
       <button
         type="button"
@@ -128,6 +142,21 @@ describe('AuthProvider', () => {
     expect(await screen.findByText('Zustand: angemeldet')).toBeInTheDocument();
     expect(screen.getByText('Konto: Manfred Wolff')).toBeInTheDocument();
     expect(fetchMock).toHaveBeenLastCalledWith('/api/auth/login', expect.anything());
+  });
+
+  it('ist nach dem Einrichten angemeldet — die Einrichtung meldet den Betreiber an (K3)', async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response(null, { status: 401 }))
+      .mockResolvedValueOnce(kontoAntwort());
+    const nutzer = userEvent.setup();
+
+    renderSpiegel();
+    await screen.findByText('Zustand: abgemeldet');
+    await nutzer.click(screen.getByRole('button', { name: 'einrichten' }));
+
+    expect(await screen.findByText('Zustand: angemeldet')).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenLastCalledWith('/api/setup', expect.anything());
   });
 
   it('legt auf keinem Weg etwas im Speicher des Browsers ab', async () => {

@@ -66,3 +66,49 @@ export function me(): Promise<Konto> {
 export function setupStatus(): Promise<SetupStatus> {
   return apiJson('/api/setup/status', { methode: 'GET' }, parseSetupStatus);
 }
+
+/** Die Eingaben der Einrichtung — die Felder von `SetupRequest` im Backend. */
+export interface Einrichtung {
+  readonly email: string;
+  readonly emailRepeat: string;
+  readonly displayName: string;
+  readonly password: string;
+  readonly bootstrapToken: string;
+}
+
+/**
+ * Richtet die Instanz ein (K3). Die Antwort ist das angelegte Konto, und die Sitzung kommt wie
+ * beim Anmelden als HttpOnly-Cookie mit — der Betreiber ist danach angemeldet.
+ */
+export function setup(eingaben: Einrichtung): Promise<Konto> {
+  return apiJson('/api/setup', { methode: 'POST', rumpf: eingaben }, parseMe);
+}
+
+/**
+ * Fordert einen Reset-Link an. Die Antwort (202) sagt bewusst nichts darueber, ob es zu der
+ * Adresse ein Konto gibt (K7) — deshalb gibt es hier auch nichts zu verengen.
+ */
+export function requestPasswordReset(email: string): Promise<void> {
+  return apiOhneInhalt('/api/auth/password-reset', { methode: 'POST', rumpf: { email } });
+}
+
+/**
+ * Prueft, ob ein Reset-Link noch einloesbar ist (E24): 204 heisst ja, jeder andere Status
+ * scheitert als `ApiError`. Ohne Nebenwirkung — der Link bleibt danach gueltig.
+ *
+ * Der Token steht im Pfad und wird kodiert: Er kommt aus der Adresszeile, und ein `/` oder `?`
+ * darin fuehrte die Anfrage sonst an einen anderen Endpunkt.
+ */
+export function checkResetToken(token: string): Promise<void> {
+  return apiOhneInhalt(`/api/auth/password-reset/${encodeURIComponent(token)}`, {
+    methode: 'GET',
+  });
+}
+
+/** Loest den Link ein und setzt das neue Passwort (K6, K7). */
+export function confirmPasswordReset(token: string, password: string): Promise<void> {
+  return apiOhneInhalt('/api/auth/password-reset/confirm', {
+    methode: 'POST',
+    rumpf: { token, password },
+  });
+}

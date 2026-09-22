@@ -1,8 +1,8 @@
 import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 
-import type { Konto } from '../api/auth';
-import { login, logout, me } from '../api/auth';
+import type { Einrichtung, Konto } from '../api/auth';
+import { login, logout, me, setup } from '../api/auth';
 
 /**
  * Der Sitzungszustand der Oberflaeche.
@@ -21,6 +21,8 @@ export type Sitzung =
 export interface AuthWert {
   readonly sitzung: Sitzung;
   readonly anmelden: (email: string, passwort: string) => Promise<void>;
+  /** Richtet die Instanz ein; die Einrichtung meldet den Betreiber zugleich an (K3). */
+  readonly einrichten: (eingaben: Einrichtung) => Promise<void>;
   readonly abmelden: () => Promise<void>;
 }
 
@@ -56,6 +58,9 @@ export function AuthProvider({ children }: { readonly children: ReactNode }) {
       sitzung,
       anmelden: async (email: string, passwort: string) => {
         setSitzung({ status: 'angemeldet', konto: await login(email, passwort) });
+      },
+      einrichten: async (eingaben: Einrichtung) => {
+        setSitzung({ status: 'angemeldet', konto: await setup(eingaben) });
       },
       abmelden: async () => {
         await logout();

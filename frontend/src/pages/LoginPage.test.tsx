@@ -4,6 +4,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { AuthProvider } from '../auth/AuthContext';
+import { fetchNachPfad, json, leer } from '../test/fetchNachPfad';
 import { renderMitTheme } from '../test/render';
 import LoginPage from './LoginPage';
 
@@ -23,18 +24,39 @@ function kontoAntwort(): Response {
   });
 }
 
-/** Die erste Antwort gehoert immer der Sitzungspruefung des Providers. */
-function ohneSitzung() {
-  return vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response(null, { status: 401 }));
+type Antwort = () => Response | Promise<Response>;
+
+/**
+ * Keine Sitzung, eingerichtete Instanz — und fuer jeden Anmeldeversuch die naechste Antwort.
+ *
+ * Nach Pfad statt nach Reihenfolge: Beim Aufbau fragen Provider und Seite gleichzeitig, und
+ * welche Anfrage zuerst hinausgeht, ist kein Teil der Zusage.
+ */
+function ohneSitzung(...anmeldungen: Antwort[]) {
+  return aufInstanz(true, ...anmeldungen);
 }
 
-function renderAnmeldeseite() {
+function aufInstanz(eingerichtet: boolean, ...anmeldungen: Antwort[]) {
+  let naechste = 0;
+  return fetchNachPfad({
+    'GET /api/auth/me': leer(401),
+    'GET /api/setup/status': json(200, { initialized: eingerichtet }),
+    'POST /api/auth/login': () => anmeldungen[naechste++](),
+  });
+}
+
+function anmeldeAufrufe(fetchMock: ReturnType<typeof ohneSitzung>) {
+  return fetchMock.mock.calls.filter(([ziel]) => ziel === '/api/auth/login');
+}
+
+function renderAnmeldeseite(zustand: unknown = null) {
   return renderMitTheme(
-    <MemoryRouter initialEntries={['/anmelden']}>
+    <MemoryRouter initialEntries={[{ pathname: '/anmelden', state: zustand }]}>
       <AuthProvider>
         <Routes>
           <Route path="/anmelden" element={<LoginPage />} />
           <Route path="/" element={<p>Leitstand</p>} />
+          <Route path="/einrichten" element={<p>Einrichtungsseite</p>} />
         </Routes>
       </AuthProvider>
     </MemoryRouter>,
@@ -78,7 +100,7 @@ describe('Anmeldeseite', () => {
   });
 
   it('fuehrt nach erfolgreicher Anmeldung in die Anwendung', async () => {
-    ohneSitzung().mockResolvedValueOnce(kontoAntwort());
+    ohneSitzung(kontoAntwort);
 
     renderAnmeldeseite();
     await screen.findByLabelText(/^E-Mail-Adresse/);
@@ -88,9 +110,10 @@ describe('Anmeldeseite', () => {
   });
 
   it('zeigt fuer unbekannte Adresse und falsches Passwort denselben Text', async () => {
-    const fetchMock = ohneSitzung()
-      .mockResolvedValueOnce(problemAntwort(401, 'Es gibt kein Konto mit dieser Adresse.'))
-      .mockResolvedValueOnce(problemAntwort(401, 'Das Passwort ist falsch.'));
+    const fetchMock = ohneSitzung(
+      () => problemAntwort(401, 'Es gibt kein Konto mit dieser Adresse.'),
+      () => problemAntwort(401, 'Das Passwort ist falsch.'),
+    );
 
     renderAnmeldeseite();
     await screen.findByLabelText(/^E-Mail-Adresse/);
@@ -99,7 +122,7 @@ describe('Anmeldeseite', () => {
 
     await anmeldenMit('auch-falsch');
     await waitFor(() => {
-      expect(fetchMock).toHaveBeenCalledTimes(3);
+      expect(anmeldeAufrufe(fetchMock)).toHaveLength(2);
     });
     const zweiteMeldung = screen.getByRole('alert').textContent;
 
@@ -109,7 +132,7 @@ describe('Anmeldeseite', () => {
   });
 
   it('reicht die Meldung des Servers durch, wenn sie nichts ueber das Konto verraet', async () => {
-    ohneSitzung().mockResolvedValueOnce(
+    ohneSitzung(() =>
       problemAntwort(429, 'Zu viele Anmeldeversuche. Bitte spaeter erneut versuchen.'),
     );
 
@@ -121,7 +144,7 @@ describe('Anmeldeseite', () => {
   });
 
   it('meldet einen Ausfall der Schnittstelle ohne technische Einzelheiten', async () => {
-    ohneSitzung().mockRejectedValueOnce(new TypeError('Failed to fetch'));
+    ohneSitzung(() => Promise.reject(new TypeError('Failed to fetch')));
 
     renderAnmeldeseite();
     await screen.findByLabelText(/^E-Mail-Adresse/);
@@ -133,7 +156,7 @@ describe('Anmeldeseite', () => {
   });
 
   it('deaktiviert den Absendeknopf waehrend der Anfrage', async () => {
-    ohneSitzung().mockImplementationOnce(
+    ohneSitzung(
       () =>
         new Promise<Response>((aufloesen) => {
           setTimeout(() => {
@@ -151,7 +174,7 @@ describe('Anmeldeseite', () => {
   });
 
   it('gibt den Absendeknopf nach einem Fehlschlag wieder frei', async () => {
-    ohneSitzung().mockResolvedValueOnce(problemAntwort(401, 'Anmeldung gescheitert.'));
+    ohneSitzung(() => problemAntwort(401, 'Anmeldung gescheitert.'));
 
     renderAnmeldeseite();
     await screen.findByLabelText(/^E-Mail-Adresse/);
@@ -159,5 +182,30 @@ describe('Anmeldeseite', () => {
     await screen.findByRole('alert');
 
     expect(screen.getByRole('button', { name: 'Anmelden' })).toBeEnabled();
+  });
+
+  it('fuehrt eine nicht eingerichtete Instanz auf die Einrichtungsseite', async () => {
+    aufInstanz(false);
+
+    renderAnmeldeseite();
+
+    expect(await screen.findByText('Einrichtungsseite')).toBeInTheDocument();
+  });
+
+  it('bleibt auf der Anmeldeseite, wenn der Einrichtungsstand nicht zu erfahren ist', async () => {
+    fetchNachPfad({ 'GET /api/auth/me': leer(401), 'GET /api/setup/status': leer(503) });
+
+    renderAnmeldeseite();
+
+    expect(await screen.findByLabelText(/^E-Mail-Adresse/)).toBeInTheDocument();
+    expect(screen.queryByText('Einrichtungsseite')).not.toBeInTheDocument();
+  });
+
+  it('zeigt den Hinweis, mit dem ein anderer Weg hierher gefuehrt hat', async () => {
+    ohneSitzung();
+
+    renderAnmeldeseite({ hinweis: 'Das neue Passwort ist gesetzt.' });
+
+    expect(await screen.findByRole('status')).toHaveTextContent('Das neue Passwort ist gesetzt.');
   });
 });

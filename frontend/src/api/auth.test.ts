@@ -1,6 +1,18 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { login, logout, me, parseMe, parseSetupStatus, setupStatus } from './auth';
+import {
+  checkResetToken,
+  confirmPasswordReset,
+  login,
+  logout,
+  me,
+  parseMe,
+  parseSetupStatus,
+  requestPasswordReset,
+  setup,
+  setupStatus,
+} from './auth';
+import { ApiError } from './client';
 
 const KONTO = { id: 1, displayName: 'Manfred Wolff', email: 'info@mwolff.org' };
 
@@ -82,6 +94,71 @@ describe('Aufrufe', () => {
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/auth/me',
       expect.objectContaining({ method: 'GET' }),
+    );
+  });
+
+  it('richtet die Instanz ein und liefert das angemeldete Konto', async () => {
+    const fetchMock = fetchLiefert(() => jsonAntwort(KONTO));
+    const eingaben = {
+      email: 'info@mwolff.org',
+      emailRepeat: 'info@mwolff.org',
+      displayName: 'Manfred Wolff',
+      password: 'geheim-genug',
+      bootstrapToken: 'einmal',
+    };
+
+    await expect(setup(eingaben)).resolves.toEqual(KONTO);
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/setup',
+      expect.objectContaining({ method: 'POST', body: JSON.stringify(eingaben) }),
+    );
+  });
+
+  it('weist eine Einrichtungsantwort ohne Konto zurueck', async () => {
+    fetchLiefert(() => jsonAntwort({ initialized: true }));
+
+    await expect(
+      setup({ email: 'a@b.de', emailRepeat: 'a@b.de', displayName: 'A', password: 'x', bootstrapToken: 'y' }),
+    ).rejects.toThrow(TypeError);
+  });
+
+  it('fordert einen Reset-Link an', async () => {
+    const fetchMock = fetchLiefert(() => new Response(null, { status: 202 }));
+
+    await expect(requestPasswordReset('info@mwolff.org')).resolves.toBeUndefined();
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/auth/password-reset',
+      expect.objectContaining({ method: 'POST', body: JSON.stringify({ email: 'info@mwolff.org' }) }),
+    );
+  });
+
+  it('prueft einen Reset-Link, ohne dass Zeichen darin den Pfad verlassen', async () => {
+    const fetchMock = fetchLiefert(() => new Response(null, { status: 204 }));
+
+    await expect(checkResetToken('a/b?c')).resolves.toBeUndefined();
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/auth/password-reset/a%2Fb%3Fc',
+      expect.objectContaining({ method: 'GET' }),
+    );
+  });
+
+  it('meldet einen verbrauchten Reset-Link als ApiError mit 410', async () => {
+    fetchLiefert(() => new Response(null, { status: 410 }));
+
+    await expect(checkResetToken('alt')).rejects.toMatchObject({ status: 410 });
+    await expect(checkResetToken('alt')).rejects.toBeInstanceOf(ApiError);
+  });
+
+  it('setzt das neue Passwort mit dem Token aus dem Link', async () => {
+    const fetchMock = fetchLiefert(() => new Response(null, { status: 204 }));
+
+    await expect(confirmPasswordReset('tok', 'neues-passwort')).resolves.toBeUndefined();
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/auth/password-reset/confirm',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ token: 'tok', password: 'neues-passwort' }),
+      }),
     );
   });
 
