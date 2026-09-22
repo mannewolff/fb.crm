@@ -121,7 +121,19 @@
       "abdeckungMin": 10,
       "kostenUsd": 50,
       "korrekturrunden": 2
+    },
+    "stufen": {
+      "schwer": {
+        "modell": "claude-opus-5"
+      },
+      "mittel": {
+        "modell": "claude-sonnet-5"
+      },
+      "leicht": {
+        "modell": "claude-sonnet-5"
+      }
     }
+ 
   },
   "toolbox": {
     "host": "https://kanban.mwolff.org",
