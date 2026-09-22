@@ -13,6 +13,10 @@
 	# rechts und kaeme damit zurecht — aber diese zweite Linie im Proxy haelt die Umgehung auch
 	# dann geschlossen, wenn spaeter trusted-proxy-count oder die Filterreihenfolge geaendert
 	# wird, ohne dass es jemandem auffaellt.
-	header_up X-Forwarded-For {remote_host}
-	reverse_proxy fbcrm-api:8080
+	#
+	# header_up ist eine Unteranweisung von reverse_proxy: Auf Ebene des Site-Blocks weist Caddy
+	# den ganzen Caddyfile mit "unrecognized directive" ab und startet nicht (Issue #32).
+	reverse_proxy fbcrm-api:8080 {
+		header_up X-Forwarded-For {remote_host}
+	}
 }

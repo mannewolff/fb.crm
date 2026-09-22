@@ -43,7 +43,13 @@ services:
       # zufälligen 32+-Byte-Wert ersetzen.
       FBCRM_SESSION_SECRET: ${FBCRM_SESSION_SECRET:-dev-only-insecure-secret-change-me}
       # Session-Cookie nur über HTTPS ausliefern. Hinter TLS (Prod) true; für reines HTTP-Lokal ggf. false.
-      FBCRM_COOKIE_SECURE: ${FBCRM_COOKIE_SECURE:-true}
+      # Der Name ist der, den application.yml liest — unter FBCRM_COOKIE_SECURE kam der Wert zwar
+      # im Container an, aber niemand las ihn (Issue #32).
+      FBCRM_SESSION_COOKIE_SECURE: ${FBCRM_SESSION_COOKIE_SECURE:-true}
+      # Peer-Adressen, deren X-Forwarded-For die Anwendung glaubt (E9), kommagetrennt. Leer heisst:
+      # Es zaehlt die Adresse der Gegenstelle. Ohne Eintrag hier erreichte ein Wert aus der .env
+      # den Container nicht.
+      FBCRM_TRUSTED_PROXIES: ${FBCRM_TRUSTED_PROXIES:-}
       # Einmal-Token für den ersten Plattform-Admin (leer = deaktiviert; greift nur ohne Admin).
       FBCRM_BOOTSTRAP_ADMIN_TOKEN: ${FBCRM_BOOTSTRAP_ADMIN_TOKEN:-}
       FBCRM_DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-fbcrm}
@@ -78,6 +84,15 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
+    # Gesund heisst: Spring Boot ist hochgefahren, Flyway ist durch, und /actuator/health antwortet
+    # UP. curl liegt im Image allein fuer diese Zeile. start_period deckt den ersten Start mit den
+    # Migrationen ab; in dieser Zeit zaehlen Fehlschlaege nicht.
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 60s
 
   # Auffangserver fuer den lokalen Entwicklungsbetrieb (E8): nimmt alles an, stellt nichts zu
   # und zeigt jede Nachricht in seiner Weboberflaeche. Nur unter dem Profil dev-mail, damit der
@@ -112,8 +127,10 @@ services:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
+    # Erst die gesunde API, dann der Proxy: Sonst beantwortete Caddy die ersten Aufrufe mit 502.
     depends_on:
-      - fbcrm-api
+      fbcrm-api:
+        condition: service_healthy
 
 volumes:
   postgres_data:

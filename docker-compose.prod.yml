@@ -22,7 +22,8 @@ services:
       # Prod-kritische Werte MUESSEN aus der Server-.env kommen (kein unsicherer Default).
       FBCRM_SESSION_SECRET: ${FBCRM_SESSION_SECRET:?FBCRM_SESSION_SECRET muss in .env gesetzt sein}
       FBCRM_BASE_URL: ${FBCRM_BASE_URL:?FBCRM_BASE_URL muss in .env gesetzt sein (z. B. https://crm.example.org)}
-      # Uebrige Prod-Envs (FBCRM_COOKIE_SECURE, FBCRM_BOOTSTRAP_ADMIN_TOKEN, FBCRM_MAIL_*,
+      # Uebrige Prod-Envs (FBCRM_SESSION_COOKIE_SECURE, FBCRM_TRUSTED_PROXIES,
+      # FBCRM_BOOTSTRAP_ADMIN_TOKEN, FBCRM_MAIL_*,
       # DB-/MinIO-Zugang) werden vom Basis-Compose aus der .env gelesen.
     networks:
       - default
