@@ -1,7 +1,8 @@
 import { lazy, Suspense } from 'react';
-import { Navigate, Route, Routes } from 'react-router-dom';
+import { Navigate, Outlet, Route, Routes } from 'react-router-dom';
 
 import { AuthProvider } from './auth/AuthContext';
+import AppShell from './components/AppShell';
 import ProtectedRoute from './routes/ProtectedRoute';
 
 // Route-Level Lazy Loading ist Pflicht fuer alle Top-Level-Routen (CLAUDE-react.md).
@@ -9,11 +10,15 @@ const LoginPage = lazy(async () => import('./pages/LoginPage'));
 const SetupPage = lazy(async () => import('./pages/SetupPage'));
 const ForgotPasswordPage = lazy(async () => import('./pages/ForgotPasswordPage'));
 const ResetPasswordPage = lazy(async () => import('./pages/ResetPasswordPage'));
-const StartPage = lazy(async () => import('./pages/StartPage'));
+const EmptyPanel = lazy(async () => import('./pages/EmptyPanel'));
 
 /**
  * Der Routenbaum. Offen sind die Anmeldeseite, die Einrichtung und die beiden Seiten zum
  * Passwort; alles andere liegt hinter der Sitzung.
+ *
+ * Die geschuetzten Adressen teilen sich einen Rahmen ({@link AppShell}): Er steht einmal um
+ * das `Outlet` und bleibt beim Wechsel zwischen ihnen stehen, statt je Ansicht neu zu entstehen.
+ * `/`, `/administration` und `/dokumentation` zeigen in diesem Stand dasselbe leere Panel.
  *
  * Die unbekannte Adresse bekommt keine eigene Ansicht: Mit Sitzung fuehrt sie auf die
  * Startadresse, ohne Sitzung uebernimmt {@link ProtectedRoute} und fuehrt auf die
@@ -29,21 +34,21 @@ export default function App() {
           <Route path="/passwort-vergessen" element={<ForgotPasswordPage />} />
           <Route path="/passwort-neu" element={<ResetPasswordPage />} />
           <Route
-            path="/"
             element={
               <ProtectedRoute>
-                <StartPage />
+                <AppShell>
+                  <Suspense fallback={null}>
+                    <Outlet />
+                  </Suspense>
+                </AppShell>
               </ProtectedRoute>
             }
-          />
-          <Route
-            path="*"
-            element={
-              <ProtectedRoute>
-                <Navigate to="/" replace />
-              </ProtectedRoute>
-            }
-          />
+          >
+            <Route path="/" element={<EmptyPanel />} />
+            <Route path="/administration" element={<EmptyPanel />} />
+            <Route path="/dokumentation" element={<EmptyPanel />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Route>
         </Routes>
       </Suspense>
     </AuthProvider>

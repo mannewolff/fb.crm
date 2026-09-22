@@ -1,0 +1,48 @@
+import { screen, within } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+
+import { AuthProvider } from '../auth/AuthContext';
+import { fetchNachPfad, json } from '../test/fetchNachPfad';
+import { renderMitTheme } from '../test/render';
+import TopBar from './TopBar';
+
+const KONTO = { id: 1, displayName: 'Manfred Wolff', email: 'info@mwolff.org' };
+
+function renderKopf() {
+  fetchNachPfad({ 'GET /api/auth/me': json(200, KONTO) });
+  return renderMitTheme(
+    <MemoryRouter>
+      <AuthProvider>
+        <TopBar />
+      </AuthProvider>
+    </MemoryRouter>,
+  );
+}
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
+describe('TopBar', () => {
+  it('ist der Kopf der Seite, links leer und rechts allein das Nutzer-Mal (K13)', async () => {
+    renderKopf();
+
+    const kopf = within(screen.getByRole('banner'));
+    expect(screen.getByTestId('kopf-links')).toBeEmptyDOMElement();
+    expect(await kopf.findByRole('button', { name: /Nutzermenü/ })).toBeInTheDocument();
+    expect(kopf.getAllByRole('button')).toHaveLength(1);
+    expect(kopf.queryAllByRole('link')).toHaveLength(0);
+  });
+
+  it('traegt keine Suche, keine Reiterleiste und keine Kennzahl', async () => {
+    renderKopf();
+    await screen.findByRole('button', { name: /Nutzermenü/ });
+
+    expect(screen.queryByRole('searchbox')).not.toBeInTheDocument();
+    expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
+    expect(screen.queryByRole('tablist')).not.toBeInTheDocument();
+    expect(screen.queryByText(/\d/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/⌘K/)).not.toBeInTheDocument();
+  });
+});

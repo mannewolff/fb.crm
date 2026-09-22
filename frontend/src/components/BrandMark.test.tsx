@@ -25,4 +25,12 @@ describe('BrandMark', () => {
     // (E10, Issue #26).
     expect(screen.queryByTestId('marke-zusatz')).not.toBeInTheDocument();
   });
+
+  it('zeigt kompakt nur das Mal — fuer die eingeklappte Schiene', () => {
+    renderMitTheme(<BrandMark version="1.4.0" kompakt />);
+
+    expect(screen.getByTestId('marke-mal')).toBeInTheDocument();
+    expect(screen.queryByText('fb.crm')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('marke-zusatz')).not.toBeInTheDocument();
+  });
 });

@@ -64,6 +64,14 @@ export interface KupferwarteFarben {
   readonly grau: string;
   /** Der Grund der Anwendung: Kupfer-Schimmer oben links ueber dem Grundton. */
   readonly grundVerlauf: string;
+  /**
+   * Das runde Nutzer-Mal im Kopf: Schiefer-Verlauf von hell nach tief, Kuerzel darauf
+   * (Vorlage `.nutzer` Z. 347–356). Die Vorlage fuehrt es fuer beide Erscheinungsbilder mit
+   * denselben Werten.
+   */
+  readonly nutzerHell: string;
+  readonly nutzerTief: string;
+  readonly nutzerSchrift: string;
 }
 
 /** Die vier Tiefenstufen der Vorlage: Nut < Grund < Platte < Abgehoben. */
@@ -118,6 +126,11 @@ const PLEX_SANS = '"IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-s
 /** Zahlen und Kennungen (Vorlage Z. 171–174). */
 const PLEX_MONO = '"IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace';
 
+/** Vorlage `.nutzer` Z. 349–350 — in beiden Erscheinungsbildern dieselben Werte. */
+const NUTZER_HELL = '#47505D';
+const NUTZER_TIEF = '#2B323C';
+const NUTZER_SCHRIFT = '#FFFFFF';
+
 /**
  * Der Grund traegt in beiden Erscheinungsbildern denselben Schimmer oben links
  * (Vorlage Z. 152–162).
@@ -159,6 +172,9 @@ const hellFarben: KupferwarteFarben = {
   // Melder: Vorlage #8A929E — auf der Nut nur 2,22:1 (CLAUDE-design.md, Verfehlung 4).
   grau: '#727B8A',
   grundVerlauf: grundVerlauf(HELL_KUPFER_SCHIMMER, HELL_GRUND),
+  nutzerHell: NUTZER_HELL,
+  nutzerTief: NUTZER_TIEF,
+  nutzerSchrift: NUTZER_SCHRIFT,
 };
 
 const dunkelFarben: KupferwarteFarben = {
@@ -189,6 +205,9 @@ const dunkelFarben: KupferwarteFarben = {
   stahl: '#5B96F0',
   grau: '#6E7681',
   grundVerlauf: grundVerlauf(DUNKEL_KUPFER_SCHIMMER, DUNKEL_GRUND),
+  nutzerHell: NUTZER_HELL,
+  nutzerTief: NUTZER_TIEF,
+  nutzerSchrift: NUTZER_SCHRIFT,
 };
 
 export const SCHATTEN: {

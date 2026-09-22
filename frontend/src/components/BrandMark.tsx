@@ -24,9 +24,11 @@ const MAL_SCHATTEN = '0 1px 0 rgba(255,255,255,.35) inset, 0 2px 6px rgba(0,0,0,
 export interface BrandMarkProps {
   /** Versionsstand der Instanz; ohne ihn bleibt die Zeile unter dem Namen leer. */
   readonly version?: string;
+  /** Nur das Mal — fuer die eingeklappte Schiene, in der Name und Version keinen Platz haben. */
+  readonly kompakt?: boolean;
 }
 
-export default function BrandMark({ version }: BrandMarkProps) {
+export default function BrandMark({ version, kompakt = false }: BrandMarkProps) {
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: '10px', paddingInline: '4px' }}>
       <Box
@@ -49,6 +51,7 @@ export default function BrandMark({ version }: BrandMarkProps) {
           <rect x="10.9" y="2" width="3.6" height="5" rx="1.2" fill="#fff" fillOpacity=".5" />
         </svg>
       </Box>
+      {kompakt ? null : (
       <Box sx={{ lineHeight: 1.15 }}>
         <Typography
           component="span"
@@ -78,6 +81,7 @@ export default function BrandMark({ version }: BrandMarkProps) {
           </Typography>
         )}
       </Box>
+      )}
     </Box>
   );
 }

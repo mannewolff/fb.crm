@@ -45,6 +45,11 @@ describe.each([
     },
   );
 
+  it('haelt das Kuerzel im Nutzer-Mal auf beiden Enden des Verlaufs bei mindestens 4,5:1', () => {
+    expect(contrastRatio(p.nutzerSchrift, p.nutzerHell)).toBeGreaterThanOrEqual(4.5);
+    expect(contrastRatio(p.nutzerSchrift, p.nutzerTief)).toBeGreaterThanOrEqual(4.5);
+  });
+
   it('haelt die Schrift auf der Kupferfuellung bei mindestens 4,5:1', () => {
     expect(contrastRatio(p.kupferSchrift, p.kupfer)).toBeGreaterThanOrEqual(4.5);
   });
