@@ -1,0 +1,82 @@
+# CI — dieselben Gates wie lokal (CLAUDE-java.md §8 Schritt 8, Issue #31).
+#
+# Jeder Schritt mit einer id "gate-…" fuehrt ein Kommando aus .claude/workflow.config.json aus,
+# Zeichen fuer Zeichen: buildChecks nach Bereich (backend → verify, frontend → frontend) und
+# mutationCommand im eigenen Job pit, damit dessen Laufzeit verify nicht aufhaelt.
+# CiWorkflowTest haelt Config und Workflow deckungsgleich; alle uebrigen Schritte sind
+# Vorbereitung.
+#
+# "on" steht in Anfuehrungszeichen: YAML 1.1 liest ein nacktes on als true.
+name: CI
+
+"on":
+  push:
+  pull_request:
+
+# Die Jobs lesen nur. Ein Token mit mehr Rechten waere Angriffsflaeche ohne Nutzen.
+permissions:
+  contents: read
+
+# Ein neuer Push auf denselben Branch loest den laufenden Durchgang ab.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "25"
+          cache: maven
+      # Die Gates rufen "mvn" wie lokal; hier steht dahinter der Maven-Wrapper, damit CI die
+      # Maven-Version aus .mvn/wrapper faehrt und nicht die des Runners.
+      - name: Maven-Wrapper als mvn bereitstellen
+        run: |
+          mkdir -p "$RUNNER_TEMP/bin"
+          printf '#!/bin/sh\nexec "%s/mvnw" "$@"\n' "$GITHUB_WORKSPACE" > "$RUNNER_TEMP/bin/mvn"
+          chmod +x "$RUNNER_TEMP/bin/mvn"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+      # Docker ist auf dem Runner vorhanden — die Testcontainers-ITs laufen mit.
+      - id: gate-mvn-verify
+        run: mvn verify
+
+  pit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "25"
+          cache: maven
+      - name: Maven-Wrapper als mvn bereitstellen
+        run: |
+          mkdir -p "$RUNNER_TEMP/bin"
+          printf '#!/bin/sh\nexec "%s/mvnw" "$@"\n' "$GITHUB_WORKSPACE" > "$RUNNER_TEMP/bin/mvn"
+          chmod +x "$RUNNER_TEMP/bin/mvn"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+      - id: gate-pit
+        run: mvn -Ppit -Dskip.frontend=true test
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          # engines.node — dieselbe Version wie node.version in pom.xml (CiWorkflowTest).
+          node-version-file: frontend/package.json
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Abhaengigkeiten installieren
+        run: npm --prefix frontend ci
+      - id: gate-build
+        run: npm --prefix frontend run build
+      - id: gate-lint
+        run: npm --prefix frontend run lint
+      - id: gate-test-coverage
+        run: npm --prefix frontend run test:coverage
