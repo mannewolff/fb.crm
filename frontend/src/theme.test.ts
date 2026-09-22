@@ -28,10 +28,10 @@ const FLIESSTEXT = ['text', 'textMatt', 'textSchwach'] as const;
  */
 const GRAFIK = ['kupfer', 'gruen', 'bernst', 'zinnob', 'stahl', 'grau'] as const;
 
-describe.each([
-  ['hell', KUPFERWARTE.hell],
-  ['dunkel', KUPFERWARTE.dunkel],
-])('Kontrast im Erscheinungsbild %s', (_name, p) => {
+/** Die helle Palette — das einzige Erscheinungsbild (CLAUDE-design.md, „Erscheinungsbild"). */
+const p = KUPFERWARTE;
+
+describe('Kontrast', () => {
   it.each(
     FLIESSTEXT.flatMap((rolle) => FLAECHEN.map((flaeche) => [rolle, flaeche] as const)),
   )('haelt %s auf %s bei mindestens 4,5:1', (rolle, flaeche) => {
@@ -57,10 +57,9 @@ describe.each([
   it('staffelt die drei Textstufen auf der schwaechsten Flaeche unterscheidbar', () => {
     // Nachgezogen wird nur nach unten: waere textSchwach bloss auf 4,5:1 gehoben, fiele es
     // mit textMatt zusammen und die Vorlage verlore eine ihrer drei Stufen.
-    const schwaechste = _name === 'hell' ? p.nute : p.platteHoch;
-    const text = contrastRatio(p.text, schwaechste);
-    const matt = contrastRatio(p.textMatt, schwaechste);
-    const schwach = contrastRatio(p.textSchwach, schwaechste);
+    const text = contrastRatio(p.text, p.nute);
+    const matt = contrastRatio(p.textMatt, p.nute);
+    const schwach = contrastRatio(p.textSchwach, p.nute);
     expect(text).toBeGreaterThan(matt);
     expect(matt).toBeGreaterThan(schwach);
     expect(matt - schwach).toBeGreaterThan(0.5);
@@ -75,28 +74,33 @@ describe('Tokens der Vorlage', () => {
     expect(theme.shape.borderRadius).toBe(CONTROL_RADIUS);
   });
 
-  it('kennt genau vier Schattenstufen in beiden Erscheinungsbildern', () => {
-    expect(Object.keys(SCHATTEN.hell)).toEqual(['nute', 'platte', 'hoch', 'taste']);
-    expect(Object.keys(SCHATTEN.dunkel)).toEqual(['nute', 'platte', 'hoch', 'taste']);
+  it('kennt genau vier Schattenstufen', () => {
+    expect(Object.keys(SCHATTEN)).toEqual(['nute', 'platte', 'hoch', 'taste']);
   });
 
   it('schreibt die CSS-Variablen mit dem Praefix fb', () => {
     expect(theme.cssVarPrefix).toBe('fb');
   });
 
-  it('schaltet das Erscheinungsbild ueber prefers-color-scheme, nicht ueber ein Bedienelement', () => {
-    expect(theme.colorSchemeSelector).toBe('media');
+  it('kennt nur das helle Farbschema', () => {
+    expect(Object.keys(theme.colorSchemes)).toEqual(['light']);
+  });
+
+  it('erzeugt kein CSS unter prefers-color-scheme — die Oberflaeche bleibt hell, gleich was der Rechner sagt', () => {
+    // Gegenprobe zum Ausbau (Issue #34): ohne sie waere ein still wieder eingeschalteter
+    // Dunkelsatz von einem wirksamen Ausbau nicht zu unterscheiden. Geprueft werden das
+    // erzeugte Stylesheet der CSS-Variablen und die globalen Regeln der Komponenten.
+    expect(JSON.stringify(theme.generateStyleSheets())).not.toContain('prefers-color-scheme');
+    expect(JSON.stringify(theme.components)).not.toContain('prefers-color-scheme');
   });
 
   it('setzt den Umbruchpunkt sm auf 760 px', () => {
     expect(theme.breakpoints.values.sm).toBe(760);
   });
 
-  it('legt den Kupfer-Schimmer oben links in den Grund beider Erscheinungsbilder', () => {
-    for (const p of [KUPFERWARTE.hell, KUPFERWARTE.dunkel]) {
-      expect(p.grundVerlauf).toContain('radial-gradient');
-      expect(p.grundVerlauf).toContain('18% -8%');
-      expect(p.grundVerlauf).toContain(p.kupferSchimmer);
-    }
+  it('legt den Kupfer-Schimmer oben links in den Grund', () => {
+    expect(p.grundVerlauf).toContain('radial-gradient');
+    expect(p.grundVerlauf).toContain('18% -8%');
+    expect(p.grundVerlauf).toContain(p.kupferSchimmer);
   });
 });

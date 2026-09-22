@@ -15,8 +15,7 @@ const KONTO = { id: 1, displayName: 'Manfred Wolff', email: 'info@mwolff.org' };
  *
  * jsdom kennt kein `matchMedia`; MUI fragt es fuer `useMediaQuery`. Das Doppel liest die erste
  * Zahl der Abfrage als Mindestbreite — die Form, die MUI fuer `breakpoints.up(...)` erzeugt:
- * `(min-width:<n>px)`. Die Abfrage des Themes nach `prefers-color-scheme` traegt keine Zahl und
- * ergibt damit `false`, also das helle Erscheinungsbild.
+ * `(min-width:<n>px)`. Eine Abfrage ohne Zahl ergibt `false`.
  */
 function fensterbreite(breite: number) {
   Object.defineProperty(window, 'matchMedia', {
@@ -24,7 +23,7 @@ function fensterbreite(breite: number) {
     value: (abfrage: string) => ({
       matches: breite >= Number.parseInt(abfrage.replace(/\D+/g, ' ').trim(), 10),
       media: abfrage,
-      // Beide Formen: useMediaQuery nimmt die neue, das Erscheinungsbild des Themes die alte.
+      // Beide Formen, neue und alte: MUI fragt je nach Stelle die eine oder die andere.
       addEventListener: vi.fn(),
       removeEventListener: vi.fn(),
       addListener: vi.fn(),

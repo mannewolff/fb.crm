@@ -4,18 +4,22 @@ import { createTheme } from '@mui/material/styles';
  * Kupferwarte — die einzige Wertequelle des Erscheinungsbildes.
  *
  * Alle Werte stammen aus der verbindlichen Vorlage `docs/entwurf-leitstand.html`
- * (`:root` Z. 11–60 hell, Z. 63–148 dunkel, `body` Z. 152–162, Schriften Z. 164–174,
+ * (`:root` Z. 11–60, `body` Z. 152–162, Schriften Z. 164–174,
  * Fokusring Z. 178–182, Etikett Z. 185–194, Bewegung Z. 1093–1096) und aus der
  * Palettentabelle in `CLAUDE-design.md`.
  *
+ * **Ein Erscheinungsbild: hell** (CLAUDE-design.md, „Erscheinungsbild", Issue #34). Die Vorlage
+ * traegt unter `prefers-color-scheme: dark` einen Dunkelsatz; er gilt nicht und wird hier nicht
+ * gefuehrt. `theme.test.ts` haelt fest, dass kein Farbschema ausser `light` entsteht und kein CSS
+ * unter `prefers-color-scheme`.
+ *
  * Wo ein Wert von der Vorlage abweicht, steht der Grund an der Konstante. Abgewichen wird
- * ausschliesslich an den vier Stellen, die `CLAUDE-design.md` unter „Kontrast" als
- * AA-Verfehlung der Vorlage benennt — nachgezogen im selben Farbton, nie durch Senken der
- * Schwelle. Nachgerechnet wird das in `theme.test.ts` mit `lib/contrast.ts`.
+ * ausschliesslich an den Stellen, die `CLAUDE-design.md` unter „Kontrast" als AA-Verfehlung
+ * der Vorlage benennt — nachgezogen im selben Farbton, nie durch Senken der Schwelle.
+ * Nachgerechnet wird das in `theme.test.ts` mit `lib/contrast.ts`.
  *
  * **Tokens sind Verweise, keine Werte.** Ansichten lesen die Flaechen, Linien und Melder
- * ueber `theme.vars.palette.kupferwarte.*`; die Konstanten unten liefern nur den jeweiligen
- * Wert eines Erscheinungsbildes und schalten nicht um.
+ * ueber `theme.vars.palette.kupferwarte.*`.
  */
 
 /** Platte, Kachel, Laufband. */
@@ -111,12 +115,7 @@ const HELL_GRUND = '#E7E9ED';
 const HELL_KANTE = 'rgba(255,255,255,.9)';
 const HELL_KUPFER_SCHIMMER = 'rgba(168,95,44,.16)';
 
-const DUNKEL_GRUND = '#0D1014';
-const DUNKEL_KANTE = 'rgba(255,255,255,.075)';
-const DUNKEL_KUPFER = '#D08A52';
-const DUNKEL_KUPFER_SCHIMMER = 'rgba(208,138,82,.18)';
-
-/** Vorlage Z. 225: das dunkle Ende des Kupferverlaufs, in beiden Erscheinungsbildern gleich. */
+/** Vorlage Z. 225: das tiefe Ende des Kupferverlaufs. */
 const KUPFER_TIEF = '#7B421C';
 
 /** Titel und Anzeige (Vorlage Z. 164–169). */
@@ -126,7 +125,7 @@ const PLEX_SANS = '"IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-s
 /** Zahlen und Kennungen (Vorlage Z. 171–174). */
 const PLEX_MONO = '"IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace';
 
-/** Vorlage `.nutzer` Z. 349–350 — in beiden Erscheinungsbildern dieselben Werte. */
+/** Vorlage `.nutzer` Z. 349–350. */
 const NUTZER_HELL = '#47505D';
 const NUTZER_TIEF = '#2B323C';
 const NUTZER_SCHRIFT = '#FFFFFF';
@@ -163,13 +162,13 @@ const hellFarben: KupferwarteFarben = {
   kupferSchimmer: HELL_KUPFER_SCHIMMER,
   // Vorlage `.taste-kupfer` Z. 322–345: weisse Schrift auf der Kupferfuellung, 4,84:1.
   kupferSchrift: '#FFFFFF',
-  // Melder: Vorlage #2F8F4E — auf der Nut nur 2,87:1 (CLAUDE-design.md, Verfehlung 4).
+  // Melder: Vorlage #2F8F4E — auf der Nut nur 2,87:1 (CLAUDE-design.md, Verfehlung 3).
   gruen: '#2E8B4C',
-  // Melder: Vorlage #B07C15 — auf der Nut nur 2,58:1 (CLAUDE-design.md, Verfehlung 4).
+  // Melder: Vorlage #B07C15 — auf der Nut nur 2,58:1 (CLAUDE-design.md, Verfehlung 3).
   bernst: '#A17213',
   zinnob: '#C8393E',
   stahl: '#2F6FC9',
-  // Melder: Vorlage #8A929E — auf der Nut nur 2,22:1 (CLAUDE-design.md, Verfehlung 4).
+  // Melder: Vorlage #8A929E — auf der Nut nur 2,22:1 (CLAUDE-design.md, Verfehlung 3).
   grau: '#727B8A',
   grundVerlauf: grundVerlauf(HELL_KUPFER_SCHIMMER, HELL_GRUND),
   nutzerHell: NUTZER_HELL,
@@ -177,58 +176,14 @@ const hellFarben: KupferwarteFarben = {
   nutzerSchrift: NUTZER_SCHRIFT,
 };
 
-const dunkelFarben: KupferwarteFarben = {
-  grund: DUNKEL_GRUND,
-  grundTief: '#090B0E',
-  nute: '#080A0D',
-  platte: '#171B22',
-  platteFuss: '#12151B',
-  platteHoch: '#1E242D',
-  rand: '#262C36',
-  randStark: '#333B47',
-  kante: DUNKEL_KANTE,
-  text: '#E7EAEF',
-  textMatt: '#98A1AE',
-  // Vorlage: #69717E — als Schrift nur 3,17–4,02:1 (CLAUDE-design.md, Verfehlung 1).
-  // Aufgehellt im selben Ton auf 4,54:1 gegen „Platte hoch", die hellste dunkle Flaeche.
-  textSchwach: '#838B97',
-  kupfer: DUNKEL_KUPFER,
-  kupferHell: '#E3A26C',
-  kupferTief: KUPFER_TIEF,
-  kupferSchimmer: DUNKEL_KUPFER_SCHIMMER,
-  // Vorlage `.taste-kupfer`: weisse Schrift ergaebe hier nur 2,82:1 (CLAUDE-design.md,
-  // Verfehlung 3). Dunkel traegt die Kupfertaste deshalb die Grundtinte — 6,75:1.
-  kupferSchrift: DUNKEL_GRUND,
-  gruen: '#46C46F',
-  bernst: '#E0AE49',
-  zinnob: '#F0575C',
-  stahl: '#5B96F0',
-  grau: '#6E7681',
-  grundVerlauf: grundVerlauf(DUNKEL_KUPFER_SCHIMMER, DUNKEL_GRUND),
-  nutzerHell: NUTZER_HELL,
-  nutzerTief: NUTZER_TIEF,
-  nutzerSchrift: NUTZER_SCHRIFT,
+export const SCHATTEN: KupferwarteSchatten = {
+  nute: `0 2px 5px rgba(18,24,33,.14) inset, 0 -1px 0 ${HELL_KANTE} inset`,
+  platte: `0 1px 0 ${HELL_KANTE} inset, 0 1px 2px rgba(18,24,33,.10), 0 10px 24px -14px rgba(18,24,33,.35)`,
+  hoch: `0 1px 0 ${HELL_KANTE} inset, 0 2px 4px rgba(18,24,33,.10), 0 18px 34px -16px rgba(18,24,33,.42)`,
+  taste: `0 1px 0 ${HELL_KANTE} inset, 0 1px 2px rgba(18,24,33,.18)`,
 };
 
-export const SCHATTEN: {
-  readonly hell: KupferwarteSchatten;
-  readonly dunkel: KupferwarteSchatten;
-} = {
-  hell: {
-    nute: `0 2px 5px rgba(18,24,33,.14) inset, 0 -1px 0 ${HELL_KANTE} inset`,
-    platte: `0 1px 0 ${HELL_KANTE} inset, 0 1px 2px rgba(18,24,33,.10), 0 10px 24px -14px rgba(18,24,33,.35)`,
-    hoch: `0 1px 0 ${HELL_KANTE} inset, 0 2px 4px rgba(18,24,33,.10), 0 18px 34px -16px rgba(18,24,33,.42)`,
-    taste: `0 1px 0 ${HELL_KANTE} inset, 0 1px 2px rgba(18,24,33,.18)`,
-  },
-  dunkel: {
-    nute: '0 3px 7px rgba(0,0,0,.6) inset, 0 -1px 0 rgba(255,255,255,.05) inset',
-    platte: `0 1px 0 ${DUNKEL_KANTE} inset, 0 1px 2px rgba(0,0,0,.5), 0 12px 28px -16px rgba(0,0,0,.85)`,
-    hoch: '0 1px 0 rgba(255,255,255,.11) inset, 0 2px 6px rgba(0,0,0,.55), 0 22px 40px -18px rgba(0,0,0,.95)',
-    taste: '0 1px 0 rgba(255,255,255,.08) inset, 0 1px 2px rgba(0,0,0,.6)',
-  },
-};
-
-export const KUPFERWARTE = { hell: hellFarben, dunkel: dunkelFarben } as const;
+export const KUPFERWARTE: KupferwarteFarben = hellFarben;
 
 /** Ueberschriften der Vorlage: Archivo mit gedehnter Breite. */
 const ueberschrift = { fontFamily: ARCHIVO, fontStretch: '112%', textWrap: 'balance' } as const;
@@ -248,12 +203,12 @@ function palette(farben: KupferwarteFarben, schatten: KupferwarteSchatten) {
 }
 
 export const theme = createTheme({
-  // Zwei Erscheinungsbilder, kein Schalter: die dunklen Werte stehen unter
-  // @media (prefers-color-scheme: dark) (CLAUDE-design.md, „Erscheinungsbilder").
-  cssVariables: { colorSchemeSelector: 'media', cssVarPrefix: 'fb' },
+  // Ein Erscheinungsbild, hell (CLAUDE-design.md, „Erscheinungsbild"). Ohne ein zweites
+  // Farbschema erzeugt MUI kein CSS unter prefers-color-scheme — die Oberflaeche bleibt hell,
+  // gleich was der Rechner einstellt.
+  cssVariables: { cssVarPrefix: 'fb' },
   colorSchemes: {
-    light: { palette: palette(hellFarben, SCHATTEN.hell) },
-    dark: { palette: palette(dunkelFarben, SCHATTEN.dunkel) },
+    light: { palette: palette(hellFarben, SCHATTEN) },
   },
   shape: { borderRadius: CONTROL_RADIUS },
   breakpoints: {
@@ -289,9 +244,6 @@ export const theme = createTheme({
           background: hellFarben.grundVerlauf,
           lineHeight: 1.5,
           WebkitFontSmoothing: 'antialiased',
-          '@media (prefers-color-scheme: dark)': {
-            background: dunkelFarben.grundVerlauf,
-          },
         },
         // Zahlen stehen untereinander in einer Spalte (CLAUDE-design.md, Typografie).
         'code, kbd, samp, .mono': {

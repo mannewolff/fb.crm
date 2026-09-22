@@ -1,6 +1,6 @@
 # CLAUDE-design.md — Designsprache von fb.crm: Kupferwarte
 
-Diese Datei ist die Designquelle der Anwendung **fb.crm**. Sie beschreibt, **was** die Oberfläche trägt: Vorlage, Erscheinungsbilder, Palette, Schrift, Radien, Tiefe, Kontrast, Rahmen und Zustandsformen. **Wie** diese Werte im Code angewendet werden — Theme-zentral, über die `sx`-Prop, keine hartcodierten Werte — regelt [CLAUDE-react.md](CLAUDE-react.md).
+Diese Datei ist die Designquelle der Anwendung **fb.crm**. Sie beschreibt, **was** die Oberfläche trägt: Vorlage, Erscheinungsbild, Palette, Schrift, Radien, Tiefe, Kontrast, Rahmen und Zustandsformen. **Wie** diese Werte im Code angewendet werden — Theme-zentral, über die `sx`-Prop, keine hartcodierten Werte — regelt [CLAUDE-react.md](CLAUDE-react.md).
 
 **Geltungsbereich:** ausschließlich diese Anwendung. Regeln für Veröffentlichungen (Blog, LinkedIn, Whitepaper, Website) und für Präsentationen gelten hier **nicht**. Auch die Gestaltung der erzeugten PDF-Dokumente (Angebot, Rechnung, Leistungsnachweis) fällt nicht hierunter — sie folgt Kapitel 06 der Spezifikation.
 
@@ -14,15 +14,17 @@ Diese Datei ist die Designquelle der Anwendung **fb.crm**. Sie beschreibt, **was
 
 **Bindend sind** die Vorlage, diese Datei und `frontend/src/theme.ts` als einzige Wertequelle im Code. Ein Plan oder ein Arbeitspaket entscheidet keine Gestaltungsfrage gegen die Vorlage — eine Abweichung wird Manne vorgelegt.
 
-**Abgenommen wird visuell:** je Ansicht ein Bildschirmfoto bei 1440 × 900 neben der Vorlage, im hellen und im dunklen Erscheinungsbild. Tests und Gates sichern Werte, Kontrast und Verhalten; ob eine Ansicht aussieht wie die Vorlage, sagen sie nicht.
+**Abgenommen wird visuell:** je Ansicht ein Bildschirmfoto bei 1440 × 900 neben der Vorlage. Tests und Gates sichern Werte, Kontrast und Verhalten; ob eine Ansicht aussieht wie die Vorlage, sagen sie nicht.
 
 ---
 
-## 🌗 Erscheinungsbilder
+## ☀️ Erscheinungsbild
 
-**Zwei Erscheinungsbilder, beide aus der Vorlage, kein Schalter.** Die Vorlage führt helle Werte an `:root` und dunkle unter `prefers-color-scheme: dark`; genau so trägt es die Anwendung: `theme.ts` nutzt MUI-CSS-Variablen mit `cssVariables: { colorSchemeSelector: 'media', cssVarPrefix: 'fb' }`, die Dunkelwerte stehen damit unter `@media (prefers-color-scheme: dark)`. Es gibt keinen Zustand, keine Persistenz und kein Bedienelement, über das jemand das Erscheinungsbild wählen könnte. Den Umschalter `data-theme`, den die Vorlage zum Vorführen trägt, übernimmt die Anwendung nicht.
+**Ein Erscheinungsbild: hell — unabhängig von der Einstellung des Rechners oder Browsers** (Entscheidung Manne, 2026-09-22; wie im KI-Leitstand, aus dem diese Datei stammt). Es gibt keinen Schalter, keine Umschaltung über `prefers-color-scheme`, keinen Zustand und keine Persistenz. `theme.ts` kennt nur das helle Farbschema; `theme.test.ts` hält fest, dass kein weiteres dazukommt und kein CSS unter `prefers-color-scheme` entsteht.
 
-**Tokens sind Verweise, keine Werte.** Die Konstanten aus `theme.ts` tragen `var(--fb-…)`. `theme.palette.*` liefert nur den hellen Wert — eine Lesung beim Modulstart schaltet nicht um; dort gilt `theme.vars.palette.*`.
+**Die Vorlage trägt einen Dunkelsatz, der nicht gilt.** `docs/entwurf-leitstand.html` führt neben den hellen Werten an `:root` auch dunkle unter `prefers-color-scheme: dark` und einen Umschalter `data-theme`. Beides übernimmt die Anwendung nicht; es gelten allein die hellen Werte.
+
+**Tokens sind Verweise, keine Werte.** Die Konstanten aus `theme.ts` tragen `var(--fb-…)`. In den Ansichten gilt `theme.vars.palette.*`, nicht `theme.palette.*`.
 
 ---
 
@@ -30,30 +32,30 @@ Diese Datei ist die Designquelle der Anwendung **fb.crm**. Sie beschreibt, **was
 
 Die Rollen und Werte der Vorlage (Entwurf Z. 10–150). Die **Leitfarbe ist Kupfer**; die Melder tragen ausschließlich Zustände und werden nie als Akzent verwendet.
 
-| Rolle | Hell | Dunkel | Verwendung |
-|---|---|---|---|
-| Grund | `#E7E9ED` | `#0D1014` | Grund der Anwendung (`background.default`) |
-| Grund tief | `#D8DBE2` | `#090B0E` | oberes Ende der Schiene |
-| Nut | `#D5D9E0` | `#080A0D` | eingelassene Flächen: Schiene, Suche, Filtergruppen, Zähler |
-| Platte | `#FDFDFE` | `#171B22` | Inhaltsflächen: Karten, Kacheln, Platten (`background.paper`) |
-| Platte Fuß | `#F2F4F7` | `#12151B` | unteres Ende eines Tastenverlaufs |
-| Platte hoch | `#FFFFFF` | `#1E242D` | abgehobene Flächen, oberes Ende eines Tastenverlaufs |
-| Rand | `#CDD2DA` | `#262C36` | Haarlinien (`divider`) |
-| Rand stark | `#B7BEC9` | `#333B47` | betonte Linien, Tastenkappen |
-| Kante | `rgba(255,255,255,.9)` | `rgba(255,255,255,.075)` | Lichtkante an der Oberkante erhabener Flächen |
-| Text | `#14181E` | `#E7EAEF` | Fließtext (`text.primary`) |
-| Text matt | `#58606C` | `#98A1AE` | Sekundärtext (`text.secondary`), Navigation |
-| Text schwach | `#868E9B` | `#69717E` | Etiketten, Zähler, Hinweise — siehe [Kontrast](#kontrast) |
-| Kupfer | `#A85F2C` | `#D08A52` | Leitfarbe (`primary`): aktive Navigation, Primärtaste, Fokusring, Füllungen |
-| Kupfer hell | `#C2743C` | `#E3A26C` | oberes Ende von Kupferverläufen |
-| Kupfer-Schimmer | `rgba(168,95,44,.16)` | `rgba(208,138,82,.18)` | Schimmer im Grund, Schatten der Kupfertaste |
-| Grün | `#2F8F4E` | `#46C46F` | Melder: erfolgreich, fertig |
-| Bernstein | `#B07C15` | `#E0AE49` | Melder: Warnung, Grenze erreicht |
-| Zinnober | `#C8393E` | `#F0575C` | Melder: gescheitert, überfällig |
-| Stahl | `#2F6FC9` | `#5B96F0` | Melder: laufend, Information |
-| Grau | `#8A929E` | `#6E7681` | Melder: nicht bearbeitet |
+| Rolle | Wert | Verwendung |
+|---|---|---|
+| Grund | `#E7E9ED` | Grund der Anwendung (`background.default`) |
+| Grund tief | `#D8DBE2` | oberes Ende der Schiene |
+| Nut | `#D5D9E0` | eingelassene Flächen: Schiene, Suche, Filtergruppen, Zähler |
+| Platte | `#FDFDFE` | Inhaltsflächen: Karten, Kacheln, Platten (`background.paper`) |
+| Platte Fuß | `#F2F4F7` | unteres Ende eines Tastenverlaufs |
+| Platte hoch | `#FFFFFF` | abgehobene Flächen, oberes Ende eines Tastenverlaufs |
+| Rand | `#CDD2DA` | Haarlinien (`divider`) |
+| Rand stark | `#B7BEC9` | betonte Linien, Tastenkappen |
+| Kante | `rgba(255,255,255,.9)` | Lichtkante an der Oberkante erhabener Flächen |
+| Text | `#14181E` | Fließtext (`text.primary`) |
+| Text matt | `#58606C` | Sekundärtext (`text.secondary`), Navigation |
+| Text schwach | `#868E9B` | Etiketten, Zähler, Hinweise — siehe [Kontrast](#kontrast) |
+| Kupfer | `#A85F2C` | Leitfarbe (`primary`): aktive Navigation, Primärtaste, Fokusring, Füllungen |
+| Kupfer hell | `#C2743C` | oberes Ende von Kupferverläufen |
+| Kupfer-Schimmer | `rgba(168,95,44,.16)` | Schimmer im Grund, Schatten der Kupfertaste |
+| Grün | `#2F8F4E` | Melder: erfolgreich, fertig |
+| Bernstein | `#B07C15` | Melder: Warnung, Grenze erreicht |
+| Zinnober | `#C8393E` | Melder: gescheitert, überfällig |
+| Stahl | `#2F6FC9` | Melder: laufend, Information |
+| Grau | `#8A929E` | Melder: nicht bearbeitet |
 
-**Grund der Anwendung:** der Grund mit einem Kupfer-Schimmer oben links (`radial-gradient(1100px 600px at 18% -8%, Kupfer-Schimmer, transparent 62%)`, Entwurf Z. 152–160), in beiden Erscheinungsbildern.
+**Grund der Anwendung:** der Grund mit einem Kupfer-Schimmer oben links (`radial-gradient(1100px 600px at 18% -8%, Kupfer-Schimmer, transparent 62%)`, Entwurf Z. 152–160).
 
 ---
 
@@ -93,20 +95,19 @@ Die Rollen und Werte der Vorlage (Entwurf Z. 10–150). Die **Leitfarbe ist Kupf
 | `--schatten-hoch` | abgehobene Fläche, weiter geöffnet |
 | `--schatten-taste` | Lichtkante plus kurzer Schatten einer Taste |
 
-Die Schattenfarbe folgt der Vorlage: hell eine dunkle Blaugrau-Tinte `rgba(18,24,33,…)`, dunkel Schwarz mit hoher Deckkraft — auf fast schwarzem Grund trägt nur dieser Schatten eine sichtbare Stufe.
+Die Schattenfarbe folgt der Vorlage: eine Blaugrau-Tinte `rgba(18,24,33,…)`.
 
 ---
 
 ## ♿ Kontrast
 
-**WCAG AA ist das Mindestmaß: 4,5:1 für Text**, 3:1 für großen Text und bedeutungstragende Grafikelemente — in beiden Erscheinungsbildern. Gerechnet wird gegen die Fläche, auf der das Element tatsächlich steht, mit einem Kontrastrechner im Frontend; die Tabelle über beide Erscheinungsbilder steht im Test des Themes.
+**WCAG AA ist das Mindestmaß: 4,5:1 für Text**, 3:1 für großen Text und bedeutungstragende Grafikelemente. Gerechnet wird gegen die Fläche, auf der das Element tatsächlich steht, mit einem Kontrastrechner im Frontend; die Tabelle steht im Test des Themes.
 
-**Die Vorlage verfehlt AA an wenigen Stellen.** Dort wird der Ton **minimal im selben Farbton** nachgedunkelt bzw. aufgehellt, bis die Schwelle hält; die Abweichung steht an der Konstante in `theme.ts` und im Test — die Schwelle wird nie gesenkt. Die bekannten Stellen:
+**Die Vorlage verfehlt AA an wenigen Stellen.** Dort wird der Ton **minimal im selben Farbton** vertieft, bis die Schwelle hält; die Abweichung steht an der Konstante in `theme.ts` und im Test — die Schwelle wird nie gesenkt. Die bekannten Stellen:
 
-- **Text schwach als Schrift:** hell 2,3–3,3:1 (auf Nut, Grund, Platte), dunkel 3,2–4,0:1.
-- **Text matt auf der Nut, hell:** 4,49:1.
-- **Weiße Schrift auf Kupfer, dunkel:** 2,8:1 — die Schrift auf der Kupfertaste ist dunkel die Grundtinte.
-- **Melder auf der Nut, hell:** Grün 2,9, Bernstein 2,6, Grau 2,2:1 — als Füllung auf der Nut nachgedunkelt oder auf eine Platte gesetzt.
+- **Text schwach als Schrift:** 2,3–3,3:1 (auf Nut, Grund, Platte).
+- **Text matt auf der Nut:** 4,49:1.
+- **Melder auf der Nut:** Grün 2,9, Bernstein 2,6, Grau 2,2:1 — als Füllung auf der Nut vertieft oder auf eine Platte gesetzt.
 
 ---
 
@@ -136,7 +137,7 @@ Zustände sind an **Form** erkennbar, nicht allein an Farbe — eine Plakette mi
 
 ## 🔢 Weitere Tokens
 
-**Einzige Wertequelle im Code ist `frontend/src/theme.ts`**, gespeist aus der Vorlage: Palette beider Erscheinungsbilder, Schatten, Radien, Grund, Schriften, Tabellenziffern, Flächen der gefüllten Meldungen und die hellen Variablen. Abgeleitete Farbzuordnungen (etwa Status- und Kennzeichenfarben) liegen in eigenen Modulen unter `frontend/src/lib/` und bilden auf die Melder und Schild-Töne der Vorlage ab. Diese Datei nennt außer der Palettentabelle der Vorlage keine Tokenwerte.
+**Einzige Wertequelle im Code ist `frontend/src/theme.ts`**, gespeist aus den hellen Werten der Vorlage: Palette, Schatten, Radien, Grund, Schriften, Tabellenziffern und Flächen der gefüllten Meldungen. Abgeleitete Farbzuordnungen (etwa Status- und Kennzeichenfarben) liegen in eigenen Modulen unter `frontend/src/lib/` und bilden auf die Melder und Schild-Töne der Vorlage ab. Diese Datei nennt außer der Palettentabelle der Vorlage keine Tokenwerte.
 
 ---
 
