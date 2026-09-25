@@ -15,6 +15,11 @@ class SchemaBaselineIT extends AbstractIntegrationTest {
   private static final String INSERT_ACCOUNT =
       "INSERT INTO account (email, display_name, password_hash, role) VALUES (?, ?, ?, ?)";
 
+  private static final String INSERT_FIRMA = "INSERT INTO firma (name) VALUES (?)";
+
+  private static final String INSERT_ANSPRECHPARTNER =
+      "INSERT INTO ansprechpartner (firma_id, nachname) VALUES (?, ?)";
+
   private final JdbcTemplate jdbc;
 
   @Autowired
@@ -24,7 +29,14 @@ class SchemaBaselineIT extends AbstractIntegrationTest {
 
   @BeforeEach
   void leereFachtabellen() {
-    jdbc.execute("TRUNCATE outbox_message, password_reset_token, account RESTART IDENTITY CASCADE");
+    jdbc.execute(
+        "TRUNCATE outbox_message, password_reset_token, account, ansprechpartner, firma"
+            + " RESTART IDENTITY CASCADE");
+  }
+
+  private Long firmaId(final String name) {
+    jdbc.update(INSERT_FIRMA, name);
+    return jdbc.queryForObject("SELECT id FROM firma WHERE name = ?", Long.class, name);
   }
 
   @Test
@@ -33,11 +45,12 @@ class SchemaBaselineIT extends AbstractIntegrationTest {
     final Integer tabellen =
         jdbc.queryForObject(
             "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public'"
-                + " AND table_name IN ('account', 'password_reset_token', 'outbox_message')",
+                + " AND table_name IN ('account', 'password_reset_token', 'outbox_message',"
+                + " 'firma', 'ansprechpartner')",
             Integer.class);
 
     // Then
-    assertThat(tabellen).isEqualTo(3);
+    assertThat(tabellen).isEqualTo(5);
   }
 
   @Test
@@ -135,5 +148,48 @@ class SchemaBaselineIT extends AbstractIntegrationTest {
 
     // Then
     assertThat(offen).isEqualTo(1);
+  }
+
+  @Test
+  void firmaName_givenOnlyWhitespace_thenRejectedByTheDatabase() {
+    // When / Then
+    assertThatThrownBy(() -> jdbc.update(INSERT_FIRMA, "   "))
+        .isInstanceOf(DataIntegrityViolationException.class)
+        .hasMessageContaining("firma_name_nicht_leer");
+  }
+
+  @Test
+  void ansprechpartnerNachname_givenOnlyWhitespace_thenRejectedByTheDatabase() {
+    // Given
+    final Long firmaId = firmaId("Adler AG");
+
+    // When / Then
+    assertThatThrownBy(() -> jdbc.update(INSERT_ANSPRECHPARTNER, firmaId, "   "))
+        .isInstanceOf(DataIntegrityViolationException.class)
+        .hasMessageContaining("ansprechpartner_nachname_nicht_leer");
+  }
+
+  @Test
+  void ansprechpartnerFirmaId_givenAnUnknownFirma_thenRejectedByTheDatabase() {
+    // When / Then
+    assertThatThrownBy(() -> jdbc.update(INSERT_ANSPRECHPARTNER, 4711L, "Mustermann"))
+        .isInstanceOf(DataIntegrityViolationException.class);
+  }
+
+  @Test
+  void aktiv_whenInsertedWithoutTheColumn_thenDefaultsToTrue() {
+    // Given
+    final Long firmaId = firmaId("Adler AG");
+    jdbc.update(INSERT_ANSPRECHPARTNER, firmaId, "Mustermann");
+
+    // When
+    final Integer aktive =
+        jdbc.queryForObject(
+            "SELECT count(*) FROM firma f JOIN ansprechpartner a ON a.firma_id = f.id"
+                + " WHERE f.aktiv AND a.aktiv",
+            Integer.class);
+
+    // Then
+    assertThat(aktive).isEqualTo(1);
   }
 }
