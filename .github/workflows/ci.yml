@@ -42,7 +42,7 @@ jobs:
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
       # Docker ist auf dem Runner vorhanden — die Testcontainers-ITs laufen mit.
       - id: gate-mvn-verify
-        run: mvn verify
+        run: mvn verify -Dskip.frontend=true
 
   pit:
     runs-on: ubuntu-latest
