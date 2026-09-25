@@ -12,6 +12,8 @@ const ForgotPasswordPage = lazy(async () => import('./pages/ForgotPasswordPage')
 const ResetPasswordPage = lazy(async () => import('./pages/ResetPasswordPage'));
 const EmptyPanel = lazy(async () => import('./pages/EmptyPanel'));
 const FirmenPage = lazy(async () => import('./pages/FirmenPage'));
+const FirmaMaske = lazy(async () => import('./pages/FirmaMaske'));
+const FirmaPage = lazy(async () => import('./pages/FirmaPage'));
 
 /**
  * Der Routenbaum. Offen sind die Anmeldeseite, die Einrichtung und die beiden Seiten zum
@@ -48,6 +50,10 @@ export default function App() {
           >
             <Route path="/" element={<EmptyPanel />} />
             <Route path="/firmen" element={<FirmenPage />} />
+            {/* Statisch vor dynamisch: `/firmen/neu` ist die Maske, nicht die Firma „neu". */}
+            <Route path="/firmen/neu" element={<FirmaMaske />} />
+            <Route path="/firmen/:id" element={<FirmaPage />} />
+            <Route path="/firmen/:id/bearbeiten" element={<FirmaMaske />} />
             <Route path="/administration" element={<EmptyPanel />} />
             <Route path="/dokumentation" element={<EmptyPanel />} />
             <Route path="*" element={<Navigate to="/" replace />} />
