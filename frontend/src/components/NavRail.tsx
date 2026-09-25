@@ -35,6 +35,17 @@ const BREITE_EINGEKLAPPT = 64;
 
 /** Die Symbole der Vorlage: 16 px, Strich in `currentColor`. */
 const SYMBOLE: Readonly<Record<Symbolname, ReactNode>> = {
+  // Die Mappe: der Vorgang als Klammer um Angebot, Auftrag und Rechnung (CLAUDE.md). Bewusst
+  // anders gezeichnet als das Haus der Firmen — eingeklappt steht nur noch das Symbol da.
+  vorgaenge: (
+    <path
+      d="M2.5 12.7V4.3a.8.8 0 0 1 .8-.8h2.7l1.4 1.8h5.3a.8.8 0 0 1 .8.8v6.6a.8.8 0 0 1-.8.8H3.3a.8.8 0 0 1-.8-.8ZM5.5 9.5h5"
+      stroke="currentColor"
+      strokeWidth="1.3"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  ),
   firmen: (
     <path
       d="M2.5 13.5V3a.5.5 0 0 1 .5-.5h5a.5.5 0 0 1 .5.5v10.5M8.5 6.5H13a.5.5 0 0 1 .5.5v6.5M1.5 13.5h13M4.5 5h2M4.5 7.5h2M4.5 10h2M10.5 9h1.5M10.5 11.5h1.5"
@@ -83,6 +94,9 @@ function NavSymbol({ name }: { readonly name: Symbolname }) {
       fill="none"
       aria-hidden
       className="nav-symbol"
+      // Der Strich selbst ist fuer Hilfsmittel unsichtbar; eingeklappt ist er aber das einzige
+      // Unterscheidungsmerkmal zweier Eintraege. Der Griff macht ihn im Test pruefbar.
+      data-testid={`nav-symbol-${name}`}
       sx={(theme) => ({
         width: 16,
         height: 16,

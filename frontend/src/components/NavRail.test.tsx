@@ -49,10 +49,13 @@ describe('navItems (E15, E18)', () => {
     ]);
   });
 
-  it('fuehrt genau den Block „Stammdaten" mit dem Eintrag „Firmen"', () => {
+  it('fuehrt „Geschäft" vor „Stammdaten", jeden Block mit seinen Eintraegen', () => {
     expect(
       NAV_BLOECKE.map((block) => [block.etikett, block.eintraege.map((e) => [e.beschriftung, e.ziel])]),
-    ).toEqual([['Stammdaten', [['Firmen', '/firmen']]]]);
+    ).toEqual([
+      ['Geschäft', [['Vorgänge', '/vorgaenge']]],
+      ['Stammdaten', [['Firmen', '/firmen']]],
+    ]);
   });
 });
 
@@ -74,7 +77,7 @@ describe('NavRail', () => {
     expect(screen.queryAllByRole('link', { current: true })).toHaveLength(0);
   });
 
-  it('traegt zwischen Marke und Fuss den Block „Stammdaten" mit „Firmen" (K11, E18)', () => {
+  it('traegt zwischen Marke und Fuss die Bloecke „Geschäft" und „Stammdaten" (K11, E18, E24)', () => {
     fetchNachPfad({ 'GET /api/instance': json(200, { version: '0.1.1' }) });
 
     renderSchiene();
@@ -85,8 +88,16 @@ describe('NavRail', () => {
     expect(screen.getByTestId('schiene-kopf')).toHaveTextContent(/^fb\.crm$/);
 
     const bloecke = within(screen.getByTestId('schiene-bloecke'));
-    expect(bloecke.getByText('Stammdaten')).toBeInTheDocument();
-    expect(bloecke.getAllByRole('link').map((link) => link.getAttribute('href'))).toEqual(['/firmen']);
+    // „Geschäft" steht ueber „Stammdaten" (E24): die Reihenfolge der Links haelt sie fest.
+    expect(bloecke.getAllByText(/^(Geschäft|Stammdaten)$/).map((e) => e.textContent)).toEqual([
+      'Geschäft',
+      'Stammdaten',
+    ]);
+    expect(bloecke.getAllByRole('link').map((link) => link.getAttribute('href'))).toEqual([
+      '/vorgaenge',
+      '/firmen',
+    ]);
+    expect(bloecke.getByRole('link', { name: 'Vorgänge' })).toBeInTheDocument();
     expect(bloecke.getByRole('link', { name: 'Firmen' })).toBeInTheDocument();
     // Kein Umschalter in den Bloecken — Tasten stehen allein im Fuss.
     expect(bloecke.queryAllByRole('button')).toHaveLength(0);
@@ -130,6 +141,9 @@ describe('NavRail', () => {
     ['/firmen', 'Firmen'],
     // Auch die Detailansicht einer Firma laesst „Firmen" aktiv stehen (Plan-Review Fund 3).
     ['/firmen/7', 'Firmen'],
+    ['/vorgaenge', 'Vorgänge'],
+    // Dasselbe am Vorgang: die Detailansicht laesst „Vorgänge" aktiv stehen.
+    ['/vorgaenge/12', 'Vorgänge'],
   ])('setzt auf %s aria-current="page" an „%s" und nur dort (K12)', (adresse, beschriftung) => {
     fetchNachPfad({ 'GET /api/instance': json(200, { version: '0.1.1' }) });
 
@@ -177,8 +191,11 @@ describe('NavRail', () => {
     expect(screen.getByRole('link', { name: 'Administration' })).toBeInTheDocument();
     // Ebenso im Block: das Etikett entfaellt, der Link behaelt seinen Namen.
     expect(screen.queryByText('Stammdaten')).not.toBeInTheDocument();
+    expect(screen.queryByText('Geschäft')).not.toBeInTheDocument();
     expect(screen.queryByText('Firmen')).not.toBeInTheDocument();
+    expect(screen.queryByText('Vorgänge')).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Firmen' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Vorgänge' })).toBeInTheDocument();
 
     // Neuladen: die Komponente geht, der Speicher bleibt.
     unmount();
@@ -186,6 +203,22 @@ describe('NavRail', () => {
 
     expect(screen.getByRole('navigation')).toHaveAttribute('data-eingeklappt', 'true');
     expect(localStorage.getItem(SCHIENE_SCHLUESSEL)).toBe('true');
+  });
+
+  it('zeichnet „Vorgänge" und „Firmen" mit verschiedenen Symbolen (E24)', async () => {
+    // Eingeklappt steht nur noch das Symbol da. Zwei Eintraege mit demselben Strich waeren dort
+    // nicht mehr zu unterscheiden — der Block „Geschäft" saehe aus wie „Stammdaten".
+    fetchNachPfad({ 'GET /api/instance': json(200, { version: '0.1.1' }) });
+    const nutzer = userEvent.setup();
+
+    renderSchiene();
+    await nutzer.click(screen.getByRole('button', { name: 'Einklappen' }));
+
+    // Eingeklappt steht keine Beschriftung mehr da — nur noch der Strich.
+    expect(screen.queryByText('Vorgänge')).not.toBeInTheDocument();
+    const strich = (name: string) => screen.getByTestId(`nav-symbol-${name}`).innerHTML;
+    expect(strich('vorgaenge')).toBeTruthy();
+    expect(strich('vorgaenge')).not.toBe(strich('firmen'));
   });
 
   it('wechselt die Breite zwischen 224 und 64 px', async () => {

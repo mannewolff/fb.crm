@@ -1,0 +1,353 @@
+import Alert from '@mui/material/Alert';
+import Box from '@mui/material/Box';
+import Link from '@mui/material/Link';
+import TextField from '@mui/material/TextField';
+import ToggleButton from '@mui/material/ToggleButton';
+import Typography from '@mui/material/Typography';
+import { useEffect, useState } from 'react';
+import type { ReactNode } from 'react';
+import { Link as RouterLink, useSearchParams } from 'react-router-dom';
+
+import { vorgaengeUebersicht } from '../api/vorgaenge';
+import type { Phase, VorgaengeUebersicht, VorgangZeile } from '../api/vorgaenge';
+import KopfAktion from '../components/KopfAktion';
+import KupferTaste from '../components/KupferTaste';
+import Platte from '../components/Platte';
+import Tafel from '../components/Tafel';
+import { CARD_RADIUS } from '../theme';
+
+/**
+ * Die Uebersicht der Vorgaenge (Kriterien 1–4, 20, 25, 26).
+ *
+ * Sie folgt in allem dem Muster der Firmenuebersicht, weil beide dieselbe Zusage tragen: Der
+ * Zustand — Suchtext und Schalter — steht in der Adresse, der Suchtext geht entprellt hinein, jeder
+ * Lauf haengt an einem {@link AbortController}, und gefiltert wie sortiert wird auf dem Server. Die
+ * Begruendungen im Einzelnen stehen an {@link FirmenPage}; hier wiederholt sie diese Ansicht nicht.
+ *
+ * Gestalt nach der Vorlagen-Ansicht „Liste": Werkzeugleiste (Z. 1866 ff., CSS Z. 799–806) mit dem
+ * Suchfeld als Nut und dem Schalter als gedruecktem Filter, darunter die Platte mit der
+ * {@link Tafel} (Z. 1888 ff.). Ohne Auswahlhaken, Massenleiste, Gruppenzeilen, Spaltenwahl und
+ * Export (E22) — das sind Funktionen, die fb.crm nicht hat.
+ *
+ * **Der Link steht in der Titelspalte, nicht um die Zeile.** Ein `a` kann keine `td`-Elemente
+ * umschliessen; eine Zeile mit `role="link"` verlöre ihre Rolle als Tabellenzeile und damit die
+ * Zuordnung zu den Spalten. Der Weg zum Vorgang haengt darum am Titel — ein echtes `href`, im
+ * Tabulatorweg, in einem neuen Reiter zu oeffnen.
+ */
+
+/** Wie lange der Suchtext ruhen muss, bevor er in Adresse und Aufruf geht. */
+export const ENTPRELLUNG_MS = 300;
+
+const PARAM_SUCHE = 'suche';
+const PARAM_ABGESCHLOSSENE = 'auchAbgeschlossene';
+
+/** Wenn die Schnittstelle nicht antwortet — ohne technische Einzelheiten. */
+const AUSFALL = 'Die Vorgänge sind gerade nicht zu erreichen. Bitte später erneut versuchen.';
+
+const SPALTEN = ['Nr.', 'Vorgang', 'Firma', 'Phase', 'Letzte Aktivität'] as const;
+
+/** Die Phase als Wort. Heute kennt das Backend genau eine (`Phase` in `api/vorgaenge.ts`). */
+const PHASE_TEXT: Readonly<Record<Phase, string>> = { ANBAHNUNG: 'Anbahnung' };
+
+/** Was die Ansicht gerade weiss. */
+type Stand =
+  | { readonly art: 'laedt' }
+  | { readonly art: 'daten'; readonly uebersicht: VorgaengeUebersicht }
+  | { readonly art: 'fehler' };
+
+/** Holt die Uebersicht und macht auch aus dem Fehlschlag einen Stand. */
+async function laden(
+  suche: string,
+  auchAbgeschlossene: boolean,
+  signal: AbortSignal,
+): Promise<Stand> {
+  try {
+    return {
+      art: 'daten',
+      uebersicht: await vorgaengeUebersicht(suche, auchAbgeschlossene, signal),
+    };
+  } catch {
+    // Jeder Grund fuehrt zur selben Meldung; welcher es war, hilft dem Benutzer nicht.
+    return { art: 'fehler' };
+  }
+}
+
+/** Setzt oder entfernt einen Parameter, ohne die uebrigen anzutasten. */
+function mitParameter(alt: URLSearchParams, name: string, wert: string | null): URLSearchParams {
+  const neu = new URLSearchParams(alt);
+  if (wert === null) {
+    neu.delete(name);
+  } else {
+    neu.set(name, wert);
+  }
+  return neu;
+}
+
+/**
+ * Der Zeitpunkt der letzten Aktivitaet als Tag.
+ *
+ * Nur der Tag, nicht die Uhrzeit: In einer Spalte neben vier anderen ist die Minute kein Wert,
+ * sondern Breite. Wer sie braucht, findet sie in der Historie des Vorgangs.
+ */
+function alsTag(zeitstempel: string): string {
+  return new Date(zeitstempel).toLocaleDateString('de-DE', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  });
+}
+
+/**
+ * Der Hinweis zur leeren Tafel.
+ *
+ * Drei Lagen, die eine leere Liste sonst zusammenwirft (E5, Feld `gesamt`). Die dritte steht als
+ * Restfall: Ohne Suchtext und mit `gesamt` groesser null kann die Tafel nur leer sein, weil alles
+ * abgeschlossen ist — mit eingeschaltetem Schalter kaeme dieselbe Anfrage mit Zeilen zurueck.
+ */
+function hinweisZu(suche: string, gesamt: number): ReactNode {
+  if (gesamt === 0) {
+    return (
+      <>
+        Es ist noch kein Vorgang angelegt.{' '}
+        <Link component={RouterLink} to="/vorgaenge/neu" underline="hover">
+          Ersten Vorgang anlegen
+        </Link>
+      </>
+    );
+  }
+  if (suche !== '') {
+    return <>Zu diesem Suchtext wurde nichts gefunden.</>;
+  }
+  return <>Alle Vorgänge sind abgeschlossen. Der Schalter „auch abgeschlossene“ zeigt sie an.</>;
+}
+
+/** Eine Zeile der Tafel. Der Weg zum Vorgang haengt am Titel (siehe Klassenkommentar). */
+function Zeile({ vorgang }: { readonly vorgang: VorgangZeile }) {
+  return (
+    <Box component="tr">
+      <Box
+        component="td"
+        sx={(theme) => ({
+          fontFamily: theme.vars.palette.kupferwarte.monoFontFamily,
+          color: theme.vars.palette.kupferwarte.textSchwach,
+          width: 58,
+        })}
+      >
+        {`#${vorgang.nummer}`}
+      </Box>
+      <Box component="td" sx={{ fontWeight: 500 }}>
+        <Box
+          component={RouterLink}
+          to={`/vorgaenge/${vorgang.id}`}
+          sx={(theme) => ({
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 1,
+            color: 'inherit',
+            textDecoration: 'none',
+            '&:hover': { color: theme.vars.palette.kupferwarte.kupfer },
+          })}
+        >
+          {vorgang.titel}
+          {vorgang.abgeschlossen ? (
+            // Schild der Vorlage (Z. 780–790), im Link: Der Stand steht als Wort da und gehoert
+            // zum Namen des Weges, damit der Screenreader ihn mit der Zeile vorliest (E15).
+            <Box
+              component="span"
+              sx={(theme) => ({
+                flex: 'none',
+                fontSize: 10,
+                fontWeight: 500,
+                padding: '1px 6px',
+                borderRadius: '5px',
+                color: theme.vars.palette.kupferwarte.grau,
+                border: '1px solid currentColor',
+                background: 'color-mix(in srgb, currentColor 13%, transparent)',
+              })}
+            >
+              abgeschlossen
+            </Box>
+          ) : null}
+        </Box>
+      </Box>
+      <Box component="td">{vorgang.firma}</Box>
+      <Box component="td">{PHASE_TEXT[vorgang.phase]}</Box>
+      <Box
+        component="td"
+        sx={(theme) => ({
+          fontFamily: theme.vars.palette.kupferwarte.monoFontFamily,
+          fontVariantNumeric: 'tabular-nums',
+          color: theme.vars.palette.kupferwarte.textMatt,
+          whiteSpace: 'nowrap',
+        })}
+      >
+        {alsTag(vorgang.letzteAktivitaet)}
+      </Box>
+    </Box>
+  );
+}
+
+/** Was in der Platte steht: Ladehinweis, Meldung, Hinweis zur Leere oder die Tafel. */
+function inhaltZu(stand: Stand, suche: string): ReactNode {
+  if (stand.art === 'laedt') {
+    return (
+      <Typography
+        sx={(theme) => ({
+          padding: '18px 16px',
+          fontSize: 12.5,
+          color: theme.vars.palette.kupferwarte.textSchwach,
+        })}
+      >
+        Vorgänge werden geladen …
+      </Typography>
+    );
+  }
+  if (stand.art === 'fehler') {
+    return (
+      <Alert severity="error" sx={{ borderRadius: 0 }}>
+        {AUSFALL}
+      </Alert>
+    );
+  }
+  if (stand.uebersicht.vorgaenge.length === 0) {
+    return (
+      <Typography
+        role="status"
+        sx={(theme) => ({
+          padding: '18px 16px',
+          fontSize: 12.5,
+          color: theme.vars.palette.kupferwarte.textMatt,
+        })}
+      >
+        {hinweisZu(suche, stand.uebersicht.gesamt)}
+      </Typography>
+    );
+  }
+  return (
+    <Tafel beschriftung="Vorgänge" spalten={[...SPALTEN]}>
+      {stand.uebersicht.vorgaenge.map((vorgang) => (
+        <Zeile key={vorgang.id} vorgang={vorgang} />
+      ))}
+    </Tafel>
+  );
+}
+
+export default function VorgaengePage() {
+  const [parameter, setzeParameter] = useSearchParams();
+  const suche = parameter.get(PARAM_SUCHE) ?? '';
+  const auchAbgeschlossene = parameter.get(PARAM_ABGESCHLOSSENE) === 'true';
+  const [eingabe, setzeEingabe] = useState(suche);
+  const [stand, setzeStand] = useState<Stand>({ art: 'laedt' });
+
+  // Entprellung: Der Suchtext wandert erst in die Adresse, wenn die Tastatur ruht. Solange
+  // Eingabe und Adresse uebereinstimmen, gibt es nichts zu tun — sonst liefe der Effekt im
+  // Kreis, weil das Setzen der Adresse ihn erneut anstoesst.
+  useEffect(() => {
+    if (eingabe === suche) {
+      return;
+    }
+    const uhr = setTimeout(() => {
+      setzeParameter((alt) => mitParameter(alt, PARAM_SUCHE, eingabe === '' ? null : eingabe), {
+        replace: true,
+      });
+    }, ENTPRELLUNG_MS);
+    return () => {
+      clearTimeout(uhr);
+    };
+  }, [eingabe, suche, setzeParameter]);
+
+  useEffect(() => {
+    const steuerung = new AbortController();
+    setzeStand({ art: 'laedt' });
+    void laden(suche, auchAbgeschlossene, steuerung.signal).then((neu) => {
+      // Abgebrochen heisst: Es gibt bereits eine juengere Anfrage. Ihre Antwort ist die
+      // richtige, auch wenn diese hier zuerst eintrifft.
+      if (!steuerung.signal.aborted) {
+        setzeStand(neu);
+      }
+    });
+    return () => {
+      steuerung.abort();
+    };
+  }, [suche, auchAbgeschlossene]);
+
+  return (
+    <Box
+      sx={{
+        padding: { xs: 2, sm: '22px 26px 44px' },
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '20px',
+      }}
+    >
+      <KopfAktion>
+        <KupferTaste to="/vorgaenge/neu">Neuer Vorgang</KupferTaste>
+      </KopfAktion>
+      <Box
+        sx={(theme) => ({
+          display: 'flex',
+          alignItems: 'center',
+          gap: '10px',
+          flexWrap: 'wrap',
+          padding: '9px 11px',
+          borderRadius: `${CARD_RADIUS}px`,
+          border: `1px solid ${theme.vars.palette.kupferwarte.rand}`,
+          background: `linear-gradient(180deg, ${theme.vars.palette.kupferwarte.platteHoch}, ${theme.vars.palette.kupferwarte.platteFuss})`,
+          boxShadow: theme.vars.palette.kupferwarte.schatten.platte,
+        })}
+      >
+        <TextField
+          label="Suche"
+          type="search"
+          size="small"
+          value={eingabe}
+          onChange={(ereignis) => {
+            setzeEingabe(ereignis.target.value);
+          }}
+          sx={(theme) => ({
+            minWidth: 190,
+            '& .MuiOutlinedInput-root': {
+              background: theme.vars.palette.kupferwarte.nute,
+              boxShadow: theme.vars.palette.kupferwarte.schatten.nute,
+              borderRadius: '9px',
+              fontSize: 12.5,
+            },
+            '& .MuiOutlinedInput-notchedOutline': {
+              borderColor: theme.vars.palette.kupferwarte.rand,
+            },
+          })}
+        />
+        <ToggleButton
+          value={PARAM_ABGESCHLOSSENE}
+          selected={auchAbgeschlossene}
+          onChange={() => {
+            // Geschoben statt ersetzt: Der Schalter ist eine Handlung, die „zurueck"
+            // zuruecknehmen koennen soll.
+            setzeParameter((alt) =>
+              mitParameter(alt, PARAM_ABGESCHLOSSENE, auchAbgeschlossene ? null : 'true'),
+            );
+          }}
+          sx={(theme) => ({
+            fontSize: 11.5,
+            fontWeight: 500,
+            textTransform: 'none',
+            padding: '4px 9px',
+            borderRadius: '7px',
+            color: theme.vars.palette.kupferwarte.textMatt,
+            background: theme.vars.palette.kupferwarte.nute,
+            border: `1px solid ${theme.vars.palette.kupferwarte.rand}`,
+            boxShadow: theme.vars.palette.kupferwarte.schatten.nute,
+            '&.Mui-selected': {
+              color: theme.vars.palette.kupferwarte.text,
+              background: `linear-gradient(180deg, ${theme.vars.palette.kupferwarte.platteHoch}, ${theme.vars.palette.kupferwarte.platte})`,
+              boxShadow: theme.vars.palette.kupferwarte.schatten.taste,
+            },
+          })}
+        >
+          auch abgeschlossene
+        </ToggleButton>
+      </Box>
+      <Platte>{inhaltZu(stand, suche)}</Platte>
+    </Box>
+  );
+}

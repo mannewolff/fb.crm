@@ -2,15 +2,20 @@
  * Die Eintraege der Schiene (E15).
  *
  * Oberhalb des Fusses stehen die <b>Navigationsbloecke</b>, jeder mit einem Etikett als Titel
- * (CLAUDE-design.md, „Rahmen"). Den ersten Block traegt dieser Stand: „Stammdaten" mit dem
- * Eintrag „Firmen" (E18, Kriterium 1 aus Issue #35) — damit traegt die Schiene ein fachliches
- * Ziel, und die Zwischenloesung aus K11 („oberhalb des Fusses nichts") ist abgeloest. Welche
- * Bloecke dazukommen, entsteht mit den Fachplaenen.
+ * (CLAUDE-design.md, „Rahmen"). Zwei Bloecke traegt dieser Stand, und ihre Reihenfolge ist die
+ * Aussage: <b>„Geschäft" steht ueber „Stammdaten"</b> (E24). Der Vorgang ist die taegliche Arbeit,
+ * die Firma ihre Voraussetzung — wer die Anwendung oeffnet, will zuerst an seine Vorgaenge.
+ * Welche Bloecke dazukommen, entsteht mit den Fachplaenen.
  *
  * Der Fuss bleibt unveraendert: „Administration", „Dokumentation" und „Einklappen".
  */
 
-export type Symbolname = 'firmen' | 'administration' | 'dokumentation' | 'einklappen';
+export type Symbolname =
+  | 'vorgaenge'
+  | 'firmen'
+  | 'administration'
+  | 'dokumentation'
+  | 'einklappen';
 
 export interface NavEintrag {
   readonly beschriftung: string;
@@ -24,6 +29,10 @@ export interface NavBlock {
 }
 
 export const NAV_BLOECKE: readonly NavBlock[] = [
+  {
+    etikett: 'Geschäft',
+    eintraege: [{ beschriftung: 'Vorgänge', ziel: '/vorgaenge', symbol: 'vorgaenge' }],
+  },
   {
     etikett: 'Stammdaten',
     eintraege: [{ beschriftung: 'Firmen', ziel: '/firmen', symbol: 'firmen' }],

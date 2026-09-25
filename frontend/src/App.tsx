@@ -15,6 +15,7 @@ const FirmenPage = lazy(async () => import('./pages/FirmenPage'));
 const FirmaMaske = lazy(async () => import('./pages/FirmaMaske'));
 const FirmaPage = lazy(async () => import('./pages/FirmaPage'));
 const AnsprechpartnerMaske = lazy(async () => import('./pages/AnsprechpartnerMaske'));
+const VorgaengePage = lazy(async () => import('./pages/VorgaengePage'));
 
 /**
  * Der Routenbaum. Offen sind die Anmeldeseite, die Einrichtung und die beiden Seiten zum
@@ -23,7 +24,7 @@ const AnsprechpartnerMaske = lazy(async () => import('./pages/AnsprechpartnerMas
  * Die geschuetzten Adressen teilen sich einen Rahmen ({@link AppShell}): Er steht einmal um
  * das `Outlet` und bleibt beim Wechsel zwischen ihnen stehen, statt je Ansicht neu zu entstehen.
  * `/`, `/administration` und `/dokumentation` zeigen in diesem Stand dasselbe leere Panel;
- * `/firmen` traegt die erste fachliche Ansicht.
+ * `/firmen` und `/vorgaenge` tragen die fachlichen Ansichten.
  *
  * Die unbekannte Adresse bekommt keine eigene Ansicht: Mit Sitzung fuehrt sie auf die
  * Startadresse, ohne Sitzung uebernimmt {@link ProtectedRoute} und fuehrt auf die
@@ -50,6 +51,7 @@ export default function App() {
             }
           >
             <Route path="/" element={<EmptyPanel />} />
+            <Route path="/vorgaenge" element={<VorgaengePage />} />
             <Route path="/firmen" element={<FirmenPage />} />
             {/* Statisch vor dynamisch: `/firmen/neu` ist die Maske, nicht die Firma „neu". */}
             <Route path="/firmen/neu" element={<FirmaMaske />} />
