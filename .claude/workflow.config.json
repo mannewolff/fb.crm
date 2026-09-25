@@ -3,7 +3,7 @@
   "issueTracker": "toolbox",
   "buildChecks": [
     {
-      "cmd": "mvn verify",
+      "cmd": "mvn verify -Dskip.frontend=true",
       "areas": [
         "backend"
       ]
