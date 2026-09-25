@@ -8,7 +8,13 @@ import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Link as RouterLink, useParams } from 'react-router-dom';
 
-import { firmaAktivieren, firmaLesen, firmaStilllegen } from '../api/firmen';
+import {
+  ansprechpartnerAktivieren,
+  ansprechpartnerStilllegen,
+  firmaAktivieren,
+  firmaLesen,
+  firmaStilllegen,
+} from '../api/firmen';
 import type { Ansprechpartner, Firma } from '../api/firmen';
 import KopfAktion from '../components/KopfAktion';
 import KupferTaste from '../components/KupferTaste';
@@ -42,6 +48,8 @@ import { CARD_RADIUS } from '../theme';
 const NICHT_GEFUNDEN = 'Diese Firma gibt es nicht.';
 const AUSFALL = 'Die Firma ist gerade nicht zu erreichen. Bitte später erneut versuchen.';
 const SCHALTEN_FEHLT = 'Der Stand der Firma wurde nicht geändert. Bitte später erneut versuchen.';
+const PARTNER_SCHALTEN_FEHLT =
+  'Der Stand des Ansprechpartners wurde nicht geändert. Bitte später erneut versuchen.';
 const OHNE_ANSPRECHPARTNER = 'Noch kein Ansprechpartner angelegt.';
 
 /** Was die Ansicht gerade weiss. */
@@ -160,38 +168,79 @@ function namensZug(partner: Ansprechpartner): string {
   return partner.vorname === null ? partner.nachname : `${partner.vorname} ${partner.nachname}`;
 }
 
+/**
+ * Die Wege einer Zeile (Kriterium 15).
+ *
+ * Beide tragen den Namen des Ansprechpartners in ihrer Benennung. Eine Liste aus lauter Tasten
+ * „Bearbeiten" waere mit dem Screenreader nicht zu unterscheiden — und sie liesse sich auch von
+ * der Taste der Firma im Plattenkopf nicht trennen. Die sichtbare Aufschrift steht dabei am
+ * Anfang der Benennung, damit die Spracheingabe sie trifft (WCAG 2.5.3).
+ */
+interface ZeilenProps {
+  readonly partner: Ansprechpartner;
+  readonly firmaId: number;
+  readonly schalte: (partner: Ansprechpartner) => void;
+}
+
 /** Eine Zeile der Liste (Vorlage `.vorgang` CSS Z. 580–605). */
-function Zeile({ partner }: { readonly partner: Ansprechpartner }) {
+function Zeile({ partner, firmaId, schalte }: ZeilenProps) {
+  const name = namensZug(partner);
+  const umschalten = partner.aktiv ? 'Stilllegen' : 'Wieder aktivieren';
   return (
     <Box
       component="li"
       sx={(theme) => ({
+        display: 'flex',
+        alignItems: 'center',
+        gap: 1.5,
+        flexWrap: 'wrap',
         padding: '11px 16px',
         borderBottom: `1px solid color-mix(in srgb, ${theme.vars.palette.kupferwarte.rand} 55%, transparent)`,
         'li:last-of-type&': { borderBottom: 0 },
       })}
     >
-      <Typography sx={{ fontSize: 13.5, fontWeight: 500 }}>{namensZug(partner)}</Typography>
-      <Box
-        sx={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 1.5,
-          marginTop: '3px',
-          flexWrap: 'wrap',
-        }}
-      >
-        {partner.rolle === null ? null : (
-          <Typography
-            component="span"
-            sx={(theme) => ({ fontSize: 11.5, color: theme.vars.palette.kupferwarte.textMatt })}
-          >
-            {partner.rolle}
-          </Typography>
-        )}
-        <Kontakt wert={partner.email} ziel={emailZiel} />
-        <Kontakt wert={partner.telefonFestnetz} ziel={telefonZiel} />
-        <Kontakt wert={partner.telefonMobil} ziel={telefonZiel} />
+      <Box sx={{ flex: '1 1 240px', minWidth: 0 }}>
+        <Typography sx={{ fontSize: 13.5, fontWeight: 500 }}>{name}</Typography>
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 1.5,
+            marginTop: '3px',
+            flexWrap: 'wrap',
+          }}
+        >
+          {partner.rolle === null ? null : (
+            <Typography
+              component="span"
+              sx={(theme) => ({ fontSize: 11.5, color: theme.vars.palette.kupferwarte.textMatt })}
+            >
+              {partner.rolle}
+            </Typography>
+          )}
+          <Kontakt wert={partner.email} ziel={emailZiel} />
+          <Kontakt wert={partner.telefonFestnetz} ziel={telefonZiel} />
+          <Kontakt wert={partner.telefonMobil} ziel={telefonZiel} />
+        </Box>
+      </Box>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, marginLeft: 'auto' }}>
+        <Button
+          component={RouterLink}
+          to={`/firmen/${String(firmaId)}/ansprechpartner/${String(partner.id)}/bearbeiten`}
+          aria-label={`Bearbeiten: ${name}`}
+          sx={flacheTasteSx}
+        >
+          Bearbeiten
+        </Button>
+        <Button
+          onClick={() => {
+            schalte(partner);
+          }}
+          aria-label={`${umschalten}: ${name}`}
+          sx={flacheTasteSx}
+        >
+          {umschalten}
+        </Button>
       </Box>
     </Box>
   );
@@ -201,9 +250,13 @@ function Zeile({ partner }: { readonly partner: Ansprechpartner }) {
 function Liste({
   partner,
   bezeichnung,
+  firmaId,
+  schalte,
 }: {
   readonly partner: readonly Ansprechpartner[];
   readonly bezeichnung: string;
+  readonly firmaId: number;
+  readonly schalte: (partner: Ansprechpartner) => void;
 }) {
   if (partner.length === 0) {
     return null;
@@ -215,14 +268,20 @@ function Liste({
       sx={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column' }}
     >
       {partner.map((einer) => (
-        <Zeile key={einer.id} partner={einer} />
+        <Zeile key={einer.id} partner={einer} firmaId={firmaId} schalte={schalte} />
       ))}
     </Box>
   );
 }
 
 /** Die Ansprechpartner der Firma: aktive zuerst, die stillgelegten darunter (Kriterium 10). */
-function Ansprechpartnerliste({ firma }: { readonly firma: Firma }) {
+function Ansprechpartnerliste({
+  firma,
+  schalte,
+}: {
+  readonly firma: Firma;
+  readonly schalte: (partner: Ansprechpartner) => void;
+}) {
   const aktive = firma.ansprechpartner.filter((einer) => einer.aktiv);
   const ruhende = firma.ansprechpartner.filter((einer) => !einer.aktiv);
   if (firma.ansprechpartner.length === 0) {
@@ -241,7 +300,12 @@ function Ansprechpartnerliste({ firma }: { readonly firma: Firma }) {
   }
   return (
     <>
-      <Liste partner={aktive} bezeichnung="Aktive Ansprechpartner" />
+      <Liste
+        partner={aktive}
+        bezeichnung="Aktive Ansprechpartner"
+        firmaId={firma.id}
+        schalte={schalte}
+      />
       {ruhende.length === 0 ? null : (
         <Typography
           variant="h3"
@@ -256,7 +320,12 @@ function Ansprechpartnerliste({ firma }: { readonly firma: Firma }) {
           Stillgelegt
         </Typography>
       )}
-      <Liste partner={ruhende} bezeichnung="Stillgelegte Ansprechpartner" />
+      <Liste
+        partner={ruhende}
+        bezeichnung="Stillgelegte Ansprechpartner"
+        firmaId={firma.id}
+        schalte={schalte}
+      />
     </>
   );
 }
@@ -290,6 +359,24 @@ export default function FirmaPage() {
     } catch {
       // Welcher Grund es war, hilft dem Benutzer nicht (CLAUDE-react.md).
       setzeSchaltFehler(SCHALTEN_FEHLT);
+    }
+  };
+
+  /**
+   * Stilllegen und Wiederaktivieren einer Zeile (Kriterium 15).
+   *
+   * Wie bei der Firma liest die Ansicht danach neu: Erst die Antwort des Servers entscheidet, in
+   * welchem Teil der Liste die Zeile steht.
+   */
+  const schaltePartner = async (firma: Firma, partner: Ansprechpartner) => {
+    setzeSchaltFehler(null);
+    try {
+      await (partner.aktiv
+        ? ansprechpartnerStilllegen(firma.id, partner.id)
+        : ansprechpartnerAktivieren(firma.id, partner.id));
+      setzeStand({ art: 'daten', firma: await firmaLesen(firma.id) });
+    } catch {
+      setzeSchaltFehler(PARTNER_SCHALTEN_FEHLT);
     }
   };
 
@@ -331,7 +418,12 @@ export default function FirmaPage() {
           </Box>
         </Platte>
         <Platte titel="Ansprechpartner">
-          <Ansprechpartnerliste firma={firma} />
+          <Ansprechpartnerliste
+            firma={firma}
+            schalte={(partner) => {
+              void schaltePartner(firma, partner);
+            }}
+          />
         </Platte>
       </>
     );

@@ -92,6 +92,19 @@ function fensterbreite(breite: number) {
  */
 function firmaDoppel(start: Firma = FIRMA) {
   let firma: Firma = start;
+  /**
+   * Schaltet den Ansprechpartner der Firma — so, wie der Server es taete.
+   *
+   * Die Faelle, die eine Zeile schalten, tragen genau einen Ansprechpartner; deshalb braucht das
+   * Doppel den Eintrag nicht erst herauszusuchen.
+   */
+  const schaltePartner = (aktiv: boolean) => {
+    firma = {
+      ...firma,
+      ansprechpartner: firma.ansprechpartner.map((einer) => ({ ...einer, aktiv })),
+    };
+    return new Response(null, { status: 204 });
+  };
   return fetchNachPfad({
     'GET /api/firmen/7': () =>
       new Response(JSON.stringify(firma), {
@@ -106,6 +119,8 @@ function firmaDoppel(start: Firma = FIRMA) {
       firma = { ...firma, aktiv: true };
       return new Response(null, { status: 204 });
     },
+    'POST /api/firmen/7/ansprechpartner/11/stilllegen': () => schaltePartner(false),
+    'POST /api/firmen/7/ansprechpartner/11/aktivieren': () => schaltePartner(true),
   });
 }
 
@@ -287,6 +302,90 @@ describe('FirmaPage — die Ansprechpartner', () => {
   });
 });
 
+describe('FirmaPage — die Zeilen-Aktionen der Ansprechpartner (Kriterium 15)', () => {
+  it('fuehrt „Bearbeiten" je Zeile auf die Maske des Ansprechpartners', async () => {
+    firmaDoppel();
+
+    renderSeite();
+
+    expect(await screen.findByRole('link', { name: 'Bearbeiten: Anna Berg' })).toHaveAttribute(
+      'href',
+      '/firmen/7/ansprechpartner/11/bearbeiten',
+    );
+    expect(screen.getByRole('link', { name: 'Bearbeiten: Clausen' })).toHaveAttribute(
+      'href',
+      '/firmen/7/ansprechpartner/12/bearbeiten',
+    );
+    // Der Weg der Firma bleibt daneben eindeutig benannt.
+    expect(screen.getByRole('link', { name: 'Bearbeiten' })).toHaveAttribute(
+      'href',
+      '/firmen/7/bearbeiten',
+    );
+  });
+
+  it('verschiebt die Zeile beim Stilllegen unter „Stillgelegt" und wieder zurueck', async () => {
+    const nutzer = userEvent.setup();
+    firmaDoppel({ ...FIRMA, ansprechpartner: [ANNA] });
+
+    renderSeite();
+
+    const aktive = within(await screen.findByRole('list', { name: 'Aktive Ansprechpartner' }));
+    expect(aktive.getByText('Anna Berg')).toBeInTheDocument();
+
+    await nutzer.click(screen.getByRole('button', { name: 'Stilllegen: Anna Berg' }));
+
+    const ruhende = within(
+      await screen.findByRole('list', { name: 'Stillgelegte Ansprechpartner' }),
+    );
+    expect(ruhende.getByText('Anna Berg')).toBeInTheDocument();
+    expect(screen.queryByRole('list', { name: 'Aktive Ansprechpartner' })).not.toBeInTheDocument();
+
+    await nutzer.click(screen.getByRole('button', { name: 'Wieder aktivieren: Anna Berg' }));
+
+    expect(await screen.findByRole('list', { name: 'Aktive Ansprechpartner' })).toBeInTheDocument();
+    expect(
+      screen.queryByRole('list', { name: 'Stillgelegte Ansprechpartner' }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('haelt die Zeilen-Aktionen auch bei stillgelegter Firma offen (Kriterium 14)', async () => {
+    const nutzer = userEvent.setup();
+    firmaDoppel({ ...FIRMA, aktiv: false, ansprechpartner: [ANNA] });
+
+    renderSeite();
+
+    expect(await screen.findByText('stillgelegt')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Bearbeiten: Anna Berg' })).toBeInTheDocument();
+
+    await nutzer.click(screen.getByRole('button', { name: 'Stilllegen: Anna Berg' }));
+
+    const ruhende = within(
+      await screen.findByRole('list', { name: 'Stillgelegte Ansprechpartner' }),
+    );
+    expect(ruhende.getByText('Anna Berg')).toBeInTheDocument();
+
+    await nutzer.click(screen.getByRole('button', { name: 'Wieder aktivieren: Anna Berg' }));
+
+    expect(await screen.findByRole('list', { name: 'Aktive Ansprechpartner' })).toBeInTheDocument();
+  });
+
+  it('meldet, wenn das Schalten einer Zeile nicht durchgeht', async () => {
+    const nutzer = userEvent.setup();
+    fetchNachPfad({
+      'GET /api/firmen/7': json(200, { ...FIRMA, ansprechpartner: [ANNA] }),
+      'POST /api/firmen/7/ansprechpartner/11/stilllegen': leer(500),
+    });
+
+    renderSeite();
+    await screen.findByRole('heading', { name: 'Beispiel GmbH' });
+    await nutzer.click(screen.getByRole('button', { name: 'Stilllegen: Anna Berg' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Der Stand des Ansprechpartners wurde nicht geändert',
+    );
+  });
+});
+
 describe('FirmaPage — unsinnige Kennung, unbekannte Firma, Ausfall', () => {
   it('faengt eine nicht numerische Kennung ab, bevor sie an die Schnittstelle geht', async () => {
     const fetchMock = fetchNachPfad({});
@@ -371,5 +470,9 @@ describe('FirmaPage — Kopfaktion und Tastatur', () => {
     expect(screen.getByRole('link', { name: 'anna.berg@beispiel.de' })).toHaveFocus();
     await nutzer.tab();
     expect(screen.getByRole('link', { name: '+49 421 123456' })).toHaveFocus();
+    await nutzer.tab();
+    expect(screen.getByRole('link', { name: 'Bearbeiten: Anna Berg' })).toHaveFocus();
+    await nutzer.tab();
+    expect(screen.getByRole('button', { name: 'Stilllegen: Anna Berg' })).toHaveFocus();
   });
 });
