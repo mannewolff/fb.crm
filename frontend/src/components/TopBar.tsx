@@ -1,15 +1,19 @@
 import Box from '@mui/material/Box';
 
+import { useKopfAktionPlatz } from './KopfAktion';
 import UserMenu from './UserMenu';
 
 /**
  * Der Kopf: klebend, getoent, mit Weichzeichner (Vorlage `.kopf` Z. 284–299).
  *
- * Links steht in diesem Stand nichts, rechts allein das Nutzer-Mal (K13). Pfad, Suche, `⌘K`,
- * Reiterleiste und Kennzahlen der Vorlage gehoeren zur Fachlichkeit von kanban-kit und werden
- * nicht uebernommen.
+ * Links steht nichts, rechts der Platz fuer die Hauptaktion der Ansicht und dahinter das
+ * Nutzer-Mal (K13, Vorlage Z. 1192–1196). Welche Aktion dort steht, bringt die Ansicht selbst mit
+ * ({@link KopfAktion}); ohne Aktion bleibt der Platz leer. Pfad, Suche, `⌘K`, Reiterleiste und
+ * Kennzahlen der Vorlage gehoeren zur Fachlichkeit von kanban-kit und werden nicht uebernommen.
  */
 export default function TopBar() {
+  const meldePlatz = useKopfAktionPlatz();
+
   return (
     <Box
       component="header"
@@ -27,6 +31,11 @@ export default function TopBar() {
       })}
     >
       <Box data-testid="kopf-links" sx={{ flex: 1, minWidth: 0 }} />
+      <Box
+        data-testid="kopf-aktion"
+        ref={meldePlatz}
+        sx={{ display: 'flex', alignItems: 'center', gap: 1 }}
+      />
       <UserMenu />
     </Box>
   );

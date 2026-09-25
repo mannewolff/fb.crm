@@ -34,8 +34,8 @@ export class ApiError extends Error {
   }
 }
 
-/** Die beiden Methoden, die diese Anwendung kennt. */
-type Methode = 'GET' | 'POST';
+/** Die Methoden, die diese Anwendung kennt. */
+type Methode = 'GET' | 'POST' | 'PUT';
 
 export interface Anfrage {
   readonly methode: Methode;
