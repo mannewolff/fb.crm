@@ -1,5 +1,7 @@
 package org.mwolff.fbcrm.vorgang.application;
 
+import java.io.InputStream;
+import java.time.Instant;
 import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -9,6 +11,9 @@ import org.mwolff.fbcrm.firma.domain.Ansprechpartner;
 import org.mwolff.fbcrm.firma.domain.AnsprechpartnerRepository;
 import org.mwolff.fbcrm.firma.domain.Firma;
 import org.mwolff.fbcrm.firma.domain.FirmaRepository;
+import org.mwolff.fbcrm.vorgang.domain.AnhangSpeicher;
+import org.mwolff.fbcrm.vorgang.domain.Eintrag;
+import org.mwolff.fbcrm.vorgang.domain.EintragRepository;
 import org.mwolff.fbcrm.vorgang.domain.NummernkreisRepository;
 import org.mwolff.fbcrm.vorgang.domain.Vorgang;
 import org.mwolff.fbcrm.vorgang.domain.VorgangRepository;
@@ -98,6 +103,115 @@ final class Ports {
     /** Wie oft eine Nummer gezogen wurde — der Nachweis zu Kriterium 8. */
     int zuege() {
       return zuege;
+    }
+  }
+
+  /**
+   * Der Bestand der Historieneintraege: speichert, vergibt Kennungen, liest nach.
+   *
+   * <p>Jedes Speichern vermerkt sich im uebergebenen Protokoll. Nur daran ist E8 ablesbar — dass
+   * beim Anhang das Objekt <b>vor</b> der Zeile geschrieben wird —, weil die Reihenfolge zweier
+   * Ports ohne gemeinsamen Zeugen nicht pruefbar ist.
+   */
+  static final class Eintraege implements EintragRepository {
+
+    /** Der Vermerk, den ein Speichern hinterlaesst. */
+    static final String ZEILE = "zeile";
+
+    private final List<String> protokoll;
+    private final Map<Long, Eintrag> bestand = new LinkedHashMap<>();
+    private long naechsteId = 1L;
+
+    Eintraege(final List<String> protokoll) {
+      this.protokoll = protokoll;
+    }
+
+    /** Legt den Eintrag ohne Protokolleintrag in den Bestand und liefert ihn mit Kennung. */
+    Eintrag mit(final Eintrag eintrag) {
+      final Eintrag gespeichert = gespeichert(eintrag);
+      bestand.put(gespeichert.requireId(), gespeichert);
+      return gespeichert;
+    }
+
+    @Override
+    public Eintrag save(final Eintrag eintrag) {
+      protokoll.add(ZEILE);
+      return mit(eintrag);
+    }
+
+    @Override
+    public Optional<Eintrag> findById(final long id) {
+      return Optional.ofNullable(bestand.get(Long.valueOf(id)));
+    }
+
+    /** Alles, was im Bestand liegt — in der Reihenfolge des ersten Speicherns. */
+    List<Eintrag> alle() {
+      return List.copyOf(bestand.values());
+    }
+
+    private Eintrag gespeichert(final Eintrag eintrag) {
+      final Long id = eintrag.id() == null ? Long.valueOf(naechsteId++) : eintrag.id();
+      return new Eintrag(
+          id,
+          eintrag.vorgangId(),
+          eintrag.art(),
+          eintrag.text(),
+          eintrag.geschehenAm(),
+          eintrag.herkunft(),
+          eintrag.dateiName(),
+          eintrag.dateiGroesse(),
+          eintrag.objektSchluessel(),
+          eintrag.createdAt(),
+          eintrag.geaendertAm());
+    }
+
+    @Override
+    public List<Eintrag> findByVorgang(final long vorgangId) {
+      throw nichtGebraucht();
+    }
+
+    @Override
+    public Map<Long, Instant> juengstesGeschehenJeVorgang(final Collection<Long> vorgangIds) {
+      throw nichtGebraucht();
+    }
+  }
+
+  /**
+   * Der Objektspeicher: vergibt fortlaufende Schluessel in der Form aus E9 und vermerkt jedes
+   * Ablegen im gemeinsamen Protokoll.
+   *
+   * <p>Der Datenstrom wird nicht gelesen, nur seine angekuendigte Groesse festgehalten. Was mit den
+   * Bytes geschieht, ist Sache des Adapters und steht in {@code S3AnhangSpeicherIT}; hier zaehlt
+   * allein, <b>wann</b> abgelegt wird und <b>was</b> danach in der Zeile steht.
+   */
+  static final class Speicher implements AnhangSpeicher {
+
+    /** Der Vermerk, den ein Ablegen hinterlaesst. */
+    static final String OBJEKT = "objekt";
+
+    private final List<String> protokoll;
+    private final Map<String, Long> abgelegt = new LinkedHashMap<>();
+
+    Speicher(final List<String> protokoll) {
+      this.protokoll = protokoll;
+    }
+
+    @Override
+    public String ablegen(final long vorgangId, final InputStream inhalt, final long groesse) {
+      protokoll.add(OBJEKT);
+      final String schluessel = "vorgang/" + vorgangId + "/objekt-" + (abgelegt.size() + 1);
+      abgelegt.put(schluessel, Long.valueOf(groesse));
+      return schluessel;
+    }
+
+    /** Was abgelegt wurde: Schluessel auf angekuendigte Groesse. */
+    Map<String, Long> abgelegt() {
+      return Map.copyOf(abgelegt);
+    }
+
+    @Override
+    public Optional<InputStream> lesen(final String objektSchluessel) {
+      throw nichtGebraucht();
     }
   }
 

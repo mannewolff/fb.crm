@@ -33,10 +33,11 @@ public final class Dateiname {
     final int letzterTrenner = Math.max(roh.lastIndexOf('/'), roh.lastIndexOf('\\'));
     final String ohnePfad = roh.substring(letzterTrenner + 1);
     final String ohneSteuerzeichen = STEUERZEICHEN.matcher(ohnePfad).replaceAll("");
+    // Ohne Verzweigung, und das ist Absicht: Als Bedingung war die Laengengrenze nicht pruefbar —
+    // bei genau 255 Zeichen liefern "kuerzen" und "nicht kuerzen" dieselbe Zeichenkette, und ein
+    // Mutationstest, der die Grenze um eins verschiebt, blieb darum unentdeckt (PIT, Issue #64).
     final String gekuerzt =
-        ohneSteuerzeichen.length() > MAX_LAENGE
-            ? ohneSteuerzeichen.substring(0, MAX_LAENGE)
-            : ohneSteuerzeichen;
+        ohneSteuerzeichen.substring(0, Math.min(ohneSteuerzeichen.length(), MAX_LAENGE));
     final String getrimmt = gekuerzt.strip();
     return getrimmt.isEmpty() ? Optional.empty() : Optional.of(getrimmt);
   }

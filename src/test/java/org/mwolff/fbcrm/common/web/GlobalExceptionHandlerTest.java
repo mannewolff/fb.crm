@@ -6,6 +6,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
+import org.mwolff.fbcrm.common.Uploadgrenze;
 import org.springframework.core.MethodParameter;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
@@ -100,6 +101,29 @@ class GlobalExceptionHandlerTest {
     assertThat(problem.getProperties())
         .containsEntry(
             "fieldErrors", Map.of("email", List.of(GlobalExceptionHandler.FALLBACK_FIELD_MESSAGE)));
+  }
+
+  @Test
+  void handleUploadZuGross_thenAnswersBadRequestInsteadOfTheGenericPayloadTooLarge() {
+    // Given — E10: Springs eigene Antwort waere eine 413 ohne die Grenze im Text, und genau die
+    // verlangt Kriterium 18.
+
+    // When
+    final ProblemDetail problem = handler.handleUploadZuGross();
+
+    // Then
+    assertThat(problem.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST.value());
+  }
+
+  @Test
+  void handleUploadZuGross_thenNamesTheSameLimitAsTheFieldMessage() {
+    // Given — derselbe Satz wie in der Constraint der Eintragsanfrage.
+
+    // When
+    final ProblemDetail problem = handler.handleUploadZuGross();
+
+    // Then
+    assertThat(problem.getDetail()).isEqualTo(Uploadgrenze.MELDUNG);
   }
 
   @Test

@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 import org.jspecify.annotations.Nullable;
+import org.mwolff.fbcrm.common.Uploadgrenze;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.annotation.AnnotatedElementUtils;
@@ -16,6 +17,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
 /**
  * Die einzige Stelle, an der Fehler auf HTTP-Antworten abgebildet werden (CLAUDE-java.md §6.3).
@@ -50,6 +52,27 @@ public class GlobalExceptionHandler {
     problem.setTitle("Ungueltige Eingabe");
     problem.setProperty("fieldErrors", fieldErrors);
     return problem;
+  }
+
+  /**
+   * Der Riegel des Containers fuer zu grosse Rumpfe (E10, Kriterium 18).
+   *
+   * <p>Ohne diesen Zweig antwortete die Anwendung mit Springs eigener Lage: {@link
+   * MaxUploadSizeExceededException} ist ein {@code ErrorResponse} und traegt eine generische 413
+   * <b>ohne die Grenze im Text</b> — der Zweig darunter gaebe sie unveraendert zurueck. Kriterium
+   * 18 verlangt aber eine Meldung, die die Grenze nennt, und sie muss den Browser auch dann
+   * erreichen, wenn der Rumpf so gross ist, dass die Bean Validation der Anfrage gar nicht erst zum
+   * Zuge kommt.
+   *
+   * <p>400 statt 413 und derselbe Satz wie am Feld {@code datei}: Fuer die Maske ist es dieselbe
+   * Lage, und zwei Formulierungen fuer dieselbe Grenze waeren zwei Wahrheiten.
+   *
+   * <p>Ohne Parameter, weil die Ausnahme selbst nichts beitraegt: Ihre eigene Groessenangabe ist
+   * die des Containers und nicht die, die die Anwendung zusagt.
+   */
+  @ExceptionHandler(MaxUploadSizeExceededException.class)
+  public ProblemDetail handleUploadZuGross() {
+    return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, Uploadgrenze.MELDUNG);
   }
 
   @ExceptionHandler(Exception.class)
