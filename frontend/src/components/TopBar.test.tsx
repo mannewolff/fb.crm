@@ -1,4 +1,5 @@
 import { screen, within } from '@testing-library/react';
+import type { ReactNode } from 'react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -10,13 +11,13 @@ import TopBar from './TopBar';
 
 const KONTO = { id: 1, displayName: 'Manfred Wolff', email: 'info@mwolff.org' };
 
-function renderKopf() {
+function renderKopf(schalter?: ReactNode) {
   fetchNachPfad({ 'GET /api/auth/me': json(200, KONTO) });
   return renderMitTheme(
     <MemoryRouter>
       <AuthProvider>
         <KopfAktionProvider>
-          <TopBar />
+          <TopBar schalter={schalter} />
         </KopfAktionProvider>
       </AuthProvider>
     </MemoryRouter>,
@@ -38,6 +39,15 @@ describe('TopBar', () => {
     expect(await kopf.findByRole('button', { name: /Nutzermenü/ })).toBeInTheDocument();
     expect(kopf.getAllByRole('button')).toHaveLength(1);
     expect(kopf.queryAllByRole('link')).toHaveLength(0);
+  });
+
+  it('nimmt die Schaltflaeche der Schiene links auf (E18)', async () => {
+    renderKopf(<button type="button">Navigation öffnen</button>);
+    await screen.findByRole('button', { name: /Nutzermenü/ });
+
+    expect(within(screen.getByTestId('kopf-links')).getByRole('button')).toHaveAccessibleName(
+      'Navigation öffnen',
+    );
   });
 
   it('traegt keine Suche, keine Reiterleiste und keine Kennzahl', async () => {

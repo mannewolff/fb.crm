@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { FUSS_EINTRAEGE } from '../layout/navItems';
+import { FUSS_EINTRAEGE, NAV_BLOECKE } from '../layout/navItems';
 import { SCHIENE_SCHLUESSEL } from '../lib/railState';
 import { fetchNachPfad, json, leer } from '../test/fetchNachPfad';
 import { renderMitTheme } from '../test/render';
@@ -40,13 +40,19 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe('navItems (E15)', () => {
+describe('navItems (E15, E18)', () => {
   it('fuehrt genau die drei Fuss-Eintraege und sonst nichts', () => {
     expect(FUSS_EINTRAEGE.map((eintrag) => eintrag.beschriftung)).toEqual([
       'Administration',
       'Dokumentation',
       'Einklappen',
     ]);
+  });
+
+  it('fuehrt genau den Block „Stammdaten" mit dem Eintrag „Firmen"', () => {
+    expect(
+      NAV_BLOECKE.map((block) => [block.etikett, block.eintraege.map((e) => [e.beschriftung, e.ziel])]),
+    ).toEqual([['Stammdaten', [['Firmen', '/firmen']]]]);
   });
 });
 
@@ -68,21 +74,41 @@ describe('NavRail', () => {
     expect(screen.queryAllByRole('link', { current: true })).toHaveLength(0);
   });
 
-  it('rendert oberhalb des Fusses keinen Link, keine Taste und kein Etikett (K11, E15)', () => {
+  it('traegt zwischen Marke und Fuss den Block „Stammdaten" mit „Firmen" (K11, E18)', () => {
     fetchNachPfad({ 'GET /api/instance': json(200, { version: '0.1.1' }) });
 
     renderSchiene();
 
+    // Die Marke bleibt fuer sich: Das Etikett gehoert zum Block, nicht zum Kopf.
     const kopf = within(screen.getByTestId('schiene-kopf'));
     expect(kopf.queryAllByRole('link')).toHaveLength(0);
-    expect(kopf.queryAllByRole('button')).toHaveLength(0);
-    // Kein Etikett, kein Blocktitel, kein Platzhalter: Oberhalb des Fusses steht allein die Marke.
     expect(screen.getByTestId('schiene-kopf')).toHaveTextContent(/^fb\.crm$/);
-    // Alle Links und Tasten der Schiene liegen im Fuss.
-    const schiene = within(screen.getByRole('navigation', { name: 'Hauptnavigation' }));
-    const fuss = within(screen.getByTestId('schiene-fuss'));
-    expect(schiene.getAllByRole('link')).toEqual(fuss.getAllByRole('link'));
-    expect(schiene.getAllByRole('button')).toEqual(fuss.getAllByRole('button'));
+
+    const bloecke = within(screen.getByTestId('schiene-bloecke'));
+    expect(bloecke.getByText('Stammdaten')).toBeInTheDocument();
+    expect(bloecke.getAllByRole('link').map((link) => link.getAttribute('href'))).toEqual(['/firmen']);
+    expect(bloecke.getByRole('link', { name: 'Firmen' })).toBeInTheDocument();
+    // Kein Umschalter in den Bloecken — Tasten stehen allein im Fuss.
+    expect(bloecke.queryAllByRole('button')).toHaveLength(0);
+    // Die Bloecke stehen im Baum oberhalb des Fusses.
+    expect(
+      screen.getByTestId('schiene-bloecke').compareDocumentPosition(screen.getByTestId('schiene-fuss')),
+    ).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+  });
+
+  it('ruft beim Waehlen eines Eintrags den Rueckruf (Schaltflaechen-Schiene)', async () => {
+    fetchNachPfad({ 'GET /api/instance': json(200, { version: '0.1.1' }) });
+    const nutzer = userEvent.setup();
+    const gewaehlt = vi.fn();
+
+    renderMitTheme(
+      <MemoryRouter initialEntries={['/']}>
+        <NavRail onWahl={gewaehlt} />
+      </MemoryRouter>,
+    );
+    await nutzer.click(screen.getByRole('link', { name: 'Firmen' }));
+
+    expect(gewaehlt).toHaveBeenCalledTimes(1);
   });
 
   it('traegt im Fuss genau die drei Eintraege (K12)', () => {
@@ -101,6 +127,9 @@ describe('NavRail', () => {
   it.each([
     ['/administration', 'Administration'],
     ['/dokumentation', 'Dokumentation'],
+    ['/firmen', 'Firmen'],
+    // Auch die Detailansicht einer Firma laesst „Firmen" aktiv stehen (Plan-Review Fund 3).
+    ['/firmen/7', 'Firmen'],
   ])('setzt auf %s aria-current="page" an „%s" und nur dort (K12)', (adresse, beschriftung) => {
     fetchNachPfad({ 'GET /api/instance': json(200, { version: '0.1.1' }) });
 
@@ -146,6 +175,10 @@ describe('NavRail', () => {
     // Eingeklappt steht keine sichtbare Beschriftung mehr — der Name bleibt als aria-label.
     expect(screen.queryByText('Administration')).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Administration' })).toBeInTheDocument();
+    // Ebenso im Block: das Etikett entfaellt, der Link behaelt seinen Namen.
+    expect(screen.queryByText('Stammdaten')).not.toBeInTheDocument();
+    expect(screen.queryByText('Firmen')).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Firmen' })).toBeInTheDocument();
 
     // Neuladen: die Komponente geht, der Speicher bleibt.
     unmount();
