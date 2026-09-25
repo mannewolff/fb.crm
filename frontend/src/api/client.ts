@@ -41,6 +41,15 @@ export interface Anfrage {
   readonly methode: Methode;
   readonly rumpf?: unknown;
   /**
+   * Der Rumpf als Formulardaten, wenn eine Datei mitgeht (E21).
+   *
+   * Steht er, geht kein `Content-Type` hinaus: Ein `multipart/form-data` braucht die
+   * `boundary`, und die kennt erst der Browser, wenn er das `FormData` serialisiert. Ein von
+   * Hand gesetzter Kopf haette keine — der Server bekaeme eine Nachricht, deren Teile er nicht
+   * trennen kann, und die Antwort waere ein Fehler ohne erkennbaren Grund.
+   */
+  readonly formular?: FormData;
+  /**
    * Bricht die Anfrage ab, sobald die Ansicht ihre Antwort nicht mehr braucht.
    *
    * Eine Ansicht, die auf jeden Tastendruck neu fragt, hat sonst mehrere Antworten unterwegs, und
@@ -106,7 +115,7 @@ async function anfragen(pfad: string, anfrage: Anfrage): Promise<Response> {
     method: anfrage.methode,
     credentials: 'same-origin',
     headers: mitRumpf ? { 'Content-Type': 'application/json' } : undefined,
-    body: mitRumpf ? JSON.stringify(anfrage.rumpf) : undefined,
+    body: anfrage.formular ?? (mitRumpf ? JSON.stringify(anfrage.rumpf) : undefined),
     signal: anfrage.signal,
   });
   if (!antwort.ok) {
@@ -128,4 +137,14 @@ export async function apiJson<T>(
 /** Ruft auf, wo die Antwort keinen Inhalt traegt (204). */
 export async function apiOhneInhalt(pfad: string, anfrage: Anfrage): Promise<void> {
   await anfragen(pfad, anfrage);
+}
+
+/**
+ * Schickt Formulardaten samt Datei ab (E21).
+ *
+ * Immer `POST`: Es gibt in dieser Anwendung keinen Weg, der eine hochgeladene Datei ersetzt —
+ * ein Anhang wird hinzugefuegt, nicht ausgetauscht. Die Antwort traegt keinen Rumpf.
+ */
+export async function apiFormular(pfad: string, formular: FormData): Promise<void> {
+  await anfragen(pfad, { methode: 'POST', formular });
 }

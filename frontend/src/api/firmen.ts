@@ -1,4 +1,5 @@
 import { apiJson, apiOhneInhalt } from './client';
+import { jaNein, liste, objekt, text, textOderNull, zahl } from './verengen';
 
 /**
  * Die Wege zu Firmen und Ansprechpartnern.
@@ -11,9 +12,9 @@ import { apiJson, apiOhneInhalt } from './client';
  * Einen eigenen Leseweg fuer Ansprechpartner gibt es nicht: Sie kommen eingebettet in der
  * Detailantwort ihrer Firma (E7). Aus demselben Grund traegt die Eingabe des Ansprechpartners kein
  * Feld fuer die Firma — die steht im Pfad, und Umhaengen gibt es nicht (Kriterium 12).
+ *
+ * Die Bausteine der Pruefung stehen in `verengen.ts` und werden mit den Vorgaengen geteilt.
  */
-
-const FORMFEHLER = 'Die Antwort der Schnittstelle hat nicht die erwartete Form.';
 
 /** Eine Zeile der Uebersicht. */
 export interface FirmaZeile {
@@ -80,50 +81,6 @@ export interface AnsprechpartnerEingabe {
   readonly email: string | null;
   readonly telefonFestnetz: string | null;
   readonly telefonMobil: string | null;
-}
-
-function istObjekt(wert: unknown): wert is Record<string, unknown> {
-  return typeof wert === 'object' && wert !== null;
-}
-
-function objekt(wert: unknown): Record<string, unknown> {
-  if (!istObjekt(wert)) {
-    throw new TypeError(FORMFEHLER);
-  }
-  return wert;
-}
-
-function liste(wert: unknown): readonly unknown[] {
-  if (!Array.isArray(wert)) {
-    throw new TypeError(FORMFEHLER);
-  }
-  return wert;
-}
-
-function zahl(wert: unknown): number {
-  if (typeof wert !== 'number') {
-    throw new TypeError(FORMFEHLER);
-  }
-  return wert;
-}
-
-function text(wert: unknown): string {
-  if (typeof wert !== 'string') {
-    throw new TypeError(FORMFEHLER);
-  }
-  return wert;
-}
-
-/** Eine Angabe, die fehlen darf — dann steht dort `null`, nie ein Platzhalter. */
-function textOderNull(wert: unknown): string | null {
-  return wert === null ? null : text(wert);
-}
-
-function jaNein(wert: unknown): boolean {
-  if (typeof wert !== 'boolean') {
-    throw new TypeError(FORMFEHLER);
-  }
-  return wert;
 }
 
 /** Verengt eine Zeile der Uebersicht oder scheitert. */
