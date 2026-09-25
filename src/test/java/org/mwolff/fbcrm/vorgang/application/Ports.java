@@ -1,5 +1,6 @@
 package org.mwolff.fbcrm.vorgang.application;
 
+import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.time.Instant;
 import java.util.Collection;
@@ -26,9 +27,10 @@ import org.mwolff.fbcrm.vorgang.domain.VorgangRepository;
  * keine Nummer" (Kriterium 8) ist nur an einem Zaehler ablesbar, der wirklich zaehlt. Mit Mocks
  * stuende dort eine Interaktionspruefung, die dasselbe nur behauptet.
  *
- * <p>Umgesetzt ist allein, was die Schreibwege aufrufen. Die Lesewege haben ihre eigenen Tests; ein
- * Doppel, das sie mitspielte, waere ein zweiter Bestand ohne Leser — deshalb steht dort {@link
- * #nichtGebraucht()}, das laut wird, falls ein Weg doch danach greift.
+ * <p>Umgesetzt ist allein, was die Wege dieses Pakets aufrufen, die es hier benutzen — die
+ * Schreibwege des Vorgangs und das Herausgeben eines Anhangs. Was kein Aufrufer braucht, bleibt
+ * {@link #nichtGebraucht()} und wird laut, falls ein Weg doch danach greift; ein Doppel ohne Leser
+ * waere ein zweiter Bestand, den niemand pflegt.
  */
 final class Ports {
 
@@ -180,9 +182,14 @@ final class Ports {
    * Der Objektspeicher: vergibt fortlaufende Schluessel in der Form aus E9 und vermerkt jedes
    * Ablegen im gemeinsamen Protokoll.
    *
-   * <p>Der Datenstrom wird nicht gelesen, nur seine angekuendigte Groesse festgehalten. Was mit den
-   * Bytes geschieht, ist Sache des Adapters und steht in {@code S3AnhangSpeicherIT}; hier zaehlt
-   * allein, <b>wann</b> abgelegt wird und <b>was</b> danach in der Zeile steht.
+   * <p>Der Datenstrom wird beim Ablegen nicht gelesen, nur seine angekuendigte Groesse
+   * festgehalten. Was mit den Bytes geschieht, ist Sache des Adapters und steht in {@code
+   * S3AnhangSpeicherIT}; fuer die Schreibwege zaehlt allein, <b>wann</b> abgelegt wird und
+   * <b>was</b> danach in der Zeile steht.
+   *
+   * <p>Zum Herauslesen liegen die Bytes daneben: {@link #mit(String, byte[])} legt sie unter einen
+   * Schluessel, so als waeren sie hochgeladen worden. Ohne sie waere „was hochgeladen wurde, kommt
+   * unveraendert wieder heraus" (Kriterium 17) nicht pruefbar.
    */
   static final class Speicher implements AnhangSpeicher {
 
@@ -191,9 +198,21 @@ final class Ports {
 
     private final List<String> protokoll;
     private final Map<String, Long> abgelegt = new LinkedHashMap<>();
+    private final Map<String, byte[]> inhalte = new LinkedHashMap<>();
 
     Speicher(final List<String> protokoll) {
       this.protokoll = protokoll;
+    }
+
+    /**
+     * Legt Bytes unter einem Schluessel ab und liefert dieses Doppel zurueck.
+     *
+     * @param objektSchluessel der Schluessel, unter dem {@link #lesen} sie findet
+     * @param inhalt die Bytes; sie werden kopiert
+     */
+    Speicher mit(final String objektSchluessel, final byte[] inhalt) {
+      inhalte.put(objektSchluessel, inhalt.clone());
+      return this;
     }
 
     @Override
@@ -211,7 +230,7 @@ final class Ports {
 
     @Override
     public Optional<InputStream> lesen(final String objektSchluessel) {
-      throw nichtGebraucht();
+      return Optional.ofNullable(inhalte.get(objektSchluessel)).map(ByteArrayInputStream::new);
     }
   }
 

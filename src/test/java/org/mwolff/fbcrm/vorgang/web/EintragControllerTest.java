@@ -6,11 +6,16 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.io.ByteArrayInputStream;
+import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -23,6 +28,8 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mwolff.fbcrm.common.Uploadgrenze;
 import org.mwolff.fbcrm.common.web.GlobalExceptionHandler;
+import org.mwolff.fbcrm.vorgang.application.AnhangInhalt;
+import org.mwolff.fbcrm.vorgang.application.AnhangLesenUseCase;
 import org.mwolff.fbcrm.vorgang.application.EintragAendernUseCase;
 import org.mwolff.fbcrm.vorgang.application.EintragDaten;
 import org.mwolff.fbcrm.vorgang.application.EintragHinzufuegenUseCase;
@@ -31,6 +38,7 @@ import org.mwolff.fbcrm.vorgang.application.VorgangNichtGefunden;
 import org.mwolff.fbcrm.vorgang.domain.Eintrag;
 import org.mwolff.fbcrm.vorgang.domain.Eintragsart;
 import org.mwolff.fbcrm.vorgang.domain.Herkunft;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MockMvc;
@@ -54,9 +62,20 @@ class EintragControllerTest {
   private static final Instant JETZT = Instant.parse("2026-09-12T09:00:00Z");
   private static final String GESTERN = "2026-09-11T14:30:00Z";
   private static final String PFAD = "/api/vorgaenge/4/eintraege";
+  private static final String DATEI_PFAD = PFAD + "/21/datei";
+
+  /**
+   * Ein Name mit allem, was eine Kopfzeile sprengen kann: Leerzeichen, Anfuehrungszeichen, Umlaut.
+   */
+  private static final String NAME_MIT_UMLAUT = "Angebot \"Müller\".pdf";
+
+  /** Der Inhalt, der nie in der Origin der Anwendung ausgefuehrt werden darf (E11). */
+  private static final byte[] SEITE =
+      "<html><script>alert(1)</script></html>".getBytes(StandardCharsets.UTF_8);
 
   @Mock private EintragHinzufuegenUseCase hinzufuegen;
   @Mock private EintragAendernUseCase aendern;
+  @Mock private AnhangLesenUseCase anhangLesen;
   @Captor private ArgumentCaptor<EintragDaten> daten;
 
   private MockMvc mockMvc;
@@ -64,12 +83,17 @@ class EintragControllerTest {
   @BeforeEach
   void baueDenController() {
     mockMvc =
-        MockMvcBuilders.standaloneSetup(new EintragController(hinzufuegen, aendern))
+        MockMvcBuilders.standaloneSetup(new EintragController(hinzufuegen, aendern, anhangLesen))
             .setValidator(
                 new SpringValidatorAdapter(
                     Pruefer.mitUhr(Clock.fixed(JETZT, ZoneOffset.UTC)).getValidator()))
             .setControllerAdvice(new GlobalExceptionHandler())
             .build();
+  }
+
+  private void anhangLiegtBereit(final String dateiName) {
+    when(anhangLesen.lese(4L, 21L))
+        .thenReturn(new AnhangInhalt(dateiName, SEITE.length, new ByteArrayInputStream(SEITE)));
   }
 
   private static RequestBuilder kommentar(final String text) {
@@ -304,5 +328,62 @@ class EintragControllerTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(aenderung("\"Doch geschrieben\"", GESTERN)))
         .andExpect(status().isNotFound());
+  }
+
+  @Test
+  void datei_thenAnswersWithTheStoredBytes() throws Exception {
+    // Given — Kriterium 17.
+    anhangLiegtBereit("Angebot.pdf");
+
+    // When / Then
+    mockMvc.perform(get(DATEI_PFAD)).andExpect(status().isOk()).andExpect(content().bytes(SEITE));
+  }
+
+  @Test
+  void datei_givenAnUploadedHtmlFile_thenAnswersOctetStream() throws Exception {
+    // Given — E11: der hochgeladene Typ geht nie wieder hinaus.
+    anhangLiegtBereit("seite.html");
+
+    // When / Then
+    mockMvc
+        .perform(get(DATEI_PFAD))
+        .andExpect(
+            header().string(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_OCTET_STREAM_VALUE));
+  }
+
+  @Test
+  void datei_givenANameWithQuotesAndUmlaut_thenCarriesBothFormsOfTheName() throws Exception {
+    // Given — E11: RFC-5987-Kodierung und ein ASCII-Rueckfall ohne Anfuehrungszeichen.
+    anhangLiegtBereit(NAME_MIT_UMLAUT);
+
+    // When / Then
+    mockMvc
+        .perform(get(DATEI_PFAD))
+        .andExpect(
+            header()
+                .string(
+                    HttpHeaders.CONTENT_DISPOSITION,
+                    "attachment; filename=\"Angebot _M_ller_.pdf\";"
+                        + " filename*=UTF-8''Angebot%20%22M%C3%BCller%22.pdf"));
+  }
+
+  @Test
+  void datei_thenCarriesTheSandboxPolicy() throws Exception {
+    // Given — E11: selbst wenn ein Browser den Inhalt doch anzeigt, laeuft dort nichts.
+    anhangLiegtBereit("seite.html");
+
+    // When / Then
+    mockMvc
+        .perform(get(DATEI_PFAD))
+        .andExpect(header().string(Anhangkopf.INHALTSREGEL, Anhangkopf.SANDKASTEN));
+  }
+
+  @Test
+  void datei_givenAnUnknownEintrag_thenAnswersNotFound() throws Exception {
+    // Given
+    when(anhangLesen.lese(4L, 21L)).thenThrow(new EintragNichtGefunden());
+
+    // When / Then
+    mockMvc.perform(get(DATEI_PFAD)).andExpect(status().isNotFound());
   }
 }
