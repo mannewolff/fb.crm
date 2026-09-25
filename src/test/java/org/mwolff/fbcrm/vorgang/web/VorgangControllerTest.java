@@ -1,9 +1,13 @@
 package org.mwolff.fbcrm.vorgang.web;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.time.Instant;
@@ -18,8 +22,13 @@ import org.mwolff.fbcrm.firma.domain.Anschrift;
 import org.mwolff.fbcrm.firma.domain.Ansprechpartner;
 import org.mwolff.fbcrm.firma.domain.Firma;
 import org.mwolff.fbcrm.vorgang.application.EintragAnsicht;
+import org.mwolff.fbcrm.vorgang.application.FirmaNichtWaehlbar;
 import org.mwolff.fbcrm.vorgang.application.VorgaengeUebersicht;
 import org.mwolff.fbcrm.vorgang.application.VorgaengeUebersichtUseCase;
+import org.mwolff.fbcrm.vorgang.application.VorgangAbschliessenUseCase;
+import org.mwolff.fbcrm.vorgang.application.VorgangAendernUseCase;
+import org.mwolff.fbcrm.vorgang.application.VorgangAnlegenUseCase;
+import org.mwolff.fbcrm.vorgang.application.VorgangDaten;
 import org.mwolff.fbcrm.vorgang.application.VorgangLesenUseCase;
 import org.mwolff.fbcrm.vorgang.application.VorgangMitHistorie;
 import org.mwolff.fbcrm.vorgang.application.VorgangNichtGefunden;
@@ -28,16 +37,18 @@ import org.mwolff.fbcrm.vorgang.domain.Eintragsart;
 import org.mwolff.fbcrm.vorgang.domain.Herkunft;
 import org.mwolff.fbcrm.vorgang.domain.Phase;
 import org.mwolff.fbcrm.vorgang.domain.Vorgang;
+import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 /**
- * Die Uebersetzung zwischen Anwendungsfall und HTTP fuer die beiden Lesewege des Vorgangs.
+ * Die Uebersetzung zwischen Anwendungsfall und HTTP fuer die Lese- und Schreibwege des Vorgangs.
  *
  * <p>Zwei Blickwinkel in einer Klasse, wie bei {@code FirmaControllerTest}: Die Abbildung wird
- * direkt an den Methoden geprueft, und die beiden Faelle, bei denen die <b>Form</b> der Antwort die
- * Aussage ist (Standardwerte der Parameter und unbekannte Kennung), laufen durch eine schlanke
- * MockMvc-Strecke mit dem echten {@link GlobalExceptionHandler}.
+ * direkt an den Methoden geprueft, und die Faelle, bei denen die <b>Form</b> der Antwort die
+ * Aussage ist (Standardwerte der Parameter, Feldfehler, unbekannte Kennung, Statuscodes der
+ * Schreibwege), laufen durch eine schlanke MockMvc-Strecke mit dem echten {@link
+ * GlobalExceptionHandler}.
  *
  * <p>Die Nummer geht als Zahl hinaus; das {@code #} setzt die Oberflaeche.
  */
@@ -49,17 +60,32 @@ class VorgangControllerTest {
 
   @Mock private VorgaengeUebersichtUseCase uebersicht;
   @Mock private VorgangLesenUseCase lesen;
+  @Mock private VorgangAnlegenUseCase anlegen;
+  @Mock private VorgangAendernUseCase aendern;
+  @Mock private VorgangAbschliessenUseCase abschliessen;
 
   private VorgangController controller;
   private MockMvc mockMvc;
 
   @BeforeEach
   void baueDenController() {
-    controller = new VorgangController(uebersicht, lesen);
+    controller = new VorgangController(uebersicht, lesen, anlegen, aendern, abschliessen);
     mockMvc =
         MockMvcBuilders.standaloneSetup(controller)
             .setControllerAdvice(new GlobalExceptionHandler())
             .build();
+  }
+
+  private static String rumpf(final String titel, final String firmaId) {
+    return "{\"titel\":" + titel + ",\"firmaId\":" + firmaId + ",\"ansprechpartnerId\":3}";
+  }
+
+  private static VorgangRequest anfrage(final String titel) {
+    return new VorgangRequest(titel, Long.valueOf(7L), Long.valueOf(3L));
+  }
+
+  private static VorgangDaten erwarteteDaten(final String titel) {
+    return new VorgangDaten(titel, 7L, Long.valueOf(3L));
   }
 
   private static Firma adlerAg(final boolean aktiv) {
@@ -267,5 +293,152 @@ class VorgangControllerTest {
 
     // When / Then
     mockMvc.perform(get("/api/vorgaenge/4711")).andExpect(status().isNotFound());
+  }
+
+  @Test
+  void anlegen_thenPassesTheRequestToTheUseCase() {
+    // Given
+    when(anlegen.anlegen(erwarteteDaten("Website-Relaunch")))
+        .thenReturn(new Vorgang(4L, 12L, "Website-Relaunch", 7L, null, false, ANGELEGT, ANGELEGT));
+
+    // When
+    controller.anlegen(anfrage("Website-Relaunch"));
+
+    // Then
+    verify(anlegen).anlegen(erwarteteDaten("Website-Relaunch"));
+  }
+
+  @Test
+  void anlegen_thenAnswersWithIdAndNumber() {
+    // Given — Kriterien 8, 9: die Oberflaeche braucht beides fuer den Weg zur Detailansicht.
+    when(anlegen.anlegen(erwarteteDaten("Website-Relaunch")))
+        .thenReturn(new Vorgang(4L, 12L, "Website-Relaunch", 7L, null, false, ANGELEGT, ANGELEGT));
+
+    // When
+    final VorgangAngelegtResponse antwort = controller.anlegen(anfrage("Website-Relaunch"));
+
+    // Then
+    assertThat(antwort).isEqualTo(new VorgangAngelegtResponse(4L, 12L));
+  }
+
+  @Test
+  void anlegen_thenAnswersCreated() throws Exception {
+    // Given — E25: das Anlegen ist der einzige Schreibweg mit Rumpf.
+    when(anlegen.anlegen(erwarteteDaten("Website-Relaunch")))
+        .thenReturn(new Vorgang(4L, 12L, "Website-Relaunch", 7L, null, false, ANGELEGT, ANGELEGT));
+
+    // When / Then
+    mockMvc
+        .perform(
+            post("/api/vorgaenge")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(rumpf("\"Website-Relaunch\"", "7")))
+        .andExpect(status().isCreated());
+  }
+
+  @Test
+  void anlegen_givenABlankTitle_thenNamesTheFieldInTheProblemDetail() throws Exception {
+    // When / Then — Kriterium 5: die Meldung steht am Feld.
+    mockMvc
+        .perform(
+            post("/api/vorgaenge")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(rumpf("\"   \"", "7")))
+        .andExpect(jsonPath("$.fieldErrors.titel").isArray());
+  }
+
+  @Test
+  void anlegen_givenNoFirma_thenNamesTheFieldInTheProblemDetail() throws Exception {
+    // When / Then — Kriterium 5: die Firma ist Pflicht.
+    mockMvc
+        .perform(
+            post("/api/vorgaenge")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(rumpf("\"Website-Relaunch\"", "null")))
+        .andExpect(jsonPath("$.fieldErrors.firmaId").isArray());
+  }
+
+  @Test
+  void anlegen_givenATitleBeyondTheColumnWidth_thenAnswersBadRequest() throws Exception {
+    // When / Then — dieselbe Grenze wie in V3__vorgang_und_historie.sql: 300 Zeichen.
+    mockMvc
+        .perform(
+            post("/api/vorgaenge")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(rumpf("\"" + "x".repeat(301) + "\"", "7")))
+        .andExpect(jsonPath("$.fieldErrors.titel").isArray());
+  }
+
+  @Test
+  void anlegen_givenARetiredFirma_thenAnswersBadRequest() throws Exception {
+    // Given — E19: die Wahlregel schlaegt als 400 durch, nicht als 500.
+    when(anlegen.anlegen(erwarteteDaten("Website-Relaunch"))).thenThrow(new FirmaNichtWaehlbar());
+
+    // When / Then
+    mockMvc
+        .perform(
+            post("/api/vorgaenge")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(rumpf("\"Website-Relaunch\"", "7")))
+        .andExpect(status().isBadRequest());
+  }
+
+  @Test
+  void aendern_thenPassesIdAndRequestToTheUseCase() {
+    // When — Kriterium 10.
+    controller.aendern(4L, anfrage("Neuer Titel"));
+
+    // Then
+    verify(aendern).aendern(4L, erwarteteDaten("Neuer Titel"));
+  }
+
+  @Test
+  void aendern_thenAnswersWithoutContent() throws Exception {
+    // When / Then — E25: die Schreibwege antworten ohne Rumpf.
+    mockMvc
+        .perform(
+            put("/api/vorgaenge/4")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(rumpf("\"Neuer Titel\"", "7")))
+        .andExpect(status().isNoContent());
+  }
+
+  @Test
+  void abschliessen_thenPassesTheIdToTheUseCase() {
+    // When — Kriterium 20.
+    controller.abschliessen(4L);
+
+    // Then
+    verify(abschliessen).abschliessen(4L);
+  }
+
+  @Test
+  void abschliessen_thenAnswersWithoutContent() throws Exception {
+    // When / Then
+    mockMvc.perform(post("/api/vorgaenge/4/abschliessen")).andExpect(status().isNoContent());
+  }
+
+  @Test
+  void wiederEroeffnen_thenPassesTheIdToTheUseCase() {
+    // When — Kriterium 20: der Weg zurueck.
+    controller.wiederEroeffnen(4L);
+
+    // Then
+    verify(abschliessen).wiederEroeffnen(4L);
+  }
+
+  @Test
+  void wiederEroeffnen_thenAnswersWithoutContent() throws Exception {
+    // When / Then
+    mockMvc.perform(post("/api/vorgaenge/4/wiedereroeffnen")).andExpect(status().isNoContent());
+  }
+
+  @Test
+  void abschliessen_givenAnUnknownId_thenAnswersNotFound() throws Exception {
+    // Given
+    doThrow(new VorgangNichtGefunden()).when(abschliessen).abschliessen(4711L);
+
+    // When / Then
+    mockMvc.perform(post("/api/vorgaenge/4711/abschliessen")).andExpect(status().isNotFound());
   }
 }
