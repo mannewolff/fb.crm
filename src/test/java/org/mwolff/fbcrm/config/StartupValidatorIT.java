@@ -8,6 +8,7 @@ import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
 import java.util.List;
+import java.util.function.Function;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import org.mwolff.fbcrm.AbstractIntegrationTest;
@@ -62,9 +63,17 @@ class StartupValidatorIT {
    * ${FBCRM_DB_URL:jdbc:postgresql://localhost:5432/fbcrm}}: Der Container waere damit uebergangen
    * und jeder Start liefe gegen ein Postgres, das es auf dem Host nicht gibt.
    * Kommandozeilenargumente stehen in der Rangfolge ueber der YAML und gewinnen.
+   *
+   * <p>Aus demselben Grund gehen die MinIO-Werte des Suite-Containers mit hinein: Die Zugangsdaten
+   * des Objektspeichers haben keinen brauchbaren Default, ohne sie scheitert die Bindung von {@code
+   * MinioProperties} — und dieser Test unterschiede den Abbruch nicht von dem, den er prueft.
    */
   private static String[] alsArgumente(final String[] schalter) {
-    return Stream.concat(Stream.of(datenbankSchalter()), Stream.of(schalter))
+    return Stream.of(
+            Stream.of(datenbankSchalter()),
+            Stream.of(AbstractIntegrationTest.objektspeicherSchalter()),
+            Stream.of(schalter))
+        .flatMap(Function.identity())
         .map(eintrag -> "--" + eintrag)
         .toArray(String[]::new);
   }

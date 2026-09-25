@@ -82,6 +82,15 @@ fbcrm:
     enabled: ${FBCRM_MAIL_ENABLED:false}
     from: ${FBCRM_MAIL_FROM:no-reply@fbcrm.local}
     base-url: ${FBCRM_BASE_URL:https://localhost}
+  # Der Objektspeicher der Anhaenge (MinioProperties, E7). Kein Wert hat eine brauchbare
+  # Vorbelegung: Der leere Wert unten laesst die Validierung (@NotBlank) scheitern, und die
+  # Anwendung startet nicht. Ein Vorgabezugang im Repository waere ein bekannter Zugang
+  # (CLAUDE-security.md); docker-compose.yml Z. 69 ff. setzt die Werte fuer den lokalen Stack.
+  minio:
+    endpoint: ${FBCRM_MINIO_ENDPOINT:}
+    access-key: ${FBCRM_MINIO_ACCESS_KEY:}
+    secret-key: ${FBCRM_MINIO_SECRET_KEY:}
+    bucket: ${FBCRM_MINIO_BUCKET:}
   # Das transaktionale Postausgangsfach (OutboxProperties, E7). Default aus, wie bei dev-mode und
   # mail.enabled der strengere der beiden Faelle; docker-compose.yml Z. 69 schaltet es ein.
   outbox:

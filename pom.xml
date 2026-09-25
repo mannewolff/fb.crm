@@ -36,6 +36,11 @@
          Laufzeit. Die Version steht deshalb hier und wird mit den uebrigen Abhaengigkeiten
          gepflegt. -->
     <bouncycastle.version>1.86</bouncycastle.version>
+    <!-- Das Spring-Boot-BOM managt das AWS SDK nicht; der S3-Adapter des Objektspeichers braucht
+         es. Die Version steht deshalb hier und wird ueber das AWS-BOM unten auf alle
+         Teilartefakte durchgereicht — ohne das BOM zoege s3 seine Geschwister in abweichenden
+         Versionen herein, und dependencyConvergence des Enforcers braeche den Build. -->
+    <awssdk.version>2.55.5</awssdk.version>
 
     <jacoco.version>0.8.15</jacoco.version>
     <maven-enforcer-plugin.version>3.6.3</maven-enforcer-plugin.version>
@@ -51,6 +56,18 @@
     <error-prone.version>2.50.0</error-prone.version>
     <nullaway.version>0.14.1</nullaway.version>
   </properties>
+
+  <dependencyManagement>
+    <dependencies>
+      <dependency>
+        <groupId>software.amazon.awssdk</groupId>
+        <artifactId>bom</artifactId>
+        <version>${awssdk.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+    </dependencies>
+  </dependencyManagement>
 
   <dependencies>
     <dependency>
@@ -95,6 +112,21 @@
       <version>${jspecify.version}</version>
     </dependency>
 
+    <!-- Der Objektspeicher der Anhaenge (Issue #59, E7): MinIO spricht S3, angesprochen wird es
+         mit dem synchronen S3Client des AWS SDK. Der asynchrone Netty-Client bleibt draussen —
+         der Adapter schreibt und liest blockierend, und Netty braechte eine zweite
+         Netzwerk-Stack-Version in einen Build, der dependencyConvergence erzwingt. -->
+    <dependency>
+      <groupId>software.amazon.awssdk</groupId>
+      <artifactId>s3</artifactId>
+      <exclusions>
+        <exclusion>
+          <groupId>software.amazon.awssdk</groupId>
+          <artifactId>netty-nio-client</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
+
     <!-- Der Starter kommt mit diesem Paket (Issue #23): Ab hier existiert eine SecurityConfig,
          die die Zugangsregel selbst setzt, statt die Autokonfiguration raten zu lassen. Er zieht
          spring-security-crypto mit, das den Argon2-Hasher aus #22 traegt. -->
@@ -126,6 +158,13 @@
     <dependency>
       <groupId>org.testcontainers</groupId>
       <artifactId>postgresql</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <!-- Zweiter Container der Suite (E23): der Objektspeicher, gegen den S3AnhangSpeicherIT
+         laeuft. Wie bei Postgres die echte Engine statt eines Ersatzes (CLAUDE-java.md §3.1). -->
+    <dependency>
+      <groupId>org.testcontainers</groupId>
+      <artifactId>minio</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
@@ -244,6 +283,11 @@
           <excludes>
             <!-- Reine main-Methode ohne Fachlogik (CLAUDE-java.md §5.2). -->
             <exclude>org/mwolff/fbcrm/FbCrmApplication.class</exclude>
+            <!-- S3-Adapter (CLAUDE-java.md §5.2): Der Code besteht aus Aufrufen des AWS SDK und
+                 ist nur gegen einen echten Objektspeicher sinnvoll pruefbar. Was er zusagt —
+                 ablegen, lesen, die Groesse, die Schluesselform aus E9 und der beim Start
+                 angelegte Eimer — weist S3AnhangSpeicherIT gegen den MinIO-Container nach. -->
+            <exclude>org/mwolff/fbcrm/vorgang/infrastructure/S3AnhangSpeicher.class</exclude>
           </excludes>
         </configuration>
         <executions>
@@ -521,6 +565,10 @@
                      diese Klasse bleibt in Abdeckung und Mutationstest. -->
                 <param>org.mwolff.fbcrm.auth.web.SecurityConfig</param>
                 <param>org.mwolff.fbcrm.config.SpaForwardingConfig</param>
+                <!-- S3-Adapter (CLAUDE-java.md §5.2), dieselbe Begruendung wie beim
+                     JaCoCo-Ausschluss: Aufrufe des AWS SDK, nachgewiesen von S3AnhangSpeicherIT
+                     gegen den MinIO-Container. PIT faehrt ohnehin nur *Test, nicht *IT. -->
+                <param>org.mwolff.fbcrm.vorgang.infrastructure.S3AnhangSpeicher</param>
               </excludedClasses>
               <mutators>
                 <mutator>STRONGER</mutator>

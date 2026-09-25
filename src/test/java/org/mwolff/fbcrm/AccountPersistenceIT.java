@@ -3,6 +3,7 @@ package org.mwolff.fbcrm;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.time.Instant;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mwolff.fbcrm.auth.application.LoginResult;
@@ -56,15 +57,23 @@ class AccountPersistenceIT extends AbstractIntegrationTest {
    * <p>Die Werte gehen als Kommandozeilenargumente hinein und nicht als {@code properties(...)}:
    * Letztere sind Vorgabewerte und stehen in der Rangfolge <b>unter</b> der {@code application.yml}
    * — die Instanz verbaende sich dann mit {@code localhost:5432}.
+   *
+   * <p>Der Objektspeicher der Suite geht aus demselben Grund mit hinein: Seine Zugangsdaten haben
+   * keinen brauchbaren Default, ohne sie kaeme die zweite Instanz nicht hoch.
    */
   private static ConfigurableApplicationContext neueInstanz() {
     return new SpringApplicationBuilder(FbCrmApplication.class)
         .run(
-            "--server.port=0",
-            "--spring.datasource.url=" + POSTGRES.getJdbcUrl(),
-            "--spring.datasource.username=" + POSTGRES.getUsername(),
-            "--spring.datasource.password=" + POSTGRES.getPassword(),
-            "--fbcrm.auth.session-secret=" + NEUES_GEHEIMNIS);
+            Stream.concat(
+                    Stream.of(
+                        "server.port=0",
+                        "spring.datasource.url=" + POSTGRES.getJdbcUrl(),
+                        "spring.datasource.username=" + POSTGRES.getUsername(),
+                        "spring.datasource.password=" + POSTGRES.getPassword(),
+                        "fbcrm.auth.session-secret=" + NEUES_GEHEIMNIS),
+                    Stream.of(objektspeicherSchalter()))
+                .map(eintrag -> "--" + eintrag)
+                .toArray(String[]::new));
   }
 
   @Test

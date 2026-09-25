@@ -69,6 +69,10 @@ services:
       FBCRM_MINIO_ENDPOINT: http://minio:9000
       FBCRM_MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-fbcrm}
       FBCRM_MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-fbcrm-minio}
+      # Eimer, in dem die Anhaenge der Vorgaenge liegen. Die Anwendung legt ihn beim Start an,
+      # wenn er fehlt (S3AnhangSpeicher) — der Name darf deshalb frei gewaehlt werden, muss aber
+      # gesetzt sein: Ohne Wert scheitert die Validierung, und der Container kommt nicht hoch.
+      FBCRM_MINIO_BUCKET: ${FBCRM_MINIO_BUCKET:-fbcrm-anhaenge}
       # Transaktionale Zustellung der Seiteneffekte (Mail, Speicher). Die Variablen haengen
       # hier, weil eine Variable, die im environment-Block fehlt, den Container gar nicht
       # erreicht — wer sie in der .env abschaltet, erzielte sonst keine Wirkung, ohne dass
