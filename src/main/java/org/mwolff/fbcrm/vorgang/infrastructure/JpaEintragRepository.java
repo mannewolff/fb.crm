@@ -1,6 +1,10 @@
 package org.mwolff.fbcrm.vorgang.infrastructure;
 
+import java.time.Instant;
+import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import org.mwolff.fbcrm.vorgang.domain.Eintrag;
 import org.mwolff.fbcrm.vorgang.domain.EintragRepository;
@@ -29,6 +33,17 @@ class JpaEintragRepository implements EintragRepository {
   @Override
   public Eintrag save(final Eintrag eintrag) {
     return toDomain(jpa.save(toEntity(eintrag)));
+  }
+
+  @Override
+  public Map<Long, Instant> juengstesGeschehenJeVorgang(final Collection<Long> vorgangIds) {
+    // Nur Vorgaenge mit Eintrag stehen am Ende in der Abbildung — der Port sagt genau das zu. Ein
+    // Waechter fuer die leere Anfrage steht hier bewusst nicht, wie bei der Zaehlung der
+    // Ansprechpartner: Er waere ein Zweig, den kein Test von seinem Gegenteil unterscheiden kann.
+    final Map<Long, Instant> juengste = new LinkedHashMap<>();
+    jpa.juengstesGeschehenJeVorgang(vorgangIds)
+        .forEach(zeile -> juengste.put(zeile.getVorgangId(), zeile.getGeschehenAm()));
+    return juengste;
   }
 
   private static Eintrag toDomain(final VorgangEintragEntity zeile) {

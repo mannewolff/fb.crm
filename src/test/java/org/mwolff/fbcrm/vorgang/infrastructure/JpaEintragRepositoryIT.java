@@ -1,9 +1,11 @@
 package org.mwolff.fbcrm.vorgang.infrastructure;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.entry;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -203,5 +205,61 @@ class JpaEintragRepositoryIT extends AbstractIntegrationTest {
 
     // Then
     assertThat(historie).isEmpty();
+  }
+
+  @Test
+  void juengstesGeschehenJeVorgang_thenReportsTheLatestTimeOfEachVorgang() {
+    // Given — Kriterium 2: der Tag je Zeile kommt vom juengsten Eintrag.
+    final long ersterVorgang = vorgangId(1L);
+    final long zweiterVorgang = vorgangId(2L);
+    repository.save(kommentar(ersterVorgang, "Zuerst geschehen", FRUEH));
+    repository.save(kommentar(ersterVorgang, "Danach geschehen", SPAET));
+    repository.save(kommentar(zweiterVorgang, "Zum zweiten Vorgang", FRUEH));
+
+    // When
+    final Map<Long, Instant> juengste =
+        repository.juengstesGeschehenJeVorgang(List.of(ersterVorgang, zweiterVorgang));
+
+    // Then
+    assertThat(juengste).containsOnly(entry(ersterVorgang, SPAET), entry(zweiterVorgang, FRUEH));
+  }
+
+  @Test
+  void juengstesGeschehenJeVorgang_givenAVorgangWithoutEntries_thenLeavesItOut() {
+    // Given — ohne Eintrag zaehlt der Vorgang mit seinem Anlagezeitpunkt; den kennt der Aufrufer.
+    final long vorgangId = vorgangId(1L);
+
+    // When
+    final Map<Long, Instant> juengste = repository.juengstesGeschehenJeVorgang(List.of(vorgangId));
+
+    // Then
+    assertThat(juengste).isEmpty();
+  }
+
+  @Test
+  void juengstesGeschehenJeVorgang_givenNoVorgaenge_thenEmptyMapWithoutFailing() {
+    // Given — die leere Uebersicht fragt mit einer leeren Liste.
+
+    // When
+    final Map<Long, Instant> juengste = repository.juengstesGeschehenJeVorgang(List.of());
+
+    // Then
+    assertThat(juengste).isEmpty();
+  }
+
+  @Test
+  void juengstesGeschehenJeVorgang_thenIgnoresVorgaengeThatWereNotAsked() {
+    // Given
+    final long ersterVorgang = vorgangId(1L);
+    final long zweiterVorgang = vorgangId(2L);
+    repository.save(kommentar(ersterVorgang, "Zum ersten Vorgang", FRUEH));
+    repository.save(kommentar(zweiterVorgang, "Zum zweiten Vorgang", SPAET));
+
+    // When
+    final Map<Long, Instant> juengste =
+        repository.juengstesGeschehenJeVorgang(List.of(ersterVorgang));
+
+    // Then
+    assertThat(juengste).containsOnlyKeys(ersterVorgang);
   }
 }

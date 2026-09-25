@@ -1,12 +1,15 @@
 package org.mwolff.fbcrm.vorgang.infrastructure;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.entry;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -213,5 +216,54 @@ class JpaEintragRepositoryTest {
 
     // Then
     assertThat(historie).isEmpty();
+  }
+
+  private static SpringDataEintragRepository.JuengstesGeschehen zeile(
+      final long vorgangId, final Instant geschehenAm) {
+    final SpringDataEintragRepository.JuengstesGeschehen zeile =
+        mock(SpringDataEintragRepository.JuengstesGeschehen.class);
+    when(zeile.getVorgangId()).thenReturn(vorgangId);
+    when(zeile.getGeschehenAm()).thenReturn(geschehenAm);
+    return zeile;
+  }
+
+  @Test
+  void juengstesGeschehenJeVorgang_thenTranslatesEveryRowIntoTheMap() {
+    // Given
+    final List<SpringDataEintragRepository.JuengstesGeschehen> zeilen =
+        List.of(zeile(4L, GESCHEHEN), zeile(5L, ANGELEGT));
+    when(jpa.juengstesGeschehenJeVorgang(List.of(4L, 5L))).thenReturn(zeilen);
+
+    // When
+    final Map<Long, Instant> juengste = repository.juengstesGeschehenJeVorgang(List.of(4L, 5L));
+
+    // Then
+    assertThat(juengste).containsExactly(entry(4L, GESCHEHEN), entry(5L, ANGELEGT));
+  }
+
+  @Test
+  void juengstesGeschehenJeVorgang_givenAVorgangWithoutEntries_thenLeavesItOut() {
+    // Given — ohne Eintrag gibt es keinen Zeitpunkt; einen Ersatzwert kennt der Adapter nicht.
+    final List<SpringDataEintragRepository.JuengstesGeschehen> zeilen =
+        List.of(zeile(4L, GESCHEHEN));
+    when(jpa.juengstesGeschehenJeVorgang(List.of(4L, 5L))).thenReturn(zeilen);
+
+    // When
+    final Map<Long, Instant> juengste = repository.juengstesGeschehenJeVorgang(List.of(4L, 5L));
+
+    // Then
+    assertThat(juengste).containsOnlyKeys(4L);
+  }
+
+  @Test
+  void juengstesGeschehenJeVorgang_givenNoVorgaenge_thenEmptyMap() {
+    // Given
+    when(jpa.juengstesGeschehenJeVorgang(List.of())).thenReturn(List.of());
+
+    // When
+    final Map<Long, Instant> juengste = repository.juengstesGeschehenJeVorgang(List.of());
+
+    // Then
+    assertThat(juengste).isEmpty();
   }
 }
