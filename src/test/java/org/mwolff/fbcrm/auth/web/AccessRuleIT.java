@@ -222,6 +222,31 @@ class AccessRuleIT extends AbstractIntegrationTest {
     assertThat(antwort).isEqualTo(HttpStatus.UNAUTHORIZED);
   }
 
+  /**
+   * Die Wege des Ansprechpartners liegen vollstaendig hinter einer Kennung im Pfad.
+   *
+   * <p>Damit laesst der generische Nachweis oben sie restlos aus — selbst {@code POST
+   * /api/firmen/{firmaId}/ansprechpartner} traegt eine Vorlage. Ohne diese beiden Faelle waere die
+   * Zugangsregel fuer das ganze Paket ungeprueft.
+   */
+  @Test
+  void ansprechpartnerAnlegen_withoutASession_thenAnswersUnauthorized() {
+    // When
+    final HttpStatus antwort = status("/api/firmen/1/ansprechpartner", HttpMethod.POST);
+
+    // Then
+    assertThat(antwort).isEqualTo(HttpStatus.UNAUTHORIZED);
+  }
+
+  @Test
+  void ansprechpartnerAendern_withoutASession_thenAnswersUnauthorized() {
+    // When
+    final HttpStatus antwort = status("/api/firmen/1/ansprechpartner/1", HttpMethod.PUT);
+
+    // Then
+    assertThat(antwort).isEqualTo(HttpStatus.UNAUTHORIZED);
+  }
+
   private HttpStatus status(final String pfad, final HttpMethod methode) {
     return HttpStatus.valueOf(
         rest.exchange(pfad, methode, null, String.class).getStatusCode().value());
