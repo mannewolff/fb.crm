@@ -178,6 +178,50 @@ class AccessRuleIT extends AbstractIntegrationTest {
     assertThat(antwort.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
   }
 
+  /**
+   * Die Wege der Firma mit einer Kennung im Pfad.
+   *
+   * <p>Der generische Nachweis oben laesst jeden Pfad mit {@code {} } aus — eine Vorlage laesst
+   * sich nicht aufrufen. Genau diese Wege blieben damit ungeprueft, obwohl sie die fachlichen Daten
+   * tragen. Deshalb stehen sie hier ausgeschrieben; {@code GET} und {@code POST} auf {@code
+   * /api/firmen} deckt der generische Fall ab.
+   */
+  @Test
+  void firmaDetail_withoutASession_thenAnswersUnauthorized() {
+    // When
+    final HttpStatus antwort = status("/api/firmen/1", HttpMethod.GET);
+
+    // Then
+    assertThat(antwort).isEqualTo(HttpStatus.UNAUTHORIZED);
+  }
+
+  @Test
+  void firmaAendern_withoutASession_thenAnswersUnauthorized() {
+    // When
+    final HttpStatus antwort = status("/api/firmen/1", HttpMethod.PUT);
+
+    // Then
+    assertThat(antwort).isEqualTo(HttpStatus.UNAUTHORIZED);
+  }
+
+  @Test
+  void firmaStilllegen_withoutASession_thenAnswersUnauthorized() {
+    // When
+    final HttpStatus antwort = status("/api/firmen/1/stilllegen", HttpMethod.POST);
+
+    // Then
+    assertThat(antwort).isEqualTo(HttpStatus.UNAUTHORIZED);
+  }
+
+  @Test
+  void firmaAktivieren_withoutASession_thenAnswersUnauthorized() {
+    // When
+    final HttpStatus antwort = status("/api/firmen/1/aktivieren", HttpMethod.POST);
+
+    // Then
+    assertThat(antwort).isEqualTo(HttpStatus.UNAUTHORIZED);
+  }
+
   private HttpStatus status(final String pfad, final HttpMethod methode) {
     return HttpStatus.valueOf(
         rest.exchange(pfad, methode, null, String.class).getStatusCode().value());
