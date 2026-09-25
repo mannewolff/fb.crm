@@ -40,6 +40,14 @@ type Methode = 'GET' | 'POST' | 'PUT';
 export interface Anfrage {
   readonly methode: Methode;
   readonly rumpf?: unknown;
+  /**
+   * Bricht die Anfrage ab, sobald die Ansicht ihre Antwort nicht mehr braucht.
+   *
+   * Eine Ansicht, die auf jeden Tastendruck neu fragt, hat sonst mehrere Antworten unterwegs, und
+   * die langsamste gewinnt. Das Signal gehoert hierher und nicht in die Ansicht: Nur hier gibt es
+   * den `fetch`, den es abbricht — ein Abbruch weiter oben wuerde die Leitung offen lassen.
+   */
+  readonly signal?: AbortSignal;
 }
 
 function istObjekt(wert: unknown): wert is Record<string, unknown> {
@@ -99,6 +107,7 @@ async function anfragen(pfad: string, anfrage: Anfrage): Promise<Response> {
     credentials: 'same-origin',
     headers: mitRumpf ? { 'Content-Type': 'application/json' } : undefined,
     body: mitRumpf ? JSON.stringify(anfrage.rumpf) : undefined,
+    signal: anfrage.signal,
   });
   if (!antwort.ok) {
     throw await fehlerAus(antwort);

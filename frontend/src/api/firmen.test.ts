@@ -142,6 +142,19 @@ describe('firmenUebersicht', () => {
 
     expect(await firmenUebersicht('', false)).toEqual({ firmen: [], gesamt: 0 });
   });
+
+  it('reicht das Abbruchsignal an den Aufruf durch', async () => {
+    const adresse = '/api/firmen?suche=&auchStillgelegte=false';
+    const fetchMock = fetchNachPfad({ [`GET ${adresse}`]: json(200, { firmen: [], gesamt: 0 }) });
+    const steuerung = new AbortController();
+
+    await firmenUebersicht('', false, steuerung.signal);
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      adresse,
+      expect.objectContaining({ signal: steuerung.signal }),
+    );
+  });
 });
 
 describe('die Wege der Firma', () => {

@@ -11,6 +11,7 @@ const SetupPage = lazy(async () => import('./pages/SetupPage'));
 const ForgotPasswordPage = lazy(async () => import('./pages/ForgotPasswordPage'));
 const ResetPasswordPage = lazy(async () => import('./pages/ResetPasswordPage'));
 const EmptyPanel = lazy(async () => import('./pages/EmptyPanel'));
+const FirmenPage = lazy(async () => import('./pages/FirmenPage'));
 
 /**
  * Der Routenbaum. Offen sind die Anmeldeseite, die Einrichtung und die beiden Seiten zum
@@ -18,7 +19,8 @@ const EmptyPanel = lazy(async () => import('./pages/EmptyPanel'));
  *
  * Die geschuetzten Adressen teilen sich einen Rahmen ({@link AppShell}): Er steht einmal um
  * das `Outlet` und bleibt beim Wechsel zwischen ihnen stehen, statt je Ansicht neu zu entstehen.
- * `/`, `/administration` und `/dokumentation` zeigen in diesem Stand dasselbe leere Panel.
+ * `/`, `/administration` und `/dokumentation` zeigen in diesem Stand dasselbe leere Panel;
+ * `/firmen` traegt die erste fachliche Ansicht.
  *
  * Die unbekannte Adresse bekommt keine eigene Ansicht: Mit Sitzung fuehrt sie auf die
  * Startadresse, ohne Sitzung uebernimmt {@link ProtectedRoute} und fuehrt auf die
@@ -45,6 +47,7 @@ export default function App() {
             }
           >
             <Route path="/" element={<EmptyPanel />} />
+            <Route path="/firmen" element={<FirmenPage />} />
             <Route path="/administration" element={<EmptyPanel />} />
             <Route path="/dokumentation" element={<EmptyPanel />} />
             <Route path="*" element={<Navigate to="/" replace />} />

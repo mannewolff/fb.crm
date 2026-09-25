@@ -184,16 +184,24 @@ export function parseFirma(wert: unknown): Firma {
  *
  * Suchtext und Schalter gehen ueber `URLSearchParams` in die Adresse: Ein Name mit `&` oder `%`
  * waere in einer zusammengesetzten Zeichenkette ein zweiter Parameter statt ein Suchtext.
+ *
+ * Als einziger Weg dieses Moduls nimmt die Uebersicht ein Abbruchsignal: Sie ist der einzige, den
+ * die Oberflaeche waehrend des Tippens mehrfach anstoesst (Issue #46).
  */
 export function firmenUebersicht(
   suche: string,
   auchStillgelegte: boolean,
+  signal?: AbortSignal,
 ): Promise<FirmenUebersicht> {
   const parameter = new URLSearchParams({
     suche,
     auchStillgelegte: String(auchStillgelegte),
   });
-  return apiJson(`/api/firmen?${parameter.toString()}`, { methode: 'GET' }, parseFirmenUebersicht);
+  return apiJson(
+    `/api/firmen?${parameter.toString()}`,
+    { methode: 'GET', signal },
+    parseFirmenUebersicht,
+  );
 }
 
 /** Legt eine Firma an; die Antwort traegt die Kennung fuer den Weg zur Detailansicht (Kriterium 7). */
