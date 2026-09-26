@@ -23,6 +23,14 @@ export const RADIUS_KACHEL = 24;
 export const RADIUS_MITTEL = 22;
 /** Das Mal einer Firma (84 px) — das abgerundete Quadrat neben dem Kreis der Personen. */
 export const RADIUS_MAL = 26;
+/**
+ * Das Symbolfeld eines Zeitleisten-Eintrags (36 px).
+ *
+ * CLAUDE-design.md nennt den Wert zweimal: in der Radien-Tabelle als Spanne „14–16 px
+ * (Symbolfelder 36–48 px)" und im Baustein „Zeitleiste" ausdruecklich mit 12 px. Die genauere
+ * Angabe gilt — die Vorlage traegt denselben Wert (`.zeit .punkt` Z. 97).
+ */
+export const RADIUS_SYMBOL = 12;
 /** Navigationseintrag, Zeile, Eingabefeld. */
 export const RADIUS_KLEIN = 14;
 /** Tasten, Chips, Suche, Zaehler — die runde Form. */
