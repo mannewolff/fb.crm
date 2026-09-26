@@ -10,6 +10,7 @@ import { Link as RouterLink, useParams } from 'react-router-dom';
 
 import { vorgangAbschliessen, vorgangLesen, vorgangWiederEroeffnen } from '../api/vorgaenge';
 import type { Phase, Vorgang, Zuordnung } from '../api/vorgaenge';
+import EintragMaske from '../components/EintragMaske';
 import Historie from '../components/Historie';
 import Platte from '../components/Platte';
 import { nichtGefunden } from '../lib/apifehler';
@@ -37,10 +38,15 @@ import { CARD_RADIUS } from '../theme';
  *   <li><b>Eine stillgelegte Zuordnung bleibt sichtbar und wird angesagt</b> (Kriterien 23, 26):
  *       Das Schild steht als Wort in der Zeile, und der Stand gehoert zum Namen des Weges — wer mit
  *       dem Screenreader durch die Wege springt, hoert ihn ohne die Nachbarschaft.</li>
+ *   <li><b>Nach dem Hinzufuegen eines Eintrags wird neu gelesen</b> (E20, Kriterien 13, 14). Die
+ *       Maske steht als Platte ueber der Historie und meldet nur, dass etwas dazugekommen ist —
+ *       wie die Liste danach aussieht, sagt der Server, nicht die Oberflaeche. Auch am
+ *       abgeschlossenen Vorgang steht sie da: Abgeschlossen heisst „zu Ende gegangen", nicht
+ *       „gesperrt" (Kriterium 21), und das Backend nimmt dort weiter Eintraege an.</li>
  * </ul>
  *
- * Die Tasten „Bearbeiten" (#73) und die Maske fuer Eintraege (#70) bringen ihre eigenen Pakete mit;
- * dieses Paket kennt als Schreibaktion nur Abschliessen und Wiederoeffnen.
+ * Die Taste „Bearbeiten" (#73) bringt ihr eigenes Paket mit; dieses Paket kennt als Schreibaktion
+ * das Abschliessen, das Wiederoeffnen und den neuen Eintrag.
  */
 
 const NICHT_GEFUNDEN = 'Diesen Vorgang gibt es nicht.';
@@ -281,6 +287,14 @@ export default function VorgangPage() {
   const [stand, setzeStand] = useState<Stand>({ art: 'laedt' });
   const [schaltFehler, setzeSchaltFehler] = useState<string | null>(null);
   const [schaltet, setzeSchaltet] = useState(false);
+  /**
+   * Zaehlt die Anlaesse zum Neulesen.
+   *
+   * Ein Zaehler und kein eigener Ladepfad neben dem Effekt: So geht das Neulesen nach einem
+   * Eintrag denselben Weg wie das erste Lesen — samt seiner Behandlung von „gibt es nicht" und
+   * „nicht zu erreichen". Zwei Wege auf dieselben Daten liefen frueher oder spaeter auseinander.
+   */
+  const [runde, setzeRunde] = useState(0);
 
   useEffect(() => {
     if (kennung === null) {
@@ -295,7 +309,7 @@ export default function VorgangPage() {
       .catch((ursache: unknown) => {
         setzeStand(nichtGefunden(ursache) ? { art: 'unbekannt' } : { art: 'ausfall' });
       });
-  }, [kennung]);
+  }, [kennung, runde]);
 
   const schalten = async (vorgang: Vorgang) => {
     setzeSchaltFehler(null);
@@ -333,6 +347,14 @@ export default function VorgangPage() {
               schaltet={schaltet}
               schalte={() => {
                 void schalten(vorgang);
+              }}
+            />
+          </Platte>
+          <Platte titel="Eintrag hinzufügen">
+            <EintragMaske
+              vorgangId={vorgang.id}
+              hinzugefuegt={() => {
+                setzeRunde((bisher) => bisher + 1);
               }}
             />
           </Platte>

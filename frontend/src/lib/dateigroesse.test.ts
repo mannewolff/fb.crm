@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { dateigroesse } from './dateigroesse';
+import { dateigroesse, MAX_UPLOAD_BYTE } from './dateigroesse';
 
 describe('dateigroesse', () => {
   it('nennt Kleinstes in Byte', () => {
@@ -17,7 +17,8 @@ describe('dateigroesse', () => {
 
   it('wechselt bei einem Mebibyte auf MiB', () => {
     expect(dateigroesse(1048576)).toBe('1 MiB');
-    // Die Grenze des Uploads (E10) — sie soll als glatte Zahl dastehen.
-    expect(dateigroesse(26214400)).toBe('25 MiB');
+    // Die Grenze des Uploads (E10) — sie soll als glatte Zahl dastehen, denn die Meldung der
+    // Maske nennt sie in dieser Form.
+    expect(dateigroesse(MAX_UPLOAD_BYTE)).toBe('25 MiB');
   });
 });

@@ -203,6 +203,54 @@ describe('VorgangPage — Abschliessen und Wieder oeffnen (Kriterien 20, 21)', (
   });
 });
 
+describe('VorgangPage — die Maske fuer Eintraege (E20, Kriterien 13, 14)', () => {
+  it('stellt die Maske als Platte ueber die Historie', async () => {
+    vorgangDoppel();
+
+    renderSeite();
+
+    await screen.findByRole('heading', { name: VORGANG.titel });
+    expect(
+      screen.getAllByRole('heading', { level: 2 }).map((ueberschrift) => ueberschrift.textContent),
+    ).toEqual([VORGANG.titel, 'Eintrag hinzufügen', 'Historie', 'Felder']);
+  });
+
+  it('liest die Historie neu, nachdem ein Eintrag hinzugefuegt wurde', async () => {
+    const nutzer = userEvent.setup();
+    const NEUER: Eintrag = {
+      id: 33,
+      art: 'KOMMENTAR',
+      text: 'Angebot zugesagt.',
+      geschehenAm: '2026-09-22T10:00:00Z',
+      herkunft: 'VON_HAND',
+      dateiName: null,
+      dateiGroesse: null,
+      geaendertAm: null,
+    };
+    let historie: readonly Eintrag[] = [ANHANG, KOMMENTAR];
+    fetchNachPfad({
+      'GET /api/vorgaenge/5': () =>
+        new Response(JSON.stringify({ ...VORGANG, historie }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      'POST /api/vorgaenge/5/eintraege': () => {
+        historie = [NEUER, ANHANG, KOMMENTAR];
+        return new Response(null, { status: 201 });
+      },
+    });
+
+    renderSeite();
+    await screen.findByRole('heading', { name: VORGANG.titel });
+    await nutzer.type(screen.getByRole('textbox', { name: /^Text/ }), 'Angebot zugesagt.');
+    await nutzer.click(screen.getByRole('button', { name: 'Hinzufügen' }));
+
+    expect(await screen.findByText('Angebot zugesagt.')).toBeInTheDocument();
+    expect(within(screen.getByRole('list', { name: 'Historie' })).getAllByRole('listitem'))
+      .toHaveLength(3);
+  });
+});
+
 describe('VorgangPage — die Historie (Kriterium 15)', () => {
   it('gibt die Eintraege der Antwort in ihrer Reihenfolge an den Baustein weiter', async () => {
     vorgangDoppel();
@@ -267,8 +315,16 @@ describe('VorgangPage — Tastatur (Kriterium 26)', () => {
 
     await nutzer.tab();
     expect(screen.getByRole('button', { name: 'Abschließen' })).toHaveFocus();
-    // Der Tabulator folgt der Lesefolge des Dokuments: erst das Blatt mit Kopf und Historie,
-    // danach die Saeule mit den Feldern.
+    // Der Tabulator folgt der Lesefolge des Dokuments: erst das Blatt mit Kopf, Maske und
+    // Historie, danach die Saeule mit den Feldern.
+    await nutzer.tab();
+    expect(screen.getByRole('combobox', { name: 'Art' })).toHaveFocus();
+    await nutzer.tab();
+    expect(screen.getByLabelText(/^Zeitpunkt/)).toHaveFocus();
+    await nutzer.tab();
+    expect(screen.getByRole('textbox', { name: /^Text/ })).toHaveFocus();
+    await nutzer.tab();
+    expect(screen.getByRole('button', { name: 'Hinzufügen' })).toHaveFocus();
     await nutzer.tab();
     expect(screen.getByRole('link', { name: 'anfrage.pdf' })).toHaveFocus();
     await nutzer.tab();

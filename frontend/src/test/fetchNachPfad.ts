@@ -9,8 +9,14 @@ import { vi } from 'vitest';
  *
  * Jeder Eintrag ist eine Fabrik, weil ein `Response`-Rumpf nur einmal gelesen werden kann.
  * Ein Aufruf ohne Eintrag scheitert laut, statt still eine leere Antwort zu liefern.
+ *
+ * Die Fabrik bekommt den Rumpf des Aufrufs. Wer ihn nicht braucht, nimmt ihn nicht an; wer ein
+ * Formular abschickt (E21), liest darueber, was hinausging — `fetch.mock.calls` gibt ihn nur als
+ * `BodyInit` heraus, und der laesst sich ohne Verzweigung nicht befragen.
  */
-export type Routen = Readonly<Record<string, () => Response | Promise<Response>>>;
+export type Routen = Readonly<
+  Record<string, (rumpf: BodyInit | null) => Response | Promise<Response>>
+>;
 
 export function fetchNachPfad(routen: Routen) {
   return vi.spyOn(globalThis, 'fetch').mockImplementation((ziel, init) => {
@@ -19,8 +25,27 @@ export function fetchNachPfad(routen: Routen) {
     const bauen = routen[schluessel];
     return bauen === undefined
       ? Promise.reject(new Error(`Unerwarteter Aufruf: ${schluessel}`))
-      : Promise.resolve(bauen());
+      : Promise.resolve(bauen(init?.body ?? null));
   });
+}
+
+/**
+ * Eine Route, die das abgeschickte Formular herausreicht und dann antwortet.
+ *
+ * Sie scheitert laut, wenn der Rumpf keines ist: Ein stilles Weiterreichen liesse die Erwartungen
+ * gegen ein leeres Formular laufen und waere gruen, ohne etwas geprueft zu haben.
+ */
+export function formularWeg(
+  merke: (formular: FormData) => void,
+  antwort: () => Response,
+): (rumpf: BodyInit | null) => Response {
+  return (rumpf) => {
+    if (!(rumpf instanceof FormData)) {
+      throw new TypeError('Der Rumpf dieses Aufrufs ist kein Formular.');
+    }
+    merke(rumpf);
+    return antwort();
+  };
 }
 
 /** Eine JSON-Antwort mit Status. */

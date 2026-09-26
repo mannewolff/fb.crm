@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { fetchNachPfad, json, leer, problem } from './fetchNachPfad';
+import { fetchNachPfad, formularWeg, json, leer, problem } from './fetchNachPfad';
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -36,6 +36,20 @@ describe('fetchNachPfad', () => {
     await expect(fetch('/nirgends', { method: 'GET' })).rejects.toThrow('Unerwarteter Aufruf: GET /nirgends');
   });
 
+  it('reicht den Rumpf des Aufrufs an die Fabrik weiter', async () => {
+    let gesehen: BodyInit | null = 'noch nichts';
+    fetchNachPfad({
+      'POST /e': (rumpf) => {
+        gesehen = rumpf;
+        return leer(204)();
+      },
+    });
+
+    await fetch('/e', { method: 'POST', body: 'ein Rumpf' });
+
+    expect(gesehen).toBe('ein Rumpf');
+  });
+
   it('baut Problem Details mit Feldfehlern', async () => {
     fetchNachPfad({ 'GET /c': problem(400, 'ungueltig', { email: ['falsch'] }) });
 
@@ -44,5 +58,33 @@ describe('fetchNachPfad', () => {
       detail: 'ungueltig',
       fieldErrors: { email: ['falsch'] },
     });
+  });
+});
+
+describe('formularWeg', () => {
+  it('reicht das abgeschickte Formular heraus und antwortet', async () => {
+    let gesehen = new FormData();
+    const formular = new FormData();
+    formular.append('art', 'KOMMENTAR');
+    fetchNachPfad({
+      'POST /f': formularWeg((abgeschickt) => {
+        gesehen = abgeschickt;
+      }, leer(201)),
+    });
+
+    const antwort = await fetch('/f', { method: 'POST', body: formular });
+
+    expect(antwort.status).toBe(201);
+    expect(gesehen.get('art')).toBe('KOMMENTAR');
+  });
+
+  it('scheitert laut, wenn der Rumpf kein Formular ist', () => {
+    const merke = vi.fn();
+    fetchNachPfad({ 'POST /f': formularWeg(merke, leer(201)) });
+
+    expect(() => fetch('/f', { method: 'POST', body: 'kein Rumpf mit Feldern' })).toThrow(
+      'kein Formular',
+    );
+    expect(merke).not.toHaveBeenCalled();
   });
 });
