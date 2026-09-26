@@ -68,7 +68,7 @@ Das Folgende ist die **Soll-Struktur**. Sie steht hier, damit jedes Arbeitspaket
 /
 ├── CLAUDE*.md                          # Guide-Familie (Workflow-Guide unter .claude/)
 ├── mini-crm-spezifikation.pdf          # fachliche Spezifikation (Quelle des Projektziels)
-├── docs/entwurf-leitstand.html         # Gestaltungsvorlage „Kupferwarte" (siehe CLAUDE-design.md)
+├── docs/entwurf-kupferwolke.html       # Gestaltungsvorlage „Kupferwolke" (siehe CLAUDE-design.md)
 ├── pom.xml                             # Maven-Konfiguration (inkl. frontend-maven-plugin)
 ├── Dockerfile, docker-compose.yml      # Multi-Stage-Image + lokale Composition (Postgres, MinIO, Caddy)
 ├── docker-compose.prod.yml             # Produktions-Overlay hinter Traefik (Host aus FBCRM_DOMAIN)
@@ -145,7 +145,7 @@ Keine kurzfristige Bequemlichkeit rechtfertigt unsicheren, untypisierten oder sc
 
 ---
 
-**TL;DR:** fb.crm ist ein Mini-CRM für Freiberufler — Anfrage bis Zahlungseingang, der Vorgang als Klammer. Java 25 + Spring Boot 3 (TDD-pflichtig, 100 % Coverage) auf PostgreSQL 16 + MinIO. React 18 + TypeScript strict + MUI im Erscheinungsbild „Kupferwarte". Eigenes Session-Auth, rollenbasierte Rechte. Sicherheit > Korrektheit > Komfort. Vor jedem Push: `mvn verify` und `npm run build`/`lint`/`test` grün. Plan-Mode und Board-Issues sind verbindlich (siehe Workflow).
+**TL;DR:** fb.crm ist ein Mini-CRM für Freiberufler — Anfrage bis Zahlungseingang, der Vorgang als Klammer. Java 25 + Spring Boot 3 (TDD-pflichtig, 100 % Coverage) auf PostgreSQL 16 + MinIO. React 18 + TypeScript strict + MUI im Erscheinungsbild „Kupferwolke". Eigenes Session-Auth, rollenbasierte Rechte. Sicherheit > Korrektheit > Komfort. Vor jedem Push: `mvn verify` und `npm run build`/`lint`/`test` grün. Plan-Mode und Board-Issues sind verbindlich (siehe Workflow).
 
 ## Gedächtnis (Obsidian-Vault)
 

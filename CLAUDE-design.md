@@ -1,4 +1,4 @@
-# CLAUDE-design.md — Designsprache von fb.crm: Kupferwarte
+# CLAUDE-design.md — Designsprache von fb.crm: Kupferwolke
 
 Diese Datei ist die Designquelle der Anwendung **fb.crm**. Sie beschreibt, **was** die Oberfläche trägt: Vorlage, Erscheinungsbild, Palette, Schrift, Radien, Tiefe, Kontrast, Rahmen und Zustandsformen. **Wie** diese Werte im Code angewendet werden — Theme-zentral, über die `sx`-Prop, keine hartcodierten Werte — regelt [CLAUDE-react.md](CLAUDE-react.md).
 
@@ -6,13 +6,23 @@ Diese Datei ist die Designquelle der Anwendung **fb.crm**. Sie beschreibt, **was
 
 ---
 
+## 🧭 Leitgedanke
+
+**Weich, warm, luftig — und trotzdem ein Arbeitswerkzeug.** Die Oberfläche soll sich anfühlen wie ein freundliches Notizbuch über die eigenen Kunden, nicht wie ein Schaltpult. Daraus folgen drei Regeln, die über allen Einzelwerten stehen:
+
+1. **Karten statt Linien.** Gliederung entsteht durch Abstand, Fläche und weiche Schatten — Haarlinien nur, wo Zeilen sonst ineinanderlaufen.
+2. **Eine Hauptsache je Ansicht.** Es gibt genau eine Kupfertaste; alles andere tritt zurück. Seltene und folgenreiche Aktionen stehen nicht gleichrangig daneben.
+3. **Zeigen, wie es steht.** Eine Ansicht erzählt zuerst den Zustand (Kürzel, Chips, Kennzahlen, jüngste Ereignisse), dann die Stammdaten.
+
+---
+
 ## 📌 Vorlage und Abnahme
 
-**Die Vorlage ist verbindlich:** [`docs/entwurf-leitstand.html`](docs/entwurf-leitstand.html) — „Kupferwarte". Sie gilt für **Aussehen und Aufbau**: Farben, Schriften, Radien, Tiefe, Rahmen, Zustandsformen und die Gestalt der Bausteine (Schiene, Kopf, Bühne, Platte, Nut, Taste, Wähler, Etikett, LED).
+**Die Vorlage ist verbindlich:** [`docs/entwurf-kupferwolke.html`](docs/entwurf-kupferwolke.html) — „Kupferwolke". Sie gilt für **Aussehen und Aufbau**: Farben, Schrift, Radien, Tiefe, Rahmen, Zustandsformen und die Gestalt der Bausteine (Schiene, Kopf, Bühne, Karte, Innenkarte, Kopfkarte, Kachel, Taste, Icontaste, Chip, Mal, Zeitleiste).
 
-**Sie gilt ausdrücklich nicht für Inhalte und Ansichten.** Die Vorlage stammt aus einem anderen Produkt und führt dessen Ansichten vor; welche Ansichten fb.crm hat, was darauf steht und unter welcher Route sie liegen, entscheiden die Fachpläne. Aus der Vorlage wird **nichts Fachliches** übernommen — weder Bezeichnungen noch Kennzahlen noch Bedienelemente, für die es in fb.crm keinen Anlass gibt.
+**Sie gilt ausdrücklich nicht für Inhalte und Ansichten.** Die Vorlage zeigt eine Firmen-Detailansicht mit **erfundenen Beispielinhalten** — Navigationseinträge, Kennzahlen, Zeitleiste, Glocke und Telefonnummer sind Platzhalter. Welche Ansichten fb.crm hat, was darauf steht und unter welcher Route sie liegen, entscheiden die Fachpläne. Aus der Vorlage wird **nichts Fachliches** übernommen.
 
-**Bindend sind** die Vorlage, diese Datei und `frontend/src/theme.ts` als einzige Wertequelle im Code. Ein Plan oder ein Arbeitspaket entscheidet keine Gestaltungsfrage gegen die Vorlage — eine Abweichung wird Manne vorgelegt.
+**Bindend sind** die Vorlage, diese Datei und `frontend/src/theme.ts` als einzige Wertequelle im Code. Weichen Vorlage und diese Datei voneinander ab, **gilt diese Datei**. Ein Plan oder ein Arbeitspaket entscheidet keine Gestaltungsfrage gegen die Vorlage — eine Abweichung wird Manne vorgelegt.
 
 **Abgenommen wird visuell:** je Ansicht ein Bildschirmfoto bei 1440 × 900 neben der Vorlage. Tests und Gates sichern Werte, Kontrast und Verhalten; ob eine Ansicht aussieht wie die Vorlage, sagen sie nicht.
 
@@ -20,9 +30,7 @@ Diese Datei ist die Designquelle der Anwendung **fb.crm**. Sie beschreibt, **was
 
 ## ☀️ Erscheinungsbild
 
-**Ein Erscheinungsbild: hell — unabhängig von der Einstellung des Rechners oder Browsers** (Entscheidung Manne, 2026-09-22; wie im KI-Leitstand, aus dem diese Datei stammt). Es gibt keinen Schalter, keine Umschaltung über `prefers-color-scheme`, keinen Zustand und keine Persistenz. `theme.ts` kennt nur das helle Farbschema; `theme.test.ts` hält fest, dass kein weiteres dazukommt und kein CSS unter `prefers-color-scheme` entsteht.
-
-**Die Vorlage trägt einen Dunkelsatz, der nicht gilt.** `docs/entwurf-leitstand.html` führt neben den hellen Werten an `:root` auch dunkle unter `prefers-color-scheme: dark` und einen Umschalter `data-theme`. Beides übernimmt die Anwendung nicht; es gelten allein die hellen Werte.
+**Ein Erscheinungsbild: hell — unabhängig von der Einstellung des Rechners oder Browsers** (Entscheidung Manne, 2026-09-22). Es gibt keinen Schalter, keine Umschaltung über `prefers-color-scheme`, keinen Zustand und keine Persistenz. `theme.ts` kennt nur das helle Farbschema; `theme.test.ts` hält fest, dass kein weiteres dazukommt und kein CSS unter `prefers-color-scheme` entsteht.
 
 **Tokens sind Verweise, keine Werte.** Die Konstanten aus `theme.ts` tragen `var(--fb-…)`. In den Ansichten gilt `theme.vars.palette.*`, nicht `theme.palette.*`.
 
@@ -30,118 +38,192 @@ Diese Datei ist die Designquelle der Anwendung **fb.crm**. Sie beschreibt, **was
 
 ## 🎨 Palette
 
-Die Rollen und Werte der Vorlage (Entwurf Z. 10–150). Die **Leitfarbe ist Kupfer**; die Melder tragen ausschließlich Zustände und werden nie als Akzent verwendet.
+**Die Leitfarbe ist Kupfer.** Die Werte unten sind bereits auf WCAG AA gerechnet (siehe [Kontrast](#kontrast)); die Vorlage trägt dieselben Werte.
+
+### Flächen, Linien, Text
 
 | Rolle | Wert | Verwendung |
 |---|---|---|
-| Grund | `#E7E9ED` | Grund der Anwendung (`background.default`) |
-| Grund tief | `#D8DBE2` | oberes Ende der Schiene |
-| Nut | `#D5D9E0` | eingelassene Flächen: Schiene, Suche, Filtergruppen, Zähler |
-| Platte | `#FDFDFE` | Inhaltsflächen: Karten, Kacheln, Platten (`background.paper`) |
-| Platte Fuß | `#F2F4F7` | unteres Ende eines Tastenverlaufs |
-| Platte hoch | `#FFFFFF` | abgehobene Flächen, oberes Ende eines Tastenverlaufs |
-| Rand | `#CDD2DA` | Haarlinien (`divider`) |
-| Rand stark | `#B7BEC9` | betonte Linien, Tastenkappen |
-| Kante | `rgba(255,255,255,.9)` | Lichtkante an der Oberkante erhabener Flächen |
-| Text | `#14181E` | Fließtext (`text.primary`) |
-| Text matt | `#58606C` | Sekundärtext (`text.secondary`), Navigation |
-| Text schwach | `#868E9B` | Etiketten, Zähler, Hinweise — siehe [Kontrast](#kontrast) |
-| Kupfer | `#A85F2C` | Leitfarbe (`primary`): aktive Navigation, Primärtaste, Fokusring, Füllungen |
-| Kupfer hell | `#C2743C` | oberes Ende von Kupferverläufen |
-| Kupfer-Schimmer | `rgba(168,95,44,.16)` | Schimmer im Grund, Schatten der Kupfertaste |
-| Grün | `#2F8F4E` | Melder: erfolgreich, fertig |
-| Bernstein | `#B07C15` | Melder: Warnung, Grenze erreicht |
-| Zinnober | `#C8393E` | Melder: gescheitert, überfällig |
-| Stahl | `#2F6FC9` | Melder: laufend, Information |
-| Grau | `#8A929E` | Melder: nicht bearbeitet |
+| Grund | `#F6F3EF` | Grund der Anwendung (`background.default`), warmes Cremeweiß |
+| Fläche | `#FFFFFF` | Karten, Schiene, Suche, Menüs (`background.paper`) |
+| Fläche weich | `#FBF9F6` | Innenkarten, weiche Tasten, Icontasten, Zähler, Hover-Grund von Zeilen |
+| Linie | `#EFE9E3` | seltene Haarlinien, gestrichelter Rand der Hinzufügen-Kachel (`divider`) — rein gliedernd, trägt nie eine Aussage |
+| Rand stark | `#928577` | Rand von Eingabefeldern und allem, dessen Umriss man erkennen muss (≥ 3:1) |
+| Text | `#1F1B18` | Fließtext, Titel (`text.primary`) |
+| Text matt | `#6B625B` | Sekundärtext, Navigation (`text.secondary`) |
+| Text schwach | `#756C64` | Gruppentitel, Pfad, Hinweise, Beschriftungen in Stammdaten |
 
-**Grund der Anwendung:** der Grund mit einem Kupfer-Schimmer oben links (`radial-gradient(1100px 600px at 18% -8%, Kupfer-Schimmer, transparent 62%)`, Entwurf Z. 152–160).
+### Kupfer
+
+| Rolle | Wert | Verwendung |
+|---|---|---|
+| Kupfer | `#A0521F` | Leitfarbe (`primary`): Links, Fokusring, kupferne Schrift, aktive Zustände |
+| Kupfer Taste | `#AE5A24` → `#8E4718` | Verlauf (135°) der Kupfertaste, weiße Schrift darauf |
+| Kupfer-Glanz | `#E08A4F` | **nur Schmuck:** Verlauf des Markenmals, Hover-Rand der Hinzufügen-Kachel — nie Schrift, nie Grund von Schrift |
+| Kupfer-Schatten | `rgba(184,97,42,.55)` | farbiger Schatten der Kupfertaste und des Markenmals |
+
+### Tönungen
+
+Pastellflächen mit ihrer Schrift. Sie tragen **Kategorien und Zustände**, jede Tönung hat eine feste Bedeutung — sie werden nicht der Reihe nach „durchgefärbt".
+
+| Tönung | Fläche | Schrift | Bedeutung |
+|---|---|---|---|
+| Pfirsich | `#FDEBDD` | `#8A4418` | Kupfer-Familie: aktiver Navigationseintrag, Firmen-Mal, Hover der Icontaste, Vorgänge |
+| Salbei | `#E4F1E8` | `#2E6B45` | erfolgreich, aktiv, bezahlt, Umsatz |
+| Himmel | `#E3EFFB` | `#1F5A96` | Information, laufend, versendet |
+| Bernstein | `#FBF0D9` | `#7A5510` | Warnung, Grenze erreicht, bald fällig |
+| Rosé | `#FBE4E4` | `#A12D31` | gescheitert, überfällig, stillgelegt |
+| Flieder | `#ECEAFB` | `#4B3FA0` | neutrale Kategorie: Personen, Ansprechpartner, Rechnungen als Menge |
+
+### Melder
+
+Kräftige Zustandsfarben für Symbole, Zahlen und schmale Markierungen. Sie stehen **auf Flächen (Karten)**, nie direkt auf dem Grund.
+
+| Melder | Wert | Bedeutung |
+|---|---|---|
+| Grün | `#277A42` | erfolgreich, fertig |
+| Bernstein | `#8F6410` | Warnung, Grenze erreicht |
+| Zinnober | `#C8393E` | gescheitert, überfällig |
+| Stahl | `#2F6FC9` | laufend, Information |
+| Grau | `#6B737F` | nicht bearbeitet |
+
+**Grund der Anwendung:** das Cremeweiß mit zwei weichen Schimmern — Kupfer-Glanz oben links (`radial-gradient(900px 500px at 12% -10%, rgba(224,138,79,.18), transparent 60%)`) und Flieder oben rechts (`radial-gradient(700px 500px at 100% 0%, rgba(160,150,240,.12), transparent 60%)`).
 
 ---
 
 ## ✒️ Typografie
 
-| Rolle | Schrift | Einsatz |
-|---|---|---|
-| Titel, Anzeige | **Archivo** (variable Breite, `font-stretch` 110–118 %) | Überschriften, Markenname, Pfad, Etiketten, Plattentitel |
-| Fließtext | **IBM Plex Sans**, 14 px, Zeilenhöhe 1,5 | alles Lesbare |
-| Zahlen und Kennungen | **IBM Plex Mono** mit `tabular-nums` | Nummern, Beträge, Mengen, Datumsangaben, Tastenkürzel, Kennzahlen |
+**Eine Schrift: Plus Jakarta Sans** — rund, offen, freundlich. Keine zweite Anzeige- und keine Monoschrift.
 
-- **Gewichte wie in der Vorlage:** 400, 500 (Navigation, Titel in Listen), 600 (Tasten, Etiketten, Pfad, Plattentitel), 700 (Markenname, große Zahlen).
-- **Etikett** (`.etikett`, Entwurf Z. 185–194): Archivo, 10 px, 600, Versalien, Laufweite 0,14 em, Farbe „Text schwach".
-- Alle Schriften werden **offline mit der Anwendung ausgeliefert** (`@fontsource`); eine Instanz ohne Internetzugang zeigt dasselbe Schriftbild.
-- **Eine große Einzelzahl** trägt keine Tabellenziffern, Zahlen untereinander immer.
+| Rolle | Größe / Gewicht | Einsatz |
+|---|---|---|
+| Ansichtstitel | 28 px / 800, Laufweite −0,02 em | Name in der Kopfkarte |
+| Kennzahl | 26 px / 800, Laufweite −0,02 em | Zahl in einer Kachel |
+| Kartentitel | 18 px / 700 | Überschrift einer Karte |
+| Markenname | 17 px / 800 | „fb.crm" in der Schiene |
+| Name in Liste | 15 px / 700 | Person, Firma, Vorgang in Karten und Zeilen |
+| Fließtext | 14,5 px / 400, Zeilenhöhe 1,5 | alles Lesbare |
+| Navigation, Tasten | 14 px / 500 bzw. 600; aktiver Eintrag 700 | Schiene, Tasten |
+| Klein | 12–13,5 px / 500–600 | Chips, Gruppentitel, Zähler, Zeitangaben |
+
+- **Satzschreibung überall** — auch Gruppentitel der Schiene („Stammdaten", nicht „STAMMDATEN"). Keine Versalien mit Laufweite.
+- **Zahlen und Kennungen** (Beträge, Mengen, Datumsangaben, Nummern wie `R-2026-006`) tragen `font-variant-numeric: tabular-nums`, wo sie untereinander stehen. Ob Plus Jakarta Sans die Tabellenziffern (`tnum`) führt, prüft der Umsetzungsplan; fehlen sie, legt der Plan Manne eine Ersatzlösung vor.
+- **Eine große Einzelzahl** (Kachel) braucht keine Tabellenziffern.
+- Die Schrift wird **offline mit der Anwendung ausgeliefert** (`@fontsource`); eine Instanz ohne Internetzugang zeigt dasselbe Schriftbild. Der Google-Fonts-Link in der Vorlage gilt nur für die Vorlage.
 
 ---
 
 ## 📐 Radien
 
-| Ebene | Radius | Token |
+| Ebene | Radius | Einsatz |
 |---|---|---|
-| Platte, Kachel, Laufband | 14 px | `PANEL_RADIUS` (`--r-gross`) |
-| Karte, Navigationseintrag | 10 px | `CARD_RADIUS` (`--r-mittel`) |
-| Bedienelement, Fokusring | 6 px | `shape.borderRadius` (`--r-klein`) |
+| Groß | 28 px | Karte, Kopfkarte, Schiene |
+| Kachel | 24 px | Kennzahl-Kachel, Fuß der Schiene |
+| Mittel | 22 px | Innenkarte (Person in einer Karte), Hinzufügen-Kachel |
+| Mal | 26 px (84 px Mal) bzw. 14–16 px (Symbolfelder 36–48 px) | Firmen-Mal, Markenmal, Symbolfeld in Kachel und Zeitleiste |
+| Klein | 14 px | Navigationseintrag, Zeile, Eingabefeld |
+| Rund | 999 px | Tasten, Chips, Suche, Zähler; Kreis für Personen-Kürzel und Icontasten |
+
+Der Fokusring folgt dem Radius des Elements.
 
 ---
 
 ## 🌓 Tiefe
 
-**Vier Stufen: Nut < Grund < Platte < Abgehoben** (Entwurf Z. 6–8). Eingelassenes liegt als Nut im Grund (Schiene, Suche, Filtergruppen, Zähler); Inhalte liegen als Platte darauf; was gerade bewegt wird oder über allem schwebt, ist abgehoben. Tasten sind kleine erhabene Flächen mit Lichtkante, die beim Drücken zur Nut werden.
+**Drei Stufen: Grund < Karte < Abgehoben.** Karten schweben auf dem Grund; was man gerade berührt oder was über allem liegt (Innenkarte im Hover, Menü, Dialog), hebt sich weiter ab. **Es gibt keine eingelassenen Flächen mehr** — Suche und Eingabefelder sind helle Flächen, keine Rillen. Innenkarten liegen als „Fläche weich" ohne eigenen Schatten in der Karte.
 
-| Token | Rolle |
-|---|---|
-| `--schatten-nute` | Innenschatten eingelassener Flächen |
-| `--schatten-platte` | Lichtkante plus zwei Schattenebenen der Platte |
-| `--schatten-hoch` | abgehobene Fläche, weiter geöffnet |
-| `--schatten-taste` | Lichtkante plus kurzer Schatten einer Taste |
+| Token | Wert | Rolle |
+|---|---|---|
+| `schatten-karte` | `0 1px 2px rgba(80,50,30,.04), 0 8px 24px -6px rgba(80,50,30,.10)` | Karte, Schiene, Suche, runde Kopftasten |
+| `schatten-hoch` | `0 2px 4px rgba(80,50,30,.05), 0 18px 40px -10px rgba(80,50,30,.18)` | Innenkarte im Hover, Menü, Dialog |
+| `schatten-kupfer` | `0 8px 20px -6px` Kupfer-Schatten | Kupfertaste, Markenmal |
 
-Die Schattenfarbe folgt der Vorlage: eine Blaugrau-Tinte `rgba(18,24,33,…)`.
+Die Schattenfarbe ist ein warmes Braun `rgba(80,50,30,…)` — kein Blaugrau, kein Schwarz.
 
 ---
 
 ## ♿ Kontrast
 
-**WCAG AA ist das Mindestmaß: 4,5:1 für Text**, 3:1 für großen Text und bedeutungstragende Grafikelemente. Gerechnet wird gegen die Fläche, auf der das Element tatsächlich steht, mit einem Kontrastrechner im Frontend; die Tabelle steht im Test des Themes.
+**WCAG AA ist das Mindestmaß: 4,5:1 für Text**, 3:1 für großen Text und für Umrisse und bedeutungstragende Grafik (Eingabefeldrand, Fokusring, Melder-Symbole). Gerechnet wird gegen die Fläche, auf der das Element tatsächlich steht, mit dem Kontrastrechner im Frontend (`lib/contrast.ts`); die Tabelle steht im Test des Themes. **Die Schwelle wird nie gesenkt** — reicht ein Ton nicht, wird er im selben Farbton vertieft und hier nachgetragen.
 
-**Die Vorlage verfehlt AA an wenigen Stellen.** Dort wird der Ton **minimal im selben Farbton** vertieft, bis die Schwelle hält; die Abweichung steht an der Konstante in `theme.ts` und im Test — die Schwelle wird nie gesenkt. Die bekannten Stellen:
+Nachgerechnet am 2026-09-26 (Auszug, schwächste Paarung je Rolle):
 
-- **Text schwach als Schrift:** 2,3–3,3:1 (auf Nut, Grund, Platte).
-- **Text matt auf der Nut:** 4,49:1.
-- **Melder auf der Nut:** Grün 2,9, Bernstein 2,6, Grau 2,2:1 — als Füllung auf der Nut vertieft oder auf eine Platte gesetzt.
+| Paarung | Verhältnis |
+|---|---|
+| Text schwach auf Grund | 4,65:1 |
+| Text matt auf Grund | 5,39:1 |
+| Kupfer auf Grund | 5,10:1 · auf Pfirsich 4,86:1 |
+| Weiß auf Kupfer Taste (helles Ende `#AE5A24`) | 4,90:1 |
+| Tönungsschrift auf ihrer Fläche | Pfirsich 6,20 · Salbei 5,46 · Himmel 6,08 · Bernstein 5,92 · Rosé 5,90 · Flieder 7,04 |
+| Melder auf Fläche (Weiß) | Grün 5,32 · Bernstein 5,25 · Zinnober 5,11 · Stahl 4,96 · Grau 4,79 |
+| Rand stark auf Fläche weich | 3,42:1 |
+
+**Bekannte Grenzen:** Kupfer-Glanz (2,65:1 gegen Weiß) und Linie (1,20:1) erreichen keine Schwelle und dürfen deshalb **nie** Schrift oder eine Aussage tragen. Stahl (4,48:1) und Grau (4,33:1) verfehlen AA auf dem Grund — deshalb stehen Melder nur auf Flächen.
 
 ---
 
 ## 🧱 Rahmen
 
-Vorlage: Entwurf CSS Z. 196–389, HTML Z. 1101–1199.
+Vorlage: `docs/entwurf-kupferwolke.html`.
 
-- **Warte:** zweispaltig, links die Schiene (224 px), rechts der Inhalt.
-- **Schiene:** eingelassene Nut mit Verlauf von „Grund tief" nach „Nut", Innenschatten, Haarlinie rechts. Oben die **Marke** (Kupfer-Mal mit drei Balken, Name, Version); darunter **Navigationsblöcke**, jeder mit einem Etikett als Titel und immer offen; unten der **Fuß** mit den seltener gebrauchten Wegen und dem Einklappen. Welche Blöcke es gibt und welche Einträge darin stehen, entsteht mit den Fachplänen und wird dort festgehalten — diese Datei regelt nur die Gestalt. Ein Eintrag ist ein echter Link mit Symbol und Beschriftung; der aktive Eintrag (`aria-current="page"`, der längste passende Pfad) ist eine erhabene Taste mit kupfernem Symbol. Zahlen an Einträgen erscheinen erst, wenn die Shell diese Daten kennt. Eingeklappt (64 px) bleiben nur die Symbole.
-- **Die Schiene ist der einzige Ort, an dem man zwischen den Ansichten wechselt.** Die Reiterleiste, die die Vorlage oben zum Wechseln zeigt, übernimmt die Anwendung nicht.
-- **Kopf:** klebt oben, leicht getönt mit Weichzeichner; **Pfad** in Archivo mit verlinkten Stufen, **Suche** als Nut mit der Tastenkappe des echten Kürzels `/` (die Vorlage zeigt `⌘K`; Modifikator-Kürzel überlässt die Anwendung dem Browser), **Nutzer** als rundes Mal mit Kürzel, das ein Menü mit „Profil bearbeiten" und „Abmelden" öffnet. Die Kupfertaste für die Hauptaktion der Ansicht bringt das jeweilige Ansichtspaket mit.
-- **Bühne:** Innenabstand 22/26/44 px, Abstand zwischen Bereichen 20 px.
-- **Fokusring:** 2 px Kupfer mit 2 px Abstand an jedem Tastaturziel; Eingabefelder zeigen den Fokus an ihrer Rahmenlinie.
+- **Aufbau:** zweispaltig mit 20 px Außenabstand und 24 px Spalt; links die Schiene (260 px), rechts die Bühne mit höchstens 1180 px Breite.
+- **Schiene:** eine freistehende weiße Karte (Radius groß, `schatten-karte`), klebt oben. Oben die **Marke**: Markenmal (42 px, Radius 14, Verlauf Kupfer-Glanz → Kupfer, Kupfer-Schatten), Name, Version. Darunter **Navigationsgruppen**, jede mit einem Gruppentitel in Satzschreibung und immer offen. Ein Eintrag ist ein echter Link mit Symbol (20 px) und Beschriftung, Radius klein; Hover „Fläche weich". Der **aktive Eintrag** (`aria-current="page"`, längster passender Pfad) liegt auf Pfirsich mit Pfirsich-Schrift in 700. Zähler an Einträgen als runde Plakette rechts — erst, wenn die Shell diese Daten kennt. Unten der **Fuß** als Kachel „Fläche weich": Personen-Kürzel, Name, Rolle und der Weg zu den Einstellungen; ein Klick öffnet das Menü mit „Profil bearbeiten" und „Abmelden". Welche Gruppen und Einträge es gibt, entsteht mit den Fachplänen. Eingeklappt (76 px) bleiben Markenmal, Symbole und Kürzel.
+- **Die Schiene ist der einzige Ort, an dem man zwischen den Ansichten wechselt.**
+- **Kopf:** eine Zeile ohne eigene Fläche über der Bühne. Links der **Pfad** (Text schwach, verlinkte Stufen, Chevron als Trenner, letzte Stufe in Text und 700). Rechts die **Suche** als weiße Pille (320 px, `schatten-karte`) mit Lupe, Platzhalter und der Tastenkappe des echten Kürzels `/`; daneben runde Kopftasten (42 px) für Dinge, die es geben wird — keine ohne fachlichen Anlass.
+- **Bühne:** Abstand zwischen Bereichen 22 px, Innenabstand einer Karte 28 px.
+- **Fokusring:** 2 px Kupfer mit 2 px Abstand an jedem Tastaturziel; Eingabefelder zeigen den Fokus als 2 px Kupferrand.
 - **Mindestbreite:** 768 px vollständig bedienbar; unterhalb von 900 px liegt die Schiene hinter einer Schaltfläche.
+
+### Bausteine
+
+- **Kopfkarte** (Detailansichten): Mal (84 px, Radius 26, Tönung mit Kürzel in 800), Titel, eine Zeile mit den wichtigsten Stammdaten (Symbol davor, Teile durch „·" getrennt), darunter Chips. Rechts die Aktionen. Ein weicher Pfirsich-Kreis rechts oben ist Schmuck.
+- **Kennzahl-Kacheln:** Raster aus zwei bis vier Kacheln, jede auf einer Tönung mit Symbolfeld (48 px, halbtransparentes Weiß), Beschriftung (13 px / 600) und Zahl.
+- **Innenkarten:** für **wenige gleichrangige Objekte** innerhalb einer Karte (z. B. Ansprechpartner einer Firma) — Raster, Personen-Kürzel (48 px Kreis auf Tönung), Name, Rolle, Kontaktwege mit Symbol. Die letzte Kachel ist die **Hinzufügen-Kachel** (gestrichelter Rand).
+- **Zeilen:** **Listen mit vielen Einträgen** (Firmenliste, Vorgänge, Rechnungen) sind Zeilen in einer Karte, kein Kartenraster. Zeile mit Radius klein, Hover „Fläche weich", ganze Zeile als Link auf das Objekt.
+- **Zeitleiste:** Einträge mit Symbolfeld (36 px, Radius 12, Tönung nach Art des Ereignisses), Titel (600) und Unterzeile (Text schwach).
+- **Stammdaten:** wenn sie ausführlich stehen müssen, als Beschriftung–Wert-Liste ohne Linien je Zeile, Beschriftung in Text schwach.
+
+### Tasten
+
+- **Kupfertaste:** Pille, Verlauf Kupfer Taste, weiße Schrift 600, `schatten-kupfer`. **Genau eine je Ansicht** — die Hauptaktion. Sie steht in der Kopfkarte (Detailansicht) bzw. rechts im Kartenkopf der Liste.
+- **Weiche Taste:** Pille, „Fläche weich" mit 1 px Linie als Innenring, Textfarbe — für die zweitwichtigste Aktion (z. B. „Bearbeiten").
+- **Icontaste:** Kreis 40 px, „Fläche weich", Symbol in Text matt; Hover Pfirsich. Braucht immer einen zugänglichen Namen.
+- **⋯-Menü:** **Seltene und folgenreiche Aktionen** (Stilllegen, Löschen, Archivieren) stehen nie als gleichrangige Taste neben den anderen, sondern im ⋯-Menü; im Menü tragen sie Rosé-Schrift und fragen vor der Ausführung nach.
+- **Hover:** Tasten heben sich um 1 px; Innenkarten gehen im Hover auf Weiß mit `schatten-hoch`.
+- **Aktionen, die erst im Hover erscheinen** (⋯ an Innenkarten), erscheinen ebenso bei **Tastaturfokus** (`:focus-within`) und sind auf Geräten ohne Hover (`@media (hover: none)`) **immer sichtbar**.
+
+### Eingabefelder
+
+Weiße Fläche, 1 px „Rand stark", Radius klein, Beschriftung über dem Feld (13 px / 600, Text matt). Fokus: 2 px Kupferrand. Fehler: Rand und Hinweistext in Zinnober, dazu ein Symbol — nie Farbe allein.
 
 ---
 
 ## 🧭 Zustandsformen
 
-Zustände sind an **Form** erkennbar, nicht allein an Farbe — eine Plakette mit LED, eine Vertiefung, eine Lichtkante, ein Symbol. Farbe allein trägt nie eine Aussage.
+Zustände sind an **Form** erkennbar, nicht allein an Farbe — ein **Chip mit Symbol und Wort**, eine Tönung mit Symbolfeld, ein Kürzel. Farbe allein trägt nie eine Aussage.
 
-- **Wähler in der Werkzeugleiste** (`.waehler`, CSS Z. 833–842; HTML Z. 1687–1690): **keine Beschriftung über dem Feld**. Die Benennung trägt der Wert selbst — „‹Merkmal›: alle", „‹Merkmal›: ‹Wert›" —, sichtbar wie in der Vorlage, damit auch ein gewählter Wert sagt, wonach gefiltert wird. Maße wie die Filtertasten daneben (Schrift 11,5 px, Innenabstand 4/9 px, Radius 7 px), damit die Leiste in einer Linie steht. Den **zugänglichen Namen** behält das Feld: Ohne sichtbare Beschriftung ist er der einzige.
-- **Bewegung reduzieren:** eine zentrale Regel setzt unter `prefers-reduced-motion: reduce` Übergangs- und Animationsdauern auf null, auch das Pulsieren der LED.
-- **Ausdruck:** schlicht und immer hell — ohne Grund, Verläufe und Schatten.
+- **Chip:** Pille, 12,5 px / 600, Symbol links, Tönung nach Bedeutung (Tabelle „Tönungen"). Das Wort sagt den Zustand („Aktiv", „Überfällig"), das Symbol stützt ihn.
+- **Wähler in der Werkzeugleiste:** **keine Beschriftung über dem Feld**. Die Benennung trägt der Wert selbst — „‹Merkmal›: alle", „‹Merkmal›: ‹Wert›". Form wie eine weiche Taste, damit die Leiste in einer Linie steht. Den **zugänglichen Namen** behält das Feld: Ohne sichtbare Beschriftung ist er der einzige.
+- **Leere Zustände:** eine Einladung, keine Entschuldigung — Symbol auf Tönung, ein Satz, eine Taste („Ersten Ansprechpartner anlegen").
+- **Bewegung reduzieren:** eine zentrale Regel setzt unter `prefers-reduced-motion: reduce` Übergangs- und Animationsdauern auf null, auch das Anheben im Hover.
+- **Ausdruck:** schlicht und immer hell — ohne Grund, Schimmer, Verläufe und Schatten.
 
 ---
 
 ## 🔢 Weitere Tokens
 
-**Einzige Wertequelle im Code ist `frontend/src/theme.ts`**, gespeist aus den hellen Werten der Vorlage: Palette, Schatten, Radien, Grund, Schriften, Tabellenziffern und Flächen der gefüllten Meldungen. Abgeleitete Farbzuordnungen (etwa Status- und Kennzeichenfarben) liegen in eigenen Modulen unter `frontend/src/lib/` und bilden auf die Melder und Schild-Töne der Vorlage ab. Diese Datei nennt außer der Palettentabelle der Vorlage keine Tokenwerte.
+**Einzige Wertequelle im Code ist `frontend/src/theme.ts`**, gespeist aus dieser Datei und der Vorlage: Palette, Tönungen, Melder, Schatten, Radien, Grund, Schrift, Tabellenziffern. Abgeleitete Farbzuordnungen (etwa Status → Tönung) liegen in eigenen Modulen unter `frontend/src/lib/`. Diese Datei nennt keine Tokennamen im Code — die legt der Umsetzungsplan fest.
+
+---
+
+## 🔄 Übergang
+
+**Diese Datei gilt ab 2026-09-26; der Code folgt mit dem Umsetzungsplan.** Bis dahin tragen `theme.ts`, `theme.test.ts` und die Bausteine (`AppShell`, `NavRail`, `TopBar`, `Platte`, `KupferTaste`, `UserMenu`, …) noch die Werte und Namen der Kupferwarte, und `docs/entwurf-leitstand.html` liegt noch im Repository. Beides verschwindet mit der Umstellung. **Neue Ansichten, die vorher entstehen, folgen bereits dieser Datei**, soweit das Theme die Werte schon trägt; sonst warten sie auf die Umstellung.
 
 ---
 
 ## 📜 Historie
 
-- **seit 2026-09-17 „Kupferwarte":** Die Designsprache stammt aus dem Repo kanban-kit (Designsession am 2026-09-16) und gilt seit dem 2026-09-17 unverändert für fb.crm; die Vorlage `docs/entwurf-leitstand.html` ist verbindlich (Entscheidung Manne).
+- **seit 2026-09-26 „Kupferwolke":** löst die Kupferwarte ab (Entscheidung Manne, 2026-09-26: „zu sehr 60er"). Weicher, warmer Stil mit schwebenden Karten, großen Radien, Pastell-Tönungen und Plus Jakarta Sans; Kupfer bleibt Leitfarbe. Vorlage `docs/entwurf-kupferwolke.html`.
+- **2026-09-17 bis 2026-09-26 „Kupferwarte":** Leitstand-Stil aus dem Repo kanban-kit (Vorlage `docs/entwurf-leitstand.html`) — Nut, Platte, Taste, LED; Archivo und IBM Plex.
 - **Die Lehre für jeden Gestaltungswechsel:** Zuerst wird **diese Datei** umgestellt, dann geplant und umgesetzt — ein Plan folgt der Quelle, die im Repository als bindend markiert ist.
