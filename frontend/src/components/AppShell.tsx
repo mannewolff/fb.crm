@@ -8,7 +8,6 @@ import { useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 
 import { RADIUS_KLEIN, RADIUS_RUND } from '../theme';
-import { KopfAktionProvider } from './KopfAktion';
 import { KopfPfadProvider } from './KopfPfad';
 import NavRail from './NavRail';
 import TopBar from './TopBar';
@@ -38,9 +37,9 @@ import TopBar from './TopBar';
  * gewaehlter Eintrag ihn schliesst; deshalb genuegt `setSchieneOffen(false)` und es braucht kein
  * eigenes Fokus-Kommando, das mit dem Fokusfang des Dialogs streiten wuerde.
  *
- * Der Rahmen spannt ausserdem die zwei Kontexte des Kopfes auf ({@link KopfAktionProvider},
- * {@link KopfPfadProvider}): Beide muessen Kopf und Inhalt gemeinsam umschliessen, damit eine
- * Ansicht ihre Hauptaktion und ihren Pfad in den Kopf legen kann, der ueber ihr steht (E11, E6).
+ * Der Rahmen spannt ausserdem den Kontext des Kopfes auf ({@link KopfPfadProvider}): Er muss Kopf
+ * und Inhalt gemeinsam umschliessen, damit eine Ansicht ihren Pfad in den Kopf legen kann, der
+ * ueber ihr steht (E6).
  *
  * Der Skip-Link steht als erstes im Tabulatorweg und setzt den Fokus auf den Inhalt — ohne ihn
  * muesste jeder Tastaturnutzer vor jedem Inhalt durch Schiene und Kopf.
@@ -100,88 +99,86 @@ export default function AppShell({ children }: { readonly children: ReactNode })
   const hinterSchaltflaeche = mitSchiene && !offeneSchiene;
 
   return (
-    <KopfAktionProvider>
-      <KopfPfadProvider>
-        <Box
-          sx={{
-            display: 'grid',
-            gridTemplateColumns: offeneSchiene ? 'auto minmax(0, 1fr)' : 'minmax(0, 1fr)',
-            gap: '24px',
-            padding: '20px',
-            minHeight: '100vh',
+    <KopfPfadProvider>
+      <Box
+        sx={{
+          display: 'grid',
+          gridTemplateColumns: offeneSchiene ? 'auto minmax(0, 1fr)' : 'minmax(0, 1fr)',
+          gap: '24px',
+          padding: '20px',
+          minHeight: '100vh',
+        }}
+      >
+        <Link
+          href="#inhalt"
+          onClick={(ereignis) => {
+            ereignis.preventDefault();
+            inhalt.current?.focus();
           }}
+          sx={(t) => ({
+            position: 'absolute',
+            left: 8,
+            top: -48,
+            zIndex: 30,
+            padding: '6px 12px',
+            borderRadius: `${RADIUS_KLEIN}px`,
+            background: t.vars.palette.kupferwolke.flaeche,
+            boxShadow: t.vars.palette.kupferwolke.schatten.hoch,
+            '&:focus': { top: 8 },
+          })}
         >
-          <Link
-            href="#inhalt"
-            onClick={(ereignis) => {
-              ereignis.preventDefault();
-              inhalt.current?.focus();
+          Zum Inhalt springen
+        </Link>
+        {offeneSchiene ? <NavRail /> : null}
+        {hinterSchaltflaeche ? (
+          <Drawer
+            anchor="left"
+            open={schieneOffen}
+            onClose={() => {
+              setSchieneOffen(false);
             }}
-            sx={(t) => ({
-              position: 'absolute',
-              left: 8,
-              top: -48,
-              zIndex: 30,
-              padding: '6px 12px',
-              borderRadius: `${RADIUS_KLEIN}px`,
-              background: t.vars.palette.kupferwolke.flaeche,
-              boxShadow: t.vars.palette.kupferwolke.schatten.hoch,
-              '&:focus': { top: 8 },
-            })}
+            // Die Schiene bringt Flaeche, Rand und Tiefe selbst mit; das Papier des Drawers
+            // wuerde sie sonst mit einer zweiten weissen Flaeche unterlegen. Der Aussenabstand
+            // des Rahmens steht hier am Papier, damit die Karte auch hier frei schwebt.
+            slotProps={{
+              paper: { sx: { background: 'none', border: 0, boxShadow: 'none', padding: '20px' } },
+            }}
           >
-            Zum Inhalt springen
-          </Link>
-          {offeneSchiene ? <NavRail /> : null}
-          {hinterSchaltflaeche ? (
-            <Drawer
-              anchor="left"
-              open={schieneOffen}
-              onClose={() => {
+            <NavRail
+              onWahl={() => {
                 setSchieneOffen(false);
               }}
-              // Die Schiene bringt Flaeche, Rand und Tiefe selbst mit; das Papier des Drawers
-              // wuerde sie sonst mit einer zweiten weissen Flaeche unterlegen. Der Aussenabstand
-              // des Rahmens steht hier am Papier, damit die Karte auch hier frei schwebt.
-              slotProps={{
-                paper: { sx: { background: 'none', border: 0, boxShadow: 'none', padding: '20px' } },
-              }}
-            >
-              <NavRail
-                onWahl={() => {
-                  setSchieneOffen(false);
-                }}
-              />
-            </Drawer>
-          ) : null}
-          <Box
-            data-testid="buehne"
-            sx={{
-              minWidth: 0,
-              width: '100%',
-              maxWidth: 1180,
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '22px',
-            }}
-          >
-            <TopBar
-              schalter={
-                hinterSchaltflaeche ? (
-                  <SchieneSchalter
-                    offen={schieneOffen}
-                    oeffnen={() => {
-                      setSchieneOffen(true);
-                    }}
-                  />
-                ) : undefined
-              }
             />
-            <Box component="main" id="inhalt" ref={inhalt} tabIndex={-1} sx={{ outline: 'none' }}>
-              {children}
-            </Box>
+          </Drawer>
+        ) : null}
+        <Box
+          data-testid="buehne"
+          sx={{
+            minWidth: 0,
+            width: '100%',
+            maxWidth: 1180,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '22px',
+          }}
+        >
+          <TopBar
+            schalter={
+              hinterSchaltflaeche ? (
+                <SchieneSchalter
+                  offen={schieneOffen}
+                  oeffnen={() => {
+                    setSchieneOffen(true);
+                  }}
+                />
+              ) : undefined
+            }
+          />
+          <Box component="main" id="inhalt" ref={inhalt} tabIndex={-1} sx={{ outline: 'none' }}>
+            {children}
           </Box>
         </Box>
-      </KopfPfadProvider>
-    </KopfAktionProvider>
+      </Box>
+    </KopfPfadProvider>
   );
 }

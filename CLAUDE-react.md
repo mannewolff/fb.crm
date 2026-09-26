@@ -49,7 +49,7 @@ Der Dev-Server (Vite, `:5173`) leitet `/api/*` per Proxy an Spring Boot (`:8080`
 | `assets/StartPage-*.js` (lazy) | 1,92 kB | 0,99 kB |
 | `assets/index-*.css` | 13,45 kB | 1,48 kB |
 
-Dazu die Schriften als eigene Dateien (Archivo variabel, IBM Plex Sans und Mono), die größte mit 34,93 kB. Sie werden vom Browser einzeln und nur bei Bedarf geladen und zählen nicht gegen die Chunk-Grenze.
+Dazu die Schrift als eigene Dateien: Plus Jakarta Sans variabel, je Zeichensatz eine Datei (`plus-jakarta-sans-latin-wght-normal-*.woff2` mit 27,35 kB, dazu `latin-ext` mit 21,73 kB und `vietnamese` mit 8,35 kB). Sie werden vom Browser einzeln und nur bei Bedarf geladen und zählen nicht gegen die Chunk-Grenze.
 
 **Regeln:**
 - **Route-Level Lazy Loading ist Pflicht** für alle Top-Level-Routen in `App.tsx` (via `React.lazy` + `Suspense`). Kein direktes Import einer Page-Komponente in `App.tsx` ohne `lazy()`.

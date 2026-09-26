@@ -9,8 +9,8 @@ import { RADIUS_GROSS, RADIUS_RUND } from '../theme';
  * Die Karte: die tragende, schwebende Flaeche der Buehne (Vorlage `.karte` Z. 53, `.kopfzeile`
  * Z. 79–80, `.karte h2 .anzahl` Z. 78).
  *
- * Sie traegt den Namen der Designquelle (E4): Die Kupferwarte kannte an dieser Stelle einen anderen
- * Baustein, und ein alter Name im Code fuehrt kuenftige Pakete in die alte Designsprache zurueck.
+ * Sie traegt den Namen der Designquelle (E4): Die abgeloeste Designsprache kannte an dieser Stelle
+ * einen anderen Baustein, und ein alter Name im Code fuehrt kuenftige Pakete dorthin zurueck.
  *
  * **Karten statt Linien** (CLAUDE-design.md, Leitgedanke): Die Karte gliedert durch Flaeche, Radius
  * und weichen Schatten. Unter dem Kartenkopf steht darum **keine** Trennlinie mehr; den Abstand

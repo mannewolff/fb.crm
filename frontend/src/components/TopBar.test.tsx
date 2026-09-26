@@ -4,7 +4,6 @@ import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it } from 'vitest';
 
 import { renderMitTheme } from '../test/render';
-import { KopfAktionProvider } from './KopfAktion';
 import { KopfPfadProvider, useKopfPfad } from './KopfPfad';
 import TopBar from './TopBar';
 
@@ -22,12 +21,10 @@ function renderKopf({
 }: { readonly schalter?: ReactNode; readonly ansicht?: boolean } = {}) {
   return renderMitTheme(
     <MemoryRouter>
-      <KopfAktionProvider>
-        <KopfPfadProvider>
-          <TopBar schalter={schalter} />
-          {ansicht ? <Ansicht /> : null}
-        </KopfPfadProvider>
-      </KopfAktionProvider>
+      <KopfPfadProvider>
+        <TopBar schalter={schalter} />
+        {ansicht ? <Ansicht /> : null}
+      </KopfPfadProvider>
     </MemoryRouter>,
   );
 }
@@ -41,12 +38,16 @@ describe('TopBar', () => {
     expect(kopf.queryAllByRole('button')).toHaveLength(0);
   });
 
-  it('bleibt ohne gemeldeten Pfad und ohne Hauptaktion leer (E6)', () => {
+  it('bleibt ohne gemeldeten Pfad leer (E6)', () => {
     renderKopf();
 
     expect(screen.getByTestId('kopf-links')).toBeEmptyDOMElement();
-    // Ohne Ansicht, die eine Hauptaktion mitbringt, bleibt ihr Platz leer.
-    expect(screen.getByTestId('kopf-aktion')).toBeEmptyDOMElement();
+  });
+
+  it('traegt keinen Aktionsplatz mehr — jede Ansicht traegt ihre Hauptaktion selbst', () => {
+    renderKopf({ ansicht: true });
+
+    expect(screen.queryByTestId('kopf-aktion')).not.toBeInTheDocument();
   });
 
   it('zeigt den Pfad der Ansicht links im Kopf (E6)', async () => {

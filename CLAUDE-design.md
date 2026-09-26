@@ -107,7 +107,7 @@ Kräftige Zustandsfarben für Symbole, Zahlen und schmale Markierungen. Sie steh
 | Klein | 12–13,5 px / 500–600 | Chips, Gruppentitel, Zähler, Zeitangaben |
 
 - **Satzschreibung überall** — auch Gruppentitel der Schiene („Stammdaten", nicht „STAMMDATEN"). Keine Versalien mit Laufweite.
-- **Zahlen und Kennungen** (Beträge, Mengen, Datumsangaben, Nummern wie `R-2026-006`) tragen `font-variant-numeric: tabular-nums`, wo sie untereinander stehen. Ob Plus Jakarta Sans die Tabellenziffern (`tnum`) führt, prüft der Umsetzungsplan; fehlen sie, legt der Plan Manne eine Ersatzlösung vor.
+- **Zahlen und Kennungen** (Beträge, Mengen, Datumsangaben, Nummern wie `R-2026-006`) tragen `font-variant-numeric: tabular-nums`, wo sie untereinander stehen. Plus Jakarta Sans führt Tabellenziffern (`tnum`).
 - **Eine große Einzelzahl** (Kachel) braucht keine Tabellenziffern.
 - Die Schrift wird **offline mit der Anwendung ausgeliefert** (`@fontsource`); eine Instanz ohne Internetzugang zeigt dasselbe Schriftbild. Der Google-Fonts-Link in der Vorlage gilt nur für die Vorlage.
 
@@ -216,16 +216,9 @@ Zustände sind an **Form** erkennbar, nicht allein an Farbe — ein **Chip mit S
 
 ---
 
-## 🔄 Übergang
-
-**Diese Datei gilt ab 2026-09-26; der Code folgt mit dem Umsetzungsplan.** Bis dahin tragen `theme.ts`, `theme.test.ts` und die Bausteine (`AppShell`, `NavRail`, `TopBar`, `Platte`, `KupferTaste`, `UserMenu`, …) noch die Werte und Namen der Kupferwarte, und `docs/entwurf-leitstand.html` liegt noch im Repository. Beides verschwindet mit der Umstellung.
-
-**Pakete, die am 2026-09-26 schon in Ready stehen (#68–#74), werden noch in der Kupferwarte fertig** (Entscheidung Manne, 2026-09-26). Für sie gilt weiter `docs/entwurf-leitstand.html` als Vorlage, auch bei der Abnahme per Bildschirmfoto, so wie es in den Paketen steht. Pakete, die danach geschnitten werden, entstehen erst nach dem Umsetzungsplan und folgen dieser Datei. Der Umsetzungsplan stellt alle bis dahin gebauten Ansichten mit um, einschließlich #66–#74.
-
----
-
 ## 📜 Historie
 
 - **seit 2026-09-26 „Kupferwolke":** löst die Kupferwarte ab (Entscheidung Manne, 2026-09-26: „zu sehr 60er"). Weicher, warmer Stil mit schwebenden Karten, großen Radien, Pastell-Tönungen und Plus Jakarta Sans; Kupfer bleibt Leitfarbe. Vorlage `docs/entwurf-kupferwolke.html`.
+- **2026-09-26 abgeschlossen:** Mit Issue #83 trägt der Code durchgehend die Kupferwolke — `theme.ts` und alle Bausteine führen ihre Werte und Namen, die Vorlage der Kupferwarte ist aus dem Repository entfernt. Der Abschnitt „Übergang" ist damit entfallen.
 - **2026-09-17 bis 2026-09-26 „Kupferwarte":** Leitstand-Stil aus dem Repo kanban-kit (Vorlage `docs/entwurf-leitstand.html`) — Nut, Platte, Taste, LED; Archivo und IBM Plex.
 - **Die Lehre für jeden Gestaltungswechsel:** Zuerst wird **diese Datei** umgestellt, dann geplant und umgesetzt — ein Plan folgt der Quelle, die im Repository als bindend markiert ist.

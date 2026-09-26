@@ -9,11 +9,11 @@ import { Link as RouterLink } from 'react-router-dom';
 /**
  * Der Pfad im Kopf: verlinkte Stufen, die letzte als Text (E6, Vorlage `.kopf`/`.pfad` Z. 46–47).
  *
- * Der Kopf steht im Rahmen und nicht in der Ansicht — dieses Modul ist die Bruecke, wie
- * {@link KopfAktion} fuer die Hauptaktion: {@link AppShell} spannt den Kontext auf,
- * {@link TopBar} zeichnet den Pfad, und eine Seite meldet ihren mit {@link useKopfPfad}.
+ * Der Kopf steht im Rahmen und nicht in der Ansicht — dieses Modul ist die Bruecke:
+ * {@link AppShell} spannt den Kontext auf, {@link TopBar} zeichnet den Pfad, und eine Seite meldet
+ * ihren mit {@link useKopfPfad}.
  *
- * **Daten statt Portal.** Anders als die Hauptaktion ist ein Pfad kein Baustein, sondern eine
+ * **Daten statt Portal.** Ein Pfad ist kein Baustein, sondern eine
  * kurze Liste aus Beschriftung und Ziel. Sie liegt darum im Zustand des Kontexts. Damit das nicht
  * zur Endlosschleife wird — eine Ansicht schreibt ihre Stufen bei jedem Rendern neu, und ein
  * Effekt an der Identitaet des Feldes liefe immer wieder —, haengt der Effekt an der
