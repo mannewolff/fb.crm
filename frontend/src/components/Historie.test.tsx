@@ -1,9 +1,11 @@
 import { screen, within } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import userEvent from '@testing-library/user-event';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { anhangPfad } from '../api/vorgaenge';
 import type { Eintrag } from '../api/vorgaenge';
 import { dateigroesse } from '../lib/dateigroesse';
+import { fetchNachPfad, leer } from '../test/fetchNachPfad';
 import { renderMitTheme } from '../test/render';
 import Historie from './Historie';
 
@@ -48,9 +50,20 @@ const GEAENDERTER_KOMMENTAR: Eintrag = {
   geaendertAm: GEAENDERT.toISOString(),
 };
 
-function renderHistorie(eintraege: readonly Eintrag[]) {
-  return renderMitTheme(<Historie vorgangId={VORGANG_ID} eintraege={eintraege} />);
+function renderHistorie(eintraege: readonly Eintrag[], geaendert: () => void = vi.fn()) {
+  return renderMitTheme(
+    <Historie vorgangId={VORGANG_ID} eintraege={eintraege} geaendert={geaendert} />,
+  );
 }
+
+/** Die Taste, die die Maske in der Zeile aufgehen laesst — ihr Name nennt den Eintrag. */
+function aendernTaste(zeile: HTMLElement) {
+  return within(zeile).getByRole('button', { name: /^Ändern/u });
+}
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 describe('Historie', () => {
   it('laesst die Reihenfolge der uebergebenen Eintraege unangetastet', () => {
@@ -156,5 +169,75 @@ describe('Historie', () => {
     renderHistorie([KOMMENTAR]);
 
     expect(screen.getByRole('list', { name: 'Historie' })).toBeInTheDocument();
+  });
+});
+
+describe('Historie — Aendern an Ort und Stelle (E20, Kriterien 19, 26)', () => {
+  it('stellt je Eintrag eine Taste „Aendern" mit dem Eintrag im Namen', () => {
+    renderHistorie([ANHANG, KOMMENTAR]);
+
+    const zeilen = screen.getAllByRole('listitem');
+    // Der Name unterscheidet die Tasten: „Aendern" allein waere in jeder Zeile derselbe.
+    expect(aendernTaste(zeilen[0])).toHaveAccessibleName(
+      `Ändern: Anhang, ${GESCHEHEN_TEXT}, von Hand`,
+    );
+    expect(aendernTaste(zeilen[1])).toBeInTheDocument();
+  });
+
+  it('oeffnet die Maske in der Zeile des Eintrags', async () => {
+    const nutzer = userEvent.setup();
+    renderHistorie([ANHANG, KOMMENTAR]);
+
+    await nutzer.click(aendernTaste(screen.getAllByRole('listitem')[1]));
+
+    const zeile = screen.getAllByRole('listitem')[1];
+    expect(within(zeile).getByRole('textbox', { name: /^Text/u })).toHaveValue(
+      'Erste Zeile\nZweite Zeile',
+    );
+    expect(within(zeile).getByRole('button', { name: 'Speichern' })).toBeInTheDocument();
+    // Die Zeile selbst traegt nun die Maske statt der Taste.
+    expect(within(zeile).queryByRole('button', { name: /^Ändern/u })).not.toBeInTheDocument();
+  });
+
+  it('haelt hoechstens eine Zeile gleichzeitig im Aendern', async () => {
+    const nutzer = userEvent.setup();
+    renderHistorie([ANHANG, KOMMENTAR]);
+
+    await nutzer.click(aendernTaste(screen.getAllByRole('listitem')[1]));
+    await nutzer.click(aendernTaste(screen.getAllByRole('listitem')[0]));
+
+    expect(screen.getAllByRole('button', { name: 'Speichern' })).toHaveLength(1);
+    const zeilen = screen.getAllByRole('listitem');
+    expect(within(zeilen[0]).getByRole('button', { name: 'Speichern' })).toBeInTheDocument();
+    expect(aendernTaste(zeilen[1])).toBeInTheDocument();
+  });
+
+  it('springt mit dem Fokus in die Maske und nach „Abbrechen" zurueck auf die Taste', async () => {
+    const nutzer = userEvent.setup();
+    renderHistorie([KOMMENTAR]);
+
+    await nutzer.click(aendernTaste(screen.getByRole('listitem')));
+
+    expect(screen.getByRole('textbox', { name: /^Text/u })).toHaveFocus();
+
+    await nutzer.click(screen.getByRole('button', { name: 'Abbrechen' }));
+
+    // Kriterium 26: Wer mit der Tastatur arbeitet, steht danach wieder dort, wo er losging.
+    expect(aendernTaste(screen.getByRole('listitem'))).toHaveFocus();
+  });
+
+  it('schliesst die Zeile nach dem Speichern und fordert zum Neuladen auf', async () => {
+    const nutzer = userEvent.setup();
+    const geaendert = vi.fn();
+    fetchNachPfad({ [`PUT /api/vorgaenge/${String(VORGANG_ID)}/eintraege/42`]: leer(204) });
+    renderHistorie([KOMMENTAR], geaendert);
+
+    await nutzer.click(aendernTaste(screen.getByRole('listitem')));
+    await nutzer.click(screen.getByRole('button', { name: 'Speichern' }));
+
+    expect(geaendert).toHaveBeenCalledTimes(1);
+    // Wie die Liste danach aussieht, sagt der Server — die Zeile geht wieder zu.
+    expect(await screen.findByRole('button', { name: /^Ändern/u })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Speichern' })).not.toBeInTheDocument();
   });
 });

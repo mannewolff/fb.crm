@@ -275,6 +275,40 @@ describe('VorgangPage — die Maske fuer Eintraege (E20, Kriterien 13, 14)', () 
     expect(within(screen.getByRole('list', { name: 'Historie' })).getAllByRole('listitem'))
       .toHaveLength(3);
   });
+
+  it('liest die Historie neu und zeigt den Vermerk „geaendert" (Kriterium 19)', async () => {
+    const nutzer = userEvent.setup();
+    let historie: readonly Eintrag[] = [ANHANG, KOMMENTAR];
+    fetchNachPfad({
+      'GET /api/vorgaenge/5': () =>
+        new Response(JSON.stringify({ ...VORGANG, historie }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      // Der Vermerk und die neue Einordnung kommen vom Server, nicht aus der Oberflaeche.
+      'PUT /api/vorgaenge/5/eintraege/31': () => {
+        historie = [
+          ANHANG,
+          { ...KOMMENTAR, text: 'Nachgetragen.', geaendertAm: '2026-09-23T12:00:00Z' },
+        ];
+        return new Response(null, { status: 204 });
+      },
+    });
+
+    renderSeite();
+    await screen.findByRole('heading', { name: VORGANG.titel });
+    const zeile = within(screen.getByRole('list', { name: 'Historie' })).getAllByRole(
+      'listitem',
+    )[1];
+    await nutzer.click(within(zeile).getByRole('button', { name: /^Ändern: Kommentar/ }));
+    const feld = within(zeile).getByRole('textbox', { name: /^Text/ });
+    await nutzer.clear(feld);
+    await nutzer.type(feld, 'Nachgetragen.');
+    await nutzer.click(within(zeile).getByRole('button', { name: 'Speichern' }));
+
+    expect(await screen.findByText('Nachgetragen.')).toBeInTheDocument();
+    expect(screen.getByText(/^geändert/)).toBeInTheDocument();
+  });
 });
 
 describe('VorgangPage — die Historie (Kriterium 15)', () => {
@@ -355,6 +389,11 @@ describe('VorgangPage — Tastatur (Kriterium 26)', () => {
     expect(screen.getByRole('button', { name: 'Hinzufügen' })).toHaveFocus();
     await nutzer.tab();
     expect(screen.getByRole('link', { name: 'anfrage.pdf' })).toHaveFocus();
+    // In jeder Zeile der Historie steht danach ihre Taste „Aendern" (Kriterien 19, 26).
+    await nutzer.tab();
+    expect(screen.getByRole('button', { name: /^Ändern: Anhang/ })).toHaveFocus();
+    await nutzer.tab();
+    expect(screen.getByRole('button', { name: /^Ändern: Kommentar/ })).toHaveFocus();
     await nutzer.tab();
     expect(screen.getByRole('link', { name: 'Beispiel GmbH' })).toHaveFocus();
     await nutzer.tab();

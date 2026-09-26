@@ -1,10 +1,13 @@
 import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
 import Link from '@mui/material/Link';
 import Typography from '@mui/material/Typography';
+import { useEffect, useRef, useState } from 'react';
 
 import { anhangPfad } from '../api/vorgaenge';
 import type { Eintrag, Eintragsart, Herkunft } from '../api/vorgaenge';
 import { dateigroesse } from '../lib/dateigroesse';
+import EintragMaske from './EintragMaske';
 
 /**
  * Die Historie eines Vorgangs (Kriterien 15, 16, 17, 19, 26).
@@ -28,6 +31,11 @@ import { dateigroesse } from '../lib/dateigroesse';
  *   <li><b>Jede Zeile traegt ihren Stand im zugaenglichen Namen</b> (Kriterium 26). Wer mit dem
  *       Screenreader durch die Eintraege geht, hoert Art, Zeitpunkt, Herkunft und den Vermerk
  *       „geaendert", ohne die Zeile betreten zu muessen.</li>
+ *   <li><b>Geaendert wird an Ort und Stelle</b> (E20, Kriterium 19): Die Taste „Aendern" laesst
+ *       {@link EintragMaske} in der Zeile selbst aufgehen, statt auf eine eigene Seite zu fuehren.
+ *       Hoechstens eine Zeile ist gleichzeitig offen — deshalb steht der offene Eintrag hier und
+ *       nicht in der Zeile: Zwei Masken gleichzeitig waeren zwei Faelle desselben Eintrags, und
+ *       welcher gilt, haengt daran, welcher zuletzt gespeichert wurde.</li>
  * </ul>
  *
  * Der Melder ist Beiwerk und darum `aria-hidden`: Die Art steht in derselben Zeile als Wort da,
@@ -55,6 +63,13 @@ export interface HistorieProps {
   readonly vorgangId: number;
   /** Die Eintraege in der Reihenfolge der Schnittstelle: der juengste zuerst. */
   readonly eintraege: readonly Eintrag[];
+  /**
+   * Ruft den Aufrufer zum Neuladen auf, sobald ein Eintrag geaendert wurde (Kriterium 19).
+   *
+   * Die Historie schreibt ihre eigene Liste nicht fort: Den Vermerk „geaendert" und die neue
+   * Einordnung eines zurueckdatierten Eintrags vergibt der Server.
+   */
+  readonly geaendert: () => void;
 }
 
 /**
@@ -163,7 +178,45 @@ function Text({ text }: { readonly text: string | null }) {
 }
 
 /** Eine Zeile der Historie (Vorlage `.anlauf` CSS Z. 1046–1058). */
-function Zeile({ vorgangId, eintrag }: { readonly vorgangId: number; readonly eintrag: Eintrag }) {
+function Zeile({
+  vorgangId,
+  eintrag,
+  offen,
+  oeffne,
+  schliesse,
+  gespeichert,
+}: {
+  readonly vorgangId: number;
+  readonly eintrag: Eintrag;
+  /** Steht diese Zeile im Aendern? Die Antwort haelt {@link Historie} fuer alle Zeilen. */
+  readonly offen: boolean;
+  readonly oeffne: () => void;
+  readonly schliesse: () => void;
+  readonly gespeichert: () => void;
+}) {
+  const taste = useRef<HTMLButtonElement>(null);
+  /**
+   * Merkt sich, dass der Fokus nach dem Schliessen zurueck auf die Taste gehoert.
+   *
+   * Nicht jedes Schliessen ist ein Abbrechen: Die Zeile geht auch zu, wenn der Benutzer eine
+   * andere Zeile aufmacht. Dort haette ein Sprung auf diese Taste den Fokus aus der Maske
+   * gerissen, in die er gerade gesetzt wurde.
+   */
+  const zurueckZurTaste = useRef(false);
+
+  useEffect(() => {
+    if (offen || !zurueckZurTaste.current) {
+      return;
+    }
+    zurueckZurTaste.current = false;
+    taste.current?.focus();
+  }, [offen]);
+
+  const abbrechen = () => {
+    zurueckZurTaste.current = true;
+    schliesse();
+  };
+
   return (
     <Box
       component="li"
@@ -235,8 +288,36 @@ function Zeile({ vorgangId, eintrag }: { readonly vorgangId: number; readonly ei
           </Typography>
           <Datei vorgangId={vorgangId} eintrag={eintrag} />
           <Groesse bytes={eintrag.dateiGroesse} />
+          {offen ? null : (
+            // Der Name nennt den Eintrag mit: „Aendern" allein waere in jeder Zeile derselbe,
+            // und wer die Tasten mit dem Screenreader durchgeht, hoerte nicht, welche wohin
+            // gehoert (Kriterium 26).
+            <Button
+              ref={taste}
+              onClick={oeffne}
+              aria-label={`Ändern: ${benennung(eintrag)}`}
+              sx={(theme) => ({
+                minWidth: 0,
+                padding: '0 4px',
+                fontSize: 11,
+                fontWeight: 600,
+                textTransform: 'none',
+                color: theme.vars.palette.kupferwarte.kupfer,
+              })}
+            >
+              Ändern
+            </Button>
+          )}
         </Box>
-        <Text text={eintrag.text} />
+        {offen ? (
+          <EintragMaske
+            vorgangId={vorgangId}
+            modus={{ art: 'aendern', eintrag, abgebrochen: abbrechen }}
+            gespeichert={gespeichert}
+          />
+        ) : (
+          <Text text={eintrag.text} />
+        )}
       </Box>
       <Box
         sx={(theme) => ({
@@ -268,7 +349,10 @@ function Zeile({ vorgangId, eintrag }: { readonly vorgangId: number; readonly ei
   );
 }
 
-export default function Historie({ vorgangId, eintraege }: HistorieProps) {
+export default function Historie({ vorgangId, eintraege, geaendert }: HistorieProps) {
+  /** Der Eintrag, dessen Zeile gerade im Aendern steht — `null`, wenn keiner offen ist. */
+  const [imAendern, setzeImAendern] = useState<number | null>(null);
+
   if (eintraege.length === 0) {
     return (
       <Typography
@@ -297,7 +381,22 @@ export default function Historie({ vorgangId, eintraege }: HistorieProps) {
       }}
     >
       {eintraege.map((eintrag) => (
-        <Zeile key={eintrag.id} vorgangId={vorgangId} eintrag={eintrag} />
+        <Zeile
+          key={eintrag.id}
+          vorgangId={vorgangId}
+          eintrag={eintrag}
+          offen={imAendern === eintrag.id}
+          oeffne={() => {
+            setzeImAendern(eintrag.id);
+          }}
+          schliesse={() => {
+            setzeImAendern(null);
+          }}
+          gespeichert={() => {
+            setzeImAendern(null);
+            geaendert();
+          }}
+        />
       ))}
     </Box>
   );

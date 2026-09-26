@@ -38,8 +38,9 @@ import { CARD_RADIUS } from '../theme';
  *   <li><b>Eine stillgelegte Zuordnung bleibt sichtbar und wird angesagt</b> (Kriterien 23, 26):
  *       Das Schild steht als Wort in der Zeile, und der Stand gehoert zum Namen des Weges — wer mit
  *       dem Screenreader durch die Wege springt, hoert ihn ohne die Nachbarschaft.</li>
- *   <li><b>Nach dem Hinzufuegen eines Eintrags wird neu gelesen</b> (E20, Kriterien 13, 14). Die
- *       Maske steht als Platte ueber der Historie und meldet nur, dass etwas dazugekommen ist —
+ *   <li><b>Nach dem Hinzufuegen und nach dem Aendern eines Eintrags wird neu gelesen</b> (E20,
+ *       Kriterien 13, 14, 19). Die Maske steht als Platte ueber der Historie, das Aendern in der
+ *       Zeile selbst; beide melden nur, dass etwas geschrieben wurde —
  *       wie die Liste danach aussieht, sagt der Server, nicht die Oberflaeche. Auch am
  *       abgeschlossenen Vorgang steht sie da: Abgeschlossen heisst „zu Ende gegangen", nicht
  *       „gesperrt" (Kriterium 21), und das Backend nimmt dort weiter Eintraege an.</li>
@@ -304,6 +305,11 @@ export default function VorgangPage() {
    */
   const [runde, setzeRunde] = useState(0);
 
+  /** Der eine Anlass zum Neulesen — die Maske ueber der Historie und die Zeile darin teilen ihn. */
+  const neuLesen = () => {
+    setzeRunde((bisher) => bisher + 1);
+  };
+
   useEffect(() => {
     if (kennung === null) {
       // Eine Kennung, die keine ist, geht gar nicht erst ans Netz (kennung.ts).
@@ -361,13 +367,12 @@ export default function VorgangPage() {
           <Platte titel="Eintrag hinzufügen">
             <EintragMaske
               vorgangId={vorgang.id}
-              hinzugefuegt={() => {
-                setzeRunde((bisher) => bisher + 1);
-              }}
+              modus={{ art: 'hinzufuegen' }}
+              gespeichert={neuLesen}
             />
           </Platte>
           <Platte titel="Historie">
-            <Historie vorgangId={vorgang.id} eintraege={vorgang.historie} />
+            <Historie vorgangId={vorgang.id} eintraege={vorgang.historie} geaendert={neuLesen} />
           </Platte>
         </Box>
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: '16px', minWidth: 0 }}>
