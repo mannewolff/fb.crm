@@ -1,11 +1,8 @@
 import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { Link, MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { AuthProvider } from '../auth/AuthContext';
-import AppShell from '../components/AppShell';
-import { KopfAktionProvider } from '../components/KopfAktion';
 import KopfPfad, { KopfPfadProvider } from '../components/KopfPfad';
 import { fetchNachPfad, json, leer } from '../test/fetchNachPfad';
 import { renderMitTheme } from '../test/render';
@@ -31,8 +28,6 @@ const BEISPIEL = {
 const EINZEL = { id: 8, name: 'Einzel KG', ort: 'Oldenburg', aktiveAnsprechpartner: 1, aktiv: true };
 const RUHEND = { id: 9, name: 'Ruhend AG', ort: null, aktiveAnsprechpartner: 0, aktiv: false };
 
-const KONTO = { id: 1, displayName: 'Manfred Wolff', email: 'info@mwolff.org' };
-
 /** Die Adresse, an der sich ablesen laesst, was in `useSearchParams` gelandet ist. */
 function Adresse() {
   const ort = useLocation();
@@ -56,19 +51,22 @@ function schalter() {
   return screen.getByRole('button', { name: 'auch stillgelegte' });
 }
 
+/** Die Datenzeilen der Tafel — ohne die Kopfzeile mit den Spaltennamen. */
+function zeilen() {
+  return screen.getAllByRole('row').slice(1);
+}
+
 function renderSeite(start = '/firmen') {
   return renderMitTheme(
     <MemoryRouter initialEntries={[start]}>
-      <KopfAktionProvider>
-        <KopfPfadProvider>
-          <Routes>
-            <Route path="/firmen" element={<FirmenPage />} />
-            <Route path="/firmen/neu" element={<p>Maske</p>} />
-            <Route path="/firmen/:id" element={<p>Detailansicht</p>} />
-          </Routes>
-          <Adresse />
-        </KopfPfadProvider>
-      </KopfAktionProvider>
+      <KopfPfadProvider>
+        <Routes>
+          <Route path="/firmen" element={<FirmenPage />} />
+          <Route path="/firmen/neu" element={<p>Maske</p>} />
+          <Route path="/firmen/:id" element={<p>Detailansicht</p>} />
+        </Routes>
+        <Adresse />
+      </KopfPfadProvider>
     </MemoryRouter>,
   );
 }
@@ -77,48 +75,43 @@ function renderSeite(start = '/firmen') {
 function renderMitKopf() {
   return renderMitTheme(
     <MemoryRouter initialEntries={['/firmen']}>
-      <KopfAktionProvider>
-        <KopfPfadProvider>
-          <KopfPfad />
-          <FirmenPage />
-        </KopfPfadProvider>
-      </KopfAktionProvider>
+      <KopfPfadProvider>
+        <KopfPfad />
+        <FirmenPage />
+      </KopfPfadProvider>
     </MemoryRouter>,
   );
-}
-
-/** Die Fensterbreite, gegen die `matchMedia` auswertet — nur der Rahmen fragt danach. */
-function fensterbreite(breite: number) {
-  Object.defineProperty(window, 'matchMedia', {
-    configurable: true,
-    value: (abfrage: string) => ({
-      matches: breite >= Number.parseInt(abfrage.replace(/\D+/g, ' ').trim(), 10),
-      media: abfrage,
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-      addListener: vi.fn(),
-      removeListener: vi.fn(),
-    }),
-  });
 }
 
 afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe('FirmenPage — die Liste', () => {
+describe('FirmenPage — die Tafel', () => {
   it('zeigt die Zeilen in der Reihenfolge der Antwort, mit Ort und Zahl der Ansprechpartner', async () => {
     fetchNachPfad({ [weg('', false)]: json(200, { firmen: [BEISPIEL, EINZEL], gesamt: 2 }) });
 
     renderSeite();
 
-    const zeilen = await screen.findAllByRole('listitem');
-    expect(zeilen).toHaveLength(2);
-    expect(within(zeilen[0]).getByText('Beispiel GmbH')).toBeInTheDocument();
-    expect(within(zeilen[0]).getByText('Bremen')).toBeInTheDocument();
-    expect(within(zeilen[0]).getByText('2 Ansprechpartner')).toBeInTheDocument();
-    expect(within(zeilen[1]).getByText('Einzel KG')).toBeInTheDocument();
-    expect(within(zeilen[1]).getByText('1 Ansprechpartner')).toBeInTheDocument();
+    await screen.findByRole('table', { name: 'Firmen' });
+    const reihen = zeilen();
+    expect(reihen).toHaveLength(2);
+    expect(within(reihen[0]).getByText('Beispiel GmbH')).toBeInTheDocument();
+    expect(within(reihen[0]).getByText('Bremen')).toBeInTheDocument();
+    expect(within(reihen[0]).getByText('2')).toBeInTheDocument();
+    expect(within(reihen[1]).getByText('Einzel KG')).toBeInTheDocument();
+    expect(within(reihen[1]).getByText('1')).toBeInTheDocument();
+  });
+
+  it('nennt jede Spalte in der Kopfzeile', async () => {
+    fetchNachPfad({ [weg('', false)]: json(200, { firmen: [BEISPIEL], gesamt: 1 }) });
+
+    renderSeite();
+
+    await screen.findByRole('table', { name: 'Firmen' });
+    expect(
+      screen.getAllByRole('columnheader').map((spalte) => spalte.textContent),
+    ).toEqual(['Firma', 'Ort', 'Ansprechpartner']);
   });
 
   it('fuehrt jede Zeile als Link auf die Detailansicht', async () => {
@@ -126,21 +119,22 @@ describe('FirmenPage — die Liste', () => {
 
     renderSeite();
 
-    expect(await screen.findByRole('link', { name: /Beispiel GmbH/ })).toHaveAttribute(
+    expect(await screen.findByRole('link', { name: 'Beispiel GmbH' })).toHaveAttribute(
       'href',
       '/firmen/7',
     );
   });
 
-  it('nennt den Stilllegungsstand als Text, nicht nur als Farbe', async () => {
+  it('nennt den Stilllegungsstand als Chip mit Wort, nicht nur als Farbe', async () => {
     fetchNachPfad({ [weg('', true)]: json(200, { firmen: [BEISPIEL, RUHEND], gesamt: 2 }) });
 
     renderSeite('/firmen?auchStillgelegte=true');
 
-    const zeilen = await screen.findAllByRole('listitem');
-    expect(within(zeilen[1]).getByText('stillgelegt')).toBeInTheDocument();
-    expect(within(zeilen[0]).queryByText('stillgelegt')).not.toBeInTheDocument();
-    expect(within(zeilen[1]).getByText('0 Ansprechpartner')).toBeInTheDocument();
+    await screen.findByRole('table', { name: 'Firmen' });
+    const reihen = zeilen();
+    expect(within(reihen[1]).getByText('Stillgelegt')).toBeInTheDocument();
+    expect(within(reihen[0]).queryByTestId('chip')).not.toBeInTheDocument();
+    expect(within(reihen[1]).getByText('0')).toBeInTheDocument();
   });
 
   it('laesst den Ort weg, wo keiner hinterlegt ist — ohne Platzhalter', async () => {
@@ -148,9 +142,25 @@ describe('FirmenPage — die Liste', () => {
 
     renderSeite('/firmen?auchStillgelegte=true');
 
-    const zeile = await screen.findByRole('listitem');
-    expect(within(zeile).getByText('Ruhend AG')).toBeInTheDocument();
-    expect(within(zeile).queryByText('—')).not.toBeInTheDocument();
+    await screen.findByRole('table', { name: 'Firmen' });
+    const reihe = zeilen()[0];
+    expect(within(reihe).getByText('Ruhend AG')).toBeInTheDocument();
+    expect(within(reihe).queryByText('—')).not.toBeInTheDocument();
+  });
+});
+
+describe('FirmenPage — die Hauptaktion im Kartenkopf', () => {
+  it('traegt die Kupfertaste „Neue Firma" im Kopf der Karte, nicht im Kopf des Rahmens', () => {
+    fetchNachPfad({ [weg('', false)]: json(200, { firmen: [BEISPIEL], gesamt: 1 }) });
+
+    renderSeite();
+
+    const kopf = within(screen.getByTestId('karte-kopf'));
+    expect(kopf.getByRole('heading', { name: 'Firmen' })).toBeInTheDocument();
+    expect(kopf.getByRole('link', { name: 'Neue Firma' })).toHaveAttribute('href', '/firmen/neu');
+    // Filter und Schalter stehen links daneben, in derselben Leiste (Plan E5).
+    expect(kopf.getByRole('searchbox', { name: 'Suche' })).toBeInTheDocument();
+    expect(kopf.getByRole('button', { name: 'auch stillgelegte' })).toBeInTheDocument();
   });
 });
 
@@ -163,7 +173,7 @@ describe('FirmenPage — Suche', () => {
     });
 
     renderSeite();
-    await screen.findByRole('listitem');
+    await screen.findByRole('table', { name: 'Firmen' });
     await nutzer.type(suchfeld(), 'bei');
 
     expect(adresse()).toBe('/firmen');
@@ -186,7 +196,7 @@ describe('FirmenPage — Suche', () => {
     });
 
     renderSeite('/firmen?suche=bei');
-    await screen.findByRole('listitem');
+    await screen.findByRole('table', { name: 'Firmen' });
     await nutzer.clear(suchfeld());
 
     await waitFor(() => {
@@ -249,7 +259,7 @@ describe('FirmenPage — Schalter', () => {
     });
 
     renderSeite();
-    await screen.findByRole('listitem');
+    await screen.findByRole('table', { name: 'Firmen' });
     expect(schalter()).toHaveAttribute('aria-pressed', 'false');
 
     await nutzer.click(schalter());
@@ -274,7 +284,7 @@ describe('FirmenPage — Schalter', () => {
 
     renderSeite('/firmen?suche=bei&auchStillgelegte=true');
 
-    await screen.findByRole('listitem');
+    await screen.findByRole('table', { name: 'Firmen' });
     expect(suchfeld()).toHaveValue('bei');
     expect(schalter()).toHaveAttribute('aria-pressed', 'true');
     expect(fetchMock).toHaveBeenCalledWith(
@@ -295,6 +305,7 @@ describe('FirmenPage — leere Liste und Ausfall', () => {
       'href',
       '/firmen/neu',
     );
+    expect(screen.queryByRole('table')).not.toBeInTheDocument();
   });
 
   it('sagt bei einem Suchtext ohne Treffer, dass nichts gefunden wurde', async () => {
@@ -322,44 +333,19 @@ describe('FirmenPage — leere Liste und Ausfall', () => {
     renderSeite();
 
     expect(await screen.findByRole('alert')).toHaveTextContent('nicht zu erreichen');
-    expect(screen.queryByRole('listitem')).not.toBeInTheDocument();
+    expect(screen.queryByRole('table')).not.toBeInTheDocument();
+  });
+
+  it('sagt es, solange die Firmen noch geladen werden', () => {
+    fetchNachPfad({ [weg('', false)]: () => new Promise<Response>(() => {}) });
+
+    renderSeite();
+
+    expect(screen.getByText('Firmen werden geladen …')).toBeInTheDocument();
   });
 });
 
-describe('FirmenPage — Kopfaktion und Tastatur', () => {
-  it('legt „Neue Firma" in den Kopf und raeumt den Platz beim Verlassen', async () => {
-    const nutzer = userEvent.setup();
-    fensterbreite(1440);
-    fetchNachPfad({
-      'GET /api/auth/me': json(200, KONTO),
-      'GET /api/instance': json(200, { version: '0.1.3' }),
-      [weg('', false)]: json(200, { firmen: [BEISPIEL], gesamt: 1 }),
-    });
-
-    renderMitTheme(
-      <MemoryRouter initialEntries={['/firmen']}>
-        <AuthProvider>
-          <AppShell>
-            <Routes>
-              <Route path="/firmen" element={<FirmenPage />} />
-              <Route path="/woanders" element={<p>Andere Seite</p>} />
-            </Routes>
-            <Link to="/woanders">Weiter</Link>
-          </AppShell>
-        </AuthProvider>
-      </MemoryRouter>,
-    );
-
-    const kopf = within(screen.getByRole('banner'));
-    expect(kopf.getByRole('link', { name: 'Neue Firma' })).toHaveAttribute('href', '/firmen/neu');
-    await screen.findByRole('listitem');
-
-    await nutzer.click(screen.getByRole('link', { name: 'Weiter' }));
-
-    expect(screen.getByText('Andere Seite')).toBeInTheDocument();
-    expect(screen.getByTestId('kopf-aktion')).toBeEmptyDOMElement();
-  });
-
+describe('FirmenPage — Pfad und Tastatur', () => {
   it('meldet „Firmen" als Pfad an den Kopf (E6)', async () => {
     fetchNachPfad({ [weg('', false)]: json(200, { firmen: [], gesamt: 0 }) });
 
@@ -370,20 +356,23 @@ describe('FirmenPage — Kopfaktion und Tastatur', () => {
     expect(within(pfad).queryAllByRole('link')).toHaveLength(0);
   });
 
-  it('fuehrt mit dem Tabulator ueber Suchfeld, Schalter und jede Zeile', async () => {
+  it('fuehrt mit dem Tabulator ueber Suchfeld, Schalter, Hauptaktion und jede Zeile', async () => {
     const nutzer = userEvent.setup();
     fetchNachPfad({ [weg('', false)]: json(200, { firmen: [BEISPIEL, EINZEL], gesamt: 2 }) });
 
     renderSeite();
-    await screen.findAllByRole('listitem');
+    await screen.findByRole('table', { name: 'Firmen' });
 
-    await nutzer.tab();
-    expect(suchfeld()).toHaveFocus();
-    await nutzer.tab();
-    expect(schalter()).toHaveFocus();
-    await nutzer.tab();
-    expect(screen.getByRole('link', { name: /Beispiel GmbH/ })).toHaveFocus();
-    await nutzer.tab();
-    expect(screen.getByRole('link', { name: /Einzel KG/ })).toHaveFocus();
+    const reihe = [
+      suchfeld(),
+      schalter(),
+      screen.getByRole('link', { name: 'Neue Firma' }),
+      screen.getByRole('link', { name: 'Beispiel GmbH' }),
+      screen.getByRole('link', { name: 'Einzel KG' }),
+    ];
+    for (const element of reihe) {
+      await nutzer.tab();
+      expect(element).toHaveFocus();
+    }
   });
 });

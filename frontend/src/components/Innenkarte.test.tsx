@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 
 import { renderMitTheme } from '../test/render';
 import Innenkarte, { HinzufuegenKachel, InnenkartenRaster } from './Innenkarte';
+import ZustandsChip from './ZustandsChip';
 
 describe('Innenkarte', () => {
   it('zeigt Name, Unterzeile und Kontaktwege', () => {
@@ -52,8 +53,30 @@ describe('Innenkarte', () => {
 
     expect(screen.getByText('Konstanze Wilschewski')).toBeInTheDocument();
     expect(screen.queryByTestId('innenkarte-unterzeile')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('innenkarte-zustand')).not.toBeInTheDocument();
     expect(screen.queryByTestId('innenkarte-kontakt')).not.toBeInTheDocument();
     expect(screen.queryByRole('button')).not.toBeInTheDocument();
+  });
+
+  it('stellt den Zustand als Chip unter den Namen', () => {
+    renderMitTheme(
+      <Innenkarte
+        name="Konstanze Wilschewski"
+        unterzeile="Ansprechpartnerin"
+        zustand={<ZustandsChip wort="Stillgelegt" toenung="rose" />}
+        matt
+      />,
+    );
+
+    // Der Zustand steht als Wort im Dokument — nicht nur als matte Schrift am Namen
+    // (CLAUDE-design.md, „Zustandsformen").
+    const zustand = screen.getByTestId('innenkarte-zustand');
+    expect(within(zustand).getByText('Stillgelegt')).toBeInTheDocument();
+    // Unter dem Namen und ueber der Unterzeile — die Reihenfolge im DOM ist die gelesene.
+    const teile = screen
+      .getAllByTestId(/^innenkarte-/)
+      .map((element) => element.dataset.testid);
+    expect(teile).toEqual(['innenkarte-zustand', 'innenkarte-unterzeile']);
   });
 });
 

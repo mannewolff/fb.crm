@@ -160,12 +160,16 @@ describe('FirmaMaske — Anlegen', () => {
     expect(knopf).toBeDisabled();
   });
 
-  it('fuehrt „Abbrechen" zurueck auf die Uebersicht', async () => {
+  it('fuehrt „Abbrechen" als weiche Taste zurueck auf die Uebersicht', async () => {
     const nutzer = userEvent.setup();
     fetchNachPfad({});
 
     renderMaske('/firmen/neu');
-    await nutzer.click(screen.getByRole('link', { name: 'Abbrechen' }));
+    const abbrechen = screen.getByRole('link', { name: 'Abbrechen' });
+    // Weiche Taste neben der Kupfertaste, kein Textlink (CLAUDE-design.md, „Tasten").
+    expect(abbrechen).toHaveClass('MuiButton-root');
+
+    await nutzer.click(abbrechen);
 
     expect(adresse()).toBe('/firmen');
   });

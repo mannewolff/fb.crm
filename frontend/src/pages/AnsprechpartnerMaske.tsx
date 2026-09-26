@@ -1,18 +1,18 @@
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
-import Link from '@mui/material/Link';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { useEffect, useState } from 'react';
 import type { Dispatch, FormEvent, SetStateAction } from 'react';
-import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 
 import { ansprechpartnerAendern, ansprechpartnerAnlegen, firmaLesen } from '../api/firmen';
 import type { FieldErrors } from '../api/client';
 import { useKopfPfad } from '../components/KopfPfad';
 import type { PfadVerweis } from '../components/KopfPfad';
-import KupferTaste from '../components/KupferTaste';
 import Karte from '../components/Karte';
+import KupferTaste from '../components/KupferTaste';
+import WeicheTaste from '../components/WeicheTaste';
 import { feldMeldungen, nichtGefunden } from '../lib/apifehler';
 import { istEmailForm } from '../lib/emailform';
 import { meldungAm } from '../lib/feldmeldung';
@@ -252,7 +252,7 @@ export default function AnsprechpartnerMaske() {
             onSubmit={(ereignis: FormEvent<HTMLFormElement>) => {
               void absenden(ereignis, stand.firmaId);
             }}
-            sx={{ display: 'flex', flexDirection: 'column', gap: 2, padding: '18px 16px' }}
+            sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}
           >
             {fehler === null ? null : <Alert severity="error">{fehler}</Alert>}
             <Eingabe
@@ -301,33 +301,19 @@ export default function AnsprechpartnerMaske() {
               meldung={meldung('telefonMobil')}
               art="tel"
             />
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, flexWrap: 'wrap' }}>
               <KupferTaste disabled={laeuft}>{aendern ? 'Speichern' : 'Anlegen'}</KupferTaste>
-              <Link
-                component={RouterLink}
-                to={`/firmen/${String(stand.firmaId)}`}
-                underline="hover"
-                sx={{ fontSize: 12.5 }}
-              >
-                Abbrechen
-              </Link>
+              <WeicheTaste to={`/firmen/${String(stand.firmaId)}`}>Abbrechen</WeicheTaste>
             </Box>
           </Box>
+        ) : stand.art === 'laedt' ? (
+          <Typography
+            sx={(theme) => ({ fontSize: 12.5, color: theme.vars.palette.kupferwolke.textSchwach })}
+          >
+            Der Ansprechpartner wird geladen …
+          </Typography>
         ) : (
-          <Box sx={{ padding: '18px 16px' }}>
-            {stand.art === 'laedt' ? (
-              <Typography
-                sx={(theme) => ({
-                  fontSize: 12.5,
-                  color: theme.vars.palette.kupferwolke.textSchwach,
-                })}
-              >
-                Der Ansprechpartner wird geladen …
-              </Typography>
-            ) : (
-              <Alert severity="error">{stand.meldung}</Alert>
-            )}
-          </Box>
+          <Alert severity="error">{stand.meldung}</Alert>
         )}
       </Karte>
     </Box>

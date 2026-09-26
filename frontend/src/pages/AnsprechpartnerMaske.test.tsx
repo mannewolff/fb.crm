@@ -264,13 +264,17 @@ describe('AnsprechpartnerMaske — Anlegen', () => {
     expect(knopf).toBeDisabled();
   });
 
-  it('fuehrt „Abbrechen" zurueck auf die Detailansicht', async () => {
+  it('fuehrt „Abbrechen" als weiche Taste zurueck auf die Detailansicht', async () => {
     const nutzer = userEvent.setup();
     fetchNachPfad({ 'GET /api/firmen/7': json(200, FIRMA) });
 
     renderMaske('/firmen/7/ansprechpartner/neu');
     await screen.findByRole('heading', { name: 'Neuer Ansprechpartner' });
-    await nutzer.click(screen.getByRole('link', { name: 'Abbrechen' }));
+    const abbrechen = screen.getByRole('link', { name: 'Abbrechen' });
+    // Weiche Taste neben der Kupfertaste, kein Textlink (CLAUDE-design.md, „Tasten").
+    expect(abbrechen).toHaveClass('MuiButton-root');
+
+    await nutzer.click(abbrechen);
 
     expect(adresse()).toBe('/firmen/7');
   });

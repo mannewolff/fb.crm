@@ -34,6 +34,20 @@ const MAL = 48;
 export interface InnenkarteProps {
   /** Der Name des Objekts — und die Quelle des Kuerzels im Mal. */
   readonly name: string;
+  /**
+   * Der Zustand des Objekts als Chip unter dem Namen — etwa „Stillgelegt".
+   *
+   * Ein Knoten und kein Wort mit Toenung: Welcher Zustand welche Toenung traegt, entscheidet die
+   * Ansicht mit ihrem {@link ZustandsChip}; die Innenkarte gibt ihm nur seinen Platz.
+   */
+  readonly zustand?: ReactNode;
+  /**
+   * Nimmt dem Namen den Kontrast — fuer ein Objekt, das nicht mehr zur Auswahl steht.
+   *
+   * Die matte Schrift steht **neben** dem Chip und nie an seiner Stelle: Farbe allein traegt keine
+   * Aussage (CLAUDE-design.md, „Zustandsformen").
+   */
+  readonly matt?: boolean;
   /** Die Zeile unter dem Namen, etwa die Rolle. */
   readonly unterzeile?: string;
   /** Die Toenung des Mals. Vorgabe Flieder — die neutrale Kategorie fuer Personen. */
@@ -46,6 +60,8 @@ export interface InnenkarteProps {
 
 export default function Innenkarte({
   name,
+  zustand,
+  matt = false,
   unterzeile,
   toenung = 'flieder',
   children,
@@ -75,9 +91,18 @@ export default function Innenkarte({
     >
       <Mal name={name} groesse={MAL} toenung={toenung} />
       <Box sx={{ minWidth: 0 }}>
-        <Typography variant="h4" component="div">
+        <Typography
+          variant="h4"
+          component="div"
+          sx={(theme) => (matt ? { color: theme.vars.palette.kupferwolke.textMatt } : {})}
+        >
           {name}
         </Typography>
+        {zustand === undefined ? null : (
+          <Box data-testid="innenkarte-zustand" sx={{ marginTop: '4px' }}>
+            {zustand}
+          </Box>
+        )}
         {unterzeile === undefined ? null : (
           <Typography
             data-testid="innenkarte-unterzeile"

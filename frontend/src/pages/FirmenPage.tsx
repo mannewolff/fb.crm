@@ -4,23 +4,27 @@ import Link from '@mui/material/Link';
 import TextField from '@mui/material/TextField';
 import ToggleButton from '@mui/material/ToggleButton';
 import Typography from '@mui/material/Typography';
+import { IconArchive, IconPlus } from '@tabler/icons-react';
 import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Link as RouterLink, useSearchParams } from 'react-router-dom';
 
 import { firmenUebersicht } from '../api/firmen';
 import type { FirmaZeile, FirmenUebersicht } from '../api/firmen';
-import KopfAktion from '../components/KopfAktion';
+import Karte from '../components/Karte';
 import { useKopfPfad } from '../components/KopfPfad';
 import type { PfadVerweis } from '../components/KopfPfad';
 import KupferTaste from '../components/KupferTaste';
-import Karte from '../components/Karte';
-import { RADIUS_MITTEL, RADIUS_RUND } from '../theme';
+import Tafel from '../components/Tafel';
+import ZustandsChip from '../components/ZustandsChip';
+import { RADIUS_RUND, ZAHLEN_KLASSE } from '../theme';
 
 /**
- * Die Uebersicht der Firmen (Kriterien 2, 3, 6 und 13).
+ * Die Uebersicht der Firmen (Kriterien 2, 3, 6 und 13) in der Kupferwolke.
  *
- * Drei Zusagen tragen diese Ansicht, und jede hat einen Grund:
+ * Die Zeilen stehen in einer {@link Tafel} innerhalb einer {@link Karte}; im Kartenkopf steht die
+ * Hauptaktion als Kupfertaste, davor Filter und Schalter (Plan E5, CLAUDE-design.md, „Tasten":
+ * „rechts im Kartenkopf der Liste"). Vier Zusagen tragen diese Ansicht, und jede hat einen Grund:
  *
  * <ul>
  *   <li><b>Der Zustand steht in der Adresse</b> — Suchtext und Schalter sind ueber
@@ -33,14 +37,9 @@ import { RADIUS_MITTEL, RADIUS_RUND } from '../theme';
  *       eintrifft, wird verworfen statt angezeigt (CLAUDE-react.md, Hooks).</li>
  *   <li><b>Filtern und Sortieren macht der Server</b> (E5) — hier wird nichts nachsortiert. Die
  *       Zeilen stehen in der Reihenfolge der Antwort.</li>
+ *   <li><b>Der Stilllegungsstand steht als Wort da</b> — als Chip in der Zeile, nicht als zweite
+ *       Farbe (CLAUDE-design.md, „Zustandsformen").</li>
  * </ul>
- *
- * Die Vorlage gibt die Gestalt vor: Werkzeugleiste (`werkzeugleiste` Z. 799–806) mit dem Suchfeld
- * als Nut (`.suche` Z. 300–311) und dem Schalter als gedrueckter Filter (`.filter` Z. 561–576),
- * darunter die Karte mit den Zeilen (`.vorgang` Z. 580–605). Eine Ueberschrift traegt die Ansicht
- * nicht: Die Buehne der Vorlage beginnt mit der Werkzeugleiste, und eine Karte unter einer eigenen
- * Werkzeugleiste bleibt ohne Kopf (Issue #45). Die Liste ist stattdessen als benannte Liste
- * ausgezeichnet, damit sie mit dem Screenreader auffindbar bleibt.
  */
 
 /** Wie lange der Suchtext ruhen muss, bevor er in Adresse und Aufruf geht. */
@@ -54,6 +53,9 @@ const PARAM_STILLGELEGTE = 'auchStillgelegte';
 
 /** Wenn die Schnittstelle nicht antwortet — ohne technische Einzelheiten. */
 const AUSFALL = 'Die Firmen sind gerade nicht zu erreichen. Bitte später erneut versuchen.';
+
+/** Die Spalten der Tafel, in der Reihenfolge der Zellen. */
+const SPALTEN: readonly string[] = ['Firma', 'Ort', 'Ansprechpartner'];
 
 /** Was die Ansicht gerade weiss. */
 type Stand =
@@ -92,11 +94,6 @@ function mitParameter(alt: URLSearchParams, name: string, wert: string | null): 
   return neu;
 }
 
-/** „1 Ansprechpartner" statt „1 Ansprechpartners" — die Zahl steht immer davor. */
-function ansprechpartnerText(anzahl: number): string {
-  return anzahl === 1 ? '1 Ansprechpartner' : `${anzahl} Ansprechpartner`;
-}
-
 /**
  * Der Hinweis zur leeren Liste.
  *
@@ -121,92 +118,51 @@ function hinweisZu(suche: string, gesamt: number): ReactNode {
   return <>Alle Firmen sind stillgelegt. Der Schalter „auch stillgelegte“ zeigt sie an.</>;
 }
 
-/** Eine Zeile der Uebersicht: ein Link auf die Detailansicht (Vorlage `.vorgang` Z. 580–605). */
+/**
+ * Eine Zeile der Tafel.
+ *
+ * Der **Name** traegt den Weg zum Objekt: Eine Tabellenzeile kann kein Link sein, und ein Weg
+ * gehoert in ein `a` mit `href`. Der Chip steht daneben, ausserhalb des Weges — er ist kein Teil
+ * seines Ziels. Fehlt der Ort, bleibt die Zelle leer; ein „—" waere ein Wort ohne Aussage.
+ */
 function Zeile({ firma }: { readonly firma: FirmaZeile }) {
   return (
-    <Box component="li">
-      <Box
-        component={RouterLink}
-        to={`/firmen/${firma.id}`}
-        sx={(theme) => ({
-          display: 'flex',
-          alignItems: 'center',
-          gap: 1.5,
-          padding: '11px 16px',
-          textDecoration: 'none',
-          color: 'inherit',
-          borderBottom: `1px solid ${theme.vars.palette.kupferwolke.linie}`,
-          transition: 'background .12s ease',
-          '&:hover': { background: theme.vars.palette.kupferwolke.flaecheWeich },
-          'li:last-of-type > &': { borderBottom: 0 },
-        })}
-      >
-        <Box sx={{ minWidth: 0, flex: 1 }}>
-          <Typography
-            sx={{
-              fontSize: 13.5,
-              fontWeight: 500,
-              whiteSpace: 'nowrap',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-            }}
-          >
-            {firma.name}
-          </Typography>
+    <Box component="tr">
+      <Box component="td">
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, flexWrap: 'wrap' }}>
           <Box
-            sx={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 1,
-              marginTop: '3px',
-              flexWrap: 'wrap',
-            }}
-          >
-            {firma.ort === null ? null : (
-              <Typography
-                sx={(theme) => ({ fontSize: 11, color: theme.vars.palette.kupferwolke.textMatt })}
-              >
-                {firma.ort}
-              </Typography>
-            )}
-            <Typography
-              sx={(theme) => ({ fontSize: 11, color: theme.vars.palette.kupferwolke.textMatt })}
-            >
-              {ansprechpartnerText(firma.aktiveAnsprechpartner)}
-            </Typography>
-          </Box>
-        </Box>
-        {firma.aktiv ? null : (
-          // Schild der Vorlage (Z. 780–790): der Stand steht als Wort da, nicht nur als Farbe
-          // (E15) — Farbe allein traegt keine Information (CLAUDE-react.md, Accessibility).
-          <Box
-            component="span"
+            component={RouterLink}
+            to={`/firmen/${String(firma.id)}`}
             sx={(theme) => ({
-              flex: 'none',
-              fontSize: 10,
               fontWeight: 500,
-              padding: '1px 6px',
-              borderRadius: '5px',
-              color: theme.vars.palette.kupferwolke.melder.grau,
-              border: '1px solid currentColor',
-              background: 'color-mix(in srgb, currentColor 13%, transparent)',
+              color: 'inherit',
+              textDecoration: 'none',
+              '&:hover': { color: theme.vars.palette.kupferwolke.kupfer },
             })}
           >
-            stillgelegt
+            {firma.name}
           </Box>
-        )}
+          {firma.aktiv ? null : (
+            <ZustandsChip wort="Stillgelegt" toenung="rose" symbol={<IconArchive size={13} />} />
+          )}
+        </Box>
+      </Box>
+      <Box component="td" sx={(theme) => ({ color: theme.vars.palette.kupferwolke.textMatt })}>
+        {firma.ort}
+      </Box>
+      <Box component="td" className={ZAHLEN_KLASSE}>
+        {firma.aktiveAnsprechpartner}
       </Box>
     </Box>
   );
 }
 
-/** Was in der Karte steht: Ladehinweis, Meldung, Hinweis zur Leere oder die Liste. */
+/** Was in der Karte steht: Ladehinweis, Meldung, Hinweis zur Leere oder die Tafel. */
 function inhaltZu(stand: Stand, suche: string): ReactNode {
   if (stand.art === 'laedt') {
     return (
       <Typography
         sx={(theme) => ({
-          padding: '18px 16px',
           fontSize: 12.5,
           color: theme.vars.palette.kupferwolke.textSchwach,
         })}
@@ -216,18 +172,13 @@ function inhaltZu(stand: Stand, suche: string): ReactNode {
     );
   }
   if (stand.art === 'fehler') {
-    return (
-      <Alert severity="error" sx={{ borderRadius: 0 }}>
-        {AUSFALL}
-      </Alert>
-    );
+    return <Alert severity="error">{AUSFALL}</Alert>;
   }
   if (stand.uebersicht.firmen.length === 0) {
     return (
       <Typography
         role="status"
         sx={(theme) => ({
-          padding: '18px 16px',
           fontSize: 12.5,
           color: theme.vars.palette.kupferwolke.textMatt,
         })}
@@ -237,15 +188,11 @@ function inhaltZu(stand: Stand, suche: string): ReactNode {
     );
   }
   return (
-    <Box
-      component="ul"
-      aria-label="Firmen"
-      sx={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column' }}
-    >
+    <Tafel beschriftung="Firmen" spalten={SPALTEN}>
       {stand.uebersicht.firmen.map((firma) => (
         <Zeile key={firma.id} firma={firma} />
       ))}
-    </Box>
+    </Tafel>
   );
 }
 
@@ -300,63 +247,69 @@ export default function FirmenPage() {
         gap: '22px',
       }}
     >
-      <KopfAktion>
-        <KupferTaste to="/firmen/neu">Neue Firma</KupferTaste>
-      </KopfAktion>
-      <Box
-        sx={(theme) => ({
-          display: 'flex',
-          alignItems: 'center',
-          gap: '10px',
-          flexWrap: 'wrap',
-          padding: '9px 11px',
-          borderRadius: `${RADIUS_MITTEL}px`,
-          background: theme.vars.palette.kupferwolke.flaeche,
-          boxShadow: theme.vars.palette.kupferwolke.schatten.karte,
-        })}
+      <Karte
+        titel="Firmen"
+        werkzeug={
+          <>
+            <TextField
+              type="search"
+              size="small"
+              value={eingabe}
+              onChange={(ereignis) => {
+                setzeEingabe(ereignis.target.value);
+              }}
+              placeholder="Firmen durchsuchen …"
+              // Keine Beschriftung ueber dem Feld: In der Werkzeugleiste traegt der Wert die
+              // Benennung, den zugaenglichen Namen behaelt das Feld (CLAUDE-design.md,
+              // „Zustandsformen"). Die Pille steht in einer Linie mit Schalter und Taste.
+              slotProps={{ htmlInput: { 'aria-label': 'Suche' } }}
+              sx={(theme) => ({
+                minWidth: 220,
+                '& .MuiOutlinedInput-root': {
+                  fontSize: 12.5,
+                  borderRadius: `${RADIUS_RUND}px`,
+                  background: theme.vars.palette.kupferwolke.flaecheWeich,
+                },
+              })}
+            />
+            <ToggleButton
+              value={PARAM_STILLGELEGTE}
+              selected={auchStillgelegte}
+              onChange={() => {
+                // Geschoben statt ersetzt: Der Schalter ist eine Handlung, die „zurueck"
+                // zuruecknehmen koennen soll.
+                setzeParameter((alt) =>
+                  mitParameter(alt, PARAM_STILLGELEGTE, auchStillgelegte ? null : 'true'),
+                );
+              }}
+              sx={(theme) => ({
+                fontSize: 11.5,
+                fontWeight: 500,
+                textTransform: 'none',
+                padding: '4px 12px',
+                borderRadius: `${RADIUS_RUND}px`,
+                color: theme.vars.palette.kupferwolke.textMatt,
+                background: theme.vars.palette.kupferwolke.flaecheWeich,
+                border: 0,
+                boxShadow: `inset 0 0 0 1px ${theme.vars.palette.kupferwolke.linie}`,
+                // Gewaehlt: die Toenung Pfirsich, nicht bloss eine zweite Tiefe — Form und Farbe
+                // sagen dasselbe (CLAUDE-design.md, „Zustandsformen").
+                '&.Mui-selected': {
+                  color: theme.vars.palette.kupferwolke.toenung.pfirsich.schrift,
+                  background: theme.vars.palette.kupferwolke.toenung.pfirsich.flaeche,
+                },
+              })}
+            >
+              auch stillgelegte
+            </ToggleButton>
+            <KupferTaste to="/firmen/neu" symbol={<IconPlus size={16} stroke={1.8} />}>
+              Neue Firma
+            </KupferTaste>
+          </>
+        }
       >
-        <TextField
-          label="Suche"
-          type="search"
-          size="small"
-          value={eingabe}
-          onChange={(ereignis) => {
-            setzeEingabe(ereignis.target.value);
-          }}
-          sx={{ minWidth: 190, '& .MuiOutlinedInput-root': { fontSize: 12.5 } }}
-        />
-        <ToggleButton
-          value={PARAM_STILLGELEGTE}
-          selected={auchStillgelegte}
-          onChange={() => {
-            // Geschoben statt ersetzt: Der Schalter ist eine Handlung, die „zurueck"
-            // zuruecknehmen koennen soll.
-            setzeParameter((alt) =>
-              mitParameter(alt, PARAM_STILLGELEGTE, auchStillgelegte ? null : 'true'),
-            );
-          }}
-          sx={(theme) => ({
-            fontSize: 11.5,
-            fontWeight: 500,
-            textTransform: 'none',
-            padding: '4px 12px',
-            borderRadius: `${RADIUS_RUND}px`,
-            color: theme.vars.palette.kupferwolke.textMatt,
-            background: theme.vars.palette.kupferwolke.flaecheWeich,
-            border: 0,
-            boxShadow: `inset 0 0 0 1px ${theme.vars.palette.kupferwolke.linie}`,
-            // Gewaehlt: die Toenung Pfirsich, nicht bloss eine zweite Tiefe — Form und Farbe
-            // sagen dasselbe (CLAUDE-design.md, „Zustandsformen").
-            '&.Mui-selected': {
-              color: theme.vars.palette.kupferwolke.toenung.pfirsich.schrift,
-              background: theme.vars.palette.kupferwolke.toenung.pfirsich.flaeche,
-            },
-          })}
-        >
-          auch stillgelegte
-        </ToggleButton>
-      </Box>
-      <Karte>{inhaltZu(stand, suche)}</Karte>
+        {inhaltZu(stand, suche)}
+      </Karte>
     </Box>
   );
 }
