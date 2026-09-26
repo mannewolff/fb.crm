@@ -218,7 +218,9 @@ Zustände sind an **Form** erkennbar, nicht allein an Farbe — ein **Chip mit S
 
 ## 🔄 Übergang
 
-**Diese Datei gilt ab 2026-09-26; der Code folgt mit dem Umsetzungsplan.** Bis dahin tragen `theme.ts`, `theme.test.ts` und die Bausteine (`AppShell`, `NavRail`, `TopBar`, `Platte`, `KupferTaste`, `UserMenu`, …) noch die Werte und Namen der Kupferwarte, und `docs/entwurf-leitstand.html` liegt noch im Repository. Beides verschwindet mit der Umstellung. **Neue Ansichten, die vorher entstehen, folgen bereits dieser Datei**, soweit das Theme die Werte schon trägt; sonst warten sie auf die Umstellung.
+**Diese Datei gilt ab 2026-09-26; der Code folgt mit dem Umsetzungsplan.** Bis dahin tragen `theme.ts`, `theme.test.ts` und die Bausteine (`AppShell`, `NavRail`, `TopBar`, `Platte`, `KupferTaste`, `UserMenu`, …) noch die Werte und Namen der Kupferwarte, und `docs/entwurf-leitstand.html` liegt noch im Repository. Beides verschwindet mit der Umstellung.
+
+**Pakete, die am 2026-09-26 schon in Ready stehen (#68–#74), werden noch in der Kupferwarte fertig** (Entscheidung Manne, 2026-09-26). Für sie gilt weiter `docs/entwurf-leitstand.html` als Vorlage, auch bei der Abnahme per Bildschirmfoto, so wie es in den Paketen steht. Pakete, die danach geschnitten werden, entstehen erst nach dem Umsetzungsplan und folgen dieser Datei. Der Umsetzungsplan stellt alle bis dahin gebauten Ansichten mit um, einschließlich #66–#74.
 
 ---
 
