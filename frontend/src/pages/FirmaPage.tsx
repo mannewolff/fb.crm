@@ -16,6 +16,8 @@ import {
   firmaStilllegen,
 } from '../api/firmen';
 import type { Ansprechpartner, Firma } from '../api/firmen';
+import { vorgaengeDerFirma } from '../api/vorgaenge';
+import type { Phase, VorgaengeDerFirma, VorgangZeile } from '../api/vorgaenge';
 import KopfAktion from '../components/KopfAktion';
 import KupferTaste from '../components/KupferTaste';
 import Platte from '../components/Platte';
@@ -52,12 +54,34 @@ const SCHALTEN_FEHLT = 'Der Stand der Firma wurde nicht geändert. Bitte später
 const PARTNER_SCHALTEN_FEHLT =
   'Der Stand des Ansprechpartners wurde nicht geändert. Bitte später erneut versuchen.';
 const OHNE_ANSPRECHPARTNER = 'Noch kein Ansprechpartner angelegt.';
+const OHNE_VORGANG = 'Noch kein Vorgang angelegt.';
+const VORGAENGE_AUSFALL = 'Die Vorgänge sind gerade nicht zu erreichen. Bitte später erneut versuchen.';
+
+/**
+ * Die Phase als Wort; heute kennt das Backend genau eine (`Phase` in `api/vorgaenge.ts`).
+ *
+ * Dieselbe Zuordnung steht in `VorgaengePage`. Sie hier zu wiederholen, statt sie aus der anderen
+ * Ansicht zu holen, haelt die beiden Seiten voneinander unabhaengig — ein gemeinsamer Ort entsteht,
+ * wenn es mehr als eine Phase und mehr als zwei Leser gibt.
+ */
+const PHASE_TEXT: Readonly<Record<Phase, string>> = { ANBAHNUNG: 'Anbahnung' };
 
 /** Was die Ansicht gerade weiss. */
 type Stand =
   | { readonly art: 'laedt' }
   | { readonly art: 'daten'; readonly firma: Firma }
   | { readonly art: 'unbekannt' }
+  | { readonly art: 'ausfall' };
+
+/**
+ * Was die Ansicht ueber die Vorgaenge der Firma weiss (Kriterium 12).
+ *
+ * Ein eigener Stand neben dem der Firma, weil es ein eigener Leseweg ist (E2): Faellt er aus,
+ * bleiben die Angaben der Firma und ihre Ansprechpartner sichtbar — nur die eine Platte meldet.
+ */
+type VorgangStand =
+  | { readonly art: 'laedt' }
+  | { readonly art: 'daten'; readonly vorgaenge: VorgaengeDerFirma }
   | { readonly art: 'ausfall' };
 
 /** Die flache Taste der Vorlage (`.taste` CSS Z. 322–334) — fuer die Nebenwege im Plattenkopf. */
@@ -81,7 +105,7 @@ function flacheTasteSx(theme: Theme) {
  * Das Schild der Vorlage (`.schild` CSS Z. 780–790): der Stand steht als Wort da, nicht nur als
  * Farbe — Farbe allein traegt keine Information (CLAUDE-react.md, Accessibility).
  */
-function Schild() {
+function Schild({ wort }: { readonly wort: string }) {
   return (
     <Box
       component="span"
@@ -95,7 +119,7 @@ function Schild() {
         background: 'color-mix(in srgb, currentColor 13%, transparent)',
       })}
     >
-      stillgelegt
+      {wort}
     </Box>
   );
 }
@@ -326,11 +350,182 @@ function Ansprechpartnerliste({
   );
 }
 
+/**
+ * Eine Zeile der Vorgangsliste (Vorlage `.vorgang` CSS Z. 580–605).
+ *
+ * Nummer und Titel bilden zusammen den Weg zum Vorgang, das Schild eines abgeschlossenen steht
+ * darin: So traegt der Name des Weges den Abschlussstand, statt ihn nur nebenher zu zeigen — wer
+ * die Liste mit dem Screenreader Weg fuer Weg durchgeht, hoert ihn mit. Die Phase steht daneben,
+ * ausserhalb des Weges, weil sie kein Teil seines Ziels ist.
+ */
+function VorgangZeileAnsicht({ vorgang }: { readonly vorgang: VorgangZeile }) {
+  return (
+    <Box
+      component="li"
+      sx={(theme) => ({
+        display: 'flex',
+        alignItems: 'center',
+        gap: 1.5,
+        flexWrap: 'wrap',
+        padding: '11px 16px',
+        borderBottom: `1px solid color-mix(in srgb, ${theme.vars.palette.kupferwarte.rand} 55%, transparent)`,
+        'li:last-of-type&': { borderBottom: 0 },
+      })}
+    >
+      <Box
+        component={RouterLink}
+        to={`/vorgaenge/${String(vorgang.id)}`}
+        sx={(theme) => ({
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 1.5,
+          minWidth: 0,
+          color: 'inherit',
+          textDecoration: 'none',
+          '&:hover': { color: theme.vars.palette.kupferwarte.kupfer },
+        })}
+      >
+        <Box
+          component="span"
+          sx={(theme) => ({
+            flex: 'none',
+            fontFamily: theme.vars.palette.kupferwarte.monoFontFamily,
+            fontSize: 12,
+            fontVariantNumeric: 'tabular-nums',
+            color: theme.vars.palette.kupferwarte.textSchwach,
+          })}
+        >
+          {`#${String(vorgang.nummer)}`}
+        </Box>
+        <Box component="span" sx={{ fontSize: 13.5, fontWeight: 500, minWidth: 0 }}>
+          {vorgang.titel}
+        </Box>
+        {vorgang.abgeschlossen ? <Schild wort="abgeschlossen" /> : null}
+      </Box>
+      <Typography
+        component="span"
+        sx={(theme) => ({
+          marginLeft: 'auto',
+          fontSize: 11.5,
+          color: theme.vars.palette.kupferwarte.textMatt,
+        })}
+      >
+        {PHASE_TEXT[vorgang.phase]}
+      </Typography>
+    </Box>
+  );
+}
+
+/** Eine der beiden Vorgangslisten; ohne Eintraege entsteht sie gar nicht. */
+function Vorgangsliste({
+  vorgaenge,
+  bezeichnung,
+}: {
+  readonly vorgaenge: readonly VorgangZeile[];
+  readonly bezeichnung: string;
+}) {
+  if (vorgaenge.length === 0) {
+    return null;
+  }
+  return (
+    <Box
+      component="ul"
+      aria-label={bezeichnung}
+      sx={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column' }}
+    >
+      {vorgaenge.map((vorgang) => (
+        <VorgangZeileAnsicht key={vorgang.id} vorgang={vorgang} />
+      ))}
+    </Box>
+  );
+}
+
+/**
+ * Der Inhalt der Platte „Vorgaenge" (Kriterium 12).
+ *
+ * Offene zuerst in der Reihenfolge der Antwort, die abgeschlossenen abgesetzt unter eigener
+ * Ueberschrift — dasselbe Muster wie bei den Ansprechpartnern, damit die Ansicht eine Sprache
+ * spricht. Ohne Vorgang sagt die Platte das, statt leer zu bleiben.
+ */
+function Vorgangsplatte({ stand }: { readonly stand: VorgangStand }) {
+  if (stand.art === 'laedt') {
+    return (
+      <Typography
+        sx={(theme) => ({
+          padding: '18px 16px',
+          fontSize: 12.5,
+          color: theme.vars.palette.kupferwarte.textSchwach,
+        })}
+      >
+        Vorgänge werden geladen …
+      </Typography>
+    );
+  }
+  if (stand.art === 'ausfall') {
+    return (
+      <Alert severity="error" sx={{ borderRadius: 0 }}>
+        {VORGAENGE_AUSFALL}
+      </Alert>
+    );
+  }
+  const { offene, abgeschlossene } = stand.vorgaenge;
+  if (offene.length === 0 && abgeschlossene.length === 0) {
+    return (
+      <Typography
+        role="status"
+        sx={(theme) => ({
+          padding: '18px 16px',
+          fontSize: 12.5,
+          color: theme.vars.palette.kupferwarte.textMatt,
+        })}
+      >
+        {OHNE_VORGANG}
+      </Typography>
+    );
+  }
+  return (
+    <>
+      <Vorgangsliste vorgaenge={offene} bezeichnung="Offene Vorgänge" />
+      {abgeschlossene.length === 0 ? null : (
+        <Typography
+          variant="h3"
+          sx={(theme) => ({
+            padding: '12px 16px 4px',
+            fontSize: 11.5,
+            fontWeight: 600,
+            color: theme.vars.palette.kupferwarte.textSchwach,
+            borderTop: `1px solid ${theme.vars.palette.kupferwarte.rand}`,
+          })}
+        >
+          Abgeschlossen
+        </Typography>
+      )}
+      <Vorgangsliste vorgaenge={abgeschlossene} bezeichnung="Abgeschlossene Vorgänge" />
+    </>
+  );
+}
+
 export default function FirmaPage() {
   const { id } = useParams();
   const kennung = kennungAus(id);
   const [stand, setzeStand] = useState<Stand>({ art: 'laedt' });
   const [schaltFehler, setzeSchaltFehler] = useState<string | null>(null);
+  const [vorgangStand, setzeVorgangStand] = useState<VorgangStand>({ art: 'laedt' });
+
+  // Der zweite Leseweg laeuft neben dem ersten und mit eigenem Stand (E2): Er haengt nicht an der
+  // Antwort der Firma, und sein Ausfall nimmt der Ansicht nicht die Angaben.
+  useEffect(() => {
+    if (kennung === null) {
+      return;
+    }
+    vorgaengeDerFirma(kennung)
+      .then((vorgaenge) => {
+        setzeVorgangStand({ art: 'daten', vorgaenge });
+      })
+      .catch(() => {
+        setzeVorgangStand({ art: 'ausfall' });
+      });
+  }, [kennung]);
 
   useEffect(() => {
     if (kennung === null) {
@@ -385,7 +580,7 @@ export default function FirmaPage() {
           titel={firma.name}
           werkzeug={
             <>
-              {firma.aktiv ? null : <Schild />}
+              {firma.aktiv ? null : <Schild wort="stillgelegt" />}
               <Button
                 component={RouterLink}
                 to={`/firmen/${String(firma.id)}/bearbeiten`}
@@ -420,6 +615,9 @@ export default function FirmaPage() {
               void schaltePartner(firma, partner);
             }}
           />
+        </Platte>
+        <Platte titel="Vorgänge">
+          <Vorgangsplatte stand={vorgangStand} />
         </Platte>
       </>
     );

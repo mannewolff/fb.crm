@@ -4,6 +4,7 @@ import { Link, MemoryRouter, Route, Routes, useLocation } from 'react-router-dom
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { Ansprechpartner, Firma } from '../api/firmen';
+import type { VorgaengeDerFirma, VorgangZeile } from '../api/vorgaenge';
 import { AuthProvider } from '../auth/AuthContext';
 import AppShell from '../components/AppShell';
 import { KopfAktionProvider } from '../components/KopfAktion';
@@ -48,6 +49,28 @@ const FIRMA: Firma = {
 
 const KONTO = { id: 1, displayName: 'Manfred Wolff', email: 'info@mwolff.org' };
 
+const OFFEN: VorgangZeile = {
+  id: 31,
+  nummer: 101,
+  titel: 'Relaunch der Website',
+  firma: 'Beispiel GmbH',
+  phase: 'ANBAHNUNG',
+  abgeschlossen: false,
+  letzteAktivitaet: '2026-09-20T09:00:00Z',
+};
+
+const ZWEITER_OFFEN: VorgangZeile = { ...OFFEN, id: 32, nummer: 102, titel: 'Wartungsvertrag' };
+
+const FERTIG: VorgangZeile = {
+  ...OFFEN,
+  id: 33,
+  nummer: 99,
+  titel: 'Schulung Redaktion',
+  abgeschlossen: true,
+};
+
+const VORGAENGE: VorgaengeDerFirma = { offene: [OFFEN, ZWEITER_OFFEN], abgeschlossene: [FERTIG] };
+
 /** Die Adresse, an der sich ablesen laesst, wohin ein Weg gefuehrt hat. */
 function Adresse() {
   const ort = useLocation();
@@ -90,7 +113,7 @@ function fensterbreite(breite: number) {
  * Die Ansicht liest nach jeder Schaltung neu — ein Doppel mit festem Rumpf wuerde deshalb
  * gruen bleiben, auch wenn die Ansicht das Ergebnis gar nicht uebernaehme.
  */
-function firmaDoppel(start: Firma = FIRMA) {
+function firmaDoppel(start: Firma = FIRMA, vorgaenge: VorgaengeDerFirma = VORGAENGE) {
   let firma: Firma = start;
   /**
    * Schaltet den Ansprechpartner der Firma — so, wie der Server es taete.
@@ -111,6 +134,7 @@ function firmaDoppel(start: Firma = FIRMA) {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       }),
+    'GET /api/firmen/7/vorgaenge': json(200, vorgaenge),
     'POST /api/firmen/7/stilllegen': () => {
       firma = { ...firma, aktiv: false };
       return new Response(null, { status: 204 });
@@ -203,6 +227,7 @@ describe('FirmaPage — Stilllegen und Wiederaktivieren', () => {
     const nutzer = userEvent.setup();
     fetchNachPfad({
       'GET /api/firmen/7': json(200, FIRMA),
+      'GET /api/firmen/7/vorgaenge': json(200, VORGAENGE),
       'POST /api/firmen/7/stilllegen': leer(500),
     });
 
@@ -373,6 +398,7 @@ describe('FirmaPage — die Zeilen-Aktionen der Ansprechpartner (Kriterium 15)',
     const nutzer = userEvent.setup();
     fetchNachPfad({
       'GET /api/firmen/7': json(200, { ...FIRMA, ansprechpartner: [ANNA] }),
+      'GET /api/firmen/7/vorgaenge': json(200, VORGAENGE),
       'POST /api/firmen/7/ansprechpartner/11/stilllegen': leer(500),
     });
 
@@ -383,6 +409,124 @@ describe('FirmaPage — die Zeilen-Aktionen der Ansprechpartner (Kriterium 15)',
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'Der Stand des Ansprechpartners wurde nicht geändert',
     );
+  });
+});
+
+describe('FirmaPage — die Vorgaenge der Firma (Kriterium 12)', () => {
+  it('zeigt die offenen in der Reihenfolge der Antwort, mit Nummer, Titel und Phase', async () => {
+    firmaDoppel();
+
+    renderSeite();
+
+    const offene = within(await screen.findByRole('list', { name: 'Offene Vorgänge' }));
+    const wege = offene.getAllByRole('link');
+    expect(wege.map((weg) => weg.textContent)).toEqual([
+      '#101Relaunch der Website',
+      '#102Wartungsvertrag',
+    ]);
+    expect(wege[0]).toHaveAttribute('href', '/vorgaenge/31');
+    expect(wege[1]).toHaveAttribute('href', '/vorgaenge/32');
+    expect(offene.getAllByText('Anbahnung')).toHaveLength(2);
+  });
+
+  it('setzt die abgeschlossenen darunter ab und nennt den Stand im zugaenglichen Namen', async () => {
+    firmaDoppel();
+
+    renderSeite();
+
+    await screen.findByRole('list', { name: 'Offene Vorgänge' });
+    const ueberschriften = screen
+      .getAllByRole('heading')
+      .map((element) => element.textContent)
+      .filter((text) => text === 'Vorgänge' || text === 'Abgeschlossen');
+    expect(ueberschriften).toEqual(['Vorgänge', 'Abgeschlossen']);
+
+    const fertige = within(screen.getByRole('list', { name: 'Abgeschlossene Vorgänge' }));
+    const weg = fertige.getByRole('link', { name: '#99 Schulung Redaktion abgeschlossen' });
+    expect(weg).toHaveAttribute('href', '/vorgaenge/33');
+    // Der Stand haengt am Weg selbst, nicht nur an einer Farbe.
+    expect(
+      within(screen.getByRole('list', { name: 'Offene Vorgänge' })).queryByText('abgeschlossen'),
+    ).not.toBeInTheDocument();
+  });
+
+  it('laesst die Ueberschrift „Abgeschlossen" weg, wo keiner abgeschlossen ist', async () => {
+    firmaDoppel(FIRMA, { offene: [OFFEN], abgeschlossene: [] });
+
+    renderSeite();
+
+    await screen.findByRole('list', { name: 'Offene Vorgänge' });
+    expect(screen.queryByRole('heading', { name: 'Abgeschlossen' })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('list', { name: 'Abgeschlossene Vorgänge' }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('zeigt nur die abgeschlossenen, wo keiner offen ist', async () => {
+    firmaDoppel(FIRMA, { offene: [], abgeschlossene: [FERTIG] });
+
+    renderSeite();
+
+    expect(
+      await screen.findByRole('list', { name: 'Abgeschlossene Vorgänge' }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('list', { name: 'Offene Vorgänge' })).not.toBeInTheDocument();
+  });
+
+  it('sagt es, wenn es keinen Vorgang gibt', async () => {
+    firmaDoppel({ ...FIRMA, ansprechpartner: [ANNA] }, { offene: [], abgeschlossene: [] });
+
+    renderSeite();
+
+    expect(await screen.findByRole('status')).toHaveTextContent('Noch kein Vorgang angelegt');
+    expect(screen.queryByRole('list', { name: 'Offene Vorgänge' })).not.toBeInTheDocument();
+  });
+
+  it('zeigt den Ladehinweis, solange der zweite Leseweg noch laeuft', async () => {
+    // Ohne Platzhalter-Funktion: Ein nie gerufener Vorbelegungswert waere ungetesteter Code.
+    let liefere!: (antwort: Response) => void;
+    const spaeter = new Promise<Response>((aufloesen) => {
+      liefere = aufloesen;
+    });
+    fetchNachPfad({
+      'GET /api/firmen/7': json(200, FIRMA),
+      'GET /api/firmen/7/vorgaenge': () => spaeter,
+    });
+
+    renderSeite();
+
+    // Die Firma ist da, die Vorgaenge noch nicht — die Platte sagt es, statt leer zu bleiben.
+    await screen.findByRole('heading', { name: 'Beispiel GmbH' });
+    expect(screen.getByText('Vorgänge werden geladen …')).toBeInTheDocument();
+
+    liefere(json(200, VORGAENGE)());
+
+    expect(await screen.findByRole('list', { name: 'Offene Vorgänge' })).toBeInTheDocument();
+  });
+
+  it('meldet den Ausfall des zweiten Lesewegs, laesst die Angaben der Firma aber stehen', async () => {
+    fetchNachPfad({
+      'GET /api/firmen/7': json(200, FIRMA),
+      'GET /api/firmen/7/vorgaenge': leer(500),
+    });
+
+    renderSeite();
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Die Vorgänge sind gerade nicht zu erreichen',
+    );
+    expect(screen.getByRole('heading', { name: 'Beispiel GmbH' })).toBeInTheDocument();
+    expect(screen.getByText('Hauptstraße 1')).toBeInTheDocument();
+    expect(screen.getByRole('list', { name: 'Aktive Ansprechpartner' })).toBeInTheDocument();
+  });
+
+  it('fragt die Vorgaenge nicht ab, wo die Kennung keine ist', async () => {
+    const fetchMock = fetchNachPfad({});
+
+    renderSeite('/firmen/keine-zahl');
+
+    await screen.findByRole('alert');
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });
 
@@ -426,6 +570,7 @@ describe('FirmaPage — Kopfaktion und Tastatur', () => {
           status: 200,
           headers: { 'Content-Type': 'application/json' },
         }),
+      'GET /api/firmen/7/vorgaenge': json(200, VORGAENGE),
     });
 
     renderMitTheme(
