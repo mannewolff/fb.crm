@@ -7,14 +7,14 @@ import { RADIUS_GROSS } from '../theme';
 import BrandMark from './BrandMark';
 
 /**
- * Die Platte der Auth-Seiten: mittig auf dem Grund, mit Marke, Titel, Inhalt und Fuss
- * (Vorlage `.platte` Z. 543–549, `body`-Grund Z. 152–162).
+ * Die Karte der Auth-Seiten: mittig auf dem Grund, mit Marke, Titel, Inhalt und Fuss
+ * (Vorlage `.karte` Z. 53, `body`-Grund Z. 22–27).
  *
  * Die Marke traegt hier <b>keine</b> Versionsnummer (K15, E10) — siehe {@link BrandMark}.
  */
 
-/** Breite der Platte; darueber hinaus wuerde ein Formular mit zwei Feldern auseinanderlaufen. */
-const PLATTE_BREITE = 380;
+/** Breite der Karte; darueber hinaus wuerde ein Formular mit zwei Feldern auseinanderlaufen. */
+const KARTE_BREITE = 380;
 
 export interface AuthCardProps {
   readonly titel: string;
@@ -33,7 +33,7 @@ export default function AuthCard({ titel, children, fuss }: AuthCardProps) {
         elevation={0}
         sx={(theme) => ({
           width: '100%',
-          maxWidth: PLATTE_BREITE,
+          maxWidth: KARTE_BREITE,
           padding: 3,
           borderRadius: `${RADIUS_GROSS}px`,
           background: theme.vars.palette.kupferwolke.flaeche,

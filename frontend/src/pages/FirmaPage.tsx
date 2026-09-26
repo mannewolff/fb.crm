@@ -22,7 +22,7 @@ import KopfAktion from '../components/KopfAktion';
 import { useKopfPfad } from '../components/KopfPfad';
 import type { PfadVerweis } from '../components/KopfPfad';
 import KupferTaste from '../components/KupferTaste';
-import Platte from '../components/Platte';
+import Karte from '../components/Karte';
 import { nichtGefunden } from '../lib/apifehler';
 import { kennungAus } from '../lib/kennung';
 import { namensZug } from '../lib/namenszug';
@@ -79,14 +79,14 @@ type Stand =
  * Was die Ansicht ueber die Vorgaenge der Firma weiss (Kriterium 12).
  *
  * Ein eigener Stand neben dem der Firma, weil es ein eigener Leseweg ist (E2): Faellt er aus,
- * bleiben die Angaben der Firma und ihre Ansprechpartner sichtbar — nur die eine Platte meldet.
+ * bleiben die Angaben der Firma und ihre Ansprechpartner sichtbar — nur die eine Karte meldet.
  */
 type VorgangStand =
   | { readonly art: 'laedt' }
   | { readonly art: 'daten'; readonly vorgaenge: VorgaengeDerFirma }
   | { readonly art: 'ausfall' };
 
-/** Die weiche Taste (CLAUDE-design.md, „Tasten") — fuer die Nebenwege im Plattenkopf. */
+/** Die weiche Taste (CLAUDE-design.md, „Tasten") — fuer die Nebenwege im Kartenkopf. */
 function flacheTasteSx(theme: Theme) {
   return {
     fontSize: 12.5,
@@ -194,7 +194,7 @@ function Kontakt({
  *
  * Beide tragen den Namen des Ansprechpartners in ihrer Benennung. Eine Liste aus lauter Tasten
  * „Bearbeiten" waere mit dem Screenreader nicht zu unterscheiden — und sie liesse sich auch von
- * der Taste der Firma im Plattenkopf nicht trennen. Die sichtbare Aufschrift steht dabei am
+ * der Taste der Firma im Kartenkopf nicht trennen. Die sichtbare Aufschrift steht dabei am
  * Anfang der Benennung, damit die Spracheingabe sie trifft (WCAG 2.5.3).
  */
 interface ZeilenProps {
@@ -441,13 +441,13 @@ function Vorgangsliste({
 }
 
 /**
- * Der Inhalt der Platte „Vorgaenge" (Kriterium 12).
+ * Der Inhalt der Karte „Vorgaenge" (Kriterium 12).
  *
  * Offene zuerst in der Reihenfolge der Antwort, die abgeschlossenen abgesetzt unter eigener
  * Ueberschrift — dasselbe Muster wie bei den Ansprechpartnern, damit die Ansicht eine Sprache
- * spricht. Ohne Vorgang sagt die Platte das, statt leer zu bleiben.
+ * spricht. Ohne Vorgang sagt die Karte das, statt leer zu bleiben.
  */
-function Vorgangsplatte({ stand }: { readonly stand: VorgangStand }) {
+function Vorgangskarte({ stand }: { readonly stand: VorgangStand }) {
   if (stand.art === 'laedt') {
     return (
       <Typography
@@ -582,7 +582,7 @@ export default function FirmaPage() {
     const firma = stand.firma;
     inhalt = (
       <>
-        <Platte
+        <Karte
           titel={firma.name}
           werkzeug={
             <>
@@ -613,23 +613,23 @@ export default function FirmaPage() {
             <Feld name="Steuernummer" wert={firma.steuernummer} />
             <Feld name="Umsatzsteuer-Identifikationsnummer" wert={firma.umsatzsteuerId} />
           </Box>
-        </Platte>
-        <Platte titel="Ansprechpartner">
+        </Karte>
+        <Karte titel="Ansprechpartner">
           <Ansprechpartnerliste
             firma={firma}
             schalte={(partner) => {
               void schaltePartner(firma, partner);
             }}
           />
-        </Platte>
-        <Platte titel="Vorgänge">
-          <Vorgangsplatte stand={vorgangStand} />
-        </Platte>
+        </Karte>
+        <Karte titel="Vorgänge">
+          <Vorgangskarte stand={vorgangStand} />
+        </Karte>
       </>
     );
   } else if (stand.art === 'laedt') {
     inhalt = (
-      <Platte>
+      <Karte>
         <Typography
           sx={(theme) => ({
             padding: '18px 16px',
@@ -639,15 +639,15 @@ export default function FirmaPage() {
         >
           Die Firma wird geladen …
         </Typography>
-      </Platte>
+      </Karte>
     );
   } else {
     inhalt = (
-      <Platte>
+      <Karte>
         <Alert severity="error" sx={{ borderRadius: 0 }}>
           {stand.art === 'unbekannt' ? NICHT_GEFUNDEN : AUSFALL}
         </Alert>
-      </Platte>
+      </Karte>
     );
   }
 

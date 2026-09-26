@@ -12,7 +12,7 @@ import type { FieldErrors } from '../api/client';
 import { useKopfPfad } from '../components/KopfPfad';
 import type { PfadVerweis } from '../components/KopfPfad';
 import KupferTaste from '../components/KupferTaste';
-import Platte from '../components/Platte';
+import Karte from '../components/Karte';
 import { feldMeldungen, nichtGefunden } from '../lib/apifehler';
 import { meldungAm } from '../lib/feldmeldung';
 import { kennungAus } from '../lib/kennung';
@@ -25,7 +25,7 @@ import { kennungAus } from '../lib/kennung';
  * und der einzige Unterschied ist, woher die Werte kommen und wohin das Speichern fuehrt. Zwei
  * Abschriften liefen beim ersten Nachziehen auseinander.
  *
- * Die Maske steht als {@link Platte} auf der Buehne und nicht in der Karte der Auth-Seiten (E19,
+ * Die Maske steht als {@link Karte} auf der Buehne und nicht in der Karte der Auth-Seiten (E19,
  * Plan-Review Fund 5): Die bringt ein eigenes `main` und die Marke mit — innerhalb des
  * angemeldeten Rahmens waere das ein zweites `main` in derselben Seite.
  *
@@ -206,7 +206,7 @@ export default function FirmaMaske() {
         gap: '22px',
       }}
     >
-      <Platte titel={titel}>
+      <Karte titel={titel}>
         {stand === 'bereit' ? (
           <Box
             component="form"
@@ -292,7 +292,7 @@ export default function FirmaMaske() {
             )}
           </Box>
         )}
-      </Platte>
+      </Karte>
     </Box>
   );
 }

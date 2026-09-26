@@ -14,7 +14,7 @@ import KopfAktion from '../components/KopfAktion';
 import { useKopfPfad } from '../components/KopfPfad';
 import type { PfadVerweis } from '../components/KopfPfad';
 import KupferTaste from '../components/KupferTaste';
-import Platte from '../components/Platte';
+import Karte from '../components/Karte';
 import Tafel from '../components/Tafel';
 import { RADIUS_MITTEL, RADIUS_RUND, ZAHLEN_KLASSE } from '../theme';
 
@@ -27,7 +27,7 @@ import { RADIUS_MITTEL, RADIUS_RUND, ZAHLEN_KLASSE } from '../theme';
  * Begruendungen im Einzelnen stehen an {@link FirmenPage}; hier wiederholt sie diese Ansicht nicht.
  *
  * Gestalt nach der Vorlagen-Ansicht „Liste": Werkzeugleiste (Z. 1866 ff., CSS Z. 799–806) mit dem
- * Suchfeld als Nut und dem Schalter als gedruecktem Filter, darunter die Platte mit der
+ * Suchfeld als Nut und dem Schalter als gedruecktem Filter, darunter die Karte mit der
  * {@link Tafel} (Z. 1888 ff.). Ohne Auswahlhaken, Massenleiste, Gruppenzeilen, Spaltenwahl und
  * Export (E22) — das sind Funktionen, die fb.crm nicht hat.
  *
@@ -191,7 +191,7 @@ function Zeile({ vorgang }: { readonly vorgang: VorgangZeile }) {
   );
 }
 
-/** Was in der Platte steht: Ladehinweis, Meldung, Hinweis zur Leere oder die Tafel. */
+/** Was in der Karte steht: Ladehinweis, Meldung, Hinweis zur Leere oder die Tafel. */
 function inhaltZu(stand: Stand, suche: string): ReactNode {
   if (stand.art === 'laedt') {
     return (
@@ -342,7 +342,7 @@ export default function VorgaengePage() {
           auch abgeschlossene
         </ToggleButton>
       </Box>
-      <Platte>{inhaltZu(stand, suche)}</Platte>
+      <Karte>{inhaltZu(stand, suche)}</Karte>
     </Box>
   );
 }

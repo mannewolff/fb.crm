@@ -55,4 +55,22 @@ describe('Tafel', () => {
       'Anbahnung',
     ]);
   });
+
+  it('schreibt die Spaltenkoepfe in Satzschreibung statt in Versalien', () => {
+    renderTafel();
+
+    // Satzschreibung ueberall, keine Versalien mit Laufweite (CLAUDE-design.md, Typografie).
+    for (const zelle of screen.getAllByRole('columnheader')) {
+      expect(zelle).not.toHaveStyle({ textTransform: 'uppercase' });
+    }
+  });
+
+  it('gliedert die Zeilen ohne Linien', () => {
+    renderTafel();
+
+    // Karten statt Linien (E10): Die Zeilen trennt der Hover, nicht ein Strich.
+    for (const zelle of screen.getAllByRole('cell')) {
+      expect(zelle).not.toHaveStyle({ borderBottomStyle: 'solid' });
+    }
+  });
 });

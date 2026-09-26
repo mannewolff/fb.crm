@@ -21,6 +21,8 @@ export const RADIUS_GROSS = 28;
 export const RADIUS_KACHEL = 24;
 /** Innenkarte, Hinzufuegen-Kachel, Menue, Dialog. */
 export const RADIUS_MITTEL = 22;
+/** Das Mal einer Firma (84 px) — das abgerundete Quadrat neben dem Kreis der Personen. */
+export const RADIUS_MAL = 26;
 /** Navigationseintrag, Zeile, Eingabefeld. */
 export const RADIUS_KLEIN = 14;
 /** Tasten, Chips, Suche, Zaehler — die runde Form. */
@@ -63,6 +65,15 @@ export interface KupferwolkeToenungen {
   /** neutrale Kategorie: Personen, Ansprechpartner, Rechnungen als Menge. */
   readonly flieder: Toenung;
 }
+
+/**
+ * Der Name einer Toenung — die Wahl, die ein Baustein von seinem Aufrufer annimmt.
+ *
+ * Bausteine nehmen den **Namen**, nicht das Farbpaar: So bleibt die Bedeutung („Rose heisst
+ * stillgelegt") im Aufruf lesbar, und kein Aufrufer kann eine Flaeche mit der Schrift einer
+ * anderen Toenung paaren.
+ */
+export type ToenungName = keyof KupferwolkeToenungen;
 
 /**
  * Kraeftige Zustandsfarben fuer Symbole, Zahlen und schmale Markierungen.

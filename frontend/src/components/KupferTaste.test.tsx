@@ -31,4 +31,20 @@ describe('KupferTaste', () => {
 
     expect(screen.getByRole('button', { name: 'Speichern' })).toBeDisabled();
   });
+
+  it('haengt ein Symbol vor die Aufschrift und haelt es aus dem Namen heraus', () => {
+    renderMitTheme(<KupferTaste symbol={<svg data-testid="zeichen" />}>Speichern</KupferTaste>);
+
+    // Das Symbol stuetzt das Wort, es ersetzt es nicht: Der zugaengliche Name bleibt die
+    // Aufschrift (CLAUDE-design.md, „Zustandsformen").
+    expect(screen.getByRole('button', { name: 'Speichern' })).toBeInTheDocument();
+    expect(screen.getByTestId('taste-symbol')).toHaveAttribute('aria-hidden', 'true');
+    expect(screen.getByTestId('zeichen')).toBeInTheDocument();
+  });
+
+  it('traegt ohne Symbol keinen leeren Symbolplatz', () => {
+    renderMitTheme(<KupferTaste>Speichern</KupferTaste>);
+
+    expect(screen.queryByTestId('taste-symbol')).not.toBeInTheDocument();
+  });
 });

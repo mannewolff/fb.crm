@@ -26,7 +26,7 @@ describe('AuthCard', () => {
     );
 
     // Die Version verlangt eine Sitzung (E10); vor der Anmeldung gibt es keine, und die
-    // Platte darf auch keine erfinden (K15).
+    // Karte darf auch keine erfinden (K15).
     expect(screen.queryByTestId('marke-zusatz')).not.toBeInTheDocument();
     expect(screen.getByRole('main')).not.toHaveTextContent(/\d+\.\d+/);
   });

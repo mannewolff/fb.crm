@@ -9,6 +9,7 @@ import {
   RADIUS_GROSS,
   RADIUS_KACHEL,
   RADIUS_KLEIN,
+  RADIUS_MAL,
   RADIUS_MITTEL,
   RADIUS_RUND,
   SCHATTEN,
@@ -73,8 +74,9 @@ describe('Kontrast', () => {
 });
 
 describe('Tokens der Vorlage', () => {
-  it('traegt die Radien 28, 24, 22 und 14 px und die runde Form', () => {
+  it('traegt die Radien 28, 26, 24, 22 und 14 px und die runde Form', () => {
     expect(RADIUS_GROSS).toBe(28);
+    expect(RADIUS_MAL).toBe(26);
     expect(RADIUS_KACHEL).toBe(24);
     expect(RADIUS_MITTEL).toBe(22);
     expect(RADIUS_KLEIN).toBe(14);

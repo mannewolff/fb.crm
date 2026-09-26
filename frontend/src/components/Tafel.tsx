@@ -1,25 +1,32 @@
 import Box from '@mui/material/Box';
 import type { ReactNode } from 'react';
 
+import { RADIUS_KLEIN } from '../theme';
+
 /**
- * Die Tafel: eine Liste in Spalten (Vorlage `.tafel-rahmen`/`.tafel` Z. 878–913, Ansicht „Liste"
- * Z. 1888–2045).
+ * Die Tafel: eine Liste mit vielen Eintraegen in Spalten (CLAUDE-design.md, „Bausteine": viele
+ * Eintraege sind Zeilen, kein Kartenraster; Vorlage `.kopfzeile` Z. 79–80 fuer den Kartenkopf
+ * darueber).
  *
  * Eine <b>echte Tabelle</b> und kein Gitter aus `div`-Elementen: Nur so nennt der Screenreader beim
  * Vorlesen einer Zelle ihre Spalte, und nur so stehen die Tastaturwege der Tabellennavigation zur
  * Verfuegung. Die Kopfzellen tragen darum `scope="col"`.
  *
- * Die <b>Gestalt der Zeilen steht hier</b>, nicht bei den Aufrufern: Zellenpolster, Haarlinien und
- * die Tönung beim Überfahren kommen ueber Nachfahren-Selektoren aus diesem `sx`. Eine Ansicht
- * uebergibt `tr`/`td` ohne eigene Farbwerte und ergaenzt allenfalls die Schriftart einer Spalte.
- * Alle Farben, Radien und Tiefen stammen aus dem Theme (CLAUDE-design.md).
+ * Die <b>Gestalt der Zeilen steht hier</b>, nicht bei den Aufrufern: Zellenpolster, Radius und die
+ * weiche Flaeche beim Ueberfahren kommen ueber Nachfahren-Selektoren aus diesem `sx`. Eine Ansicht
+ * uebergibt `tr`/`td` ohne eigene Farbwerte. Alle Farben, Radien und Tiefen stammen aus dem Theme.
  *
- * Die Kopfzeile <b>laeuft mit</b> (`position: sticky`). Sie steht unter dem Kopf der Anwendung, der
- * selbst schon klebt — daher der Abstand von oben und die kleinere Stapelstufe: Der Kopf bleibt
- * ueber der Tafel.
+ * <b>Keine Zeilenlinien</b> (E10): Gegliedert wird durch Abstand und den Hover auf „Flaeche weich"
+ * mit Radius klein — die Zeile wird zur Flaeche, nicht zum Streifen zwischen zwei Strichen. Die
+ * Kopfzeile steht in Satzschreibung ohne Versalien (CLAUDE-design.md, Typografie).
  *
- * Nicht enthalten sind Auswahlhaken, Massenleiste, Gruppenzeilen, Spaltenwahl und Export der
- * Vorlage (E22). Sie gehoeren zu Funktionen, die fb.crm nicht hat.
+ * <b>Zahlen stellt der Aufrufer untereinander</b>: Nummern und Betraege tragen die Klasse aus
+ * `ZAHLEN_KLASSE` an ihrer `td`. Die Tafel bekommt fertige Zeilen und weiss nicht, welche
+ * Spalte eine Zahl fuehrt; eine Liste von Spaltennummern im Aufruf waere eine zweite, stumme
+ * Beschreibung derselben Zeilen.
+ *
+ * Nicht enthalten sind Auswahlhaken, Massenleiste, Gruppenzeilen, Spaltenwahl und Export. Sie
+ * gehoeren zu Funktionen, die fb.crm nicht hat.
  */
 export interface TafelProps {
   /** Der zugaengliche Name der Tafel — sie ist eine eigene Landmarke im Dokument. */
@@ -30,13 +37,7 @@ export interface TafelProps {
   readonly children: ReactNode;
 }
 
-/** Vorlage Z. 881: die Kopfzeile klebt unter dem Kopf der Anwendung. */
-const KOPF_ABSTAND = 59;
-
-/** Unter der Stapelstufe des Kopfes (`TopBar`: 20), ueber den Zeilen (Vorlage Z. 881). */
-const KOPF_STUFE = 5;
-
-/** Die kleinste Breite, unter der die Tafel waagerecht rollt statt zu quetschen (Vorlage Z. 879). */
+/** Die kleinste Breite, unter der die Tafel waagerecht rollt statt zu quetschen. */
 const MINDESTBREITE = 720;
 
 export default function Tafel({ beschriftung, spalten, children }: TafelProps) {
@@ -51,27 +52,33 @@ export default function Tafel({ beschriftung, spalten, children }: TafelProps) {
           borderSpacing: 0,
           minWidth: MINDESTBREITE,
           '& thead th': {
-            position: 'sticky',
-            top: KOPF_ABSTAND,
-            zIndex: KOPF_STUFE,
             textAlign: 'left',
-            ...theme.typography.overline,
+            fontSize: 12.5,
+            fontWeight: 600,
+            // Satzschreibung: keine Versalien mit Laufweite (CLAUDE-design.md, Typografie).
+            textTransform: 'none',
+            letterSpacing: 'normal',
             color: theme.vars.palette.kupferwolke.textSchwach,
-            padding: '10px 12px',
-            background: theme.vars.palette.kupferwolke.flaeche,
-            borderBottom: `1px solid ${theme.vars.palette.kupferwolke.linie}`,
+            padding: '8px 14px',
             whiteSpace: 'nowrap',
           },
           '& tbody td': {
-            padding: '9px 12px',
-            borderBottom: `1px solid color-mix(in srgb, ${theme.vars.palette.kupferwolke.linie} 50%, transparent)`,
-            fontSize: 12.5,
+            padding: '12px 14px',
+            fontSize: 13.5,
             verticalAlign: 'middle',
           },
-          '& tbody tr:last-of-type td': { borderBottom: 0 },
-          '& tbody tr': { transition: 'background .12s ease' },
+          // Die Zeile wird im Hover zur weichen Flaeche mit Radius klein. Den Radius tragen die
+          // aeussersten Zellen: Eine `tr` nimmt in einer Tabelle keinen eigenen Radius an.
+          '& tbody td:first-of-type': {
+            borderTopLeftRadius: `${RADIUS_KLEIN}px`,
+            borderBottomLeftRadius: `${RADIUS_KLEIN}px`,
+          },
+          '& tbody td:last-of-type': {
+            borderTopRightRadius: `${RADIUS_KLEIN}px`,
+            borderBottomRightRadius: `${RADIUS_KLEIN}px`,
+          },
+          '& tbody tr td': { transition: 'background .12s ease' },
           '& tbody tr:hover td': {
-            // Hover-Grund von Zeilen ist die weiche Flaeche (CLAUDE-design.md, „Flaeche weich").
             background: theme.vars.palette.kupferwolke.flaecheWeich,
           },
         })}

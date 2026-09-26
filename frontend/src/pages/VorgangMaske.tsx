@@ -15,7 +15,7 @@ import type { Zuordnung } from '../api/vorgaenge';
 import { useKopfPfad } from '../components/KopfPfad';
 import type { PfadVerweis } from '../components/KopfPfad';
 import KupferTaste from '../components/KupferTaste';
-import Platte from '../components/Platte';
+import Karte from '../components/Karte';
 import { feldMeldungen, nichtGefunden } from '../lib/apifehler';
 import { meldungAm } from '../lib/feldmeldung';
 import { kennungAus } from '../lib/kennung';
@@ -29,7 +29,7 @@ import { namensZug } from '../lib/namenszug';
  * Verhalten sind dieselben, und der einzige Unterschied ist, woher die Werte kommen und wohin das
  * Speichern fuehrt. Zwei Abschriften liefen beim ersten Nachziehen auseinander.
  *
- * Rahmen und Aufbau folgen ebenfalls {@link FirmaMaske}: eine {@link Platte} auf der Buehne und
+ * Rahmen und Aufbau folgen ebenfalls {@link FirmaMaske}: eine {@link Karte} auf der Buehne und
  * nicht die Karte der Auth-Seiten (E19) — die bringt ein eigenes `main` und die Marke mit, und
  * innerhalb des angemeldeten Rahmens waere das ein zweites `main` in derselben Seite. Eine eigene
  * Ruecknahme braucht es nicht: „ohne Speichern verlassen" ist der Weg zurueck (E10).
@@ -389,7 +389,7 @@ export default function VorgangMaske() {
         gap: '22px',
       }}
     >
-      <Platte titel={aendern ? 'Vorgang bearbeiten' : 'Neuer Vorgang'}>
+      <Karte titel={aendern ? 'Vorgang bearbeiten' : 'Neuer Vorgang'}>
         {stand.art === 'bereit' ? (
           <Box
             component="form"
@@ -462,7 +462,7 @@ export default function VorgangMaske() {
             )}
           </Box>
         )}
-      </Platte>
+      </Karte>
     </Box>
   );
 }

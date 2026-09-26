@@ -14,7 +14,7 @@ import KopfAktion from '../components/KopfAktion';
 import { useKopfPfad } from '../components/KopfPfad';
 import type { PfadVerweis } from '../components/KopfPfad';
 import KupferTaste from '../components/KupferTaste';
-import Platte from '../components/Platte';
+import Karte from '../components/Karte';
 import { RADIUS_MITTEL, RADIUS_RUND } from '../theme';
 
 /**
@@ -37,8 +37,8 @@ import { RADIUS_MITTEL, RADIUS_RUND } from '../theme';
  *
  * Die Vorlage gibt die Gestalt vor: Werkzeugleiste (`werkzeugleiste` Z. 799–806) mit dem Suchfeld
  * als Nut (`.suche` Z. 300–311) und dem Schalter als gedrueckter Filter (`.filter` Z. 561–576),
- * darunter die Platte mit den Zeilen (`.vorgang` Z. 580–605). Eine Ueberschrift traegt die Ansicht
- * nicht: Die Buehne der Vorlage beginnt mit der Werkzeugleiste, und eine Platte unter einer eigenen
+ * darunter die Karte mit den Zeilen (`.vorgang` Z. 580–605). Eine Ueberschrift traegt die Ansicht
+ * nicht: Die Buehne der Vorlage beginnt mit der Werkzeugleiste, und eine Karte unter einer eigenen
  * Werkzeugleiste bleibt ohne Kopf (Issue #45). Die Liste ist stattdessen als benannte Liste
  * ausgezeichnet, damit sie mit dem Screenreader auffindbar bleibt.
  */
@@ -200,7 +200,7 @@ function Zeile({ firma }: { readonly firma: FirmaZeile }) {
   );
 }
 
-/** Was in der Platte steht: Ladehinweis, Meldung, Hinweis zur Leere oder die Liste. */
+/** Was in der Karte steht: Ladehinweis, Meldung, Hinweis zur Leere oder die Liste. */
 function inhaltZu(stand: Stand, suche: string): ReactNode {
   if (stand.art === 'laedt') {
     return (
@@ -356,7 +356,7 @@ export default function FirmenPage() {
           auch stillgelegte
         </ToggleButton>
       </Box>
-      <Platte>{inhaltZu(stand, suche)}</Platte>
+      <Karte>{inhaltZu(stand, suche)}</Karte>
     </Box>
   );
 }

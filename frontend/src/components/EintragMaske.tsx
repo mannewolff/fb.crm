@@ -21,7 +21,7 @@ import KupferTaste from './KupferTaste';
 /**
  * Die Maske fuer einen Eintrag der Historie (E20, Kriterien 13, 14, 18, 19, 26).
  *
- * Sie sitzt als Platte ueber der Historie und nicht auf einer eigenen Seite: Ein Kommentar
+ * Sie sitzt als Karte ueber der Historie und nicht auf einer eigenen Seite: Ein Kommentar
  * entsteht im Lesen des Vorgangs, und ein Seitenwechsel dafuer naehme dem Benutzer genau den
  * Zusammenhang, in dem er schreibt. Im Modus <b>Aendern</b> sitzt sie noch enger dran — in der
  * Zeile des Eintrags selbst (E20).

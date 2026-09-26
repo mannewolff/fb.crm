@@ -514,7 +514,7 @@ describe('FirmaPage — die Vorgaenge der Firma (Kriterium 12)', () => {
 
     renderSeite();
 
-    // Die Firma ist da, die Vorgaenge noch nicht — die Platte sagt es, statt leer zu bleiben.
+    // Die Firma ist da, die Vorgaenge noch nicht — die Karte sagt es, statt leer zu bleiben.
     await screen.findByRole('heading', { name: 'Beispiel GmbH' });
     expect(screen.getByText('Vorgänge werden geladen …')).toBeInTheDocument();
 

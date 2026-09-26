@@ -14,7 +14,7 @@ import EintragMaske from '../components/EintragMaske';
 import Historie from '../components/Historie';
 import { useKopfPfad } from '../components/KopfPfad';
 import type { PfadVerweis } from '../components/KopfPfad';
-import Platte from '../components/Platte';
+import Karte from '../components/Karte';
 import { nichtGefunden } from '../lib/apifehler';
 import { kennungAus } from '../lib/kennung';
 import { RADIUS_RUND, ZAHLEN_KLASSE } from '../theme';
@@ -40,7 +40,7 @@ import { RADIUS_RUND, ZAHLEN_KLASSE } from '../theme';
  *       Das Schild steht als Wort in der Zeile, und der Stand gehoert zum Namen des Weges — wer mit
  *       dem Screenreader durch die Wege springt, hoert ihn ohne die Nachbarschaft.</li>
  *   <li><b>Nach dem Hinzufuegen und nach dem Aendern eines Eintrags wird neu gelesen</b> (E20,
- *       Kriterien 13, 14, 19). Die Maske steht als Platte ueber der Historie, das Aendern in der
+ *       Kriterien 13, 14, 19). Die Maske steht als Karte ueber der Historie, das Aendern in der
  *       Zeile selbst; beide melden nur, dass etwas geschrieben wurde —
  *       wie die Liste danach aussieht, sagt der Server, nicht die Oberflaeche. Auch am
  *       abgeschlossenen Vorgang steht sie da: Abgeschlossen heisst „zu Ende gegangen", nicht
@@ -224,7 +224,7 @@ function Kopf({
 }
 
 /**
- * Ein Feldpaar der Platte „Felder" (Vorlage `.feld` CSS Z. 1062–1065).
+ * Ein Feldpaar der Karte „Felder" (Vorlage `.feld` CSS Z. 1062–1065).
  *
  * Es nimmt `children` statt einer Zeichenkette wie das gleichnamige Feldpaar in
  * {@link FirmaPage}: Hier steht im Wert ein Weg mit Schild, nicht Text.
@@ -360,7 +360,7 @@ export default function VorgangPage() {
         }}
       >
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: '16px', minWidth: 0 }}>
-          <Platte>
+          <Karte>
             <Kopf
               vorgang={vorgang}
               schaltet={schaltet}
@@ -368,20 +368,20 @@ export default function VorgangPage() {
                 void schalten(vorgang);
               }}
             />
-          </Platte>
-          <Platte titel="Eintrag hinzufügen">
+          </Karte>
+          <Karte titel="Eintrag hinzufügen">
             <EintragMaske
               vorgangId={vorgang.id}
               modus={{ art: 'hinzufuegen' }}
               gespeichert={neuLesen}
             />
-          </Platte>
-          <Platte titel="Historie">
+          </Karte>
+          <Karte titel="Historie">
             <Historie vorgangId={vorgang.id} eintraege={vorgang.historie} geaendert={neuLesen} />
-          </Platte>
+          </Karte>
         </Box>
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: '16px', minWidth: 0 }}>
-          <Platte titel="Felder">
+          <Karte titel="Felder">
             <Box sx={{ display: 'flex', flexDirection: 'column' }}>
               <Feld name="Firma">
                 <Weg zuordnung={vorgang.firma} firmaId={vorgang.firma.id} />
@@ -394,13 +394,13 @@ export default function VorgangPage() {
                 </Feld>
               )}
             </Box>
-          </Platte>
+          </Karte>
         </Box>
       </Box>
     );
   } else if (stand.art === 'laedt') {
     inhalt = (
-      <Platte>
+      <Karte>
         <Typography
           sx={(theme) => ({
             padding: '18px 16px',
@@ -410,15 +410,15 @@ export default function VorgangPage() {
         >
           {LAEDT}
         </Typography>
-      </Platte>
+      </Karte>
     );
   } else {
     inhalt = (
-      <Platte>
+      <Karte>
         <Alert severity="error" sx={{ borderRadius: 0 }}>
           {stand.art === 'unbekannt' ? NICHT_GEFUNDEN : AUSFALL}
         </Alert>
-      </Platte>
+      </Karte>
     );
   }
 

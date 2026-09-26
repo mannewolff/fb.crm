@@ -12,7 +12,7 @@ import type { FieldErrors } from '../api/client';
 import { useKopfPfad } from '../components/KopfPfad';
 import type { PfadVerweis } from '../components/KopfPfad';
 import KupferTaste from '../components/KupferTaste';
-import Platte from '../components/Platte';
+import Karte from '../components/Karte';
 import { feldMeldungen, nichtGefunden } from '../lib/apifehler';
 import { istEmailForm } from '../lib/emailform';
 import { meldungAm } from '../lib/feldmeldung';
@@ -24,7 +24,7 @@ import { kennungAus } from '../lib/kennung';
  *
  * Eine Komponente fuer beide Wege, aus demselben Grund wie bei der Firma-Maske: Felder, Meldungen
  * und Verhalten sind dieselben, und nur Herkunft der Werte und Ziel des Speicherns unterscheiden
- * sich. Auch der Rahmen ist derselbe — eine {@link Platte} auf der Buehne, keine `AuthCard` (E19).
+ * sich. Auch der Rahmen ist derselbe — eine {@link Karte} auf der Buehne, keine `AuthCard` (E19).
  *
  * <b>Kein Feld fuer die Firma</b> (Kriterium 12, E7). Die Firma steht im Pfad, und Umhaengen gibt
  * es nicht. Sie erscheint als Notiz im Kopf, damit sichtbar ist, unter wem der Ansprechpartner
@@ -241,7 +241,7 @@ export default function AnsprechpartnerMaske() {
         gap: '22px',
       }}
     >
-      <Platte
+      <Karte
         titel={titel}
         notiz={stand.art === 'bereit' ? stand.firmaName : undefined}
       >
@@ -329,7 +329,7 @@ export default function AnsprechpartnerMaske() {
             )}
           </Box>
         )}
-      </Platte>
+      </Karte>
     </Box>
   );
 }

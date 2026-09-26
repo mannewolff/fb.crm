@@ -151,7 +151,7 @@ describe('VorgangPage — der Kopf (Kriterien 9, 11)', () => {
   });
 });
 
-describe('VorgangPage — die Platte „Felder" (Kriterien 9, 23)', () => {
+describe('VorgangPage — die Karte „Felder" (Kriterien 9, 23)', () => {
   it('macht Firma und Ansprechpartner zu Wegen auf die Detailansicht der Firma', async () => {
     vorgangDoppel();
 
@@ -247,7 +247,7 @@ describe('VorgangPage — Abschliessen und Wieder oeffnen (Kriterien 20, 21)', (
 });
 
 describe('VorgangPage — die Maske fuer Eintraege (E20, Kriterien 13, 14)', () => {
-  it('stellt die Maske als Platte ueber die Historie', async () => {
+  it('stellt die Maske als Karte ueber die Historie', async () => {
     vorgangDoppel();
 
     renderSeite();

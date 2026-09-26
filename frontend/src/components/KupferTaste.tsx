@@ -4,18 +4,19 @@ import type { ReactNode } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
 
 import { RADIUS_RUND } from '../theme';
+import TastenSymbol from './TastenSymbol';
 
 /**
  * Die Haupttaste einer Ansicht: eine Pille im Kupferverlauf mit farbigem Schatten
- * (Vorlage `.taste.primaer` Z. 63–65).
+ * (Vorlage `.taste` Z. 63–64, `.taste.primaer` Z. 65).
  *
- * Eine eigene Komponente, weil jede Auth-Seite genau eine davon traegt — vier Abschriften
- * desselben `sx`-Blocks liefen beim ersten Nachziehen der Vorlage auseinander.
+ * **Genau eine je Ansicht** (CLAUDE-design.md, „Tasten") — sie steht in der Kopfkarte einer
+ * Detailansicht, rechts im Kartenkopf einer Liste oder am Ende eines Formulars.
  *
  * Zwei Gestalten, eine Optik: Mit `to` ist die Taste ein **echter Link** und kein Knopf mit
  * `onClick`. Ein Weg gehoert in ein `a` mit `href` — sonst faellt er aus dem Tabulatorweg der
  * Links, laesst sich nicht in einem neuen Reiter oeffnen und wird vom Screenreader als Schalter
- * angesagt, obwohl er die Seite wechselt (E11).
+ * angesagt, obwohl er die Seite wechselt.
  */
 export interface KupferTasteProps {
   readonly children: ReactNode;
@@ -23,13 +24,16 @@ export interface KupferTasteProps {
   readonly to?: string;
   /** Gesperrt, solange gesendet wird — nur fuer die absendende Gestalt. */
   readonly disabled?: boolean;
+  /** Das stuetzende Symbol links der Aufschrift. */
+  readonly symbol?: ReactNode;
 }
 
 /** Die Gestalt der Kupfertaste, geteilt von beiden Varianten. */
 function kupferSx(theme: Theme) {
   return {
     borderRadius: `${RADIUS_RUND}px`,
-    paddingBlock: '9px',
+    padding: '11px 20px',
+    gap: '8px',
     color: theme.vars.palette.kupferwolke.kupferSchrift,
     background: `linear-gradient(135deg, ${theme.vars.palette.kupferwolke.kupferTaste}, ${theme.vars.palette.kupferwolke.kupferTief})`,
     border: 0,
@@ -44,17 +48,23 @@ function kupferSx(theme: Theme) {
   };
 }
 
-export default function KupferTaste({ children, to, disabled = false }: KupferTasteProps) {
+export default function KupferTaste({ children, to, disabled = false, symbol }: KupferTasteProps) {
+  const inhalt = (
+    <>
+      {symbol === undefined ? null : <TastenSymbol>{symbol}</TastenSymbol>}
+      {children}
+    </>
+  );
   if (to !== undefined) {
     return (
       <Button component={RouterLink} to={to} sx={kupferSx}>
-        {children}
+        {inhalt}
       </Button>
     );
   }
   return (
     <Button type="submit" disabled={disabled} sx={kupferSx}>
-      {children}
+      {inhalt}
     </Button>
   );
 }
