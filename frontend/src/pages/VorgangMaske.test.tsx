@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { Firma, FirmenUebersicht } from '../api/firmen';
 import type { Vorgang } from '../api/vorgaenge';
+import KopfPfad, { KopfPfadProvider } from '../components/KopfPfad';
 import { fetchNachPfad, json, leer, problem } from '../test/fetchNachPfad';
 import { renderMitTheme } from '../test/render';
 import VorgangMaske from './VorgangMaske';
@@ -85,13 +86,15 @@ function adresse() {
 function renderMaske() {
   return renderMitTheme(
     <MemoryRouter initialEntries={['/vorgaenge/neu']}>
-      <Routes>
-        <Route path="/vorgaenge" element={<p>Übersicht</p>} />
-        <Route path="/vorgaenge/neu" element={<VorgangMaske />} />
-        <Route path="/vorgaenge/:id" element={<p>Detailansicht</p>} />
-        <Route path="/firmen/neu" element={<p>Neue Firma</p>} />
-      </Routes>
-      <Adresse />
+      <KopfPfadProvider>
+        <Routes>
+          <Route path="/vorgaenge" element={<p>Übersicht</p>} />
+          <Route path="/vorgaenge/neu" element={<VorgangMaske />} />
+          <Route path="/vorgaenge/:id" element={<p>Detailansicht</p>} />
+          <Route path="/firmen/neu" element={<p>Neue Firma</p>} />
+        </Routes>
+        <Adresse />
+      </KopfPfadProvider>
     </MemoryRouter>,
   );
 }
@@ -100,12 +103,29 @@ function renderMaske() {
 function renderMaskeZumAendern(id = '5') {
   return renderMitTheme(
     <MemoryRouter initialEntries={[`/vorgaenge/${id}/bearbeiten`]}>
-      <Routes>
-        <Route path="/vorgaenge" element={<p>Übersicht</p>} />
-        <Route path="/vorgaenge/:id" element={<p>Detailansicht</p>} />
-        <Route path="/vorgaenge/:id/bearbeiten" element={<VorgangMaske />} />
-      </Routes>
-      <Adresse />
+      <KopfPfadProvider>
+        <Routes>
+          <Route path="/vorgaenge" element={<p>Übersicht</p>} />
+          <Route path="/vorgaenge/:id" element={<p>Detailansicht</p>} />
+          <Route path="/vorgaenge/:id/bearbeiten" element={<VorgangMaske />} />
+        </Routes>
+        <Adresse />
+      </KopfPfadProvider>
+    </MemoryRouter>,
+  );
+}
+
+/** Dieselbe Maske, aber mit dem Kopf darueber — fuer den Pfad, den sie meldet. */
+function renderMitKopf(start: string) {
+  return renderMitTheme(
+    <MemoryRouter initialEntries={[start]}>
+      <KopfPfadProvider>
+        <KopfPfad />
+        <Routes>
+          <Route path="/vorgaenge/neu" element={<VorgangMaske />} />
+          <Route path="/vorgaenge/:id/bearbeiten" element={<VorgangMaske />} />
+        </Routes>
+      </KopfPfadProvider>
     </MemoryRouter>,
   );
 }
@@ -692,6 +712,25 @@ describe('VorgangMaske — die stillgelegte Zuordnung (Kriterien 23, 26)', () =>
       '/api/vorgaenge/5',
       expect.objectContaining({ method: 'PUT' }),
     );
+  });
+});
+
+describe('VorgangMaske — der Pfad im Kopf (E6)', () => {
+  it.each([
+    ['/vorgaenge/neu', 'Neuer Vorgang'],
+    ['/vorgaenge/5/bearbeiten', 'Vorgang bearbeiten'],
+  ])('meldet unter %s den Pfad \u201eVorgänge > %s"', async (start, endstufe) => {
+    fetchNachPfad({
+      [FIRMEN_WEG]: json(200, FIRMEN),
+      'GET /api/firmen/7': json(200, FIRMA_7),
+      'GET /api/vorgaenge/5': json(200, VORGANG),
+    });
+
+    renderMitKopf(start);
+
+    const pfad = within(await screen.findByRole('navigation', { name: 'Pfad' }));
+    expect(pfad.getByRole('link', { name: 'Vorgänge' })).toHaveAttribute('href', '/vorgaenge');
+    expect(pfad.getByText(endstufe)).toHaveAttribute('aria-current', 'page');
   });
 });
 

@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AuthProvider } from '../auth/AuthContext';
 import AppShell from '../components/AppShell';
 import { KopfAktionProvider } from '../components/KopfAktion';
+import KopfPfad, { KopfPfadProvider } from '../components/KopfPfad';
 import { fetchNachPfad, json, leer } from '../test/fetchNachPfad';
 import { renderMitTheme } from '../test/render';
 import VorgaengePage from './VorgaengePage';
@@ -72,12 +73,28 @@ function renderSeite(start = '/vorgaenge') {
   return renderMitTheme(
     <MemoryRouter initialEntries={[start]}>
       <KopfAktionProvider>
-        <Routes>
-          <Route path="/vorgaenge" element={<VorgaengePage />} />
-          <Route path="/vorgaenge/neu" element={<p>Maske</p>} />
-          <Route path="/vorgaenge/:id" element={<p>Detailansicht</p>} />
-        </Routes>
-        <Adresse />
+        <KopfPfadProvider>
+          <Routes>
+            <Route path="/vorgaenge" element={<VorgaengePage />} />
+            <Route path="/vorgaenge/neu" element={<p>Maske</p>} />
+            <Route path="/vorgaenge/:id" element={<p>Detailansicht</p>} />
+          </Routes>
+          <Adresse />
+        </KopfPfadProvider>
+      </KopfAktionProvider>
+    </MemoryRouter>,
+  );
+}
+
+/** Dieselbe Ansicht, aber mit dem Kopf darueber — fuer den Pfad, den sie meldet. */
+function renderMitKopf() {
+  return renderMitTheme(
+    <MemoryRouter initialEntries={['/vorgaenge']}>
+      <KopfAktionProvider>
+        <KopfPfadProvider>
+          <KopfPfad />
+          <VorgaengePage />
+        </KopfPfadProvider>
       </KopfAktionProvider>
     </MemoryRouter>,
   );
@@ -308,6 +325,18 @@ describe('VorgaengePage — die drei Leerfaelle und der Ausfall', () => {
     renderSeite();
 
     expect(screen.getByText('Vorgänge werden geladen …')).toBeInTheDocument();
+  });
+});
+
+describe('VorgaengePage — der Pfad im Kopf (E6)', () => {
+  it('meldet „Vorgänge" als Pfad an den Kopf', async () => {
+    fetchNachPfad({ [weg('', false)]: json(200, { vorgaenge: [], gesamt: 0 }) });
+
+    renderMitKopf();
+
+    const pfad = await screen.findByRole('navigation', { name: 'Pfad' });
+    expect(within(pfad).getByText('Vorgänge')).toHaveAttribute('aria-current', 'page');
+    expect(within(pfad).queryAllByRole('link')).toHaveLength(0);
   });
 });
 

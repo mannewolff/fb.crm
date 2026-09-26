@@ -11,6 +11,8 @@ import { Link as RouterLink, useSearchParams } from 'react-router-dom';
 import { vorgaengeUebersicht } from '../api/vorgaenge';
 import type { Phase, VorgaengeUebersicht, VorgangZeile } from '../api/vorgaenge';
 import KopfAktion from '../components/KopfAktion';
+import { useKopfPfad } from '../components/KopfPfad';
+import type { PfadVerweis } from '../components/KopfPfad';
 import KupferTaste from '../components/KupferTaste';
 import Platte from '../components/Platte';
 import Tafel from '../components/Tafel';
@@ -37,6 +39,9 @@ import { RADIUS_MITTEL, RADIUS_RUND, ZAHLEN_KLASSE } from '../theme';
 
 /** Wie lange der Suchtext ruhen muss, bevor er in Adresse und Aufruf geht. */
 export const ENTPRELLUNG_MS = 300;
+
+/** Die Uebersicht ist die erste Stufe des Pfades — ueber ihr steht nichts (E6). */
+const KEIN_WEG: readonly PfadVerweis[] = [];
 
 const PARAM_SUCHE = 'suche';
 const PARAM_ABGESCHLOSSENE = 'auchAbgeschlossene';
@@ -232,6 +237,7 @@ function inhaltZu(stand: Stand, suche: string): ReactNode {
 }
 
 export default function VorgaengePage() {
+  useKopfPfad(KEIN_WEG, 'Vorgänge');
   const [parameter, setzeParameter] = useSearchParams();
   const suche = parameter.get(PARAM_SUCHE) ?? '';
   const auchAbgeschlossene = parameter.get(PARAM_ABGESCHLOSSENE) === 'true';
@@ -273,10 +279,11 @@ export default function VorgaengePage() {
   return (
     <Box
       sx={{
-        padding: { xs: 2, sm: '22px 26px 44px' },
         display: 'flex',
         flexDirection: 'column',
-        gap: '20px',
+        // Aussenabstand und Spalt bringt der Rahmen mit; hier bleibt nur der Abstand zwischen
+        // den Bereichen der Buehne (CLAUDE-design.md, „Rahmen").
+        gap: '22px',
       }}
     >
       <KopfAktion>

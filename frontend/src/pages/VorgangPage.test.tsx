@@ -4,6 +4,7 @@ import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { Eintrag, Vorgang } from '../api/vorgaenge';
+import KopfPfad, { KopfPfadProvider } from '../components/KopfPfad';
 import { fetchNachPfad, json, leer } from '../test/fetchNachPfad';
 import { renderMitTheme } from '../test/render';
 import VorgangPage from './VorgangPage';
@@ -50,12 +51,28 @@ function Adresse() {
 function renderSeite(start = '/vorgaenge/5') {
   return renderMitTheme(
     <MemoryRouter initialEntries={[start]}>
-      <Routes>
-        <Route path="/vorgaenge/:id" element={<VorgangPage />} />
-        <Route path="/vorgaenge/:id/bearbeiten" element={<p>Maske</p>} />
-        <Route path="/firmen/:id" element={<p>Firma</p>} />
-      </Routes>
-      <Adresse />
+      <KopfPfadProvider>
+        <Routes>
+          <Route path="/vorgaenge/:id" element={<VorgangPage />} />
+          <Route path="/vorgaenge/:id/bearbeiten" element={<p>Maske</p>} />
+          <Route path="/firmen/:id" element={<p>Firma</p>} />
+        </Routes>
+        <Adresse />
+      </KopfPfadProvider>
+    </MemoryRouter>,
+  );
+}
+
+/** Dieselbe Ansicht, aber mit dem Kopf darueber — fuer den Pfad, den sie meldet. */
+function renderMitKopf(start = '/vorgaenge/5') {
+  return renderMitTheme(
+    <MemoryRouter initialEntries={[start]}>
+      <KopfPfadProvider>
+        <KopfPfad />
+        <Routes>
+          <Route path="/vorgaenge/:id" element={<VorgangPage />} />
+        </Routes>
+      </KopfPfadProvider>
     </MemoryRouter>,
   );
 }
@@ -335,6 +352,29 @@ describe('VorgangPage — die Historie (Kriterium 15)', () => {
     renderSeite();
 
     expect(await screen.findByRole('status')).toHaveTextContent('Noch kein Eintrag in der Historie');
+  });
+});
+
+describe('VorgangPage — der Pfad im Kopf (E6)', () => {
+  it('meldet „Vorgänge" als Weg und Nummer samt Titel als Endstufe', async () => {
+    fetchNachPfad({ 'GET /api/vorgaenge/5': json(200, VORGANG) });
+
+    renderMitKopf();
+
+    const pfad = within(await screen.findByRole('navigation', { name: 'Pfad' }));
+    expect(pfad.getByRole('link', { name: 'Vorgänge' })).toHaveAttribute('href', '/vorgaenge');
+    expect(
+      await pfad.findByText('#941 Anteilsbalken je Vorgang statt Band über alle'),
+    ).toHaveAttribute('aria-current', 'page');
+  });
+
+  it('nennt die Endstufe „Vorgang", solange der Vorgang noch nicht gelesen ist', async () => {
+    fetchNachPfad({ 'GET /api/vorgaenge/5': leer(503) });
+
+    renderMitKopf();
+
+    const pfad = within(await screen.findByRole('navigation', { name: 'Pfad' }));
+    expect(pfad.getByText('Vorgang')).toHaveAttribute('aria-current', 'page');
   });
 });
 

@@ -19,6 +19,8 @@ import type { Ansprechpartner, Firma } from '../api/firmen';
 import { vorgaengeDerFirma } from '../api/vorgaenge';
 import type { Phase, VorgaengeDerFirma, VorgangZeile } from '../api/vorgaenge';
 import KopfAktion from '../components/KopfAktion';
+import { useKopfPfad } from '../components/KopfPfad';
+import type { PfadVerweis } from '../components/KopfPfad';
 import KupferTaste from '../components/KupferTaste';
 import Platte from '../components/Platte';
 import { nichtGefunden } from '../lib/apifehler';
@@ -503,12 +505,18 @@ function Vorgangsplatte({ stand }: { readonly stand: VorgangStand }) {
   );
 }
 
+/** Ueber jeder Firmen-Ansicht steht die Uebersicht (E6). */
+const ZU_FIRMEN: readonly PfadVerweis[] = [{ titel: 'Firmen', ziel: '/firmen' }];
+
 export default function FirmaPage() {
   const { id } = useParams();
   const kennung = kennungAus(id);
   const [stand, setzeStand] = useState<Stand>({ art: 'laedt' });
   const [schaltFehler, setzeSchaltFehler] = useState<string | null>(null);
   const [vorgangStand, setzeVorgangStand] = useState<VorgangStand>({ art: 'laedt' });
+  // Solange die Firma nicht gelesen ist, traegt die Endstufe das Wort „Firma": Ein Pfad, der
+  // erst spaeter erscheint, liesse den Kopf bei jedem Aufruf einmal springen.
+  useKopfPfad(ZU_FIRMEN, stand.art === 'daten' ? stand.firma.name : 'Firma');
 
   // Der zweite Leseweg laeuft neben dem ersten und mit eigenem Stand (E2): Er haengt nicht an der
   // Antwort der Firma, und sein Ausfall nimmt der Ansicht nicht die Angaben.
@@ -646,10 +654,11 @@ export default function FirmaPage() {
   return (
     <Box
       sx={{
-        padding: { xs: 2, sm: '22px 26px 44px' },
         display: 'flex',
         flexDirection: 'column',
-        gap: '20px',
+        // Aussenabstand und Spalt bringt der Rahmen mit; hier bleibt nur der Abstand zwischen
+        // den Bereichen der Buehne (CLAUDE-design.md, „Rahmen").
+        gap: '22px',
       }}
     >
       {kennung === null ? null : (

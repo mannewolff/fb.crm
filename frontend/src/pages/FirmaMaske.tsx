@@ -9,6 +9,8 @@ import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom';
 
 import { firmaAendern, firmaAnlegen, firmaLesen } from '../api/firmen';
 import type { FieldErrors } from '../api/client';
+import { useKopfPfad } from '../components/KopfPfad';
+import type { PfadVerweis } from '../components/KopfPfad';
 import KupferTaste from '../components/KupferTaste';
 import Platte from '../components/Platte';
 import { feldMeldungen, nichtGefunden } from '../lib/apifehler';
@@ -109,6 +111,9 @@ function Eingabe({ label, feld, werte, setzeWerte, meldung, pflicht = false }: E
   );
 }
 
+/** Ueber jeder Firmen-Ansicht steht die Uebersicht (E6). */
+const ZU_FIRMEN: readonly PfadVerweis[] = [{ titel: 'Firmen', ziel: '/firmen' }];
+
 export default function FirmaMaske() {
   const { id } = useParams();
   const aendern = id !== undefined;
@@ -187,16 +192,18 @@ export default function FirmaMaske() {
   };
 
   const titel = aendern ? 'Firma bearbeiten' : 'Neue Firma';
+  useKopfPfad(ZU_FIRMEN, titel);
   const zurueck = kennung === null ? '/firmen' : `/firmen/${String(kennung)}`;
   const nameMeldung = nameFehlt ? NAME_FEHLT : meldungAm(feldFehler, 'name');
 
   return (
     <Box
       sx={{
-        padding: { xs: 2, sm: '22px 26px 44px' },
         display: 'flex',
         flexDirection: 'column',
-        gap: '20px',
+        // Aussenabstand und Spalt bringt der Rahmen mit; hier bleibt nur der Abstand zwischen
+        // den Bereichen der Buehne (CLAUDE-design.md, „Rahmen").
+        gap: '22px',
       }}
     >
       <Platte titel={titel}>

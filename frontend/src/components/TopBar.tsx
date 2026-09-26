@@ -2,17 +2,19 @@ import Box from '@mui/material/Box';
 import type { ReactNode } from 'react';
 
 import { useKopfAktionPlatz } from './KopfAktion';
-import UserMenu from './UserMenu';
+import KopfPfad from './KopfPfad';
 
 /**
- * Der Kopf: klebend, getoent, mit Weichzeichner (Vorlage `.kopf` Z. 284–299).
+ * Der Kopf: eine Zeile ohne eigene Flaeche ueber der Buehne (Vorlage `.kopf` Z. 46).
  *
- * Links steht die Schaltflaeche der Schiene, sofern der Rahmen eine mitbringt — unterhalb von
- * 900 px liegt die Schiene dahinter (CLAUDE-design.md, „Mindestbreite"). Sonst bleibt die Stelle
- * leer. Rechts der Platz fuer die Hauptaktion der Ansicht und dahinter das Nutzer-Mal (K13,
- * Vorlage Z. 1192–1196). Welche Aktion dort steht, bringt die Ansicht selbst mit
- * ({@link KopfAktion}); ohne Aktion bleibt der Platz leer. Pfad, Suche, `⌘K`, Reiterleiste und
- * Kennzahlen der Vorlage gehoeren zur Fachlichkeit von kanban-kit und werden nicht uebernommen.
+ * Links der {@link KopfPfad} — und davor die Schaltflaeche der Schiene, sofern der Rahmen eine
+ * mitbringt: unterhalb von 900 px liegt die Schiene dahinter (CLAUDE-design.md, „Mindestbreite").
+ * Rechts bleibt der Platz fuer die Hauptaktion der Ansicht, bis alle Ansichten sie selbst tragen
+ * (E5); welche Aktion dort steht, bringt die Ansicht mit ({@link KopfAktion}).
+ *
+ * Das Nutzer-Mal stand hier bis zur Kupferwolke; es ist die Nutzerkarte im Fuss der Schiene
+ * geworden (E7). Suche, Glocke, Reiterleiste und Kennzahlen der Vorlage entstehen nicht — kein
+ * Bedienelement ohne fachlichen Anlass (Plan A3).
  */
 export default function TopBar({ schalter }: { readonly schalter?: ReactNode }) {
   const meldePlatz = useKopfAktionPlatz();
@@ -20,31 +22,28 @@ export default function TopBar({ schalter }: { readonly schalter?: ReactNode }) 
   return (
     <Box
       component="header"
-      sx={(theme) => ({
+      sx={{
         display: 'flex',
         alignItems: 'center',
         gap: 2,
-        padding: { xs: '12px 16px', sm: '14px 26px' },
-        borderBottom: `1px solid ${theme.vars.palette.kupferwolke.linie}`,
-        background: `color-mix(in srgb, ${theme.vars.palette.kupferwolke.grund} 86%, ${theme.vars.palette.kupferwolke.flaeche})`,
-        position: 'sticky',
-        top: 0,
-        zIndex: 20,
-        backdropFilter: 'blur(10px)',
-      })}
+        padding: '6px 4px',
+        // Der Kopf haelt seine Zeile, auch wenn eine Ansicht weder Pfad noch Aktion meldet —
+        // sonst sprangen die Karten darunter je Ansicht um seine Hoehe.
+        minHeight: 34,
+      }}
     >
       <Box
         data-testid="kopf-links"
-        sx={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center' }}
+        sx={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 2 }}
       >
         {schalter}
+        <KopfPfad />
       </Box>
       <Box
         data-testid="kopf-aktion"
         ref={meldePlatz}
         sx={{ display: 'flex', alignItems: 'center', gap: 1 }}
       />
-      <UserMenu />
     </Box>
   );
 }

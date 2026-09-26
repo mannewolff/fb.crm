@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AuthProvider } from '../auth/AuthContext';
 import AppShell from '../components/AppShell';
 import { KopfAktionProvider } from '../components/KopfAktion';
+import KopfPfad, { KopfPfadProvider } from '../components/KopfPfad';
 import { fetchNachPfad, json, leer } from '../test/fetchNachPfad';
 import { renderMitTheme } from '../test/render';
 import FirmenPage from './FirmenPage';
@@ -59,12 +60,28 @@ function renderSeite(start = '/firmen') {
   return renderMitTheme(
     <MemoryRouter initialEntries={[start]}>
       <KopfAktionProvider>
-        <Routes>
-          <Route path="/firmen" element={<FirmenPage />} />
-          <Route path="/firmen/neu" element={<p>Maske</p>} />
-          <Route path="/firmen/:id" element={<p>Detailansicht</p>} />
-        </Routes>
-        <Adresse />
+        <KopfPfadProvider>
+          <Routes>
+            <Route path="/firmen" element={<FirmenPage />} />
+            <Route path="/firmen/neu" element={<p>Maske</p>} />
+            <Route path="/firmen/:id" element={<p>Detailansicht</p>} />
+          </Routes>
+          <Adresse />
+        </KopfPfadProvider>
+      </KopfAktionProvider>
+    </MemoryRouter>,
+  );
+}
+
+/** Dieselbe Ansicht, aber mit dem Kopf darueber — fuer den Pfad, den sie meldet. */
+function renderMitKopf() {
+  return renderMitTheme(
+    <MemoryRouter initialEntries={['/firmen']}>
+      <KopfAktionProvider>
+        <KopfPfadProvider>
+          <KopfPfad />
+          <FirmenPage />
+        </KopfPfadProvider>
       </KopfAktionProvider>
     </MemoryRouter>,
   );
@@ -341,6 +358,16 @@ describe('FirmenPage — Kopfaktion und Tastatur', () => {
 
     expect(screen.getByText('Andere Seite')).toBeInTheDocument();
     expect(screen.getByTestId('kopf-aktion')).toBeEmptyDOMElement();
+  });
+
+  it('meldet „Firmen" als Pfad an den Kopf (E6)', async () => {
+    fetchNachPfad({ [weg('', false)]: json(200, { firmen: [], gesamt: 0 }) });
+
+    renderMitKopf();
+
+    const pfad = await screen.findByRole('navigation', { name: 'Pfad' });
+    expect(within(pfad).getByText('Firmen')).toHaveAttribute('aria-current', 'page');
+    expect(within(pfad).queryAllByRole('link')).toHaveLength(0);
   });
 
   it('fuehrt mit dem Tabulator ueber Suchfeld, Schalter und jede Zeile', async () => {

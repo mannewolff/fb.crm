@@ -1,133 +1,91 @@
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
+import {
+  IconBook,
+  IconBuildingCommunity,
+  IconLayoutSidebarLeftCollapse,
+  IconLayoutSidebarLeftExpand,
+  IconSettings,
+  IconStack2,
+} from '@tabler/icons-react';
+import type { TablerIcon } from '@tabler/icons-react';
 import { useEffect, useState } from 'react';
-import type { ReactNode } from 'react';
 import { NavLink } from 'react-router-dom';
 
 import { instance } from '../api/instance';
 import { FUSS_EINTRAEGE, NAV_BLOECKE } from '../layout/navItems';
 import type { NavEintrag, Symbolname } from '../layout/navItems';
 import { liesEingeklappt, merkeEingeklappt } from '../lib/railState';
-import { RADIUS_KLEIN } from '../theme';
+import { RADIUS_GROSS, RADIUS_KLEIN, RADIUS_RUND } from '../theme';
 import BrandMark from './BrandMark';
+import UserMenu from './UserMenu';
 
 /**
  * Die Schiene: eine freistehende weisse Karte links, oben die Marke, darunter die
- * Navigationsbloecke, unten der Fuss (Vorlage `.schiene` Z. 30, `.gruppe` Z. 35,
- * `.nav a` Z. 36–41).
+ * Navigationsbloecke, unten der Fuss (Vorlage `.schiene` Z. 30, `.marke` Z. 31–34,
+ * `.gruppe` Z. 35, `.nav a` Z. 36–41, `.schiene .fuss` Z. 42).
  *
- * Der aktive Eintrag liegt auf Pfirsich mit Pfirsich-Schrift; `aria-current="page"` setzt
+ * Radius gross, `schatten-karte`, und sie klebt oben — die Buehne rechts scrollt an ihr vorbei
+ * (CLAUDE-design.md, „Rahmen").
+ *
+ * Der aktive Eintrag liegt auf Pfirsich mit Pfirsich-Schrift in 700; `aria-current="page"` setzt
  * `NavLink` selbst, und genau daran haengt auch die Gestalt — Ansicht und Zugaenglichkeit koennen
  * so nicht auseinanderlaufen. Weil `NavLink` ohne `end` auch auf die tieferen Pfade passt, bleibt
  * „Firmen" auf `/firmen/7` aktiv (CLAUDE-design.md: „der laengste passende Pfad").
  *
- * Eingeklappt bleiben nur die Symbole; die Beschriftung geht in `aria-label` ueber, damit jeder
- * Eintrag seinen Namen behaelt. Der Gruppentitel entfaellt dort ganz — auf 64 px ist kein Platz
- * fuer ihn, und er benennt keinen eigenen Tastaturweg.
+ * Eingeklappt (76 px) bleiben Markenmal, Symbole und das Kuerzel der Nutzerkarte; die
+ * Beschriftung geht in `aria-label` ueber, damit jeder Eintrag seinen Namen behaelt. Der
+ * Gruppentitel entfaellt dort ganz — auf 76 px ist kein Platz fuer ihn, und er benennt keinen
+ * eigenen Tastaturweg.
  *
  * `onWahl` ist der Rueckruf fuer die Betriebsart hinter der Schaltflaeche ({@link AppShell}): Dort
  * liegt die Schiene ueber dem Inhalt und muss sich schliessen, sobald ein Ziel gewaehlt ist.
  */
 
-/** Breite ausgeklappt (Vorlage `.warte` Z. 201) und eingeklappt (CLAUDE-design.md). */
-const BREITE = 224;
-const BREITE_EINGEKLAPPT = 64;
+/** Breite ausgeklappt und eingeklappt (CLAUDE-design.md, „Rahmen"). */
+const BREITE = 260;
+const BREITE_EINGEKLAPPT = 76;
 
-/** Die Symbole der Vorlage: 16 px, Strich in `currentColor`. */
-const SYMBOLE: Readonly<Record<Symbolname, ReactNode>> = {
-  // Die Mappe: der Vorgang als Klammer um Angebot, Auftrag und Rechnung (CLAUDE.md). Bewusst
-  // anders gezeichnet als das Haus der Firmen — eingeklappt steht nur noch das Symbol da.
-  vorgaenge: (
-    <path
-      d="M2.5 12.7V4.3a.8.8 0 0 1 .8-.8h2.7l1.4 1.8h5.3a.8.8 0 0 1 .8.8v6.6a.8.8 0 0 1-.8.8H3.3a.8.8 0 0 1-.8-.8ZM5.5 9.5h5"
-      stroke="currentColor"
-      strokeWidth="1.3"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-  ),
-  firmen: (
-    <path
-      d="M2.5 13.5V3a.5.5 0 0 1 .5-.5h5a.5.5 0 0 1 .5.5v10.5M8.5 6.5H13a.5.5 0 0 1 .5.5v6.5M1.5 13.5h13M4.5 5h2M4.5 7.5h2M4.5 10h2M10.5 9h1.5M10.5 11.5h1.5"
-      stroke="currentColor"
-      strokeWidth="1.3"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-  ),
-  administration: (
-    <>
-      <circle cx="8" cy="8" r="2.2" stroke="currentColor" strokeWidth="1.5" />
-      <path
-        d="M8 1.8v1.6M8 12.6v1.6M1.8 8h1.6M12.6 8h1.6M3.6 3.6l1.1 1.1M11.3 11.3l1.1 1.1M3.6 12.4l1.1-1.1M11.3 4.7l1.1-1.1"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        strokeLinecap="round"
-      />
-    </>
-  ),
-  dokumentation: (
-    <path
-      d="M3 2.5h6.5L13 6v7.5H3zM9.5 2.5V6H13M5.5 9h5M5.5 11.5h3.5"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinejoin="round"
-      strokeLinecap="round"
-    />
-  ),
-  einklappen: (
-    <path
-      d="M10 3.5 5.5 8l4.5 4.5M13 3.5v9"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-  ),
+/** Die Symbole der Vorlage — dieselbe Familie, dieselben Namen (E3). */
+const SYMBOLE: Readonly<Record<Symbolname, TablerIcon>> = {
+  'stack-2': IconStack2,
+  'building-community': IconBuildingCommunity,
+  settings: IconSettings,
+  book: IconBook,
 };
 
+/** 20 px, Strich in `currentColor` — die Farbe kommt damit vom Eintrag (Vorlage `.nav a i`). */
 function NavSymbol({ name }: { readonly name: Symbolname }) {
+  const Symbol = SYMBOLE[name];
   return (
-    <Box
-      component="svg"
-      viewBox="0 0 16 16"
-      fill="none"
+    <Symbol
+      size={20}
+      stroke={1.6}
       aria-hidden
-      className="nav-symbol"
       // Der Strich selbst ist fuer Hilfsmittel unsichtbar; eingeklappt ist er aber das einzige
       // Unterscheidungsmerkmal zweier Eintraege. Der Griff macht ihn im Test pruefbar.
       data-testid={`nav-symbol-${name}`}
-      sx={(theme) => ({
-        width: 16,
-        height: 16,
-        flex: 'none',
-        color: theme.vars.palette.kupferwolke.textSchwach,
-      })}
-    >
-      {SYMBOLE[name]}
-    </Box>
+      style={{ flex: 'none' }}
+    />
   );
 }
 
-/** Gestalt eines Eintrags — fuer Link und Taste dieselbe (Vorlage `.nav-eintrag`). */
+/** Gestalt eines Eintrags (Vorlage `.nav a` Z. 36–41). */
 const eintragStil = {
   display: 'flex',
   alignItems: 'center',
-  gap: '10px',
-  padding: '7px 10px',
+  gap: '12px',
+  padding: '10px 12px',
   borderRadius: `${RADIUS_KLEIN}px`,
-  fontSize: 13,
+  fontSize: 14,
   fontWeight: 500,
-  // Link und Taste tragen dieselbe Zeilenhoehe — die Taste erbt sonst keine, und der Eintrag
-  // „Einklappen" stuende 3 px niedriger als seine Nachbarn.
   lineHeight: '20px',
   fontFamily: 'inherit',
   textAlign: 'left',
   textDecoration: 'none',
-  cursor: 'pointer',
-  border: '1px solid transparent',
+  border: 0,
   background: 'transparent',
-  transition: 'background .14s ease, color .14s ease',
+  transition: 'background .15s ease, color .15s ease',
 } as const;
 
 /**
@@ -164,13 +122,57 @@ function NavZiel({
           color: theme.vars.palette.kupferwolke.toenung.pfirsich.schrift,
           fontWeight: 700,
         },
-        '&[aria-current="page"] .nav-symbol': {
-          color: theme.vars.palette.kupferwolke.toenung.pfirsich.schrift,
-        },
       })}
     >
       <NavSymbol name={eintrag.symbol} />
       {eingeklappt ? null : eintrag.beschriftung}
+    </Box>
+  );
+}
+
+/**
+ * Die Icontaste neben der Marke, die die Schiene ein- und ausklappt (E7).
+ *
+ * `aria-expanded` sagt, ob die Schiene offen steht — das ist die Aussage der Taste, nicht ein
+ * gedrueckter Zustand. Der Name bleibt darum in beiden Lagen derselbe; das Symbol zeigt die
+ * Richtung.
+ */
+function EinklappTaste({
+  eingeklappt,
+  umschalten,
+}: {
+  readonly eingeklappt: boolean;
+  readonly umschalten: () => void;
+}) {
+  const Symbol = eingeklappt ? IconLayoutSidebarLeftExpand : IconLayoutSidebarLeftCollapse;
+  return (
+    <Box
+      component="button"
+      type="button"
+      aria-label="Einklappen"
+      aria-expanded={!eingeklappt}
+      onClick={umschalten}
+      sx={(theme) => ({
+        // Icontaste: Kreis 40 px auf „Flaeche weich", Symbol in Text matt, Hover Pfirsich
+        // (CLAUDE-design.md, „Tasten").
+        width: 40,
+        height: 40,
+        flex: 'none',
+        display: 'grid',
+        placeItems: 'center',
+        padding: 0,
+        border: 0,
+        cursor: 'pointer',
+        borderRadius: `${RADIUS_RUND}px`,
+        background: theme.vars.palette.kupferwolke.flaecheWeich,
+        color: theme.vars.palette.kupferwolke.textMatt,
+        '&:hover': {
+          background: theme.vars.palette.kupferwolke.toenung.pfirsich.flaeche,
+          color: theme.vars.palette.kupferwolke.toenung.pfirsich.schrift,
+        },
+      })}
+    >
+      <Symbol size={20} stroke={1.7} aria-hidden />
     </Box>
   );
 }
@@ -201,33 +203,57 @@ export default function NavRail({ onWahl }: { readonly onWahl?: () => void }) {
       data-eingeklappt={String(eingeklappt)}
       sx={(theme) => ({
         width: eingeklappt ? BREITE_EINGEKLAPPT : BREITE,
-        // Die Schiene ist eine freistehende weisse Karte, keine eingelassene Nut mehr
-        // (CLAUDE-design.md, „Rahmen").
+        // Die Schiene ist eine freistehende weisse Karte (CLAUDE-design.md, „Rahmen").
         background: theme.vars.palette.kupferwolke.flaeche,
+        borderRadius: `${RADIUS_GROSS}px`,
         boxShadow: theme.vars.palette.kupferwolke.schatten.karte,
-        paddingBlock: '18px 24px',
-        paddingInline: '14px',
+        padding: '22px 16px',
         display: 'flex',
         flexDirection: 'column',
-        gap: '22px',
+        gap: '6px',
+        // Sie klebt oben, um den Aussenabstand des Rahmens versetzt (Vorlage `.schiene` Z. 30).
+        // Die feste Hoehe ist dafuer die Voraussetzung und nicht Schmuck: Nur eine Karte, die
+        // kuerzer ist als ihre Spalte, hat einen Weg, den sie kleben kann — und nur sie schiebt
+        // ihren Fuss mit der Nutzerkarte nach unten. Was nicht hineinpasst, scrollt in ihr.
+        position: 'sticky',
+        top: '20px',
+        height: 'calc(100vh - 40px)',
+        overflowY: 'auto',
         transition: 'width .14s ease',
       })}
     >
-      <Box data-testid="schiene-kopf">
+      <Box
+        data-testid="schiene-kopf"
+        sx={{
+          display: 'flex',
+          // Eingeklappt stehen Marke und Taste uebereinander — nebeneinander reichten 76 px nicht.
+          flexDirection: eingeklappt ? 'column' : 'row',
+          alignItems: 'center',
+          gap: '10px',
+          padding: '4px 0 18px',
+        }}
+      >
         <BrandMark version={version} kompakt={eingeklappt} />
+        <Box sx={{ marginLeft: eingeklappt ? 0 : 'auto' }}>
+          <EinklappTaste eingeklappt={eingeklappt} umschalten={umschalten} />
+        </Box>
       </Box>
       <Box
         data-testid="schiene-bloecke"
         sx={{ display: 'flex', flexDirection: 'column', gap: '2px' }}
       >
         {NAV_BLOECKE.map((block) => (
-          <Box
-            key={block.etikett}
-            sx={{ display: 'flex', flexDirection: 'column', gap: '3px' }}
-          >
+          <Box key={block.titel} sx={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
             {eingeklappt ? null : (
-              <Typography variant="overline" component="div" sx={{ padding: '0 8px 7px' }}>
-                {block.etikett}
+              <Typography
+                variant="overline"
+                component="div"
+                sx={(theme) => ({
+                  padding: '14px 12px 6px',
+                  color: theme.vars.palette.kupferwolke.textSchwach,
+                })}
+              >
+                {block.titel}
               </Typography>
             )}
             {block.eintraege.map((eintrag) => (
@@ -243,39 +269,25 @@ export default function NavRail({ onWahl }: { readonly onWahl?: () => void }) {
       </Box>
       <Box
         data-testid="schiene-fuss"
-        sx={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: '3px' }}
+        sx={{
+          marginTop: 'auto',
+          paddingTop: '18px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '10px',
+        }}
       >
-        {FUSS_EINTRAEGE.map((fuss) =>
-          fuss.art === 'ziel' ? (
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+          {FUSS_EINTRAEGE.map((eintrag) => (
             <NavZiel
-              key={fuss.beschriftung}
-              eintrag={fuss}
+              key={eintrag.ziel}
+              eintrag={eintrag}
               eingeklappt={eingeklappt}
               onWahl={onWahl}
             />
-          ) : (
-            <Box
-              key={fuss.beschriftung}
-              component="button"
-              type="button"
-              aria-pressed={eingeklappt}
-              aria-label={eingeklappt ? fuss.beschriftung : undefined}
-              onClick={umschalten}
-              sx={(theme) => ({
-                ...eintragStil,
-                color: theme.vars.palette.kupferwolke.textMatt,
-                '&:hover': {
-                  background: theme.vars.palette.kupferwolke.flaecheWeich,
-                  color: theme.vars.palette.kupferwolke.text,
-                },
-                '& .nav-symbol': { transform: eingeklappt ? 'scaleX(-1)' : 'none' },
-              })}
-            >
-              <NavSymbol name={fuss.symbol} />
-              {eingeklappt ? null : fuss.beschriftung}
-            </Box>
-          ),
-        )}
+          ))}
+        </Box>
+        <UserMenu kompakt={eingeklappt} />
       </Box>
     </Box>
   );

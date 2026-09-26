@@ -12,6 +12,8 @@ import { vorgangAbschliessen, vorgangLesen, vorgangWiederEroeffnen } from '../ap
 import type { Phase, Vorgang, Zuordnung } from '../api/vorgaenge';
 import EintragMaske from '../components/EintragMaske';
 import Historie from '../components/Historie';
+import { useKopfPfad } from '../components/KopfPfad';
+import type { PfadVerweis } from '../components/KopfPfad';
 import Platte from '../components/Platte';
 import { nichtGefunden } from '../lib/apifehler';
 import { kennungAus } from '../lib/kennung';
@@ -284,12 +286,21 @@ function Weg({
   );
 }
 
+/** Ueber jeder Vorgangs-Ansicht steht die Uebersicht (E6). */
+const ZU_VORGAENGEN: readonly PfadVerweis[] = [{ titel: 'Vorgänge', ziel: '/vorgaenge' }];
+
 export default function VorgangPage() {
   const { id } = useParams();
   const kennung = kennungAus(id);
   const [stand, setzeStand] = useState<Stand>({ art: 'laedt' });
   const [schaltFehler, setzeSchaltFehler] = useState<string | null>(null);
   const [schaltet, setzeSchaltet] = useState(false);
+  // Solange der Vorgang nicht gelesen ist, traegt die Endstufe das Wort „Vorgang": Ein Pfad, der
+  // erst spaeter erscheint, liesse den Kopf bei jedem Aufruf einmal springen.
+  useKopfPfad(
+    ZU_VORGAENGEN,
+    stand.art === 'daten' ? `#${String(stand.vorgang.nummer)} ${stand.vorgang.titel}` : 'Vorgang',
+  );
   /**
    * Zaehlt die Anlaesse zum Neulesen.
    *
@@ -414,10 +425,11 @@ export default function VorgangPage() {
   return (
     <Box
       sx={{
-        padding: { xs: 2, sm: '22px 26px 44px' },
         display: 'flex',
         flexDirection: 'column',
-        gap: '20px',
+        // Aussenabstand und Spalt bringt der Rahmen mit; hier bleibt nur der Abstand zwischen
+        // den Bereichen der Buehne (CLAUDE-design.md, „Rahmen").
+        gap: '22px',
       }}
     >
       {schaltFehler === null ? null : <Alert severity="error">{schaltFehler}</Alert>}

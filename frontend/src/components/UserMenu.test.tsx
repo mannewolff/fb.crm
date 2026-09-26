@@ -25,12 +25,12 @@ function angemeldet(weitere: Routen = {}) {
   return fetchNachPfad({ 'GET /api/auth/me': json(200, KONTO), ...weitere });
 }
 
-function renderMenue() {
+function renderMenue(kompakt = false) {
   return renderMitTheme(
     <MemoryRouter initialEntries={['/']}>
       <AuthProvider>
         <Routes>
-          <Route path="/" element={<UserMenu />} />
+          <Route path="/" element={<UserMenu kompakt={kompakt} />} />
           <Route path="/anmelden" element={<p>Anmeldeseite</p>} />
         </Routes>
       </AuthProvider>
@@ -43,14 +43,29 @@ afterEach(() => {
 });
 
 describe('UserMenu', () => {
-  it('zeigt die Initialen aus dem Anzeigenamen und nennt das Konto (K13, E12)', async () => {
+  it('ist die Nutzerkarte mit Kuerzel, Namen und E-Mail (E7)', async () => {
     angemeldet();
 
     renderMenue();
 
-    const mal = await screen.findByRole('button', { name: 'Nutzermenü: Manfred Wolff' });
-    expect(mal).toHaveTextContent('MW');
-    expect(mal).toHaveAttribute('aria-haspopup', 'menu');
+    const karte = await screen.findByRole('button', { name: 'Nutzermenü: Manfred Wolff' });
+    expect(karte).toHaveTextContent('MW');
+    expect(karte).toHaveTextContent('Manfred Wolff');
+    expect(karte).toHaveTextContent('info@mwolff.org');
+    expect(karte).toHaveAttribute('aria-haspopup', 'menu');
+    // Das Kuerzel steht neben dem Namen und sagt darum nichts Eigenes mehr.
+    expect(screen.getByTestId('nutzer-mal')).toHaveAttribute('aria-hidden', 'true');
+  });
+
+  it('zeigt eingeklappt nur das Kuerzel, behaelt aber seinen Namen (E7)', async () => {
+    angemeldet();
+
+    renderMenue(true);
+
+    const karte = await screen.findByRole('button', { name: 'Nutzermenü: Manfred Wolff' });
+    expect(karte).toHaveTextContent('MW');
+    expect(screen.queryByText('Manfred Wolff')).not.toBeInTheDocument();
+    expect(screen.queryByText('info@mwolff.org')).not.toBeInTheDocument();
   });
 
   it('zeigt ohne Sitzung nichts', () => {

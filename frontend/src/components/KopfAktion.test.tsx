@@ -44,19 +44,18 @@ afterEach(() => {
 });
 
 describe('KopfAktion', () => {
-  it('legt die Hauptaktion der Seite in den Kopf, vor das Nutzer-Mal', async () => {
+  it('legt die Hauptaktion der Seite rechts in den Kopf (E5)', () => {
     renderSeiten();
 
     const kopf = within(screen.getByRole('banner'));
     const aktion = kopf.getByRole('link', { name: 'Neue Firma' });
-    const mal = await kopf.findByRole('button', { name: /Nutzermenü/ });
     expect(aktion).toHaveAttribute('href', '/firmen/neu');
-    expect(aktion.compareDocumentPosition(mal) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByTestId('kopf-aktion')).toContainElement(aktion);
   });
 
   it('raeumt den Platz, sobald die Seite verlassen wird', async () => {
     renderSeiten();
-    await screen.findByRole('button', { name: /Nutzermenü/ });
+    expect(screen.getByRole('link', { name: 'Neue Firma' })).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('link', { name: 'Weiter' }));
 

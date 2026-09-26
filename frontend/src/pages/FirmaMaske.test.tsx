@@ -1,9 +1,10 @@
-import { screen } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { Firma } from '../api/firmen';
+import KopfPfad, { KopfPfadProvider } from '../components/KopfPfad';
 import { fetchNachPfad, json, leer, problem } from '../test/fetchNachPfad';
 import { renderMitTheme } from '../test/render';
 import FirmaMaske from './FirmaMaske';
@@ -34,13 +35,30 @@ function adresse() {
 function renderMaske(start: string) {
   return renderMitTheme(
     <MemoryRouter initialEntries={[start]}>
-      <Routes>
-        <Route path="/firmen" element={<p>Übersicht</p>} />
-        <Route path="/firmen/neu" element={<FirmaMaske />} />
-        <Route path="/firmen/:id" element={<p>Detailansicht</p>} />
-        <Route path="/firmen/:id/bearbeiten" element={<FirmaMaske />} />
-      </Routes>
-      <Adresse />
+      <KopfPfadProvider>
+        <Routes>
+          <Route path="/firmen" element={<p>Übersicht</p>} />
+          <Route path="/firmen/neu" element={<FirmaMaske />} />
+          <Route path="/firmen/:id" element={<p>Detailansicht</p>} />
+          <Route path="/firmen/:id/bearbeiten" element={<FirmaMaske />} />
+        </Routes>
+        <Adresse />
+      </KopfPfadProvider>
+    </MemoryRouter>,
+  );
+}
+
+/** Dieselbe Maske, aber mit dem Kopf darueber — fuer den Pfad, den sie meldet. */
+function renderMitKopf(start: string) {
+  return renderMitTheme(
+    <MemoryRouter initialEntries={[start]}>
+      <KopfPfadProvider>
+        <KopfPfad />
+        <Routes>
+          <Route path="/firmen/neu" element={<FirmaMaske />} />
+          <Route path="/firmen/:id/bearbeiten" element={<FirmaMaske />} />
+        </Routes>
+      </KopfPfadProvider>
     </MemoryRouter>,
   );
 }
@@ -261,6 +279,21 @@ describe('FirmaMaske — Ändern', () => {
     renderMaske('/firmen/7/bearbeiten');
 
     expect(await screen.findByRole('alert')).toHaveTextContent('nicht zu erreichen');
+  });
+});
+
+describe('FirmaMaske — der Pfad im Kopf (E6)', () => {
+  it.each([
+    ['/firmen/neu', 'Neue Firma'],
+    ['/firmen/7/bearbeiten', 'Firma bearbeiten'],
+  ])('meldet unter %s den Pfad „Firmen › %s"', async (start, endstufe) => {
+    fetchNachPfad({ 'GET /api/firmen/7': json(200, FIRMA) });
+
+    renderMitKopf(start);
+
+    const pfad = within(await screen.findByRole('navigation', { name: 'Pfad' }));
+    expect(pfad.getByRole('link', { name: 'Firmen' })).toHaveAttribute('href', '/firmen');
+    expect(pfad.getByText(endstufe)).toHaveAttribute('aria-current', 'page');
   });
 });
 

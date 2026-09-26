@@ -1,21 +1,22 @@
 /**
  * Die Eintraege der Schiene (E15).
  *
- * Oberhalb des Fusses stehen die <b>Navigationsbloecke</b>, jeder mit einem Etikett als Titel
- * (CLAUDE-design.md, „Rahmen"). Zwei Bloecke traegt dieser Stand, und ihre Reihenfolge ist die
- * Aussage: <b>„Geschäft" steht ueber „Stammdaten"</b> (E24). Der Vorgang ist die taegliche Arbeit,
- * die Firma ihre Voraussetzung — wer die Anwendung oeffnet, will zuerst an seine Vorgaenge.
- * Welche Bloecke dazukommen, entsteht mit den Fachplaenen.
+ * Oberhalb des Fusses stehen die <b>Navigationsbloecke</b>, jeder mit einem Gruppentitel in
+ * Satzschreibung (CLAUDE-design.md, „Rahmen"). Zwei Bloecke traegt dieser Stand, und ihre
+ * Reihenfolge ist die Aussage: <b>„Geschäft" steht ueber „Stammdaten"</b> (E24). Der Vorgang ist
+ * die taegliche Arbeit, die Firma ihre Voraussetzung — wer die Anwendung oeffnet, will zuerst an
+ * seine Vorgaenge. Welche Bloecke dazukommen, entsteht mit den Fachplaenen.
  *
- * Der Fuss bleibt unveraendert: „Administration", „Dokumentation" und „Einklappen".
+ * Im Fuss stehen „Administration" und „Dokumentation" als eigene Gruppe ueber der Nutzerkarte
+ * (E7). „Einklappen" steht nicht mehr darunter: Es ist eine Icontaste neben der Marke geworden
+ * und damit kein Ziel der Navigation mehr.
+ *
+ * Die <b>Symbolnamen sind die der Symbolfamilie Tabler</b> (E3) — dieselbe, die die Vorlage
+ * benutzt. {@link NavRail} loest sie in Komponenten auf; hier bleibt es bei Namen, damit diese
+ * Datei ohne React auskommt.
  */
 
-export type Symbolname =
-  | 'vorgaenge'
-  | 'firmen'
-  | 'administration'
-  | 'dokumentation'
-  | 'einklappen';
+export type Symbolname = 'stack-2' | 'building-community' | 'settings' | 'book';
 
 export interface NavEintrag {
   readonly beschriftung: string;
@@ -24,27 +25,22 @@ export interface NavEintrag {
 }
 
 export interface NavBlock {
-  readonly etikett: string;
+  readonly titel: string;
   readonly eintraege: readonly NavEintrag[];
 }
 
 export const NAV_BLOECKE: readonly NavBlock[] = [
   {
-    etikett: 'Geschäft',
-    eintraege: [{ beschriftung: 'Vorgänge', ziel: '/vorgaenge', symbol: 'vorgaenge' }],
+    titel: 'Geschäft',
+    eintraege: [{ beschriftung: 'Vorgänge', ziel: '/vorgaenge', symbol: 'stack-2' }],
   },
   {
-    etikett: 'Stammdaten',
-    eintraege: [{ beschriftung: 'Firmen', ziel: '/firmen', symbol: 'firmen' }],
+    titel: 'Stammdaten',
+    eintraege: [{ beschriftung: 'Firmen', ziel: '/firmen', symbol: 'building-community' }],
   },
 ];
 
-export type FussEintrag =
-  | { readonly art: 'ziel'; readonly beschriftung: string; readonly ziel: string; readonly symbol: Symbolname }
-  | { readonly art: 'einklappen'; readonly beschriftung: string; readonly symbol: Symbolname };
-
-export const FUSS_EINTRAEGE: readonly FussEintrag[] = [
-  { art: 'ziel', beschriftung: 'Administration', ziel: '/administration', symbol: 'administration' },
-  { art: 'ziel', beschriftung: 'Dokumentation', ziel: '/dokumentation', symbol: 'dokumentation' },
-  { art: 'einklappen', beschriftung: 'Einklappen', symbol: 'einklappen' },
+export const FUSS_EINTRAEGE: readonly NavEintrag[] = [
+  { beschriftung: 'Administration', ziel: '/administration', symbol: 'settings' },
+  { beschriftung: 'Dokumentation', ziel: '/dokumentation', symbol: 'book' },
 ];

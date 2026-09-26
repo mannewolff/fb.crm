@@ -132,6 +132,17 @@ describe('AppShell', () => {
     expect(screen.getByRole('main')).toHaveTextContent('Panel');
   });
 
+  it('haelt die Buehne bei hoechstens 1180 px, Kopf und Inhalt darin (Rahmen)', () => {
+    fensterbreite(1440);
+
+    renderRahmen();
+
+    const buehne = screen.getByTestId('buehne');
+    expect(getComputedStyle(buehne).maxWidth).toBe('1180px');
+    expect(buehne).toContainElement(screen.getByRole('banner'));
+    expect(buehne).toContainElement(screen.getByRole('main'));
+  });
+
   it('fuehrt ueber den Skip-Link auf den Inhaltsbereich', async () => {
     fensterbreite(1440);
     const nutzer = userEvent.setup();

@@ -9,6 +9,8 @@ import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom';
 
 import { ansprechpartnerAendern, ansprechpartnerAnlegen, firmaLesen } from '../api/firmen';
 import type { FieldErrors } from '../api/client';
+import { useKopfPfad } from '../components/KopfPfad';
+import type { PfadVerweis } from '../components/KopfPfad';
 import KupferTaste from '../components/KupferTaste';
 import Platte from '../components/Platte';
 import { feldMeldungen, nichtGefunden } from '../lib/apifehler';
@@ -122,6 +124,9 @@ function Eingabe({
   );
 }
 
+/** Ueber jeder Firmen-Ansicht steht die Uebersicht (E6). */
+const ZU_FIRMEN: readonly PfadVerweis[] = [{ titel: 'Firmen', ziel: '/firmen' }];
+
 export default function AnsprechpartnerMaske() {
   const { id, ansprechpartnerId } = useParams();
   const aendern = ansprechpartnerId !== undefined;
@@ -221,6 +226,7 @@ export default function AnsprechpartnerMaske() {
   };
 
   const titel = aendern ? 'Ansprechpartner bearbeiten' : 'Neuer Ansprechpartner';
+  useKopfPfad(ZU_FIRMEN, titel);
   /** Die eigene Meldung geht vor: Sie beschreibt die Eingabe, die gar nicht erst abging. */
   const meldung = (feld: string) =>
     meldungAm(eigeneFehler, feld) ?? meldungAm(feldFehler, feld);
@@ -228,10 +234,11 @@ export default function AnsprechpartnerMaske() {
   return (
     <Box
       sx={{
-        padding: { xs: 2, sm: '22px 26px 44px' },
         display: 'flex',
         flexDirection: 'column',
-        gap: '20px',
+        // Aussenabstand und Spalt bringt der Rahmen mit; hier bleibt nur der Abstand zwischen
+        // den Bereichen der Buehne (CLAUDE-design.md, „Rahmen").
+        gap: '22px',
       }}
     >
       <Platte

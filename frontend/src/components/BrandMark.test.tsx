@@ -12,6 +12,12 @@ describe('BrandMark', () => {
     expect(screen.getByText('fb.crm')).toBeInTheDocument();
   });
 
+  it('traegt das Mal in 42 px (Rahmen)', () => {
+    renderMitTheme(<BrandMark />);
+
+    expect(getComputedStyle(screen.getByTestId('marke-mal')).width).toBe('42px');
+  });
+
   it('zeigt die Versionsnummer, wenn sie uebergeben wird', () => {
     renderMitTheme(<BrandMark version="1.4.0" />);
 

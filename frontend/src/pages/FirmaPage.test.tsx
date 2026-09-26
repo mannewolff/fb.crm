@@ -8,6 +8,7 @@ import type { VorgaengeDerFirma, VorgangZeile } from '../api/vorgaenge';
 import { AuthProvider } from '../auth/AuthContext';
 import AppShell from '../components/AppShell';
 import { KopfAktionProvider } from '../components/KopfAktion';
+import KopfPfad, { KopfPfadProvider } from '../components/KopfPfad';
 import { fetchNachPfad, json, leer } from '../test/fetchNachPfad';
 import { renderMitTheme } from '../test/render';
 import FirmaPage from './FirmaPage';
@@ -81,12 +82,30 @@ function renderSeite(start = '/firmen/7') {
   return renderMitTheme(
     <MemoryRouter initialEntries={[start]}>
       <KopfAktionProvider>
-        <Routes>
-          <Route path="/firmen" element={<p>Übersicht</p>} />
-          <Route path="/firmen/:id" element={<FirmaPage />} />
-          <Route path="/firmen/:id/bearbeiten" element={<p>Maske</p>} />
-        </Routes>
-        <Adresse />
+        <KopfPfadProvider>
+          <Routes>
+            <Route path="/firmen" element={<p>Übersicht</p>} />
+            <Route path="/firmen/:id" element={<FirmaPage />} />
+            <Route path="/firmen/:id/bearbeiten" element={<p>Maske</p>} />
+          </Routes>
+          <Adresse />
+        </KopfPfadProvider>
+      </KopfAktionProvider>
+    </MemoryRouter>,
+  );
+}
+
+/** Dieselbe Ansicht, aber mit dem Kopf darueber — fuer den Pfad, den sie meldet. */
+function renderMitKopf(start = '/firmen/7') {
+  return renderMitTheme(
+    <MemoryRouter initialEntries={[start]}>
+      <KopfAktionProvider>
+        <KopfPfadProvider>
+          <KopfPfad />
+          <Routes>
+            <Route path="/firmen/:id" element={<FirmaPage />} />
+          </Routes>
+        </KopfPfadProvider>
       </KopfAktionProvider>
     </MemoryRouter>,
   );
@@ -527,6 +546,30 @@ describe('FirmaPage — die Vorgaenge der Firma (Kriterium 12)', () => {
 
     await screen.findByRole('alert');
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('FirmaPage — der Pfad im Kopf (E6)', () => {
+  it('meldet „Firmen" als Weg und den Namen der Firma als Endstufe', async () => {
+    fetchNachPfad({
+      'GET /api/firmen/7': json(200, FIRMA),
+      'GET /api/firmen/7/vorgaenge': json(200, VORGAENGE),
+    });
+
+    renderMitKopf();
+
+    const pfad = within(await screen.findByRole('navigation', { name: 'Pfad' }));
+    expect(pfad.getByRole('link', { name: 'Firmen' })).toHaveAttribute('href', '/firmen');
+    expect(await pfad.findByText('Beispiel GmbH')).toHaveAttribute('aria-current', 'page');
+  });
+
+  it('nennt die Endstufe „Firma", solange die Firma noch nicht gelesen ist', async () => {
+    fetchNachPfad({ 'GET /api/firmen/7': leer(503), 'GET /api/firmen/7/vorgaenge': leer(503) });
+
+    renderMitKopf();
+
+    const pfad = within(await screen.findByRole('navigation', { name: 'Pfad' }));
+    expect(pfad.getByText('Firma')).toHaveAttribute('aria-current', 'page');
   });
 });
 

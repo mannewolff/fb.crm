@@ -3,17 +3,22 @@ import Drawer from '@mui/material/Drawer';
 import Link from '@mui/material/Link';
 import { useTheme } from '@mui/material/styles';
 import useMediaQuery from '@mui/material/useMediaQuery';
+import { IconMenu2 } from '@tabler/icons-react';
 import { useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 
 import { RADIUS_KLEIN, RADIUS_RUND } from '../theme';
 import { KopfAktionProvider } from './KopfAktion';
+import { KopfPfadProvider } from './KopfPfad';
 import NavRail from './NavRail';
 import TopBar from './TopBar';
 
 /**
- * Der Rahmen der angemeldeten Oberflaeche: Schiene links, rechts Kopf und Inhalt (Vorlage
- * `.warte` Z. 199–204).
+ * Der Rahmen der angemeldeten Oberflaeche: Schiene links, rechts die Buehne mit Kopf und Inhalt
+ * (Vorlage `.app` Z. 28, `main` Z. 45).
+ *
+ * Die Masse stehen in der Designquelle („Rahmen"): 20 px Aussenabstand, 24 px Spalt zwischen
+ * Schiene und Buehne, die Buehne hoechstens 1180 px breit, 22 px zwischen ihren Bereichen.
  *
  * Drei Betriebsarten, und jede steht hier im Code und nicht nur im Stylesheet — eine per CSS
  * versteckte Schiene bliebe im Baum und haette im Tabulatorweg keinen Ort:
@@ -33,21 +38,20 @@ import TopBar from './TopBar';
  * gewaehlter Eintrag ihn schliesst; deshalb genuegt `setSchieneOffen(false)` und es braucht kein
  * eigenes Fokus-Kommando, das mit dem Fokusfang des Dialogs streiten wuerde.
  *
- * Der Rahmen spannt ausserdem den Kontext der Kopfaktion auf ({@link KopfAktionProvider}): Er muss
- * Kopf und Inhalt gemeinsam umschliessen, damit eine Ansicht ihre Hauptaktion in den Kopf legen
- * kann, der ueber ihr steht (E11).
+ * Der Rahmen spannt ausserdem die zwei Kontexte des Kopfes auf ({@link KopfAktionProvider},
+ * {@link KopfPfadProvider}): Beide muessen Kopf und Inhalt gemeinsam umschliessen, damit eine
+ * Ansicht ihre Hauptaktion und ihren Pfad in den Kopf legen kann, der ueber ihr steht (E11, E6).
  *
  * Der Skip-Link steht als erstes im Tabulatorweg und setzt den Fokus auf den Inhalt — ohne ihn
  * muesste jeder Tastaturnutzer vor jedem Inhalt durch Schiene und Kopf.
  */
 
 /**
- * Die Schaltflaeche, hinter der die Schiene liegt: erhabene Platte mit drei Balken, links im Kopf
- * (Vorlage `.taste` CSS Z. 315–330).
+ * Die Schaltflaeche, hinter der die Schiene liegt: Icontaste links im Kopf, vor dem Pfad
+ * (Vorlage `.icontaste` Z. 67–68).
  *
- * Sie traegt keinen sichtbaren Text — das Symbol allein steht im Kopf, wie das Nutzer-Mal auf der
- * anderen Seite. Den zugaenglichen Namen traegt deshalb `aria-label`, und `aria-expanded` sagt,
- * ob die Schiene gerade offen ist.
+ * Sie traegt keinen sichtbaren Text — das Symbol allein steht im Kopf. Den zugaenglichen Namen
+ * traegt deshalb `aria-label`, und `aria-expanded` sagt, ob die Schiene gerade offen ist.
  */
 function SchieneSchalter({
   offen,
@@ -66,12 +70,12 @@ function SchieneSchalter({
       sx={(t) => ({
         display: 'grid',
         placeItems: 'center',
-        width: 32,
-        height: 32,
+        width: 40,
+        height: 40,
         flex: 'none',
         padding: 0,
         cursor: 'pointer',
-        // Icontaste: Kreis auf „Flaeche weich", Symbol in Text matt, Hover Pfirsich
+        // Icontaste: Kreis 40 px auf „Flaeche weich", Symbol in Text matt, Hover Pfirsich
         // (CLAUDE-design.md, „Tasten").
         borderRadius: `${RADIUS_RUND}px`,
         border: 0,
@@ -83,14 +87,7 @@ function SchieneSchalter({
         },
       })}
     >
-      <Box component="svg" viewBox="0 0 16 16" fill="none" aria-hidden sx={{ width: 16, height: 16 }}>
-        <path
-          d="M2.5 4h11M2.5 8h11M2.5 12h11"
-          stroke="currentColor"
-          strokeWidth="1.5"
-          strokeLinecap="round"
-        />
-      </Box>
+      <IconMenu2 size={20} stroke={1.7} aria-hidden />
     </Box>
   );
 }
@@ -104,70 +101,87 @@ export default function AppShell({ children }: { readonly children: ReactNode })
 
   return (
     <KopfAktionProvider>
-      <Box
-        sx={{
-          display: 'grid',
-          gridTemplateColumns: offeneSchiene ? 'auto minmax(0, 1fr)' : 'minmax(0, 1fr)',
-          minHeight: '100vh',
-        }}
-      >
-        <Link
-          href="#inhalt"
-          onClick={(ereignis) => {
-            ereignis.preventDefault();
-            inhalt.current?.focus();
+      <KopfPfadProvider>
+        <Box
+          sx={{
+            display: 'grid',
+            gridTemplateColumns: offeneSchiene ? 'auto minmax(0, 1fr)' : 'minmax(0, 1fr)',
+            gap: '24px',
+            padding: '20px',
+            minHeight: '100vh',
           }}
-          sx={(t) => ({
-            position: 'absolute',
-            left: 8,
-            top: -48,
-            zIndex: 30,
-            padding: '6px 12px',
-            borderRadius: `${RADIUS_KLEIN}px`,
-            background: t.vars.palette.kupferwolke.flaeche,
-            boxShadow: t.vars.palette.kupferwolke.schatten.hoch,
-            '&:focus': { top: 8 },
-          })}
         >
-          Zum Inhalt springen
-        </Link>
-        {offeneSchiene ? <NavRail /> : null}
-        {hinterSchaltflaeche ? (
-          <Drawer
-            anchor="left"
-            open={schieneOffen}
-            onClose={() => {
-              setSchieneOffen(false);
+          <Link
+            href="#inhalt"
+            onClick={(ereignis) => {
+              ereignis.preventDefault();
+              inhalt.current?.focus();
             }}
-            // Die Schiene bringt Flaeche, Rand und Tiefe selbst mit; das Papier des Drawers
-            // wuerde sie sonst mit einer zweiten weissen Flaeche unterlegen.
-            slotProps={{ paper: { sx: { background: 'none', border: 0, boxShadow: 'none' } } }}
+            sx={(t) => ({
+              position: 'absolute',
+              left: 8,
+              top: -48,
+              zIndex: 30,
+              padding: '6px 12px',
+              borderRadius: `${RADIUS_KLEIN}px`,
+              background: t.vars.palette.kupferwolke.flaeche,
+              boxShadow: t.vars.palette.kupferwolke.schatten.hoch,
+              '&:focus': { top: 8 },
+            })}
           >
-            <NavRail
-              onWahl={() => {
+            Zum Inhalt springen
+          </Link>
+          {offeneSchiene ? <NavRail /> : null}
+          {hinterSchaltflaeche ? (
+            <Drawer
+              anchor="left"
+              open={schieneOffen}
+              onClose={() => {
                 setSchieneOffen(false);
               }}
+              // Die Schiene bringt Flaeche, Rand und Tiefe selbst mit; das Papier des Drawers
+              // wuerde sie sonst mit einer zweiten weissen Flaeche unterlegen. Der Aussenabstand
+              // des Rahmens steht hier am Papier, damit die Karte auch hier frei schwebt.
+              slotProps={{
+                paper: { sx: { background: 'none', border: 0, boxShadow: 'none', padding: '20px' } },
+              }}
+            >
+              <NavRail
+                onWahl={() => {
+                  setSchieneOffen(false);
+                }}
+              />
+            </Drawer>
+          ) : null}
+          <Box
+            data-testid="buehne"
+            sx={{
+              minWidth: 0,
+              width: '100%',
+              maxWidth: 1180,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '22px',
+            }}
+          >
+            <TopBar
+              schalter={
+                hinterSchaltflaeche ? (
+                  <SchieneSchalter
+                    offen={schieneOffen}
+                    oeffnen={() => {
+                      setSchieneOffen(true);
+                    }}
+                  />
+                ) : undefined
+              }
             />
-          </Drawer>
-        ) : null}
-        <Box sx={{ minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-          <TopBar
-            schalter={
-              hinterSchaltflaeche ? (
-                <SchieneSchalter
-                  offen={schieneOffen}
-                  oeffnen={() => {
-                    setSchieneOffen(true);
-                  }}
-                />
-              ) : undefined
-            }
-          />
-          <Box component="main" id="inhalt" ref={inhalt} tabIndex={-1} sx={{ outline: 'none' }}>
-            {children}
+            <Box component="main" id="inhalt" ref={inhalt} tabIndex={-1} sx={{ outline: 'none' }}>
+              {children}
+            </Box>
           </Box>
         </Box>
-      </Box>
+      </KopfPfadProvider>
     </KopfAktionProvider>
   );
 }

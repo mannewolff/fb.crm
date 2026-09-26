@@ -3,11 +3,15 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { AuthProvider } from '../auth/AuthContext';
 import { FUSS_EINTRAEGE, NAV_BLOECKE } from '../layout/navItems';
 import { SCHIENE_SCHLUESSEL } from '../lib/railState';
 import { fetchNachPfad, json, leer } from '../test/fetchNachPfad';
+import type { Routen } from '../test/fetchNachPfad';
 import { renderMitTheme } from '../test/render';
 import NavRail from './NavRail';
+
+const KONTO = { id: 1, displayName: 'Manfred Wolff', email: 'info@mwolff.org' };
 
 /** Ein Speicher, der ein Neuladen ueberlebt, weil er nicht an der Komponente haengt. */
 function speicher() {
@@ -24,10 +28,21 @@ function speicher() {
   return inhalt;
 }
 
-function renderSchiene(adresse = '/') {
+/** Sitzung und Versionsstand — beides braucht die Schiene fuer Marke und Nutzerkarte. */
+function angemeldet(weitere: Routen = {}) {
+  return fetchNachPfad({
+    'GET /api/auth/me': json(200, KONTO),
+    'GET /api/instance': json(200, { version: '0.1.1' }),
+    ...weitere,
+  });
+}
+
+function renderSchiene(adresse = '/', onWahl?: () => void) {
   return renderMitTheme(
     <MemoryRouter initialEntries={[adresse]}>
-      <NavRail />
+      <AuthProvider>
+        <NavRail onWahl={onWahl} />
+      </AuthProvider>
     </MemoryRouter>,
   );
 }
@@ -41,17 +56,16 @@ afterEach(() => {
 });
 
 describe('navItems (E15, E18)', () => {
-  it('fuehrt genau die drei Fuss-Eintraege und sonst nichts', () => {
+  it('fuehrt im Fuss nur noch die beiden Ziele — „Einklappen" steht an der Marke (E7)', () => {
     expect(FUSS_EINTRAEGE.map((eintrag) => eintrag.beschriftung)).toEqual([
       'Administration',
       'Dokumentation',
-      'Einklappen',
     ]);
   });
 
   it('fuehrt „Geschäft" vor „Stammdaten", jeden Block mit seinen Eintraegen', () => {
     expect(
-      NAV_BLOECKE.map((block) => [block.etikett, block.eintraege.map((e) => [e.beschriftung, e.ziel])]),
+      NAV_BLOECKE.map((block) => [block.titel, block.eintraege.map((e) => [e.beschriftung, e.ziel])]),
     ).toEqual([
       ['Geschäft', [['Vorgänge', '/vorgaenge']]],
       ['Stammdaten', [['Firmen', '/firmen']]],
@@ -61,7 +75,7 @@ describe('navItems (E15, E18)', () => {
 
 describe('NavRail', () => {
   it('ist als Hauptnavigation benannt', () => {
-    fetchNachPfad({ 'GET /api/instance': json(200, { version: '0.1.1' }) });
+    angemeldet();
 
     renderSchiene();
 
@@ -69,7 +83,7 @@ describe('NavRail', () => {
   });
 
   it('hat nach der Anmeldung keinen aktiven Eintrag (K10)', () => {
-    fetchNachPfad({ 'GET /api/instance': json(200, { version: '0.1.1' }) });
+    angemeldet();
 
     renderSchiene('/');
 
@@ -78,14 +92,14 @@ describe('NavRail', () => {
   });
 
   it('traegt zwischen Marke und Fuss die Bloecke „Geschäft" und „Stammdaten" (K11, E18, E24)', () => {
-    fetchNachPfad({ 'GET /api/instance': json(200, { version: '0.1.1' }) });
+    angemeldet();
 
     renderSchiene();
 
-    // Die Marke bleibt fuer sich: Das Etikett gehoert zum Block, nicht zum Kopf.
+    // Die Marke bleibt fuer sich: Der Gruppentitel gehoert zum Block, nicht zum Kopf.
     const kopf = within(screen.getByTestId('schiene-kopf'));
     expect(kopf.queryAllByRole('link')).toHaveLength(0);
-    expect(screen.getByTestId('schiene-kopf')).toHaveTextContent(/^fb\.crm$/);
+    expect(kopf.getByText('fb.crm')).toBeInTheDocument();
 
     const bloecke = within(screen.getByTestId('schiene-bloecke'));
     // „Geschäft" steht ueber „Stammdaten" (E24): die Reihenfolge der Links haelt sie fest.
@@ -99,7 +113,7 @@ describe('NavRail', () => {
     ]);
     expect(bloecke.getByRole('link', { name: 'Vorgänge' })).toBeInTheDocument();
     expect(bloecke.getByRole('link', { name: 'Firmen' })).toBeInTheDocument();
-    // Kein Umschalter in den Bloecken — Tasten stehen allein im Fuss.
+    // Kein Umschalter in den Bloecken — Tasten stehen an der Marke und im Fuss.
     expect(bloecke.queryAllByRole('button')).toHaveLength(0);
     // Die Bloecke stehen im Baum oberhalb des Fusses.
     expect(
@@ -107,23 +121,28 @@ describe('NavRail', () => {
     ).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
   });
 
+  it('schreibt die Gruppentitel in Satzschreibung, ohne Versalien (Typografie)', () => {
+    angemeldet();
+
+    renderSchiene();
+
+    const titel = within(screen.getByTestId('schiene-bloecke')).getByText('Stammdaten');
+    expect(getComputedStyle(titel).textTransform).toBe('none');
+  });
+
   it('ruft beim Waehlen eines Eintrags den Rueckruf (Schaltflaechen-Schiene)', async () => {
-    fetchNachPfad({ 'GET /api/instance': json(200, { version: '0.1.1' }) });
+    angemeldet();
     const nutzer = userEvent.setup();
     const gewaehlt = vi.fn();
 
-    renderMitTheme(
-      <MemoryRouter initialEntries={['/']}>
-        <NavRail onWahl={gewaehlt} />
-      </MemoryRouter>,
-    );
+    renderSchiene('/', gewaehlt);
     await nutzer.click(screen.getByRole('link', { name: 'Firmen' }));
 
     expect(gewaehlt).toHaveBeenCalledTimes(1);
   });
 
-  it('traegt im Fuss genau die drei Eintraege (K12)', () => {
-    fetchNachPfad({ 'GET /api/instance': json(200, { version: '0.1.1' }) });
+  it('traegt im Fuss Administration, Dokumentation und die Nutzerkarte (K12, E7)', async () => {
+    angemeldet();
 
     renderSchiene();
 
@@ -132,7 +151,21 @@ describe('NavRail', () => {
       '/administration',
       '/dokumentation',
     ]);
-    expect(fuss.getAllByRole('button').map((taste) => taste.textContent)).toEqual(['Einklappen']);
+    const karte = await fuss.findByRole('button', { name: 'Nutzermenü: Manfred Wolff' });
+    expect(karte).toHaveTextContent('Manfred Wolff');
+    expect(karte).toHaveTextContent('info@mwolff.org');
+    expect(karte).toHaveTextContent('MW');
+  });
+
+  it('oeffnet aus der Nutzerkarte das Menue mit „Abmelden" (K14, E7)', async () => {
+    angemeldet();
+    const nutzer = userEvent.setup();
+
+    renderSchiene();
+    await nutzer.click(await screen.findByRole('button', { name: /Nutzermenü/ }));
+
+    const eintraege = within(screen.getByRole('menu')).getAllByRole('menuitem');
+    expect(eintraege.map((eintrag) => eintrag.textContent)).toEqual(['Abmelden']);
   });
 
   it.each([
@@ -145,7 +178,7 @@ describe('NavRail', () => {
     // Dasselbe am Vorgang: die Detailansicht laesst „Vorgänge" aktiv stehen.
     ['/vorgaenge/12', 'Vorgänge'],
   ])('setzt auf %s aria-current="page" an „%s" und nur dort (K12)', (adresse, beschriftung) => {
-    fetchNachPfad({ 'GET /api/instance': json(200, { version: '0.1.1' }) });
+    angemeldet();
 
     renderSchiene(adresse);
 
@@ -155,7 +188,7 @@ describe('NavRail', () => {
   });
 
   it('zeigt die Version der Instanz an der Marke (K11)', async () => {
-    fetchNachPfad({ 'GET /api/instance': json(200, { version: '0.1.1' }) });
+    angemeldet();
 
     renderSchiene();
 
@@ -163,7 +196,7 @@ describe('NavRail', () => {
   });
 
   it('bleibt ohne Version bedienbar, wenn der Versionsstand nicht zu erfahren ist', async () => {
-    const fetchMock = fetchNachPfad({ 'GET /api/instance': leer(503) });
+    const fetchMock = angemeldet({ 'GET /api/instance': leer(503) });
 
     renderSchiene();
     await vi.waitFor(() => {
@@ -174,28 +207,37 @@ describe('NavRail', () => {
     expect(screen.getByRole('button', { name: 'Einklappen' })).toBeEnabled();
   });
 
-  it('klappt ein, behaelt die Beschriftung als Namen und uebersteht das Neuladen (K12, E13)', async () => {
-    fetchNachPfad({ 'GET /api/instance': json(200, { version: '0.1.1' }) });
+  it('klappt ein, behaelt jeden Namen und uebersteht das Neuladen (K12, E13)', async () => {
+    angemeldet();
     const nutzer = userEvent.setup();
 
     const { unmount } = renderSchiene();
     const taste = screen.getByRole('button', { name: 'Einklappen' });
-    expect(taste).toHaveAttribute('aria-pressed', 'false');
+    // Die Taste sagt, ob die Schiene offen steht — nicht, ob sie gedrueckt ist.
+    expect(taste).toHaveAttribute('aria-expanded', 'true');
     expect(screen.getByRole('navigation')).toHaveAttribute('data-eingeklappt', 'false');
     await nutzer.click(taste);
 
-    expect(screen.getByRole('button', { name: 'Einklappen' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'Einklappen' })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    );
     expect(screen.getByRole('navigation')).toHaveAttribute('data-eingeklappt', 'true');
     // Eingeklappt steht keine sichtbare Beschriftung mehr — der Name bleibt als aria-label.
     expect(screen.queryByText('Administration')).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Administration' })).toBeInTheDocument();
-    // Ebenso im Block: das Etikett entfaellt, der Link behaelt seinen Namen.
+    // Ebenso im Block: der Gruppentitel entfaellt, der Link behaelt seinen Namen.
     expect(screen.queryByText('Stammdaten')).not.toBeInTheDocument();
     expect(screen.queryByText('Geschäft')).not.toBeInTheDocument();
     expect(screen.queryByText('Firmen')).not.toBeInTheDocument();
     expect(screen.queryByText('Vorgänge')).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Firmen' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Vorgänge' })).toBeInTheDocument();
+    // Marke und Kuerzel bleiben; Name und E-Mail der Nutzerkarte entfallen.
+    expect(screen.getByTestId('marke-mal')).toBeInTheDocument();
+    expect(screen.getByTestId('nutzer-mal')).toHaveTextContent('MW');
+    expect(screen.queryByText('info@mwolff.org')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Nutzermenü/ })).toBeInTheDocument();
 
     // Neuladen: die Komponente geht, der Speicher bleibt.
     unmount();
@@ -208,7 +250,7 @@ describe('NavRail', () => {
   it('zeichnet „Vorgänge" und „Firmen" mit verschiedenen Symbolen (E24)', async () => {
     // Eingeklappt steht nur noch das Symbol da. Zwei Eintraege mit demselben Strich waeren dort
     // nicht mehr zu unterscheiden — der Block „Geschäft" saehe aus wie „Stammdaten".
-    fetchNachPfad({ 'GET /api/instance': json(200, { version: '0.1.1' }) });
+    angemeldet();
     const nutzer = userEvent.setup();
 
     renderSchiene();
@@ -217,25 +259,25 @@ describe('NavRail', () => {
     // Eingeklappt steht keine Beschriftung mehr da — nur noch der Strich.
     expect(screen.queryByText('Vorgänge')).not.toBeInTheDocument();
     const strich = (name: string) => screen.getByTestId(`nav-symbol-${name}`).innerHTML;
-    expect(strich('vorgaenge')).toBeTruthy();
-    expect(strich('vorgaenge')).not.toBe(strich('firmen'));
+    expect(strich('stack-2')).toBeTruthy();
+    expect(strich('stack-2')).not.toBe(strich('building-community'));
   });
 
-  it('wechselt die Breite zwischen 224 und 64 px', async () => {
-    fetchNachPfad({ 'GET /api/instance': json(200, { version: '0.1.1' }) });
+  it('wechselt die Breite zwischen 260 und 76 px (Rahmen)', async () => {
+    angemeldet();
     const nutzer = userEvent.setup();
 
     renderSchiene();
     const schiene = screen.getByRole('navigation');
-    expect(getComputedStyle(schiene).width).toBe('224px');
+    expect(getComputedStyle(schiene).width).toBe('260px');
 
     await nutzer.click(screen.getByRole('button', { name: 'Einklappen' }));
 
-    expect(getComputedStyle(screen.getByRole('navigation')).width).toBe('64px');
+    expect(getComputedStyle(screen.getByRole('navigation')).width).toBe('76px');
   });
 
   it('klappt wieder aus', async () => {
-    fetchNachPfad({ 'GET /api/instance': json(200, { version: '0.1.1' }) });
+    angemeldet();
     const nutzer = userEvent.setup();
 
     renderSchiene();

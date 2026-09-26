@@ -12,6 +12,8 @@ import type { Ansprechpartner, FirmaZeile } from '../api/firmen';
 import type { FieldErrors } from '../api/client';
 import { vorgangAendern, vorgangAnlegen, vorgangLesen } from '../api/vorgaenge';
 import type { Zuordnung } from '../api/vorgaenge';
+import { useKopfPfad } from '../components/KopfPfad';
+import type { PfadVerweis } from '../components/KopfPfad';
 import KupferTaste from '../components/KupferTaste';
 import Platte from '../components/Platte';
 import { feldMeldungen, nichtGefunden } from '../lib/apifehler';
@@ -212,6 +214,9 @@ interface Eigene {
   readonly ansprechpartner: Zuordnung | null;
 }
 
+/** Ueber jeder Vorgangs-Ansicht steht die Uebersicht (E6). */
+const ZU_VORGAENGEN: readonly PfadVerweis[] = [{ titel: 'Vorgänge', ziel: '/vorgaenge' }];
+
 export default function VorgangMaske() {
   const { id } = useParams();
   const aendern = id !== undefined;
@@ -226,6 +231,7 @@ export default function VorgangMaske() {
   const [eigeneFehler, setzeEigeneFehler] = useState<FieldErrors>({});
   const [feldFehler, setzeFeldFehler] = useState<FieldErrors>({});
   const [fehler, setzeFehler] = useState<string | null>(null);
+  useKopfPfad(ZU_VORGAENGEN, aendern ? 'Vorgang bearbeiten' : 'Neuer Vorgang');
   const [laeuft, setzeLaeuft] = useState(false);
 
   useEffect(() => {
@@ -376,10 +382,11 @@ export default function VorgangMaske() {
   return (
     <Box
       sx={{
-        padding: { xs: 2, sm: '22px 26px 44px' },
         display: 'flex',
         flexDirection: 'column',
-        gap: '20px',
+        // Aussenabstand und Spalt bringt der Rahmen mit; hier bleibt nur der Abstand zwischen
+        // den Bereichen der Buehne (CLAUDE-design.md, „Rahmen").
+        gap: '22px',
       }}
     >
       <Platte titel={aendern ? 'Vorgang bearbeiten' : 'Neuer Vorgang'}>
