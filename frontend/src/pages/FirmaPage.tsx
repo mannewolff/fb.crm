@@ -21,6 +21,7 @@ import KupferTaste from '../components/KupferTaste';
 import Platte from '../components/Platte';
 import { nichtGefunden } from '../lib/apifehler';
 import { kennungAus } from '../lib/kennung';
+import { namensZug } from '../lib/namenszug';
 import { emailZiel, telefonZiel } from '../lib/telefonlink';
 import { CARD_RADIUS } from '../theme';
 
@@ -161,11 +162,6 @@ function Kontakt({
       {wert}
     </Link>
   );
-}
-
-/** „Anna Berg" oder, ohne Vornamen, „Clausen" — nie ein fuehrendes Leerzeichen. */
-function namensZug(partner: Ansprechpartner): string {
-  return partner.vorname === null ? partner.nachname : `${partner.vorname} ${partner.nachname}`;
 }
 
 /**

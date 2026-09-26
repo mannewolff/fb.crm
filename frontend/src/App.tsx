@@ -16,6 +16,7 @@ const FirmaMaske = lazy(async () => import('./pages/FirmaMaske'));
 const FirmaPage = lazy(async () => import('./pages/FirmaPage'));
 const AnsprechpartnerMaske = lazy(async () => import('./pages/AnsprechpartnerMaske'));
 const VorgaengePage = lazy(async () => import('./pages/VorgaengePage'));
+const VorgangMaske = lazy(async () => import('./pages/VorgangMaske'));
 const VorgangPage = lazy(async () => import('./pages/VorgangPage'));
 
 /**
@@ -53,6 +54,8 @@ export default function App() {
           >
             <Route path="/" element={<EmptyPanel />} />
             <Route path="/vorgaenge" element={<VorgaengePage />} />
+            {/* Statisch vor dynamisch: `/vorgaenge/neu` ist die Maske, nicht der Vorgang „neu". */}
+            <Route path="/vorgaenge/neu" element={<VorgangMaske />} />
             <Route path="/vorgaenge/:id" element={<VorgangPage />} />
             <Route path="/firmen" element={<FirmenPage />} />
             {/* Statisch vor dynamisch: `/firmen/neu` ist die Maske, nicht die Firma „neu". */}

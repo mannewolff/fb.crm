@@ -347,4 +347,36 @@ describe('VorgaengePage — Kopfaktion', () => {
     expect(screen.getByText('Andere Seite')).toBeInTheDocument();
     expect(screen.getByTestId('kopf-aktion')).toBeEmptyDOMElement();
   });
+
+  it('fuehrt „Neuer Vorgang" auf die Maske', async () => {
+    const nutzer = userEvent.setup();
+    fensterbreite(1440);
+    fetchNachPfad({
+      'GET /api/auth/me': json(200, KONTO),
+      'GET /api/instance': json(200, { version: '0.1.3' }),
+      [weg('', false)]: json(200, { vorgaenge: [WEBSITE], gesamt: 1 }),
+    });
+
+    renderMitTheme(
+      <MemoryRouter initialEntries={['/vorgaenge']}>
+        <AuthProvider>
+          <AppShell>
+            <Routes>
+              <Route path="/vorgaenge" element={<VorgaengePage />} />
+              <Route path="/vorgaenge/neu" element={<p>Maske</p>} />
+            </Routes>
+            <Adresse />
+          </AppShell>
+        </AuthProvider>
+      </MemoryRouter>,
+    );
+
+    await screen.findByRole('table');
+    await nutzer.click(
+      within(screen.getByRole('banner')).getByRole('link', { name: 'Neuer Vorgang' }),
+    );
+
+    expect(screen.getByText('Maske')).toBeInTheDocument();
+    expect(adresse()).toBe('/vorgaenge/neu');
+  });
 });

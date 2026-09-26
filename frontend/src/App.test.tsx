@@ -110,6 +110,32 @@ describe('App', () => {
     expect(screen.getByRole('navigation', { name: 'Hauptnavigation' })).toBeInTheDocument();
   });
 
+  it('fuehrt „/vorgaenge/neu" ohne Sitzung auf die Anmeldeseite', async () => {
+    ohneSitzung();
+
+    renderApp(['/vorgaenge/neu'], 0);
+
+    expect(await screen.findByLabelText(/^E-Mail-Adresse/)).toBeInTheDocument();
+  });
+
+  it('zeigt „/vorgaenge/neu" als Maske — statisch vor der dynamischen Kennung', async () => {
+    fensterbreite(1440);
+    fetchNachPfad({
+      'GET /api/auth/me': json(200, KONTO),
+      'GET /api/instance': json(200, { version: '0.1.3' }),
+      'GET /api/firmen?suche=&auchStillgelegte=false': json(200, { firmen: [], gesamt: 0 }),
+    });
+
+    renderApp(['/vorgaenge/neu'], 0);
+
+    // Lazy und geschuetzt: Beim ersten Rendern steht erst die Sitzungspruefung da.
+    expect(screen.getByRole('status')).toHaveTextContent('Sitzung wird geprüft');
+    // „neu" ist die Maske und nicht der Vorgang mit der Kennung „neu": Waere die dynamische
+    // Route zuerst dran, ginge hier ein Aufruf auf /api/vorgaenge/neu hinaus.
+    expect(await screen.findByRole('heading', { name: 'Neuer Vorgang' })).toBeInTheDocument();
+    expect(screen.getByRole('navigation', { name: 'Hauptnavigation' })).toBeInTheDocument();
+  });
+
   it('fuehrt „/vorgaenge/5" ohne Sitzung auf die Anmeldeseite', async () => {
     ohneSitzung();
 
