@@ -109,4 +109,38 @@ describe('App', () => {
     expect(await screen.findByText(/Es ist noch kein Vorgang angelegt/)).toBeInTheDocument();
     expect(screen.getByRole('navigation', { name: 'Hauptnavigation' })).toBeInTheDocument();
   });
+
+  it('fuehrt „/vorgaenge/5" ohne Sitzung auf die Anmeldeseite', async () => {
+    ohneSitzung();
+
+    renderApp(['/vorgaenge/5'], 0);
+
+    expect(await screen.findByLabelText(/^E-Mail-Adresse/)).toBeInTheDocument();
+  });
+
+  it('zeigt „/vorgaenge/5" mit Sitzung im Rahmen — nachgeladen, nicht im ersten Rutsch', async () => {
+    fensterbreite(1440);
+    fetchNachPfad({
+      'GET /api/auth/me': json(200, KONTO),
+      'GET /api/instance': json(200, { version: '0.1.3' }),
+      'GET /api/vorgaenge/5': json(200, {
+        id: 5,
+        nummer: 941,
+        titel: 'Anteilsbalken je Vorgang',
+        phase: 'ANBAHNUNG',
+        abgeschlossen: false,
+        firma: { id: 7, name: 'Beispiel GmbH', aktiv: true },
+        ansprechpartner: null,
+        historie: [],
+      }),
+    });
+
+    renderApp(['/vorgaenge/5'], 0);
+
+    expect(screen.getByRole('status')).toHaveTextContent('Sitzung wird geprüft');
+    expect(
+      await screen.findByRole('heading', { name: 'Anteilsbalken je Vorgang' }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('navigation', { name: 'Hauptnavigation' })).toBeInTheDocument();
+  });
 });

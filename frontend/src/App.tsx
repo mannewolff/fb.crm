@@ -16,6 +16,7 @@ const FirmaMaske = lazy(async () => import('./pages/FirmaMaske'));
 const FirmaPage = lazy(async () => import('./pages/FirmaPage'));
 const AnsprechpartnerMaske = lazy(async () => import('./pages/AnsprechpartnerMaske'));
 const VorgaengePage = lazy(async () => import('./pages/VorgaengePage'));
+const VorgangPage = lazy(async () => import('./pages/VorgangPage'));
 
 /**
  * Der Routenbaum. Offen sind die Anmeldeseite, die Einrichtung und die beiden Seiten zum
@@ -52,6 +53,7 @@ export default function App() {
           >
             <Route path="/" element={<EmptyPanel />} />
             <Route path="/vorgaenge" element={<VorgaengePage />} />
+            <Route path="/vorgaenge/:id" element={<VorgangPage />} />
             <Route path="/firmen" element={<FirmenPage />} />
             {/* Statisch vor dynamisch: `/firmen/neu` ist die Maske, nicht die Firma „neu". */}
             <Route path="/firmen/neu" element={<FirmaMaske />} />
