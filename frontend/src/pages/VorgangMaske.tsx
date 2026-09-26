@@ -5,25 +5,32 @@ import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { useEffect, useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
-import { Link as RouterLink, useNavigate } from 'react-router-dom';
+import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom';
 
 import { firmaLesen, firmenUebersicht } from '../api/firmen';
 import type { Ansprechpartner, FirmaZeile } from '../api/firmen';
 import type { FieldErrors } from '../api/client';
-import { vorgangAnlegen } from '../api/vorgaenge';
+import { vorgangAendern, vorgangAnlegen, vorgangLesen } from '../api/vorgaenge';
+import type { Zuordnung } from '../api/vorgaenge';
 import KupferTaste from '../components/KupferTaste';
 import Platte from '../components/Platte';
-import { feldMeldungen } from '../lib/apifehler';
+import { feldMeldungen, nichtGefunden } from '../lib/apifehler';
 import { meldungAm } from '../lib/feldmeldung';
+import { kennungAus } from '../lib/kennung';
 import { namensZug } from '../lib/namenszug';
 
 /**
- * Die Maske des Vorgangs — Anlegen unter `/vorgaenge/neu` (Kriterien 5, 6, 7, 26).
+ * Die Maske des Vorgangs — Anlegen unter `/vorgaenge/neu`, Aendern unter
+ * `/vorgaenge/:id/bearbeiten` (Kriterien 5, 6, 7, 10, 23, 26).
  *
- * Rahmen und Aufbau folgen {@link FirmaMaske}: eine {@link Platte} auf der Buehne und nicht die
- * Karte der Auth-Seiten (E19) — die bringt ein eigenes `main` und die Marke mit, und innerhalb des
- * angemeldeten Rahmens waere das ein zweites `main` in derselben Seite. Eine eigene Ruecknahme
- * braucht es nicht: „ohne Speichern verlassen" ist der Weg zurueck (E10).
+ * Eine Komponente fuer beide Wege, wie in {@link FirmaMaske}: Die Felder, ihre Meldungen und ihr
+ * Verhalten sind dieselben, und der einzige Unterschied ist, woher die Werte kommen und wohin das
+ * Speichern fuehrt. Zwei Abschriften liefen beim ersten Nachziehen auseinander.
+ *
+ * Rahmen und Aufbau folgen ebenfalls {@link FirmaMaske}: eine {@link Platte} auf der Buehne und
+ * nicht die Karte der Auth-Seiten (E19) — die bringt ein eigenes `main` und die Marke mit, und
+ * innerhalb des angemeldeten Rahmens waere das ein zweites `main` in derselben Seite. Eine eigene
+ * Ruecknahme braucht es nicht: „ohne Speichern verlassen" ist der Weg zurueck (E10).
  *
  * <b>Kein eigener Leseweg fuer die Auswahllisten</b> (E18). Die Firmen kommen aus
  * `GET /api/firmen` — ohne Schalter liefert der Weg nur aktive —, die Ansprechpartner aus
@@ -31,8 +38,15 @@ import { namensZug } from '../lib/namenszug';
  * dieselben Daten waere eine zweite Wahrheit. Die Schranke liegt ohnehin nicht hier, sondern
  * serverseitig (E19): Die Oberflaeche fuehrt, sie sperrt nicht.
  *
+ * <b>Die eigene Zuordnung des Vorgangs steht in der Wahl, solange sie gewaehlt ist</b>
+ * (Kriterium 23, E18). Sie kann inzwischen stillgelegt sein und fehlt dann in den Leselisten;
+ * diese Maske mischt sie hinzu, gekennzeichnet in der Aufschrift. Wer etwas anderes waehlt, findet
+ * sie danach nicht wieder — {@link mitEigener} haengt sie an die Wahl und nicht an den Vorgang.
+ *
  * Beide Auswahllisten sind <b>native</b> `select`-Elemente. Sie tragen die Bedienung des jeweiligen
  * Systems mit — Tastatur, Sprachsteuerung, Screenreader —, statt sie nachzubilden (Kriterium 26).
+ * Darum steht „stillgelegt" als Wort in der Aufschrift und nicht als Schild daneben: Ein `option`
+ * traegt nichts als Text, und so liest der Screenreader den Stand mit dem Namen.
  *
  * Das Formular traegt `noValidate`. Die Pflichtangabe steht als `required` am Feld — fuer den
  * Screenreader und fuer das Sternchen —, die Meldung dazu schreibt aber diese Maske, damit sie in
@@ -45,16 +59,21 @@ const KEINE_WAHL = '';
 const TITEL_FEHLT = 'Bitte einen Titel angeben.';
 const FIRMA_FEHLT = 'Bitte eine Firma wählen.';
 const OHNE_AKTIVE_FIRMA = 'Es ist keine aktive Firma vorhanden.';
+const NICHT_GEFUNDEN = 'Diesen Vorgang gibt es nicht.';
 const AUSFALL_FIRMEN = 'Die Firmen sind gerade nicht zu erreichen. Bitte später erneut versuchen.';
+const AUSFALL_LESEN = 'Der Vorgang ist gerade nicht zu erreichen. Bitte später erneut versuchen.';
 const AUSFALL_PARTNER =
   'Die Ansprechpartner sind gerade nicht zu erreichen. Bitte später erneut versuchen.';
 const AUSFALL_SPEICHERN = 'Der Vorgang wurde nicht gespeichert. Bitte später erneut versuchen.';
+const LAEDT_FIRMEN = 'Die Firmen werden geladen …';
+const LAEDT_VORGANG = 'Der Vorgang wird geladen …';
 
-/** Was die Maske ueber die Firmen weiss. */
+/** Was die Maske ueber die Firmen und — beim Aendern — ueber den Vorgang weiss. */
 type Stand =
   | { readonly art: 'laedt' }
   | { readonly art: 'bereit'; readonly firmen: readonly FirmaZeile[] }
-  | { readonly art: 'ausfall' };
+  | { readonly art: 'unbekannt' }
+  | { readonly art: 'ausfall'; readonly meldung: string };
 
 /** Was die Maske ueber die Ansprechpartner der gewaehlten Firma weiss. */
 type PartnerStand =
@@ -72,7 +91,7 @@ async function firmenLaden(): Promise<Stand> {
     return { art: 'bereit', firmen: uebersicht.firmen };
   } catch {
     // Jeder Grund fuehrt zur selben Meldung; welcher es war, hilft dem Benutzer nicht.
-    return { art: 'ausfall' };
+    return { art: 'ausfall', meldung: AUSFALL_FIRMEN };
   }
 }
 
@@ -86,13 +105,56 @@ async function partnerLaden(firmaId: number): Promise<PartnerStand> {
   }
 }
 
+/** Ein Eintrag einer Auswahlliste: die Kennung als Wert, die Aufschrift als Text. */
+interface Wahleintrag {
+  readonly id: number;
+  readonly aufschrift: string;
+}
+
+/**
+ * Die eigene Zuordnung des Vorgangs als Eintrag der Wahl.
+ *
+ * Gekennzeichnet nur, solange sie stillgelegt ist: Eine aktive Zuordnung steht ohnehin in der
+ * Leseliste, und ein Zusatz an ihrer Aufschrift waere eine Auszeichnung ohne Inhalt.
+ */
+function alsEintrag(zuordnung: Zuordnung): Wahleintrag {
+  return {
+    id: zuordnung.id,
+    aufschrift: zuordnung.aktiv ? zuordnung.name : `${zuordnung.name} (stillgelegt)`,
+  };
+}
+
+/**
+ * Mischt die eigene Zuordnung des Vorgangs in die Wahl — solange sie gewaehlt ist (Kriterium 23).
+ *
+ * Die Bedingung ist die Wahl und nicht der Vorgang: Wer etwas anderes waehlt, findet die
+ * stillgelegte Zuordnung danach nicht wieder, und genau das steht im Kriterium. Doppelt steht sie
+ * nie da — eine aktive Zuordnung kommt bereits aus der Leseliste.
+ *
+ * Sie steht <b>vorn</b>: Sie ist der gewaehlte Stand und der einzige Eintrag, der nicht aus der
+ * nach Namen sortierten Antwort des Servers stammt. Sie einzusortieren hiesse, dessen Ordnung hier
+ * nachzubilden — dieselbe Reihenfolge an zwei Stellen.
+ */
+function mitEigener(
+  eintraege: readonly Wahleintrag[],
+  eigene: Zuordnung | null,
+  gewaehlt: string,
+): readonly Wahleintrag[] {
+  if (eigene === null || gewaehlt !== String(eigene.id)) {
+    return eintraege;
+  }
+  return eintraege.some((einer) => einer.id === eigene.id)
+    ? eintraege
+    : [alsEintrag(eigene), ...eintraege];
+}
+
 /** Die Eintraege einer Auswahlliste, samt dem Eintrag fuer „nichts gewaehlt". */
 interface WahlProps {
   readonly label: string;
   readonly leerEintrag: string;
   readonly wert: string;
   readonly setzeWert: (wert: string) => void;
-  readonly eintraege: readonly { readonly id: number; readonly aufschrift: string }[];
+  readonly eintraege: readonly Wahleintrag[];
   readonly meldung?: ReactNode;
   /** Rot und als fehlerhaft angesagt. Ein Hinweis (Kriterium 7) ist kein Fehler am Feld. */
   readonly fehlerhaft?: boolean;
@@ -144,21 +206,59 @@ function oderNull(wert: string): number | null {
   return wert === KEINE_WAHL ? null : Number(wert);
 }
 
+/** Die Zuordnungen, mit denen der Vorgang gelesen wurde — die Quelle des Einschubs in die Wahl. */
+interface Eigene {
+  readonly firma: Zuordnung;
+  readonly ansprechpartner: Zuordnung | null;
+}
+
 export default function VorgangMaske() {
+  const { id } = useParams();
+  const aendern = id !== undefined;
+  const kennung = kennungAus(id);
   const navigate = useNavigate();
   const [stand, setzeStand] = useState<Stand>({ art: 'laedt' });
   const [partnerStand, setzePartnerStand] = useState<PartnerStand>(OHNE_PARTNER);
   const [titel, setzeTitel] = useState('');
   const [firmaWahl, setzeFirmaWahl] = useState(KEINE_WAHL);
   const [partnerWahl, setzePartnerWahl] = useState(KEINE_WAHL);
+  const [eigene, setzeEigene] = useState<Eigene | null>(null);
   const [eigeneFehler, setzeEigeneFehler] = useState<FieldErrors>({});
   const [feldFehler, setzeFeldFehler] = useState<FieldErrors>({});
   const [fehler, setzeFehler] = useState<string | null>(null);
   const [laeuft, setzeLaeuft] = useState(false);
 
   useEffect(() => {
-    void firmenLaden().then(setzeStand);
-  }, []);
+    if (!aendern) {
+      void firmenLaden().then(setzeStand);
+      return;
+    }
+    if (kennung === null) {
+      // Eine Kennung, die keine ist, geht gar nicht erst ans Netz (kennung.ts).
+      setzeStand({ art: 'unbekannt' });
+      return;
+    }
+    // Erst der Vorgang, dann die Firmen: Ohne den Vorgang gibt es nichts vorzubelegen, und ein
+    // unbekannter Vorgang ersparte den zweiten Aufruf ganz. `firmenLaden` scheitert nie — das
+    // `catch` gehoert allein dem Lesen des Vorgangs.
+    void vorgangLesen(kennung)
+      .then(async (vorgang) => {
+        setzeTitel(vorgang.titel);
+        setzeFirmaWahl(String(vorgang.firma.id));
+        setzePartnerWahl(
+          vorgang.ansprechpartner === null ? KEINE_WAHL : String(vorgang.ansprechpartner.id),
+        );
+        setzeEigene({ firma: vorgang.firma, ansprechpartner: vorgang.ansprechpartner });
+        setzeStand(await firmenLaden());
+      })
+      .catch((ursache: unknown) => {
+        setzeStand(
+          nichtGefunden(ursache)
+            ? { art: 'unbekannt' }
+            : { art: 'ausfall', meldung: AUSFALL_LESEN },
+        );
+      });
+  }, [aendern, kennung]);
 
   useEffect(() => {
     if (firmaWahl === KEINE_WAHL) {
@@ -195,13 +295,19 @@ export default function VorgangMaske() {
       return;
     }
     setzeLaeuft(true);
+    const eingabe = {
+      titel: titel.trim(),
+      firmaId: Number(firmaWahl),
+      ansprechpartnerId: oderNull(partnerWahl),
+    };
     try {
-      const angelegt = await vorgangAnlegen({
-        titel: titel.trim(),
-        firmaId: Number(firmaWahl),
-        ansprechpartnerId: oderNull(partnerWahl),
-      });
-      navigate(`/vorgaenge/${String(angelegt.id)}`, { replace: true });
+      if (kennung === null) {
+        const angelegt = await vorgangAnlegen(eingabe);
+        navigate(`/vorgaenge/${String(angelegt.id)}`, { replace: true });
+      } else {
+        await vorgangAendern(kennung, eingabe);
+        navigate(`/vorgaenge/${String(kennung)}`, { replace: true });
+      }
     } catch (ursache) {
       setzeLaeuft(false);
       const felder = feldMeldungen(ursache);
@@ -216,7 +322,30 @@ export default function VorgangMaske() {
   /** Die eigene Meldung geht vor: Sie beschreibt die Eingabe, die gar nicht erst abging. */
   const meldung = (feld: string) => meldungAm(eigeneFehler, feld) ?? meldungAm(feldFehler, feld);
 
-  const ohneAktiveFirma = stand.art === 'bereit' && stand.firmen.length === 0;
+  const firmenEintraege = mitEigener(
+    stand.art === 'bereit'
+      ? stand.firmen.map((firma) => ({ id: firma.id, aufschrift: firma.name }))
+      : [],
+    eigene === null ? null : eigene.firma,
+    firmaWahl,
+  );
+
+  const partnerEintraege = mitEigener(
+    partnerStand.art === 'bereit'
+      ? partnerStand.partner.map((einer) => ({ id: einer.id, aufschrift: namensZug(einer) }))
+      : [],
+    eigene === null ? null : eigene.ansprechpartner,
+    partnerWahl,
+  );
+
+  /**
+   * Gemessen wird die Wahl und nicht die Antwort des Servers.
+   *
+   * Beim Anlegen ist das dasselbe. Beim Aendern nicht: Dort steht die eigene, womoeglich
+   * stillgelegte Firma in der Wahl, auch wenn es keine aktive gibt — und dann soll sich der Vorgang
+   * speichern lassen, ohne sie zu aendern (Kriterium 23 vor Kriterium 7).
+   */
+  const ohneAktiveFirma = stand.art === 'bereit' && firmenEintraege.length === 0;
 
   /**
    * Der Hinweis an der Firmenauswahl (Kriterium 7): Ohne aktive Firma steht dort der Weg zum
@@ -236,6 +365,14 @@ export default function VorgangMaske() {
   const partnerMeldung: ReactNode =
     partnerStand.art === 'ausfall' ? AUSFALL_PARTNER : meldung('ansprechpartnerId');
 
+  /**
+   * Der Weg zurueck (E10): beim Aendern auf den Vorgang, beim Anlegen auf die Uebersicht.
+   *
+   * Die Kennung entscheidet und nicht `aendern`: Ohne sie gibt es keinen Vorgang, auf den der Weg
+   * fuehren koennte — weder beim Anlegen noch bei einer Kennung, die keine ist.
+   */
+  const zurueck = kennung === null ? '/vorgaenge' : `/vorgaenge/${String(kennung)}`;
+
   return (
     <Box
       sx={{
@@ -245,7 +382,7 @@ export default function VorgangMaske() {
         gap: '20px',
       }}
     >
-      <Platte titel="Neuer Vorgang">
+      <Platte titel={aendern ? 'Vorgang bearbeiten' : 'Neuer Vorgang'}>
         {stand.art === 'bereit' ? (
           <Box
             component="form"
@@ -277,7 +414,7 @@ export default function VorgangMaske() {
                 // gewaehlter gehoert nicht mehr dazu.
                 setzePartnerWahl(KEINE_WAHL);
               }}
-              eintraege={stand.firmen.map((firma) => ({ id: firma.id, aufschrift: firma.name }))}
+              eintraege={firmenEintraege}
               meldung={firmaMeldung}
               fehlerhaft={!ohneAktiveFirma && meldung('firmaId') !== undefined}
               pflicht
@@ -287,25 +424,15 @@ export default function VorgangMaske() {
               leerEintrag="— keiner —"
               wert={partnerWahl}
               setzeWert={setzePartnerWahl}
-              eintraege={
-                partnerStand.art === 'bereit'
-                  ? partnerStand.partner.map((einer) => ({
-                      id: einer.id,
-                      aufschrift: namensZug(einer),
-                    }))
-                  : []
-              }
+              eintraege={partnerEintraege}
               meldung={partnerMeldung}
               fehlerhaft={partnerMeldung !== undefined}
             />
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
-              <KupferTaste disabled={laeuft || ohneAktiveFirma}>Anlegen</KupferTaste>
-              <Link
-                component={RouterLink}
-                to="/vorgaenge"
-                underline="hover"
-                sx={{ fontSize: 12.5 }}
-              >
+              <KupferTaste disabled={laeuft || ohneAktiveFirma}>
+                {aendern ? 'Speichern' : 'Anlegen'}
+              </KupferTaste>
+              <Link component={RouterLink} to={zurueck} underline="hover" sx={{ fontSize: 12.5 }}>
                 Abbrechen
               </Link>
             </Box>
@@ -319,10 +446,12 @@ export default function VorgangMaske() {
                   color: theme.vars.palette.kupferwarte.textSchwach,
                 })}
               >
-                Die Firmen werden geladen …
+                {aendern ? LAEDT_VORGANG : LAEDT_FIRMEN}
               </Typography>
             ) : (
-              <Alert severity="error">{AUSFALL_FIRMEN}</Alert>
+              <Alert severity="error">
+                {stand.art === 'unbekannt' ? NICHT_GEFUNDEN : stand.meldung}
+              </Alert>
             )}
           </Box>
         )}

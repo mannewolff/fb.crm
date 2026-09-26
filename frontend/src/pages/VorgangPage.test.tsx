@@ -52,6 +52,7 @@ function renderSeite(start = '/vorgaenge/5') {
     <MemoryRouter initialEntries={[start]}>
       <Routes>
         <Route path="/vorgaenge/:id" element={<VorgangPage />} />
+        <Route path="/vorgaenge/:id/bearbeiten" element={<p>Maske</p>} />
         <Route path="/firmen/:id" element={<p>Firma</p>} />
       </Routes>
       <Adresse />
@@ -105,6 +106,31 @@ describe('VorgangPage — der Kopf (Kriterien 9, 11)', () => {
     renderSeite();
 
     expect(screen.getByText('Der Vorgang wird geladen …')).toBeInTheDocument();
+  });
+
+  it('fuehrt mit „Bearbeiten" auf die Maske des Vorgangs (Kriterium 10)', async () => {
+    const nutzer = userEvent.setup();
+    vorgangDoppel();
+
+    renderSeite();
+    await screen.findByRole('heading', { name: VORGANG.titel });
+
+    expect(screen.getByRole('link', { name: 'Bearbeiten' })).toHaveAttribute(
+      'href',
+      '/vorgaenge/5/bearbeiten',
+    );
+    await nutzer.click(screen.getByRole('link', { name: 'Bearbeiten' }));
+
+    expect(screen.getByText('Maske')).toBeInTheDocument();
+    expect(screen.getByTestId('adresse')).toHaveTextContent('/vorgaenge/5/bearbeiten');
+  });
+
+  it('traegt „Bearbeiten" auch am abgeschlossenen Vorgang (Kriterium 10)', async () => {
+    vorgangDoppel({ ...VORGANG, abgeschlossen: true });
+
+    renderSeite();
+
+    expect(await screen.findByRole('link', { name: 'Bearbeiten' })).toBeInTheDocument();
   });
 });
 
@@ -313,6 +339,8 @@ describe('VorgangPage — Tastatur (Kriterium 26)', () => {
     renderSeite();
     await screen.findByRole('heading', { name: VORGANG.titel });
 
+    await nutzer.tab();
+    expect(screen.getByRole('link', { name: 'Bearbeiten' })).toHaveFocus();
     await nutzer.tab();
     expect(screen.getByRole('button', { name: 'Abschließen' })).toHaveFocus();
     // Der Tabulator folgt der Lesefolge des Dokuments: erst das Blatt mit Kopf, Maske und

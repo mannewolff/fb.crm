@@ -57,6 +57,7 @@ export default function App() {
             {/* Statisch vor dynamisch: `/vorgaenge/neu` ist die Maske, nicht der Vorgang „neu". */}
             <Route path="/vorgaenge/neu" element={<VorgangMaske />} />
             <Route path="/vorgaenge/:id" element={<VorgangPage />} />
+            <Route path="/vorgaenge/:id/bearbeiten" element={<VorgangMaske />} />
             <Route path="/firmen" element={<FirmenPage />} />
             {/* Statisch vor dynamisch: `/firmen/neu` ist die Maske, nicht die Firma „neu". */}
             <Route path="/firmen/neu" element={<FirmaMaske />} />

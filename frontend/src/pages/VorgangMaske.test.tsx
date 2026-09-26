@@ -4,6 +4,7 @@ import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { Firma, FirmenUebersicht } from '../api/firmen';
+import type { Vorgang } from '../api/vorgaenge';
 import { fetchNachPfad, json, leer, problem } from '../test/fetchNachPfad';
 import { renderMitTheme } from '../test/render';
 import VorgangMaske from './VorgangMaske';
@@ -20,6 +21,12 @@ const FIRMEN: FirmenUebersicht = {
 };
 
 const OHNE_FIRMA: FirmenUebersicht = { firmen: [], gesamt: 0 };
+
+/** Nur die Zweite AG ist aktiv — die Beispiel GmbH ist stillgelegt und fehlt darum hier. */
+const NUR_ZWEITE: FirmenUebersicht = {
+  firmen: [{ id: 8, name: 'Zweite AG', ort: null, aktiveAnsprechpartner: 1, aktiv: true }],
+  gesamt: 2,
+};
 
 function partner(id: number, vorname: string | null, nachname: string, aktiv: boolean) {
   return {
@@ -53,6 +60,18 @@ const FIRMA_7: Firma = {
 
 const FIRMA_8: Firma = { ...FIRMA_7, id: 8, name: 'Zweite AG', ansprechpartner: [] };
 
+/** Der Vorgang, den die Maske beim Aendern vorbelegt (Kriterium 10). */
+const VORGANG: Vorgang = {
+  id: 5,
+  nummer: 941,
+  titel: 'Anteilsbalken je Vorgang',
+  phase: 'ANBAHNUNG',
+  abgeschlossen: false,
+  firma: { id: 7, name: 'Beispiel GmbH', aktiv: true },
+  ansprechpartner: { id: 31, name: 'Anna Berg', aktiv: true },
+  historie: [],
+};
+
 /** Die Adresse, an der sich ablesen laesst, wohin die Maske gefuehrt hat. */
 function Adresse() {
   const ort = useLocation();
@@ -71,6 +90,20 @@ function renderMaske() {
         <Route path="/vorgaenge/neu" element={<VorgangMaske />} />
         <Route path="/vorgaenge/:id" element={<p>Detailansicht</p>} />
         <Route path="/firmen/neu" element={<p>Neue Firma</p>} />
+      </Routes>
+      <Adresse />
+    </MemoryRouter>,
+  );
+}
+
+/** Dieselbe Komponente unter der Adresse zum Aendern — der Unterschied ist die Kennung. */
+function renderMaskeZumAendern(id = '5') {
+  return renderMitTheme(
+    <MemoryRouter initialEntries={[`/vorgaenge/${id}/bearbeiten`]}>
+      <Routes>
+        <Route path="/vorgaenge" element={<p>Übersicht</p>} />
+        <Route path="/vorgaenge/:id" element={<p>Detailansicht</p>} />
+        <Route path="/vorgaenge/:id/bearbeiten" element={<VorgangMaske />} />
       </Routes>
       <Adresse />
     </MemoryRouter>,
@@ -380,6 +413,285 @@ describe('VorgangMaske — Anlegen', () => {
     expect(screen.getByText('Übersicht')).toBeInTheDocument();
     expect(adresse()).toBe('/vorgaenge');
     expect(fetchMock).not.toHaveBeenCalledWith('/api/vorgaenge', expect.anything());
+  });
+});
+
+describe('VorgangMaske — Ändern (Kriterium 10)', () => {
+  it('belegt Titel, Firma und Ansprechpartner vor und schreibt sie fort', async () => {
+    const nutzer = userEvent.setup();
+    const fetchMock = fetchNachPfad({
+      'GET /api/vorgaenge/5': json(200, VORGANG),
+      [FIRMEN_WEG]: json(200, FIRMEN),
+      'GET /api/firmen/7': json(200, FIRMA_7),
+      'PUT /api/vorgaenge/5': leer(204),
+    });
+
+    renderMaskeZumAendern();
+
+    expect(await screen.findByRole('heading', { name: 'Vorgang bearbeiten' })).toBeInTheDocument();
+    expect(titelFeld()).toHaveValue('Anteilsbalken je Vorgang');
+    expect(wahl('Firma')).toHaveValue('7');
+    // Der Ansprechpartner steht erst da, wenn die Liste seiner Firma eingetroffen ist.
+    expect(await screen.findByRole('option', { name: 'Clausen' })).toBeInTheDocument();
+    expect(wahl('Ansprechpartner')).toHaveValue('31');
+
+    await nutzer.clear(titelFeld());
+    await nutzer.type(titelFeld(), 'Anteilsbalken je Vorgang statt Band');
+    await nutzer.selectOptions(wahl('Ansprechpartner'), '32');
+    await nutzer.click(screen.getByRole('button', { name: 'Speichern' }));
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/vorgaenge/5',
+      expect.objectContaining({
+        method: 'PUT',
+        body: JSON.stringify({
+          titel: 'Anteilsbalken je Vorgang statt Band',
+          firmaId: 7,
+          ansprechpartnerId: 32,
+        }),
+      }),
+    );
+    expect(await screen.findByText('Detailansicht')).toBeInTheDocument();
+    expect(adresse()).toBe('/vorgaenge/5');
+  });
+
+  it('laesst den Ansprechpartner auch ohne Zuordnung am Vorgang leer', async () => {
+    fetchNachPfad({
+      'GET /api/vorgaenge/5': json(200, { ...VORGANG, ansprechpartner: null }),
+      [FIRMEN_WEG]: json(200, FIRMEN),
+      'GET /api/firmen/7': json(200, FIRMA_7),
+    });
+
+    renderMaskeZumAendern();
+
+    await screen.findByRole('heading', { name: 'Vorgang bearbeiten' });
+    expect(await screen.findByRole('option', { name: 'Anna Berg' })).toBeInTheDocument();
+    expect(wahl('Ansprechpartner')).toHaveValue('');
+  });
+
+  it('aendert beim Verlassen ohne Speichern nichts und fuehrt auf die Detailansicht', async () => {
+    const nutzer = userEvent.setup();
+    const fetchMock = fetchNachPfad({
+      'GET /api/vorgaenge/5': json(200, VORGANG),
+      [FIRMEN_WEG]: json(200, FIRMEN),
+      'GET /api/firmen/7': json(200, FIRMA_7),
+    });
+
+    renderMaskeZumAendern();
+    await screen.findByRole('heading', { name: 'Vorgang bearbeiten' });
+    await nutzer.type(titelFeld(), ' — verworfen');
+    await nutzer.click(screen.getByRole('link', { name: 'Abbrechen' }));
+
+    // Kriterium 10: ohne Speichern bleibt der alte Stand — es geht nichts hinaus.
+    expect(screen.getByText('Detailansicht')).toBeInTheDocument();
+    expect(adresse()).toBe('/vorgaenge/5');
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      '/api/vorgaenge/5',
+      expect.objectContaining({ method: 'PUT' }),
+    );
+  });
+
+  it('haengt die Meldungen des Servers an ihre Felder und bleibt in der Maske', async () => {
+    const nutzer = userEvent.setup();
+    fetchNachPfad({
+      'GET /api/vorgaenge/5': json(200, VORGANG),
+      [FIRMEN_WEG]: json(200, FIRMEN),
+      'GET /api/firmen/7': json(200, FIRMA_7),
+      'PUT /api/vorgaenge/5': problem(400, 'Ungültig', {
+        titel: ['Dieser Titel ist zu lang.'],
+        ansprechpartnerId: ['Dieser Ansprechpartner gehört nicht zu dieser Firma.'],
+      }),
+    });
+
+    renderMaskeZumAendern();
+    await screen.findByRole('heading', { name: 'Vorgang bearbeiten' });
+    await nutzer.click(screen.getByRole('button', { name: 'Speichern' }));
+
+    expect(await screen.findByText('Dieser Titel ist zu lang.')).toBeInTheDocument();
+    expect(titelFeld()).toHaveAccessibleDescription('Dieser Titel ist zu lang.');
+    expect(wahl('Ansprechpartner')).toHaveAccessibleDescription(
+      'Dieser Ansprechpartner gehört nicht zu dieser Firma.',
+    );
+    expect(adresse()).toBe('/vorgaenge/5/bearbeiten');
+  });
+
+  it('zeigt bis zur Antwort einen Ladehinweis auf den Vorgang', () => {
+    fetchNachPfad({ 'GET /api/vorgaenge/5': json(200, VORGANG) });
+
+    renderMaskeZumAendern();
+
+    expect(screen.getByText('Der Vorgang wird geladen …')).toBeInTheDocument();
+  });
+
+  it('faengt eine nicht numerische Kennung ab, bevor sie an die Schnittstelle geht', async () => {
+    const fetchMock = fetchNachPfad({});
+
+    renderMaskeZumAendern('keine-zahl');
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('gibt es nicht');
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('meldet einen unbekannten Vorgang', async () => {
+    fetchNachPfad({ 'GET /api/vorgaenge/5': leer(404) });
+
+    renderMaskeZumAendern();
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('gibt es nicht');
+    expect(screen.queryByRole('textbox', { name: 'Titel' })).not.toBeInTheDocument();
+  });
+
+  it('meldet den Ausfall beim Lesen des Vorgangs', async () => {
+    fetchNachPfad({ 'GET /api/vorgaenge/5': leer(500) });
+
+    renderMaskeZumAendern();
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Der Vorgang ist gerade nicht zu erreichen',
+    );
+  });
+});
+
+describe('VorgangMaske — die stillgelegte Zuordnung (Kriterien 23, 26)', () => {
+  /** Ein Vorgang, dessen Firma inzwischen stillgelegt ist. */
+  const MIT_STILLER_FIRMA: Vorgang = {
+    ...VORGANG,
+    firma: { id: 7, name: 'Beispiel GmbH', aktiv: false },
+  };
+
+  /** Ein Vorgang, dessen Ansprechpartner inzwischen stillgelegt ist. */
+  const MIT_STILLEM_PARTNER: Vorgang = {
+    ...VORGANG,
+    ansprechpartner: { id: 33, name: 'Dora Stillgelegt', aktiv: false },
+  };
+
+  it('stellt die stillgelegte Firma gekennzeichnet zur Wahl und speichert sie unveraendert', async () => {
+    const nutzer = userEvent.setup();
+    const fetchMock = fetchNachPfad({
+      'GET /api/vorgaenge/5': json(200, MIT_STILLER_FIRMA),
+      // Der Leseweg liefert nur aktive Firmen — die stillgelegte Beispiel GmbH ist nicht dabei.
+      [FIRMEN_WEG]: json(200, NUR_ZWEITE),
+      'GET /api/firmen/7': json(200, FIRMA_7),
+      'PUT /api/vorgaenge/5': leer(204),
+    });
+
+    renderMaskeZumAendern();
+    await screen.findByRole('heading', { name: 'Vorgang bearbeiten' });
+
+    // Der Stand steht als Wort in der Aufschrift — ein `option` traegt nichts anderes, und so
+    // liest der Screenreader ihn mit dem Namen (Kriterium 26).
+    expect(angebot('Firma')).toEqual(['Beispiel GmbH (stillgelegt)', 'Zweite AG']);
+    expect(wahl('Firma')).toHaveValue('7');
+
+    await nutzer.click(screen.getByRole('button', { name: 'Speichern' }));
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/vorgaenge/5',
+      expect.objectContaining({
+        method: 'PUT',
+        body: JSON.stringify({
+          titel: 'Anteilsbalken je Vorgang',
+          firmaId: 7,
+          ansprechpartnerId: 31,
+        }),
+      }),
+    );
+    expect(adresse()).toBe('/vorgaenge/5');
+  });
+
+  it('nimmt die stillgelegte Firma nach dem Wechsel aus der Wahl', async () => {
+    const nutzer = userEvent.setup();
+    fetchNachPfad({
+      'GET /api/vorgaenge/5': json(200, MIT_STILLER_FIRMA),
+      [FIRMEN_WEG]: json(200, NUR_ZWEITE),
+      'GET /api/firmen/7': json(200, FIRMA_7),
+      'GET /api/firmen/8': json(200, FIRMA_8),
+    });
+
+    renderMaskeZumAendern();
+    await screen.findByRole('heading', { name: 'Vorgang bearbeiten' });
+    await nutzer.selectOptions(wahl('Firma'), '8');
+
+    // Kriterium 23: Wer etwas anderes waehlt, findet die stillgelegte Zuordnung nicht wieder.
+    expect(angebot('Firma')).toEqual(['Zweite AG']);
+    expect(wahl('Ansprechpartner')).toHaveValue('');
+  });
+
+  it('stellt den stillgelegten Ansprechpartner gekennzeichnet zur Wahl und speichert ihn unveraendert', async () => {
+    const nutzer = userEvent.setup();
+    const fetchMock = fetchNachPfad({
+      'GET /api/vorgaenge/5': json(200, MIT_STILLEM_PARTNER),
+      [FIRMEN_WEG]: json(200, FIRMEN),
+      'GET /api/firmen/7': json(200, FIRMA_7),
+      'PUT /api/vorgaenge/5': leer(204),
+    });
+
+    renderMaskeZumAendern();
+    await screen.findByRole('heading', { name: 'Vorgang bearbeiten' });
+    expect(await screen.findByRole('option', { name: 'Anna Berg' })).toBeInTheDocument();
+
+    expect(angebot('Ansprechpartner')).toEqual([
+      'Dora Stillgelegt (stillgelegt)',
+      'Anna Berg',
+      'Clausen',
+    ]);
+    expect(wahl('Ansprechpartner')).toHaveValue('33');
+
+    await nutzer.click(screen.getByRole('button', { name: 'Speichern' }));
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/vorgaenge/5',
+      expect.objectContaining({
+        method: 'PUT',
+        body: JSON.stringify({
+          titel: 'Anteilsbalken je Vorgang',
+          firmaId: 7,
+          ansprechpartnerId: 33,
+        }),
+      }),
+    );
+  });
+
+  it('nimmt den stillgelegten Ansprechpartner nach dem Wechsel aus der Wahl', async () => {
+    const nutzer = userEvent.setup();
+    fetchNachPfad({
+      'GET /api/vorgaenge/5': json(200, MIT_STILLEM_PARTNER),
+      [FIRMEN_WEG]: json(200, FIRMEN),
+      'GET /api/firmen/7': json(200, FIRMA_7),
+    });
+
+    renderMaskeZumAendern();
+    await screen.findByRole('heading', { name: 'Vorgang bearbeiten' });
+    await screen.findByRole('option', { name: 'Anna Berg' });
+    await nutzer.selectOptions(wahl('Ansprechpartner'), '31');
+
+    expect(angebot('Ansprechpartner')).toEqual(['Anna Berg', 'Clausen']);
+  });
+
+  it('laesst ohne jede aktive Firma den Vorgang mit seiner stillgelegten Firma speichern', async () => {
+    const nutzer = userEvent.setup();
+    const fetchMock = fetchNachPfad({
+      'GET /api/vorgaenge/5': json(200, MIT_STILLER_FIRMA),
+      [FIRMEN_WEG]: json(200, OHNE_FIRMA),
+      'GET /api/firmen/7': json(200, FIRMA_7),
+      'PUT /api/vorgaenge/5': leer(204),
+    });
+
+    renderMaskeZumAendern();
+    await screen.findByRole('heading', { name: 'Vorgang bearbeiten' });
+
+    // Kriterium 23 geht hier vor Kriterium 7: Es gibt etwas zu waehlen — die eigene Zuordnung.
+    expect(angebot('Firma')).toEqual(['Beispiel GmbH (stillgelegt)']);
+    expect(wahl('Firma')).not.toHaveAccessibleDescription(/Es ist keine aktive Firma vorhanden/);
+    const knopf = screen.getByRole('button', { name: 'Speichern' });
+    expect(knopf).toBeEnabled();
+
+    await nutzer.click(knopf);
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/vorgaenge/5',
+      expect.objectContaining({ method: 'PUT' }),
+    );
   });
 });
 

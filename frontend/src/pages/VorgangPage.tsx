@@ -43,10 +43,11 @@ import { CARD_RADIUS } from '../theme';
  *       wie die Liste danach aussieht, sagt der Server, nicht die Oberflaeche. Auch am
  *       abgeschlossenen Vorgang steht sie da: Abgeschlossen heisst „zu Ende gegangen", nicht
  *       „gesperrt" (Kriterium 21), und das Backend nimmt dort weiter Eintraege an.</li>
+ *   <li><b>„Bearbeiten" steht auch am abgeschlossenen Vorgang</b> (Kriterium 10): Titel und
+ *       Zuordnung sind dort weiter aenderbar. Die Taste ist ein Weg und keine Schaltflaeche —
+ *       sie fuehrt auf `/vorgaenge/:id/bearbeiten`, also gehoert sie in den Tabulatorweg als
+ *       Link, nicht als Knopf mit `onClick`.</li>
  * </ul>
- *
- * Die Taste „Bearbeiten" (#73) bringt ihr eigenes Paket mit; dieses Paket kennt als Schreibaktion
- * das Abschliessen, das Wiederoeffnen und den neuen Eintrag.
  */
 
 const NICHT_GEFUNDEN = 'Diesen Vorgang gibt es nicht.';
@@ -210,6 +211,13 @@ function Kopf({
       >
         <PhasenPlakette phase={vorgang.phase} />
         {vorgang.abgeschlossen ? <Schild text="abgeschlossen" /> : null}
+        <Button
+          component={RouterLink}
+          to={`/vorgaenge/${String(vorgang.id)}/bearbeiten`}
+          sx={flacheTasteSx}
+        >
+          Bearbeiten
+        </Button>
         <Button onClick={schalte} disabled={schaltet} sx={flacheTasteSx}>
           {vorgang.abgeschlossen ? 'Wieder öffnen' : 'Abschließen'}
         </Button>

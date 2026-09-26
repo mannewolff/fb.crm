@@ -169,4 +169,54 @@ describe('App', () => {
     ).toBeInTheDocument();
     expect(screen.getByRole('navigation', { name: 'Hauptnavigation' })).toBeInTheDocument();
   });
+
+  it('fuehrt „/vorgaenge/5/bearbeiten" ohne Sitzung auf die Anmeldeseite', async () => {
+    ohneSitzung();
+
+    renderApp(['/vorgaenge/5/bearbeiten'], 0);
+
+    expect(await screen.findByLabelText(/^E-Mail-Adresse/)).toBeInTheDocument();
+  });
+
+  it('zeigt „/vorgaenge/5/bearbeiten" als Maske — nachgeladen, nicht im ersten Rutsch', async () => {
+    fensterbreite(1440);
+    fetchNachPfad({
+      'GET /api/auth/me': json(200, KONTO),
+      'GET /api/instance': json(200, { version: '0.1.3' }),
+      'GET /api/vorgaenge/5': json(200, {
+        id: 5,
+        nummer: 941,
+        titel: 'Anteilsbalken je Vorgang',
+        phase: 'ANBAHNUNG',
+        abgeschlossen: false,
+        firma: { id: 7, name: 'Beispiel GmbH', aktiv: true },
+        ansprechpartner: null,
+        historie: [],
+      }),
+      'GET /api/firmen?suche=&auchStillgelegte=false': json(200, {
+        firmen: [{ id: 7, name: 'Beispiel GmbH', ort: 'Bremen', aktiveAnsprechpartner: 0, aktiv: true }],
+        gesamt: 1,
+      }),
+      'GET /api/firmen/7': json(200, {
+        id: 7,
+        name: 'Beispiel GmbH',
+        strasse: null,
+        plz: null,
+        ort: 'Bremen',
+        land: 'Deutschland',
+        steuernummer: null,
+        umsatzsteuerId: null,
+        aktiv: true,
+        ansprechpartner: [],
+      }),
+    });
+
+    renderApp(['/vorgaenge/5/bearbeiten'], 0);
+
+    expect(screen.getByRole('status')).toHaveTextContent('Sitzung wird geprüft');
+    expect(
+      await screen.findByRole('heading', { name: 'Vorgang bearbeiten' }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('navigation', { name: 'Hauptnavigation' })).toBeInTheDocument();
+  });
 });
