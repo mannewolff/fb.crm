@@ -1,0 +1,160 @@
+import { screen, within } from '@testing-library/react';
+import { describe, expect, it } from 'vitest';
+
+import { anhangPfad } from '../api/vorgaenge';
+import type { Eintrag } from '../api/vorgaenge';
+import { dateigroesse } from '../lib/dateigroesse';
+import { renderMitTheme } from '../test/render';
+import Historie from './Historie';
+
+/**
+ * Die Zeitpunkte stehen relativ zur Zeitzone der Maschine, nicht als feste Zeichenkette mit `Z`:
+ * Sonst waere gruen, wer in UTC laeuft, und rot, wer in Europa/Berlin sitzt — dieselbe Begruendung
+ * wie in `lib/zeitpunkt.test.ts`.
+ */
+const GESCHEHEN = new Date(2026, 8, 24, 11, 15);
+const GESCHEHEN_TEXT = '24.09.2026, 11:15';
+const GEAENDERT = new Date(2026, 8, 25, 8, 5);
+const GEAENDERT_TEXT = '25.09.2026, 08:05';
+
+const VORGANG_ID = 7;
+
+const KOMMENTAR: Eintrag = {
+  id: 42,
+  art: 'KOMMENTAR',
+  text: 'Erste Zeile\nZweite Zeile',
+  geschehenAm: GESCHEHEN.toISOString(),
+  herkunft: 'VON_HAND',
+  dateiName: null,
+  dateiGroesse: null,
+  geaendertAm: null,
+};
+
+const ANHANG: Eintrag = {
+  id: 43,
+  art: 'ANHANG',
+  text: 'Das Angebot als PDF',
+  geschehenAm: GESCHEHEN.toISOString(),
+  herkunft: 'VON_HAND',
+  dateiName: 'angebot.pdf',
+  dateiGroesse: 43520,
+  geaendertAm: null,
+};
+
+const GEAENDERTER_KOMMENTAR: Eintrag = {
+  ...KOMMENTAR,
+  id: 44,
+  text: 'Nachgetragen',
+  geaendertAm: GEAENDERT.toISOString(),
+};
+
+function renderHistorie(eintraege: readonly Eintrag[]) {
+  return renderMitTheme(<Historie vorgangId={VORGANG_ID} eintraege={eintraege} />);
+}
+
+describe('Historie', () => {
+  it('laesst die Reihenfolge der uebergebenen Eintraege unangetastet', () => {
+    // Der juengste oben ist die Zusage der Schnittstelle (Kriterium 15); die Oberflaeche
+    // sortiert nicht nach, sonst gaebe es zwei Reihenfolgen.
+    renderHistorie([GEAENDERTER_KOMMENTAR, ANHANG, KOMMENTAR]);
+
+    const zeilen = screen.getAllByRole('listitem');
+    expect(zeilen).toHaveLength(3);
+    expect(within(zeilen[0]).getByText('Nachgetragen')).toBeInTheDocument();
+    expect(within(zeilen[1]).getByText('Das Angebot als PDF')).toBeInTheDocument();
+    expect(within(zeilen[2]).getByText(/Erste Zeile/u)).toBeInTheDocument();
+  });
+
+  it('nennt je Eintrag Art, Zeitpunkt und Herkunft', () => {
+    renderHistorie([KOMMENTAR]);
+
+    const zeile = screen.getByRole('listitem');
+    expect(within(zeile).getByText('Kommentar')).toBeInTheDocument();
+    expect(within(zeile).getByText(GESCHEHEN_TEXT)).toBeInTheDocument();
+    expect(within(zeile).getByText('von Hand')).toBeInTheDocument();
+  });
+
+  it('nennt beim Anhang die Art Anhang', () => {
+    renderHistorie([ANHANG]);
+
+    expect(screen.getByText('Anhang')).toBeInTheDocument();
+  });
+
+  it('haelt die Zeilenumbrueche des Textes', () => {
+    renderHistorie([KOMMENTAR]);
+
+    // Ohne Normalisierung: Der Standardmatcher von Testing Library faltet Leerraum zusammen
+    // und faende den Text auch dann, wenn der Umbruch verloren waere.
+    const text = screen.getByText('Erste Zeile\nZweite Zeile', { normalizer: (wert) => wert });
+    expect(text).toBeInTheDocument();
+    // Der Umbruch im Markup traegt nur, wenn ihn das Rendern nicht wegwirft.
+    expect(text).toHaveStyle({ whiteSpace: 'pre-wrap' });
+  });
+
+  it('gibt den Anhang als Verweis mit Dateiname, Groesse und download heraus', () => {
+    renderHistorie([ANHANG]);
+
+    const verweis = screen.getByRole('link', { name: 'angebot.pdf' });
+    // Ein Pfad im `href`, kein `fetch` (E14): Der Browser holt die Datei selbst.
+    expect(verweis).toHaveAttribute('href', anhangPfad(VORGANG_ID, ANHANG.id));
+    expect(verweis).toHaveAttribute('download');
+    expect(screen.getByText(dateigroesse(43520))).toBeInTheDocument();
+  });
+
+  it('kommt beim Anhang ohne Beschreibung ohne Textzeile aus', () => {
+    // `Eintrag.anhang` im Backend laesst den beschreibenden Text offen; dann bleibt die Zeile
+    // bei Dateiname und Groesse, statt eine leere Zeile darunter zu setzen.
+    renderHistorie([{ ...ANHANG, text: null }]);
+
+    const zeile = screen.getByRole('listitem');
+    expect(within(zeile).getByRole('link', { name: 'angebot.pdf' })).toBeInTheDocument();
+    expect(within(zeile).queryByText('Das Angebot als PDF')).not.toBeInTheDocument();
+  });
+
+  it('zeigt keinen Verweis und keine Groesse beim Kommentar', () => {
+    renderHistorie([KOMMENTAR]);
+
+    expect(screen.queryByRole('link')).not.toBeInTheDocument();
+    expect(screen.queryByText(/KiB|MiB|\bB\b/u)).not.toBeInTheDocument();
+  });
+
+  it('vermerkt eine Aenderung samt Zeitpunkt', () => {
+    renderHistorie([GEAENDERTER_KOMMENTAR]);
+
+    expect(screen.getByText(`geändert ${GEAENDERT_TEXT}`)).toBeInTheDocument();
+  });
+
+  it('vermerkt nichts, solange keine Aenderung stattfand', () => {
+    renderHistorie([KOMMENTAR]);
+
+    expect(screen.queryByText(/geändert/u)).not.toBeInTheDocument();
+  });
+
+  it('sagt es, wenn die Historie leer ist', () => {
+    renderHistorie([]);
+
+    expect(screen.getByRole('status')).toHaveTextContent('Noch kein Eintrag in der Historie.');
+    expect(screen.queryByRole('listitem')).not.toBeInTheDocument();
+  });
+
+  it('traegt Art, Zeitpunkt, Herkunft und Vermerk im zugaenglichen Namen jedes Eintrags', () => {
+    // Kriterium 26: Wer mit dem Screenreader durch die Eintraege geht, hoert an jedem, was er
+    // ist, wann er geschah, woher er stammt und ob er geaendert wurde — ohne ihn zu betreten.
+    renderHistorie([GEAENDERTER_KOMMENTAR, KOMMENTAR]);
+
+    expect(
+      screen.getByRole('listitem', {
+        name: `Kommentar, ${GESCHEHEN_TEXT}, von Hand, geändert ${GEAENDERT_TEXT}`,
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('listitem', { name: `Kommentar, ${GESCHEHEN_TEXT}, von Hand` }),
+    ).toBeInTheDocument();
+  });
+
+  it('benennt die Liste als Historie', () => {
+    renderHistorie([KOMMENTAR]);
+
+    expect(screen.getByRole('list', { name: 'Historie' })).toBeInTheDocument();
+  });
+});
