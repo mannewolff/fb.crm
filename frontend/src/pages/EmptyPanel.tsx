@@ -1,6 +1,6 @@
 import Box from '@mui/material/Box';
 
-import { PANEL_RADIUS } from '../theme';
+import { RADIUS_GROSS } from '../theme';
 
 /**
  * Das leere Inhaltspanel: eine Platte auf der Buehne, ohne Ueberschrift und ohne Inhalt.
@@ -15,10 +15,9 @@ export default function EmptyPanel() {
         data-testid="leeres-panel"
         sx={(theme) => ({
           minHeight: 'calc(100vh - 140px)',
-          borderRadius: `${PANEL_RADIUS}px`,
-          border: `1px solid ${theme.vars.palette.kupferwarte.rand}`,
-          background: theme.vars.palette.kupferwarte.platte,
-          boxShadow: theme.vars.palette.kupferwarte.schatten.platte,
+          borderRadius: `${RADIUS_GROSS}px`,
+          background: theme.vars.palette.kupferwolke.flaeche,
+          boxShadow: theme.vars.palette.kupferwolke.schatten.karte,
         })}
       />
     </Box>

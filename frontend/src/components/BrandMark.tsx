@@ -1,25 +1,19 @@
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 
+import { RADIUS_KLEIN } from '../theme';
+
 /**
- * Die Marke: Kupfer-Mal und Name (Vorlage Z. 216–241, Markup Z. 1103–1114).
+ * Die Marke: Kupfer-Mal und Name (Vorlage `.marke` Z. 31–34).
  *
  * Die Versionsnummer ist ein optionales Prop und bleibt auf den Auth-Seiten leer: Sie kommt
  * aus `GET /api/instance`, und der Pfad verlangt eine Sitzung (E10, Issue #26). Vor der
  * Anmeldung gibt es keine — die Platte darf dort also auch keine zeigen (K15).
  */
 
-/** Kantenlaenge des Mals in Pixeln (Vorlage Z. 223). */
+/** Kantenlaenge des Mals in Pixeln. */
 const MAL = 30;
 
-/**
- * Lichtkante und kurzer Schatten des Mals (Vorlage Z. 226–228).
- *
- * Steht hier und nicht im Theme: Die vier Tiefenstufen der Kupferwarte beschreiben Nut,
- * Platte, Abgehoben und Taste; das Mal ist keine davon, und die Vorlage schreibt seinen
- * Schatten ebenfalls am Bauteil fest.
- */
-const MAL_SCHATTEN = '0 1px 0 rgba(255,255,255,.35) inset, 0 2px 6px rgba(0,0,0,.35)';
 
 export interface BrandMarkProps {
   /** Versionsstand der Instanz; ohne ihn bleibt die Zeile unter dem Namen leer. */
@@ -37,9 +31,11 @@ export default function BrandMark({ version, kompakt = false }: BrandMarkProps) 
         sx={(theme) => ({
           width: MAL,
           height: MAL,
-          borderRadius: '9px',
-          background: `linear-gradient(155deg, ${theme.vars.palette.kupferwarte.kupferHell}, ${theme.vars.palette.kupferwarte.kupfer} 62%, ${theme.vars.palette.kupferwarte.kupferTief})`,
-          boxShadow: MAL_SCHATTEN,
+          borderRadius: `${RADIUS_KLEIN}px`,
+          // Markenmal: Verlauf Kupfer-Glanz → Kupfer mit dem farbigen Kupfer-Schatten
+          // (CLAUDE-design.md, „Rahmen"; Vorlage `.marke .mal` Z. 32).
+          background: `linear-gradient(135deg, ${theme.vars.palette.kupferwolke.kupferGlanz}, ${theme.vars.palette.kupferwolke.kupfer})`,
+          boxShadow: theme.vars.palette.kupferwolke.schatten.kupfer,
           display: 'grid',
           placeItems: 'center',
           flex: 'none',
@@ -57,9 +53,8 @@ export default function BrandMark({ version, kompakt = false }: BrandMarkProps) 
           component="span"
           sx={(theme) => ({
             display: 'block',
-            fontFamily: theme.typography.h1.fontFamily,
-            fontStretch: '118%',
-            fontWeight: 700,
+            fontFamily: theme.typography.h3.fontFamily,
+            fontWeight: 800,
             fontSize: 14,
             letterSpacing: '-.01em',
           })}
@@ -74,7 +69,7 @@ export default function BrandMark({ version, kompakt = false }: BrandMarkProps) 
               display: 'block',
               fontSize: 10.5,
               letterSpacing: '.04em',
-              color: theme.vars.palette.kupferwarte.textSchwach,
+              color: theme.vars.palette.kupferwolke.textSchwach,
             })}
           >
             {version}

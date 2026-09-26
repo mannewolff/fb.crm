@@ -5,9 +5,9 @@ import type { ReactNode } from 'react';
 import { theme } from '../theme';
 
 /**
- * Rendert mit dem Theme der Kupferwarte.
+ * Rendert mit dem Theme der Kupferwolke.
  *
- * Ohne den Provider traegt MUI sein Standard-Theme, und `theme.vars.palette.kupferwarte.*`
+ * Ohne den Provider traegt MUI sein Standard-Theme, und `theme.vars.palette.kupferwolke.*`
  * — die Wertequelle aller Flaechen, Raender und Tiefen — faellt weg. Jede Ansicht, die
  * darauf zugreift, bricht dann im Test an einer Stelle, die mit dem Testfall nichts zu tun
  * hat.

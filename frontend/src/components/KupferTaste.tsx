@@ -3,10 +3,11 @@ import type { Theme } from '@mui/material/styles';
 import type { ReactNode } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
 
-import { CARD_RADIUS } from '../theme';
+import { RADIUS_RUND } from '../theme';
 
 /**
- * Die Haupttaste einer Ansicht: erhaben, in Kupfer (Vorlage `.taste-kupfer` Z. 322–345).
+ * Die Haupttaste einer Ansicht: eine Pille im Kupferverlauf mit farbigem Schatten
+ * (Vorlage `.taste.primaer` Z. 63–65).
  *
  * Eine eigene Komponente, weil jede Auth-Seite genau eine davon traegt — vier Abschriften
  * desselben `sx`-Blocks liefen beim ersten Nachziehen der Vorlage auseinander.
@@ -27,17 +28,19 @@ export interface KupferTasteProps {
 /** Die Gestalt der Kupfertaste, geteilt von beiden Varianten. */
 function kupferSx(theme: Theme) {
   return {
-    borderRadius: `${CARD_RADIUS}px`,
+    borderRadius: `${RADIUS_RUND}px`,
     paddingBlock: '9px',
-    color: theme.vars.palette.kupferwarte.kupferSchrift,
-    background: `linear-gradient(180deg, ${theme.vars.palette.kupferwarte.kupferHell}, ${theme.vars.palette.kupferwarte.kupfer})`,
-    border: `1px solid ${theme.vars.palette.kupferwarte.kupferTief}`,
-    boxShadow: theme.vars.palette.kupferwarte.schatten.taste,
+    color: theme.vars.palette.kupferwolke.kupferSchrift,
+    background: `linear-gradient(135deg, ${theme.vars.palette.kupferwolke.kupferTaste}, ${theme.vars.palette.kupferwolke.kupferTief})`,
+    border: 0,
+    boxShadow: theme.vars.palette.kupferwolke.schatten.kupfer,
     '&:hover': {
-      background: `linear-gradient(180deg, ${theme.vars.palette.kupferwarte.kupferHell}, ${theme.vars.palette.kupferwarte.kupfer})`,
-      boxShadow: theme.vars.palette.kupferwarte.schatten.platte,
+      background: `linear-gradient(135deg, ${theme.vars.palette.kupferwolke.kupferTaste}, ${theme.vars.palette.kupferwolke.kupferTief})`,
+      boxShadow: theme.vars.palette.kupferwolke.schatten.kupfer,
+      // Tasten heben sich im Hover um 1 px (CLAUDE-design.md, „Tasten").
+      transform: 'translateY(-1px)',
     },
-    '&:active': { transform: 'translateY(1px)' },
+    '&:active': { transform: 'none' },
   };
 }
 

@@ -25,7 +25,7 @@ import { nichtGefunden } from '../lib/apifehler';
 import { kennungAus } from '../lib/kennung';
 import { namensZug } from '../lib/namenszug';
 import { emailZiel, telefonZiel } from '../lib/telefonlink';
-import { CARD_RADIUS } from '../theme';
+import { RADIUS_RUND, ZAHLEN_KLASSE } from '../theme';
 
 /**
  * Die Detailansicht einer Firma (Kriterien 5, 10, 13, 14).
@@ -84,20 +84,19 @@ type VorgangStand =
   | { readonly art: 'daten'; readonly vorgaenge: VorgaengeDerFirma }
   | { readonly art: 'ausfall' };
 
-/** Die flache Taste der Vorlage (`.taste` CSS Z. 322–334) — fuer die Nebenwege im Plattenkopf. */
+/** Die weiche Taste (CLAUDE-design.md, „Tasten") — fuer die Nebenwege im Plattenkopf. */
 function flacheTasteSx(theme: Theme) {
   return {
     fontSize: 12.5,
     fontWeight: 600,
     textTransform: 'none',
     padding: '5px 13px',
-    borderRadius: `${CARD_RADIUS}px`,
-    color: theme.vars.palette.kupferwarte.text,
-    background: `linear-gradient(180deg, ${theme.vars.palette.kupferwarte.platteHoch}, ${theme.vars.palette.kupferwarte.platteFuss})`,
-    border: `1px solid ${theme.vars.palette.kupferwarte.rand}`,
-    boxShadow: theme.vars.palette.kupferwarte.schatten.taste,
-    '&:hover': { boxShadow: theme.vars.palette.kupferwarte.schatten.platte },
-    '&:active': { transform: 'translateY(1px)' },
+    borderRadius: `${RADIUS_RUND}px`,
+    color: theme.vars.palette.kupferwolke.text,
+    background: theme.vars.palette.kupferwolke.flaecheWeich,
+    boxShadow: `inset 0 0 0 1px ${theme.vars.palette.kupferwolke.linie}`,
+    // Tasten heben sich im Hover um 1 px (CLAUDE-design.md, „Tasten").
+    '&:hover': { transform: 'translateY(-1px)' },
   } as const;
 }
 
@@ -114,7 +113,7 @@ function Schild({ wort }: { readonly wort: string }) {
         fontWeight: 500,
         padding: '1px 6px',
         borderRadius: '5px',
-        color: theme.vars.palette.kupferwarte.grau,
+        color: theme.vars.palette.kupferwolke.melder.grau,
         border: '1px solid currentColor',
         background: 'color-mix(in srgb, currentColor 13%, transparent)',
       })}
@@ -138,13 +137,13 @@ function Feld({ name, wert }: { readonly name: string; readonly wert: string | n
         alignItems: 'center',
         padding: '9px 16px',
         fontSize: 12.5,
-        borderBottom: `1px solid color-mix(in srgb, ${theme.vars.palette.kupferwarte.rand} 50%, transparent)`,
+        borderBottom: `1px solid color-mix(in srgb, ${theme.vars.palette.kupferwolke.linie} 50%, transparent)`,
         '&:last-of-type': { borderBottom: 0 },
       })}
     >
       <Box
         component="span"
-        sx={(theme) => ({ fontSize: 11, color: theme.vars.palette.kupferwarte.textSchwach })}
+        sx={(theme) => ({ fontSize: 11, color: theme.vars.palette.kupferwolke.textSchwach })}
       >
         {name}
       </Box>
@@ -175,7 +174,7 @@ function Kontakt({
     return (
       <Typography
         component="span"
-        sx={(theme) => ({ fontSize: 11.5, color: theme.vars.palette.kupferwarte.textMatt })}
+        sx={(theme) => ({ fontSize: 11.5, color: theme.vars.palette.kupferwolke.textMatt })}
       >
         {wert}
       </Typography>
@@ -215,7 +214,7 @@ function Zeile({ partner, firmaId, schalte }: ZeilenProps) {
         gap: 1.5,
         flexWrap: 'wrap',
         padding: '11px 16px',
-        borderBottom: `1px solid color-mix(in srgb, ${theme.vars.palette.kupferwarte.rand} 55%, transparent)`,
+        borderBottom: `1px solid color-mix(in srgb, ${theme.vars.palette.kupferwolke.linie} 55%, transparent)`,
         'li:last-of-type&': { borderBottom: 0 },
       })}
     >
@@ -233,7 +232,7 @@ function Zeile({ partner, firmaId, schalte }: ZeilenProps) {
           {partner.rolle === null ? null : (
             <Typography
               component="span"
-              sx={(theme) => ({ fontSize: 11.5, color: theme.vars.palette.kupferwarte.textMatt })}
+              sx={(theme) => ({ fontSize: 11.5, color: theme.vars.palette.kupferwolke.textMatt })}
             >
               {partner.rolle}
             </Typography>
@@ -311,7 +310,7 @@ function Ansprechpartnerliste({
         sx={(theme) => ({
           padding: '18px 16px',
           fontSize: 12.5,
-          color: theme.vars.palette.kupferwarte.textMatt,
+          color: theme.vars.palette.kupferwolke.textMatt,
         })}
       >
         {OHNE_ANSPRECHPARTNER}
@@ -333,8 +332,8 @@ function Ansprechpartnerliste({
             padding: '12px 16px 4px',
             fontSize: 11.5,
             fontWeight: 600,
-            color: theme.vars.palette.kupferwarte.textSchwach,
-            borderTop: `1px solid ${theme.vars.palette.kupferwarte.rand}`,
+            color: theme.vars.palette.kupferwolke.textSchwach,
+            borderTop: `1px solid ${theme.vars.palette.kupferwolke.linie}`,
           })}
         >
           Stillgelegt
@@ -368,7 +367,7 @@ function VorgangZeileAnsicht({ vorgang }: { readonly vorgang: VorgangZeile }) {
         gap: 1.5,
         flexWrap: 'wrap',
         padding: '11px 16px',
-        borderBottom: `1px solid color-mix(in srgb, ${theme.vars.palette.kupferwarte.rand} 55%, transparent)`,
+        borderBottom: `1px solid color-mix(in srgb, ${theme.vars.palette.kupferwolke.linie} 55%, transparent)`,
         'li:last-of-type&': { borderBottom: 0 },
       })}
     >
@@ -382,17 +381,16 @@ function VorgangZeileAnsicht({ vorgang }: { readonly vorgang: VorgangZeile }) {
           minWidth: 0,
           color: 'inherit',
           textDecoration: 'none',
-          '&:hover': { color: theme.vars.palette.kupferwarte.kupfer },
+          '&:hover': { color: theme.vars.palette.kupferwolke.kupfer },
         })}
       >
         <Box
           component="span"
+          className={ZAHLEN_KLASSE}
           sx={(theme) => ({
             flex: 'none',
-            fontFamily: theme.vars.palette.kupferwarte.monoFontFamily,
             fontSize: 12,
-            fontVariantNumeric: 'tabular-nums',
-            color: theme.vars.palette.kupferwarte.textSchwach,
+            color: theme.vars.palette.kupferwolke.textSchwach,
           })}
         >
           {`#${String(vorgang.nummer)}`}
@@ -407,7 +405,7 @@ function VorgangZeileAnsicht({ vorgang }: { readonly vorgang: VorgangZeile }) {
         sx={(theme) => ({
           marginLeft: 'auto',
           fontSize: 11.5,
-          color: theme.vars.palette.kupferwarte.textMatt,
+          color: theme.vars.palette.kupferwolke.textMatt,
         })}
       >
         {PHASE_TEXT[vorgang.phase]}
@@ -454,7 +452,7 @@ function Vorgangsplatte({ stand }: { readonly stand: VorgangStand }) {
         sx={(theme) => ({
           padding: '18px 16px',
           fontSize: 12.5,
-          color: theme.vars.palette.kupferwarte.textSchwach,
+          color: theme.vars.palette.kupferwolke.textSchwach,
         })}
       >
         Vorgänge werden geladen …
@@ -476,7 +474,7 @@ function Vorgangsplatte({ stand }: { readonly stand: VorgangStand }) {
         sx={(theme) => ({
           padding: '18px 16px',
           fontSize: 12.5,
-          color: theme.vars.palette.kupferwarte.textMatt,
+          color: theme.vars.palette.kupferwolke.textMatt,
         })}
       >
         {OHNE_VORGANG}
@@ -493,8 +491,8 @@ function Vorgangsplatte({ stand }: { readonly stand: VorgangStand }) {
             padding: '12px 16px 4px',
             fontSize: 11.5,
             fontWeight: 600,
-            color: theme.vars.palette.kupferwarte.textSchwach,
-            borderTop: `1px solid ${theme.vars.palette.kupferwarte.rand}`,
+            color: theme.vars.palette.kupferwolke.textSchwach,
+            borderTop: `1px solid ${theme.vars.palette.kupferwolke.linie}`,
           })}
         >
           Abgeschlossen
@@ -628,7 +626,7 @@ export default function FirmaPage() {
           sx={(theme) => ({
             padding: '18px 16px',
             fontSize: 12.5,
-            color: theme.vars.palette.kupferwarte.textSchwach,
+            color: theme.vars.palette.kupferwolke.textSchwach,
           })}
         >
           Die Firma wird geladen …

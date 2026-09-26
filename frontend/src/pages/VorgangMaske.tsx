@@ -443,7 +443,7 @@ export default function VorgangMaske() {
               <Typography
                 sx={(theme) => ({
                   fontSize: 12.5,
-                  color: theme.vars.palette.kupferwarte.textSchwach,
+                  color: theme.vars.palette.kupferwolke.textSchwach,
                 })}
               >
                 {aendern ? LAEDT_VORGANG : LAEDT_FIRMEN}

@@ -8,22 +8,22 @@ import { instance } from '../api/instance';
 import { FUSS_EINTRAEGE, NAV_BLOECKE } from '../layout/navItems';
 import type { NavEintrag, Symbolname } from '../layout/navItems';
 import { liesEingeklappt, merkeEingeklappt } from '../lib/railState';
-import { CARD_RADIUS } from '../theme';
+import { RADIUS_KLEIN } from '../theme';
 import BrandMark from './BrandMark';
 
 /**
- * Die Schiene: eingelassene Nut links, oben die Marke, darunter die Navigationsbloecke, unten der
- * Fuss (Vorlage `.schiene` Z. 205–214, `.nav-block` Z. 243–245, `.nav-eintrag` Z. 247–270,
- * `.schiene-fuss` Z. 279).
+ * Die Schiene: eine freistehende weisse Karte links, oben die Marke, darunter die
+ * Navigationsbloecke, unten der Fuss (Vorlage `.schiene` Z. 30, `.gruppe` Z. 35,
+ * `.nav a` Z. 36–41).
  *
- * Der aktive Eintrag ist die erhabene Taste mit kupfernem Symbol; `aria-current="page"` setzt
+ * Der aktive Eintrag liegt auf Pfirsich mit Pfirsich-Schrift; `aria-current="page"` setzt
  * `NavLink` selbst, und genau daran haengt auch die Gestalt — Ansicht und Zugaenglichkeit koennen
  * so nicht auseinanderlaufen. Weil `NavLink` ohne `end` auch auf die tieferen Pfade passt, bleibt
  * „Firmen" auf `/firmen/7` aktiv (CLAUDE-design.md: „der laengste passende Pfad").
  *
  * Eingeklappt bleiben nur die Symbole; die Beschriftung geht in `aria-label` ueber, damit jeder
- * Eintrag seinen Namen behaelt. Das Etikett des Blocks entfaellt dort ganz — auf 64 px ist kein
- * Platz fuer Versalien mit 0,14 em Laufweite, und es benennt keinen eigenen Tastaturweg.
+ * Eintrag seinen Namen behaelt. Der Gruppentitel entfaellt dort ganz — auf 64 px ist kein Platz
+ * fuer ihn, und er benennt keinen eigenen Tastaturweg.
  *
  * `onWahl` ist der Rueckruf fuer die Betriebsart hinter der Schaltflaeche ({@link AppShell}): Dort
  * liegt die Schiene ueber dem Inhalt und muss sich schliessen, sobald ein Ziel gewaehlt ist.
@@ -101,7 +101,7 @@ function NavSymbol({ name }: { readonly name: Symbolname }) {
         width: 16,
         height: 16,
         flex: 'none',
-        color: theme.vars.palette.kupferwarte.textSchwach,
+        color: theme.vars.palette.kupferwolke.textSchwach,
       })}
     >
       {SYMBOLE[name]}
@@ -115,7 +115,7 @@ const eintragStil = {
   alignItems: 'center',
   gap: '10px',
   padding: '7px 10px',
-  borderRadius: `${CARD_RADIUS}px`,
+  borderRadius: `${RADIUS_KLEIN}px`,
   fontSize: 13,
   fontWeight: 500,
   // Link und Taste tragen dieselbe Zeilenhoehe — die Taste erbt sonst keine, und der Eintrag
@@ -152,19 +152,20 @@ function NavZiel({
       aria-label={eingeklappt ? eintrag.beschriftung : undefined}
       sx={(theme) => ({
         ...eintragStil,
-        color: theme.vars.palette.kupferwarte.textMatt,
+        color: theme.vars.palette.kupferwolke.textMatt,
         '&:hover': {
-          background: `color-mix(in srgb, ${theme.vars.palette.kupferwarte.platte} 70%, transparent)`,
-          color: theme.vars.palette.kupferwarte.text,
+          background: theme.vars.palette.kupferwolke.flaecheWeich,
+          color: theme.vars.palette.kupferwolke.text,
         },
+        // Der aktive Eintrag liegt auf Pfirsich mit Pfirsich-Schrift in 700
+        // (CLAUDE-design.md, „Rahmen").
         '&[aria-current="page"]': {
-          background: `linear-gradient(180deg, ${theme.vars.palette.kupferwarte.platteHoch}, ${theme.vars.palette.kupferwarte.platte})`,
-          borderColor: theme.vars.palette.kupferwarte.rand,
-          boxShadow: theme.vars.palette.kupferwarte.schatten.taste,
-          color: theme.vars.palette.kupferwarte.text,
+          background: theme.vars.palette.kupferwolke.toenung.pfirsich.flaeche,
+          color: theme.vars.palette.kupferwolke.toenung.pfirsich.schrift,
+          fontWeight: 700,
         },
         '&[aria-current="page"] .nav-symbol': {
-          color: theme.vars.palette.kupferwarte.kupfer,
+          color: theme.vars.palette.kupferwolke.toenung.pfirsich.schrift,
         },
       })}
     >
@@ -200,9 +201,10 @@ export default function NavRail({ onWahl }: { readonly onWahl?: () => void }) {
       data-eingeklappt={String(eingeklappt)}
       sx={(theme) => ({
         width: eingeklappt ? BREITE_EINGEKLAPPT : BREITE,
-        background: `linear-gradient(180deg, ${theme.vars.palette.kupferwarte.grundTief}, ${theme.vars.palette.kupferwarte.nute})`,
-        borderRight: `1px solid ${theme.vars.palette.kupferwarte.rand}`,
-        boxShadow: theme.vars.palette.kupferwarte.schatten.nute,
+        // Die Schiene ist eine freistehende weisse Karte, keine eingelassene Nut mehr
+        // (CLAUDE-design.md, „Rahmen").
+        background: theme.vars.palette.kupferwolke.flaeche,
+        boxShadow: theme.vars.palette.kupferwolke.schatten.karte,
         paddingBlock: '18px 24px',
         paddingInline: '14px',
         display: 'flex',
@@ -261,10 +263,10 @@ export default function NavRail({ onWahl }: { readonly onWahl?: () => void }) {
               onClick={umschalten}
               sx={(theme) => ({
                 ...eintragStil,
-                color: theme.vars.palette.kupferwarte.textMatt,
+                color: theme.vars.palette.kupferwolke.textMatt,
                 '&:hover': {
-                  background: `color-mix(in srgb, ${theme.vars.palette.kupferwarte.platte} 70%, transparent)`,
-                  color: theme.vars.palette.kupferwarte.text,
+                  background: theme.vars.palette.kupferwolke.flaecheWeich,
+                  color: theme.vars.palette.kupferwolke.text,
                 },
                 '& .nav-symbol': { transform: eingeklappt ? 'scaleX(-1)' : 'none' },
               })}

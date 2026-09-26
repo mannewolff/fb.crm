@@ -273,7 +273,7 @@ export default function FirmaMaske() {
               <Typography
                 sx={(theme) => ({
                   fontSize: 12.5,
-                  color: theme.vars.palette.kupferwarte.textSchwach,
+                  color: theme.vars.palette.kupferwolke.textSchwach,
                 })}
               >
                 Die Firma wird geladen …

@@ -312,7 +312,7 @@ export default function AnsprechpartnerMaske() {
               <Typography
                 sx={(theme) => ({
                   fontSize: 12.5,
-                  color: theme.vars.palette.kupferwarte.textSchwach,
+                  color: theme.vars.palette.kupferwolke.textSchwach,
                 })}
               >
                 Der Ansprechpartner wird geladen …

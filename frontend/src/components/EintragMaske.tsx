@@ -328,7 +328,7 @@ export default function EintragMaske({ vorgangId, modus, gespeichert }: EintragM
               marginTop: '8px',
               fontSize: 12.5,
               fontFamily: 'inherit',
-              color: theme.vars.palette.kupferwarte.text,
+              color: theme.vars.palette.kupferwolke.text,
             })}
           />
           {dateiMeldung === undefined ? null : (
@@ -351,7 +351,7 @@ export default function EintragMaske({ vorgangId, modus, gespeichert }: EintragM
               fontSize: 12.5,
               fontWeight: 600,
               textTransform: 'none',
-              color: theme.vars.palette.kupferwarte.textMatt,
+              color: theme.vars.palette.kupferwolke.textMatt,
             })}
           >
             Abbrechen

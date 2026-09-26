@@ -13,7 +13,7 @@ import type { FirmaZeile, FirmenUebersicht } from '../api/firmen';
 import KopfAktion from '../components/KopfAktion';
 import KupferTaste from '../components/KupferTaste';
 import Platte from '../components/Platte';
-import { CARD_RADIUS } from '../theme';
+import { RADIUS_MITTEL, RADIUS_RUND } from '../theme';
 
 /**
  * Die Uebersicht der Firmen (Kriterien 2, 3, 6 und 13).
@@ -130,9 +130,9 @@ function Zeile({ firma }: { readonly firma: FirmaZeile }) {
           padding: '11px 16px',
           textDecoration: 'none',
           color: 'inherit',
-          borderBottom: `1px solid ${theme.vars.palette.kupferwarte.rand}`,
+          borderBottom: `1px solid ${theme.vars.palette.kupferwolke.linie}`,
           transition: 'background .12s ease',
-          '&:hover': { background: theme.vars.palette.kupferwarte.platteFuss },
+          '&:hover': { background: theme.vars.palette.kupferwolke.flaecheWeich },
           'li:last-of-type > &': { borderBottom: 0 },
         })}
       >
@@ -159,13 +159,13 @@ function Zeile({ firma }: { readonly firma: FirmaZeile }) {
           >
             {firma.ort === null ? null : (
               <Typography
-                sx={(theme) => ({ fontSize: 11, color: theme.vars.palette.kupferwarte.textMatt })}
+                sx={(theme) => ({ fontSize: 11, color: theme.vars.palette.kupferwolke.textMatt })}
               >
                 {firma.ort}
               </Typography>
             )}
             <Typography
-              sx={(theme) => ({ fontSize: 11, color: theme.vars.palette.kupferwarte.textMatt })}
+              sx={(theme) => ({ fontSize: 11, color: theme.vars.palette.kupferwolke.textMatt })}
             >
               {ansprechpartnerText(firma.aktiveAnsprechpartner)}
             </Typography>
@@ -182,7 +182,7 @@ function Zeile({ firma }: { readonly firma: FirmaZeile }) {
               fontWeight: 500,
               padding: '1px 6px',
               borderRadius: '5px',
-              color: theme.vars.palette.kupferwarte.grau,
+              color: theme.vars.palette.kupferwolke.melder.grau,
               border: '1px solid currentColor',
               background: 'color-mix(in srgb, currentColor 13%, transparent)',
             })}
@@ -203,7 +203,7 @@ function inhaltZu(stand: Stand, suche: string): ReactNode {
         sx={(theme) => ({
           padding: '18px 16px',
           fontSize: 12.5,
-          color: theme.vars.palette.kupferwarte.textSchwach,
+          color: theme.vars.palette.kupferwolke.textSchwach,
         })}
       >
         Firmen werden geladen …
@@ -224,7 +224,7 @@ function inhaltZu(stand: Stand, suche: string): ReactNode {
         sx={(theme) => ({
           padding: '18px 16px',
           fontSize: 12.5,
-          color: theme.vars.palette.kupferwarte.textMatt,
+          color: theme.vars.palette.kupferwolke.textMatt,
         })}
       >
         {hinweisZu(suche, stand.uebersicht.gesamt)}
@@ -303,10 +303,9 @@ export default function FirmenPage() {
           gap: '10px',
           flexWrap: 'wrap',
           padding: '9px 11px',
-          borderRadius: `${CARD_RADIUS}px`,
-          border: `1px solid ${theme.vars.palette.kupferwarte.rand}`,
-          background: `linear-gradient(180deg, ${theme.vars.palette.kupferwarte.platteHoch}, ${theme.vars.palette.kupferwarte.platteFuss})`,
-          boxShadow: theme.vars.palette.kupferwarte.schatten.platte,
+          borderRadius: `${RADIUS_MITTEL}px`,
+          background: theme.vars.palette.kupferwolke.flaeche,
+          boxShadow: theme.vars.palette.kupferwolke.schatten.karte,
         })}
       >
         <TextField
@@ -317,18 +316,7 @@ export default function FirmenPage() {
           onChange={(ereignis) => {
             setzeEingabe(ereignis.target.value);
           }}
-          sx={(theme) => ({
-            minWidth: 190,
-            '& .MuiOutlinedInput-root': {
-              background: theme.vars.palette.kupferwarte.nute,
-              boxShadow: theme.vars.palette.kupferwarte.schatten.nute,
-              borderRadius: '9px',
-              fontSize: 12.5,
-            },
-            '& .MuiOutlinedInput-notchedOutline': {
-              borderColor: theme.vars.palette.kupferwarte.rand,
-            },
-          })}
+          sx={{ minWidth: 190, '& .MuiOutlinedInput-root': { fontSize: 12.5 } }}
         />
         <ToggleButton
           value={PARAM_STILLGELEGTE}
@@ -344,16 +332,17 @@ export default function FirmenPage() {
             fontSize: 11.5,
             fontWeight: 500,
             textTransform: 'none',
-            padding: '4px 9px',
-            borderRadius: '7px',
-            color: theme.vars.palette.kupferwarte.textMatt,
-            background: theme.vars.palette.kupferwarte.nute,
-            border: `1px solid ${theme.vars.palette.kupferwarte.rand}`,
-            boxShadow: theme.vars.palette.kupferwarte.schatten.nute,
+            padding: '4px 12px',
+            borderRadius: `${RADIUS_RUND}px`,
+            color: theme.vars.palette.kupferwolke.textMatt,
+            background: theme.vars.palette.kupferwolke.flaecheWeich,
+            border: 0,
+            boxShadow: `inset 0 0 0 1px ${theme.vars.palette.kupferwolke.linie}`,
+            // Gewaehlt: die Toenung Pfirsich, nicht bloss eine zweite Tiefe — Form und Farbe
+            // sagen dasselbe (CLAUDE-design.md, „Zustandsformen").
             '&.Mui-selected': {
-              color: theme.vars.palette.kupferwarte.text,
-              background: `linear-gradient(180deg, ${theme.vars.palette.kupferwarte.platteHoch}, ${theme.vars.palette.kupferwarte.platte})`,
-              boxShadow: theme.vars.palette.kupferwarte.schatten.taste,
+              color: theme.vars.palette.kupferwolke.toenung.pfirsich.schrift,
+              background: theme.vars.palette.kupferwolke.toenung.pfirsich.flaeche,
             },
           })}
         >

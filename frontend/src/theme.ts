@@ -1,107 +1,136 @@
 import { createTheme } from '@mui/material/styles';
 
 /**
- * Kupferwarte — die einzige Wertequelle des Erscheinungsbildes.
+ * Kupferwolke — die einzige Wertequelle des Erscheinungsbildes.
  *
- * Alle Werte stammen aus der verbindlichen Vorlage `docs/entwurf-leitstand.html`
- * (`:root` Z. 11–60, `body` Z. 152–162, Schriften Z. 164–174,
- * Fokusring Z. 178–182, Etikett Z. 185–194, Bewegung Z. 1093–1096) und aus der
- * Palettentabelle in `CLAUDE-design.md`.
+ * Alle Werte stammen aus der Palettentabelle in `CLAUDE-design.md` und aus der verbindlichen
+ * Vorlage `docs/entwurf-kupferwolke.html` (`:root` Z. 10–21, `body` Z. 22–27,
+ * `:focus-visible` Z. 103, `prefers-reduced-motion` Z. 104). Weichen Vorlage und Designquelle
+ * voneinander ab, gilt die Designquelle — sie traegt die auf AA vertieften Toene.
  *
- * **Ein Erscheinungsbild: hell** (CLAUDE-design.md, „Erscheinungsbild", Issue #34). Die Vorlage
- * traegt unter `prefers-color-scheme: dark` einen Dunkelsatz; er gilt nicht und wird hier nicht
- * gefuehrt. `theme.test.ts` haelt fest, dass kein Farbschema ausser `light` entsteht und kein CSS
- * unter `prefers-color-scheme`.
+ * **Ein Erscheinungsbild: hell** (CLAUDE-design.md, „Erscheinungsbild", Issue #34). Es gibt kein
+ * zweites Farbschema und kein CSS unter `prefers-color-scheme`; `theme.test.ts` haelt beides fest.
  *
- * Wo ein Wert von der Vorlage abweicht, steht der Grund an der Konstante. Abgewichen wird
- * ausschliesslich an den Stellen, die `CLAUDE-design.md` unter „Kontrast" als AA-Verfehlung
- * der Vorlage benennt — nachgezogen im selben Farbton, nie durch Senken der Schwelle.
- * Nachgerechnet wird das in `theme.test.ts` mit `lib/contrast.ts`.
- *
- * **Tokens sind Verweise, keine Werte.** Ansichten lesen die Flaechen, Linien und Melder
- * ueber `theme.vars.palette.kupferwarte.*`.
+ * **Tokens sind Verweise, keine Werte.** Ansichten lesen Flaechen, Linien, Toenungen und Melder
+ * ueber `theme.vars.palette.kupferwolke.*`.
  */
 
-/** Platte, Kachel, Laufband. */
-export const PANEL_RADIUS = 14;
-/** Karte, Navigationseintrag. */
-export const CARD_RADIUS = 10;
-/** Bedienelement und Fokusring. */
-export const CONTROL_RADIUS = 6;
+/** Karte, Kopfkarte, Schiene. */
+export const RADIUS_GROSS = 28;
+/** Kennzahl-Kachel, Fuss der Schiene. */
+export const RADIUS_KACHEL = 24;
+/** Innenkarte, Hinzufuegen-Kachel, Menue, Dialog. */
+export const RADIUS_MITTEL = 22;
+/** Navigationseintrag, Zeile, Eingabefeld. */
+export const RADIUS_KLEIN = 14;
+/** Tasten, Chips, Suche, Zaehler — die runde Form. */
+export const RADIUS_RUND = 999;
 
-/** Fokusring: 2 px Kupfer mit 2 px Abstand (Vorlage Z. 178–182). */
+/** Fokusring: 2 px Kupfer mit 2 px Abstand (Vorlage Z. 103). */
 export const FOCUS_RING_WIDTH = 2;
 export const FOCUS_RING_OFFSET = 2;
 
-/** Die Rollen der Vorlage, die keine MUI-Rolle haben. */
-export interface KupferwarteFarben {
+/**
+ * Die Klasse, die Zahlen untereinander stellt (CLAUDE-design.md, Typografie).
+ *
+ * Plus Jakarta Sans fuehrt die Tabellenziffern selbst (`tnum`) — es braucht keine zweite Schrift
+ * mehr, nur noch `font-variant-numeric`. Die Regel steht zentral in `MuiCssBaseline`, damit keine
+ * Ansicht sie abschreibt.
+ */
+export const ZAHLEN_KLASSE = 'zahlen';
+
+/** Eine Pastellflaeche mit der Schrift, die auf ihr steht. */
+export interface Toenung {
+  readonly flaeche: string;
+  readonly schrift: string;
+}
+
+/**
+ * Die sechs Toenungen. Jede traegt eine feste Bedeutung (CLAUDE-design.md, „Toenungen") — sie
+ * werden nicht der Reihe nach durchgefaerbt.
+ */
+export interface KupferwolkeToenungen {
+  /** Kupfer-Familie: aktiver Navigationseintrag, Firmen-Mal, Hover der Icontaste, Vorgaenge. */
+  readonly pfirsich: Toenung;
+  /** erfolgreich, aktiv, bezahlt, Umsatz. */
+  readonly salbei: Toenung;
+  /** Information, laufend, versendet. */
+  readonly himmel: Toenung;
+  /** Warnung, Grenze erreicht, bald faellig. */
+  readonly bernstein: Toenung;
+  /** gescheitert, ueberfaellig, stillgelegt. */
+  readonly rose: Toenung;
+  /** neutrale Kategorie: Personen, Ansprechpartner, Rechnungen als Menge. */
+  readonly flieder: Toenung;
+}
+
+/**
+ * Kraeftige Zustandsfarben fuer Symbole, Zahlen und schmale Markierungen.
+ *
+ * Sie stehen **auf Flaechen**, nie direkt auf dem Grund: Stahl und Grau verfehlen dort AA
+ * (CLAUDE-design.md, „Bekannte Grenzen").
+ */
+export interface KupferwolkeMelder {
+  readonly gruen: string;
+  readonly bernstein: string;
+  readonly zinnober: string;
+  readonly stahl: string;
+  readonly grau: string;
+}
+
+/** Drei Tiefenstufen: Grund < Karte < Abgehoben. Eingelassene Flaechen gibt es nicht mehr. */
+export interface KupferwolkeSchatten {
+  /** Karte, Schiene, Suche, runde Kopftasten. */
+  readonly karte: string;
+  /** Innenkarte im Hover, Menue, Dialog. */
+  readonly hoch: string;
+  /** Kupfertaste und Markenmal — der einzige farbige Schatten. */
+  readonly kupfer: string;
+}
+
+/** Die Rollen der Designquelle, die keine MUI-Rolle haben. */
+export interface KupferwolkeFarben {
+  /** Grund der Anwendung, warmes Cremeweiss. */
   readonly grund: string;
-  readonly grundTief: string;
-  readonly nute: string;
-  readonly platte: string;
-  readonly platteFuss: string;
-  readonly platteHoch: string;
-  readonly rand: string;
+  /** Karten, Schiene, Suche, Menues. */
+  readonly flaeche: string;
+  /** Innenkarten, weiche Tasten, Icontasten, Zaehler, Hover-Grund von Zeilen. */
+  readonly flaecheWeich: string;
+  /** Seltene Haarlinien — rein gliedernd, traegt nie eine Aussage. */
+  readonly linie: string;
+  /** Rand von Eingabefeldern und allem, dessen Umriss man erkennen muss (>= 3:1). */
   readonly randStark: string;
-  readonly kante: string;
   readonly text: string;
   readonly textMatt: string;
   readonly textSchwach: string;
+  /** Leitfarbe: Links, Fokusring, kupferne Schrift, aktive Zustaende. */
   readonly kupfer: string;
-  readonly kupferHell: string;
-  /**
-   * Das dunkle Ende eines Kupferverlaufs und der Rand einer Kupferfuellung.
-   *
-   * Die Vorlage schreibt ihn am Markenmal (Z. 225) fest hin und mischt ihn an der
-   * Kupfertaste (Z. 340) aus Kupfer und Schwarz — in beiden Erscheinungsbildern derselbe
-   * Ton. Hier steht er als Token, damit keine Ansicht einen Farbwert fuehren muss
-   * (CLAUDE-design.md).
-   */
+  /** Das helle Ende des Verlaufs der Kupfertaste. */
+  readonly kupferTaste: string;
+  /** Das tiefe Ende des Verlaufs der Kupfertaste. */
   readonly kupferTief: string;
-  readonly kupferSchimmer: string;
-  /** Schrift auf der Kupferfuellung. */
+  /** **Nur Schmuck** (2,65:1 gegen Weiss) — nie Schrift, nie Grund von Schrift. */
+  readonly kupferGlanz: string;
+  /** Der farbige Schatten der Kupfertaste und des Markenmals. */
+  readonly kupferSchatten: string;
+  /** Schrift auf der Kupfertaste. */
   readonly kupferSchrift: string;
-  readonly gruen: string;
-  readonly bernst: string;
-  readonly zinnob: string;
-  readonly stahl: string;
-  readonly grau: string;
-  /** Der Grund der Anwendung: Kupfer-Schimmer oben links ueber dem Grundton. */
+  /** Der Grund der Anwendung: Cremeweiss mit Kupfer-Schimmer links und Flieder-Schimmer rechts. */
   readonly grundVerlauf: string;
-  /**
-   * Das runde Nutzer-Mal im Kopf: Schiefer-Verlauf von hell nach tief, Kuerzel darauf
-   * (Vorlage `.nutzer` Z. 347–356). Die Vorlage fuehrt es fuer beide Erscheinungsbilder mit
-   * denselben Werten.
-   */
-  readonly nutzerHell: string;
-  readonly nutzerTief: string;
-  readonly nutzerSchrift: string;
+  readonly toenung: KupferwolkeToenungen;
+  readonly melder: KupferwolkeMelder;
 }
 
-/** Die vier Tiefenstufen der Vorlage: Nut < Grund < Platte < Abgehoben. */
-export interface KupferwarteSchatten {
-  /** Innenschatten eingelassener Flaechen. */
-  readonly nute: string;
-  /** Lichtkante plus zwei Schattenebenen der Platte. */
-  readonly platte: string;
-  /** Abgehobene Flaeche, weiter geoeffnet. */
-  readonly hoch: string;
-  /** Lichtkante plus kurzer Schatten einer Taste. */
-  readonly taste: string;
-}
-
-export interface KupferwartePalette extends KupferwarteFarben {
-  readonly schatten: KupferwarteSchatten;
-  /** IBM Plex Mono mit Tabellenziffern — Nummern, Betraege, Mengen, Datumsangaben. */
-  readonly monoFontFamily: string;
+export interface KupferwolkePalette extends KupferwolkeFarben {
+  readonly schatten: KupferwolkeSchatten;
 }
 
 declare module '@mui/material/styles' {
   interface Palette {
-    kupferwarte: KupferwartePalette;
+    kupferwolke: KupferwolkePalette;
   }
   interface PaletteOptions {
-    kupferwarte: KupferwartePalette;
+    kupferwolke: KupferwolkePalette;
   }
   // Blendet die Felder der CSS-Variablen (`vars`, `cssVarPrefix`, `colorSchemeSelector`)
   // am Theme-Typ ein. MUI 6 zeigt sie nur bei dieser Augmentation; ohne sie traegt das
@@ -111,94 +140,92 @@ declare module '@mui/material/styles' {
   }
 }
 
-const HELL_GRUND = '#E7E9ED';
-const HELL_KANTE = 'rgba(255,255,255,.9)';
-const HELL_KUPFER_SCHIMMER = 'rgba(168,95,44,.16)';
+const GRUND = '#F6F3EF';
+const KUPFER_GLANZ = '#E08A4F';
+const KUPFER_SCHATTEN = 'rgba(184,97,42,.55)';
 
-/** Vorlage Z. 225: das tiefe Ende des Kupferverlaufs. */
-const KUPFER_TIEF = '#7B421C';
-
-/** Titel und Anzeige (Vorlage Z. 164–169). */
-const ARCHIVO = '"Archivo Variable", Archivo, system-ui, sans-serif';
-/** Fliesstext (Vorlage Z. 158). */
-const PLEX_SANS = '"IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif';
-/** Zahlen und Kennungen (Vorlage Z. 171–174). */
-const PLEX_MONO = '"IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace';
-
-/** Vorlage `.nutzer` Z. 349–350. */
-const NUTZER_HELL = '#47505D';
-const NUTZER_TIEF = '#2B323C';
-const NUTZER_SCHRIFT = '#FFFFFF';
+/** Eine Schrift: Plus Jakarta Sans (CLAUDE-design.md, Typografie). */
+const JAKARTA = '"Plus Jakarta Sans Variable", "Plus Jakarta Sans", system-ui, sans-serif';
 
 /**
- * Der Grund traegt in beiden Erscheinungsbildern denselben Schimmer oben links
- * (Vorlage Z. 152–162).
+ * Der Grund traegt zwei weiche Schimmer (Vorlage Z. 22–27): Kupfer-Glanz oben links, Flieder
+ * oben rechts. Beide sind Schmuck und tragen nie Schrift.
  */
-function grundVerlauf(schimmer: string, grundton: string): string {
-  return `radial-gradient(1100px 600px at 18% -8%, ${schimmer}, transparent 62%), ${grundton}`;
-}
+const GRUND_VERLAUF = [
+  'radial-gradient(900px 500px at 12% -10%, rgba(224,138,79,.18), transparent 60%)',
+  'radial-gradient(700px 500px at 100% 0%, rgba(160,150,240,.12), transparent 60%)',
+  GRUND,
+].join(', ');
 
-const hellFarben: KupferwarteFarben = {
-  grund: HELL_GRUND,
-  grundTief: '#D8DBE2',
-  nute: '#D5D9E0',
-  platte: '#FDFDFE',
-  platteFuss: '#F2F4F7',
-  platteHoch: '#FFFFFF',
-  rand: '#CDD2DA',
-  randStark: '#B7BEC9',
-  kante: HELL_KANTE,
-  text: '#14181E',
-  // Vorlage: #58606C — auf der Nut nur 4,49:1 (CLAUDE-design.md, Verfehlung 2). Nachgedunkelt
-  // im selben Ton auf 5,92:1. Weiter als noetig (4,5:1 haelt schon bei #575F6B), weil
-  // textSchwach unten auf 4,54:1 gehoben werden muss und sonst mit dieser Stufe zusammenfiele.
-  textMatt: '#484E58',
-  // Vorlage: #868E9B — als Schrift nur 2,33–3,30:1 (CLAUDE-design.md, Verfehlung 1).
-  // Nachgedunkelt im selben Ton auf 4,54:1 gegen die Nut, die schwaechste helle Flaeche.
-  textSchwach: '#585F6B',
-  kupfer: '#A85F2C',
-  kupferHell: '#C2743C',
-  kupferTief: KUPFER_TIEF,
-  kupferSchimmer: HELL_KUPFER_SCHIMMER,
-  // Vorlage `.taste-kupfer` Z. 322–345: weisse Schrift auf der Kupferfuellung, 4,84:1.
+const farben: KupferwolkeFarben = {
+  grund: GRUND,
+  flaeche: '#FFFFFF',
+  flaecheWeich: '#FBF9F6',
+  linie: '#EFE9E3',
+  randStark: '#928577',
+  text: '#1F1B18',
+  textMatt: '#6B625B',
+  textSchwach: '#756C64',
+  kupfer: '#A0521F',
+  kupferTaste: '#AE5A24',
+  kupferTief: '#8E4718',
+  kupferGlanz: KUPFER_GLANZ,
+  kupferSchatten: KUPFER_SCHATTEN,
   kupferSchrift: '#FFFFFF',
-  // Melder: Vorlage #2F8F4E — auf der Nut nur 2,87:1 (CLAUDE-design.md, Verfehlung 3).
-  gruen: '#2E8B4C',
-  // Melder: Vorlage #B07C15 — auf der Nut nur 2,58:1 (CLAUDE-design.md, Verfehlung 3).
-  bernst: '#A17213',
-  zinnob: '#C8393E',
-  stahl: '#2F6FC9',
-  // Melder: Vorlage #8A929E — auf der Nut nur 2,22:1 (CLAUDE-design.md, Verfehlung 3).
-  grau: '#727B8A',
-  grundVerlauf: grundVerlauf(HELL_KUPFER_SCHIMMER, HELL_GRUND),
-  nutzerHell: NUTZER_HELL,
-  nutzerTief: NUTZER_TIEF,
-  nutzerSchrift: NUTZER_SCHRIFT,
+  grundVerlauf: GRUND_VERLAUF,
+  toenung: {
+    pfirsich: { flaeche: '#FDEBDD', schrift: '#8A4418' },
+    salbei: { flaeche: '#E4F1E8', schrift: '#2E6B45' },
+    himmel: { flaeche: '#E3EFFB', schrift: '#1F5A96' },
+    bernstein: { flaeche: '#FBF0D9', schrift: '#7A5510' },
+    rose: { flaeche: '#FBE4E4', schrift: '#A12D31' },
+    flieder: { flaeche: '#ECEAFB', schrift: '#4B3FA0' },
+  },
+  melder: {
+    gruen: '#277A42',
+    bernstein: '#8F6410',
+    zinnober: '#C8393E',
+    stahl: '#2F6FC9',
+    grau: '#6B737F',
+  },
 };
 
-export const SCHATTEN: KupferwarteSchatten = {
-  nute: `0 2px 5px rgba(18,24,33,.14) inset, 0 -1px 0 ${HELL_KANTE} inset`,
-  platte: `0 1px 0 ${HELL_KANTE} inset, 0 1px 2px rgba(18,24,33,.10), 0 10px 24px -14px rgba(18,24,33,.35)`,
-  hoch: `0 1px 0 ${HELL_KANTE} inset, 0 2px 4px rgba(18,24,33,.10), 0 18px 34px -16px rgba(18,24,33,.42)`,
-  taste: `0 1px 0 ${HELL_KANTE} inset, 0 1px 2px rgba(18,24,33,.18)`,
+/** Die Schattenfarbe ist ein warmes Braun — kein Blaugrau, kein Schwarz. */
+export const SCHATTEN: KupferwolkeSchatten = {
+  karte: '0 1px 2px rgba(80,50,30,.04), 0 8px 24px -6px rgba(80,50,30,.10)',
+  hoch: '0 2px 4px rgba(80,50,30,.05), 0 18px 40px -10px rgba(80,50,30,.18)',
+  kupfer: `0 8px 20px -6px ${KUPFER_SCHATTEN}`,
 };
 
-export const KUPFERWARTE: KupferwarteFarben = hellFarben;
+export const KUPFERWOLKE: KupferwolkeFarben = farben;
 
-/** Ueberschriften der Vorlage: Archivo mit gedehnter Breite. */
-const ueberschrift = { fontFamily: ARCHIVO, fontStretch: '112%', textWrap: 'balance' } as const;
+/**
+ * Die Kennzahl einer Kachel: eine grosse Einzelzahl, darum **ohne** Tabellenziffern
+ * (CLAUDE-design.md, Typografie). Sie steht als Bausatz hier und nicht als MUI-Variante, weil
+ * die Kachel selbst erst mit dem Kachel-Paket entsteht.
+ */
+export const KENNZAHL_TYPOGRAFIE = {
+  fontSize: 26,
+  fontWeight: 800,
+  letterSpacing: '-.02em',
+} as const;
 
-function palette(farben: KupferwarteFarben, schatten: KupferwarteSchatten) {
+function palette() {
   return {
-    primary: { main: farben.kupfer, light: farben.kupferHell, contrastText: farben.kupferSchrift },
-    background: { default: farben.grund, paper: farben.platte },
+    primary: {
+      main: farben.kupfer,
+      light: farben.kupferTaste,
+      dark: farben.kupferTief,
+      contrastText: farben.kupferSchrift,
+    },
+    background: { default: farben.grund, paper: farben.flaeche },
     text: { primary: farben.text, secondary: farben.textMatt, disabled: farben.textSchwach },
-    divider: farben.rand,
-    success: { main: farben.gruen },
-    warning: { main: farben.bernst },
-    error: { main: farben.zinnob },
-    info: { main: farben.stahl },
-    kupferwarte: { ...farben, schatten, monoFontFamily: PLEX_MONO },
+    divider: farben.linie,
+    success: { main: farben.melder.gruen },
+    warning: { main: farben.melder.bernstein },
+    error: { main: farben.melder.zinnober },
+    info: { main: farben.melder.stahl },
+    kupferwolke: { ...farben, schatten: SCHATTEN },
   };
 }
 
@@ -208,56 +235,61 @@ export const theme = createTheme({
   // gleich was der Rechner einstellt.
   cssVariables: { cssVarPrefix: 'fb' },
   colorSchemes: {
-    light: { palette: palette(hellFarben, SCHATTEN) },
+    light: { palette: palette() },
   },
-  shape: { borderRadius: CONTROL_RADIUS },
+  shape: { borderRadius: RADIUS_KLEIN },
   breakpoints: {
-    // Unterhalb von 760 px liegt die Schiene hinter einer Schaltflaeche (E14); die uebrigen
-    // Umbruchpunkte bleiben bei den MUI-Vorgaben.
+    // Unterhalb von 760 px entfaellt die Schiene (E14); die uebrigen Umbruchpunkte bleiben bei
+    // den MUI-Vorgaben.
     values: { xs: 0, sm: 760, md: 900, lg: 1200, xl: 1536 },
   },
   typography: {
-    fontFamily: PLEX_SANS,
-    fontSize: 14,
-    h1: ueberschrift,
-    h2: ueberschrift,
-    h3: ueberschrift,
-    h4: ueberschrift,
-    h5: ueberschrift,
-    h6: ueberschrift,
-    button: { fontFamily: PLEX_SANS, fontWeight: 600, textTransform: 'none' },
-    // Etikett (Vorlage Z. 185–194): Archivo, 10 px, 600, Versalien, Laufweite 0,14 em.
+    fontFamily: JAKARTA,
+    fontSize: 14.5,
+    // Ansichtstitel: Name in der Kopfkarte.
+    h1: { fontSize: 28, fontWeight: 800, letterSpacing: '-.02em', textWrap: 'balance' },
+    // Kartentitel.
+    h2: { fontSize: 18, fontWeight: 700, textWrap: 'balance' },
+    // Markenname „fb.crm" in der Schiene.
+    h3: { fontSize: 17, fontWeight: 800 },
+    // Name in Liste: Person, Firma, Vorgang in Karten und Zeilen.
+    h4: { fontSize: 15, fontWeight: 700 },
+    h5: { fontSize: 15, fontWeight: 700 },
+    h6: { fontSize: 15, fontWeight: 700 },
+    body1: { fontSize: 14.5, fontWeight: 400, lineHeight: 1.5 },
+    body2: { fontSize: 13.5, fontWeight: 500 },
+    caption: { fontSize: 12.5, fontWeight: 600 },
+    button: { fontSize: 14, fontWeight: 600, textTransform: 'none' },
+    // Gruppentitel der Schiene: Satzschreibung, keine Versalien mit Laufweite
+    // (CLAUDE-design.md, Typografie).
     overline: {
-      fontFamily: ARCHIVO,
-      fontStretch: '118%',
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: 600,
-      letterSpacing: '.14em',
-      textTransform: 'uppercase',
-      lineHeight: 1,
+      letterSpacing: 'normal',
+      textTransform: 'none',
+      lineHeight: 1.4,
     },
   },
   components: {
     MuiCssBaseline: {
       styleOverrides: {
         body: {
-          background: hellFarben.grundVerlauf,
+          background: GRUND_VERLAUF,
+          minHeight: '100vh',
           lineHeight: 1.5,
           WebkitFontSmoothing: 'antialiased',
         },
         // Zahlen stehen untereinander in einer Spalte (CLAUDE-design.md, Typografie).
-        'code, kbd, samp, .mono': {
-          fontFamily: PLEX_MONO,
-          fontVariantNumeric: 'tabular-nums',
-        },
-        // Fokusring: 2 px Kupfer mit 2 px Abstand an jedem Tastaturziel.
+        [`.${ZAHLEN_KLASSE}`]: { fontVariantNumeric: 'tabular-nums' },
+        // Fokusring: 2 px Kupfer mit 2 px Abstand an jedem Tastaturziel. Den Radius nimmt der
+        // Umriss vom Element selbst — er wird hier nicht gesetzt, sonst veraenderte die Regel
+        // die Form des Elements statt nur seinen Ring.
         ':is(button, a, [tabindex]):focus-visible': {
           outline: `${FOCUS_RING_WIDTH}px solid var(--fb-palette-primary-main)`,
           outlineOffset: `${FOCUS_RING_OFFSET}px`,
-          borderRadius: CONTROL_RADIUS,
         },
-        // Bewegung reduzieren: eine zentrale Regel, auch fuer das Pulsieren der LED
-        // (Vorlage Z. 1093–1096).
+        // Bewegung reduzieren: eine zentrale Regel, auch fuer das Anheben im Hover
+        // (Vorlage Z. 104).
         '@media (prefers-reduced-motion: reduce)': {
           '*, *::before, *::after': {
             animationDuration: '0s !important',
@@ -270,7 +302,62 @@ export const theme = createTheme({
     },
     MuiPaper: {
       styleOverrides: {
-        root: { backgroundImage: 'none', borderRadius: PANEL_RADIUS },
+        root: { backgroundImage: 'none', borderRadius: RADIUS_GROSS },
+      },
+    },
+    // Eingabefeld: weisse Flaeche, 1 px Rand stark, Radius klein, Fokus als 2 px Kupferrand
+    // (CLAUDE-design.md, „Eingabefelder").
+    MuiOutlinedInput: {
+      styleOverrides: {
+        root: ({ theme: t }) => ({
+          borderRadius: RADIUS_KLEIN,
+          backgroundColor: t.vars.palette.kupferwolke.flaeche,
+          '& .MuiOutlinedInput-notchedOutline': {
+            borderWidth: 1,
+            borderColor: t.vars.palette.kupferwolke.randStark,
+          },
+          '&:hover .MuiOutlinedInput-notchedOutline': {
+            borderColor: t.vars.palette.kupferwolke.randStark,
+          },
+          '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+            borderWidth: FOCUS_RING_WIDTH,
+            borderColor: t.vars.palette.kupferwolke.kupfer,
+          },
+          '&.Mui-error .MuiOutlinedInput-notchedOutline': {
+            borderColor: t.vars.palette.kupferwolke.melder.zinnober,
+          },
+        }),
+      },
+    },
+    // Was ueber allem liegt, hebt sich weiter ab (CLAUDE-design.md, „Tiefe").
+    MuiMenu: {
+      styleOverrides: {
+        paper: ({ theme: t }) => ({
+          borderRadius: RADIUS_MITTEL,
+          boxShadow: t.vars.palette.kupferwolke.schatten.hoch,
+        }),
+      },
+    },
+    MuiPopover: {
+      styleOverrides: {
+        paper: ({ theme: t }) => ({
+          borderRadius: RADIUS_MITTEL,
+          boxShadow: t.vars.palette.kupferwolke.schatten.hoch,
+        }),
+      },
+    },
+    MuiDialog: {
+      styleOverrides: {
+        paper: ({ theme: t }) => ({
+          borderRadius: RADIUS_MITTEL,
+          boxShadow: t.vars.palette.kupferwolke.schatten.hoch,
+        }),
+      },
+    },
+    // Tasten sind Pillen (CLAUDE-design.md, „Radien": rund).
+    MuiButton: {
+      styleOverrides: {
+        root: { borderRadius: RADIUS_RUND },
       },
     },
   },

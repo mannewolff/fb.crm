@@ -7,16 +7,16 @@ import { useEffect, useRef, useState } from 'react';
 import { anhangPfad } from '../api/vorgaenge';
 import type { Eintrag, Eintragsart, Herkunft } from '../api/vorgaenge';
 import { dateigroesse } from '../lib/dateigroesse';
+import { ZAHLEN_KLASSE } from '../theme';
 import EintragMaske from './EintragMaske';
 
 /**
  * Die Historie eines Vorgangs (Kriterien 15, 16, 17, 19, 26).
  *
- * Gestalt nach den „Anlaeufen" der Vorlagen-Ansicht „Karte" (`docs/entwurf-leitstand.html`,
- * HTML Z. 2137–2162, CSS `.anlaeufe`/`.anlauf` Z. 1045–1058): eine Spalte aus Zeilen, jede mit
- * einem Melder links am durchlaufenden Strahl, dem Kern in der Mitte und dem Zeitpunkt rechts in
- * Tabellenziffern. **Einzige gewollte Abweichung von der Vorlage:** Der juengste Eintrag steht
- * oben (Kriterium 15).
+ * Gestalt als Zeitleiste (CLAUDE-design.md, „Bausteine"): eine Spalte aus Zeilen, jede mit einem
+ * Melder links am durchlaufenden Strahl, dem Kern in der Mitte und dem Zeitpunkt rechts in
+ * Tabellenziffern. Der juengste Eintrag steht oben (Kriterium 15). Die Anordnung folgt erst ab
+ * dem Rahmen-Paket der Kupferwolke; hier stehen nur ihre Werte.
  *
  * Drei Zusagen tragen den Baustein:
  *
@@ -143,11 +143,10 @@ function Groesse({ bytes }: { readonly bytes: number | null }) {
   return (
     <Typography
       component="span"
+      className={ZAHLEN_KLASSE}
       sx={(theme) => ({
-        fontFamily: theme.vars.palette.kupferwarte.monoFontFamily,
-        fontVariantNumeric: 'tabular-nums',
         fontSize: 11,
-        color: theme.vars.palette.kupferwarte.textSchwach,
+        color: theme.vars.palette.kupferwolke.textSchwach,
       })}
     >
       {dateigroesse(bytes)}
@@ -165,7 +164,7 @@ function Text({ text }: { readonly text: string | null }) {
       sx={(theme) => ({
         marginTop: '2px',
         fontSize: 11.5,
-        color: theme.vars.palette.kupferwarte.textMatt,
+        color: theme.vars.palette.kupferwolke.textMatt,
         // Der Umbruch, den der Benutzer eingegeben hat, ist Teil seines Textes. Ohne `pre-wrap`
         // faltete der Browser ihn zu einem Leerzeichen zusammen.
         whiteSpace: 'pre-wrap',
@@ -229,8 +228,9 @@ function Zeile({
         position: 'relative',
         paddingBottom: '13px',
         '&:last-of-type': { paddingBottom: 0 },
-        // Der Strahl, der die Zeilen verbindet — eingelassen wie eine Nut, und am letzten
-        // Eintrag endet er, statt ins Leere zu laufen (Vorlage Z. 1048–1052).
+        // Der Strahl, der die Zeilen verbindet — eine Haarlinie auf der Karte, und am letzten
+        // Eintrag endet er, statt ins Leere zu laufen. Eingelassene Flaechen gibt es in der
+        // Kupferwolke nicht mehr (CLAUDE-design.md, „Tiefe").
         '&::before': {
           content: '""',
           position: 'absolute',
@@ -239,8 +239,7 @@ function Zeile({
           bottom: 0,
           width: '2px',
           borderRadius: '2px',
-          background: theme.vars.palette.kupferwarte.nute,
-          boxShadow: theme.vars.palette.kupferwarte.schatten.nute,
+          background: theme.vars.palette.kupferwolke.linie,
         },
         '&:last-of-type::before': { display: 'none' },
       })}
@@ -255,9 +254,8 @@ function Zeile({
           display: 'grid',
           placeItems: 'center',
           zIndex: 1,
-          background: theme.vars.palette.kupferwarte.platte,
-          border: `1px solid ${theme.vars.palette.kupferwarte.rand}`,
-          boxShadow: theme.vars.palette.kupferwarte.schatten.taste,
+          background: theme.vars.palette.kupferwolke.flaeche,
+          border: `1px solid ${theme.vars.palette.kupferwolke.linie}`,
         })}
       >
         <Box
@@ -266,7 +264,7 @@ function Zeile({
             width: 9,
             height: 9,
             borderRadius: '50%',
-            color: theme.vars.palette.kupferwarte[ART_MELDER[eintrag.art]],
+            color: theme.vars.palette.kupferwolke.melder[ART_MELDER[eintrag.art]],
             background: 'currentColor',
             boxShadow: '0 0 0 1px rgba(0,0,0,.22) inset, 0 0 8px -1px currentColor',
           })}
@@ -281,7 +279,7 @@ function Zeile({
             component="span"
             sx={(theme) => ({
               fontSize: 11,
-              color: theme.vars.palette.kupferwarte.textSchwach,
+              color: theme.vars.palette.kupferwolke.textSchwach,
             })}
           >
             {HERKUNFT_TEXT[eintrag.herkunft]}
@@ -302,7 +300,7 @@ function Zeile({
                 fontSize: 11,
                 fontWeight: 600,
                 textTransform: 'none',
-                color: theme.vars.palette.kupferwarte.kupfer,
+                color: theme.vars.palette.kupferwolke.kupfer,
               })}
             >
               Ändern
@@ -320,11 +318,10 @@ function Zeile({
         )}
       </Box>
       <Box
+        className={ZAHLEN_KLASSE}
         sx={(theme) => ({
-          fontFamily: theme.vars.palette.kupferwarte.monoFontFamily,
-          fontVariantNumeric: 'tabular-nums',
           fontSize: 11.5,
-          color: theme.vars.palette.kupferwarte.textMatt,
+          color: theme.vars.palette.kupferwolke.textMatt,
           textAlign: 'right',
           whiteSpace: 'nowrap',
         })}
@@ -338,7 +335,7 @@ function Zeile({
             sx={(theme) => ({
               display: 'block',
               fontSize: 11,
-              color: theme.vars.palette.kupferwarte.textSchwach,
+              color: theme.vars.palette.kupferwolke.textSchwach,
             })}
           >
             {vermerkZu(eintrag.geaendertAm)}
@@ -360,7 +357,7 @@ export default function Historie({ vorgangId, eintraege, geaendert }: HistoriePr
         sx={(theme) => ({
           padding: '18px 16px',
           fontSize: 12.5,
-          color: theme.vars.palette.kupferwarte.textMatt,
+          color: theme.vars.palette.kupferwolke.textMatt,
         })}
       >
         {OHNE_EINTRAG}

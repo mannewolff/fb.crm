@@ -56,23 +56,23 @@ export default function Tafel({ beschriftung, spalten, children }: TafelProps) {
             zIndex: KOPF_STUFE,
             textAlign: 'left',
             ...theme.typography.overline,
-            letterSpacing: '.13em',
-            color: theme.vars.palette.kupferwarte.textSchwach,
+            color: theme.vars.palette.kupferwolke.textSchwach,
             padding: '10px 12px',
-            background: `linear-gradient(180deg, ${theme.vars.palette.kupferwarte.platteHoch}, ${theme.vars.palette.kupferwarte.platteFuss})`,
-            borderBottom: `1px solid ${theme.vars.palette.kupferwarte.rand}`,
+            background: theme.vars.palette.kupferwolke.flaeche,
+            borderBottom: `1px solid ${theme.vars.palette.kupferwolke.linie}`,
             whiteSpace: 'nowrap',
           },
           '& tbody td': {
             padding: '9px 12px',
-            borderBottom: `1px solid color-mix(in srgb, ${theme.vars.palette.kupferwarte.rand} 50%, transparent)`,
+            borderBottom: `1px solid color-mix(in srgb, ${theme.vars.palette.kupferwolke.linie} 50%, transparent)`,
             fontSize: 12.5,
             verticalAlign: 'middle',
           },
           '& tbody tr:last-of-type td': { borderBottom: 0 },
           '& tbody tr': { transition: 'background .12s ease' },
           '& tbody tr:hover td': {
-            background: `color-mix(in srgb, ${theme.vars.palette.kupferwarte.platteHoch} 80%, ${theme.vars.palette.kupferwarte.kupferSchimmer})`,
+            // Hover-Grund von Zeilen ist die weiche Flaeche (CLAUDE-design.md, „Flaeche weich").
+            background: theme.vars.palette.kupferwolke.flaecheWeich,
           },
         })}
       >

@@ -3,7 +3,7 @@ import Paper from '@mui/material/Paper';
 import Typography from '@mui/material/Typography';
 import type { ReactNode } from 'react';
 
-import { PANEL_RADIUS } from '../theme';
+import { RADIUS_GROSS } from '../theme';
 import BrandMark from './BrandMark';
 
 /**
@@ -35,10 +35,9 @@ export default function AuthCard({ titel, children, fuss }: AuthCardProps) {
           width: '100%',
           maxWidth: PLATTE_BREITE,
           padding: 3,
-          borderRadius: `${PANEL_RADIUS}px`,
-          border: `1px solid ${theme.vars.palette.kupferwarte.rand}`,
-          background: theme.vars.palette.kupferwarte.platte,
-          boxShadow: theme.vars.palette.kupferwarte.schatten.platte,
+          borderRadius: `${RADIUS_GROSS}px`,
+          background: theme.vars.palette.kupferwolke.flaeche,
+          boxShadow: theme.vars.palette.kupferwolke.schatten.karte,
           display: 'flex',
           flexDirection: 'column',
           gap: 2.5,
@@ -53,9 +52,9 @@ export default function AuthCard({ titel, children, fuss }: AuthCardProps) {
           <Box
             sx={(theme) => ({
               paddingTop: 1,
-              borderTop: `1px solid ${theme.vars.palette.kupferwarte.rand}`,
+              borderTop: `1px solid ${theme.vars.palette.kupferwolke.linie}`,
               fontSize: 13,
-              color: theme.vars.palette.kupferwarte.textMatt,
+              color: theme.vars.palette.kupferwolke.textMatt,
             })}
           >
             {fuss}

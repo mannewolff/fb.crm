@@ -9,18 +9,18 @@ import { useAuth } from '../auth/AuthContext';
 import { initialen } from '../lib/initials';
 
 /**
- * Das runde Nutzer-Mal im Kopf und sein Menue (K13, K14; Vorlage `.nutzer` Z. 347–356).
+ * Das runde Nutzer-Mal im Kopf und sein Menue (K13, K14).
+ *
+ * Das Mal liegt auf der Toenung Flieder — der neutralen Kategorie fuer Personen
+ * (CLAUDE-design.md, „Toenungen"); das Kuerzel traegt ihre Schrift.
  *
  * Das Menue hat genau einen Eintrag: „Abmelden". Eine Profilseite, Einstellungen oder ein
  * Wechsel des Erscheinungsbilds gehoeren nicht in diesen Stand — ein Eintrag, der ins Leere
  * fuehrt, waere schlechter als keiner.
  */
 
-/** Kantenlaenge des Mals (Vorlage Z. 348). */
+/** Kantenlaenge des Mals. */
 const MAL = 30;
-
-/** Lichtkante und Schatten des Mals (Vorlage Z. 353) — wie beim Markenmal am Bauteil. */
-const MAL_SCHATTEN = '0 1px 0 rgba(255,255,255,.18) inset, 0 2px 5px rgba(0,0,0,.35)';
 
 const ABMELDEN_GESCHEITERT = 'Die Abmeldung ist gerade nicht möglich. Bitte erneut versuchen.';
 
@@ -77,9 +77,8 @@ export default function UserMenu() {
           fontFamily: 'inherit',
           fontSize: 11,
           fontWeight: 600,
-          color: theme.vars.palette.kupferwarte.nutzerSchrift,
-          background: `linear-gradient(160deg, ${theme.vars.palette.kupferwarte.nutzerHell}, ${theme.vars.palette.kupferwarte.nutzerTief})`,
-          boxShadow: MAL_SCHATTEN,
+          color: theme.vars.palette.kupferwolke.toenung.flieder.schrift,
+          background: theme.vars.palette.kupferwolke.toenung.flieder.flaeche,
         })}
       >
         {initialen(displayName)}

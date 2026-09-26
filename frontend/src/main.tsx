@@ -4,15 +4,10 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 
-// Alle Schriften werden offline mit der Anwendung ausgeliefert (CLAUDE-design.md, E23):
-// Archivo variabel, weil die Vorlage font-stretch 110–118 % nutzt.
-import '@fontsource-variable/archivo';
-import '@fontsource/ibm-plex-sans/400.css';
-import '@fontsource/ibm-plex-sans/500.css';
-import '@fontsource/ibm-plex-sans/600.css';
-import '@fontsource/ibm-plex-mono/400.css';
-import '@fontsource/ibm-plex-mono/500.css';
-import '@fontsource/ibm-plex-mono/600.css';
+// Eine Schrift, offline mit der Anwendung ausgeliefert (CLAUDE-design.md, Typografie): Plus
+// Jakarta Sans variabel — sie deckt die Gewichte 400 bis 800 der Tabelle in einer Datei ab und
+// fuehrt die Tabellenziffern selbst.
+import '@fontsource-variable/plus-jakarta-sans';
 
 import App from './App';
 import { theme } from './theme';

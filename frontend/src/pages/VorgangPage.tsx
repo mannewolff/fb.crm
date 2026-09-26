@@ -15,16 +15,15 @@ import Historie from '../components/Historie';
 import Platte from '../components/Platte';
 import { nichtGefunden } from '../lib/apifehler';
 import { kennungAus } from '../lib/kennung';
-import { CARD_RADIUS } from '../theme';
+import { RADIUS_RUND, ZAHLEN_KLASSE } from '../theme';
 
 /**
  * Die Detailansicht eines Vorgangs (Kriterien 9, 11, 20, 21, 23, 25, 26).
  *
- * Gestalt nach der Vorlagen-Ansicht „Karte" (`docs/entwurf-leitstand.html`): links das Blatt mit
- * dem Kopf aus Nummer, Titel und Zustand (HTML Z. 2060–2066, CSS `.blatt-kopf`/`.blatt-nr`/
- * `.blatt-titel` Z. 1021–1024) und darunter die Historie, rechts die Saeule mit der Platte
- * „Felder" (HTML Z. 2168–2185, CSS `.saeule` Z. 541, `.felder`/`.feld` Z. 1061–1065). Unterhalb
- * von 1200 px liegen beide Spalten uebereinander, wie in der Vorlage (CSS Z. 1067).
+ * Aufbau: links das Blatt mit dem Kopf aus Nummer, Titel und Zustand und darunter die Historie,
+ * rechts die Saeule mit der Karte „Felder". Unterhalb von 1200 px liegen beide Spalten
+ * uebereinander. Die Anordnung folgt erst ab dem Rahmen-Paket der Kupferwolke
+ * (CLAUDE-design.md, „Uebergang"); hier stehen nur ihre Werte.
  *
  * Drei Zusagen tragen die Ansicht:
  *
@@ -68,12 +67,11 @@ type Stand =
   | { readonly art: 'ausfall' };
 
 /**
- * Die flache Taste der Vorlage (`.taste` CSS Z. 322–334) — fuer die Schreibaktion im Kopf.
+ * Die weiche Taste (CLAUDE-design.md, „Tasten") — fuer die Schreibaktion im Kopf.
  *
  * Sie steht hier neben der gleichlautenden Hilfe in {@link FirmaPage} und nicht in einem
- * gemeinsamen Baustein: Die Umstellung auf die Kupferwolke schreibt alle Ansichten samt ihren
- * Flaechen und Tiefen neu (CLAUDE-design.md, „Uebergang"). Ein Baustein, der nur bis dahin haelt,
- * waere Bewegung ohne Ertrag.
+ * gemeinsamen Baustein: Der Umbau der Kupferwolke ordnet die Ansichten ab dem Rahmen-Paket
+ * ohnehin neu. Ein Baustein, der nur bis dahin haelt, waere Bewegung ohne Ertrag.
  */
 function flacheTasteSx(theme: Theme) {
   return {
@@ -81,13 +79,12 @@ function flacheTasteSx(theme: Theme) {
     fontWeight: 600,
     textTransform: 'none',
     padding: '5px 13px',
-    borderRadius: `${CARD_RADIUS}px`,
-    color: theme.vars.palette.kupferwarte.text,
-    background: `linear-gradient(180deg, ${theme.vars.palette.kupferwarte.platteHoch}, ${theme.vars.palette.kupferwarte.platteFuss})`,
-    border: `1px solid ${theme.vars.palette.kupferwarte.rand}`,
-    boxShadow: theme.vars.palette.kupferwarte.schatten.taste,
-    '&:hover': { boxShadow: theme.vars.palette.kupferwarte.schatten.platte },
-    '&:active': { transform: 'translateY(1px)' },
+    borderRadius: `${RADIUS_RUND}px`,
+    color: theme.vars.palette.kupferwolke.text,
+    background: theme.vars.palette.kupferwolke.flaecheWeich,
+    boxShadow: `inset 0 0 0 1px ${theme.vars.palette.kupferwolke.linie}`,
+    // Tasten heben sich im Hover um 1 px (CLAUDE-design.md, „Tasten").
+    '&:hover': { transform: 'translateY(-1px)' },
   } as const;
 }
 
@@ -105,7 +102,7 @@ function Schild({ text }: { readonly text: string }) {
         fontWeight: 500,
         padding: '1px 6px',
         borderRadius: '5px',
-        color: theme.vars.palette.kupferwarte.grau,
+        color: theme.vars.palette.kupferwolke.melder.grau,
         border: '1px solid currentColor',
         background: 'color-mix(in srgb, currentColor 13%, transparent)',
       })}
@@ -128,13 +125,14 @@ function PhasenPlakette({ phase }: { readonly phase: Phase }) {
         display: 'inline-flex',
         alignItems: 'center',
         gap: '6px',
-        fontSize: 11.5,
-        color: theme.vars.palette.kupferwarte.textMatt,
-        padding: '2px 8px 2px 6px',
-        borderRadius: '6px',
-        border: `1px solid ${theme.vars.palette.kupferwarte.rand}`,
-        background: theme.vars.palette.kupferwarte.nute,
-        boxShadow: theme.vars.palette.kupferwarte.schatten.nute,
+        fontSize: 12.5,
+        fontWeight: 600,
+        color: theme.vars.palette.kupferwolke.toenung.himmel.schrift,
+        padding: '3px 12px 3px 10px',
+        // Chip: Pille auf der Toenung Himmel — „laufend, Information" (CLAUDE-design.md,
+        // „Toenungen", „Zustandsformen").
+        borderRadius: `${RADIUS_RUND}px`,
+        background: theme.vars.palette.kupferwolke.toenung.himmel.flaeche,
         whiteSpace: 'nowrap',
       })}
     >
@@ -142,12 +140,10 @@ function PhasenPlakette({ phase }: { readonly phase: Phase }) {
         component="span"
         aria-hidden="true"
         sx={(theme) => ({
-          width: 9,
-          height: 9,
+          width: 8,
+          height: 8,
           borderRadius: '50%',
-          color: theme.vars.palette.kupferwarte.stahl,
-          background: 'currentColor',
-          boxShadow: '0 0 0 1px rgba(0,0,0,.22) inset, 0 0 8px -1px currentColor',
+          background: theme.vars.palette.kupferwolke.toenung.himmel.schrift,
         })}
       />
       {PHASE_TEXT[phase]}
@@ -178,18 +174,16 @@ function Kopf({
         gap: '12px',
         flexWrap: 'wrap',
         padding: '16px 18px 14px',
-        borderBottom: `1px solid ${theme.vars.palette.kupferwarte.rand}`,
-        background: `linear-gradient(180deg, ${theme.vars.palette.kupferwarte.platteHoch}, ${theme.vars.palette.kupferwarte.platte})`,
+        borderBottom: `1px solid ${theme.vars.palette.kupferwolke.linie}`,
       })}
     >
       <Box sx={{ minWidth: 0, flex: '1 1 240px' }}>
         <Typography
+          className={ZAHLEN_KLASSE}
           sx={(theme) => ({
-            fontFamily: theme.vars.palette.kupferwarte.monoFontFamily,
-            fontVariantNumeric: 'tabular-nums',
             fontSize: 13,
             fontWeight: 500,
-            color: theme.vars.palette.kupferwarte.kupfer,
+            color: theme.vars.palette.kupferwolke.kupfer,
           })}
         >
           {`#${String(vorgang.nummer)}`}
@@ -243,13 +237,13 @@ function Feld({ name, children }: { readonly name: string; readonly children: Re
         alignItems: 'center',
         padding: '9px 16px',
         fontSize: 12.5,
-        borderBottom: `1px solid color-mix(in srgb, ${theme.vars.palette.kupferwarte.rand} 50%, transparent)`,
+        borderBottom: `1px solid color-mix(in srgb, ${theme.vars.palette.kupferwolke.linie} 50%, transparent)`,
         '&:last-of-type': { borderBottom: 0 },
       })}
     >
       <Box
         component="span"
-        sx={(theme) => ({ fontSize: 11, color: theme.vars.palette.kupferwarte.textSchwach })}
+        sx={(theme) => ({ fontSize: 11, color: theme.vars.palette.kupferwolke.textSchwach })}
       >
         {name}
       </Box>
@@ -400,7 +394,7 @@ export default function VorgangPage() {
           sx={(theme) => ({
             padding: '18px 16px',
             fontSize: 12.5,
-            color: theme.vars.palette.kupferwarte.textSchwach,
+            color: theme.vars.palette.kupferwolke.textSchwach,
           })}
         >
           {LAEDT}

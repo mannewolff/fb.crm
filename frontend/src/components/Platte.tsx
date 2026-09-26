@@ -3,7 +3,7 @@ import Paper from '@mui/material/Paper';
 import Typography from '@mui/material/Typography';
 import type { ReactNode } from 'react';
 
-import { PANEL_RADIUS } from '../theme';
+import { RADIUS_GROSS } from '../theme';
 
 /**
  * Die Platte: die tragende Flaeche des Inhaltsbereichs (Vorlage `.platte` Z. 543–549,
@@ -31,10 +31,11 @@ export default function Platte({ children, titel, notiz, werkzeug }: PlatteProps
     <Paper
       elevation={0}
       sx={(theme) => ({
-        borderRadius: `${PANEL_RADIUS}px`,
-        border: `1px solid ${theme.vars.palette.kupferwarte.rand}`,
-        background: theme.vars.palette.kupferwarte.platte,
-        boxShadow: theme.vars.palette.kupferwarte.schatten.platte,
+        // Karten statt Linien: Gliederung entsteht durch Flaeche und weichen Schatten, nicht
+        // durch einen Umriss (CLAUDE-design.md, Leitgedanke).
+        borderRadius: `${RADIUS_GROSS}px`,
+        background: theme.vars.palette.kupferwolke.flaeche,
+        boxShadow: theme.vars.palette.kupferwolke.schatten.karte,
         overflow: 'hidden',
       })}
     >
@@ -46,8 +47,7 @@ export default function Platte({ children, titel, notiz, werkzeug }: PlatteProps
             gap: 1.5,
             flexWrap: 'wrap',
             padding: '13px 16px',
-            borderBottom: `1px solid ${theme.vars.palette.kupferwarte.rand}`,
-            background: `linear-gradient(180deg, ${theme.vars.palette.kupferwarte.platteHoch}, ${theme.vars.palette.kupferwarte.platte})`,
+            borderBottom: `1px solid ${theme.vars.palette.kupferwolke.linie}`,
           })}
         >
           <Typography variant="h2" sx={{ fontSize: 13.5, fontWeight: 600 }}>
@@ -57,7 +57,7 @@ export default function Platte({ children, titel, notiz, werkzeug }: PlatteProps
             <Typography
               sx={(theme) => ({
                 fontSize: 11.5,
-                color: theme.vars.palette.kupferwarte.textSchwach,
+                color: theme.vars.palette.kupferwolke.textSchwach,
               })}
             >
               {notiz}

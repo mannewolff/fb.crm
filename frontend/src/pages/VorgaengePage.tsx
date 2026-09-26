@@ -14,7 +14,7 @@ import KopfAktion from '../components/KopfAktion';
 import KupferTaste from '../components/KupferTaste';
 import Platte from '../components/Platte';
 import Tafel from '../components/Tafel';
-import { CARD_RADIUS } from '../theme';
+import { RADIUS_MITTEL, RADIUS_RUND, ZAHLEN_KLASSE } from '../theme';
 
 /**
  * Die Uebersicht der Vorgaenge (Kriterien 1–4, 20, 25, 26).
@@ -127,9 +127,9 @@ function Zeile({ vorgang }: { readonly vorgang: VorgangZeile }) {
     <Box component="tr">
       <Box
         component="td"
+        className={ZAHLEN_KLASSE}
         sx={(theme) => ({
-          fontFamily: theme.vars.palette.kupferwarte.monoFontFamily,
-          color: theme.vars.palette.kupferwarte.textSchwach,
+          color: theme.vars.palette.kupferwolke.textSchwach,
           width: 58,
         })}
       >
@@ -145,7 +145,7 @@ function Zeile({ vorgang }: { readonly vorgang: VorgangZeile }) {
             gap: 1,
             color: 'inherit',
             textDecoration: 'none',
-            '&:hover': { color: theme.vars.palette.kupferwarte.kupfer },
+            '&:hover': { color: theme.vars.palette.kupferwolke.kupfer },
           })}
         >
           {vorgang.titel}
@@ -160,7 +160,7 @@ function Zeile({ vorgang }: { readonly vorgang: VorgangZeile }) {
                 fontWeight: 500,
                 padding: '1px 6px',
                 borderRadius: '5px',
-                color: theme.vars.palette.kupferwarte.grau,
+                color: theme.vars.palette.kupferwolke.melder.grau,
                 border: '1px solid currentColor',
                 background: 'color-mix(in srgb, currentColor 13%, transparent)',
               })}
@@ -174,10 +174,9 @@ function Zeile({ vorgang }: { readonly vorgang: VorgangZeile }) {
       <Box component="td">{PHASE_TEXT[vorgang.phase]}</Box>
       <Box
         component="td"
+        className={ZAHLEN_KLASSE}
         sx={(theme) => ({
-          fontFamily: theme.vars.palette.kupferwarte.monoFontFamily,
-          fontVariantNumeric: 'tabular-nums',
-          color: theme.vars.palette.kupferwarte.textMatt,
+          color: theme.vars.palette.kupferwolke.textMatt,
           whiteSpace: 'nowrap',
         })}
       >
@@ -195,7 +194,7 @@ function inhaltZu(stand: Stand, suche: string): ReactNode {
         sx={(theme) => ({
           padding: '18px 16px',
           fontSize: 12.5,
-          color: theme.vars.palette.kupferwarte.textSchwach,
+          color: theme.vars.palette.kupferwolke.textSchwach,
         })}
       >
         Vorgänge werden geladen …
@@ -216,7 +215,7 @@ function inhaltZu(stand: Stand, suche: string): ReactNode {
         sx={(theme) => ({
           padding: '18px 16px',
           fontSize: 12.5,
-          color: theme.vars.palette.kupferwarte.textMatt,
+          color: theme.vars.palette.kupferwolke.textMatt,
         })}
       >
         {hinweisZu(suche, stand.uebersicht.gesamt)}
@@ -290,10 +289,9 @@ export default function VorgaengePage() {
           gap: '10px',
           flexWrap: 'wrap',
           padding: '9px 11px',
-          borderRadius: `${CARD_RADIUS}px`,
-          border: `1px solid ${theme.vars.palette.kupferwarte.rand}`,
-          background: `linear-gradient(180deg, ${theme.vars.palette.kupferwarte.platteHoch}, ${theme.vars.palette.kupferwarte.platteFuss})`,
-          boxShadow: theme.vars.palette.kupferwarte.schatten.platte,
+          borderRadius: `${RADIUS_MITTEL}px`,
+          background: theme.vars.palette.kupferwolke.flaeche,
+          boxShadow: theme.vars.palette.kupferwolke.schatten.karte,
         })}
       >
         <TextField
@@ -304,18 +302,7 @@ export default function VorgaengePage() {
           onChange={(ereignis) => {
             setzeEingabe(ereignis.target.value);
           }}
-          sx={(theme) => ({
-            minWidth: 190,
-            '& .MuiOutlinedInput-root': {
-              background: theme.vars.palette.kupferwarte.nute,
-              boxShadow: theme.vars.palette.kupferwarte.schatten.nute,
-              borderRadius: '9px',
-              fontSize: 12.5,
-            },
-            '& .MuiOutlinedInput-notchedOutline': {
-              borderColor: theme.vars.palette.kupferwarte.rand,
-            },
-          })}
+          sx={{ minWidth: 190, '& .MuiOutlinedInput-root': { fontSize: 12.5 } }}
         />
         <ToggleButton
           value={PARAM_ABGESCHLOSSENE}
@@ -331,16 +318,17 @@ export default function VorgaengePage() {
             fontSize: 11.5,
             fontWeight: 500,
             textTransform: 'none',
-            padding: '4px 9px',
-            borderRadius: '7px',
-            color: theme.vars.palette.kupferwarte.textMatt,
-            background: theme.vars.palette.kupferwarte.nute,
-            border: `1px solid ${theme.vars.palette.kupferwarte.rand}`,
-            boxShadow: theme.vars.palette.kupferwarte.schatten.nute,
+            padding: '4px 12px',
+            borderRadius: `${RADIUS_RUND}px`,
+            color: theme.vars.palette.kupferwolke.textMatt,
+            background: theme.vars.palette.kupferwolke.flaecheWeich,
+            border: 0,
+            boxShadow: `inset 0 0 0 1px ${theme.vars.palette.kupferwolke.linie}`,
+            // Gewaehlt: die Toenung Pfirsich, nicht bloss eine zweite Tiefe — Form und Farbe
+            // sagen dasselbe (CLAUDE-design.md, „Zustandsformen").
             '&.Mui-selected': {
-              color: theme.vars.palette.kupferwarte.text,
-              background: `linear-gradient(180deg, ${theme.vars.palette.kupferwarte.platteHoch}, ${theme.vars.palette.kupferwarte.platte})`,
-              boxShadow: theme.vars.palette.kupferwarte.schatten.taste,
+              color: theme.vars.palette.kupferwolke.toenung.pfirsich.schrift,
+              background: theme.vars.palette.kupferwolke.toenung.pfirsich.flaeche,
             },
           })}
         >

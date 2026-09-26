@@ -6,7 +6,7 @@ import useMediaQuery from '@mui/material/useMediaQuery';
 import { useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 
-import { CONTROL_RADIUS } from '../theme';
+import { RADIUS_KLEIN, RADIUS_RUND } from '../theme';
 import { KopfAktionProvider } from './KopfAktion';
 import NavRail from './NavRail';
 import TopBar from './TopBar';
@@ -71,12 +71,16 @@ function SchieneSchalter({
         flex: 'none',
         padding: 0,
         cursor: 'pointer',
-        borderRadius: `${CONTROL_RADIUS}px`,
-        border: `1px solid ${t.vars.palette.kupferwarte.rand}`,
-        background: `linear-gradient(180deg, ${t.vars.palette.kupferwarte.platteHoch}, ${t.vars.palette.kupferwarte.platte})`,
-        boxShadow: t.vars.palette.kupferwarte.schatten.taste,
-        color: t.vars.palette.kupferwarte.textMatt,
-        '&:hover': { color: t.vars.palette.kupferwarte.text },
+        // Icontaste: Kreis auf „Flaeche weich", Symbol in Text matt, Hover Pfirsich
+        // (CLAUDE-design.md, „Tasten").
+        borderRadius: `${RADIUS_RUND}px`,
+        border: 0,
+        background: t.vars.palette.kupferwolke.flaecheWeich,
+        color: t.vars.palette.kupferwolke.textMatt,
+        '&:hover': {
+          background: t.vars.palette.kupferwolke.toenung.pfirsich.flaeche,
+          color: t.vars.palette.kupferwolke.toenung.pfirsich.schrift,
+        },
       })}
     >
       <Box component="svg" viewBox="0 0 16 16" fill="none" aria-hidden sx={{ width: 16, height: 16 }}>
@@ -119,9 +123,9 @@ export default function AppShell({ children }: { readonly children: ReactNode })
             top: -48,
             zIndex: 30,
             padding: '6px 12px',
-            borderRadius: '6px',
-            background: t.vars.palette.kupferwarte.platte,
-            boxShadow: t.vars.palette.kupferwarte.schatten.hoch,
+            borderRadius: `${RADIUS_KLEIN}px`,
+            background: t.vars.palette.kupferwolke.flaeche,
+            boxShadow: t.vars.palette.kupferwolke.schatten.hoch,
             '&:focus': { top: 8 },
           })}
         >
