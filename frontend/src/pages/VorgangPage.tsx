@@ -1,10 +1,9 @@
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
 import Link from '@mui/material/Link';
-import type { Theme } from '@mui/material/styles';
 import Typography from '@mui/material/Typography';
-import { useEffect, useState } from 'react';
+import { IconCircleCheck, IconPencil, IconPointFilled } from '@tabler/icons-react';
+import { Fragment, useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Link as RouterLink, useParams } from 'react-router-dom';
 
@@ -12,43 +11,53 @@ import { vorgangAbschliessen, vorgangLesen, vorgangWiederEroeffnen } from '../ap
 import type { Phase, Vorgang, Zuordnung } from '../api/vorgaenge';
 import EintragMaske from '../components/EintragMaske';
 import Historie from '../components/Historie';
+import Karte from '../components/Karte';
+import Kopfkarte from '../components/Kopfkarte';
 import { useKopfPfad } from '../components/KopfPfad';
 import type { PfadVerweis } from '../components/KopfPfad';
-import Karte from '../components/Karte';
+import KupferTaste from '../components/KupferTaste';
+import WeicheTaste from '../components/WeicheTaste';
+import ZustandsChip from '../components/ZustandsChip';
 import { nichtGefunden } from '../lib/apifehler';
 import { kennungAus } from '../lib/kennung';
-import { RADIUS_RUND, ZAHLEN_KLASSE } from '../theme';
+import { ZAHLEN_KLASSE } from '../theme';
 
 /**
- * Die Detailansicht eines Vorgangs (Kriterien 9, 11, 20, 21, 23, 25, 26).
+ * Die Detailansicht eines Vorgangs (Kriterien 9, 11, 20, 21, 23, 25, 26) in der Kupferwolke.
  *
- * Aufbau: links das Blatt mit dem Kopf aus Nummer, Titel und Zustand und darunter die Historie,
- * rechts die Saeule mit der Karte „Felder". Unterhalb von 1200 px liegen beide Spalten
- * uebereinander. Die Anordnung folgt erst ab dem Rahmen-Paket der Kupferwolke
- * (CLAUDE-design.md, „Uebergang"); hier stehen nur ihre Werte.
+ * Oben die {@link Kopfkarte} mit dem Mal der Firma, `#Nummer Titel` als der einen `h1`, der Zeile
+ * „Firma · Ansprechpartner" und den Chips fuer Phase und Abschluss; rechts die Aktionen. Darunter
+ * links die Maske fuer Eintraege und die Historie als Zeitleiste, rechts die Karte „Felder".
+ * Unterhalb von 1200 px liegen beide Spalten uebereinander.
  *
- * Drei Zusagen tragen die Ansicht:
+ * <b>Die Wege zur Firma stehen in der Karte „Felder", nicht in der Zeile der Kopfkarte.</b> Die
+ * Zeile nennt Firma und Ansprechpartner als Text; derselbe Weg zweimal auf einer Seite waere fuer
+ * den Screenreader zwei Ziele mit demselben Namen, und wer die Links durchgeht, muesste beide
+ * pruefen, um zu merken, dass sie dasselbe sind. Stillgelegtes sagt die Zeile darum als Zusatz am
+ * Namen, die Felder als Schild neben dem Weg (Kriterien 23, 26).
+ *
+ * Fuenf Zusagen tragen die Ansicht:
  *
  * <ul>
  *   <li><b>Nach dem Schalten wird neu gelesen</b> (Kriterium 20), statt den Stand selbst
  *       umzuschalten. Der Server ist die Quelle der Wahrheit — und nur so sieht der Benutzer, was
  *       dort tatsaechlich steht.</li>
  *   <li><b>Der abgeschlossene Vorgang bleibt vollstaendig</b> (Kriterium 21): Phase, Zuordnung und
- *       Historie stehen weiter da, und die Taste „Wieder oeffnen" nimmt den Abschluss zurueck.
- *       Abgeschlossen heisst „zu Ende gegangen", nicht „gesperrt".</li>
+ *       Historie stehen weiter da, und „Wieder oeffnen" nimmt den Abschluss zurueck. Abgeschlossen
+ *       heisst „zu Ende gegangen", nicht „gesperrt" — es traegt darum <b>keine</b> Kupfertaste:
+ *       Am abgeschlossenen Vorgang ist nichts mehr die eine Hauptaktion.</li>
  *   <li><b>Eine stillgelegte Zuordnung bleibt sichtbar und wird angesagt</b> (Kriterien 23, 26):
  *       Das Schild steht als Wort in der Zeile, und der Stand gehoert zum Namen des Weges — wer mit
  *       dem Screenreader durch die Wege springt, hoert ihn ohne die Nachbarschaft.</li>
  *   <li><b>Nach dem Hinzufuegen und nach dem Aendern eines Eintrags wird neu gelesen</b> (E20,
- *       Kriterien 13, 14, 19). Die Maske steht als Karte ueber der Historie, das Aendern in der
- *       Zeile selbst; beide melden nur, dass etwas geschrieben wurde —
- *       wie die Liste danach aussieht, sagt der Server, nicht die Oberflaeche. Auch am
- *       abgeschlossenen Vorgang steht sie da: Abgeschlossen heisst „zu Ende gegangen", nicht
- *       „gesperrt" (Kriterium 21), und das Backend nimmt dort weiter Eintraege an.</li>
+ *       Kriterien 13, 14, 19). Die Maske steht als Karte ueber der Historie, das Aendern im
+ *       Eintrag selbst; beide melden nur, dass etwas geschrieben wurde — wie die Liste danach
+ *       aussieht, sagt der Server, nicht die Oberflaeche. Auch am abgeschlossenen Vorgang steht
+ *       sie da, und das Backend nimmt dort weiter Eintraege an.</li>
  *   <li><b>„Bearbeiten" steht auch am abgeschlossenen Vorgang</b> (Kriterium 10): Titel und
- *       Zuordnung sind dort weiter aenderbar. Die Taste ist ein Weg und keine Schaltflaeche —
- *       sie fuehrt auf `/vorgaenge/:id/bearbeiten`, also gehoert sie in den Tabulatorweg als
- *       Link, nicht als Knopf mit `onClick`.</li>
+ *       Zuordnung sind dort weiter aenderbar. Es ist ein Weg und keine Schaltflaeche — die
+ *       {@link WeicheTaste} fuehrt mit `to` auf `/vorgaenge/:id/bearbeiten`, also liegt sie als
+ *       Link im Tabulatorweg und nicht als Knopf mit `onClick`.</li>
  * </ul>
  */
 
@@ -61,6 +70,10 @@ const LAEDT = 'Der Vorgang wird geladen …';
 /** Die Phase als Wort. Heute kennt das Backend genau eine (Kriterium 11). */
 const PHASE_TEXT: Readonly<Record<Phase, string>> = { ANBAHNUNG: 'Anbahnung' };
 
+/** Die Symbolgroessen: 13 px im Chip, 16 px in den Tasten (wie in {@link FirmaPage}). */
+const SYMBOL_CHIP = 13;
+const SYMBOL_TASTE = 16;
+
 /** Was die Ansicht gerade weiss. */
 type Stand =
   | { readonly art: 'laedt' }
@@ -69,30 +82,11 @@ type Stand =
   | { readonly art: 'ausfall' };
 
 /**
- * Die weiche Taste (CLAUDE-design.md, „Tasten") — fuer die Schreibaktion im Kopf.
+ * Das Schild einer stillgelegten Zuordnung.
  *
- * Sie steht hier neben der gleichlautenden Hilfe in {@link FirmaPage} und nicht in einem
- * gemeinsamen Baustein: Der Umbau der Kupferwolke ordnet die Ansichten ab dem Rahmen-Paket
- * ohnehin neu. Ein Baustein, der nur bis dahin haelt, waere Bewegung ohne Ertrag.
- */
-function flacheTasteSx(theme: Theme) {
-  return {
-    fontSize: 12.5,
-    fontWeight: 600,
-    textTransform: 'none',
-    padding: '5px 13px',
-    borderRadius: `${RADIUS_RUND}px`,
-    color: theme.vars.palette.kupferwolke.text,
-    background: theme.vars.palette.kupferwolke.flaecheWeich,
-    boxShadow: `inset 0 0 0 1px ${theme.vars.palette.kupferwolke.linie}`,
-    // Tasten heben sich im Hover um 1 px (CLAUDE-design.md, „Tasten").
-    '&:hover': { transform: 'translateY(-1px)' },
-  } as const;
-}
-
-/**
- * Das Schild der Vorlage (`.schild` CSS Z. 780–790): Der Stand steht als Wort da, nicht nur als
- * Farbe — Farbe allein traegt keine Information (CLAUDE-react.md, Accessibility).
+ * Kein {@link ZustandsChip}: Es steht in einer Zeile neben einem Weg und nicht als Zustand des
+ * ganzen Objekts — dieselbe Form wie in {@link FirmaPage}. Der Stand steht als Wort da, nicht nur
+ * als Farbe (CLAUDE-react.md, Accessibility).
  */
 function Schild({ text }: { readonly text: string }) {
   return (
@@ -110,148 +104,6 @@ function Schild({ text }: { readonly text: string }) {
       })}
     >
       {text}
-    </Box>
-  );
-}
-
-/**
- * Die Zustandsplakette der Vorlage (`.zustand` CSS Z. 933–943) mit der Phase.
- *
- * Der Melder ist Beiwerk und darum `aria-hidden`: Die Phase steht daneben als Wort.
- */
-function PhasenPlakette({ phase }: { readonly phase: Phase }) {
-  return (
-    <Box
-      component="span"
-      sx={(theme) => ({
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: '6px',
-        fontSize: 12.5,
-        fontWeight: 600,
-        color: theme.vars.palette.kupferwolke.toenung.himmel.schrift,
-        padding: '3px 12px 3px 10px',
-        // Chip: Pille auf der Toenung Himmel — „laufend, Information" (CLAUDE-design.md,
-        // „Toenungen", „Zustandsformen").
-        borderRadius: `${RADIUS_RUND}px`,
-        background: theme.vars.palette.kupferwolke.toenung.himmel.flaeche,
-        whiteSpace: 'nowrap',
-      })}
-    >
-      <Box
-        component="span"
-        aria-hidden="true"
-        sx={(theme) => ({
-          width: 8,
-          height: 8,
-          borderRadius: '50%',
-          background: theme.vars.palette.kupferwolke.toenung.himmel.schrift,
-        })}
-      />
-      {PHASE_TEXT[phase]}
-    </Box>
-  );
-}
-
-/**
- * Der Kopf des Blattes (Vorlage HTML Z. 2060–2066).
- *
- * Die Taste ist waehrend des Schaltens abgeschaltet: Ein zweiter Klick waere ein zweiter Aufruf
- * auf denselben Stand (CLAUDE-react.md, Datenzugriff).
- */
-function Kopf({
-  vorgang,
-  schaltet,
-  schalte,
-}: {
-  readonly vorgang: Vorgang;
-  readonly schaltet: boolean;
-  readonly schalte: () => void;
-}) {
-  return (
-    <Box
-      sx={(theme) => ({
-        display: 'flex',
-        alignItems: 'flex-start',
-        gap: '12px',
-        flexWrap: 'wrap',
-        padding: '16px 18px 14px',
-        borderBottom: `1px solid ${theme.vars.palette.kupferwolke.linie}`,
-      })}
-    >
-      <Box sx={{ minWidth: 0, flex: '1 1 240px' }}>
-        <Typography
-          className={ZAHLEN_KLASSE}
-          sx={(theme) => ({
-            fontSize: 13,
-            fontWeight: 500,
-            color: theme.vars.palette.kupferwolke.kupfer,
-          })}
-        >
-          {`#${String(vorgang.nummer)}`}
-        </Typography>
-        <Typography
-          variant="h2"
-          sx={{ fontSize: 19, fontWeight: 700, lineHeight: 1.25, letterSpacing: '-.01em' }}
-        >
-          {vorgang.titel}
-        </Typography>
-      </Box>
-      <Box
-        sx={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 1,
-          flexWrap: 'wrap',
-          marginLeft: 'auto',
-        }}
-      >
-        <PhasenPlakette phase={vorgang.phase} />
-        {vorgang.abgeschlossen ? <Schild text="abgeschlossen" /> : null}
-        <Button
-          component={RouterLink}
-          to={`/vorgaenge/${String(vorgang.id)}/bearbeiten`}
-          sx={flacheTasteSx}
-        >
-          Bearbeiten
-        </Button>
-        <Button onClick={schalte} disabled={schaltet} sx={flacheTasteSx}>
-          {vorgang.abgeschlossen ? 'Wieder öffnen' : 'Abschließen'}
-        </Button>
-      </Box>
-    </Box>
-  );
-}
-
-/**
- * Ein Feldpaar der Karte „Felder" (Vorlage `.feld` CSS Z. 1062–1065).
- *
- * Es nimmt `children` statt einer Zeichenkette wie das gleichnamige Feldpaar in
- * {@link FirmaPage}: Hier steht im Wert ein Weg mit Schild, nicht Text.
- */
-function Feld({ name, children }: { readonly name: string; readonly children: ReactNode }) {
-  return (
-    <Box
-      sx={(theme) => ({
-        display: 'grid',
-        gridTemplateColumns: { xs: 'minmax(0, 1fr)', sm: '200px minmax(0, 1fr)' },
-        gap: '10px',
-        alignItems: 'center',
-        padding: '9px 16px',
-        fontSize: 12.5,
-        borderBottom: `1px solid color-mix(in srgb, ${theme.vars.palette.kupferwolke.linie} 50%, transparent)`,
-        '&:last-of-type': { borderBottom: 0 },
-      })}
-    >
-      <Box
-        component="span"
-        sx={(theme) => ({ fontSize: 11, color: theme.vars.palette.kupferwolke.textSchwach })}
-      >
-        {name}
-      </Box>
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: '7px', flexWrap: 'wrap' }}>
-        {children}
-      </Box>
     </Box>
   );
 }
@@ -277,12 +129,103 @@ function Weg({
         to={`/firmen/${String(firmaId)}`}
         aria-label={zuordnung.aktiv ? undefined : `${zuordnung.name} (stillgelegt)`}
         underline="hover"
-        sx={{ fontSize: 12.5 }}
+        sx={{ fontSize: 13.5, fontWeight: 500 }}
       >
         {zuordnung.name}
       </Link>
       {zuordnung.aktiv ? null : <Schild text="stillgelegt" />}
     </>
+  );
+}
+
+/** Der Name einer Zuordnung fuer die Textzeile der Kopfkarte — stillgelegtes sagt der Zusatz. */
+function nameMitStand(zuordnung: Zuordnung): string {
+  return zuordnung.aktiv ? zuordnung.name : `${zuordnung.name} (stillgelegt)`;
+}
+
+/** Die Zeile der Kopfkarte: „Firma · Ansprechpartner", ohne Ansprechpartner nur die Firma. */
+function zuordnungsZeile(vorgang: Vorgang): ReactNode {
+  const teile = [vorgang.firma, vorgang.ansprechpartner]
+    .filter((teil): teil is Zuordnung => teil !== null)
+    .map(nameMitStand);
+  return <Box component="span">{teile.join(' · ')}</Box>;
+}
+
+/**
+ * Die Chips der Kopfkarte: die Phase auf Himmel, der Abschluss auf Salbei.
+ *
+ * Himmel heisst „laufend, Information", Salbei „erfolgreich, zu Ende gegangen"
+ * (CLAUDE-design.md, „Toenungen"). Am offenen Vorgang steht nur die Phase: Ein Chip „Offen" waere
+ * die Abwesenheit des anderen noch einmal.
+ */
+function chipsZu(vorgang: Vorgang): ReactNode {
+  return (
+    <>
+      <ZustandsChip
+        wort={PHASE_TEXT[vorgang.phase]}
+        toenung="himmel"
+        symbol={<IconPointFilled size={SYMBOL_CHIP} />}
+      />
+      {vorgang.abgeschlossen ? (
+        <ZustandsChip
+          wort="Abgeschlossen"
+          toenung="salbei"
+          symbol={<IconCircleCheck size={SYMBOL_CHIP} stroke={1.8} />}
+        />
+      ) : null}
+    </>
+  );
+}
+
+/**
+ * Die Felder des Vorgangs als Stammdaten-Liste (Vorlage `.stamm` Z. 100–102).
+ *
+ * Kein Platzhalter, wo keine Zuordnung steht: Ein „—" waere eine Zeile, die der Screenreader
+ * vorliest, ohne dass sie etwas sagt (Kriterium 9).
+ */
+function Felderkarte({ vorgang }: { readonly vorgang: Vorgang }) {
+  const zeilen: readonly { name: string; wert: ReactNode }[] = [
+    { name: 'Firma', wert: <Weg zuordnung={vorgang.firma} firmaId={vorgang.firma.id} /> },
+    ...(vorgang.ansprechpartner === null
+      ? []
+      : [
+          {
+            name: 'Ansprechpartner',
+            wert: <Weg zuordnung={vorgang.ansprechpartner} firmaId={vorgang.firma.id} />,
+          },
+        ]),
+  ];
+  return (
+    <Karte titel="Felder">
+      <Box
+        component="dl"
+        data-testid="vorgang-felder"
+        sx={{
+          display: 'grid',
+          gridTemplateColumns: { xs: 'minmax(0, 1fr)', sm: 'auto minmax(0, 1fr)' },
+          gap: '10px 20px',
+          margin: 0,
+          fontSize: 13.5,
+        }}
+      >
+        {zeilen.map((zeile) => (
+          <Fragment key={zeile.name}>
+            <Box
+              component="dt"
+              sx={(theme) => ({ color: theme.vars.palette.kupferwolke.textSchwach })}
+            >
+              {zeile.name}
+            </Box>
+            <Box
+              component="dd"
+              sx={{ margin: 0, display: 'flex', alignItems: 'center', gap: '7px', flexWrap: 'wrap' }}
+            >
+              {zeile.wert}
+            </Box>
+          </Fragment>
+        ))}
+      </Box>
+    </Karte>
   );
 }
 
@@ -310,7 +253,7 @@ export default function VorgangPage() {
    */
   const [runde, setzeRunde] = useState(0);
 
-  /** Der eine Anlass zum Neulesen — die Maske ueber der Historie und die Zeile darin teilen ihn. */
+  /** Der eine Anlass zum Neulesen — die Maske ueber der Historie und der Eintrag darin teilen ihn. */
   const neuLesen = () => {
     setzeRunde((bisher) => bisher + 1);
   };
@@ -349,61 +292,75 @@ export default function VorgangPage() {
   let inhalt: ReactNode;
   if (stand.art === 'daten') {
     const vorgang = stand.vorgang;
+    // Die Taste ist waehrend des Schaltens abgeschaltet: Ein zweiter Klick waere ein zweiter
+    // Aufruf auf denselben Stand (CLAUDE-react.md, Datenzugriff).
+    const schalte = () => {
+      void schalten(vorgang);
+    };
     inhalt = (
-      <Box
-        sx={{
-          display: 'grid',
-          // Vorlage `.blatt` (CSS Z. 1020) — eine Spalte, sobald der Platz nicht mehr reicht.
-          gridTemplateColumns: { xs: 'minmax(0, 1fr)', lg: 'minmax(0, 1.9fr) minmax(0, 1fr)' },
-          gap: '16px',
-          alignItems: 'start',
-        }}
-      >
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: '16px', minWidth: 0 }}>
-          <Karte>
-            <Kopf
-              vorgang={vorgang}
-              schaltet={schaltet}
-              schalte={() => {
-                void schalten(vorgang);
-              }}
-            />
-          </Karte>
-          <Karte titel="Eintrag hinzufügen">
-            <EintragMaske
-              vorgangId={vorgang.id}
-              modus={{ art: 'hinzufuegen' }}
-              gespeichert={neuLesen}
-            />
-          </Karte>
-          <Karte titel="Historie">
-            <Historie vorgangId={vorgang.id} eintraege={vorgang.historie} geaendert={neuLesen} />
-          </Karte>
-        </Box>
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: '16px', minWidth: 0 }}>
-          <Karte titel="Felder">
-            <Box sx={{ display: 'flex', flexDirection: 'column' }}>
-              <Feld name="Firma">
-                <Weg zuordnung={vorgang.firma} firmaId={vorgang.firma.id} />
-              </Feld>
-              {vorgang.ansprechpartner === null ? null : (
-                // Kein Platzhalter, wo keine Zuordnung steht: Ein „—" waere eine Zeile, die der
-                // Screenreader vorliest, ohne dass sie etwas sagt.
-                <Feld name="Ansprechpartner">
-                  <Weg zuordnung={vorgang.ansprechpartner} firmaId={vorgang.firma.id} />
-                </Feld>
+      <>
+        <Kopfkarte
+          malName={vorgang.firma.name}
+          titel={
+            <>
+              <Box component="span" className={ZAHLEN_KLASSE}>
+                {`#${String(vorgang.nummer)}`}
+              </Box>{' '}
+              {vorgang.titel}
+            </>
+          }
+          zeile={zuordnungsZeile(vorgang)}
+          chips={chipsZu(vorgang)}
+          aktionen={
+            <>
+              <WeicheTaste
+                to={`/vorgaenge/${String(vorgang.id)}/bearbeiten`}
+                symbol={<IconPencil size={SYMBOL_TASTE} stroke={1.8} />}
+              >
+                Bearbeiten
+              </WeicheTaste>
+              {vorgang.abgeschlossen ? (
+                <WeicheTaste onClick={schalte} disabled={schaltet}>
+                  Wieder öffnen
+                </WeicheTaste>
+              ) : (
+                <KupferTaste onClick={schalte} disabled={schaltet}>
+                  Abschließen
+                </KupferTaste>
               )}
-            </Box>
-          </Karte>
+            </>
+          }
+        />
+        <Box
+          sx={{
+            display: 'grid',
+            // Eine Spalte, sobald der Platz nicht mehr reicht; die Historie ist die breitere.
+            gridTemplateColumns: { xs: 'minmax(0, 1fr)', lg: 'minmax(0, 1.9fr) minmax(0, 1fr)' },
+            gap: '22px',
+            alignItems: 'start',
+          }}
+        >
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: '22px', minWidth: 0 }}>
+            <Karte titel="Eintrag hinzufügen">
+              <EintragMaske
+                vorgangId={vorgang.id}
+                modus={{ art: 'hinzufuegen' }}
+                gespeichert={neuLesen}
+              />
+            </Karte>
+            <Karte titel="Historie" anzahl={vorgang.historie.length}>
+              <Historie vorgangId={vorgang.id} eintraege={vorgang.historie} geaendert={neuLesen} />
+            </Karte>
+          </Box>
+          <Felderkarte vorgang={vorgang} />
         </Box>
-      </Box>
+      </>
     );
   } else if (stand.art === 'laedt') {
     inhalt = (
       <Karte>
         <Typography
           sx={(theme) => ({
-            padding: '18px 16px',
             fontSize: 12.5,
             color: theme.vars.palette.kupferwolke.textSchwach,
           })}
@@ -415,9 +372,7 @@ export default function VorgangPage() {
   } else {
     inhalt = (
       <Karte>
-        <Alert severity="error" sx={{ borderRadius: 0 }}>
-          {stand.art === 'unbekannt' ? NICHT_GEFUNDEN : AUSFALL}
-        </Alert>
+        <Alert severity="error">{stand.art === 'unbekannt' ? NICHT_GEFUNDEN : AUSFALL}</Alert>
       </Karte>
     );
   }

@@ -66,6 +66,26 @@ describe('Zeitleiste', () => {
     }
   });
 
+  it('benennt die Liste, wo der Aufrufer eine Beschriftung gibt', () => {
+    renderMitTheme(<Zeitleiste beschriftung="Historie" eintraege={EINTRAEGE} />);
+
+    expect(screen.getByRole('list', { name: 'Historie' })).toBeInTheDocument();
+  });
+
+  it('gibt einem Eintrag den uebergebenen zugaenglichen Namen', () => {
+    // `listitem` bildet seinen Namen nicht aus dem Inhalt: Ohne diese Benennung hoerte, wer
+    // durch die Liste springt, nur „Listenelement".
+    renderMitTheme(
+      <Zeitleiste
+        eintraege={[{ ...EINTRAEGE[0], benennung: 'Kommentar, 24.09.2026, von Hand' }]}
+      />,
+    );
+
+    expect(
+      screen.getByRole('listitem', { name: 'Kommentar, 24.09.2026, von Hand' }),
+    ).toBeInTheDocument();
+  });
+
   it('rendert den optionalen Inhalt im Eintrag, zu dem er gehoert', () => {
     renderMitTheme(<Zeitleiste eintraege={EINTRAEGE} />);
 

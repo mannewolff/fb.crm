@@ -428,7 +428,10 @@ describe('VorgangMaske — Anlegen', () => {
     await nutzer.type(titelFeld(), 'Anteilsbalken');
     await nutzer.selectOptions(wahl('Firma'), '7');
     await screen.findByRole('option', { name: 'Anna Berg' });
-    await nutzer.click(screen.getByRole('link', { name: 'Abbrechen' }));
+    const abbrechen = screen.getByRole('link', { name: 'Abbrechen' });
+    // Weiche Taste neben der Kupfertaste, kein Textlink (CLAUDE-design.md, „Tasten").
+    expect(abbrechen).toHaveClass('MuiButton-root');
+    await nutzer.click(abbrechen);
 
     expect(screen.getByText('Übersicht')).toBeInTheDocument();
     expect(adresse()).toBe('/vorgaenge');

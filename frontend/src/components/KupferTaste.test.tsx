@@ -1,6 +1,7 @@
 import { screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { renderMitTheme } from '../test/render';
 import KupferTaste from './KupferTaste';
@@ -24,6 +25,21 @@ describe('KupferTaste', () => {
     const taste = screen.getByRole('button', { name: 'Speichern' });
     expect(taste).toHaveAttribute('type', 'submit');
     expect(screen.queryByRole('link')).not.toBeInTheDocument();
+  });
+
+  it('wird mit einer Handlung eine Taste, die ihr Formular nicht absendet', async () => {
+    const nutzer = userEvent.setup();
+    const handlung = vi.fn();
+    renderMitTheme(<KupferTaste onClick={handlung}>Abschließen</KupferTaste>);
+
+    const taste = screen.getByRole('button', { name: 'Abschließen' });
+    // `type="button"`: Eine Hauptaktion steht nicht immer in einem Formular, und eine
+    // `submit`-Taste ausserhalb eines Formulars tut beim Klick nichts.
+    expect(taste).toHaveAttribute('type', 'button');
+
+    await nutzer.click(taste);
+
+    expect(handlung).toHaveBeenCalledTimes(1);
   });
 
   it('laesst sich sperren, solange gesendet wird', () => {

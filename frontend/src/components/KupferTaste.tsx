@@ -22,7 +22,14 @@ export interface KupferTasteProps {
   readonly children: ReactNode;
   /** Das Ziel eines Weges. Ohne `to` ist die Taste der Absender ihres Formulars. */
   readonly to?: string;
-  /** Gesperrt, solange gesendet wird — nur fuer die absendende Gestalt. */
+  /**
+   * Was die Taste tut, wo sie kein Weg und kein Absender ist — „Abschliessen", „Freigeben".
+   *
+   * Mit `onClick` traegt sie `type="button"` statt `submit`: Eine Hauptaktion steht nicht immer in
+   * einem Formular, und eine `submit`-Taste ausserhalb eines Formulars tut beim Klick nichts.
+   */
+  readonly onClick?: () => void;
+  /** Gesperrt, solange die Aktion laeuft — nur fuer die schaltenden Gestalten. */
   readonly disabled?: boolean;
   /** Das stuetzende Symbol links der Aufschrift. */
   readonly symbol?: ReactNode;
@@ -48,7 +55,13 @@ function kupferSx(theme: Theme) {
   };
 }
 
-export default function KupferTaste({ children, to, disabled = false, symbol }: KupferTasteProps) {
+export default function KupferTaste({
+  children,
+  to,
+  onClick,
+  disabled = false,
+  symbol,
+}: KupferTasteProps) {
   const inhalt = (
     <>
       {symbol === undefined ? null : <TastenSymbol>{symbol}</TastenSymbol>}
@@ -63,7 +76,12 @@ export default function KupferTaste({ children, to, disabled = false, symbol }: 
     );
   }
   return (
-    <Button type="submit" disabled={disabled} sx={kupferSx}>
+    <Button
+      type={onClick === undefined ? 'submit' : 'button'}
+      onClick={onClick}
+      disabled={disabled}
+      sx={kupferSx}
+    >
       {inhalt}
     </Button>
   );

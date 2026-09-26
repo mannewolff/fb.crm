@@ -16,6 +16,7 @@ import { useKopfPfad } from '../components/KopfPfad';
 import type { PfadVerweis } from '../components/KopfPfad';
 import KupferTaste from '../components/KupferTaste';
 import Karte from '../components/Karte';
+import WeicheTaste from '../components/WeicheTaste';
 import { feldMeldungen, nichtGefunden } from '../lib/apifehler';
 import { meldungAm } from '../lib/feldmeldung';
 import { kennungAus } from '../lib/kennung';
@@ -397,7 +398,7 @@ export default function VorgangMaske() {
             onSubmit={(ereignis: FormEvent<HTMLFormElement>) => {
               void absenden(ereignis);
             }}
-            sx={{ display: 'flex', flexDirection: 'column', gap: 2, padding: '18px 16px' }}
+            sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}
           >
             {fehler === null ? null : <Alert severity="error">{fehler}</Alert>}
             <TextField
@@ -435,32 +436,23 @@ export default function VorgangMaske() {
               meldung={partnerMeldung}
               fehlerhaft={partnerMeldung !== undefined}
             />
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, flexWrap: 'wrap' }}>
               <KupferTaste disabled={laeuft || ohneAktiveFirma}>
                 {aendern ? 'Speichern' : 'Anlegen'}
               </KupferTaste>
-              <Link component={RouterLink} to={zurueck} underline="hover" sx={{ fontSize: 12.5 }}>
-                Abbrechen
-              </Link>
+              <WeicheTaste to={zurueck}>Abbrechen</WeicheTaste>
             </Box>
           </Box>
+        ) : stand.art === 'laedt' ? (
+          <Typography
+            sx={(theme) => ({ fontSize: 12.5, color: theme.vars.palette.kupferwolke.textSchwach })}
+          >
+            {aendern ? LAEDT_VORGANG : LAEDT_FIRMEN}
+          </Typography>
         ) : (
-          <Box sx={{ padding: '18px 16px' }}>
-            {stand.art === 'laedt' ? (
-              <Typography
-                sx={(theme) => ({
-                  fontSize: 12.5,
-                  color: theme.vars.palette.kupferwolke.textSchwach,
-                })}
-              >
-                {aendern ? LAEDT_VORGANG : LAEDT_FIRMEN}
-              </Typography>
-            ) : (
-              <Alert severity="error">
-                {stand.art === 'unbekannt' ? NICHT_GEFUNDEN : stand.meldung}
-              </Alert>
-            )}
-          </Box>
+          <Alert severity="error">
+            {stand.art === 'unbekannt' ? NICHT_GEFUNDEN : stand.meldung}
+          </Alert>
         )}
       </Karte>
     </Box>

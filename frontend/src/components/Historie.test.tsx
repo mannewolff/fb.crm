@@ -87,6 +87,18 @@ describe('Historie', () => {
     expect(within(zeile).getByText('von Hand')).toBeInTheDocument();
   });
 
+  it('befuellt die Zeitleiste — je Eintrag ein Symbolfeld ausserhalb des Vorgelesenen', () => {
+    // Der Baustein aus #79, nicht eine eigene Liste mit Linien: Die Art steht als Wort im
+    // Titel, die Toenung und das Symbol stuetzen sie nur (CLAUDE-design.md, „Zustandsformen").
+    renderHistorie([ANHANG, KOMMENTAR]);
+
+    const felder = screen.getAllByTestId('zeitleiste-symbol');
+    expect(felder).toHaveLength(2);
+    for (const feld of felder) {
+      expect(feld).toHaveAttribute('aria-hidden', 'true');
+    }
+  });
+
   it('nennt beim Anhang die Art Anhang', () => {
     renderHistorie([ANHANG]);
 

@@ -472,6 +472,8 @@ describe('EintragMaske — der Modus Aendern (E20, Kriterium 19)', () => {
 
     await nutzer.clear(textFeld());
     await nutzer.type(textFeld(), 'Verworfene Fassung');
+    // Weiche Taste neben der Kupfertaste, kein matter Textknopf (CLAUDE-design.md, „Tasten").
+    expect(abbrechenTaste()).toHaveAttribute('type', 'button');
     await nutzer.click(abbrechenTaste());
 
     expect(abgebrochen).toHaveBeenCalledTimes(1);

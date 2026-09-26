@@ -29,6 +29,14 @@ export interface ZeitleisteEintrag {
   readonly toenung: ToenungName;
   /** Der Titel — er nennt die Art des Ereignisses in Worten. */
   readonly titel: ReactNode;
+  /**
+   * Der zugaengliche Name des Eintrags.
+   *
+   * `listitem` bildet seinen Namen nicht aus dem Inhalt: Ohne Benennung haette der Eintrag gar
+   * keinen, und wer durch die Liste springt, hoerte nur „Listenelement". Sie ist wahlfrei, weil
+   * eine Zeitleiste, deren Titel schon alles sagt, nichts zu wiederholen hat.
+   */
+  readonly benennung?: string;
   /** Die Unterzeile: Zeitpunkt, Autor, Betrag. */
   readonly unterzeile?: ReactNode;
   /** Zusatz im Eintrag selbst, etwa die Maske zum Aendern an Ort und Stelle. */
@@ -37,15 +45,23 @@ export interface ZeitleisteEintrag {
 
 export interface ZeitleisteProps {
   readonly eintraege: readonly ZeitleisteEintrag[];
+  /**
+   * Der Name der Liste — etwa „Historie".
+   *
+   * Ohne ihn bleibt die Liste unbenannt: Steht sie unter einem Kartenkopf, der sie schon nennt,
+   * waere ein zweiter Name dieselbe Angabe ein zweites Mal.
+   */
+  readonly beschriftung?: string;
 }
 
 /** Kantenlaenge des Symbolfelds (CLAUDE-design.md, „Bausteine": 36 px). */
 const SYMBOLFELD = 36;
 
-export default function Zeitleiste({ eintraege }: ZeitleisteProps) {
+export default function Zeitleiste({ eintraege, beschriftung }: ZeitleisteProps) {
   return (
     <Box
       component="ul"
+      aria-label={beschriftung}
       sx={{
         listStyle: 'none',
         margin: 0,
@@ -59,6 +75,7 @@ export default function Zeitleiste({ eintraege }: ZeitleisteProps) {
         <Box
           component="li"
           key={eintrag.id}
+          aria-label={eintrag.benennung}
           sx={(theme) => ({
             display: 'flex',
             alignItems: 'flex-start',

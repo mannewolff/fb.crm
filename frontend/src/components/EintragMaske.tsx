@@ -1,6 +1,5 @@
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
 import FormControl from '@mui/material/FormControl';
 import FormHelperText from '@mui/material/FormHelperText';
 import FormLabel from '@mui/material/FormLabel';
@@ -17,6 +16,7 @@ import { ersteDatei } from '../lib/dateiwahl';
 import { meldungAm } from '../lib/feldmeldung';
 import { alsEingabe, alsZeitstempel } from '../lib/zeitpunkt';
 import KupferTaste from './KupferTaste';
+import WeicheTaste from './WeicheTaste';
 
 /**
  * Die Maske fuer einen Eintrag der Historie (E20, Kriterien 13, 14, 18, 19, 26).
@@ -249,8 +249,9 @@ export default function EintragMaske({ vorgangId, modus, gespeichert }: EintragM
         display: 'flex',
         flexDirection: 'column',
         gap: 2,
-        // Im Aendern sitzt die Maske in der Zeile der Historie, die ihren Rand schon mitbringt.
-        padding: aendern ? '8px 0 4px' : '18px 16px',
+        // Im Aendern sitzt die Maske im Eintrag der Zeitleiste, der seinen Rand schon mitbringt;
+        // beim Hinzufuegen in einer Karte, die ihren Innenabstand mitbringt.
+        paddingBottom: aendern ? '4px' : 0,
       }}
     >
       {fehler === null ? null : <Alert severity="error">{fehler}</Alert>}
@@ -338,24 +339,15 @@ export default function EintragMaske({ vorgangId, modus, gespeichert }: EintragM
           )}
         </FormControl>
       ) : null}
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, flexWrap: 'wrap' }}>
         <KupferTaste disabled={laeuft}>{aendern ? 'Speichern' : 'Hinzufügen'}</KupferTaste>
         {modus.art === 'aendern' ? (
-          // Bewusst matt und nicht als zweite erhabene Taste: „Abbrechen" ist der Weg zurueck,
-          // nicht die Handlung, zu der die Maske aufgegangen ist.
-          <Button
-            type="button"
-            onClick={modus.abgebrochen}
-            disabled={laeuft}
-            sx={(theme) => ({
-              fontSize: 12.5,
-              fontWeight: 600,
-              textTransform: 'none',
-              color: theme.vars.palette.kupferwolke.textMatt,
-            })}
-          >
+          // Die weiche Taste: Sie tritt neben der Kupfertaste zurueck, bleibt aber eine volle
+          // Taste — „Abbrechen" ist der Weg zurueck, nicht die Handlung, zu der die Maske
+          // aufgegangen ist (CLAUDE-design.md, „Tasten").
+          <WeicheTaste onClick={modus.abgebrochen} disabled={laeuft}>
             Abbrechen
-          </Button>
+          </WeicheTaste>
         ) : null}
       </Box>
     </Box>

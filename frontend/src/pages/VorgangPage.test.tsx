@@ -42,6 +42,14 @@ const VORGANG: Vorgang = {
   historie: [ANHANG, KOMMENTAR],
 };
 
+/**
+ * Der Titel der Kopfkarte: Nummer und Titel bilden zusammen die **eine `h1`** der Ansicht.
+ *
+ * Wer mit dem Screenreader auf die Seite kommt, findet damit an erster Stelle, um welchen Vorgang
+ * es geht (Baustein `Kopfkarte`, #79).
+ */
+const KOPFZEILE = `#${String(VORGANG.nummer)} ${VORGANG.titel}`;
+
 /** Die Adresse, an der sich ablesen laesst, wohin ein Weg gefuehrt hat. */
 function Adresse() {
   const ort = useLocation();
@@ -104,17 +112,62 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe('VorgangPage — der Kopf (Kriterien 9, 11)', () => {
-  it('zeigt Nummer, Titel und Phase', async () => {
+describe('VorgangPage — die Kopfkarte (Kriterien 9, 11)', () => {
+  it('traegt Nummer und Titel als die eine Ueberschrift der Ansicht', async () => {
     vorgangDoppel();
 
     renderSeite();
 
-    expect(
-      await screen.findByRole('heading', { name: 'Anteilsbalken je Vorgang statt Band über alle' }),
-    ).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { level: 1, name: KOPFZEILE })).toBeInTheDocument();
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+    // Die Nummer steht als eigener Teil, damit sie ihre Tabellenziffern tragen kann.
     expect(screen.getByText('#941')).toBeInTheDocument();
-    expect(screen.getByText('Anbahnung')).toBeInTheDocument();
+  });
+
+  it('nennt Firma und Ansprechpartner in der Zeile unter dem Titel', async () => {
+    vorgangDoppel();
+
+    renderSeite();
+    await screen.findByRole('heading', { level: 1, name: KOPFZEILE });
+
+    expect(screen.getByTestId('kopfkarte-zeile')).toHaveTextContent('Beispiel GmbH · Anna Berg');
+  });
+
+  it('nennt die Phase als Chip und beim offenen Vorgang keinen Abschluss', async () => {
+    vorgangDoppel();
+
+    renderSeite();
+    await screen.findByRole('heading', { level: 1, name: KOPFZEILE });
+
+    const chips = within(screen.getByTestId('kopfkarte-chips'));
+    expect(chips.getByText('Anbahnung')).toBeInTheDocument();
+    expect(chips.queryByText('Abgeschlossen')).not.toBeInTheDocument();
+  });
+
+  it('stellt am offenen Vorgang genau „Bearbeiten" und „Abschließen" in den Kopf', async () => {
+    vorgangDoppel();
+
+    renderSeite();
+    await screen.findByRole('heading', { level: 1, name: KOPFZEILE });
+
+    // „Abschliessen" ist die Hauptaktion und damit die einzige Kupfertaste der Ansicht
+    // (CLAUDE-design.md, „Tasten"); „Bearbeiten" tritt als weiche Taste daneben zurueck.
+    const aktionen = within(screen.getByTestId('kopfkarte-aktionen'));
+    expect(aktionen.getByRole('link', { name: 'Bearbeiten' })).toBeInTheDocument();
+    expect(aktionen.getAllByRole('button')).toHaveLength(1);
+    expect(aktionen.getByRole('button', { name: 'Abschließen' })).toBeInTheDocument();
+  });
+
+  it('stellt am abgeschlossenen Vorgang „Wieder öffnen" statt „Abschließen" in den Kopf', async () => {
+    vorgangDoppel({ ...VORGANG, abgeschlossen: true });
+
+    renderSeite();
+    await screen.findByRole('heading', { level: 1, name: KOPFZEILE });
+
+    const aktionen = within(screen.getByTestId('kopfkarte-aktionen'));
+    expect(aktionen.getByRole('link', { name: 'Bearbeiten' })).toBeInTheDocument();
+    expect(aktionen.getAllByRole('button')).toHaveLength(1);
+    expect(aktionen.getByRole('button', { name: 'Wieder öffnen' })).toBeInTheDocument();
   });
 
   it('zeigt waehrend des Ladens einen Hinweis statt einer leeren Seite', () => {
@@ -130,7 +183,7 @@ describe('VorgangPage — der Kopf (Kriterien 9, 11)', () => {
     vorgangDoppel();
 
     renderSeite();
-    await screen.findByRole('heading', { name: VORGANG.titel });
+    await screen.findByRole('heading', { level: 1, name: KOPFZEILE });
 
     expect(screen.getByRole('link', { name: 'Bearbeiten' })).toHaveAttribute(
       'href',
@@ -152,6 +205,26 @@ describe('VorgangPage — der Kopf (Kriterien 9, 11)', () => {
 });
 
 describe('VorgangPage — die Karte „Felder" (Kriterien 9, 23)', () => {
+  it('stellt die Felder als Beschriftung–Wert-Liste', async () => {
+    vorgangDoppel();
+
+    renderSeite();
+    await screen.findByRole('heading', { level: 1, name: KOPFZEILE });
+
+    // Stammdaten-Liste der Vorlage (`.stamm` Z. 100–102): Beschriftung und Wert als echte
+    // Begriffsliste, keine Tabelle — die Felder eines Vorgangs sind Paare, keine Matrix. Die
+    // Rollen `term` und `definition` gibt es nur in einem `dl` aus `dt` und `dd`.
+    const felder = within(screen.getByTestId('vorgang-felder'));
+    expect(felder.getAllByRole('term').map((teil) => teil.textContent)).toEqual([
+      'Firma',
+      'Ansprechpartner',
+    ]);
+    expect(felder.getAllByRole('definition').map((teil) => teil.textContent)).toEqual([
+      'Beispiel GmbH',
+      'Anna Berg',
+    ]);
+  });
+
   it('macht Firma und Ansprechpartner zu Wegen auf die Detailansicht der Firma', async () => {
     vorgangDoppel();
 
@@ -180,6 +253,11 @@ describe('VorgangPage — die Karte „Felder" (Kriterien 9, 23)', () => {
     ).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Anna Berg (stillgelegt)' })).toBeInTheDocument();
     expect(screen.getAllByText('stillgelegt')).toHaveLength(2);
+    // Auch die Zeile der Kopfkarte sagt es — dort als Zusatz am Namen, weil in einer Textzeile
+    // kein Schild steht (CLAUDE-design.md, „Zustandsformen").
+    expect(screen.getByTestId('kopfkarte-zeile')).toHaveTextContent(
+      'Beispiel GmbH (stillgelegt) · Anna Berg (stillgelegt)',
+    );
   });
 
   it('laesst die Zeile ohne Ansprechpartner weg — ohne Platzhaltertext', async () => {
@@ -200,12 +278,12 @@ describe('VorgangPage — Abschliessen und Wieder oeffnen (Kriterien 20, 21)', (
 
     renderSeite();
 
-    await screen.findByRole('heading', { name: VORGANG.titel });
-    expect(screen.queryByText('abgeschlossen')).not.toBeInTheDocument();
+    await screen.findByRole('heading', { level: 1, name: KOPFZEILE });
+    expect(screen.queryByText('Abgeschlossen')).not.toBeInTheDocument();
 
     await nutzer.click(screen.getByRole('button', { name: 'Abschließen' }));
 
-    expect(await screen.findByText('abgeschlossen')).toBeInTheDocument();
+    expect(await screen.findByText('Abgeschlossen')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Abschließen' })).not.toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/vorgaenge/5/abschliessen',
@@ -215,7 +293,7 @@ describe('VorgangPage — Abschliessen und Wieder oeffnen (Kriterien 20, 21)', (
     await nutzer.click(screen.getByRole('button', { name: 'Wieder öffnen' }));
 
     expect(await screen.findByRole('button', { name: 'Abschließen' })).toBeInTheDocument();
-    expect(screen.queryByText('abgeschlossen')).not.toBeInTheDocument();
+    expect(screen.queryByText('Abgeschlossen')).not.toBeInTheDocument();
   });
 
   it('traegt am abgeschlossenen Vorgang die Kennzeichnung und die Taste „Wieder oeffnen"', async () => {
@@ -223,7 +301,7 @@ describe('VorgangPage — Abschliessen und Wieder oeffnen (Kriterien 20, 21)', (
 
     renderSeite();
 
-    expect(await screen.findByText('abgeschlossen')).toBeInTheDocument();
+    expect(await screen.findByText('Abgeschlossen')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Wieder öffnen' })).toBeEnabled();
     // Phase, Zuordnung und Historie bleiben (Kriterium 21).
     expect(screen.getByText('Anbahnung')).toBeInTheDocument();
@@ -239,7 +317,7 @@ describe('VorgangPage — Abschliessen und Wieder oeffnen (Kriterien 20, 21)', (
     });
 
     renderSeite();
-    await screen.findByRole('heading', { name: VORGANG.titel });
+    await screen.findByRole('heading', { level: 1, name: KOPFZEILE });
     await nutzer.click(screen.getByRole('button', { name: 'Abschließen' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('nicht geändert');
@@ -252,10 +330,10 @@ describe('VorgangPage — die Maske fuer Eintraege (E20, Kriterien 13, 14)', () 
 
     renderSeite();
 
-    await screen.findByRole('heading', { name: VORGANG.titel });
+    await screen.findByRole('heading', { level: 1, name: KOPFZEILE });
     expect(
       screen.getAllByRole('heading', { level: 2 }).map((ueberschrift) => ueberschrift.textContent),
-    ).toEqual([VORGANG.titel, 'Eintrag hinzufügen', 'Historie', 'Felder']);
+    ).toEqual(['Eintrag hinzufügen', 'Historie', 'Felder']);
   });
 
   it('liest die Historie neu, nachdem ein Eintrag hinzugefuegt wurde', async () => {
@@ -284,7 +362,7 @@ describe('VorgangPage — die Maske fuer Eintraege (E20, Kriterien 13, 14)', () 
     });
 
     renderSeite();
-    await screen.findByRole('heading', { name: VORGANG.titel });
+    await screen.findByRole('heading', { level: 1, name: KOPFZEILE });
     await nutzer.type(screen.getByRole('textbox', { name: /^Text/ }), 'Angebot zugesagt.');
     await nutzer.click(screen.getByRole('button', { name: 'Hinzufügen' }));
 
@@ -313,7 +391,7 @@ describe('VorgangPage — die Maske fuer Eintraege (E20, Kriterien 13, 14)', () 
     });
 
     renderSeite();
-    await screen.findByRole('heading', { name: VORGANG.titel });
+    await screen.findByRole('heading', { level: 1, name: KOPFZEILE });
     const zeile = within(screen.getByRole('list', { name: 'Historie' })).getAllByRole(
       'listitem',
     )[1];
@@ -411,7 +489,7 @@ describe('VorgangPage — Tastatur (Kriterium 26)', () => {
     vorgangDoppel();
 
     renderSeite();
-    await screen.findByRole('heading', { name: VORGANG.titel });
+    await screen.findByRole('heading', { level: 1, name: KOPFZEILE });
 
     await nutzer.tab();
     expect(screen.getByRole('link', { name: 'Bearbeiten' })).toHaveFocus();

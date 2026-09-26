@@ -4,19 +4,19 @@ import Link from '@mui/material/Link';
 import TextField from '@mui/material/TextField';
 import ToggleButton from '@mui/material/ToggleButton';
 import Typography from '@mui/material/Typography';
+import { IconPlus } from '@tabler/icons-react';
 import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Link as RouterLink, useSearchParams } from 'react-router-dom';
 
 import { vorgaengeUebersicht } from '../api/vorgaenge';
 import type { Phase, VorgaengeUebersicht, VorgangZeile } from '../api/vorgaenge';
-import KopfAktion from '../components/KopfAktion';
 import { useKopfPfad } from '../components/KopfPfad';
 import type { PfadVerweis } from '../components/KopfPfad';
 import KupferTaste from '../components/KupferTaste';
 import Karte from '../components/Karte';
 import Tafel from '../components/Tafel';
-import { RADIUS_MITTEL, RADIUS_RUND, ZAHLEN_KLASSE } from '../theme';
+import { RADIUS_RUND, ZAHLEN_KLASSE } from '../theme';
 
 /**
  * Die Uebersicht der Vorgaenge (Kriterien 1–4, 20, 25, 26).
@@ -26,10 +26,12 @@ import { RADIUS_MITTEL, RADIUS_RUND, ZAHLEN_KLASSE } from '../theme';
  * Lauf haengt an einem {@link AbortController}, und gefiltert wie sortiert wird auf dem Server. Die
  * Begruendungen im Einzelnen stehen an {@link FirmenPage}; hier wiederholt sie diese Ansicht nicht.
  *
- * Gestalt nach der Vorlagen-Ansicht „Liste": Werkzeugleiste (Z. 1866 ff., CSS Z. 799–806) mit dem
- * Suchfeld als Nut und dem Schalter als gedruecktem Filter, darunter die Karte mit der
- * {@link Tafel} (Z. 1888 ff.). Ohne Auswahlhaken, Massenleiste, Gruppenzeilen, Spaltenwahl und
- * Export (E22) — das sind Funktionen, die fb.crm nicht hat.
+ * Gestalt wie die Firmenuebersicht: eine {@link Karte}, deren Kopf den Titel und rechts das
+ * Werkzeug traegt — Suchfeld, Schalter und als Letztes die Kupfertaste „Neuer Vorgang"
+ * (Vorlage `.kopfzeile` Z. 79–80, CLAUDE-design.md, „Tasten": „rechts im Kartenkopf der Liste").
+ * Die Hauptaktion steht damit <b>in der Ansicht</b> und nicht mehr im Kopf der Anwendung: Der Kopf
+ * traegt nur noch den Pfad. Ohne Auswahlhaken, Massenleiste, Gruppenzeilen, Spaltenwahl und Export
+ * (E22) — das sind Funktionen, die fb.crm nicht hat.
  *
  * **Der Link steht in der Titelspalte, nicht um die Zeile.** Ein `a` kann keine `td`-Elemente
  * umschliessen; eine Zeile mit `role="link"` verlöre ihre Rolle als Tabellenzeile und damit die
@@ -197,7 +199,6 @@ function inhaltZu(stand: Stand, suche: string): ReactNode {
     return (
       <Typography
         sx={(theme) => ({
-          padding: '18px 16px',
           fontSize: 12.5,
           color: theme.vars.palette.kupferwolke.textSchwach,
         })}
@@ -207,18 +208,13 @@ function inhaltZu(stand: Stand, suche: string): ReactNode {
     );
   }
   if (stand.art === 'fehler') {
-    return (
-      <Alert severity="error" sx={{ borderRadius: 0 }}>
-        {AUSFALL}
-      </Alert>
-    );
+    return <Alert severity="error">{AUSFALL}</Alert>;
   }
   if (stand.uebersicht.vorgaenge.length === 0) {
     return (
       <Typography
         role="status"
         sx={(theme) => ({
-          padding: '18px 16px',
           fontSize: 12.5,
           color: theme.vars.palette.kupferwolke.textMatt,
         })}
@@ -286,63 +282,69 @@ export default function VorgaengePage() {
         gap: '22px',
       }}
     >
-      <KopfAktion>
-        <KupferTaste to="/vorgaenge/neu">Neuer Vorgang</KupferTaste>
-      </KopfAktion>
-      <Box
-        sx={(theme) => ({
-          display: 'flex',
-          alignItems: 'center',
-          gap: '10px',
-          flexWrap: 'wrap',
-          padding: '9px 11px',
-          borderRadius: `${RADIUS_MITTEL}px`,
-          background: theme.vars.palette.kupferwolke.flaeche,
-          boxShadow: theme.vars.palette.kupferwolke.schatten.karte,
-        })}
+      <Karte
+        titel="Vorgänge"
+        werkzeug={
+          <>
+            <TextField
+              type="search"
+              size="small"
+              value={eingabe}
+              onChange={(ereignis) => {
+                setzeEingabe(ereignis.target.value);
+              }}
+              placeholder="Vorgänge durchsuchen …"
+              // Keine Beschriftung ueber dem Feld: In der Werkzeugleiste traegt der Wert die
+              // Benennung, den zugaenglichen Namen behaelt das Feld (CLAUDE-design.md,
+              // „Zustandsformen"). Die Pille steht in einer Linie mit Schalter und Taste.
+              slotProps={{ htmlInput: { 'aria-label': 'Suche' } }}
+              sx={(theme) => ({
+                minWidth: 220,
+                '& .MuiOutlinedInput-root': {
+                  fontSize: 12.5,
+                  borderRadius: `${RADIUS_RUND}px`,
+                  background: theme.vars.palette.kupferwolke.flaecheWeich,
+                },
+              })}
+            />
+            <ToggleButton
+              value={PARAM_ABGESCHLOSSENE}
+              selected={auchAbgeschlossene}
+              onChange={() => {
+                // Geschoben statt ersetzt: Der Schalter ist eine Handlung, die „zurueck"
+                // zuruecknehmen koennen soll.
+                setzeParameter((alt) =>
+                  mitParameter(alt, PARAM_ABGESCHLOSSENE, auchAbgeschlossene ? null : 'true'),
+                );
+              }}
+              sx={(theme) => ({
+                fontSize: 11.5,
+                fontWeight: 500,
+                textTransform: 'none',
+                padding: '4px 12px',
+                borderRadius: `${RADIUS_RUND}px`,
+                color: theme.vars.palette.kupferwolke.textMatt,
+                background: theme.vars.palette.kupferwolke.flaecheWeich,
+                border: 0,
+                boxShadow: `inset 0 0 0 1px ${theme.vars.palette.kupferwolke.linie}`,
+                // Gewaehlt: die Toenung Pfirsich, nicht bloss eine zweite Tiefe — Form und Farbe
+                // sagen dasselbe (CLAUDE-design.md, „Zustandsformen").
+                '&.Mui-selected': {
+                  color: theme.vars.palette.kupferwolke.toenung.pfirsich.schrift,
+                  background: theme.vars.palette.kupferwolke.toenung.pfirsich.flaeche,
+                },
+              })}
+            >
+              auch abgeschlossene
+            </ToggleButton>
+            <KupferTaste to="/vorgaenge/neu" symbol={<IconPlus size={16} stroke={1.8} />}>
+              Neuer Vorgang
+            </KupferTaste>
+          </>
+        }
       >
-        <TextField
-          label="Suche"
-          type="search"
-          size="small"
-          value={eingabe}
-          onChange={(ereignis) => {
-            setzeEingabe(ereignis.target.value);
-          }}
-          sx={{ minWidth: 190, '& .MuiOutlinedInput-root': { fontSize: 12.5 } }}
-        />
-        <ToggleButton
-          value={PARAM_ABGESCHLOSSENE}
-          selected={auchAbgeschlossene}
-          onChange={() => {
-            // Geschoben statt ersetzt: Der Schalter ist eine Handlung, die „zurueck"
-            // zuruecknehmen koennen soll.
-            setzeParameter((alt) =>
-              mitParameter(alt, PARAM_ABGESCHLOSSENE, auchAbgeschlossene ? null : 'true'),
-            );
-          }}
-          sx={(theme) => ({
-            fontSize: 11.5,
-            fontWeight: 500,
-            textTransform: 'none',
-            padding: '4px 12px',
-            borderRadius: `${RADIUS_RUND}px`,
-            color: theme.vars.palette.kupferwolke.textMatt,
-            background: theme.vars.palette.kupferwolke.flaecheWeich,
-            border: 0,
-            boxShadow: `inset 0 0 0 1px ${theme.vars.palette.kupferwolke.linie}`,
-            // Gewaehlt: die Toenung Pfirsich, nicht bloss eine zweite Tiefe — Form und Farbe
-            // sagen dasselbe (CLAUDE-design.md, „Zustandsformen").
-            '&.Mui-selected': {
-              color: theme.vars.palette.kupferwolke.toenung.pfirsich.schrift,
-              background: theme.vars.palette.kupferwolke.toenung.pfirsich.flaeche,
-            },
-          })}
-        >
-          auch abgeschlossene
-        </ToggleButton>
-      </Box>
-      <Karte>{inhaltZu(stand, suche)}</Karte>
+        {inhaltZu(stand, suche)}
+      </Karte>
     </Box>
   );
 }

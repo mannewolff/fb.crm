@@ -1,11 +1,8 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { Link, MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { AuthProvider } from '../auth/AuthContext';
-import AppShell from '../components/AppShell';
-import { KopfAktionProvider } from '../components/KopfAktion';
 import KopfPfad, { KopfPfadProvider } from '../components/KopfPfad';
 import { fetchNachPfad, json, leer } from '../test/fetchNachPfad';
 import { renderMitTheme } from '../test/render';
@@ -44,8 +41,6 @@ const ERLEDIGT = {
   letzteAktivitaet: '2026-08-01T09:15:00Z',
 };
 
-const KONTO = { id: 1, displayName: 'Manfred Wolff', email: 'info@mwolff.org' };
-
 /** Die Adresse, an der sich ablesen laesst, was in `useSearchParams` gelandet ist. */
 function Adresse() {
   const ort = useLocation();
@@ -72,16 +67,14 @@ function schalter() {
 function renderSeite(start = '/vorgaenge') {
   return renderMitTheme(
     <MemoryRouter initialEntries={[start]}>
-      <KopfAktionProvider>
-        <KopfPfadProvider>
-          <Routes>
-            <Route path="/vorgaenge" element={<VorgaengePage />} />
-            <Route path="/vorgaenge/neu" element={<p>Maske</p>} />
-            <Route path="/vorgaenge/:id" element={<p>Detailansicht</p>} />
-          </Routes>
-          <Adresse />
-        </KopfPfadProvider>
-      </KopfAktionProvider>
+      <KopfPfadProvider>
+        <Routes>
+          <Route path="/vorgaenge" element={<VorgaengePage />} />
+          <Route path="/vorgaenge/neu" element={<p>Maske</p>} />
+          <Route path="/vorgaenge/:id" element={<p>Detailansicht</p>} />
+        </Routes>
+        <Adresse />
+      </KopfPfadProvider>
     </MemoryRouter>,
   );
 }
@@ -90,29 +83,12 @@ function renderSeite(start = '/vorgaenge') {
 function renderMitKopf() {
   return renderMitTheme(
     <MemoryRouter initialEntries={['/vorgaenge']}>
-      <KopfAktionProvider>
-        <KopfPfadProvider>
-          <KopfPfad />
-          <VorgaengePage />
-        </KopfPfadProvider>
-      </KopfAktionProvider>
+      <KopfPfadProvider>
+        <KopfPfad />
+        <VorgaengePage />
+      </KopfPfadProvider>
     </MemoryRouter>,
   );
-}
-
-/** Die Fensterbreite, gegen die `matchMedia` auswertet — nur der Rahmen fragt danach. */
-function fensterbreite(breite: number) {
-  Object.defineProperty(window, 'matchMedia', {
-    configurable: true,
-    value: (abfrage: string) => ({
-      matches: breite >= Number.parseInt(abfrage.replace(/\D+/g, ' ').trim(), 10),
-      media: abfrage,
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-      addListener: vi.fn(),
-      removeListener: vi.fn(),
-    }),
-  });
 }
 
 /** Die Datenzeilen der Tafel — ohne die Kopfzeile. */
@@ -169,6 +145,9 @@ describe('VorgaengePage — die Tafel', () => {
     expect(suchfeld()).toHaveFocus();
     await nutzer.tab();
     expect(schalter()).toHaveFocus();
+    // Die Hauptaktion steht rechts im Kartenkopf und damit im Tabulatorweg vor der Tafel.
+    await nutzer.tab();
+    expect(screen.getByRole('link', { name: 'Neuer Vorgang' })).toHaveFocus();
     await nutzer.tab();
     expect(screen.getByRole('link', { name: /Neue Website/ })).toHaveFocus();
     await nutzer.tab();
@@ -340,72 +319,35 @@ describe('VorgaengePage — der Pfad im Kopf (E6)', () => {
   });
 });
 
-describe('VorgaengePage — Kopfaktion', () => {
-  it('legt „Neuer Vorgang" in den Kopf und raeumt den Platz beim Verlassen', async () => {
+describe('VorgaengePage — die Hauptaktion im Kartenkopf', () => {
+  it('stellt „Neuer Vorgang" rechts in den Kopf der Karte und fuehrt auf die Maske', async () => {
     const nutzer = userEvent.setup();
-    fensterbreite(1440);
-    fetchNachPfad({
-      'GET /api/auth/me': json(200, KONTO),
-      'GET /api/instance': json(200, { version: '0.1.3' }),
-      [weg('', false)]: json(200, { vorgaenge: [WEBSITE], gesamt: 1 }),
-    });
+    fetchNachPfad({ [weg('', false)]: json(200, { vorgaenge: [WEBSITE], gesamt: 1 }) });
 
-    renderMitTheme(
-      <MemoryRouter initialEntries={['/vorgaenge']}>
-        <AuthProvider>
-          <AppShell>
-            <Routes>
-              <Route path="/vorgaenge" element={<VorgaengePage />} />
-              <Route path="/woanders" element={<p>Andere Seite</p>} />
-            </Routes>
-            <Link to="/woanders">Weiter</Link>
-          </AppShell>
-        </AuthProvider>
-      </MemoryRouter>,
-    );
+    renderSeite();
+    await datenzeilen();
 
-    const kopf = within(screen.getByRole('banner'));
-    expect(kopf.getByRole('link', { name: 'Neuer Vorgang' })).toHaveAttribute(
-      'href',
-      '/vorgaenge/neu',
-    );
-    await screen.findByRole('table');
+    // Die Hauptaktion einer Liste steht im Kartenkopf, nicht mehr im Kopf der Anwendung
+    // (CLAUDE-design.md, „Tasten"); der Kopf traegt nur noch den Pfad.
+    const kopf = within(screen.getByTestId('karte-kopf'));
+    expect(kopf.getByRole('heading', { level: 2, name: 'Vorgänge' })).toBeInTheDocument();
+    const taste = kopf.getByRole('link', { name: 'Neuer Vorgang' });
+    expect(taste).toHaveAttribute('href', '/vorgaenge/neu');
 
-    await nutzer.click(screen.getByRole('link', { name: 'Weiter' }));
-
-    expect(screen.getByText('Andere Seite')).toBeInTheDocument();
-    expect(screen.getByTestId('kopf-aktion')).toBeEmptyDOMElement();
-  });
-
-  it('fuehrt „Neuer Vorgang" auf die Maske', async () => {
-    const nutzer = userEvent.setup();
-    fensterbreite(1440);
-    fetchNachPfad({
-      'GET /api/auth/me': json(200, KONTO),
-      'GET /api/instance': json(200, { version: '0.1.3' }),
-      [weg('', false)]: json(200, { vorgaenge: [WEBSITE], gesamt: 1 }),
-    });
-
-    renderMitTheme(
-      <MemoryRouter initialEntries={['/vorgaenge']}>
-        <AuthProvider>
-          <AppShell>
-            <Routes>
-              <Route path="/vorgaenge" element={<VorgaengePage />} />
-              <Route path="/vorgaenge/neu" element={<p>Maske</p>} />
-            </Routes>
-            <Adresse />
-          </AppShell>
-        </AuthProvider>
-      </MemoryRouter>,
-    );
-
-    await screen.findByRole('table');
-    await nutzer.click(
-      within(screen.getByRole('banner')).getByRole('link', { name: 'Neuer Vorgang' }),
-    );
+    await nutzer.click(taste);
 
     expect(screen.getByText('Maske')).toBeInTheDocument();
     expect(adresse()).toBe('/vorgaenge/neu');
+  });
+
+  it('haelt Suchfeld und Schalter im selben Kartenkopf', async () => {
+    fetchNachPfad({ [weg('', false)]: json(200, { vorgaenge: [WEBSITE], gesamt: 1 }) });
+
+    renderSeite();
+    await datenzeilen();
+
+    const kopf = within(screen.getByTestId('karte-kopf'));
+    expect(kopf.getByRole('searchbox', { name: 'Suche' })).toBeInTheDocument();
+    expect(kopf.getByRole('button', { name: 'auch abgeschlossene' })).toBeInTheDocument();
   });
 });

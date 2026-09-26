@@ -165,7 +165,8 @@ describe('App', () => {
 
     expect(screen.getByRole('status')).toHaveTextContent('Sitzung wird geprüft');
     expect(
-      await screen.findByRole('heading', { name: 'Anteilsbalken je Vorgang' }),
+      // Die Kopfkarte traegt Nummer und Titel als die eine Ueberschrift der Ansicht.
+      await screen.findByRole('heading', { level: 1, name: '#941 Anteilsbalken je Vorgang' }),
     ).toBeInTheDocument();
     expect(screen.getByRole('navigation', { name: 'Hauptnavigation' })).toBeInTheDocument();
   });
