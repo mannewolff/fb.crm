@@ -229,6 +229,27 @@ class JpaVorgangRepositoryTest {
   }
 
   @Test
+  void findByIds_thenTranslatesEveryRowOfTheSet() {
+    // Given — eine Abfrage fuer alle Zeilen einer Auswertung statt eine je Zeile (Kriterium 23).
+    when(jpa.findAllById(List.of(11L, 12L))).thenReturn(List.of(zeile(11L), zeile(12L)));
+
+    // When
+    final List<Vorgang> gefunden = repository.findByIds(List.of(11L, 12L));
+
+    // Then
+    assertThat(gefunden).containsExactly(vorgang(11L), vorgang(12L));
+  }
+
+  @Test
+  void findByIds_givenAnEmptySet_thenEmptyListWithoutAnything() {
+    // Given — die leere Menge beantwortet sich ohne Abfrage.
+    when(jpa.findAllById(List.of())).thenReturn(List.of());
+
+    // When / Then
+    assertThat(repository.findByIds(List.of())).isEmpty();
+  }
+
+  @Test
   void zaehleAlle_thenReportsTheCountOfTheTable() {
     // Given
     when(jpa.count()).thenReturn(3L);

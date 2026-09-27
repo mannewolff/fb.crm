@@ -1,5 +1,6 @@
 package org.mwolff.fbcrm.angebot.infrastructure;
 
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -12,6 +13,7 @@ import org.jspecify.annotations.Nullable;
 import org.mwolff.fbcrm.angebot.domain.Angebot;
 import org.mwolff.fbcrm.angebot.domain.AngebotRepository;
 import org.mwolff.fbcrm.angebot.domain.Angebotsposition;
+import org.mwolff.fbcrm.angebot.domain.Angebotszustand;
 import org.mwolff.fbcrm.angebot.domain.Belegabsender;
 import org.mwolff.fbcrm.angebot.domain.Belegempfaenger;
 import org.mwolff.fbcrm.common.Anschrift;
@@ -26,10 +28,11 @@ import org.springframework.stereotype.Repository;
  * Reihenfolge eine Zusage des Bestands und nicht der Zufall der Einfuegereihenfolge. Geloescht wird
  * nach derselben Regel: erst die Positionen, dann die Zeile, die sie traegt.
  *
- * <p>Die Liste eines Vorgangs holt ihre Positionen in <b>einer</b> zweiten Abfrage und ordnet sie
- * danach den Angeboten zu; je Zeile einzeln nachzuladen waere die bekannte Abfrage-Lawine.
+ * <p>Jede Liste holt ihre Positionen in <b>einer</b> zweiten Abfrage und ordnet sie danach den
+ * Angeboten zu; je Zeile einzeln nachzuladen waere die bekannte Abfrage-Lawine. Die Angebotsliste
+ * eines Vorgangs und die Kandidaten der Pipeline teilen sich diesen Weg.
  *
- * <p>PMD.TooManyMethods: Fuenf Wege des Ports und die Uebersetzungsschritte dazu. Die privaten
+ * <p>PMD.TooManyMethods: Sechs Wege des Ports und die Uebersetzungsschritte dazu. Die privaten
  * Methoden sind die Abbildung einer Zeile in ihre Teile — Angebot, Position, Empfaengerkopie,
  * Absenderkopie —, und sie aufzuteilen zerschnitte die Uebersetzung <b>eines</b> Aggregats auf zwei
  * Klassen, die nur zusammen richtig sind.
@@ -55,7 +58,20 @@ class JpaAngebotRepository implements AngebotRepository {
 
   @Override
   public List<Angebot> findByVorgang(final long vorgangId) {
-    final List<AngebotEntity> zeilen = angebote.findByVorgang(vorgangId);
+    return mitPositionen(angebote.findByVorgang(vorgangId));
+  }
+
+  @Override
+  public List<Angebot> pipelinekandidaten(final LocalDate tag) {
+    return mitPositionen(angebote.pipelinekandidaten(Angebotszustand.VERSENDET, tag));
+  }
+
+  /*
+   * Die Positionen mehrerer Angebote kommen in EINER zweiten Abfrage und werden danach zugeordnet;
+   * je Zeile nachzuladen waere die bekannte Abfrage-Lawine. Ohne sie liesse sich die Summe nicht
+   * rechnen (E5) — beide Listenwege brauchen sie deshalb, und sie teilen diesen einen Weg.
+   */
+  private List<Angebot> mitPositionen(final List<AngebotEntity> zeilen) {
     if (zeilen.isEmpty()) {
       // Ohne diesen Zweig liefe eine Abfrage mit leerer IN-Liste los — kein gueltiges SQL.
       return List.of();

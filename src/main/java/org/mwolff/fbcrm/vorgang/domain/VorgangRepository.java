@@ -1,5 +1,6 @@
 package org.mwolff.fbcrm.vorgang.domain;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import org.jspecify.annotations.Nullable;
@@ -29,6 +30,19 @@ public interface VorgangRepository {
    * @param firmaId Kennung der Firma
    */
   List<Vorgang> findByFirma(long firmaId);
+
+  /**
+   * Die Vorgaenge zu einer Menge technischer Ids — ohne zugesagte Reihenfolge und ohne Platzhalter
+   * fuer eine unbekannte Kennung.
+   *
+   * <p>Fuer Auswertungen, die zu vielen Zeilen den tragenden Vorgang brauchen (Kriterium 23): Ein
+   * {@link #findById} je Zeile waere die bekannte Abfrage-Lawine. Der Aufrufer ordnet die Antwort
+   * selbst seinen Zeilen zu und entscheidet, was eine fehlende Kennung bedeutet.
+   *
+   * @param ids die Kennungen der gefragten Vorgaenge; die leere Menge ist erlaubt und beantwortet
+   *     sich ohne Abfrage
+   */
+  List<Vorgang> findByIds(Collection<Long> ids);
 
   /** Der Vorgang zu einer technischen Id, oder leer. */
   Optional<Vorgang> findById(long id);

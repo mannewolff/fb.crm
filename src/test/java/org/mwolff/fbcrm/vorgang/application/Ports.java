@@ -87,6 +87,11 @@ final class Ports {
     }
 
     @Override
+    public List<Vorgang> findByIds(final Collection<Long> ids) {
+      throw nichtGebraucht();
+    }
+
+    @Override
     public long zaehleAlle() {
       throw nichtGebraucht();
     }

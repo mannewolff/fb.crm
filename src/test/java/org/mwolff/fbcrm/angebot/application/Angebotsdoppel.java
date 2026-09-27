@@ -91,6 +91,22 @@ final class Angebotsdoppel {
       final Angebotszustand zustand,
       final List<Angebotsposition> zeilen,
       final Instant angelegt) {
+    return angebot(id, vorgangId, zustand, zeilen, angelegt, GUELTIG_BIS);
+  }
+
+  /**
+   * Ein Angebot mit frei gewaehlter Gueltigkeit — fuer die Auswahl der Pipeline (Kriterium 23).
+   *
+   * <p>Die Gueltigkeit ist dort der Unterschied zwischen „zaehlt" und „abgelaufen" (E4), und sie
+   * liegt gegen den heutigen Tag der jeweiligen Pruefung, nicht gegen ein festes Datum.
+   */
+  static Angebot angebot(
+      final long id,
+      final long vorgangId,
+      final Angebotszustand zustand,
+      final List<Angebotsposition> zeilen,
+      final Instant angelegt,
+      final LocalDate gueltigBis) {
     final boolean entwurf = zustand == Angebotszustand.ENTWURF;
     return new Angebot(
         Long.valueOf(id),
@@ -98,7 +114,7 @@ final class Angebotsdoppel {
         entwurf ? null : "A-2026-%03d".formatted(id),
         zustand,
         ANGEBOTSDATUM,
-        GUELTIG_BIS,
+        gueltigBis,
         BESCHREIBUNG,
         BEDINGUNGEN,
         entwurf ? null : VERSENDET_AM,

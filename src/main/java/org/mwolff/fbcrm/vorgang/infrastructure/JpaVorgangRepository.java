@@ -1,5 +1,6 @@
 package org.mwolff.fbcrm.vorgang.infrastructure;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import org.jspecify.annotations.Nullable;
@@ -31,6 +32,12 @@ class JpaVorgangRepository implements VorgangRepository {
     // Dieselbe Abfrage und damit dieselbe Reihenfolge wie die Uebersicht (E16): alles zu dieser
     // einen Firma, offen und abgeschlossen. Die Trennung macht die Anwendungsschicht.
     return uebersetze(jpa.uebersicht(OHNE_SUCHE, null, true, firmaId));
+  }
+
+  @Override
+  public List<Vorgang> findByIds(final Collection<Long> ids) {
+    // findAllById beantwortet die leere Menge ohne Abfrage; einen eigenen Zweig braucht es nicht.
+    return uebersetze(jpa.findAllById(ids));
   }
 
   @Override
