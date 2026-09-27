@@ -41,6 +41,12 @@
          Teilartefakte durchgereicht — ohne das BOM zoege s3 seine Geschwister in abweichenden
          Versionen herein, und dependencyConvergence des Enforcers braeche den Build. -->
     <awssdk.version>2.55.5</awssdk.version>
+    <!-- Das Spring-Boot-BOM managt PDFBox nicht; der Beleg-Drucker braucht es. PDFBox zieht
+         BouncyCastle in seiner eigenen Version mit — deshalb stehen bcprov und bcpkix unten im
+         dependencyManagement auf ${bouncycastle.version}: ohne das braeche dependencyConvergence
+         des Enforcers an zwei Versionen derselben Krypto-Bibliothek, und die aeltere zu nehmen
+         waere ein Rueckschritt in einer Sicherheitsbibliothek. -->
+    <pdfbox.version>3.0.8</pdfbox.version>
 
     <jacoco.version>0.8.15</jacoco.version>
     <maven-enforcer-plugin.version>3.6.3</maven-enforcer-plugin.version>
@@ -65,6 +71,16 @@
         <version>${awssdk.version}</version>
         <type>pom</type>
         <scope>import</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.bouncycastle</groupId>
+        <artifactId>bcprov-jdk18on</artifactId>
+        <version>${bouncycastle.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.bouncycastle</groupId>
+        <artifactId>bcpkix-jdk18on</artifactId>
+        <version>${bouncycastle.version}</version>
       </dependency>
     </dependencies>
   </dependencyManagement>
@@ -138,6 +154,25 @@
       <groupId>org.bouncycastle</groupId>
       <artifactId>bcprov-jdk18on</artifactId>
       <version>${bouncycastle.version}</version>
+    </dependency>
+
+    <!-- Der Drucker der Belege (E10): PDFBox 3 unter Apache-2.0, ohne Copyleft in einer selbst
+         gehosteten Anwendung. Nur der duenne Schreiber PdfBoxDrucker laeuft dagegen; Umbruch und
+         Seitenwechsel rechnet Beleglayout ohne die Bibliothek. -->
+    <dependency>
+      <groupId>org.apache.pdfbox</groupId>
+      <artifactId>pdfbox</artifactId>
+      <version>${pdfbox.version}</version>
+      <exclusions>
+        <!-- spring-jcl liefert dieselbe API (org.apache.commons.logging) und bruecke sie nach
+             Logback. Liegt daneben das echte commons-logging, waehlt die Entdeckungslogik von
+             Commons Logging eine der beiden, warnt darueber im Log und schreibt die Meldungen der
+             Bibliothek moeglicherweise an der Protokollierung der Anwendung vorbei. -->
+        <exclusion>
+          <groupId>commons-logging</groupId>
+          <artifactId>commons-logging</artifactId>
+        </exclusion>
+      </exclusions>
     </dependency>
 
     <dependency>
@@ -290,6 +325,13 @@
                  fehlenden Eimer beim Start anlegt, weist S3ConfigIT dort ebenso nach (E28). -->
             <exclude>org/mwolff/fbcrm/vorgang/infrastructure/S3AnhangSpeicher.class</exclude>
             <exclude>org/mwolff/fbcrm/config/S3Config.class</exclude>
+            <!-- Derselbe Grund fuer den zweiten Port auf denselben Speicher (E9): Der Adapter der
+                 archivierten Belege besteht aus Aufrufen des AWS SDK. Was er zusagt — ablegen,
+                 byteweise wiederlesen, die Schluesselform angebot/<angebotId>/<uuid>.pdf und der
+                 Fehlschlag bei unbekanntem Schluessel — weist S3DokumentSpeicherIT gegen den
+                 MinIO-Container nach (E28). Beleglayout und PdfBoxDrucker bleiben in Abdeckung: Das
+                 Layout rechnet ohne Fremdcode, und der Drucker ist ohne Infrastruktur pruefbar. -->
+            <exclude>org/mwolff/fbcrm/angebot/infrastructure/S3DokumentSpeicher.class</exclude>
           </excludes>
         </configuration>
         <executions>
@@ -573,6 +615,10 @@
                      nicht *IT. -->
                 <param>org.mwolff.fbcrm.vorgang.infrastructure.S3AnhangSpeicher</param>
                 <param>org.mwolff.fbcrm.config.S3Config</param>
+                <!-- Der zweite S3-Adapter (E9), dieselbe Begruendung wie beim JaCoCo-Ausschluss:
+                     Aufrufe des AWS SDK, nachgewiesen von S3DokumentSpeicherIT gegen den
+                     MinIO-Container. -->
+                <param>org.mwolff.fbcrm.angebot.infrastructure.S3DokumentSpeicher</param>
               </excludedClasses>
               <mutators>
                 <mutator>STRONGER</mutator>
