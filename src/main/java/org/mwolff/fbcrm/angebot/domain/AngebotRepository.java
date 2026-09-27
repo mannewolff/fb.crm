@@ -1,7 +1,9 @@
 package org.mwolff.fbcrm.angebot.domain;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * Port auf den Bestand der Angebote; die Umsetzung liegt in {@code angebot.infrastructure}.
@@ -25,6 +27,23 @@ public interface AngebotRepository {
    * @param vorgangId Kennung des Vorgangs
    */
   List<Angebot> findByVorgang(long vorgangId);
+
+  /**
+   * Die Kennungen derjenigen Vorgaenge aus {@code vorgangIds}, an denen mindestens ein
+   * festgeschriebenes Angebot haengt.
+   *
+   * <p>Die Auswahl ist „traegt eine Nummer" und nicht „ist versendet": Ein angenommenes,
+   * abgelehntes oder abgeloestes Angebot ist ebenso festgeschrieben wie ein versendetes, und die
+   * Phase des Vorgangs faellt nach einer Reaktion des Kunden nicht zurueck (F6). Ein Entwurf traegt
+   * keine Nummer.
+   *
+   * <p>Nur die Kennungen, nicht die Angebote: Der Aufrufer will wissen, <b>ob</b> eines haengt, und
+   * ganze Angebote mit ihren Positionen zu laden waere Gewicht ohne Nutzen.
+   *
+   * @param vorgangIds die Kennungen der gefragten Vorgaenge; nie leer — der Aufrufer faengt den
+   *     Fall ab, weil {@code in ()} kein gueltiges SQL ist
+   */
+  Set<Long> vorgaengeMitFestgeschriebenemAngebot(Collection<Long> vorgangIds);
 
   /** Legt das Angebot an oder schreibt es fort und liefert es mit gesetzter Id zurueck. */
   Angebot save(Angebot angebot);

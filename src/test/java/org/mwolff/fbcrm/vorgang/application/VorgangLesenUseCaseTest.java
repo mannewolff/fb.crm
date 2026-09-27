@@ -2,12 +2,15 @@ package org.mwolff.fbcrm.vorgang.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.anyCollection;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -18,10 +21,12 @@ import org.mwolff.fbcrm.firma.domain.Ansprechpartner;
 import org.mwolff.fbcrm.firma.domain.AnsprechpartnerRepository;
 import org.mwolff.fbcrm.firma.domain.Firma;
 import org.mwolff.fbcrm.firma.domain.FirmaRepository;
+import org.mwolff.fbcrm.vorgang.domain.Belegstand;
 import org.mwolff.fbcrm.vorgang.domain.Eintrag;
 import org.mwolff.fbcrm.vorgang.domain.EintragRepository;
 import org.mwolff.fbcrm.vorgang.domain.Eintragsart;
 import org.mwolff.fbcrm.vorgang.domain.Herkunft;
+import org.mwolff.fbcrm.vorgang.domain.Phase;
 import org.mwolff.fbcrm.vorgang.domain.Vorgang;
 import org.mwolff.fbcrm.vorgang.domain.VorgangRepository;
 
@@ -46,17 +51,20 @@ class VorgangLesenUseCaseTest {
   @Mock private EintragRepository eintraege;
   @Mock private FirmaRepository firmen;
   @Mock private AnsprechpartnerRepository ansprechpartner;
+  @Mock private Belegstand belegstand;
 
   private VorgangLesenUseCase useCase;
 
+  /* Vorgabeweise haengt am Vorgang kein festgeschriebenes Angebot; er steht also in Anbahnung. */
   @BeforeEach
   void baueDenAnwendungsfall() {
-    useCase = new VorgangLesenUseCase(vorgaenge, eintraege, firmen, ansprechpartner);
+    lenient().when(belegstand.mitFestgeschriebenemAngebot(anyCollection())).thenReturn(Set.of());
+    useCase = new VorgangLesenUseCase(vorgaenge, eintraege, firmen, ansprechpartner, belegstand);
   }
 
   private static Vorgang vorgang(final Long ansprechpartnerId) {
     return new Vorgang(
-        4L, 12L, "Website-Relaunch", 7L, ansprechpartnerId, false, ANGELEGT, ANGELEGT);
+        4L, 12L, "Website-Relaunch", 7L, ansprechpartnerId, null, null, false, ANGELEGT, ANGELEGT);
   }
 
   private static Firma firma(final boolean aktiv) {
@@ -88,6 +96,35 @@ class VorgangLesenUseCaseTest {
 
     // Then
     assertThat(gelesen.vorgang()).isEqualTo(vorgang(null));
+  }
+
+  @Test
+  void lese_givenNoCommittedOffer_thenTheVorgangIsInAnbahnung() {
+    // Given — Kriterium 11.
+    when(vorgaenge.findById(4L)).thenReturn(Optional.of(vorgang(null)));
+    when(firmen.findById(7L)).thenReturn(Optional.of(firma(true)));
+    when(eintraege.findByVorgang(4L)).thenReturn(List.of());
+
+    // When
+    final VorgangMitHistorie gelesen = useCase.lese(4L);
+
+    // Then
+    assertThat(gelesen.phase()).isEqualTo(Phase.ANBAHNUNG);
+  }
+
+  @Test
+  void lese_givenACommittedOffer_thenTheVorgangIsInAngebot() {
+    // Given — Kriterium 22: die Phase kommt aus dem Belegstand und nicht aus einer Spalte.
+    when(vorgaenge.findById(4L)).thenReturn(Optional.of(vorgang(null)));
+    when(firmen.findById(7L)).thenReturn(Optional.of(firma(true)));
+    when(eintraege.findByVorgang(4L)).thenReturn(List.of());
+    when(belegstand.mitFestgeschriebenemAngebot(List.of(4L))).thenReturn(Set.of(Long.valueOf(4L)));
+
+    // When
+    final VorgangMitHistorie gelesen = useCase.lese(4L);
+
+    // Then
+    assertThat(gelesen.phase()).isEqualTo(Phase.ANGEBOT);
   }
 
   @Test

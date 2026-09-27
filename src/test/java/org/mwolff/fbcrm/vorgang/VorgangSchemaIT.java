@@ -22,6 +22,11 @@ class VorgangSchemaIT extends AbstractIntegrationTest {
   private static final String INSERT_VORGANG =
       "INSERT INTO vorgang (nummer, titel, firma_id) VALUES (?, ?, ?)";
 
+  private static final String INSERT_PIPELINE =
+      "INSERT INTO vorgang"
+          + " (nummer, titel, firma_id, abschlusswahrscheinlichkeit, entscheidung_erwartet_am)"
+          + " VALUES (?, 'Website-Relaunch', ?, ?, ?::date)";
+
   private static final String INSERT_EINTRAG =
       "INSERT INTO vorgang_eintrag"
           + " (vorgang_id, art, text, geschehen_am, herkunft, datei_name, datei_groesse,"
@@ -139,6 +144,52 @@ class VorgangSchemaIT extends AbstractIntegrationTest {
 
     // Then
     assertThat(abgeschlossen).isFalse();
+  }
+
+  @Test
+  void abschlusswahrscheinlichkeit_givenATenStep_thenAccepted() {
+    // Given — Kriterium 21: die Datenbank haelt die Zehnerschritte, nicht nur die Maske.
+    final Long firmaId = firmaId();
+
+    // When
+    final int betroffen = jdbc.update(INSERT_PIPELINE, 1L, firmaId, 30, "2026-10-15");
+
+    // Then
+    assertThat(betroffen).isEqualTo(1);
+  }
+
+  @Test
+  void abschlusswahrscheinlichkeit_givenNothing_thenAccepted() {
+    // Given — beide Angaben sind optional.
+    final Long firmaId = firmaId();
+
+    // When
+    final int betroffen = jdbc.update(INSERT_PIPELINE, 1L, firmaId, null, null);
+
+    // Then
+    assertThat(betroffen).isEqualTo(1);
+  }
+
+  @Test
+  void abschlusswahrscheinlichkeit_givenAValueBetweenTheSteps_thenRejectedByTheDatabase() {
+    // Given
+    final Long firmaId = firmaId();
+
+    // When / Then
+    assertThatThrownBy(() -> jdbc.update(INSERT_PIPELINE, 1L, firmaId, 35, null))
+        .isInstanceOf(DataIntegrityViolationException.class)
+        .hasMessageContaining("vorgang_abschlusswahrscheinlichkeit");
+  }
+
+  @Test
+  void abschlusswahrscheinlichkeit_givenMoreThanAHundred_thenRejectedByTheDatabase() {
+    // Given
+    final Long firmaId = firmaId();
+
+    // When / Then
+    assertThatThrownBy(() -> jdbc.update(INSERT_PIPELINE, 1L, firmaId, 110, null))
+        .isInstanceOf(DataIntegrityViolationException.class)
+        .hasMessageContaining("vorgang_abschlusswahrscheinlichkeit");
   }
 
   @Test

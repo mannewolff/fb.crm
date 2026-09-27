@@ -3,6 +3,7 @@ package org.mwolff.fbcrm.vorgang.application;
 import java.util.List;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.fbcrm.firma.domain.FirmaRepository;
+import org.mwolff.fbcrm.vorgang.domain.Belegstand;
 import org.mwolff.fbcrm.vorgang.domain.EintragRepository;
 import org.mwolff.fbcrm.vorgang.domain.Vorgang;
 import org.mwolff.fbcrm.vorgang.domain.VorgangRepository;
@@ -33,9 +34,10 @@ public class VorgaengeUebersichtUseCase {
   public VorgaengeUebersichtUseCase(
       final VorgangRepository vorgaenge,
       final EintragRepository eintraege,
-      final FirmaRepository firmen) {
+      final FirmaRepository firmen,
+      final Belegstand belege) {
     this.vorgaenge = vorgaenge;
-    this.zeilen = new VorgangZeilen(eintraege, firmen);
+    this.zeilen = new VorgangZeilen(eintraege, firmen, belege);
   }
 
   /**

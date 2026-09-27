@@ -4,8 +4,10 @@ import java.time.Instant;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.mwolff.fbcrm.firma.domain.Firma;
 import org.mwolff.fbcrm.firma.domain.FirmaRepository;
+import org.mwolff.fbcrm.vorgang.domain.Belegstand;
 import org.mwolff.fbcrm.vorgang.domain.EintragRepository;
 import org.mwolff.fbcrm.vorgang.domain.Vorgang;
 
@@ -13,9 +15,10 @@ import org.mwolff.fbcrm.vorgang.domain.Vorgang;
  * Macht aus Vorgaengen die Zeilen, die beide Listen zeigen — die Uebersicht (Kriterium 2) und die
  * Liste an der Firma (Kriterium 12).
  *
- * <p>Beide brauchen dieselben zwei Angaben, die am Vorgang selbst nicht stehen: den Namen der Firma
- * und den Tag des juengsten Eintrags. Sie an einer Stelle zu holen haelt die Zahl der Abfragen
- * gleich — <b>eine</b> fuer die Zeitpunkte aller Zeilen und eine je <b>Firma</b>, nicht je Zeile.
+ * <p>Beide brauchen dieselben drei Angaben, die am Vorgang selbst nicht stehen: den Namen der
+ * Firma, den Tag des juengsten Eintrags und die Phase. Sie an einer Stelle zu holen haelt die Zahl
+ * der Abfragen gleich — <b>eine</b> fuer die Zeitpunkte aller Zeilen, <b>eine</b> fuer den
+ * Belegstand aller Zeilen und eine je <b>Firma</b>, nicht je Zeile.
  *
  * <p>Kein eigenes Bean: Die beiden Anwendungsfaelle bauen sich ihre Instanz im Konstruktor. Die
  * Klasse haelt keinen Zustand ueber einen Aufruf hinaus.
@@ -24,10 +27,13 @@ final class VorgangZeilen {
 
   private final EintragRepository eintraege;
   private final FirmaRepository firmen;
+  private final Belegstand belege;
 
-  VorgangZeilen(final EintragRepository eintraege, final FirmaRepository firmen) {
+  VorgangZeilen(
+      final EintragRepository eintraege, final FirmaRepository firmen, final Belegstand belege) {
     this.eintraege = eintraege;
     this.firmen = firmen;
+    this.belege = belege;
   }
 
   /**
@@ -36,21 +42,25 @@ final class VorgangZeilen {
    * <p>Sortiert wird im Bestand (E16); hier wird nicht nachsortiert.
    */
   List<VorgangZeile> zu(final List<Vorgang> vorgaenge) {
-    final Map<Long, Instant> juengste =
-        eintraege.juengstesGeschehenJeVorgang(vorgaenge.stream().map(Vorgang::requireId).toList());
+    final List<Long> ids = vorgaenge.stream().map(Vorgang::requireId).toList();
+    final Map<Long, Instant> juengste = eintraege.juengstesGeschehenJeVorgang(ids);
+    final Set<Long> mitAngebot = belege.mitFestgeschriebenemAngebot(ids);
     final Map<Long, String> namen = new HashMap<>();
-    return vorgaenge.stream().map(vorgang -> zeile(vorgang, juengste, namen)).toList();
+    return vorgaenge.stream().map(vorgang -> zeile(vorgang, juengste, mitAngebot, namen)).toList();
   }
 
   private VorgangZeile zeile(
-      final Vorgang vorgang, final Map<Long, Instant> juengste, final Map<Long, String> namen) {
+      final Vorgang vorgang,
+      final Map<Long, Instant> juengste,
+      final Set<Long> mitAngebot,
+      final Map<Long, String> namen) {
     final long id = vorgang.requireId();
     return new VorgangZeile(
         id,
         vorgang.nummer(),
         vorgang.titel(),
         firmaName(vorgang.firmaId(), namen),
-        vorgang.phase(),
+        vorgang.phase(mitAngebot.contains(id)),
         vorgang.abgeschlossen(),
         // Kriterium 2: ohne Eintrag zaehlt der Vorgang mit dem Zeitpunkt seines Anlegens.
         juengste.getOrDefault(id, vorgang.createdAt()));

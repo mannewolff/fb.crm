@@ -53,6 +53,11 @@ public class VorgangAendernUseCase {
     wahl.pruefe(sauber, vorhanden);
     vorgaenge.save(
         vorhanden.geaendert(
-            sauber.titel(), sauber.firmaId(), sauber.ansprechpartnerId(), clock.instant()));
+            sauber.titel(),
+            sauber.firmaId(),
+            sauber.ansprechpartnerId(),
+            sauber.abschlusswahrscheinlichkeit(),
+            sauber.entscheidungErwartetAm(),
+            clock.instant()));
   }
 }

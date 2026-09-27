@@ -70,6 +70,8 @@ class AngebotAnlegenUseCaseTest {
         "Website-Relaunch",
         7L,
         null,
+        null,
+        null,
         abgeschlossen,
         Angebotsdoppel.ANGELEGT,
         Angebotsdoppel.ANGELEGT);

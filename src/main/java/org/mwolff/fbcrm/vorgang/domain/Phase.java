@@ -3,12 +3,15 @@ package org.mwolff.fbcrm.vorgang.domain;
 /**
  * Der Stand eines Vorgangs in der Kette von der Anfrage bis zum Zahlungseingang.
  *
- * <p>In diesem Stand gibt es genau eine Phase: Solange keine Dokumente am Vorgang haengen, ist er
- * in der Anbahnung. Angebot, Auftrag und Rechnung kommen spaeter und bringen ihre Phasen mit. Die
- * Phase wird nicht gespeichert, sondern abgeleitet (E4).
+ * <p>Die Phase wird nicht gespeichert, sondern aus dem Stand der Dokumente abgeleitet (E4, R1):
+ * Eine Spalte, die kein Code schreibt, laedt dazu ein, sie von Hand zu pflegen. Auftrag und
+ * Rechnung kommen spaeter und bringen ihre Phasen mit.
  */
 public enum Phase {
 
-  /** Angefragt, aber noch ohne Dokument. */
-  ANBAHNUNG
+  /** Angefragt, aber noch ohne festgeschriebenes Dokument. */
+  ANBAHNUNG,
+
+  /** Mindestens ein Angebot ist festgeschrieben (Kriterium 22). */
+  ANGEBOT
 }

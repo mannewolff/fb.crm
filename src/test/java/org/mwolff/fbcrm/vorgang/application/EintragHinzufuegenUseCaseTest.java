@@ -47,7 +47,8 @@ class EintragHinzufuegenUseCaseTest {
 
   @BeforeEach
   void baueDenAnwendungsfall() {
-    vorgaenge.save(new Vorgang(null, 1L, "Website-Relaunch", 7L, null, false, ANGELEGT, ANGELEGT));
+    vorgaenge.save(
+        new Vorgang(null, 1L, "Website-Relaunch", 7L, null, null, null, false, ANGELEGT, ANGELEGT));
     useCase =
         new EintragHinzufuegenUseCase(
             vorgaenge, eintraege, speicher, Clock.fixed(JETZT, ZoneOffset.UTC));

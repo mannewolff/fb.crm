@@ -3,6 +3,7 @@ package org.mwolff.fbcrm.vorgang.infrastructure;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
@@ -34,6 +35,7 @@ class JpaVorgangRepositoryIT extends AbstractIntegrationTest {
 
   private static final Instant ANGELEGT = Instant.parse("2026-09-01T08:00:00Z");
   private static final Instant GEAENDERT = Instant.parse("2026-09-18T12:00:00Z");
+  private static final LocalDate ERWARTETE_ENTSCHEIDUNG = LocalDate.of(2026, 10, 15);
 
   private final JpaVorgangRepository repository;
   private final JdbcTemplate jdbc;
@@ -65,16 +67,17 @@ class JpaVorgangRepositoryIT extends AbstractIntegrationTest {
   }
 
   private static Vorgang offen(final long nummer, final String titel, final long firmaId) {
-    return new Vorgang(null, nummer, titel, firmaId, null, false, ANGELEGT, ANGELEGT);
+    return new Vorgang(null, nummer, titel, firmaId, null, null, null, false, ANGELEGT, ANGELEGT);
   }
 
   private static Vorgang offenAngelegtAm(
       final long nummer, final String titel, final long firmaId, final Instant angelegtAm) {
-    return new Vorgang(null, nummer, titel, firmaId, null, false, angelegtAm, angelegtAm);
+    return new Vorgang(
+        null, nummer, titel, firmaId, null, null, null, false, angelegtAm, angelegtAm);
   }
 
   private static Vorgang abgeschlossen(final long nummer, final String titel, final long firmaId) {
-    return new Vorgang(null, nummer, titel, firmaId, null, true, ANGELEGT, ANGELEGT);
+    return new Vorgang(null, nummer, titel, firmaId, null, null, null, true, ANGELEGT, ANGELEGT);
   }
 
   private void eintrag(final long vorgangId, final String geschehenAm) {
@@ -110,7 +113,16 @@ class JpaVorgangRepositoryIT extends AbstractIntegrationTest {
     final long ansprechpartnerId = ansprechpartnerId(firmaId);
     final Vorgang mitAnsprechpartner =
         new Vorgang(
-            null, 1L, "Website-Relaunch", firmaId, ansprechpartnerId, false, ANGELEGT, ANGELEGT);
+            null,
+            1L,
+            "Website-Relaunch",
+            firmaId,
+            ansprechpartnerId,
+            Integer.valueOf(40),
+            ERWARTETE_ENTSCHEIDUNG,
+            false,
+            ANGELEGT,
+            ANGELEGT);
     final Vorgang gesichert = repository.save(mitAnsprechpartner);
 
     // When
@@ -155,7 +167,8 @@ class JpaVorgangRepositoryIT extends AbstractIntegrationTest {
     final Vorgang gesichert = repository.save(offen(1L, "Website-Relaunch", firmaId));
 
     // When
-    repository.save(gesichert.geaendert("Shop-Relaunch", zweiteFirmaId, null, GEAENDERT));
+    repository.save(
+        gesichert.geaendert("Shop-Relaunch", zweiteFirmaId, null, null, null, GEAENDERT));
 
     // Then
     assertThat(repository.findById(gesichert.requireId()))
@@ -400,6 +413,8 @@ class JpaVorgangRepositoryIT extends AbstractIntegrationTest {
             "Prozent % und Unter_strich",
             baumId,
             null,
+            null,
+            null,
             false,
             Instant.parse("2026-09-02T00:00:00Z"),
             Instant.parse("2026-09-02T00:00:00Z")));
@@ -409,6 +424,8 @@ class JpaVorgangRepositoryIT extends AbstractIntegrationTest {
             14L,
             "Datenmigration",
             adlerId,
+            null,
+            null,
             null,
             true,
             Instant.parse("2026-09-03T00:00:00Z"),

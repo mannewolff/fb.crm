@@ -1,5 +1,6 @@
 package org.mwolff.fbcrm.vorgang.web;
 
+import java.time.LocalDate;
 import java.util.List;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.fbcrm.firma.domain.Ansprechpartner;
@@ -19,8 +20,11 @@ import org.mwolff.fbcrm.vorgang.domain.Vorgang;
  * @param id technische Id
  * @param nummer fortlaufende Vorgangsnummer; als Zahl, das {@code #} setzt die Oberflaeche
  * @param titel Titel des Vorgangs
- * @param phase abgeleitete Phase — in diesem Stand immer {@link Phase#ANBAHNUNG} (Kriterium 11)
+ * @param phase abgeleitete Phase (Kriterien 11, 22)
  * @param abgeschlossen {@code true}, solange der Vorgang abgeschlossen ist (Kriterium 9)
+ * @param abschlusswahrscheinlichkeit Abschlusswahrscheinlichkeit in Zehnerschritten, oder {@code
+ *     null} fuer „nicht eingeschaetzt" (Kriterium 21)
+ * @param entscheidungErwartetAm erwarteter Entscheidungszeitpunkt, oder {@code null} (Kriterium 21)
  * @param firma die zugeordnete Firma, mit Kennung, Namen und Stilllegungsstand
  * @param ansprechpartner der zugeordnete Ansprechpartner, oder {@code null}
  * @param historie alle Eintraege, juengstes Geschehen oben (Kriterium 15)
@@ -31,6 +35,8 @@ public record VorgangResponse(
     String titel,
     Phase phase,
     boolean abgeschlossen,
+    @Nullable Integer abschlusswahrscheinlichkeit,
+    @Nullable LocalDate entscheidungErwartetAm,
     ZuordnungResponse firma,
     @Nullable ZuordnungResponse ansprechpartner,
     List<EintragResponse> historie) {
@@ -43,8 +49,10 @@ public record VorgangResponse(
         vorgang.requireId(),
         vorgang.nummer(),
         vorgang.titel(),
-        vorgang.phase(),
+        gelesen.phase(),
         vorgang.abgeschlossen(),
+        vorgang.abschlusswahrscheinlichkeit(),
+        vorgang.entscheidungErwartetAm(),
         ZuordnungResponse.of(gelesen.firma()),
         partner == null ? null : ZuordnungResponse.of(partner),
         gelesen.historie().stream().map(EintragResponse::of).toList());

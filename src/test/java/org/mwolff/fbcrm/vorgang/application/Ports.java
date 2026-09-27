@@ -56,6 +56,8 @@ final class Ports {
               vorgang.titel(),
               vorgang.firmaId(),
               vorgang.ansprechpartnerId(),
+              vorgang.abschlusswahrscheinlichkeit(),
+              vorgang.entscheidungErwartetAm(),
               vorgang.abgeschlossen(),
               vorgang.createdAt(),
               vorgang.updatedAt());

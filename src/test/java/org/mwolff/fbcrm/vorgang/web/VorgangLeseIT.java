@@ -143,7 +143,16 @@ class VorgangLeseIT extends AbstractIntegrationTest {
     return vorgaenge
         .save(
             new Vorgang(
-                null, nummer, titel, firmaId, ansprechpartnerId, abgeschlossen, angelegt, angelegt))
+                null,
+                nummer,
+                titel,
+                firmaId,
+                ansprechpartnerId,
+                null,
+                null,
+                abgeschlossen,
+                angelegt,
+                angelegt))
         .requireId();
   }
 

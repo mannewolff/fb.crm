@@ -6,6 +6,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
@@ -28,6 +29,7 @@ class JpaVorgangRepositoryTest {
 
   private static final Instant ANGELEGT = Instant.parse("2026-09-01T08:00:00Z");
   private static final Instant GEAENDERT = Instant.parse("2026-09-18T12:00:00Z");
+  private static final LocalDate ERWARTETE_ENTSCHEIDUNG = LocalDate.of(2026, 10, 15);
 
   @Mock private SpringDataVorgangRepository jpa;
 
@@ -36,11 +38,31 @@ class JpaVorgangRepositoryTest {
   @InjectMocks private JpaVorgangRepository repository;
 
   private static VorgangEntity zeile(final Long id) {
-    return new VorgangEntity(id, 12L, "Website-Relaunch", 5L, 7L, false, ANGELEGT, GEAENDERT);
+    return new VorgangEntity(
+        id,
+        12L,
+        "Website-Relaunch",
+        5L,
+        7L,
+        Integer.valueOf(60),
+        ERWARTETE_ENTSCHEIDUNG,
+        false,
+        ANGELEGT,
+        GEAENDERT);
   }
 
   private static Vorgang vorgang(final Long id) {
-    return new Vorgang(id, 12L, "Website-Relaunch", 5L, 7L, false, ANGELEGT, GEAENDERT);
+    return new Vorgang(
+        id,
+        12L,
+        "Website-Relaunch",
+        5L,
+        7L,
+        Integer.valueOf(60),
+        ERWARTETE_ENTSCHEIDUNG,
+        false,
+        ANGELEGT,
+        GEAENDERT);
   }
 
   @Test
@@ -60,6 +82,9 @@ class JpaVorgangRepositoryTest {
             zeile -> assertThat(zeile.getTitel()).isEqualTo("Website-Relaunch"),
             zeile -> assertThat(zeile.getFirmaId()).isEqualTo(5L),
             zeile -> assertThat(zeile.getAnsprechpartnerId()).isEqualTo(7L),
+            zeile -> assertThat(zeile.getAbschlusswahrscheinlichkeit()).isEqualTo(60),
+            zeile ->
+                assertThat(zeile.getEntscheidungErwartetAm()).isEqualTo(ERWARTETE_ENTSCHEIDUNG),
             zeile -> assertThat(zeile.isAbgeschlossen()).isFalse(),
             zeile -> assertThat(zeile.getCreatedAt()).isEqualTo(ANGELEGT),
             zeile -> assertThat(zeile.getUpdatedAt()).isEqualTo(GEAENDERT));
@@ -69,7 +94,7 @@ class JpaVorgangRepositoryTest {
   void save_givenAClosedVorgangWithoutAnsprechpartner_thenWritesThemAsAbsent() {
     // Given
     final Vorgang ohneAnsprechpartner =
-        new Vorgang(null, 12L, "Website-Relaunch", 5L, null, true, ANGELEGT, GEAENDERT);
+        new Vorgang(null, 12L, "Website-Relaunch", 5L, null, null, null, true, ANGELEGT, GEAENDERT);
     when(jpa.save(any(VorgangEntity.class))).thenReturn(zeile(11L));
 
     // When
@@ -80,6 +105,8 @@ class JpaVorgangRepositoryTest {
     assertThat(gespeicherte.getValue())
         .satisfies(
             zeile -> assertThat(zeile.getAnsprechpartnerId()).isNull(),
+            zeile -> assertThat(zeile.getAbschlusswahrscheinlichkeit()).isNull(),
+            zeile -> assertThat(zeile.getEntscheidungErwartetAm()).isNull(),
             zeile -> assertThat(zeile.isAbgeschlossen()).isTrue());
   }
 
@@ -111,7 +138,8 @@ class JpaVorgangRepositoryTest {
   void findById_givenAVorgangWithoutAnsprechpartner_thenTranslatesItAsAbsent() {
     // Given
     final VorgangEntity ohneAnsprechpartner =
-        new VorgangEntity(11L, 12L, "Website-Relaunch", 5L, null, true, ANGELEGT, GEAENDERT);
+        new VorgangEntity(
+            11L, 12L, "Website-Relaunch", 5L, null, null, null, true, ANGELEGT, GEAENDERT);
     when(jpa.findById(11L)).thenReturn(Optional.of(ohneAnsprechpartner));
 
     // When
@@ -122,6 +150,8 @@ class JpaVorgangRepositoryTest {
         .hasValueSatisfying(
             vorgang -> {
               assertThat(vorgang.ansprechpartnerId()).isNull();
+              assertThat(vorgang.abschlusswahrscheinlichkeit()).isNull();
+              assertThat(vorgang.entscheidungErwartetAm()).isNull();
               assertThat(vorgang.abgeschlossen()).isTrue();
             });
   }

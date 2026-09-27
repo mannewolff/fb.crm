@@ -14,6 +14,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -565,6 +566,31 @@ class JpaAngebotRepositoryTest {
     // Then
     assertThat(gefunden).isEmpty();
     verify(positionen, never()).findByAngebote(any());
+  }
+
+  @Test
+  void vorgaengeMitFestgeschriebenemAngebot_thenPassesTheWholeSetToTheQuery() {
+    // Given — E2: die Auswahl fuer die Phasenableitung des Vorgangs.
+    when(angebote.vorgaengeMitFestgeschriebenemAngebot(List.of(4L, 5L)))
+        .thenReturn(List.of(Long.valueOf(4L)));
+
+    // When
+    final Set<Long> gefunden = repository.vorgaengeMitFestgeschriebenemAngebot(List.of(4L, 5L));
+
+    // Then
+    assertThat(gefunden).containsExactly(Long.valueOf(4L));
+  }
+
+  @Test
+  void vorgaengeMitFestgeschriebenemAngebot_givenNoCommittedOffer_thenEmpty() {
+    // Given
+    when(angebote.vorgaengeMitFestgeschriebenemAngebot(List.of(4L))).thenReturn(List.of());
+
+    // When
+    final Set<Long> gefunden = repository.vorgaengeMitFestgeschriebenemAngebot(List.of(4L));
+
+    // Then
+    assertThat(gefunden).isEmpty();
   }
 
   @Test

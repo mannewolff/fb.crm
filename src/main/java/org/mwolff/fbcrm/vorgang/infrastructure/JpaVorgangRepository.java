@@ -59,6 +59,8 @@ class JpaVorgangRepository implements VorgangRepository {
         zeile.getTitel(),
         zeile.getFirmaId(),
         zeile.getAnsprechpartnerId(),
+        zeile.getAbschlusswahrscheinlichkeit(),
+        zeile.getEntscheidungErwartetAm(),
         zeile.isAbgeschlossen(),
         zeile.getCreatedAt(),
         zeile.getUpdatedAt());
@@ -71,6 +73,8 @@ class JpaVorgangRepository implements VorgangRepository {
         vorgang.titel(),
         vorgang.firmaId(),
         vorgang.ansprechpartnerId(),
+        vorgang.abschlusswahrscheinlichkeit(),
+        vorgang.entscheidungErwartetAm(),
         vorgang.abgeschlossen(),
         vorgang.createdAt(),
         vorgang.updatedAt());

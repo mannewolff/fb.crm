@@ -7,6 +7,7 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -47,6 +48,7 @@ class VorgangPersistenceIT extends AbstractIntegrationTest {
   private static final Instant VORGESTERN = Instant.parse("2026-09-10T09:00:00Z");
   private static final Instant GESTERN = Instant.parse("2026-09-11T14:30:00Z");
   private static final Instant ABGESCHLOSSEN_AM = Instant.parse("2026-09-12T09:00:00Z");
+  private static final LocalDate ERWARTETE_ENTSCHEIDUNG = LocalDate.of(2026, 10, 15);
   private static final String TITEL = "Website-Relaunch";
   private static final String NEUES_GEHEIMNIS = "ein-zweites-geheimnis-mit-genug-zeichen-drin";
   private static final byte[] INHALT =
@@ -80,7 +82,18 @@ class VorgangPersistenceIT extends AbstractIntegrationTest {
     jdbc.execute(
         "TRUNCATE vorgang_eintrag, vorgang, ansprechpartner, firma RESTART IDENTITY CASCADE");
     final Vorgang angelegt =
-        vorgaenge.save(new Vorgang(null, 1L, TITEL, neueFirma(), null, false, ANGELEGT, ANGELEGT));
+        vorgaenge.save(
+            new Vorgang(
+                null,
+                1L,
+                TITEL,
+                neueFirma(),
+                null,
+                Integer.valueOf(40),
+                ERWARTETE_ENTSCHEIDUNG,
+                false,
+                ANGELEGT,
+                ANGELEGT));
     vorgangId = angelegt.requireId();
     eintraege.save(Eintrag.kommentar(vorgangId, "Angerufen", GESTERN, Herkunft.VON_HAND, ANGELEGT));
     anhangId = neuerAnhang();
@@ -150,6 +163,19 @@ class VorgangPersistenceIT extends AbstractIntegrationTest {
       assertThat(gelesen)
           .extracting(Vorgang::nummer, Vorgang::titel, Vorgang::abgeschlossen)
           .containsExactly(Long.valueOf(1L), TITEL, true);
+    }
+  }
+
+  @Test
+  void lesen_afterRestartingTheInstance_thenBothPipelineFieldsComeBack() {
+    // When — Kriterium 21: beide Angaben ueberstehen den Neustart.
+    try (ConfigurableApplicationContext neu = neueInstanz()) {
+      final Vorgang gelesen = neu.getBean(VorgangLesenUseCase.class).lese(vorgangId).vorgang();
+
+      // Then
+      assertThat(gelesen)
+          .extracting(Vorgang::abschlusswahrscheinlichkeit, Vorgang::entscheidungErwartetAm)
+          .containsExactly(Integer.valueOf(40), ERWARTETE_ENTSCHEIDUNG);
     }
   }
 

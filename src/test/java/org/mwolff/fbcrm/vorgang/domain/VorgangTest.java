@@ -3,6 +3,7 @@ package org.mwolff.fbcrm.vorgang.domain;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import org.junit.jupiter.api.Test;
 
 /** Verhalten des Vorgangs: abgeleitete Phase, Aendern, Abschliessen und Wiedereroeffnen. */
@@ -10,33 +11,82 @@ class VorgangTest {
 
   private static final Instant ANGELEGT = Instant.parse("2026-09-01T08:00:00Z");
   private static final Instant GEAENDERT = Instant.parse("2026-09-18T12:00:00Z");
+  private static final LocalDate ENTSCHEIDUNG = LocalDate.of(2026, 10, 15);
+  private static final LocalDate SPAETERE_ENTSCHEIDUNG = LocalDate.of(2026, 11, 2);
 
   private static Vorgang vorgang(final boolean abgeschlossen) {
-    return new Vorgang(7L, 12L, "Website-Relaunch", 3L, 5L, abgeschlossen, ANGELEGT, ANGELEGT);
+    return new Vorgang(
+        7L,
+        12L,
+        "Website-Relaunch",
+        3L,
+        5L,
+        Integer.valueOf(30),
+        ENTSCHEIDUNG,
+        abgeschlossen,
+        ANGELEGT,
+        ANGELEGT);
   }
 
   @Test
-  void phase_givenAVorgangWithoutDocuments_thenAnbahnung() {
+  void phase_givenNoCommittedOffer_thenAnbahnung() {
     // Given
     final Vorgang bestand = vorgang(false);
 
     // When
-    final Phase phase = bestand.phase();
+    final Phase phase = bestand.phase(false);
 
     // Then
     assertThat(phase).isEqualTo(Phase.ANBAHNUNG);
   }
 
   @Test
-  void phase_givenAClosedVorgang_thenStillAnbahnung() {
+  void phase_givenACommittedOffer_thenAngebot() {
+    // Given — Kriterium 22.
+    final Vorgang bestand = vorgang(false);
+
+    // When
+    final Phase phase = bestand.phase(true);
+
+    // Then
+    assertThat(phase).isEqualTo(Phase.ANGEBOT);
+  }
+
+  @Test
+  void phase_givenAClosedVorgangWithoutACommittedOffer_thenStillAnbahnung() {
+    // Given — der Abschluss ist ein eigener Schalter und keine Phase.
+    final Vorgang bestand = vorgang(true);
+
+    // When
+    final Phase phase = bestand.phase(false);
+
+    // Then
+    assertThat(phase).isEqualTo(Phase.ANBAHNUNG);
+  }
+
+  @Test
+  void phase_givenAClosedVorgangWithACommittedOffer_thenStillAngebot() {
     // Given
     final Vorgang bestand = vorgang(true);
 
     // When
-    final Phase phase = bestand.phase();
+    final Phase phase = bestand.phase(true);
 
     // Then
-    assertThat(phase).isEqualTo(Phase.ANBAHNUNG);
+    assertThat(phase).isEqualTo(Phase.ANGEBOT);
+  }
+
+  @Test
+  void vorgang_givenNeitherProbabilityNorExpectedDecision_thenBothStayAbsent() {
+    // Given — Kriterium 21: beide Angaben sind optional.
+    final Vorgang ohne =
+        new Vorgang(7L, 12L, "Website-Relaunch", 3L, 5L, null, null, false, ANGELEGT, ANGELEGT);
+
+    // When / Then
+    assertThat(ohne)
+        .satisfies(
+            vorgang -> assertThat(vorgang.abschlusswahrscheinlichkeit()).isNull(),
+            vorgang -> assertThat(vorgang.entscheidungErwartetAm()).isNull());
   }
 
   @Test
@@ -45,14 +95,18 @@ class VorgangTest {
     final Vorgang bestand = vorgang(false);
 
     // When
-    final Vorgang geaendert = bestand.geaendert("Neuer Titel", 4L, 9L, GEAENDERT);
+    final Vorgang geaendert =
+        bestand.geaendert(
+            "Neuer Titel", 4L, 9L, Integer.valueOf(70), SPAETERE_ENTSCHEIDUNG, GEAENDERT);
 
     // Then
     assertThat(geaendert)
         .satisfies(
             neu -> assertThat(neu.titel()).isEqualTo("Neuer Titel"),
             neu -> assertThat(neu.firmaId()).isEqualTo(4L),
-            neu -> assertThat(neu.ansprechpartnerId()).isEqualTo(9L));
+            neu -> assertThat(neu.ansprechpartnerId()).isEqualTo(9L),
+            neu -> assertThat(neu.abschlusswahrscheinlichkeit()).isEqualTo(70),
+            neu -> assertThat(neu.entscheidungErwartetAm()).isEqualTo(SPAETERE_ENTSCHEIDUNG));
   }
 
   @Test
@@ -61,10 +115,25 @@ class VorgangTest {
     final Vorgang bestand = vorgang(false);
 
     // When
-    final Vorgang geaendert = bestand.geaendert("Neuer Titel", 4L, null, GEAENDERT);
+    final Vorgang geaendert = bestand.geaendert("Neuer Titel", 4L, null, null, null, GEAENDERT);
 
     // Then
     assertThat(geaendert.ansprechpartnerId()).isNull();
+  }
+
+  @Test
+  void geaendert_givenNoProbabilityAndNoExpectedDecision_thenClearsBoth() {
+    // Given — Kriterium 21: was der Freiberufler leert, bleibt leer.
+    final Vorgang bestand = vorgang(false);
+
+    // When
+    final Vorgang geaendert = bestand.geaendert("Neuer Titel", 4L, null, null, null, GEAENDERT);
+
+    // Then
+    assertThat(geaendert)
+        .satisfies(
+            neu -> assertThat(neu.abschlusswahrscheinlichkeit()).isNull(),
+            neu -> assertThat(neu.entscheidungErwartetAm()).isNull());
   }
 
   @Test
@@ -73,7 +142,9 @@ class VorgangTest {
     final Vorgang bestand = vorgang(false);
 
     // When
-    final Vorgang geaendert = bestand.geaendert("Neuer Titel", 4L, 9L, GEAENDERT);
+    final Vorgang geaendert =
+        bestand.geaendert(
+            "Neuer Titel", 4L, 9L, Integer.valueOf(70), SPAETERE_ENTSCHEIDUNG, GEAENDERT);
 
     // Then
     assertThat(geaendert.updatedAt()).isEqualTo(GEAENDERT);
@@ -85,7 +156,9 @@ class VorgangTest {
     final Vorgang bestand = vorgang(true);
 
     // When
-    final Vorgang geaendert = bestand.geaendert("Neuer Titel", 4L, 9L, GEAENDERT);
+    final Vorgang geaendert =
+        bestand.geaendert(
+            "Neuer Titel", 4L, 9L, Integer.valueOf(70), SPAETERE_ENTSCHEIDUNG, GEAENDERT);
 
     // Then
     assertThat(geaendert)
@@ -102,7 +175,7 @@ class VorgangTest {
     final Vorgang bestand = vorgang(false);
 
     // When
-    bestand.geaendert("Neuer Titel", 4L, 9L, GEAENDERT);
+    bestand.geaendert("Neuer Titel", 4L, 9L, Integer.valueOf(70), SPAETERE_ENTSCHEIDUNG, GEAENDERT);
 
     // Then
     assertThat(bestand.titel()).isEqualTo("Website-Relaunch");
@@ -148,6 +221,8 @@ class VorgangTest {
             neu -> assertThat(neu.titel()).isEqualTo("Website-Relaunch"),
             neu -> assertThat(neu.firmaId()).isEqualTo(3L),
             neu -> assertThat(neu.ansprechpartnerId()).isEqualTo(5L),
+            neu -> assertThat(neu.abschlusswahrscheinlichkeit()).isEqualTo(30),
+            neu -> assertThat(neu.entscheidungErwartetAm()).isEqualTo(ENTSCHEIDUNG),
             neu -> assertThat(neu.createdAt()).isEqualTo(ANGELEGT));
   }
 
@@ -215,6 +290,8 @@ class VorgangTest {
             neu -> assertThat(neu.titel()).isEqualTo("Website-Relaunch"),
             neu -> assertThat(neu.firmaId()).isEqualTo(3L),
             neu -> assertThat(neu.ansprechpartnerId()).isEqualTo(5L),
+            neu -> assertThat(neu.abschlusswahrscheinlichkeit()).isEqualTo(30),
+            neu -> assertThat(neu.entscheidungErwartetAm()).isEqualTo(ENTSCHEIDUNG),
             neu -> assertThat(neu.createdAt()).isEqualTo(ANGELEGT));
   }
 

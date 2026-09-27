@@ -2,6 +2,7 @@ package org.mwolff.fbcrm.vorgang.application;
 
 import java.util.List;
 import org.mwolff.fbcrm.firma.domain.FirmaRepository;
+import org.mwolff.fbcrm.vorgang.domain.Belegstand;
 import org.mwolff.fbcrm.vorgang.domain.EintragRepository;
 import org.mwolff.fbcrm.vorgang.domain.VorgangRepository;
 import org.springframework.stereotype.Service;
@@ -31,9 +32,10 @@ public class VorgaengeDerFirmaUseCase {
   public VorgaengeDerFirmaUseCase(
       final VorgangRepository bestand,
       final EintragRepository eintraege,
-      final FirmaRepository firmen) {
+      final FirmaRepository firmen,
+      final Belegstand belege) {
     this.bestand = bestand;
-    this.zeilen = new VorgangZeilen(eintraege, firmen);
+    this.zeilen = new VorgangZeilen(eintraege, firmen, belege);
   }
 
   /**

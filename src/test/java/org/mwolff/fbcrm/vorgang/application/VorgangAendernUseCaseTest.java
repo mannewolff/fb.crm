@@ -73,6 +73,8 @@ class VorgangAendernUseCaseTest {
                 "Website-Relaunch",
                 FIRMA,
                 ansprechpartnerId,
+                null,
+                null,
                 abgeschlossen,
                 ANGELEGT,
                 ANGELEGT))
@@ -81,7 +83,7 @@ class VorgangAendernUseCaseTest {
 
   private static VorgangDaten daten(
       final String titel, final long firmaId, final Long ansprechpartnerId) {
-    return new VorgangDaten(titel, firmaId, ansprechpartnerId);
+    return new VorgangDaten(titel, firmaId, ansprechpartnerId, null, null);
   }
 
   private Vorgang gespeicherter() {

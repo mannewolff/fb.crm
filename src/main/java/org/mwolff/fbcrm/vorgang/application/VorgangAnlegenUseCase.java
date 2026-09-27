@@ -61,6 +61,8 @@ public class VorgangAnlegenUseCase {
             sauber.titel(),
             sauber.firmaId(),
             sauber.ansprechpartnerId(),
+            sauber.abschlusswahrscheinlichkeit(),
+            sauber.entscheidungErwartetAm(),
             false,
             jetzt,
             jetzt));

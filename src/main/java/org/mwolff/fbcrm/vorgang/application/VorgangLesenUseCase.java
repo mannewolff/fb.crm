@@ -1,10 +1,12 @@
 package org.mwolff.fbcrm.vorgang.application;
 
+import java.util.List;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.fbcrm.firma.domain.Ansprechpartner;
 import org.mwolff.fbcrm.firma.domain.AnsprechpartnerRepository;
 import org.mwolff.fbcrm.firma.domain.Firma;
 import org.mwolff.fbcrm.firma.domain.FirmaRepository;
+import org.mwolff.fbcrm.vorgang.domain.Belegstand;
 import org.mwolff.fbcrm.vorgang.domain.EintragRepository;
 import org.mwolff.fbcrm.vorgang.domain.Vorgang;
 import org.mwolff.fbcrm.vorgang.domain.VorgangRepository;
@@ -16,6 +18,10 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * <p>Alles in einer Antwort (E25): Die Historie <b>ist</b> die Detailansicht, und ein zweiter
  * Leseweg fuer sie braechte der Oberflaeche nur einen zweiten Ladezustand.
+ *
+ * <p>Die Phase entsteht hier und nicht in der Schnittstellenschicht: Sie wird abgeleitet (E4) und
+ * braucht dazu den {@link Belegstand} — ein Port dieses Moduls, den {@code angebot} umsetzt, damit
+ * {@code vorgang} das Angebot nicht kennen muss (Plan E2).
  *
  * <p>Firma und Ansprechpartner kommen vollstaendig mit — einschliesslich ihres Stilllegungsstands.
  * Kriterium 23 verlangt, dass eine stillgelegte Zuordnung sichtbar bleibt und als solche
@@ -30,16 +36,19 @@ public class VorgangLesenUseCase {
   private final EintragRepository eintraege;
   private final FirmaRepository firmen;
   private final AnsprechpartnerRepository ansprechpartner;
+  private final Belegstand belege;
 
   public VorgangLesenUseCase(
       final VorgangRepository vorgaenge,
       final EintragRepository eintraege,
       final FirmaRepository firmen,
-      final AnsprechpartnerRepository ansprechpartner) {
+      final AnsprechpartnerRepository ansprechpartner,
+      final Belegstand belege) {
     this.vorgaenge = vorgaenge;
     this.eintraege = eintraege;
     this.firmen = firmen;
     this.ansprechpartner = ansprechpartner;
+    this.belege = belege;
   }
 
   /**
@@ -50,8 +59,11 @@ public class VorgangLesenUseCase {
    */
   public VorgangMitHistorie lese(final long id) {
     final Vorgang vorgang = vorgaenge.findById(id).orElseThrow(VorgangNichtGefunden::new);
+    final boolean angebotFestgeschrieben =
+        !belege.mitFestgeschriebenemAngebot(List.of(id)).isEmpty();
     return new VorgangMitHistorie(
         vorgang,
+        vorgang.phase(angebotFestgeschrieben),
         firma(vorgang.firmaId()),
         partner(vorgang.ansprechpartnerId()),
         eintraege.findByVorgang(id).stream().map(EintragAnsicht::of).toList());

@@ -1,5 +1,6 @@
 package org.mwolff.fbcrm.vorgang.application;
 
+import java.time.LocalDate;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -12,8 +13,16 @@ import org.jspecify.annotations.Nullable;
  * @param titel Titel des Vorgangs; Pflicht (Kriterium 5)
  * @param firmaId Kennung der gewaehlten Firma; Pflicht (Kriterium 5)
  * @param ansprechpartnerId Kennung des gewaehlten Ansprechpartners, oder {@code null}
+ * @param abschlusswahrscheinlichkeit Abschlusswahrscheinlichkeit in Zehnerschritten von 0 bis 100,
+ *     oder {@code null} (Kriterium 21)
+ * @param entscheidungErwartetAm erwarteter Entscheidungszeitpunkt, oder {@code null} (Kriterium 21)
  */
-public record VorgangDaten(String titel, long firmaId, @Nullable Long ansprechpartnerId) {
+public record VorgangDaten(
+    String titel,
+    long firmaId,
+    @Nullable Long ansprechpartnerId,
+    @Nullable Integer abschlusswahrscheinlichkeit,
+    @Nullable LocalDate entscheidungErwartetAm) {
 
   /**
    * Dieselben Angaben, so wie sie in den Bestand gehoeren (E9).
@@ -31,6 +40,7 @@ public record VorgangDaten(String titel, long firmaId, @Nullable Long ansprechpa
     if (sauberer.isEmpty()) {
       throw new IllegalArgumentException("Einen Vorgang ohne Titel gibt es nicht.");
     }
-    return new VorgangDaten(sauberer, firmaId, ansprechpartnerId);
+    return new VorgangDaten(
+        sauberer, firmaId, ansprechpartnerId, abschlusswahrscheinlichkeit, entscheidungErwartetAm);
   }
 }

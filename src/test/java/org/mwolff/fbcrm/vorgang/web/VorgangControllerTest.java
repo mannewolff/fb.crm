@@ -11,6 +11,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -57,6 +58,7 @@ class VorgangControllerTest {
 
   private static final Instant ANGELEGT = Instant.parse("2026-09-01T08:00:00Z");
   private static final Instant GESCHEHEN = Instant.parse("2026-09-12T09:00:00Z");
+  private static final LocalDate ERWARTETE_ENTSCHEIDUNG = LocalDate.of(2026, 10, 15);
 
   @Mock private VorgaengeUebersichtUseCase uebersicht;
   @Mock private VorgangLesenUseCase lesen;
@@ -77,15 +79,22 @@ class VorgangControllerTest {
   }
 
   private static String rumpf(final String titel, final String firmaId) {
-    return "{\"titel\":" + titel + ",\"firmaId\":" + firmaId + ",\"ansprechpartnerId\":3}";
+    return "{\"titel\":"
+        + titel
+        + ",\"firmaId\":"
+        + firmaId
+        + ",\"ansprechpartnerId\":3,\"abschlusswahrscheinlichkeit\":30,"
+        + "\"entscheidungErwartetAm\":\"2026-10-15\"}";
   }
 
   private static VorgangRequest anfrage(final String titel) {
-    return new VorgangRequest(titel, Long.valueOf(7L), Long.valueOf(3L));
+    return new VorgangRequest(
+        titel, Long.valueOf(7L), Long.valueOf(3L), Integer.valueOf(30), ERWARTETE_ENTSCHEIDUNG);
   }
 
   private static VorgangDaten erwarteteDaten(final String titel) {
-    return new VorgangDaten(titel, 7L, Long.valueOf(3L));
+    return new VorgangDaten(
+        titel, 7L, Long.valueOf(3L), Integer.valueOf(30), ERWARTETE_ENTSCHEIDUNG);
   }
 
   private static Firma adlerAg(final boolean aktiv) {
@@ -105,13 +114,23 @@ class VorgangControllerTest {
         3L, 7L, vorname, "Mueller", null, null, null, null, aktiv, ANGELEGT, ANGELEGT);
   }
 
+  private static Vorgang vorgang() {
+    return new Vorgang(
+        4L,
+        12L,
+        "Website-Relaunch",
+        7L,
+        null,
+        Integer.valueOf(30),
+        ERWARTETE_ENTSCHEIDUNG,
+        false,
+        ANGELEGT,
+        ANGELEGT);
+  }
+
   private static VorgangMitHistorie gelesen(
       final Ansprechpartner partner, final List<EintragAnsicht> historie) {
-    return new VorgangMitHistorie(
-        new Vorgang(4L, 12L, "Website-Relaunch", 7L, null, false, ANGELEGT, ANGELEGT),
-        adlerAg(true),
-        partner,
-        historie);
+    return new VorgangMitHistorie(vorgang(), Phase.ANBAHNUNG, adlerAg(true), partner, historie);
   }
 
   @Test
@@ -193,6 +212,8 @@ class VorgangControllerTest {
                 "Website-Relaunch",
                 Phase.ANBAHNUNG,
                 false,
+                Integer.valueOf(30),
+                ERWARTETE_ENTSCHEIDUNG,
                 new ZuordnungResponse(7L, "Adler AG", true),
                 new ZuordnungResponse(3L, "Max Mueller", true),
                 List.of(
@@ -213,10 +234,7 @@ class VorgangControllerTest {
     when(lesen.lese(4L))
         .thenReturn(
             new VorgangMitHistorie(
-                new Vorgang(4L, 12L, "Website-Relaunch", 7L, null, false, ANGELEGT, ANGELEGT),
-                adlerAg(false),
-                maxMueller("Max", false),
-                List.of()));
+                vorgang(), Phase.ANBAHNUNG, adlerAg(false), maxMueller("Max", false), List.of()));
 
     // When
     final VorgangResponse antwort = controller.lesen(4L);
@@ -225,6 +243,43 @@ class VorgangControllerTest {
     assertThat(antwort)
         .extracting(a -> a.firma().aktiv(), a -> a.ansprechpartner().aktiv())
         .containsExactly(false, false);
+  }
+
+  @Test
+  void lesen_givenACommittedOffer_thenAnswersWithThePhaseAngebot() {
+    // Given — Kriterium 22: die Phase kommt aus dem Anwendungsfall, nicht aus dem Vorgang allein.
+    when(lesen.lese(4L))
+        .thenReturn(
+            new VorgangMitHistorie(vorgang(), Phase.ANGEBOT, adlerAg(true), null, List.of()));
+
+    // When
+    final VorgangResponse antwort = controller.lesen(4L);
+
+    // Then
+    assertThat(antwort.phase()).isEqualTo(Phase.ANGEBOT);
+  }
+
+  @Test
+  void lesen_givenAVorgangWithoutPipelineFields_thenBothStayAbsent() {
+    // Given — Kriterium 21: beide Angaben sind optional.
+    when(lesen.lese(4L))
+        .thenReturn(
+            new VorgangMitHistorie(
+                new Vorgang(
+                    4L, 12L, "Website-Relaunch", 7L, null, null, null, false, ANGELEGT, ANGELEGT),
+                Phase.ANBAHNUNG,
+                adlerAg(true),
+                null,
+                List.of()));
+
+    // When
+    final VorgangResponse antwort = controller.lesen(4L);
+
+    // Then
+    assertThat(antwort)
+        .extracting(
+            VorgangResponse::abschlusswahrscheinlichkeit, VorgangResponse::entscheidungErwartetAm)
+        .containsOnlyNulls();
   }
 
   @Test
@@ -298,8 +353,7 @@ class VorgangControllerTest {
   @Test
   void anlegen_thenPassesTheRequestToTheUseCase() {
     // Given
-    when(anlegen.anlegen(erwarteteDaten("Website-Relaunch")))
-        .thenReturn(new Vorgang(4L, 12L, "Website-Relaunch", 7L, null, false, ANGELEGT, ANGELEGT));
+    when(anlegen.anlegen(erwarteteDaten("Website-Relaunch"))).thenReturn(vorgang());
 
     // When
     controller.anlegen(anfrage("Website-Relaunch"));
@@ -311,8 +365,7 @@ class VorgangControllerTest {
   @Test
   void anlegen_thenAnswersWithIdAndNumber() {
     // Given — Kriterien 8, 9: die Oberflaeche braucht beides fuer den Weg zur Detailansicht.
-    when(anlegen.anlegen(erwarteteDaten("Website-Relaunch")))
-        .thenReturn(new Vorgang(4L, 12L, "Website-Relaunch", 7L, null, false, ANGELEGT, ANGELEGT));
+    when(anlegen.anlegen(erwarteteDaten("Website-Relaunch"))).thenReturn(vorgang());
 
     // When
     final VorgangAngelegtResponse antwort = controller.anlegen(anfrage("Website-Relaunch"));
@@ -324,8 +377,7 @@ class VorgangControllerTest {
   @Test
   void anlegen_thenAnswersCreated() throws Exception {
     // Given — E25: das Anlegen ist der einzige Schreibweg mit Rumpf.
-    when(anlegen.anlegen(erwarteteDaten("Website-Relaunch")))
-        .thenReturn(new Vorgang(4L, 12L, "Website-Relaunch", 7L, null, false, ANGELEGT, ANGELEGT));
+    when(anlegen.anlegen(erwarteteDaten("Website-Relaunch"))).thenReturn(vorgang());
 
     // When / Then
     mockMvc
@@ -367,6 +419,20 @@ class VorgangControllerTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(rumpf("\"" + "x".repeat(301) + "\"", "7")))
         .andExpect(jsonPath("$.fieldErrors.titel").isArray());
+  }
+
+  @Test
+  void anlegen_givenAProbabilityOutsideTheTenSteps_thenNamesTheFieldInTheProblemDetail()
+      throws Exception {
+    // When / Then — Kriterium 21: die Meldung steht am Feld.
+    mockMvc
+        .perform(
+            post("/api/vorgaenge")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    "{\"titel\":\"Website-Relaunch\",\"firmaId\":7,"
+                        + "\"abschlusswahrscheinlichkeit\":35}"))
+        .andExpect(jsonPath("$.fieldErrors.abschlusswahrscheinlichkeit").isArray());
   }
 
   @Test

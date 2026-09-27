@@ -1,10 +1,12 @@
 package org.mwolff.fbcrm.angebot.infrastructure;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.fbcrm.angebot.domain.Angebot;
@@ -26,7 +28,13 @@ import org.springframework.stereotype.Repository;
  *
  * <p>Die Liste eines Vorgangs holt ihre Positionen in <b>einer</b> zweiten Abfrage und ordnet sie
  * danach den Angeboten zu; je Zeile einzeln nachzuladen waere die bekannte Abfrage-Lawine.
+ *
+ * <p>PMD.TooManyMethods: Fuenf Wege des Ports und die Uebersetzungsschritte dazu. Die privaten
+ * Methoden sind die Abbildung einer Zeile in ihre Teile — Angebot, Position, Empfaengerkopie,
+ * Absenderkopie —, und sie aufzuteilen zerschnitte die Uebersetzung <b>eines</b> Aggregats auf zwei
+ * Klassen, die nur zusammen richtig sind.
  */
+@SuppressWarnings("PMD.TooManyMethods")
 @Repository
 class JpaAngebotRepository implements AngebotRepository {
 
@@ -65,6 +73,11 @@ class JpaAngebotRepository implements AngebotRepository {
                     zeile,
                     jeAngebot.getOrDefault(Objects.requireNonNull(zeile.getId()), List.of())))
         .toList();
+  }
+
+  @Override
+  public Set<Long> vorgaengeMitFestgeschriebenemAngebot(final Collection<Long> vorgangIds) {
+    return Set.copyOf(angebote.vorgaengeMitFestgeschriebenemAngebot(vorgangIds));
   }
 
   @Override

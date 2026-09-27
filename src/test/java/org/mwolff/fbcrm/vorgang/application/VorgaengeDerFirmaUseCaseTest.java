@@ -1,6 +1,8 @@
 package org.mwolff.fbcrm.vorgang.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.anyCollection;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
@@ -8,6 +10,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -16,7 +19,9 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.mwolff.fbcrm.common.Anschrift;
 import org.mwolff.fbcrm.firma.domain.Firma;
 import org.mwolff.fbcrm.firma.domain.FirmaRepository;
+import org.mwolff.fbcrm.vorgang.domain.Belegstand;
 import org.mwolff.fbcrm.vorgang.domain.EintragRepository;
+import org.mwolff.fbcrm.vorgang.domain.Phase;
 import org.mwolff.fbcrm.vorgang.domain.Vorgang;
 import org.mwolff.fbcrm.vorgang.domain.VorgangRepository;
 
@@ -38,16 +43,20 @@ class VorgaengeDerFirmaUseCaseTest {
   @Mock private VorgangRepository vorgaenge;
   @Mock private EintragRepository eintraege;
   @Mock private FirmaRepository firmen;
+  @Mock private Belegstand belegstand;
 
   private VorgaengeDerFirmaUseCase useCase;
 
+  /* Wie in der Uebersicht: vorgabeweise haengt an keinem Vorgang ein festgeschriebenes Angebot. */
   @BeforeEach
   void baueDenAnwendungsfall() {
-    useCase = new VorgaengeDerFirmaUseCase(vorgaenge, eintraege, firmen);
+    lenient().when(belegstand.mitFestgeschriebenemAngebot(anyCollection())).thenReturn(Set.of());
+    useCase = new VorgaengeDerFirmaUseCase(vorgaenge, eintraege, firmen, belegstand);
   }
 
   private static Vorgang vorgang(final long id, final long nummer, final boolean abgeschlossen) {
-    return new Vorgang(id, nummer, "Website-Relaunch", 7L, null, abgeschlossen, ANGELEGT, ANGELEGT);
+    return new Vorgang(
+        id, nummer, "Website-Relaunch", 7L, null, null, null, abgeschlossen, ANGELEGT, ANGELEGT);
   }
 
   private static Firma adlerAg() {
@@ -114,6 +123,24 @@ class VorgaengeDerFirmaUseCaseTest {
         .singleElement()
         .extracting(VorgangZeile::nummer, VorgangZeile::titel, VorgangZeile::letzteAktivitaet)
         .containsExactly(12L, "Website-Relaunch", GESCHEHEN);
+  }
+
+  @Test
+  void vorgaenge_givenAVorgangWithACommittedOffer_thenItsRowShowsThePhaseAngebot() {
+    // Given — Kriterium 22: dieselbe Ableitung wie in der Uebersicht.
+    when(vorgaenge.findByFirma(7L)).thenReturn(List.of(vorgang(4L, 12L, false)));
+    when(eintraege.juengstesGeschehenJeVorgang(List.of(4L))).thenReturn(Map.of());
+    when(firmen.findById(7L)).thenReturn(Optional.of(adlerAg()));
+    when(belegstand.mitFestgeschriebenemAngebot(List.of(4L))).thenReturn(Set.of(Long.valueOf(4L)));
+
+    // When
+    final VorgaengeDerFirma gefunden = useCase.vorgaenge(7L);
+
+    // Then
+    assertThat(gefunden.offene())
+        .singleElement()
+        .extracting(VorgangZeile::phase)
+        .isEqualTo(Phase.ANGEBOT);
   }
 
   @Test

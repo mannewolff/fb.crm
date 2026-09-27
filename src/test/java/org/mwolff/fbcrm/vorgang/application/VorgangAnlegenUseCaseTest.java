@@ -64,7 +64,7 @@ class VorgangAnlegenUseCaseTest {
   }
 
   private static VorgangDaten daten(final String titel, final Long ansprechpartnerId) {
-    return new VorgangDaten(titel, FIRMA, ansprechpartnerId);
+    return new VorgangDaten(titel, FIRMA, ansprechpartnerId, null, null);
   }
 
   @Test

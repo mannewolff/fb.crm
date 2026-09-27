@@ -2,9 +2,11 @@ package org.mwolff.fbcrm.vorgang.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.nullable;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -13,6 +15,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -25,6 +28,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.mwolff.fbcrm.common.Anschrift;
 import org.mwolff.fbcrm.firma.domain.Firma;
 import org.mwolff.fbcrm.firma.domain.FirmaRepository;
+import org.mwolff.fbcrm.vorgang.domain.Belegstand;
 import org.mwolff.fbcrm.vorgang.domain.EintragRepository;
 import org.mwolff.fbcrm.vorgang.domain.Phase;
 import org.mwolff.fbcrm.vorgang.domain.Vorgang;
@@ -47,16 +51,24 @@ class VorgaengeUebersichtUseCaseTest {
   @Mock private VorgangRepository vorgaenge;
   @Mock private EintragRepository eintraege;
   @Mock private FirmaRepository firmen;
+  @Mock private Belegstand belegstand;
 
   private VorgaengeUebersichtUseCase useCase;
 
+  /*
+   * Der Belegstand antwortet vorgabeweise „an keinem dieser Vorgaenge haengt ein festgeschriebenes
+   * Angebot" — der Regelfall dieser Klasse. Wo die Phase der Gegenstand ist, setzt der Test seine
+   * eigene Antwort darueber.
+   */
   @BeforeEach
   void baueDenAnwendungsfall() {
-    useCase = new VorgaengeUebersichtUseCase(vorgaenge, eintraege, firmen);
+    lenient().when(belegstand.mitFestgeschriebenemAngebot(anyCollection())).thenReturn(Set.of());
+    useCase = new VorgaengeUebersichtUseCase(vorgaenge, eintraege, firmen, belegstand);
   }
 
   private static Vorgang vorgang(final long id, final long nummer, final long firmaId) {
-    return new Vorgang(id, nummer, "Website-Relaunch", firmaId, null, false, ANGELEGT, ANGELEGT);
+    return new Vorgang(
+        id, nummer, "Website-Relaunch", firmaId, null, null, null, false, ANGELEGT, ANGELEGT);
   }
 
   private static Firma firma(final long id, final String name) {
@@ -159,6 +171,42 @@ class VorgaengeUebersichtUseCaseTest {
   }
 
   @Test
+  void uebersicht_givenTwoVorgaenge_thenAsksTheBelegstandOnceForTheWholeSet() {
+    // Given — E2: eine Abfrage fuer die ganze Menge, nicht eine je Zeile.
+    when(vorgaenge.uebersicht("", null, false))
+        .thenReturn(List.of(vorgang(9L, 1L, 7L), vorgang(3L, 2L, 7L)));
+    when(eintraege.juengstesGeschehenJeVorgang(List.of(9L, 3L))).thenReturn(Map.of());
+    when(firmen.findById(7L)).thenReturn(Optional.of(firma(7L, "Adler AG")));
+    when(vorgaenge.zaehleAlle()).thenReturn(2L);
+
+    // When
+    useCase.uebersicht("", false);
+
+    // Then
+    verify(belegstand, times(1)).mitFestgeschriebenemAngebot(List.of(9L, 3L));
+  }
+
+  @Test
+  void uebersicht_givenAVorgangWithACommittedOffer_thenItsRowShowsThePhaseAngebot() {
+    // Given — Kriterium 22: der zweite Vorgang hat noch kein festgeschriebenes Angebot.
+    when(vorgaenge.uebersicht("", null, false))
+        .thenReturn(List.of(vorgang(9L, 1L, 7L), vorgang(3L, 2L, 7L)));
+    when(eintraege.juengstesGeschehenJeVorgang(List.of(9L, 3L))).thenReturn(Map.of());
+    when(firmen.findById(7L)).thenReturn(Optional.of(firma(7L, "Adler AG")));
+    when(belegstand.mitFestgeschriebenemAngebot(List.of(9L, 3L)))
+        .thenReturn(Set.of(Long.valueOf(9L)));
+    when(vorgaenge.zaehleAlle()).thenReturn(2L);
+
+    // When
+    final VorgaengeUebersicht uebersicht = useCase.uebersicht("", false);
+
+    // Then
+    assertThat(uebersicht.zeilen())
+        .extracting(VorgangZeile::phase)
+        .containsExactly(Phase.ANGEBOT, Phase.ANBAHNUNG);
+  }
+
+  @Test
   void uebersicht_givenTwoVorgaengeOfTheSameFirma_thenBothRowsCarryItsName() {
     // Given — die zweite Zeile nimmt den gemerkten Namen und nicht irgendeinen.
     when(vorgaenge.uebersicht("", null, false))
@@ -195,7 +243,9 @@ class VorgaengeUebersichtUseCaseTest {
     // Given
     when(vorgaenge.uebersicht("", null, true))
         .thenReturn(
-            List.of(new Vorgang(4L, 12L, "Website-Relaunch", 7L, null, true, ANGELEGT, ANGELEGT)));
+            List.of(
+                new Vorgang(
+                    4L, 12L, "Website-Relaunch", 7L, null, null, null, true, ANGELEGT, ANGELEGT)));
     when(eintraege.juengstesGeschehenJeVorgang(List.of(4L))).thenReturn(Map.of());
     when(firmen.findById(7L)).thenReturn(Optional.of(firma(7L, "Adler AG")));
     when(vorgaenge.zaehleAlle()).thenReturn(1L);

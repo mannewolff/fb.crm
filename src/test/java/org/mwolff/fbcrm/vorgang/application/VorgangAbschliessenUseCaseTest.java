@@ -42,6 +42,8 @@ class VorgangAbschliessenUseCaseTest {
                 "Website-Relaunch",
                 FIRMA,
                 Long.valueOf(PARTNER),
+                null,
+                null,
                 abgeschlossen,
                 ANGELEGT,
                 ANGELEGT))
