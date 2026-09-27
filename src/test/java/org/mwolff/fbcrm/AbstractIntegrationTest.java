@@ -28,7 +28,7 @@ public abstract class AbstractIntegrationTest {
   private static final String TEST_SESSION_SECRET =
       "test-geheimnis-mit-mindestens-32-zeichen-laenge";
 
-  /** Der Eimer der Suite. Die Anwendung legt ihn beim Start selbst an (S3AnhangSpeicher). */
+  /** Der Eimer der Suite. Die Anwendung legt ihn beim Start selbst an (S3Config). */
   private static final String TEST_BUCKET = "fbcrm-test";
 
   static final PostgreSQLContainer<?> POSTGRES =

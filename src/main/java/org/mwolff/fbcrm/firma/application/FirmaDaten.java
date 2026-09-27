@@ -1,7 +1,7 @@
 package org.mwolff.fbcrm.firma.application;
 
 import org.jspecify.annotations.Nullable;
-import org.mwolff.fbcrm.firma.domain.Anschrift;
+import org.mwolff.fbcrm.common.Anschrift;
 
 /**
  * Die Angaben einer Firma, so wie ein Aufrufer sie einreicht — roh, ungeprueft, ungetrimmt.

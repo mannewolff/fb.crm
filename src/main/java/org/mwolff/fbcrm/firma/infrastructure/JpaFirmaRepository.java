@@ -2,7 +2,7 @@ package org.mwolff.fbcrm.firma.infrastructure;
 
 import java.util.List;
 import java.util.Optional;
-import org.mwolff.fbcrm.firma.domain.Anschrift;
+import org.mwolff.fbcrm.common.Anschrift;
 import org.mwolff.fbcrm.firma.domain.Firma;
 import org.mwolff.fbcrm.firma.domain.FirmaRepository;
 import org.springframework.stereotype.Repository;

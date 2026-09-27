@@ -22,7 +22,7 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.mwolff.fbcrm.firma.domain.Anschrift;
+import org.mwolff.fbcrm.common.Anschrift;
 import org.mwolff.fbcrm.firma.domain.Firma;
 import org.mwolff.fbcrm.firma.domain.FirmaRepository;
 import org.mwolff.fbcrm.vorgang.domain.EintragRepository;

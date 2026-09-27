@@ -10,7 +10,7 @@ import java.time.Instant;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.mwolff.fbcrm.firma.domain.Anschrift;
+import org.mwolff.fbcrm.common.Anschrift;
 import org.mwolff.fbcrm.firma.domain.Firma;
 import org.mwolff.fbcrm.firma.domain.FirmaRepository;
 import org.mwolff.fbcrm.vorgang.application.AnhangLesenUseCase;

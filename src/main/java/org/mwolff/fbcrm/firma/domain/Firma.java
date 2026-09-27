@@ -2,6 +2,7 @@ package org.mwolff.fbcrm.firma.domain;
 
 import java.time.Instant;
 import org.jspecify.annotations.Nullable;
+import org.mwolff.fbcrm.common.Anschrift;
 import org.mwolff.fbcrm.common.Identifiable;
 
 /**

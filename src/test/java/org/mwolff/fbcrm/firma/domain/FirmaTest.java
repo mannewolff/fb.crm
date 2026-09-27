@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.time.Instant;
 import org.junit.jupiter.api.Test;
+import org.mwolff.fbcrm.common.Anschrift;
 
 /** Verhalten der Firma: Aendern, Stilllegen und Wiederaktivieren. */
 class FirmaTest {

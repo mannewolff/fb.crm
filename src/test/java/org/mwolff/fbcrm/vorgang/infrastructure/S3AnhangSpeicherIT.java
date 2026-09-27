@@ -10,18 +10,19 @@ import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.mwolff.fbcrm.AbstractIntegrationTest;
-import org.mwolff.fbcrm.config.MinioProperties;
 import org.springframework.beans.factory.annotation.Autowired;
 
 /**
  * Der Objektspeicher der Anhaenge gegen eine echte MinIO-Instanz.
  *
  * <p>Gegenstand ist der Port {@code AnhangSpeicher}: ablegen, lesen, die Groesse des abgelegten
- * Objekts — und die beiden Zusagen, die der Adapter darueber hinaus gibt. Erstens die Form des
- * Schluessels aus E9: {@code vorgang/<vorgangId>/<uuid>}, ohne jeden Anteil des Dateinamens; der
- * Name kommt von aussen und waere im Schluessel eine Pfadangabe. Zweitens der fehlende Eimer, den
- * der Adapter beim Start selbst anlegt — ohne ihn beantwortete MinIO jeden Zugriff mit {@code
- * NoSuchBucket} statt mit einer Auskunft.
+ * Objekts — und die Zusage, die der Adapter darueber hinaus gibt, naemlich die Form des Schluessels
+ * aus E9: {@code vorgang/<vorgangId>/<uuid>}, ohne jeden Anteil des Dateinamens; der Name kommt von
+ * aussen und waere im Schluessel eine Pfadangabe.
+ *
+ * <p>Der Eimer gehoert nicht mehr hierher: Ihn legt {@code config.S3Config} beim Start an, und
+ * {@code S3ConfigIT} weist das nach. Dieser Test bekommt den Client der Anwendung gespritzt und
+ * setzt den Eimer voraus.
  */
 class S3AnhangSpeicherIT extends AbstractIntegrationTest {
 
@@ -45,14 +46,6 @@ class S3AnhangSpeicherIT extends AbstractIntegrationTest {
     try (InputStream offen = antwort.orElseThrow()) {
       return offen.readAllBytes();
     }
-  }
-
-  private static MinioProperties zugangMitEimer(final String eimer) {
-    return new MinioProperties(
-        objektspeicher().getS3URL(),
-        objektspeicher().getUserName(),
-        objektspeicher().getPassword(),
-        eimer);
   }
 
   @Test
@@ -97,16 +90,5 @@ class S3AnhangSpeicherIT extends AbstractIntegrationTest {
 
     // Then — zwei gleichnamige Dateien am selben Vorgang ueberschreiben einander nicht.
     assertThat(zweiter).isNotEqualTo(erster);
-  }
-
-  @Test
-  void lesen_givenABucketThatDidNotExistBefore_thenTheStoreAnswersRightAfterStartup() {
-    // Given — ein Eimer, den es in dieser MinIO-Instanz noch nicht gibt.
-    final S3AnhangSpeicher frisch =
-        new S3AnhangSpeicher(zugangMitEimer("frisch-" + UUID.randomUUID()));
-
-    // When / Then — ohne beim Start angelegten Eimer meldete MinIO NoSuchBucket, statt zu
-    // antworten, dass es den Schluessel nicht kennt.
-    assertThat(frisch.lesen("vorgang/42/" + UUID.randomUUID())).isEmpty();
   }
 }

@@ -3,8 +3,8 @@ package org.mwolff.fbcrm.firma.web;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import org.jspecify.annotations.Nullable;
+import org.mwolff.fbcrm.common.Anschrift;
 import org.mwolff.fbcrm.firma.application.FirmaDaten;
-import org.mwolff.fbcrm.firma.domain.Anschrift;
 
 /**
  * Die Eingaben der Firmenmaske — fuer das Anlegen und das Aendern dieselben.

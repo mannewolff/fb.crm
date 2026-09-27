@@ -283,11 +283,13 @@
           <excludes>
             <!-- Reine main-Methode ohne Fachlogik (CLAUDE-java.md §5.2). -->
             <exclude>org/mwolff/fbcrm/FbCrmApplication.class</exclude>
-            <!-- S3-Adapter (CLAUDE-java.md §5.2): Der Code besteht aus Aufrufen des AWS SDK und
-                 ist nur gegen einen echten Objektspeicher sinnvoll pruefbar. Was er zusagt —
-                 ablegen, lesen, die Groesse, die Schluesselform aus E9 und der beim Start
-                 angelegte Eimer — weist S3AnhangSpeicherIT gegen den MinIO-Container nach. -->
+            <!-- S3-Zugang (CLAUDE-java.md §5.2): Beide Klassen bestehen aus Aufrufen des AWS
+                 SDK und sind nur gegen einen echten Objektspeicher sinnvoll pruefbar. Was der
+                 Adapter zusagt — ablegen, lesen, die Groesse und die Schluesselform aus E9 —
+                 weist S3AnhangSpeicherIT gegen den MinIO-Container nach; dass die Bean den
+                 fehlenden Eimer beim Start anlegt, weist S3ConfigIT dort ebenso nach (E28). -->
             <exclude>org/mwolff/fbcrm/vorgang/infrastructure/S3AnhangSpeicher.class</exclude>
+            <exclude>org/mwolff/fbcrm/config/S3Config.class</exclude>
           </excludes>
         </configuration>
         <executions>
@@ -565,10 +567,12 @@
                      diese Klasse bleibt in Abdeckung und Mutationstest. -->
                 <param>org.mwolff.fbcrm.auth.web.SecurityConfig</param>
                 <param>org.mwolff.fbcrm.config.SpaForwardingConfig</param>
-                <!-- S3-Adapter (CLAUDE-java.md §5.2), dieselbe Begruendung wie beim
+                <!-- S3-Zugang (CLAUDE-java.md §5.2), dieselbe Begruendung wie beim
                      JaCoCo-Ausschluss: Aufrufe des AWS SDK, nachgewiesen von S3AnhangSpeicherIT
-                     gegen den MinIO-Container. PIT faehrt ohnehin nur *Test, nicht *IT. -->
+                     und S3ConfigIT gegen den MinIO-Container. PIT faehrt ohnehin nur *Test,
+                     nicht *IT. -->
                 <param>org.mwolff.fbcrm.vorgang.infrastructure.S3AnhangSpeicher</param>
+                <param>org.mwolff.fbcrm.config.S3Config</param>
               </excludedClasses>
               <mutators>
                 <mutator>STRONGER</mutator>

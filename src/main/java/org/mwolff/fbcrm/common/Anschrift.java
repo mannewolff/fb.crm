@@ -1,9 +1,9 @@
-package org.mwolff.fbcrm.firma.domain;
+package org.mwolff.fbcrm.common;
 
 import org.jspecify.annotations.Nullable;
 
 /**
- * Die Postanschrift einer Firma.
+ * Eine Postanschrift.
  *
  * <p>Jede Angabe darf fehlen: Eine Firma wird oft mit nichts als ihrem Namen angelegt und spaeter
  * vervollstaendigt. Fehlt eine Angabe, steht dort {@code null} und nicht der Leerstring — sonst
