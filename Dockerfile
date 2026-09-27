@@ -47,4 +47,9 @@ WORKDIR /app
 COPY --from=backend /build/app.jar app.jar
 USER fbcrm
 EXPOSE 8080
-ENTRYPOINT ["java", "-jar", "/app/app.jar"]
+# Der Heap bemisst sich an der Speichergrenze des Containers (mem_limit in docker-compose.yml),
+# nicht am Speicher der ganzen Maschine: Ohne diesen Wert nahm die JVM sich so viel, dass das System
+# den Prozess Sekunden nach dem Start mit Exit 137 beendete (OOMKilled, 2026-09-26). 60 % lassen den
+# Rest fuer Metaspace, Threads und Puffer. Fest im ENTRYPOINT statt als JAVA_TOOL_OPTIONS: gilt fuer
+# jeden Start des Images, auch ohne Compose (Issue #85).
+ENTRYPOINT ["java", "-XX:MaxRAMPercentage=60", "-jar", "/app/app.jar"]

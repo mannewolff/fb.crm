@@ -88,6 +88,11 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
+    # Damit macht der Container seinen Bedarf berechenbar, unabhaengig davon, wie gross die
+    # umgebende Maschine ist. Auf diese Grenze bezieht sich -XX:MaxRAMPercentage=60 im Dockerfile:
+    # rund 600 MB Heap, rund 400 MB fuer Metaspace, Threads und Puffer daneben. Wer die Grenze
+    # anhebt, hebt damit auch den Heap — der Prozentwert bleibt derselbe.
+    mem_limit: ${FBCRM_API_MEM_LIMIT:-1g}
     # Gesund heisst: Spring Boot ist hochgefahren, Flyway ist durch, und /actuator/health antwortet
     # UP. curl liegt im Image allein fuer diese Zeile. start_period deckt den ersten Start mit den
     # Migrationen ab; in dieser Zeit zaehlen Fehlschlaege nicht.
