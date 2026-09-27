@@ -1,7 +1,6 @@
 import { apiJson, apiOhneInhalt } from './client';
-import { FORMFEHLER, liste, objekt, text, textOderNull, zahl } from './verengen';
+import { FORMFEHLER, inHundertsteln, liste, objekt, text, textOderNull, zahl } from './verengen';
 import type { Angebotsstand } from '../lib/angebotsstand';
-import { hundertstel } from '../lib/geld';
 
 /**
  * Die Wege zum Angebot: die Liste am Vorgang, das Anlegen, das Fortschreiben eines Entwurfs, das
@@ -20,7 +19,7 @@ import { hundertstel } from '../lib/geld';
  * Darstellung. Dieselben Namen bei gewechselter Einheit waeren die gefaehrlichere Wahl — ein
  * Aufrufer, der `summe` fuer Euro haelt, rechnet um den Faktor hundert daneben.
  *
- * Umgerechnet wird mit {@link hundertstel} und damit ueber die Ziffern, nicht ueber Gleitkomma:
+ * Umgerechnet wird mit {@link inHundertsteln} und damit ueber die Ziffern, nicht ueber Gleitkomma:
  * `wert * 100` waere fuer jeden Betrag dieser Anwendung genau genug, aber es waere derselbe Weg,
  * den `lib/geld.ts` fuer die Rechnung ausdruecklich ausschliesst — zwei Regeln fuer dasselbe Geld
  * laufen auseinander.
@@ -133,22 +132,6 @@ function einheit(wert: unknown): Einheit {
     throw new TypeError(FORMFEHLER);
   }
   return wert;
-}
-
-/**
- * Eine Dezimalzahl der Antwort als ganze Hundertstel — Cent beim Geld, Hundertstel bei der Menge.
- *
- * Was keine Zahl mit hoechstens zwei Nachkommastellen ist, ist hier kein Betrag: eine dritte
- * Stelle, ein negativer Wert oder eine Zeichenkette brechen ab. Das Backend laesst nichts davon
- * entstehen (`@Digits(fraction = 2)`, `@DecimalMin("0")`); ein stiller Ersatzwert waere ein
- * Betrag, den niemand gerechnet hat.
- */
-function inHundertsteln(wert: unknown): number {
-  const gelesen = hundertstel(zahl(wert));
-  if (gelesen === null) {
-    throw new TypeError(FORMFEHLER);
-  }
-  return gelesen;
 }
 
 function parsePosition(wert: unknown): AngebotPosition {

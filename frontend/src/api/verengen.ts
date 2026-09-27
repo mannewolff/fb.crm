@@ -1,3 +1,5 @@
+import { hundertstel } from '../lib/geld';
+
 /**
  * Die Bausteine, mit denen eine Antwort aus `unknown` zu einem Typ wird.
  *
@@ -57,6 +59,26 @@ export function text(wert: unknown): string {
 /** Eine Angabe, die fehlen darf — dann steht dort `null`, nie ein Platzhalter. */
 export function textOderNull(wert: unknown): string | null {
   return wert === null ? null : text(wert);
+}
+
+/**
+ * Eine Dezimalzahl der Antwort als ganze Hundertstel — Cent beim Geld, Hundertstel bei der Menge.
+ *
+ * Was keine Zahl mit hoechstens zwei Nachkommastellen ist, ist hier kein Betrag: eine dritte
+ * Stelle, ein negativer Wert oder eine Zeichenkette brechen ab. Das Backend laesst nichts davon
+ * entstehen (`@Digits(fraction = 2)`, `@DecimalMin("0")`); ein stiller Ersatzwert waere ein
+ * Betrag, den niemand gerechnet hat.
+ *
+ * Umgerechnet wird ueber {@link hundertstel} und damit ueber die Ziffern, nicht ueber Gleitkomma
+ * (E5). Die Pruefung steht hier und nicht in jedem Schnittstellenmodul: Angebot und Pipeline
+ * tragen dieselben Betraege, und zwei Abschriften derselben Regel liefen mit der Zeit auseinander.
+ */
+export function inHundertsteln(wert: unknown): number {
+  const gelesen = hundertstel(zahl(wert));
+  if (gelesen === null) {
+    throw new TypeError(FORMFEHLER);
+  }
+  return gelesen;
 }
 
 /** Ein Wahrheitswert — „ja" ist keiner. */

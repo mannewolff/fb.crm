@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'vitest';
 
-import { jaNein, liste, objekt, text, textOderNull, zahl, zahlOderNull } from './verengen';
+import {
+  inHundertsteln,
+  jaNein,
+  liste,
+  objekt,
+  text,
+  textOderNull,
+  zahl,
+  zahlOderNull,
+} from './verengen';
 
 describe('objekt', () => {
   it('nimmt ein Objekt', () => {
@@ -77,5 +86,22 @@ describe('jaNein', () => {
 
   it('weist ein Wort ab', () => {
     expect(() => jaNein('ja')).toThrow(TypeError);
+  });
+});
+
+describe('inHundertsteln', () => {
+  it('rechnet eine Dezimalzahl in ganze Hundertstel', () => {
+    expect(inHundertsteln(2500.03)).toBe(250003);
+    expect(inHundertsteln(2.5)).toBe(250);
+    expect(inHundertsteln(0)).toBe(0);
+  });
+
+  it.each([
+    ['eine Zeichenkette', '2500.03'],
+    ['drei Nachkommastellen', 2500.031],
+    ['einen negativen Wert', -1],
+    ['null', null],
+  ])('weist %s ab', (_fall, wert) => {
+    expect(() => inHundertsteln(wert)).toThrow(TypeError);
   });
 });

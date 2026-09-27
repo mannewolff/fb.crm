@@ -31,6 +31,14 @@ export const RADIUS_MAL = 26;
  * Angabe gilt — die Vorlage traegt denselben Wert (`.zeit .punkt` Z. 97).
  */
 export const RADIUS_SYMBOL = 12;
+/**
+ * Das Symbolfeld einer Kennzahl-Kachel (48 px).
+ *
+ * CLAUDE-design.md nennt fuer Symbolfelder die Spanne „14–16 px (Symbolfelder 36–48 px)"; die
+ * Vorlage traegt am grossen Ende dieser Spanne den genauen Wert (`.zahl-karte .ikon` Z. 73). Die
+ * genauere Angabe gilt — dieselbe Ueberlegung wie bei {@link RADIUS_SYMBOL}.
+ */
+export const RADIUS_SYMBOLFELD = 16;
 /** Navigationseintrag, Zeile, Eingabefeld. */
 export const RADIUS_KLEIN = 14;
 /** Tasten, Chips, Suche, Zaehler — die runde Form. */
