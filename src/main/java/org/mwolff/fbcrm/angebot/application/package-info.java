@@ -1,10 +1,12 @@
 /**
- * Die Anwendungsfaelle rund um das Angebot.
+ * Die Anwendungsfaelle rund um das Angebot: anlegen, fortschreiben, verwerfen, lesen.
  *
- * <p>In diesem Paket liegt vorerst nur die Ausnahme, die der {@code GlobalExceptionHandler} auf
- * einen HTTP-Statuscode abbildet — bewusst hier und nicht in {@code domain}, weil das
- * Domaenenmodell framework-frei bleibt (CLAUDE-java.md §6.1). Die Anwendungsfaelle folgen mit den
- * naechsten Paketen.
+ * <p>Hier liegen auch die Ausnahmen, die der {@code GlobalExceptionHandler} auf HTTP-Statuscodes
+ * abbildet — bewusst hier und nicht in {@code domain}, weil das Domaenenmodell framework-frei
+ * bleibt (CLAUDE-java.md §6.1). {@code AngebotNichtAenderbar} wirft die Domaene selbst und
+ * importiert sie deshalb aus diesem Paket zurueck; der Import geht nur in diese Richtung.
+ *
+ * <p>Versenden, Reaktion, PDF und Pipeline folgen mit den naechsten Paketen.
  */
 @NullMarked
 package org.mwolff.fbcrm.angebot.application;

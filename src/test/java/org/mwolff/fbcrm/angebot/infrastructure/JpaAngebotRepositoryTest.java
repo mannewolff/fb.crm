@@ -488,4 +488,95 @@ class JpaAngebotRepositoryTest {
     assertThat(gefunden).isEmpty();
     verify(positionen, never()).findByAngebot(anyLong());
   }
+
+  private static AngebotEntity entwurfszeile(final long id) {
+    return new AngebotEntity(
+        Long.valueOf(id),
+        3L,
+        null,
+        Angebotszustand.ENTWURF,
+        ANGEBOTSDATUM,
+        GUELTIG_BIS,
+        BESCHREIBUNG,
+        BEDINGUNGEN,
+        null,
+        null,
+        null,
+        ANGELEGT,
+        GEAENDERT);
+  }
+
+  private static AngebotPositionEntity positionszeile(
+      final long angebotId, final short platz, final Angebotsposition position) {
+    return new AngebotPositionEntity(
+        null,
+        angebotId,
+        platz,
+        position.bezeichnung(),
+        position.abrechnungsmodus(),
+        position.menge(),
+        position.einheit(),
+        position.einzelpreis());
+  }
+
+  @Test
+  void findByVorgang_thenLoadsThePositionsOfEveryOfferInOneQuery() {
+    // Given — E20: ein findByAngebot je Zeile waere die bekannte Abfrage-Lawine.
+    when(angebote.findByVorgang(3L)).thenReturn(List.of(entwurfszeile(11L), entwurfszeile(12L)));
+    when(positionen.findByAngebote(List.of(11L, 12L)))
+        .thenReturn(
+            List.of(
+                positionszeile(11L, (short) 1, SCHULUNG),
+                positionszeile(11L, (short) 2, KONZEPTION),
+                positionszeile(12L, (short) 1, KONZEPTION)));
+
+    // When
+    final List<Angebot> gefunden = repository.findByVorgang(3L);
+
+    // Then
+    assertThat(gefunden)
+        .extracting(Angebot::id, Angebot::positionen)
+        .containsExactly(
+            tuple(11L, List.of(SCHULUNG, KONZEPTION)), tuple(12L, List.of(KONZEPTION)));
+    verify(positionen, never()).findByAngebot(anyLong());
+  }
+
+  @Test
+  void findByVorgang_givenAnOfferWithoutPositions_thenTranslatesItWithAnEmptyList() {
+    // Given — ein frisch angelegter Entwurf hat noch keine Position.
+    when(angebote.findByVorgang(3L)).thenReturn(List.of(entwurfszeile(11L)));
+    when(positionen.findByAngebote(List.of(11L))).thenReturn(List.of());
+
+    // When
+    final List<Angebot> gefunden = repository.findByVorgang(3L);
+
+    // Then
+    assertThat(gefunden).singleElement().satisfies(a -> assertThat(a.positionen()).isEmpty());
+  }
+
+  @Test
+  void findByVorgang_givenAVorgangWithoutOffers_thenAsksNothingMore() {
+    // Given — eine Abfrage mit leerer IN-Liste waere kein gueltiges SQL.
+    when(angebote.findByVorgang(3L)).thenReturn(List.of());
+
+    // When
+    final List<Angebot> gefunden = repository.findByVorgang(3L);
+
+    // Then
+    assertThat(gefunden).isEmpty();
+    verify(positionen, never()).findByAngebote(any());
+  }
+
+  @Test
+  void loesche_thenRemovesThePositionsBeforeTheRowThatCarriesThem() {
+    // Given — der Fremdschluessel traegt kein ON DELETE (Kriterium 7, E19).
+
+    // When
+    repository.loesche(11L);
+
+    // Then
+    final InOrder reihenfolge = inOrder(positionen, angebote);
+    reihenfolge.verify(positionen).loescheZuAngebot(11L);
+    reihenfolge.verify(angebote).deleteById(11L);
+  }
 }

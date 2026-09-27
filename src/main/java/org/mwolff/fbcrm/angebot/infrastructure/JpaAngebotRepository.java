@@ -2,8 +2,10 @@ package org.mwolff.fbcrm.angebot.infrastructure;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.stream.Collectors;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.fbcrm.angebot.domain.Angebot;
 import org.mwolff.fbcrm.angebot.domain.AngebotRepository;
@@ -19,7 +21,11 @@ import org.springframework.stereotype.Repository;
  * <p>Das Angebot ist mit seinen Positionen eine Einheit. Geschrieben wird es darum als Ganzes: Die
  * alten Positionszeilen fallen weg, und die neuen entstehen mit den Plaetzen 1 bis n in der
  * Reihenfolge der Liste (E24). Gelesen wird in derselben Ordnung zurueck — damit ist die
- * Reihenfolge eine Zusage des Bestands und nicht der Zufall der Einfuegereihenfolge.
+ * Reihenfolge eine Zusage des Bestands und nicht der Zufall der Einfuegereihenfolge. Geloescht wird
+ * nach derselben Regel: erst die Positionen, dann die Zeile, die sie traegt.
+ *
+ * <p>Die Liste eines Vorgangs holt ihre Positionen in <b>einer</b> zweiten Abfrage und ordnet sie
+ * danach den Angeboten zu; je Zeile einzeln nachzuladen waere die bekannte Abfrage-Lawine.
  */
 @Repository
 class JpaAngebotRepository implements AngebotRepository {
@@ -37,6 +43,36 @@ class JpaAngebotRepository implements AngebotRepository {
   @Override
   public Optional<Angebot> findById(final long id) {
     return angebote.findById(id).map(zeile -> toDomain(zeile, positionen.findByAngebot(id)));
+  }
+
+  @Override
+  public List<Angebot> findByVorgang(final long vorgangId) {
+    final List<AngebotEntity> zeilen = angebote.findByVorgang(vorgangId);
+    if (zeilen.isEmpty()) {
+      // Ohne diesen Zweig liefe eine Abfrage mit leerer IN-Liste los — kein gueltiges SQL.
+      return List.of();
+    }
+    final Map<Long, List<AngebotPositionEntity>> jeAngebot =
+        positionen
+            .findByAngebote(
+                zeilen.stream().map(zeile -> Objects.requireNonNull(zeile.getId())).toList())
+            .stream()
+            .collect(Collectors.groupingBy(AngebotPositionEntity::getAngebotId));
+    return zeilen.stream()
+        .map(
+            zeile ->
+                toDomain(
+                    zeile,
+                    jeAngebot.getOrDefault(Objects.requireNonNull(zeile.getId()), List.of())))
+        .toList();
+  }
+
+  @Override
+  public void loesche(final long id) {
+    // Erst die Positionen: Der Fremdschluessel angebot_position.angebot_id traegt kein ON DELETE,
+    // und das soll er auch nicht — eine Zeile verschwindet nur, wenn jemand es ausdruecklich sagt.
+    positionen.loescheZuAngebot(id);
+    angebote.deleteById(id);
   }
 
   @Override

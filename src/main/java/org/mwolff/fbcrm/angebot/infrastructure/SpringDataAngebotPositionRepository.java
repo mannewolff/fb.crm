@@ -1,5 +1,6 @@
 package org.mwolff.fbcrm.angebot.infrastructure;
 
+import java.util.Collection;
 import java.util.List;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
@@ -22,6 +23,23 @@ interface SpringDataAngebotPositionRepository extends JpaRepository<AngebotPosit
       order by p.position
       """)
   List<AngebotPositionEntity> findByAngebot(@Param("angebotId") long angebotId);
+
+  /**
+   * Die Positionen mehrerer Angebote in einer Abfrage, nach Angebot und Platz geordnet.
+   *
+   * <p>Fuer die Angebotsliste eines Vorgangs: Ein {@code findByAngebot} je Zeile ergaebe die
+   * bekannte Abfrage-Lawine, und ohne die Positionen liesse sich die Summe nicht rechnen (E5, E20).
+   *
+   * @param angebotIds die Kennungen der Angebote; nie leer — der Aufrufer faengt den Fall ab, weil
+   *     {@code in ()} kein gueltiges SQL ist
+   */
+  @Query(
+      """
+      select p from AngebotPositionEntity p
+      where p.angebotId in :angebotIds
+      order by p.angebotId, p.position
+      """)
+  List<AngebotPositionEntity> findByAngebote(@Param("angebotIds") Collection<Long> angebotIds);
 
   /**
    * Loescht alle Positionen eines Angebots.
