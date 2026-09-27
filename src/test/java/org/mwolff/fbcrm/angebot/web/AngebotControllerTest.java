@@ -35,6 +35,7 @@ import org.mwolff.fbcrm.angebot.application.AngebotNichtAenderbar;
 import org.mwolff.fbcrm.angebot.application.AngebotNichtGefunden;
 import org.mwolff.fbcrm.angebot.application.AngebotOhneBeleg;
 import org.mwolff.fbcrm.angebot.application.AngebotPdfLesenUseCase;
+import org.mwolff.fbcrm.angebot.application.AngebotReaktionUseCase;
 import org.mwolff.fbcrm.angebot.application.AngebotVersendenUseCase;
 import org.mwolff.fbcrm.angebot.application.AngebotVerwerfenUseCase;
 import org.mwolff.fbcrm.angebot.application.Belegdokument;
@@ -69,11 +70,15 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
  * DELETE} antwortet 204 ohne Rumpf (E19), und ein festgeschriebenes Angebot ist auf beiden Wegen
  * 409.
  *
- * <p>Dazu die beiden Wege des festgeschriebenen Belegs. {@code POST …/versenden} antwortet 409 mit
- * der Erweiterung {@code fieldErrors} und genau den vier Schluesseln aus E22 — dieser Zweig des
- * {@link GlobalExceptionHandler} ist neu, denn bisher entstand {@code fieldErrors} allein aus der
- * Bean Validation (400). {@code GET …/pdf} traegt {@code Content-Disposition: inline} und {@code
+ * <p>Dazu die Wege am festgeschriebenen Beleg. {@code POST …/versenden} antwortet 409 mit der
+ * Erweiterung {@code fieldErrors} und genau den vier Schluesseln aus E22 — dieser Zweig des {@link
+ * GlobalExceptionHandler} ist neu, denn bisher entstand {@code fieldErrors} allein aus der Bean
+ * Validation (400). {@code GET …/pdf} traegt {@code Content-Disposition: inline} und {@code
  * application/pdf}: Kriterium 14 sagt „oeffnen", nicht „herunterladen" (E17).
+ *
+ * <p>Und die beiden Wege der Reaktion: {@code POST …/annehmen} und {@code POST …/ablehnen}
+ * antworten mit dem geaenderten Angebot — die Maske soll den neuen Stand ohne zweiten Aufruf zeigen
+ * —, ein unzulaessiger Zustand ist 409 und ein unbekanntes Angebot 404.
  */
 @ExtendWith(MockitoExtension.class)
 class AngebotControllerTest {
@@ -97,6 +102,7 @@ class AngebotControllerTest {
   @Mock private AngebotVerwerfenUseCase verwerfen;
   @Mock private AngebotVersendenUseCase versenden;
   @Mock private AngebotPdfLesenUseCase pdfLesen;
+  @Mock private AngebotReaktionUseCase reaktion;
 
   @Captor private ArgumentCaptor<EntwurfDaten> daten;
 
@@ -105,7 +111,7 @@ class AngebotControllerTest {
 
   @BeforeEach
   void baueDenController() {
-    controller = new AngebotController(lesen, aendern, verwerfen, versenden, pdfLesen);
+    controller = new AngebotController(lesen, aendern, verwerfen, versenden, reaktion, pdfLesen);
     mockMvc =
         MockMvcBuilders.standaloneSetup(controller)
             .setControllerAdvice(new GlobalExceptionHandler())
@@ -408,6 +414,89 @@ class AngebotControllerTest {
     // When / Then
     mockMvc
         .perform(get("/api/angebote/{id}/pdf", Long.valueOf(ANGEBOT)))
+        .andExpect(status().isNotFound());
+  }
+
+  private static AngebotAnsicht mitReaktion(
+      final Angebotszustand zustand, final Angebotsstand stand) {
+    final Angebot versendet = versendetesAngebot().angebot();
+    return new AngebotAnsicht(
+        zustand == Angebotszustand.ANGENOMMEN
+            ? versendet.angenommen(ANGELEGT)
+            : versendet.abgelehnt(ANGELEGT),
+        stand);
+  }
+
+  @Test
+  void annehmen_thenAnswers200WithTheNewStand() throws Exception {
+    // Given — Kriterium 17: der Kunde hat zugesagt.
+    when(reaktion.nimmAn(ANGEBOT))
+        .thenReturn(mitReaktion(Angebotszustand.ANGENOMMEN, Angebotsstand.ANGENOMMEN));
+
+    // When / Then
+    mockMvc
+        .perform(post("/api/angebote/{id}/annehmen", Long.valueOf(ANGEBOT)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.nummer").value(NUMMER))
+        .andExpect(jsonPath("$.stand").value("ANGENOMMEN"))
+        .andExpect(jsonPath("$.reaktionAm").exists());
+  }
+
+  @Test
+  void ablehnen_thenAnswers200WithTheNewStand() throws Exception {
+    // Given — Kriterium 17: der Kunde hat abgesagt.
+    when(reaktion.lehneAb(ANGEBOT))
+        .thenReturn(mitReaktion(Angebotszustand.ABGELEHNT, Angebotsstand.ABGELEHNT));
+
+    // When / Then
+    mockMvc
+        .perform(post("/api/angebote/{id}/ablehnen", Long.valueOf(ANGEBOT)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.stand").value("ABGELEHNT"))
+        .andExpect(jsonPath("$.reaktionAm").exists());
+  }
+
+  @Test
+  void annehmen_fromAnUnreachableZustand_thenAnswers409() throws Exception {
+    // Given — Kriterium 17: beide Reaktionen sind endgueltig.
+    when(reaktion.nimmAn(ANGEBOT)).thenThrow(new AngebotNichtAenderbar());
+
+    // When / Then
+    mockMvc
+        .perform(post("/api/angebote/{id}/annehmen", Long.valueOf(ANGEBOT)))
+        .andExpect(status().isConflict());
+  }
+
+  @Test
+  void ablehnen_fromAnUnreachableZustand_thenAnswers409() throws Exception {
+    // Given — Kriterium 17.
+    when(reaktion.lehneAb(ANGEBOT)).thenThrow(new AngebotNichtAenderbar());
+
+    // When / Then
+    mockMvc
+        .perform(post("/api/angebote/{id}/ablehnen", Long.valueOf(ANGEBOT)))
+        .andExpect(status().isConflict());
+  }
+
+  @Test
+  void annehmen_whenTheAngebotIsUnknown_thenAnswers404() throws Exception {
+    // Given
+    when(reaktion.nimmAn(ANGEBOT)).thenThrow(new AngebotNichtGefunden());
+
+    // When / Then
+    mockMvc
+        .perform(post("/api/angebote/{id}/annehmen", Long.valueOf(ANGEBOT)))
+        .andExpect(status().isNotFound());
+  }
+
+  @Test
+  void ablehnen_whenTheAngebotIsUnknown_thenAnswers404() throws Exception {
+    // Given
+    when(reaktion.lehneAb(ANGEBOT)).thenThrow(new AngebotNichtGefunden());
+
+    // When / Then
+    mockMvc
+        .perform(post("/api/angebote/{id}/ablehnen", Long.valueOf(ANGEBOT)))
         .andExpect(status().isNotFound());
   }
 }

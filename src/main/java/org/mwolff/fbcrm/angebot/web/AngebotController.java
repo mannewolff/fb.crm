@@ -4,6 +4,7 @@ import jakarta.validation.Valid;
 import org.mwolff.fbcrm.angebot.application.AngebotEntwurfAendernUseCase;
 import org.mwolff.fbcrm.angebot.application.AngebotLesenUseCase;
 import org.mwolff.fbcrm.angebot.application.AngebotPdfLesenUseCase;
+import org.mwolff.fbcrm.angebot.application.AngebotReaktionUseCase;
 import org.mwolff.fbcrm.angebot.application.AngebotVersendenUseCase;
 import org.mwolff.fbcrm.angebot.application.AngebotVerwerfenUseCase;
 import org.mwolff.fbcrm.angebot.application.Belegdokument;
@@ -23,8 +24,8 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Die Wege am einzelnen Angebot: lesen, fortschreiben, verwerfen, versenden, Beleg oeffnen
- * (Kriterien 5, 6, 7, 10, 14, 18).
+ * Die Wege am einzelnen Angebot: lesen, fortschreiben, verwerfen, versenden, Beleg oeffnen, die
+ * Reaktion des Kunden festhalten (Kriterien 5, 6, 7, 10, 14, 17, 18).
  *
  * <p>Der Controller entscheidet nichts (CLAUDE-java.md §6.3). Insbesondere prueft er den
  * Abschlussstand des Vorgangs nicht: Kriterium 9 sperrt das Anlegen und das Versenden, nicht die
@@ -41,6 +42,12 @@ import org.springframework.web.bind.annotation.RestController;
  * in das festgeschriebene Dokument geht, schon im Bestand steht (Kriterium 10). Die Antwort traegt
  * das festgeschriebene Angebot, damit die Maske Nummer und Stand ohne zweiten Aufruf zeigt.
  *
+ * <p><b>Warum es Annehmen und Ablehnen einzeln gibt und nicht einen Weg mit dem Zustand im
+ * Rumpf.</b> Derselbe Grund wie beim Versenden: Der Zustandsuebergang steht im Pfad und ist damit
+ * aus dem Zugriffsprotokoll lesbar; ein Rumpf mit einem Enum-Wert waere ein Formular ohne Formular.
+ * Auch hier traegt die Antwort das geaenderte Angebot, damit die Maske den neuen Stand ohne zweiten
+ * Aufruf zeigt.
+ *
  * <p><b>Warum der Beleg {@code inline} hinausgeht</b> (E17): Kriterium 14 sagt „oeffnen", nicht
  * „herunterladen". Der Dateiname ist die Angebotsnummer und damit reines ASCII aus dem Nummernkreis
  * — anders als beim Anhang eines Vorgangs, dessen Name vom Anwender kommt und deshalb die
@@ -54,6 +61,7 @@ public class AngebotController {
   private final AngebotEntwurfAendernUseCase aendernUseCase;
   private final AngebotVerwerfenUseCase verwerfenUseCase;
   private final AngebotVersendenUseCase versendenUseCase;
+  private final AngebotReaktionUseCase reaktionUseCase;
   private final AngebotPdfLesenUseCase pdfUseCase;
 
   public AngebotController(
@@ -61,11 +69,13 @@ public class AngebotController {
       final AngebotEntwurfAendernUseCase aendernUseCase,
       final AngebotVerwerfenUseCase verwerfenUseCase,
       final AngebotVersendenUseCase versendenUseCase,
+      final AngebotReaktionUseCase reaktionUseCase,
       final AngebotPdfLesenUseCase pdfUseCase) {
     this.lesenUseCase = lesenUseCase;
     this.aendernUseCase = aendernUseCase;
     this.verwerfenUseCase = verwerfenUseCase;
     this.versendenUseCase = versendenUseCase;
+    this.reaktionUseCase = reaktionUseCase;
     this.pdfUseCase = pdfUseCase;
   }
 
@@ -93,6 +103,18 @@ public class AngebotController {
   @PostMapping("/versenden")
   public AngebotResponse versenden(@PathVariable final long id) {
     return AngebotResponse.of(versendenUseCase.versende(id));
+  }
+
+  /** Haelt die Zusage des Kunden fest und loest die uebrigen offenen Angebote ab (Kriterium 17). */
+  @PostMapping("/annehmen")
+  public AngebotResponse annehmen(@PathVariable final long id) {
+    return AngebotResponse.of(reaktionUseCase.nimmAn(id));
+  }
+
+  /** Haelt die Absage des Kunden fest (Kriterium 17). */
+  @PostMapping("/ablehnen")
+  public AngebotResponse ablehnen(@PathVariable final long id) {
+    return AngebotResponse.of(reaktionUseCase.lehneAb(id));
   }
 
   /** Der beim Versenden erzeugte Beleg, zum Ansehen im Browser (Kriterium 14, E17). */
