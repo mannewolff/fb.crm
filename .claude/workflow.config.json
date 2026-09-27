@@ -117,7 +117,7 @@
       "label": "kit:night",
       "planMin": 30,
       "paketeMin": 75,
-      "reviewMin": 30,
+      "reviewMin": 60,
       "abdeckungMin": 10,
       "kostenUsd": 50,
       "korrekturrunden": 2
