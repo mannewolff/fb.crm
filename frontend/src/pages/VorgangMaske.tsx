@@ -115,6 +115,19 @@ interface Wahleintrag {
 }
 
 /**
+ * Die elf Werte der Abschlusswahrscheinlichkeit: 0 bis 100 in Zehnerschritten (Kriterium 21).
+ *
+ * Eine Auswahl und kein Zahlenfeld: Das Backend laesst ohnehin nur Zehnerschritte zu
+ * (`AbschlusswahrscheinlichkeitConstraint`), und eine freie Eingabe boete 37 % an, um es danach
+ * abzuweisen. Die Null steht als eigener Wert darin — sie heisst „aussichtslos" und ist etwas
+ * anderes als „nicht eingeschaetzt", wofuer der Leereintrag steht.
+ */
+const WAHRSCHEINLICHKEITEN: readonly Wahleintrag[] = Array.from({ length: 11 }, (_leer, stufe) => ({
+  id: stufe * 10,
+  aufschrift: `${String(stufe * 10)} %`,
+}));
+
+/**
  * Die eigene Zuordnung des Vorgangs als Eintrag der Wahl.
  *
  * Gekennzeichnet nur, solange sie stillgelegt ist: Eine aktive Zuordnung steht ohnehin in der
@@ -228,6 +241,8 @@ export default function VorgangMaske() {
   const [titel, setzeTitel] = useState('');
   const [firmaWahl, setzeFirmaWahl] = useState(KEINE_WAHL);
   const [partnerWahl, setzePartnerWahl] = useState(KEINE_WAHL);
+  const [wahrscheinlichkeit, setzeWahrscheinlichkeit] = useState(KEINE_WAHL);
+  const [entscheidung, setzeEntscheidung] = useState('');
   const [eigene, setzeEigene] = useState<Eigene | null>(null);
   const [eigeneFehler, setzeEigeneFehler] = useState<FieldErrors>({});
   const [feldFehler, setzeFeldFehler] = useState<FieldErrors>({});
@@ -255,6 +270,14 @@ export default function VorgangMaske() {
         setzePartnerWahl(
           vorgang.ansprechpartner === null ? KEINE_WAHL : String(vorgang.ansprechpartner.id),
         );
+        setzeWahrscheinlichkeit(
+          vorgang.abschlusswahrscheinlichkeit === null
+            ? KEINE_WAHL
+            : String(vorgang.abschlusswahrscheinlichkeit),
+        );
+        // Der Tag kommt als `YYYY-MM-DD` — genau die Form, die ein `date`-Feld erwartet. Es
+        // braucht darum keine Umrechnung wie `lib/zeitpunkt` beim Zeitpunkt der Historie.
+        setzeEntscheidung(vorgang.entscheidungErwartetAm ?? '');
         setzeEigene({ firma: vorgang.firma, ansprechpartner: vorgang.ansprechpartner });
         setzeStand(await firmenLaden());
       })
@@ -306,6 +329,10 @@ export default function VorgangMaske() {
       titel: titel.trim(),
       firmaId: Number(firmaWahl),
       ansprechpartnerId: oderNull(partnerWahl),
+      abschlusswahrscheinlichkeit: oderNull(wahrscheinlichkeit),
+      // Ein leeres Datumsfeld ist „nicht gesetzt" und keine Zeichenkette ohne Inhalt: Das Backend
+      // liest `LocalDate`, und "" waere dort ein Formfehler statt einer fehlenden Angabe.
+      entscheidungErwartetAm: entscheidung === '' ? null : entscheidung,
     };
     try {
       if (kennung === null) {
@@ -435,6 +462,29 @@ export default function VorgangMaske() {
               eintraege={partnerEintraege}
               meldung={partnerMeldung}
               fehlerhaft={partnerMeldung !== undefined}
+            />
+            <Wahl
+              label="Abschlusswahrscheinlichkeit"
+              leerEintrag="— nicht eingeschätzt —"
+              wert={wahrscheinlichkeit}
+              setzeWert={setzeWahrscheinlichkeit}
+              eintraege={WAHRSCHEINLICHKEITEN}
+              meldung={meldung('abschlusswahrscheinlichkeit')}
+              fehlerhaft={meldung('abschlusswahrscheinlichkeit') !== undefined}
+            />
+            <TextField
+              label="Erwartete Entscheidung"
+              type="date"
+              value={entscheidung}
+              onChange={(ereignis) => {
+                setzeEntscheidung(ereignis.target.value);
+              }}
+              error={meldung('entscheidungErwartetAm') !== undefined}
+              helperText={meldung('entscheidungErwartetAm')}
+              fullWidth
+              // Ein `date`-Feld zeigt immer seine Maske, also darf die Beschriftung nie im Feld
+              // liegen — dieselbe Begruendung wie beim `select` in {@link Wahl}.
+              slotProps={{ inputLabel: { shrink: true } }}
             />
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, flexWrap: 'wrap' }}>
               <KupferTaste disabled={laeuft || ohneAktiveFirma}>

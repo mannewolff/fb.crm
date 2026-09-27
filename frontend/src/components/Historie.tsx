@@ -2,7 +2,7 @@ import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Link from '@mui/material/Link';
 import Typography from '@mui/material/Typography';
-import { IconMessageCircle, IconPaperclip } from '@tabler/icons-react';
+import { IconFileText, IconMessageCircle, IconPaperclip } from '@tabler/icons-react';
 import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 
@@ -39,6 +39,11 @@ import type { ZeitleisteEintrag } from './Zeitleiste';
  *   <li><b>Jeder Eintrag traegt seinen Stand im zugaenglichen Namen</b> (Kriterium 26). Wer mit dem
  *       Screenreader durch die Eintraege geht, hoert Art, Zeitpunkt, Herkunft und den Vermerk
  *       „geaendert", ohne den Eintrag betreten zu muessen.</li>
+ *   <li><b>Ein Ereignis laesst sich nicht aendern</b> (Kriterium 19). Es hat niemand erfasst —
+ *       die Anwendung hat vermerkt, was mit einem Dokument geschehen ist. Eine Taste „Aendern"
+ *       daran waere ein Angebot, den Nachweis umzuschreiben; das Backend nimmt die Aenderung
+ *       ohnehin nicht an. Alle Ereignisse tragen dieselbe Toenung und dasselbe Symbol: Die Zeile
+ *       meldet eine Tatsache und wertet sie nicht (E3).</li>
  *   <li><b>Geaendert wird an Ort und Stelle</b> (E20, Kriterium 19): Die Taste „Aendern" laesst
  *       {@link EintragMaske} im Eintrag selbst aufgehen, statt auf eine eigene Seite zu fuehren.
  *       Hoechstens ein Eintrag ist gleichzeitig offen — deshalb steht der offene hier und nicht im
@@ -52,10 +57,14 @@ const OHNE_EINTRAG = 'Noch kein Eintrag in der Historie.';
 const ART_TEXT: Readonly<Record<Eintragsart, string>> = {
   KOMMENTAR: 'Kommentar',
   ANHANG: 'Anhang',
+  EREIGNIS: 'Ereignis',
 };
 
-/** Heute wird alles von Hand erfasst (`Herkunft` in `api/vorgaenge.ts`, Kriterium 16). */
-const HERKUNFT_TEXT: Readonly<Record<Herkunft, string>> = { VON_HAND: 'von Hand' };
+/** Von Hand erfasst oder von der Anwendung vermerkt (Kriterium 16, Kriterium 19). */
+const HERKUNFT_TEXT: Readonly<Record<Herkunft, string>> = {
+  VON_HAND: 'von Hand',
+  AUTOMATISCH: 'automatisch',
+};
 
 /**
  * Die Toenung je Art — als Name, nicht als Farbpaar (CLAUDE-design.md, „Toenungen").
@@ -66,18 +75,27 @@ const HERKUNFT_TEXT: Readonly<Record<Herkunft, string>> = { VON_HAND: 'von Hand'
 const ART_TOENUNG: Readonly<Record<Eintragsart, ToenungName>> = {
   KOMMENTAR: 'pfirsich',
   ANHANG: 'flieder',
+  // Himmel heisst „Information, laufend" — und genau das ist ein Ereignis: eine Tatsachenmeldung
+  // ueber ein Dokument. Alle Ereignisse tragen dieselbe Toenung, auch „abgelehnt": Die Zeile
+  // meldet, was geschehen ist, sie bewertet es nicht (E3, Vorlage Z. 192).
+  EREIGNIS: 'himmel',
 };
 
 /** Kantenlaenge des Symbols im Feld der Zeitleiste (Vorlage `.zeit .punkt` Z. 97: 17 px). */
 const SYMBOL = 17;
 
 /** Das Symbol je Art. Dekorativ — die Zeitleiste haengt das Feld aus dem Baum aus. */
+const ART_SYMBOL: Readonly<Record<Eintragsart, typeof IconPaperclip>> = {
+  KOMMENTAR: IconMessageCircle,
+  ANHANG: IconPaperclip,
+  // Das Blatt mit Text steht in der Vorlage an der Ereigniszeile (Z. 192) — ein Dokument hat
+  // seinen Zustand gewechselt.
+  EREIGNIS: IconFileText,
+};
+
 function symbolZu(art: Eintragsart): ReactNode {
-  return art === 'ANHANG' ? (
-    <IconPaperclip size={SYMBOL} stroke={1.8} />
-  ) : (
-    <IconMessageCircle size={SYMBOL} stroke={1.8} />
-  );
+  const Symbol = ART_SYMBOL[art];
+  return <Symbol size={SYMBOL} stroke={1.8} />;
 }
 
 /**
@@ -274,12 +292,14 @@ function Titel({
       <Box component="span">{ART_TEXT[eintrag.art]}</Box>
       <Datei vorgangId={vorgangId} eintrag={eintrag} />
       <Groesse bytes={eintrag.dateiGroesse} />
-      <AendernTaste
-        eintrag={eintrag}
-        oeffne={oeffne}
-        offen={offen}
-        zurueckZurTaste={zurueckZurTaste}
-      />
+      {eintrag.art === 'EREIGNIS' ? null : (
+        <AendernTaste
+          eintrag={eintrag}
+          oeffne={oeffne}
+          offen={offen}
+          zurueckZurTaste={zurueckZurTaste}
+        />
+      )}
     </Box>
   );
 }

@@ -37,6 +37,8 @@ const VORGANG: Vorgang = {
   titel: 'Anteilsbalken je Vorgang statt Band über alle',
   phase: 'ANBAHNUNG',
   abgeschlossen: false,
+  abschlusswahrscheinlichkeit: null,
+  entscheidungErwartetAm: null,
   firma: { id: 7, name: 'Beispiel GmbH', aktiv: true },
   ansprechpartner: { id: 11, name: 'Anna Berg', aktiv: true },
   historie: [ANHANG, KOMMENTAR],

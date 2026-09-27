@@ -69,6 +69,20 @@ describe('apiOhneInhalt', () => {
 
     await expect(apiOhneInhalt('/api/auth/logout', { methode: 'POST' })).resolves.toBeUndefined();
   });
+
+  it('traegt DELETE ohne Rumpf hinaus (E19)', async () => {
+    const fetchMock = fetchLiefert(() => new Response(null, { status: 204 }));
+
+    await apiOhneInhalt('/api/vorgaenge/3/angebote/9', { methode: 'DELETE' });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/vorgaenge/3/angebote/9',
+      expect.objectContaining({ method: 'DELETE', credentials: 'same-origin' }),
+    );
+    const optionen = fetchMock.mock.calls[0][1];
+    expect(optionen?.body).toBeUndefined();
+    expect(optionen?.headers).toBeUndefined();
+  });
 });
 
 describe('apiFormular', () => {

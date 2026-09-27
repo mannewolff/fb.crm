@@ -10,12 +10,13 @@ import type { ReactNode } from 'react';
 import { Link as RouterLink, useSearchParams } from 'react-router-dom';
 
 import { vorgaengeUebersicht } from '../api/vorgaenge';
-import type { Phase, VorgaengeUebersicht, VorgangZeile } from '../api/vorgaenge';
+import type { VorgaengeUebersicht, VorgangZeile } from '../api/vorgaenge';
 import { useKopfPfad } from '../components/KopfPfad';
 import type { PfadVerweis } from '../components/KopfPfad';
 import KupferTaste from '../components/KupferTaste';
 import Karte from '../components/Karte';
 import Tafel from '../components/Tafel';
+import { phaseWort } from '../lib/phase';
 import { RADIUS_RUND, ZAHLEN_KLASSE } from '../theme';
 
 /**
@@ -52,9 +53,6 @@ const PARAM_ABGESCHLOSSENE = 'auchAbgeschlossene';
 const AUSFALL = 'Die Vorgänge sind gerade nicht zu erreichen. Bitte später erneut versuchen.';
 
 const SPALTEN = ['Nr.', 'Vorgang', 'Firma', 'Phase', 'Letzte Aktivität'] as const;
-
-/** Die Phase als Wort. Heute kennt das Backend genau eine (`Phase` in `api/vorgaenge.ts`). */
-const PHASE_TEXT: Readonly<Record<Phase, string>> = { ANBAHNUNG: 'Anbahnung' };
 
 /** Was die Ansicht gerade weiss. */
 type Stand =
@@ -178,7 +176,7 @@ function Zeile({ vorgang }: { readonly vorgang: VorgangZeile }) {
         </Box>
       </Box>
       <Box component="td">{vorgang.firma}</Box>
-      <Box component="td">{PHASE_TEXT[vorgang.phase]}</Box>
+      <Box component="td">{phaseWort(vorgang.phase)}</Box>
       <Box
         component="td"
         className={ZAHLEN_KLASSE}

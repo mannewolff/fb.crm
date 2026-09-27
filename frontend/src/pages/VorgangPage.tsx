@@ -8,7 +8,7 @@ import type { ReactNode } from 'react';
 import { Link as RouterLink, useParams } from 'react-router-dom';
 
 import { vorgangAbschliessen, vorgangLesen, vorgangWiederEroeffnen } from '../api/vorgaenge';
-import type { Phase, Vorgang, Zuordnung } from '../api/vorgaenge';
+import type { Vorgang, Zuordnung } from '../api/vorgaenge';
 import EintragMaske from '../components/EintragMaske';
 import Historie from '../components/Historie';
 import Karte from '../components/Karte';
@@ -20,6 +20,7 @@ import WeicheTaste from '../components/WeicheTaste';
 import ZustandsChip from '../components/ZustandsChip';
 import { nichtGefunden } from '../lib/apifehler';
 import { kennungAus } from '../lib/kennung';
+import { phaseWort } from '../lib/phase';
 import { ZAHLEN_KLASSE } from '../theme';
 
 /**
@@ -66,9 +67,6 @@ const AUSFALL = 'Der Vorgang ist gerade nicht zu erreichen. Bitte später erneut
 const SCHALTEN_FEHLT =
   'Der Abschlussstand des Vorgangs wurde nicht geändert. Bitte später erneut versuchen.';
 const LAEDT = 'Der Vorgang wird geladen …';
-
-/** Die Phase als Wort. Heute kennt das Backend genau eine (Kriterium 11). */
-const PHASE_TEXT: Readonly<Record<Phase, string>> = { ANBAHNUNG: 'Anbahnung' };
 
 /** Die Symbolgroessen: 13 px im Chip, 16 px in den Tasten (wie in {@link FirmaPage}). */
 const SYMBOL_CHIP = 13;
@@ -162,7 +160,7 @@ function chipsZu(vorgang: Vorgang): ReactNode {
   return (
     <>
       <ZustandsChip
-        wort={PHASE_TEXT[vorgang.phase]}
+        wort={phaseWort(vorgang.phase)}
         toenung="himmel"
         symbol={<IconPointFilled size={SYMBOL_CHIP} />}
       />

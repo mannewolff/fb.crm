@@ -43,6 +43,22 @@ const ANHANG: Eintrag = {
   geaendertAm: null,
 };
 
+/**
+ * Ein Ereignis: von der Anwendung vermerkt, nicht von Hand erfasst (Kriterium 19).
+ *
+ * Die Vorlage zeigt genau diese Zeile (`docs/entwurf-kupferwolke.html` Z. 192).
+ */
+const EREIGNIS: Eintrag = {
+  id: 45,
+  art: 'EREIGNIS',
+  text: 'Angebot A-2026-009 versendet',
+  geschehenAm: GESCHEHEN.toISOString(),
+  herkunft: 'AUTOMATISCH',
+  dateiName: null,
+  dateiGroesse: null,
+  geaendertAm: null,
+};
+
 const GEAENDERTER_KOMMENTAR: Eintrag = {
   ...KOMMENTAR,
   id: 44,
@@ -251,5 +267,39 @@ describe('Historie — Aendern an Ort und Stelle (E20, Kriterien 19, 26)', () =>
     // Wie die Liste danach aussieht, sagt der Server — die Zeile geht wieder zu.
     expect(await screen.findByRole('button', { name: /^Ändern/u })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Speichern' })).not.toBeInTheDocument();
+  });
+});
+
+describe('Historie mit Ereignissen', () => {
+  it('nennt das Ereignis beim Wort — nicht nur an der Toenung (Kriterium 19)', () => {
+    renderHistorie([EREIGNIS]);
+
+    const zeile = screen.getByRole('listitem');
+    expect(within(zeile).getByText('Ereignis')).toBeInTheDocument();
+    expect(within(zeile).getByText('Angebot A-2026-009 versendet')).toBeInTheDocument();
+  });
+
+  it('nennt „automatisch" als Herkunft', () => {
+    renderHistorie([EREIGNIS]);
+
+    const zeile = screen.getByRole('listitem');
+    expect(within(zeile).getByText('automatisch')).toBeInTheDocument();
+    expect(zeile).toHaveAccessibleName('Ereignis, 24.09.2026, 11:15, automatisch');
+  });
+
+  it('traegt keine Taste „Ändern" — ein Ereignis ist ein Nachweis', () => {
+    renderHistorie([EREIGNIS]);
+
+    const zeile = screen.getByRole('listitem');
+    expect(within(zeile).queryByRole('button', { name: /^Ändern/u })).not.toBeInTheDocument();
+  });
+
+  it('laesst Kommentar und Anhang daneben unveraendert aenderbar', () => {
+    renderHistorie([EREIGNIS, ANHANG, KOMMENTAR]);
+
+    const zeilen = screen.getAllByRole('listitem');
+    expect(within(zeilen[0]).queryByRole('button', { name: /^Ändern/u })).not.toBeInTheDocument();
+    expect(aendernTaste(zeilen[1])).toBeInTheDocument();
+    expect(aendernTaste(zeilen[2])).toBeInTheDocument();
   });
 });

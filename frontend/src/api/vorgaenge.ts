@@ -33,14 +33,26 @@ import {
  * </ul>
  */
 
-/** Wie weit der Vorgang in der Kette ist; heute kennt das Backend genau eine Phase. */
-export type Phase = 'ANBAHNUNG';
+/**
+ * Wie weit der Vorgang in der Kette ist (`Phase` im Backend).
+ *
+ * Die Phase wird nicht gepflegt, sondern aus dem Stand der Dokumente abgeleitet: `ANGEBOT`, sobald
+ * ein Angebot festgeschrieben ist (Kriterium 22). Auftrag und Rechnung bringen ihre Phasen mit,
+ * wenn es sie gibt. Das Wort dazu steht in `lib/phase.ts` — hier steht nur der Wert.
+ */
+export type Phase = 'ANBAHNUNG' | 'ANGEBOT';
 
-/** Was ein Eintrag der Historie ist. */
-export type Eintragsart = 'KOMMENTAR' | 'ANHANG';
+/**
+ * Was ein Eintrag der Historie ist (`Eintragsart` im Backend).
+ *
+ * `EREIGNIS` kommt nie von aussen: Es ist ein Zustandswechsel eines Dokuments, den die Anwendung
+ * selbst vermerkt (Kriterium 19). Die Maske bietet es darum nicht an, und aendern laesst es sich
+ * nicht — sonst waere die Historie kein Nachweis mehr.
+ */
+export type Eintragsart = 'KOMMENTAR' | 'ANHANG' | 'EREIGNIS';
 
-/** Woher der Eintrag stammt; heute wird alles von Hand erfasst. */
-export type Herkunft = 'VON_HAND';
+/** Woher der Eintrag stammt: von Hand erfasst oder von der Anwendung vermerkt. */
+export type Herkunft = 'VON_HAND' | 'AUTOMATISCH';
 
 /** Eine Zeile der Uebersicht und der Listen an der Firma. */
 export interface VorgangZeile {
@@ -97,6 +109,10 @@ export interface Vorgang {
   readonly titel: string;
   readonly phase: Phase;
   readonly abgeschlossen: boolean;
+  /** Abschlusswahrscheinlichkeit in Zehnerschritten, oder `null` fuer „nicht eingeschaetzt". */
+  readonly abschlusswahrscheinlichkeit: number | null;
+  /** Erwarteter Entscheidungszeitpunkt als Tag (`YYYY-MM-DD`), oder `null` (Kriterium 21). */
+  readonly entscheidungErwartetAm: string | null;
   readonly firma: Zuordnung;
   readonly ansprechpartner: Zuordnung | null;
   readonly historie: readonly Eintrag[];
@@ -113,6 +129,10 @@ export interface VorgangEingabe {
   readonly titel: string;
   readonly firmaId: number;
   readonly ansprechpartnerId: number | null;
+  /** Abschlusswahrscheinlichkeit in Zehnerschritten, oder `null` — nie eine stille Null. */
+  readonly abschlusswahrscheinlichkeit: number | null;
+  /** Erwarteter Entscheidungszeitpunkt als Tag (`YYYY-MM-DD`), oder `null`. */
+  readonly entscheidungErwartetAm: string | null;
 }
 
 /** Die Eingaben beim Aendern eines Eintrags — die Felder von `EintragAenderungRequest`. */
@@ -123,21 +143,21 @@ export interface EintragAenderung {
 }
 
 function phase(wert: unknown): Phase {
-  if (wert !== 'ANBAHNUNG') {
+  if (wert !== 'ANBAHNUNG' && wert !== 'ANGEBOT') {
     throw new TypeError(FORMFEHLER);
   }
   return wert;
 }
 
 function eintragsart(wert: unknown): Eintragsart {
-  if (wert !== 'KOMMENTAR' && wert !== 'ANHANG') {
+  if (wert !== 'KOMMENTAR' && wert !== 'ANHANG' && wert !== 'EREIGNIS') {
     throw new TypeError(FORMFEHLER);
   }
   return wert;
 }
 
 function herkunft(wert: unknown): Herkunft {
-  if (wert !== 'VON_HAND') {
+  if (wert !== 'VON_HAND' && wert !== 'AUTOMATISCH') {
     throw new TypeError(FORMFEHLER);
   }
   return wert;
@@ -214,6 +234,8 @@ export function parseVorgang(wert: unknown): Vorgang {
     titel: text(vorgang.titel),
     phase: phase(vorgang.phase),
     abgeschlossen: jaNein(vorgang.abgeschlossen),
+    abschlusswahrscheinlichkeit: zahlOderNull(vorgang.abschlusswahrscheinlichkeit),
+    entscheidungErwartetAm: textOderNull(vorgang.entscheidungErwartetAm),
     firma: parseZuordnung(vorgang.firma),
     ansprechpartner: partner === null ? null : parseZuordnung(partner),
     historie: liste(vorgang.historie).map(parseEintrag),

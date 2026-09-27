@@ -25,7 +25,7 @@ import {
 } from '../api/firmen';
 import type { Ansprechpartner, Firma } from '../api/firmen';
 import { vorgaengeDerFirma } from '../api/vorgaenge';
-import type { Phase, VorgaengeDerFirma, VorgangZeile } from '../api/vorgaenge';
+import type { VorgaengeDerFirma, VorgangZeile } from '../api/vorgaenge';
 import AktionsMenue from '../components/AktionsMenue';
 import type { AktionsEintrag } from '../components/AktionsMenue';
 import Innenkarte, { HinzufuegenKachel, InnenkartenRaster } from '../components/Innenkarte';
@@ -39,6 +39,7 @@ import ZustandsChip from '../components/ZustandsChip';
 import { nichtGefunden } from '../lib/apifehler';
 import { kennungAus } from '../lib/kennung';
 import { namensZug } from '../lib/namenszug';
+import { phaseWort } from '../lib/phase';
 import { emailZiel, telefonZiel } from '../lib/telefonlink';
 import { ZAHLEN_KLASSE } from '../theme';
 
@@ -84,15 +85,6 @@ const PARTNER_FRAGE =
 /** Die Symbolgroessen: 14 px in Chip und Kontaktzeile, 16 px in Tasten und Menueeintraegen. */
 const SYMBOL_KLEIN = 14;
 const SYMBOL_TASTE = 16;
-
-/**
- * Die Phase als Wort; heute kennt das Backend genau eine (`Phase` in `api/vorgaenge.ts`).
- *
- * Dieselbe Zuordnung steht in `VorgaengePage`. Sie hier zu wiederholen, statt sie aus der anderen
- * Ansicht zu holen, haelt die beiden Seiten voneinander unabhaengig — ein gemeinsamer Ort entsteht,
- * wenn es mehr als eine Phase und mehr als zwei Leser gibt.
- */
-const PHASE_TEXT: Readonly<Record<Phase, string>> = { ANBAHNUNG: 'Anbahnung' };
 
 /** Was die Ansicht gerade weiss. */
 type Stand =
@@ -473,7 +465,7 @@ function VorgangZeileAnsicht({ vorgang }: { readonly vorgang: VorgangZeile }) {
           color: theme.vars.palette.kupferwolke.textMatt,
         })}
       >
-        {PHASE_TEXT[vorgang.phase]}
+        {phaseWort(vorgang.phase)}
       </Typography>
     </Box>
   );

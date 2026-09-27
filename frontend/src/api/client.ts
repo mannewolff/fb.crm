@@ -34,8 +34,14 @@ export class ApiError extends Error {
   }
 }
 
-/** Die Methoden, die diese Anwendung kennt. */
-type Methode = 'GET' | 'POST' | 'PUT';
+/**
+ * Die Methoden, die diese Anwendung kennt.
+ *
+ * `DELETE` gehoert dazu, seit es einen Weg gibt, der wirklich loescht: der verworfene
+ * Angebotsentwurf (E19). Geloescht wird nur, was nie festgeschrieben war — alles andere wird
+ * stillgelegt oder abgeloest, und dafuer stehen `POST` und `PUT`.
+ */
+type Methode = 'GET' | 'POST' | 'PUT' | 'DELETE';
 
 export interface Anfrage {
   readonly methode: Methode;

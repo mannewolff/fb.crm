@@ -68,6 +68,8 @@ const VORGANG: Vorgang = {
   titel: 'Anteilsbalken je Vorgang',
   phase: 'ANBAHNUNG',
   abgeschlossen: false,
+  abschlusswahrscheinlichkeit: null,
+  entscheidungErwartetAm: null,
   firma: { id: 7, name: 'Beispiel GmbH', aktiv: true },
   ansprechpartner: { id: 31, name: 'Anna Berg', aktiv: true },
   historie: [],
@@ -138,6 +140,16 @@ function wahl(name: string) {
   return screen.getByRole('combobox', { name });
 }
 
+/**
+ * Das Datumsfeld des erwarteten Entscheidungszeitpunkts.
+ *
+ * Ueber die Beschriftung und nicht ueber eine Rolle: Ein `input[type=date]` hat keine, die
+ * Testing Library kennt — `textbox` trifft es nicht.
+ */
+function datumsFeld() {
+  return screen.getByLabelText('Erwartete Entscheidung');
+}
+
 /** Die Aufschriften einer Auswahlliste, ohne den Eintrag fuer „nichts gewaehlt". */
 function angebot(name: string) {
   return within(wahl(name))
@@ -183,6 +195,8 @@ describe('VorgangMaske — Anlegen', () => {
           titel: 'Anteilsbalken je Vorgang',
           firmaId: 7,
           ansprechpartnerId: 31,
+          abschlusswahrscheinlichkeit: null,
+          entscheidungErwartetAm: null,
         }),
       }),
     );
@@ -218,6 +232,8 @@ describe('VorgangMaske — Anlegen', () => {
           titel: 'Anteilsbalken je Vorgang',
           firmaId: 7,
           ansprechpartnerId: null,
+          abschlusswahrscheinlichkeit: null,
+          entscheidungErwartetAm: null,
         }),
       }),
     );
@@ -471,6 +487,8 @@ describe('VorgangMaske — Ändern (Kriterium 10)', () => {
           titel: 'Anteilsbalken je Vorgang statt Band',
           firmaId: 7,
           ansprechpartnerId: 32,
+          abschlusswahrscheinlichkeit: null,
+          entscheidungErwartetAm: null,
         }),
       }),
     );
@@ -616,6 +634,8 @@ describe('VorgangMaske — die stillgelegte Zuordnung (Kriterien 23, 26)', () =>
           titel: 'Anteilsbalken je Vorgang',
           firmaId: 7,
           ansprechpartnerId: 31,
+          abschlusswahrscheinlichkeit: null,
+          entscheidungErwartetAm: null,
         }),
       }),
     );
@@ -670,6 +690,8 @@ describe('VorgangMaske — die stillgelegte Zuordnung (Kriterien 23, 26)', () =>
           titel: 'Anteilsbalken je Vorgang',
           firmaId: 7,
           ansprechpartnerId: 33,
+          abschlusswahrscheinlichkeit: null,
+          entscheidungErwartetAm: null,
         }),
       }),
     );
@@ -749,6 +771,8 @@ describe('VorgangMaske — Tastatur und Benennung', () => {
       titelFeld(),
       wahl('Firma'),
       wahl('Ansprechpartner'),
+      wahl('Abschlusswahrscheinlichkeit'),
+      datumsFeld(),
       screen.getByRole('button', { name: 'Anlegen' }),
       screen.getByRole('link', { name: 'Abbrechen' }),
     ];
@@ -756,5 +780,138 @@ describe('VorgangMaske — Tastatur und Benennung', () => {
       await nutzer.tab();
       expect(element).toHaveFocus();
     }
+  });
+});
+
+describe('VorgangMaske — Abschlusswahrscheinlichkeit und Entscheidungszeitpunkt (Kriterium 21)', () => {
+  it('bietet die elf Werte von 0 bis 100 in Zehnerschritten', async () => {
+    fetchNachPfad({ [FIRMEN_WEG]: json(200, FIRMEN) });
+
+    renderMaske();
+    await screen.findByRole('heading', { name: 'Neuer Vorgang' });
+
+    expect(angebot('Abschlusswahrscheinlichkeit')).toEqual([
+      '0 %',
+      '10 %',
+      '20 %',
+      '30 %',
+      '40 %',
+      '50 %',
+      '60 %',
+      '70 %',
+      '80 %',
+      '90 %',
+      '100 %',
+    ]);
+  });
+
+  it('fuehrt den erwarteten Entscheidungszeitpunkt als Datumsfeld mit Beschriftung', async () => {
+    fetchNachPfad({ [FIRMEN_WEG]: json(200, FIRMEN) });
+
+    renderMaske();
+    await screen.findByRole('heading', { name: 'Neuer Vorgang' });
+
+    const feld = datumsFeld();
+    expect(feld).toHaveAttribute('type', 'date');
+    expect(feld).toHaveValue('');
+  });
+
+  it('schickt beide Angaben mit, sobald sie gesetzt sind', async () => {
+    const nutzer = userEvent.setup();
+    const fetchMock = fetchNachPfad({
+      [FIRMEN_WEG]: json(200, FIRMEN),
+      'GET /api/firmen/7': json(200, FIRMA_7),
+      'POST /api/vorgaenge': json(201, { id: 12, nummer: 3 }),
+    });
+
+    renderMaske();
+    await screen.findByRole('heading', { name: 'Neuer Vorgang' });
+    await nutzer.type(titelFeld(), 'Anteilsbalken je Vorgang');
+    await nutzer.selectOptions(wahl('Firma'), '7');
+    await nutzer.selectOptions(wahl('Abschlusswahrscheinlichkeit'), '60');
+    await nutzer.type(datumsFeld(), '2026-10-15');
+    await nutzer.click(screen.getByRole('button', { name: 'Anlegen' }));
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/vorgaenge',
+      expect.objectContaining({
+        body: JSON.stringify({
+          titel: 'Anteilsbalken je Vorgang',
+          firmaId: 7,
+          ansprechpartnerId: null,
+          abschlusswahrscheinlichkeit: 60,
+          entscheidungErwartetAm: '2026-10-15',
+        }),
+      }),
+    );
+  });
+
+  it('schickt die Null als Wert und nicht als „nicht eingeschaetzt"', async () => {
+    const nutzer = userEvent.setup();
+    const fetchMock = fetchNachPfad({
+      [FIRMEN_WEG]: json(200, FIRMEN),
+      'GET /api/firmen/7': json(200, FIRMA_7),
+      'POST /api/vorgaenge': json(201, { id: 12, nummer: 3 }),
+    });
+
+    renderMaske();
+    await screen.findByRole('heading', { name: 'Neuer Vorgang' });
+    await nutzer.type(titelFeld(), 'Aussichtslos');
+    await nutzer.selectOptions(wahl('Firma'), '7');
+    await nutzer.selectOptions(wahl('Abschlusswahrscheinlichkeit'), '0');
+    await nutzer.click(screen.getByRole('button', { name: 'Anlegen' }));
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/vorgaenge',
+      expect.objectContaining({
+        body: JSON.stringify({
+          titel: 'Aussichtslos',
+          firmaId: 7,
+          ansprechpartnerId: null,
+          abschlusswahrscheinlichkeit: 0,
+          entscheidungErwartetAm: null,
+        }),
+      }),
+    );
+  });
+
+  it('belegt beide Angaben aus dem Vorgang vor und schreibt sie fort', async () => {
+    const nutzer = userEvent.setup();
+    const eingeschaetzt = {
+      ...VORGANG,
+      abschlusswahrscheinlichkeit: 30,
+      entscheidungErwartetAm: '2026-11-02',
+    };
+    const fetchMock = fetchNachPfad({
+      'GET /api/vorgaenge/5': json(200, eingeschaetzt),
+      [FIRMEN_WEG]: json(200, FIRMEN),
+      'GET /api/firmen/7': json(200, FIRMA_7),
+      'PUT /api/vorgaenge/5': leer(204),
+    });
+
+    renderMaskeZumAendern();
+    await screen.findByRole('heading', { name: 'Vorgang bearbeiten' });
+
+    expect(wahl('Abschlusswahrscheinlichkeit')).toHaveValue('30');
+    expect(datumsFeld()).toHaveValue('2026-11-02');
+
+    // Beide duerfen wieder leer werden: „nicht eingeschaetzt" ist ein gueltiger Stand.
+    await nutzer.selectOptions(wahl('Abschlusswahrscheinlichkeit'), '');
+    await nutzer.clear(datumsFeld());
+    await nutzer.click(screen.getByRole('button', { name: 'Speichern' }));
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/vorgaenge/5',
+      expect.objectContaining({
+        method: 'PUT',
+        body: JSON.stringify({
+          titel: 'Anteilsbalken je Vorgang',
+          firmaId: 7,
+          ansprechpartnerId: 31,
+          abschlusswahrscheinlichkeit: null,
+          entscheidungErwartetAm: null,
+        }),
+      }),
+    );
   });
 });

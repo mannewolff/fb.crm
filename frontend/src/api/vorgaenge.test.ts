@@ -59,12 +59,32 @@ const VORGANG = {
   titel: 'Neue Website',
   phase: 'ANBAHNUNG',
   abgeschlossen: false,
+  abschlusswahrscheinlichkeit: 60,
+  entscheidungErwartetAm: '2026-10-15',
   firma: ZUORDNUNG,
   ansprechpartner: { id: 3, name: 'Max Mustermann', aktiv: false },
   historie: [ANHANG, KOMMENTAR],
 };
 
-const EINGABE = { titel: 'Neue Website', firmaId: 7, ansprechpartnerId: 3 };
+const EINGABE = {
+  titel: 'Neue Website',
+  firmaId: 7,
+  ansprechpartnerId: 3,
+  abschlusswahrscheinlichkeit: 60,
+  entscheidungErwartetAm: '2026-10-15',
+};
+
+/** Ein Ereignis der Historie: von der Anwendung vermerkt, ohne Datei (Kriterium 19). */
+const EREIGNIS = {
+  id: 7,
+  art: 'EREIGNIS',
+  text: 'Angebot A-2026-009 versendet',
+  geschehenAm: '2026-09-25T08:00:00Z',
+  herkunft: 'AUTOMATISCH',
+  dateiName: null,
+  dateiGroesse: null,
+  geaendertAm: null,
+};
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -78,6 +98,14 @@ describe('parseVorgaengeUebersicht', () => {
     });
   });
 
+  it('nimmt eine Zeile in der Phase ANGEBOT an (Issue #101)', () => {
+    const angebot = { ...ZEILE, phase: 'ANGEBOT' };
+
+    expect(parseVorgaengeUebersicht({ vorgaenge: [angebot], gesamt: 1 }).vorgaenge[0].phase).toBe(
+      'ANGEBOT',
+    );
+  });
+
   it.each([
     ['kein Objekt', 42],
     ['null', null],
@@ -88,7 +116,7 @@ describe('parseVorgaengeUebersicht', () => {
     ['Zeile ohne nummer', { vorgaenge: [{ ...ZEILE, nummer: '2026001' }], gesamt: 1 }],
     ['Zeile ohne titel', { vorgaenge: [{ ...ZEILE, titel: 7 }], gesamt: 1 }],
     ['Zeile ohne firma', { vorgaenge: [{ ...ZEILE, firma: null }], gesamt: 1 }],
-    ['Zeile mit unbekannter phase', { vorgaenge: [{ ...ZEILE, phase: 'ANGEBOT' }], gesamt: 1 }],
+    ['Zeile mit unbekannter phase', { vorgaenge: [{ ...ZEILE, phase: 'RECHNUNG' }], gesamt: 1 }],
     ['Zeile ohne abgeschlossen', { vorgaenge: [{ ...ZEILE, abgeschlossen: 'nein' }], gesamt: 1 }],
     [
       'Zeile ohne letzteAktivitaet',
@@ -123,6 +151,10 @@ describe('parseEintrag', () => {
     expect(parseEintrag(ANHANG)).toEqual(ANHANG);
   });
 
+  it('verengt ein Ereignis mit automatischer Herkunft (Issue #93)', () => {
+    expect(parseEintrag(EREIGNIS)).toEqual(EREIGNIS);
+  });
+
   it.each([
     ['ohne id', { ...KOMMENTAR, id: undefined }],
     ['mit unbekannter art', { ...KOMMENTAR, art: 'NOTIZ' }],
@@ -146,6 +178,21 @@ describe('parseVorgang', () => {
     expect(parseVorgang({ ...VORGANG, ansprechpartner: null }).ansprechpartner).toBeNull();
   });
 
+  it('nimmt einen Vorgang in der Phase ANGEBOT an (Issue #101)', () => {
+    expect(parseVorgang({ ...VORGANG, phase: 'ANGEBOT' }).phase).toBe('ANGEBOT');
+  });
+
+  it('nimmt die beiden Pipeline-Felder auch als null (Kriterium 21)', () => {
+    const ohne = parseVorgang({
+      ...VORGANG,
+      abschlusswahrscheinlichkeit: null,
+      entscheidungErwartetAm: null,
+    });
+
+    expect(ohne.abschlusswahrscheinlichkeit).toBeNull();
+    expect(ohne.entscheidungErwartetAm).toBeNull();
+  });
+
   it.each([
     ['ohne id', { ...VORGANG, id: undefined }],
     ['ohne titel', { ...VORGANG, titel: null }],
@@ -154,6 +201,13 @@ describe('parseVorgang', () => {
     ['mit Firma ohne name', { ...VORGANG, firma: { ...ZUORDNUNG, name: undefined } }],
     ['mit Firma ohne aktiv', { ...VORGANG, firma: { ...ZUORDNUNG, aktiv: 'ja' } }],
     ['ohne historie', { ...VORGANG, historie: undefined }],
+    [
+      'mit falscher abschlusswahrscheinlichkeit',
+      { ...VORGANG, abschlusswahrscheinlichkeit: '60' },
+    ],
+    ['ohne abschlusswahrscheinlichkeit', { ...VORGANG, abschlusswahrscheinlichkeit: undefined }],
+    ['mit falschem entscheidungErwartetAm', { ...VORGANG, entscheidungErwartetAm: 20261015 }],
+    ['ohne entscheidungErwartetAm', { ...VORGANG, entscheidungErwartetAm: undefined }],
   ])('weist eine Antwort %s ab', (_fall, antwort) => {
     expect(() => parseVorgang(antwort)).toThrow(TypeError);
   });
