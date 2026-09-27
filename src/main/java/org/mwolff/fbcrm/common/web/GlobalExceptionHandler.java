@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 import org.jspecify.annotations.Nullable;
+import org.mwolff.fbcrm.common.Feldfehler;
 import org.mwolff.fbcrm.common.Uploadgrenze;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -22,9 +23,10 @@ import org.springframework.web.multipart.MaxUploadSizeExceededException;
 /**
  * Die einzige Stelle, an der Fehler auf HTTP-Antworten abgebildet werden (CLAUDE-java.md §6.3).
  *
- * <p>Ausgegeben wird durchgaengig RFC-9457 Problem Details. Bean-Validation-Fehler bekommen die
- * Erweiterung {@code fieldErrors}; alles Unerwartete wird als generischer 500 beantwortet, damit
- * weder Stacktrace noch interne Meldung nach aussen gelangt (CLAUDE-security.md).
+ * <p>Ausgegeben wird durchgaengig RFC-9457 Problem Details. Bean-Validation-Fehler und fachliche
+ * {@link Feldfehler} bekommen die Erweiterung {@code fieldErrors}; alles Unerwartete wird als
+ * generischer 500 beantwortet, damit weder Stacktrace noch interne Meldung nach aussen gelangt
+ * (CLAUDE-security.md).
  */
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -73,6 +75,30 @@ public class GlobalExceptionHandler {
   @ExceptionHandler(MaxUploadSizeExceededException.class)
   public ProblemDetail handleUploadZuGross() {
     return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, Uploadgrenze.MELDUNG);
+  }
+
+  /**
+   * Ein fachlicher Fehler, der die betroffenen Felder nennt (E22 des Angebot-Plans).
+   *
+   * <p>Bisher entstand {@code fieldErrors} allein aus der Bean Validation und damit immer mit 400,
+   * waehrend ein {@code @ResponseStatus}-Fehler nur {@code detail} trug. Manche fachliche Pruefung
+   * nennt aber ebenfalls Felder — die Versandpruefung des Angebots zaehlt alle fehlenden Angaben
+   * auf einmal auf —, und ohne diesen Zweig muesste die Oberflaeche zwei Formen fuer dieselbe
+   * Aussage lesen.
+   *
+   * <p>Statuscode und Text kommen aus demselben Weg wie bei jeder anderen fachlichen Ausnahme:
+   * {@link #handleUnexpected} liest die {@code @ResponseStatus}-Annotation. Hier kommt nur die
+   * Feldliste dazu — zwei Abbildungen fuer einen Statuscode liefen auseinander.
+   *
+   * <p>Der Zweig nennt bewusst {@link Feldfehler} und keine Ausnahme eines Fachmoduls: Sonst zeigte
+   * {@code common} auf das Fachmodul und das Fachmodul auf {@code common} ({@code
+   * ArchitectureTest}, {@code modules_thenFreeOfCycles}).
+   */
+  @ExceptionHandler(Feldfehler.class)
+  public ProblemDetail handleFeldfehler(final Feldfehler exception) {
+    final ProblemDetail problem = handleUnexpected(exception);
+    problem.setProperty("fieldErrors", exception.felder());
+    return problem;
   }
 
   @ExceptionHandler(Exception.class)

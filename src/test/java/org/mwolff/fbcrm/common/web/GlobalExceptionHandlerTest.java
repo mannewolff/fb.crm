@@ -6,6 +6,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
+import org.mwolff.fbcrm.common.Feldfehler;
 import org.mwolff.fbcrm.common.Uploadgrenze;
 import org.springframework.core.MethodParameter;
 import org.springframework.http.HttpStatus;
@@ -212,12 +213,60 @@ class GlobalExceptionHandlerTest {
     assertThat(problem.getDetail()).isEqualTo(GlobalExceptionHandler.GENERIC_DETAIL);
   }
 
+  @Test
+  void handleFeldfehler_thenTakesTheStatusOfTheAnnotatedException() {
+    // Given — E22 des Angebot-Plans: ein fachlicher Fehler, der einzelne Felder benennt.
+
+    // When
+    final ProblemDetail problem = handler.handleFeldfehler(new AngabenFehlen());
+
+    // Then
+    assertThat(problem.getStatus()).isEqualTo(HttpStatus.CONFLICT.value());
+  }
+
+  @Test
+  void handleFeldfehler_thenCarriesTheFieldsAsFieldErrors() {
+    // Given — E22: dieselbe Erweiterung wie bei der Bean Validation, damit die Oberflaeche die
+    // Meldungen auf beiden Wegen gleich liest.
+
+    // When
+    final ProblemDetail problem = handler.handleFeldfehler(new AngabenFehlen());
+
+    // Then
+    assertThat(problem.getProperties())
+        .containsEntry("fieldErrors", Map.of("positionen", List.of("fehlt")));
+  }
+
+  @Test
+  void handleFeldfehler_thenDetailComesFromTheResponseStatusReason() {
+    // Given — ohne eigene Meldung gilt der Grund der Annotation.
+
+    // When
+    final ProblemDetail problem = handler.handleFeldfehler(new AngabenFehlen());
+
+    // Then
+    assertThat(problem.getDetail()).isEqualTo("Es fehlen Angaben.");
+  }
+
   private static MethodArgumentNotValidException validationException(final FieldError... errors)
       throws NoSuchMethodException {
     final BindingResult bindingResult = new BeanPropertyBindingResult(new Object(), "antrag");
     Arrays.stream(errors).forEach(bindingResult::addError);
     return new MethodArgumentNotValidException(
         new MethodParameter(String.class.getDeclaredMethod("length"), -1), bindingResult);
+  }
+
+  /*
+   * Ein Feldfehler aus einem beliebigen Fachmodul — hier nachgebildet, damit dieser Test kein
+   * Fachmodul importieren muss: Die Abbildung kennt nur den Vertrag aus common.Feldfehler, und
+   * common darf kein Fachmodul kennen (ArchitectureTest, modules_thenFreeOfCycles).
+   */
+  @ResponseStatus(code = HttpStatus.CONFLICT, reason = "Es fehlen Angaben.")
+  private static final class AngabenFehlen extends Feldfehler {
+    @Override
+    public Map<String, List<String>> felder() {
+      return Map.of("positionen", List.of("fehlt"));
+    }
   }
 
   @ResponseStatus(code = HttpStatus.NOT_FOUND, reason = "Konto nicht gefunden.")
