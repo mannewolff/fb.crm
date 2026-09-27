@@ -214,6 +214,51 @@ class VorgangSchemaIT extends AbstractIntegrationTest {
   }
 
   @Test
+  void ereignis_givenTextAndNoFileData_thenAccepted() {
+    // Given — die dritte Art aus Kriterium 19.
+    final Long vorgangId = vorgangId(1L);
+
+    // When
+    final int betroffen =
+        jdbc.update(INSERT_EINTRAG, vorgangId, "EREIGNIS", "Angebot versandt", null, null, null);
+
+    // Then
+    assertThat(betroffen).isEqualTo(1);
+  }
+
+  @Test
+  void ereignis_givenNoText_thenRejectedByTheDatabase() {
+    // Given
+    final Long vorgangId = vorgangId(1L);
+
+    // When / Then
+    assertThatThrownBy(
+            () -> jdbc.update(INSERT_EINTRAG, vorgangId, "EREIGNIS", null, null, null, null))
+        .isInstanceOf(DataIntegrityViolationException.class)
+        .hasMessageContaining("vorgang_eintrag_ereignis");
+  }
+
+  @Test
+  void ereignis_givenFileData_thenRejectedByTheDatabase() {
+    // Given — ein Ereignis traegt Text, niemals eine Datei.
+    final Long vorgangId = vorgangId(1L);
+
+    // When / Then
+    assertThatThrownBy(
+            () ->
+                jdbc.update(
+                    INSERT_EINTRAG,
+                    vorgangId,
+                    "EREIGNIS",
+                    "Angebot versandt",
+                    "Angebot.pdf",
+                    4096L,
+                    "vorgang/1/abc"))
+        .isInstanceOf(DataIntegrityViolationException.class)
+        .hasMessageContaining("vorgang_eintrag_ereignis");
+  }
+
+  @Test
   void eintragArt_givenAnUnknownArt_thenRejectedByTheDatabase() {
     // Given
     final Long vorgangId = vorgangId(1L);
@@ -221,6 +266,25 @@ class VorgangSchemaIT extends AbstractIntegrationTest {
     // When / Then
     assertThatThrownBy(
             () -> jdbc.update(INSERT_EINTRAG, vorgangId, "NACHRICHT", "Text", null, null, null))
+        .isInstanceOf(DataIntegrityViolationException.class);
+  }
+
+  @Test
+  void eintragArt_givenAFourthArtWithAllFileValues_thenRejectedByTheDatabase() {
+    // Given — jeder Check benennt die anderen Arten; eine vierte faellt durch alle drei.
+    final Long vorgangId = vorgangId(1L);
+
+    // When / Then
+    assertThatThrownBy(
+            () ->
+                jdbc.update(
+                    INSERT_EINTRAG,
+                    vorgangId,
+                    "NACHRICHT",
+                    "Text",
+                    "Angebot.pdf",
+                    4096L,
+                    "vorgang/1/abc"))
         .isInstanceOf(DataIntegrityViolationException.class);
   }
 

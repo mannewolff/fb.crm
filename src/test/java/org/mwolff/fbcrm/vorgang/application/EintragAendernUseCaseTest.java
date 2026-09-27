@@ -60,6 +60,10 @@ class EintragAendernUseCaseTest {
         .requireId();
   }
 
+  private long ereignis() {
+    return eintraege.mit(Eintrag.ereignis(VORGANG_ID, "Angebot versandt.", VORGESTERN)).requireId();
+  }
+
   private Eintrag gespeicherter(final long id) {
     return eintraege.findById(id).orElseThrow();
   }
@@ -114,6 +118,32 @@ class EintragAendernUseCaseTest {
 
     // Then
     assertThat(gespeicherter(id).createdAt()).isEqualTo(VORGESTERN);
+  }
+
+  @Test
+  void aendern_givenAnEvent_thenRefuses() {
+    // Given — Kriterium 19: ein Ereignis laesst sich nicht aendern.
+    final long id = ereignis();
+
+    // When / Then
+    assertThatExceptionOfType(EintragNichtAenderbar.class)
+        .isThrownBy(() -> useCase.aendern(VORGANG_ID, id, "Umgeschrieben", GESTERN));
+  }
+
+  @Test
+  void aendern_givenAnEvent_thenWritesNothing() {
+    // Given — die Abweisung kommt vor dem Speichern; das Protokoll zeugt davon.
+    final long id = ereignis();
+
+    // When
+    assertThatExceptionOfType(EintragNichtAenderbar.class)
+        .isThrownBy(() -> useCase.aendern(VORGANG_ID, id, "Umgeschrieben", GESTERN));
+
+    // Then
+    assertThat(protokoll).isEmpty();
+    assertThat(gespeicherter(id))
+        .extracting(Eintrag::text, Eintrag::geschehenAm, Eintrag::geaendertAm)
+        .containsExactly("Angebot versandt.", VORGESTERN, null);
   }
 
   @Test

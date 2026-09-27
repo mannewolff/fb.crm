@@ -33,6 +33,7 @@ import org.mwolff.fbcrm.vorgang.application.AnhangLesenUseCase;
 import org.mwolff.fbcrm.vorgang.application.EintragAendernUseCase;
 import org.mwolff.fbcrm.vorgang.application.EintragDaten;
 import org.mwolff.fbcrm.vorgang.application.EintragHinzufuegenUseCase;
+import org.mwolff.fbcrm.vorgang.application.EintragNichtAenderbar;
 import org.mwolff.fbcrm.vorgang.application.EintragNichtGefunden;
 import org.mwolff.fbcrm.vorgang.application.VorgangNichtGefunden;
 import org.mwolff.fbcrm.vorgang.domain.Eintrag;
@@ -236,6 +237,20 @@ class EintragControllerTest {
   }
 
   @Test
+  void hinzufuegen_givenTheArtEreignis_thenAnswersBadRequestAtTheArtField() throws Exception {
+    // When / Then — Kriterium 19: Ereignisse schreibt allein die Anwendung.
+    mockMvc
+        .perform(
+            multipart(PFAD)
+                .param("art", "EREIGNIS")
+                .param("geschehenAm", GESTERN)
+                .param("text", "Angebot versandt."))
+        .andExpect(status().isBadRequest())
+        .andExpect(
+            jsonPath("$.fieldErrors.art[0]").value(EintragConstraint.EREIGNIS_NICHT_EINREICHBAR));
+  }
+
+  @Test
   void hinzufuegen_givenAFileBeyondTheLimit_thenTheMessageNamesTheLimit() throws Exception {
     // Given — Kriterium 18.
     final MockMultipartFile gross =
@@ -312,6 +327,22 @@ class EintragControllerTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(aenderung("\"Doch geschrieben\"", JETZT.plusSeconds(61).toString())))
         .andExpect(jsonPath("$.fieldErrors.geschehenAm[0]").value(EintragConstraint.ZUKUNFT));
+  }
+
+  @Test
+  void aendern_givenAnEvent_thenAnswersConflict() throws Exception {
+    // Given — Kriterium 19: der Status haengt an der Ausnahme, nicht am Controller.
+    doThrow(new EintragNichtAenderbar())
+        .when(aendern)
+        .aendern(4L, 21L, "Umgeschrieben", Instant.parse(GESTERN));
+
+    // When / Then
+    mockMvc
+        .perform(
+            put(PFAD + "/21")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(aenderung("\"Umgeschrieben\"", GESTERN)))
+        .andExpect(status().isConflict());
   }
 
   @Test

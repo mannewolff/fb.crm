@@ -214,6 +214,21 @@ class EintragHinzufuegenUseCaseTest {
   }
 
   @Test
+  void hinzufuegen_givenTheArtEreignis_thenRefusesAndWritesNothing() {
+    // Given — ein Ereignis schreibt allein die Anwendung; von aussen ist es kein Kommentar.
+
+    // When / Then
+    assertThatExceptionOfType(IllegalArgumentException.class)
+        .isThrownBy(
+            () ->
+                useCase.hinzufuegen(
+                    VORGANG_ID,
+                    new EintragDaten(
+                        Eintragsart.EREIGNIS, "Angebot versandt.", GESTERN, null, 0L, null)));
+    assertThat(eintraege.alle()).isEmpty();
+  }
+
+  @Test
   void hinzufuegen_givenAnAttachmentWithoutAFile_thenRefuses() {
     // Given — die Schranke hinter der Bean Validation.
 

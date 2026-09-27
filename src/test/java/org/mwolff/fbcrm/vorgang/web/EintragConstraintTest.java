@@ -225,6 +225,35 @@ class EintragConstraintTest {
   }
 
   @Test
+  void neuerEintrag_givenTheArtEreignis_thenReportsOnTheArtField() {
+    // Given — Ereignisse schreibt allein die Anwendung (Kriterium 19).
+
+    // When
+    final Set<ConstraintViolation<EintragRequest>> verletzungen =
+        pruefe(new EintragRequest(Eintragsart.EREIGNIS, "Angebot versandt.", GESTERN, null));
+
+    // Then
+    assertThat(verletzungen)
+        .extracting(v -> v.getPropertyPath().toString(), ConstraintViolation::getMessage)
+        .containsExactly(
+            tuple(EintragConstraint.FELD_ART, EintragConstraint.EREIGNIS_NICHT_EINREICHBAR));
+  }
+
+  @Test
+  void neuerEintrag_givenTheArtEreignisWithoutText_thenReportsOnlyOnTheArtField() {
+    // Given — die Art ist schon der Grund; eine zweite Meldung am Text hilft niemandem.
+
+    // When
+    final Set<ConstraintViolation<EintragRequest>> verletzungen =
+        pruefe(new EintragRequest(Eintragsart.EREIGNIS, null, GESTERN, null));
+
+    // Then
+    assertThat(verletzungen)
+        .extracting(v -> v.getPropertyPath().toString())
+        .containsExactly(EintragConstraint.FELD_ART);
+  }
+
+  @Test
   void aenderung_givenTextAndMoment_thenPasses() {
     // When
     final Set<ConstraintViolation<EintragAenderungRequest>> verletzungen =

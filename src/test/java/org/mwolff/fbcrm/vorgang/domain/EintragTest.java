@@ -78,6 +78,68 @@ class EintragTest {
         .hasMessageContaining("Text");
   }
 
+  private static Eintrag ereignis() {
+    return Eintrag.ereignis(7L, "Angebot versandt.", GESCHEHEN);
+  }
+
+  @Test
+  void ereignis_thenCarriesTheGivenValues() {
+    // When
+    final Eintrag eintrag = ereignis();
+
+    // Then
+    assertThat(eintrag)
+        .satisfies(
+            neu -> assertThat(neu.vorgangId()).isEqualTo(7L),
+            neu -> assertThat(neu.art()).isEqualTo(Eintragsart.EREIGNIS),
+            neu -> assertThat(neu.text()).isEqualTo("Angebot versandt."),
+            neu -> assertThat(neu.geschehenAm()).isEqualTo(GESCHEHEN),
+            neu -> assertThat(neu.createdAt()).isEqualTo(GESCHEHEN));
+  }
+
+  @Test
+  void ereignis_thenTheOriginIsAutomatic() {
+    // Given — ein Ereignis entsteht nicht von Hand, sondern aus einem Zustandswechsel.
+
+    // When
+    final Eintrag eintrag = ereignis();
+
+    // Then
+    assertThat(eintrag.herkunft()).isEqualTo(Herkunft.AUTOMATISCH);
+  }
+
+  @Test
+  void ereignis_thenCarriesNoFileData() {
+    // When
+    final Eintrag eintrag = ereignis();
+
+    // Then
+    assertThat(eintrag)
+        .satisfies(
+            neu -> assertThat(neu.dateiName()).isNull(),
+            neu -> assertThat(neu.dateiGroesse()).isNull(),
+            neu -> assertThat(neu.objektSchluessel()).isNull());
+  }
+
+  @Test
+  void ereignis_thenIsNotYetStoredAndNotYetChanged() {
+    // When
+    final Eintrag eintrag = ereignis();
+
+    // Then
+    assertThat(eintrag)
+        .satisfies(
+            neu -> assertThat(neu.id()).isNull(), neu -> assertThat(neu.geaendertAm()).isNull());
+  }
+
+  @Test
+  void ereignis_givenABlankText_thenRejected() {
+    // When / Then
+    assertThatThrownBy(() -> Eintrag.ereignis(7L, "   ", GESCHEHEN))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("Text");
+  }
+
   @Test
   void anhang_thenCarriesTheFileData() {
     // When

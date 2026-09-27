@@ -28,6 +28,11 @@ import org.springframework.transaction.annotation.Transactional;
  * eine Waise im Speicher liegen; die umgekehrte Reihenfolge hinterliesse eine Zeile, deren Datei es
  * nicht gibt, und das braeche Kriterium 17 sichtbar.
  *
+ * <p><b>Ein Ereignis kommt hier nie an.</b> Die Art {@code EREIGNIS} wird abgewiesen, statt sie als
+ * Kommentar zu behandeln: Ereignisse schreibt allein {@link EreignisVermerkenUseCase}. Die Bean
+ * Validation der Anfrage meldet sie schon am Feld; diese Schranke haelt auch den Aufruf an, der an
+ * ihr vorbeikommt.
+ *
  * <p>Was Text und Dateiangaben verlangen, steht in {@link Eintrag} und wird hier nicht wiederholt.
  * Der Anwendungsfall engt die Eingabe nur so weit ein, dass die Fabriken der Domaene sie annehmen
  * koennen — die Meldung am Feld entsteht in der Bean Validation der Anfrage, nicht hier.
@@ -61,10 +66,13 @@ public class EintragHinzufuegenUseCase {
    * @throws ZeitpunktInDerZukunft wenn der Zeitpunkt ueber der Toleranz aus E15 liegt
    * @throws VorgangNichtGefunden wenn es den Vorgang nicht gibt
    * @throws AnhangZuGross wenn die Datei die Grenze aus {@link Uploadgrenze} ueberschreitet
-   * @throws IllegalArgumentException wenn einem Kommentar der Text oder einem Anhang die Datei
-   *     fehlt
+   * @throws IllegalArgumentException wenn die Art {@code EREIGNIS} ist, einem Kommentar der Text
+   *     oder einem Anhang die Datei fehlt
    */
   public Eintrag hinzufuegen(final long vorgangId, final EintragDaten daten) {
+    if (daten.art() == Eintragsart.EREIGNIS) {
+      throw new IllegalArgumentException("Ein Ereignis vermerkt allein die Anwendung.");
+    }
     if (Zeitpunktgrenze.inDerZukunft(daten.geschehenAm(), clock.instant())) {
       throw new ZeitpunktInDerZukunft();
     }

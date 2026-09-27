@@ -121,6 +121,45 @@ class JpaEintragRepositoryIT extends AbstractIntegrationTest {
   }
 
   @Test
+  void findById_afterSavingAnEreignis_thenReturnsEveryStoredValue() {
+    // Given — Kriterium 19: das Ereignis liegt in derselben Tabelle wie Kommentar und Anhang.
+    final long vorgangId = vorgangId(1L);
+    final Eintrag gesichert =
+        repository.save(Eintrag.ereignis(vorgangId, "Angebot versandt", FRUEH));
+
+    // When
+    final Optional<Eintrag> gefunden = repository.findById(gesichert.requireId());
+
+    // Then
+    assertThat(gefunden)
+        .hasValueSatisfying(
+            eintrag -> {
+              assertThat(eintrag.art()).isEqualTo(Eintragsart.EREIGNIS);
+              assertThat(eintrag.herkunft()).isEqualTo(Herkunft.AUTOMATISCH);
+              assertThat(eintrag.text()).isEqualTo("Angebot versandt");
+              assertThat(eintrag.dateiName()).isNull();
+              assertThat(eintrag.dateiGroesse()).isNull();
+              assertThat(eintrag.objektSchluessel()).isNull();
+            });
+  }
+
+  @Test
+  void findByVorgang_givenAnEreignisBetweenTheOtherArts_thenSortsItByTheTimeOfTheEvent() {
+    // Given — E6: eine Folge aus allen Arten, nach Zeitpunkt sortiert.
+    final long vorgangId = vorgangId(1L);
+    repository.save(kommentar(vorgangId, "Zuerst geschehen", FRUEH));
+    repository.save(Eintrag.ereignis(vorgangId, "Angebot versandt", SPAET));
+
+    // When
+    final List<Eintrag> historie = repository.findByVorgang(vorgangId);
+
+    // Then
+    assertThat(historie)
+        .extracting(Eintrag::art)
+        .containsExactly(Eintragsart.EREIGNIS, Eintragsart.KOMMENTAR);
+  }
+
+  @Test
   void findById_givenAnUnknownId_thenEmpty() {
     // When
     final Optional<Eintrag> gefunden = repository.findById(4711L);

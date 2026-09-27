@@ -34,12 +34,21 @@ import org.springframework.web.multipart.MultipartFile;
  *
  * <p>Fehlende Pflichtangaben — Art, Zeitpunkt — meldet {@code @NotNull} am Feld. Die Constraint
  * schweigt dazu: Zwei Meldungen fuer dasselbe leere Feld helfen niemandem.
+ *
+ * <p><b>Der Riegel gegen die dritte Art.</b> {@code EREIGNIS} ist ein Wert der Aufzaehlung und
+ * deshalb bindbar, aber kein Aufrufer von aussen darf ihn einreichen: Ereignisse vermerkt allein
+ * {@code EreignisVermerkenUseCase} (Kriterium 19). Ohne diese Regel liefe {@code art=EREIGNIS} als
+ * Kommentar weiter und endete in der Anwendungsschicht in einem 500. Gemeldet wird am Feld {@code
+ * art}, weil dort der Grund liegt.
  */
 @Documented
 @Retention(RetentionPolicy.RUNTIME)
 @Target(ElementType.TYPE)
 @Constraint(validatedBy = {EintragConstraint.NeuerEintrag.class, EintragConstraint.Aenderung.class})
 public @interface EintragConstraint {
+
+  /** Das Feld der Eintragsart. */
+  String FELD_ART = "art";
 
   /** Das Feld des Textes. */
   String FELD_TEXT = "text";
@@ -49,6 +58,10 @@ public @interface EintragConstraint {
 
   /** Das Feld des Zeitpunkts des Geschehens. */
   String FELD_ZEITPUNKT = "geschehenAm";
+
+  /** Die Art {@code EREIGNIS} in einer Anfrage von aussen. */
+  String EREIGNIS_NICHT_EINREICHBAR =
+      "Ein Ereignis vermerkt die Anwendung selbst und laesst sich nicht eintragen.";
 
   /** Ein Kommentar ohne Text. */
   String TEXT_FEHLT = "Ein Kommentar braucht einen Text.";
@@ -123,6 +136,10 @@ public @interface EintragConstraint {
     @Override
     public boolean isValid(final EintragRequest anfrage, final ConstraintValidatorContext kontext) {
       kontext.disableDefaultConstraintViolation();
+      if (anfrage.art() == Eintragsart.EREIGNIS) {
+        Regeln.melde(kontext, EREIGNIS_NICHT_EINREICHBAR, FELD_ART);
+        return false;
+      }
       boolean gueltig = Regeln.zeitpunktGueltig(anfrage.geschehenAm(), clock, kontext);
       if (anfrage.art() == Eintragsart.KOMMENTAR && leer(anfrage.text())) {
         Regeln.melde(kontext, TEXT_FEHLT, FELD_TEXT);

@@ -5,12 +5,12 @@ import org.jspecify.annotations.Nullable;
 import org.mwolff.fbcrm.common.Identifiable;
 
 /**
- * Ein Eintrag in der Historie eines Vorgangs — ein Kommentar oder ein Anhang.
+ * Ein Eintrag in der Historie eines Vorgangs — ein Kommentar, ein Anhang oder ein Ereignis.
  *
- * <p>Beide Arten liegen in einem Record und in einer Tabelle, damit die Historie als <b>eine</b>
+ * <p>Alle Arten liegen in einem Record und in einer Tabelle, damit die Historie als <b>eine</b>
  * nach {@link #geschehenAm} sortierte Folge lesbar bleibt (E6). Was eine Art verlangt und was sie
- * verbietet, halten die Fabriken {@link #kommentar} und {@link #anhang} an einer Stelle fest; die
- * Checks der Migration sagen dasselbe noch einmal in der Datenbank.
+ * verbietet, halten die Fabriken {@link #kommentar}, {@link #anhang} und {@link #ereignis} an einer
+ * Stelle fest; die Checks der Migration sagen dasselbe noch einmal in der Datenbank.
  *
  * <p>{@link #geschehenAm} ist der Zeitpunkt des Geschehens und nicht der der Erfassung: Ein
  * Telefonat von gestern wird heute mit dem gestrigen Zeitpunkt eingetragen. {@link #createdAt}
@@ -18,7 +18,7 @@ import org.mwolff.fbcrm.common.Identifiable;
  *
  * @param id technische Id — {@code null}, solange der Eintrag nicht gespeichert ist
  * @param vorgangId Kennung des Vorgangs, zu dem der Eintrag gehoert
- * @param art Kommentar oder Anhang
+ * @param art Kommentar, Anhang oder Ereignis
  * @param text der Text; bei einem Kommentar Pflicht, bei einem Anhang die Beschreibung oder {@code
  *     null}
  * @param geschehenAm Zeitpunkt des Geschehens
@@ -64,7 +64,7 @@ public record Eintrag(
         null,
         vorgangId,
         Eintragsart.KOMMENTAR,
-        pflichttext(text),
+        pflichttext(text, "Ein Kommentar braucht einen Text."),
         geschehenAm,
         herkunft,
         null,
@@ -111,6 +111,34 @@ public record Eintrag(
   }
 
   /**
+   * Ein Ereignis: Text ist Pflicht, Dateiangaben gibt es nicht, die Herkunft ist {@link
+   * Herkunft#AUTOMATISCH} (Kriterium 19).
+   *
+   * <p>Ein Ereignis geschieht in dem Augenblick, in dem es vermerkt wird — Geschehen und Erfassung
+   * fallen deshalb auf denselben Zeitpunkt. Anders als beim Kommentar gibt es hier nichts
+   * nachzutragen: Wer den Zustand wechselt, ist die Anwendung, und sie merkt es sofort.
+   *
+   * @param vorgangId Kennung des Vorgangs
+   * @param text was geschehen ist; darf nicht leer sein
+   * @param zeitpunkt Zeitpunkt des Geschehens und der Erfassung
+   * @throws IllegalArgumentException wenn der Text leer ist
+   */
+  public static Eintrag ereignis(final long vorgangId, final String text, final Instant zeitpunkt) {
+    return new Eintrag(
+        null,
+        vorgangId,
+        Eintragsart.EREIGNIS,
+        pflichttext(text, "Ein Ereignis braucht einen Text."),
+        zeitpunkt,
+        Herkunft.AUTOMATISCH,
+        null,
+        null,
+        null,
+        zeitpunkt,
+        null);
+  }
+
+  /**
    * Der Eintrag mit neuem Text und neuem Zeitpunkt des Geschehens; Art, Herkunft und Dateiangaben
    * bleiben unberuehrt.
    *
@@ -122,7 +150,7 @@ public record Eintrag(
   public Eintrag geaendert(
       final @Nullable String text, final Instant geschehenAm, final Instant zeitpunkt) {
     if (art == Eintragsart.KOMMENTAR) {
-      pflichttext(text);
+      pflichttext(text, "Ein Kommentar braucht einen Text.");
     }
     return new Eintrag(
         id,
@@ -138,9 +166,9 @@ public record Eintrag(
         zeitpunkt);
   }
 
-  private static String pflichttext(final @Nullable String text) {
+  private static String pflichttext(final @Nullable String text, final String meldung) {
     if (text == null || text.isBlank()) {
-      throw new IllegalArgumentException("Ein Kommentar braucht einen Text.");
+      throw new IllegalArgumentException(meldung);
     }
     return text;
   }

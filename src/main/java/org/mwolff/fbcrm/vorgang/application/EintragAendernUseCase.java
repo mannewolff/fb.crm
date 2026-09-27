@@ -5,6 +5,7 @@ import java.time.Instant;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.fbcrm.vorgang.domain.Eintrag;
 import org.mwolff.fbcrm.vorgang.domain.EintragRepository;
+import org.mwolff.fbcrm.vorgang.domain.Eintragsart;
 import org.mwolff.fbcrm.vorgang.domain.Zeitpunktgrenze;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -15,6 +16,11 @@ import org.springframework.transaction.annotation.Transactional;
  * <p>Die Datei bleibt unberuehrt. Ein Anhang laesst sich nicht austauschen — dafuer gibt es keinen
  * Weg, und es braucht ihn nicht: Wer eine andere Datei meint, haengt sie an und laesst die alte in
  * der Historie stehen, wo sie hingehoert.
+ *
+ * <p><b>Ein Ereignis bleibt, wie es ist.</b> Die Art {@code EREIGNIS} wird abgewiesen, bevor
+ * irgendetwas geschrieben wird (Kriterium 19) — sie ist der Nachweis eines Zustandswechsels, nicht
+ * ein Nachtrag von Hand. Geprueft wird das hier und nicht in der Anfrage: Die Art steht im Bestand,
+ * nicht in der Anfrage.
  *
  * <p><b>Ein Zugriff auf den Bestand, nicht zwei.</b> Geprueft wird der Eintrag, nicht zusaetzlich
  * der Vorgang: Passt seine Vorgangskennung nicht zum Pfad, ist er unter dieser Adresse nicht
@@ -42,6 +48,7 @@ public class EintragAendernUseCase {
    * @param geschehenAm der neue Zeitpunkt des Geschehens
    * @throws ZeitpunktInDerZukunft wenn der Zeitpunkt ueber der Toleranz aus E15 liegt
    * @throws EintragNichtGefunden wenn es unter dieser Adresse keinen Eintrag gibt
+   * @throws EintragNichtAenderbar wenn der Eintrag ein Ereignis ist
    * @throws IllegalArgumentException wenn der Eintrag ein Kommentar ist und der Text leer bleibt
    */
   public void aendern(
@@ -57,6 +64,9 @@ public class EintragAendernUseCase {
             .findById(eintragId)
             .filter(eintrag -> eintrag.vorgangId() == vorgangId)
             .orElseThrow(EintragNichtGefunden::new);
+    if (vorhanden.art() == Eintragsart.EREIGNIS) {
+      throw new EintragNichtAenderbar();
+    }
     eintraege.save(vorhanden.geaendert(text, geschehenAm, clock.instant()));
   }
 }
