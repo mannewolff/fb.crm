@@ -171,6 +171,44 @@ describe('App', () => {
     expect(screen.getByRole('navigation', { name: 'Hauptnavigation' })).toBeInTheDocument();
   });
 
+  it('fuehrt „/eigene-angaben" ohne Sitzung auf die Anmeldeseite', async () => {
+    ohneSitzung();
+
+    renderApp(['/eigene-angaben'], 0);
+
+    expect(await screen.findByLabelText(/^E-Mail-Adresse/)).toBeInTheDocument();
+  });
+
+  it('zeigt „/eigene-angaben" mit Sitzung im Rahmen — nachgeladen, nicht im ersten Rutsch', async () => {
+    fensterbreite(1440);
+    fetchNachPfad({
+      'GET /api/auth/me': json(200, KONTO),
+      'GET /api/instance': json(200, { version: '0.1.3' }),
+      'GET /api/eigene-angaben': json(200, {
+        name: 'Manfred Wolff',
+        strasse: null,
+        plz: null,
+        ort: 'Bremen',
+        land: 'Deutschland',
+        email: null,
+        telefon: null,
+        steuernummer: null,
+        umsatzsteuerId: null,
+        bankverbindung: null,
+        zahlungsbedingungen: null,
+      }),
+    });
+
+    renderApp(['/eigene-angaben'], 0);
+
+    // Lazy und geschuetzt: Beim ersten Rendern steht erst die Sitzungspruefung da.
+    expect(screen.getByRole('status')).toHaveTextContent('Sitzung wird geprüft');
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Eigene Angaben' }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('navigation', { name: 'Hauptnavigation' })).toBeInTheDocument();
+  });
+
   it('fuehrt „/vorgaenge/5/bearbeiten" ohne Sitzung auf die Anmeldeseite', async () => {
     ohneSitzung();
 

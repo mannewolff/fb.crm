@@ -18,6 +18,7 @@ const AnsprechpartnerMaske = lazy(async () => import('./pages/AnsprechpartnerMas
 const VorgaengePage = lazy(async () => import('./pages/VorgaengePage'));
 const VorgangMaske = lazy(async () => import('./pages/VorgangMaske'));
 const VorgangPage = lazy(async () => import('./pages/VorgangPage'));
+const EigeneAngabenMaske = lazy(async () => import('./pages/EigeneAngabenMaske'));
 
 /**
  * Der Routenbaum. Offen sind die Anmeldeseite, die Einrichtung und die beiden Seiten zum
@@ -26,7 +27,7 @@ const VorgangPage = lazy(async () => import('./pages/VorgangPage'));
  * Die geschuetzten Adressen teilen sich einen Rahmen ({@link AppShell}): Er steht einmal um
  * das `Outlet` und bleibt beim Wechsel zwischen ihnen stehen, statt je Ansicht neu zu entstehen.
  * `/`, `/administration` und `/dokumentation` zeigen in diesem Stand dasselbe leere Panel;
- * `/firmen` und `/vorgaenge` tragen die fachlichen Ansichten.
+ * `/firmen`, `/vorgaenge` und `/eigene-angaben` tragen die fachlichen Ansichten.
  *
  * Die unbekannte Adresse bekommt keine eigene Ansicht: Mit Sitzung fuehrt sie auf die
  * Startadresse, ohne Sitzung uebernimmt {@link ProtectedRoute} und fuehrt auf die
@@ -71,6 +72,7 @@ export default function App() {
               path="/firmen/:id/ansprechpartner/:ansprechpartnerId/bearbeiten"
               element={<AnsprechpartnerMaske />}
             />
+            <Route path="/eigene-angaben" element={<EigeneAngabenMaske />} />
             <Route path="/administration" element={<EmptyPanel />} />
             <Route path="/dokumentation" element={<EmptyPanel />} />
             <Route path="*" element={<Navigate to="/" replace />} />

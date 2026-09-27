@@ -3,6 +3,7 @@ import Typography from '@mui/material/Typography';
 import {
   IconBook,
   IconBuildingCommunity,
+  IconId,
   IconLayoutSidebarLeftCollapse,
   IconLayoutSidebarLeftExpand,
   IconSettings,
@@ -50,6 +51,7 @@ const BREITE_EINGEKLAPPT = 76;
 const SYMBOLE: Readonly<Record<Symbolname, TablerIcon>> = {
   'stack-2': IconStack2,
   'building-community': IconBuildingCommunity,
+  id: IconId,
   settings: IconSettings,
   book: IconBook,
 };

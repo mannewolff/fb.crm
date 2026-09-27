@@ -22,6 +22,11 @@ import { RADIUS_GROSS, RADIUS_RUND } from '../theme';
  * Der Titel ist eine Ueberschrift der zweiten Ebene: Die Seiten tragen genau eine `h1`, und die
  * Karten darunter gliedern sie. Wer mit dem Screenreader durch die Ueberschriften springt, findet
  * damit die Abschnitte einer Ansicht.
+ *
+ * Wo eine Ansicht aus genau dieser einen Karte besteht und keine {@link Kopfkarte} darueber steht,
+ * gibt es sonst gar keine `h1` — dann hebt `titelEbene={1}` den Kartentitel auf die erste Ebene.
+ * Nur die Ebene wechselt, nicht die Gestalt: Der Kartenkopf sieht in beiden Faellen gleich aus, und
+ * die Vorlage kennt an dieser Stelle nur eine Groesse (`.karte h2` Z. 79).
  */
 export interface KarteProps {
   readonly children: ReactNode;
@@ -33,6 +38,8 @@ export interface KarteProps {
   readonly notiz?: string;
   /** Rechts im Kopf: Filter, Waehler, die Hauptaktion einer Liste. */
   readonly werkzeug?: ReactNode;
+  /** Die Ebene des Titels. Vorgabe 2; `1`, wo die Karte die ganze Ansicht ist. */
+  readonly titelEbene?: 1 | 2;
 }
 
 /** Innenabstand einer Karte (CLAUDE-design.md, „Rahmen"; Vorlage `.karte` Z. 53). */
@@ -41,7 +48,14 @@ const INNENABSTAND = 28;
 /** Abstand zwischen Kartenkopf und Inhalt (Vorlage `.kopfzeile` Z. 79). */
 const KOPF_ABSTAND = 18;
 
-export default function Karte({ children, titel, anzahl, notiz, werkzeug }: KarteProps) {
+export default function Karte({
+  children,
+  titel,
+  anzahl,
+  notiz,
+  werkzeug,
+  titelEbene = 2,
+}: KarteProps) {
   return (
     <Paper
       elevation={0}
@@ -64,7 +78,9 @@ export default function Karte({ children, titel, anzahl, notiz, werkzeug }: Kart
             marginBottom: `${String(KOPF_ABSTAND)}px`,
           }}
         >
-          <Typography variant="h2">{titel}</Typography>
+          <Typography variant="h2" component={titelEbene === 1 ? 'h1' : 'h2'}>
+            {titel}
+          </Typography>
           {anzahl === undefined ? null : (
             <Box
               component="span"

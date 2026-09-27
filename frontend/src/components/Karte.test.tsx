@@ -64,6 +64,29 @@ describe('Karte', () => {
     expect(screen.getByTestId('karte-anzahl')).toHaveTextContent('0');
   });
 
+  it('schreibt den Titel als Ueberschrift der zweiten Ebene', () => {
+    renderMitTheme(
+      <Karte titel="Firmen">
+        <p>Inhalt</p>
+      </Karte>,
+    );
+
+    expect(screen.getByRole('heading', { level: 2, name: 'Firmen' })).toBeInTheDocument();
+  });
+
+  it('hebt den Titel auf die erste Ebene, wo die Karte die ganze Ansicht ist', () => {
+    // Eine Ansicht ohne Kopfkarte hat sonst keine h1 — dann traegt der Kartenkopf sie.
+    renderMitTheme(
+      <Karte titel="Eigene Angaben" titelEbene={1}>
+        <p>Inhalt</p>
+      </Karte>,
+    );
+
+    expect(screen.getByRole('heading', { level: 1, name: 'Eigene Angaben' })).toBeInTheDocument();
+    // Die Gestalt bleibt die des Kartenkopfes: 18 px, 700 — nur die Ebene wechselt.
+    expect(getComputedStyle(screen.getByRole('heading', { level: 1 })).fontSize).toBe('18px');
+  });
+
   it('gliedert ohne Linie unter dem Kopf', () => {
     renderMitTheme(
       <Karte titel="Firmen">

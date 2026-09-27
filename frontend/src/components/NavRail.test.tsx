@@ -68,7 +68,15 @@ describe('navItems (E15, E18)', () => {
       NAV_BLOECKE.map((block) => [block.titel, block.eintraege.map((e) => [e.beschriftung, e.ziel])]),
     ).toEqual([
       ['Geschäft', [['Vorgänge', '/vorgaenge']]],
-      ['Stammdaten', [['Firmen', '/firmen']]],
+      // „Eigene Angaben" ist ein Stammdatum wie die Firma und steht neben ihr — nicht hinter
+      // „Administration" und nicht in einem eigenen Block mit einem Eintrag (E14).
+      [
+        'Stammdaten',
+        [
+          ['Firmen', '/firmen'],
+          ['Eigene Angaben', '/eigene-angaben'],
+        ],
+      ],
     ]);
   });
 });
@@ -110,9 +118,11 @@ describe('NavRail', () => {
     expect(bloecke.getAllByRole('link').map((link) => link.getAttribute('href'))).toEqual([
       '/vorgaenge',
       '/firmen',
+      '/eigene-angaben',
     ]);
     expect(bloecke.getByRole('link', { name: 'Vorgänge' })).toBeInTheDocument();
     expect(bloecke.getByRole('link', { name: 'Firmen' })).toBeInTheDocument();
+    expect(bloecke.getByRole('link', { name: 'Eigene Angaben' })).toBeInTheDocument();
     // Kein Umschalter in den Bloecken — Tasten stehen an der Marke und im Fuss.
     expect(bloecke.queryAllByRole('button')).toHaveLength(0);
     // Die Bloecke stehen im Baum oberhalb des Fusses.
@@ -177,6 +187,7 @@ describe('NavRail', () => {
     ['/vorgaenge', 'Vorgänge'],
     // Dasselbe am Vorgang: die Detailansicht laesst „Vorgänge" aktiv stehen.
     ['/vorgaenge/12', 'Vorgänge'],
+    ['/eigene-angaben', 'Eigene Angaben'],
   ])('setzt auf %s aria-current="page" an „%s" und nur dort (K12)', (adresse, beschriftung) => {
     angemeldet();
 
@@ -231,8 +242,10 @@ describe('NavRail', () => {
     expect(screen.queryByText('Geschäft')).not.toBeInTheDocument();
     expect(screen.queryByText('Firmen')).not.toBeInTheDocument();
     expect(screen.queryByText('Vorgänge')).not.toBeInTheDocument();
+    expect(screen.queryByText('Eigene Angaben')).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Firmen' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Vorgänge' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Eigene Angaben' })).toBeInTheDocument();
     // Marke und Kuerzel bleiben; Name und E-Mail der Nutzerkarte entfallen.
     expect(screen.getByTestId('marke-mal')).toBeInTheDocument();
     expect(screen.getByTestId('nutzer-mal')).toHaveTextContent('MW');
@@ -261,6 +274,9 @@ describe('NavRail', () => {
     const strich = (name: string) => screen.getByTestId(`nav-symbol-${name}`).innerHTML;
     expect(strich('stack-2')).toBeTruthy();
     expect(strich('stack-2')).not.toBe(strich('building-community'));
+    // Dasselbe im Block „Stammdaten": Zwei Eintraege, zwei Striche.
+    expect(strich('id')).toBeTruthy();
+    expect(strich('id')).not.toBe(strich('building-community'));
   });
 
   it('wechselt die Breite zwischen 260 und 76 px (Rahmen)', async () => {

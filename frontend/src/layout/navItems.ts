@@ -16,7 +16,7 @@
  * Datei ohne React auskommt.
  */
 
-export type Symbolname = 'stack-2' | 'building-community' | 'settings' | 'book';
+export type Symbolname = 'stack-2' | 'building-community' | 'id' | 'settings' | 'book';
 
 export interface NavEintrag {
   readonly beschriftung: string;
@@ -36,7 +36,13 @@ export const NAV_BLOECKE: readonly NavBlock[] = [
   },
   {
     titel: 'Stammdaten',
-    eintraege: [{ beschriftung: 'Firmen', ziel: '/firmen', symbol: 'building-community' }],
+    eintraege: [
+      { beschriftung: 'Firmen', ziel: '/firmen', symbol: 'building-community' },
+      // „Eigene Angaben" ist ein Stammdatum wie die Firma und steht neben ihr — nicht hinter
+      // „Administration" im Fuss (dort gehoeren Konto, Instanz und Rollen hin) und nicht in einem
+      // eigenen Block, denn ein Block mit einem Eintrag benennt keine Gruppe (E14).
+      { beschriftung: 'Eigene Angaben', ziel: '/eigene-angaben', symbol: 'id' },
+    ],
   },
 ];
 
