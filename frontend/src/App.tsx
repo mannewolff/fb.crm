@@ -18,6 +18,8 @@ const AnsprechpartnerMaske = lazy(async () => import('./pages/AnsprechpartnerMas
 const VorgaengePage = lazy(async () => import('./pages/VorgaengePage'));
 const VorgangMaske = lazy(async () => import('./pages/VorgangMaske'));
 const VorgangPage = lazy(async () => import('./pages/VorgangPage'));
+const AngebotMaske = lazy(async () => import('./pages/AngebotMaske'));
+const AngebotPage = lazy(async () => import('./pages/AngebotPage'));
 const EigeneAngabenMaske = lazy(async () => import('./pages/EigeneAngabenMaske'));
 
 /**
@@ -27,7 +29,8 @@ const EigeneAngabenMaske = lazy(async () => import('./pages/EigeneAngabenMaske')
  * Die geschuetzten Adressen teilen sich einen Rahmen ({@link AppShell}): Er steht einmal um
  * das `Outlet` und bleibt beim Wechsel zwischen ihnen stehen, statt je Ansicht neu zu entstehen.
  * `/`, `/administration` und `/dokumentation` zeigen in diesem Stand dasselbe leere Panel;
- * `/firmen`, `/vorgaenge` und `/eigene-angaben` tragen die fachlichen Ansichten.
+ * `/firmen`, `/vorgaenge` und `/eigene-angaben` tragen die fachlichen Ansichten. Die Angebote
+ * liegen unter dem Vorgang (E16) — die Maske unter `neu` und `bearbeiten`, die Ansicht dazwischen.
  *
  * Die unbekannte Adresse bekommt keine eigene Ansicht: Mit Sitzung fuehrt sie auf die
  * Startadresse, ohne Sitzung uebernimmt {@link ProtectedRoute} und fuehrt auf die
@@ -59,6 +62,14 @@ export default function App() {
             <Route path="/vorgaenge/neu" element={<VorgangMaske />} />
             <Route path="/vorgaenge/:id" element={<VorgangPage />} />
             <Route path="/vorgaenge/:id/bearbeiten" element={<VorgangMaske />} />
+            {/* Die Angebote liegen unter dem Vorgang, weil der Vorgang die Klammer ist (E16);
+                „neu" ist die Maske und nicht das Angebot mit der Kennung „neu". */}
+            <Route path="/vorgaenge/:id/angebote/neu" element={<AngebotMaske />} />
+            <Route path="/vorgaenge/:id/angebote/:angebotId" element={<AngebotPage />} />
+            <Route
+              path="/vorgaenge/:id/angebote/:angebotId/bearbeiten"
+              element={<AngebotMaske />}
+            />
             <Route path="/firmen" element={<FirmenPage />} />
             {/* Statisch vor dynamisch: `/firmen/neu` ist die Maske, nicht die Firma „neu". */}
             <Route path="/firmen/neu" element={<FirmaMaske />} />

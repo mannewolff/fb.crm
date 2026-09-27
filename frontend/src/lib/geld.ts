@@ -75,3 +75,20 @@ export function euro(cent: number): string {
   const ganze = ziffern.slice(0, -2).replace(TAUSENDER, '.');
   return `${ganze},${ziffern.slice(-2)} €`;
 }
+
+/**
+ * Ein Hundertstelwert als Dezimaltext — `dezimal(250, ',')` ergibt „2,50".
+ *
+ * Zwei Leser brauchen ihn mit verschiedenem Trenner: Das Eingabefeld zeigt das Komma, der Rumpf
+ * einer Anfrage traegt den Punkt, den `BigDecimal` liest. Gesetzt wird wie in {@link euro} aus den
+ * Ziffern und nicht aus einer Zahl — eine Gleitkommazahl dazwischen holte genau den Fehler zurueck,
+ * den die ganzen Zahlen vermeiden.
+ *
+ * Die beiden Dezimalstellen stehen immer da: In einer Spalte stuenden sonst verschieden lange
+ * Zahlen, und ein Rumpf mit „2,5" und einer mit „2,50" waeren zwei Formen fuer denselben Wert.
+ */
+export function dezimal(hundertstelWert: number, trenner: string): string {
+  // Mindestens drei Ziffern, damit „5" zu „0,05" wird und nicht zu „,5".
+  const ziffern = String(hundertstelWert).padStart(3, '0');
+  return `${ziffern.slice(0, -2)}${trenner}${ziffern.slice(-2)}`;
+}

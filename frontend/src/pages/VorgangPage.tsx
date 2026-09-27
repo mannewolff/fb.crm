@@ -2,13 +2,16 @@ import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Link from '@mui/material/Link';
 import Typography from '@mui/material/Typography';
-import { IconCircleCheck, IconPencil, IconPointFilled } from '@tabler/icons-react';
+import { IconCircleCheck, IconPencil, IconPlus, IconPointFilled } from '@tabler/icons-react';
 import { Fragment, useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Link as RouterLink, useParams } from 'react-router-dom';
 
+import { angeboteDesVorgangs } from '../api/angebote';
+import type { AngebotZeile } from '../api/angebote';
 import { vorgangAbschliessen, vorgangLesen, vorgangWiederEroeffnen } from '../api/vorgaenge';
 import type { Vorgang, Zuordnung } from '../api/vorgaenge';
+import Angebotsliste from '../components/Angebotsliste';
 import EintragMaske from '../components/EintragMaske';
 import Historie from '../components/Historie';
 import Karte from '../components/Karte';
@@ -67,6 +70,9 @@ const AUSFALL = 'Der Vorgang ist gerade nicht zu erreichen. Bitte später erneut
 const SCHALTEN_FEHLT =
   'Der Abschlussstand des Vorgangs wurde nicht geändert. Bitte später erneut versuchen.';
 const LAEDT = 'Der Vorgang wird geladen …';
+const LAEDT_ANGEBOTE = 'Die Angebote werden geladen …';
+const AUSFALL_ANGEBOTE =
+  'Die Angebote sind gerade nicht zu erreichen. Bitte später erneut versuchen.';
 
 /** Die Symbolgroessen: 13 px im Chip, 16 px in den Tasten (wie in {@link FirmaPage}). */
 const SYMBOL_CHIP = 13;
@@ -227,6 +233,57 @@ function Felderkarte({ vorgang }: { readonly vorgang: Vorgang }) {
   );
 }
 
+/** Was die Karte „Angebote" gerade weiss. */
+type AngeboteStand =
+  | { readonly art: 'laedt' }
+  | { readonly art: 'daten'; readonly angebote: readonly AngebotZeile[] }
+  | { readonly art: 'ausfall' };
+
+/**
+ * Die Karte „Angebote" mit ihrem eigenen Aufruf (Kriterium 20).
+ *
+ * Ein eigener Baustein mit eigenem Stand und nicht ein zweiter Zweig im Vorgang: Die Liste kommt
+ * aus einem anderen Weg (`/api/vorgaenge/{id}/angebote`), und ihr Ausfall darf die Detailansicht
+ * nicht mitnehmen — wer den Vorgang liest, soll seine Historie sehen, auch wenn das Angebotsmodul
+ * gerade nicht antwortet.
+ */
+function Angebotekarte({ vorgangId }: { readonly vorgangId: number }) {
+  const [stand, setzeStand] = useState<AngeboteStand>({ art: 'laedt' });
+
+  useEffect(() => {
+    void angeboteDesVorgangs(vorgangId)
+      .then((antwort) => {
+        setzeStand({ art: 'daten', angebote: antwort.angebote });
+      })
+      .catch(() => {
+        // Jeder Grund fuehrt zur selben Meldung; welcher es war, hilft dem Benutzer nicht.
+        setzeStand({ art: 'ausfall' });
+      });
+  }, [vorgangId]);
+
+  return (
+    <Karte
+      titel="Angebote"
+      anzahl={stand.art === 'daten' ? stand.angebote.length : undefined}
+    >
+      {stand.art === 'daten' ? (
+        <Angebotsliste vorgangId={vorgangId} angebote={stand.angebote} />
+      ) : stand.art === 'laedt' ? (
+        <Typography
+          sx={(theme) => ({
+            fontSize: 12.5,
+            color: theme.vars.palette.kupferwolke.textSchwach,
+          })}
+        >
+          {LAEDT_ANGEBOTE}
+        </Typography>
+      ) : (
+        <Alert severity="error">{AUSFALL_ANGEBOTE}</Alert>
+      )}
+    </Karte>
+  );
+}
+
 /** Ueber jeder Vorgangs-Ansicht steht die Uebersicht (E6). */
 const ZU_VORGAENGEN: readonly PfadVerweis[] = [{ titel: 'Vorgänge', ziel: '/vorgaenge' }];
 
@@ -322,13 +379,26 @@ export default function VorgangPage() {
                   Wieder öffnen
                 </WeicheTaste>
               ) : (
-                <KupferTaste onClick={schalte} disabled={schaltet}>
-                  Abschließen
-                </KupferTaste>
+                <>
+                  <WeicheTaste onClick={schalte} disabled={schaltet}>
+                    Abschließen
+                  </WeicheTaste>
+                  {/* Am abgeschlossenen Vorgang entsteht kein Angebot (Kriterium 9, E13) — die
+                      Taste steht dort gar nicht, statt abgeschaltet dazustehen. */}
+                  <KupferTaste
+                    to={`/vorgaenge/${String(vorgang.id)}/angebote/neu`}
+                    symbol={<IconPlus size={SYMBOL_TASTE} stroke={1.8} />}
+                  >
+                    Angebot anlegen
+                  </KupferTaste>
+                </>
               )}
             </>
           }
         />
+        {/* Die Angebote stehen ueber dem Raster und nicht in einer Spalte: Ihre Tafel traegt
+            fuenf Spalten und braucht die ganze Breite der Buehne (Kriterium 20). */}
+        <Angebotekarte vorgangId={vorgang.id} />
         <Box
           sx={{
             display: 'grid',

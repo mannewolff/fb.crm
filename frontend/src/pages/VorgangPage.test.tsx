@@ -31,6 +31,16 @@ const ANHANG: Eintrag = {
   geaendertAm: null,
 };
 
+/** Eine Zeile der Angebotsliste, wie das Backend sie schreibt. */
+const ANGEBOT_ZEILE = {
+  id: 9,
+  nummer: 'A-2026-001',
+  stand: 'VERSENDET',
+  angebotDatum: '2026-09-24',
+  gueltigBis: '2026-10-24',
+  summe: 2500.03,
+};
+
 const VORGANG: Vorgang = {
   id: 5,
   nummer: 941,
@@ -51,6 +61,17 @@ const VORGANG: Vorgang = {
  * es geht (Baustein `Kopfkarte`, #79).
  */
 const KOPFZEILE = `#${String(VORGANG.nummer)} ${VORGANG.titel}`;
+
+/**
+ * Wahr nur fuer eine Kupfertaste.
+ *
+ * Sie traegt den Kupferverlauf, die weiche eine Flaeche (CLAUDE-design.md, „Tasten"). Die Rolle
+ * unterscheidet beide nicht: „Angebot anlegen" ist ein Weg und damit ein Link, „Abschliessen" eine
+ * Handlung und damit ein Knopf — gezaehlt wird aber die Kupfertaste, nicht der Knopf (E18).
+ */
+function istKupfer(taste: HTMLElement): boolean {
+  return getComputedStyle(taste).background.includes('linear-gradient');
+}
 
 /** Die Adresse, an der sich ablesen laesst, wohin ein Weg gefuehrt hat. */
 function Adresse() {
@@ -105,6 +126,7 @@ function vorgangDoppel(start: Vorgang = VORGANG) {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       }),
+    'GET /api/vorgaenge/5/angebote': json(200, { angebote: [ANGEBOT_ZEILE] }),
     'POST /api/vorgaenge/5/abschliessen': () => schalte(true),
     'POST /api/vorgaenge/5/wiedereroeffnen': () => schalte(false),
   });
@@ -146,21 +168,25 @@ describe('VorgangPage — die Kopfkarte (Kriterien 9, 11)', () => {
     expect(chips.queryByText('Abgeschlossen')).not.toBeInTheDocument();
   });
 
-  it('stellt am offenen Vorgang genau „Bearbeiten" und „Abschließen" in den Kopf', async () => {
+  it('stellt am offenen Vorgang „Bearbeiten", „Abschließen" und „Angebot anlegen" in den Kopf', async () => {
     vorgangDoppel();
 
     renderSeite();
     await screen.findByRole('heading', { level: 1, name: KOPFZEILE });
 
-    // „Abschliessen" ist die Hauptaktion und damit die einzige Kupfertaste der Ansicht
-    // (CLAUDE-design.md, „Tasten"); „Bearbeiten" tritt als weiche Taste daneben zurueck.
+    // „Angebot anlegen" ist die eine Kupfertaste der Ansicht (E18); „Bearbeiten" und
+    // „Abschliessen" treten als weiche Tasten daneben zurueck.
     const aktionen = within(screen.getByTestId('kopfkarte-aktionen'));
     expect(aktionen.getByRole('link', { name: 'Bearbeiten' })).toBeInTheDocument();
-    expect(aktionen.getAllByRole('button')).toHaveLength(1);
     expect(aktionen.getByRole('button', { name: 'Abschließen' })).toBeInTheDocument();
+    const anlegen = aktionen.getByRole('link', { name: 'Angebot anlegen' });
+    expect(anlegen).toHaveAttribute('href', '/vorgaenge/5/angebote/neu');
+    expect(
+      [...aktionen.getAllByRole('link'), ...aktionen.getAllByRole('button')].filter(istKupfer),
+    ).toEqual([anlegen]);
   });
 
-  it('stellt am abgeschlossenen Vorgang „Wieder öffnen" statt „Abschließen" in den Kopf', async () => {
+  it('traegt am abgeschlossenen Vorgang „Wieder öffnen" und keine Kupfertaste', async () => {
     vorgangDoppel({ ...VORGANG, abgeschlossen: true });
 
     renderSeite();
@@ -170,6 +196,12 @@ describe('VorgangPage — die Kopfkarte (Kriterien 9, 11)', () => {
     expect(aktionen.getByRole('link', { name: 'Bearbeiten' })).toBeInTheDocument();
     expect(aktionen.getAllByRole('button')).toHaveLength(1);
     expect(aktionen.getByRole('button', { name: 'Wieder öffnen' })).toBeInTheDocument();
+    // Am abgeschlossenen Vorgang entsteht kein Angebot (Kriterium 9) — und nichts ist mehr die
+    // eine Hauptaktion.
+    expect(aktionen.queryByRole('link', { name: 'Angebot anlegen' })).not.toBeInTheDocument();
+    expect(
+      [...aktionen.getAllByRole('link'), ...aktionen.getAllByRole('button')].filter(istKupfer),
+    ).toEqual([]);
   });
 
   it('zeigt waehrend des Ladens einen Hinweis statt einer leeren Seite', () => {
@@ -315,6 +347,7 @@ describe('VorgangPage — Abschliessen und Wieder oeffnen (Kriterien 20, 21)', (
     const nutzer = userEvent.setup();
     fetchNachPfad({
       'GET /api/vorgaenge/5': json(200, VORGANG),
+      'GET /api/vorgaenge/5/angebote': json(200, { angebote: [ANGEBOT_ZEILE] }),
       'POST /api/vorgaenge/5/abschliessen': leer(500),
     });
 
@@ -335,7 +368,7 @@ describe('VorgangPage — die Maske fuer Eintraege (E20, Kriterien 13, 14)', () 
     await screen.findByRole('heading', { level: 1, name: KOPFZEILE });
     expect(
       screen.getAllByRole('heading', { level: 2 }).map((ueberschrift) => ueberschrift.textContent),
-    ).toEqual(['Eintrag hinzufügen', 'Historie', 'Felder']);
+    ).toEqual(['Angebote', 'Eintrag hinzufügen', 'Historie', 'Felder']);
   });
 
   it('liest die Historie neu, nachdem ein Eintrag hinzugefuegt wurde', async () => {
@@ -357,6 +390,7 @@ describe('VorgangPage — die Maske fuer Eintraege (E20, Kriterien 13, 14)', () 
           status: 200,
           headers: { 'Content-Type': 'application/json' },
         }),
+      'GET /api/vorgaenge/5/angebote': json(200, { angebote: [ANGEBOT_ZEILE] }),
       'POST /api/vorgaenge/5/eintraege': () => {
         historie = [NEUER, ANHANG, KOMMENTAR];
         return new Response(null, { status: 201 });
@@ -382,6 +416,7 @@ describe('VorgangPage — die Maske fuer Eintraege (E20, Kriterien 13, 14)', () 
           status: 200,
           headers: { 'Content-Type': 'application/json' },
         }),
+      'GET /api/vorgaenge/5/angebote': json(200, { angebote: [ANGEBOT_ZEILE] }),
       // Der Vermerk und die neue Einordnung kommen vom Server, nicht aus der Oberflaeche.
       'PUT /api/vorgaenge/5/eintraege/31': () => {
         historie = [
@@ -437,7 +472,10 @@ describe('VorgangPage — die Historie (Kriterium 15)', () => {
 
 describe('VorgangPage — der Pfad im Kopf (E6)', () => {
   it('meldet „Vorgänge" als Weg und Nummer samt Titel als Endstufe', async () => {
-    fetchNachPfad({ 'GET /api/vorgaenge/5': json(200, VORGANG) });
+    fetchNachPfad({
+      'GET /api/vorgaenge/5': json(200, VORGANG),
+      'GET /api/vorgaenge/5/angebote': json(200, { angebote: [ANGEBOT_ZEILE] }),
+    });
 
     renderMitKopf();
 
@@ -497,8 +535,12 @@ describe('VorgangPage — Tastatur (Kriterium 26)', () => {
     expect(screen.getByRole('link', { name: 'Bearbeiten' })).toHaveFocus();
     await nutzer.tab();
     expect(screen.getByRole('button', { name: 'Abschließen' })).toHaveFocus();
-    // Der Tabulator folgt der Lesefolge des Dokuments: erst das Blatt mit Kopf, Maske und
-    // Historie, danach die Saeule mit den Feldern.
+    await nutzer.tab();
+    expect(screen.getByRole('link', { name: 'Angebot anlegen' })).toHaveFocus();
+    // Der Tabulator folgt der Lesefolge des Dokuments: erst der Kopf, dann die Angebote, dann das
+    // Blatt mit Maske und Historie, danach die Saeule mit den Feldern.
+    await nutzer.tab();
+    expect(screen.getByRole('link', { name: 'A-2026-001' })).toHaveFocus();
     await nutzer.tab();
     expect(screen.getByRole('combobox', { name: 'Art' })).toHaveFocus();
     await nutzer.tab();
@@ -518,5 +560,59 @@ describe('VorgangPage — Tastatur (Kriterium 26)', () => {
     expect(screen.getByRole('link', { name: 'Beispiel GmbH' })).toHaveFocus();
     await nutzer.tab();
     expect(screen.getByRole('link', { name: 'Anna Berg' })).toHaveFocus();
+  });
+});
+
+describe('VorgangPage — die Karte „Angebote" (Kriterium 20)', () => {
+  it('stellt die Angebote des Vorgangs mit ihrer Zahl neben den Titel', async () => {
+    vorgangDoppel();
+
+    renderSeite();
+    await screen.findByRole('heading', { level: 1, name: KOPFZEILE });
+
+    expect(await screen.findByRole('link', { name: 'A-2026-001' })).toHaveAttribute(
+      'href',
+      '/vorgaenge/5/angebote/9',
+    );
+    expect(screen.getAllByTestId('karte-anzahl').map((zahl) => zahl.textContent)).toContain('1');
+  });
+
+  it('sagt es, wenn der Vorgang noch kein Angebot hat', async () => {
+    fetchNachPfad({
+      'GET /api/vorgaenge/5': json(200, VORGANG),
+      'GET /api/vorgaenge/5/angebote': json(200, { angebote: [] }),
+    });
+
+    renderSeite();
+
+    expect(await screen.findByText('Noch kein Angebot zu diesem Vorgang.')).toBeInTheDocument();
+  });
+
+  it('zeigt einen Hinweis, solange die Angebote noch geladen werden', async () => {
+    fetchNachPfad({
+      'GET /api/vorgaenge/5': json(200, VORGANG),
+      // Die Antwort bleibt aus: Der Vorgang steht schon da, die Karte wartet noch.
+      'GET /api/vorgaenge/5/angebote': () => new Promise<Response>(() => undefined),
+    });
+
+    renderSeite();
+    await screen.findByRole('heading', { level: 1, name: KOPFZEILE });
+
+    expect(screen.getByText('Die Angebote werden geladen …')).toBeInTheDocument();
+  });
+
+  it('meldet den Ausfall der Angebote, ohne die Historie mitzunehmen', async () => {
+    fetchNachPfad({
+      'GET /api/vorgaenge/5': json(200, VORGANG),
+      'GET /api/vorgaenge/5/angebote': leer(500),
+    });
+
+    renderSeite();
+
+    // Der Ausfall bleibt in seiner Karte: Wer den Vorgang liest, sieht seine Historie weiter.
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Die Angebote sind gerade nicht zu erreichen.',
+    );
+    expect(screen.getByRole('list', { name: 'Historie' })).toBeInTheDocument();
   });
 });

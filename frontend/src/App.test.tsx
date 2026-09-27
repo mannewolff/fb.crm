@@ -9,6 +9,22 @@ import { renderMitTheme } from './test/render';
 
 const KONTO = { id: 1, displayName: 'Manfred Wolff', email: 'info@mwolff.org' };
 
+/** Ein versendetes Angebot, wie das Backend es schreibt. */
+const ANGEBOT = {
+  id: 9,
+  vorgangId: 5,
+  nummer: 'A-2026-001',
+  stand: 'VERSENDET',
+  angebotDatum: '2026-09-24',
+  gueltigBis: '2026-10-24',
+  leistungsbeschreibung: null,
+  zahlungsbedingungen: null,
+  versendetAm: '2026-09-24T08:00:00Z',
+  reaktionAm: null,
+  positionen: [],
+  summe: 0,
+};
+
 /** Die Fensterbreite, gegen die `matchMedia` auswertet — nur der Rahmen fragt danach. */
 function fensterbreite(breite: number) {
   Object.defineProperty(window, 'matchMedia', {
@@ -161,6 +177,7 @@ describe('App', () => {
         ansprechpartner: null,
         historie: [],
       }),
+      'GET /api/vorgaenge/5/angebote': json(200, { angebote: [] }),
     });
 
     renderApp(['/vorgaenge/5'], 0);
@@ -169,6 +186,83 @@ describe('App', () => {
     expect(
       // Die Kopfkarte traegt Nummer und Titel als die eine Ueberschrift der Ansicht.
       await screen.findByRole('heading', { level: 1, name: '#941 Anteilsbalken je Vorgang' }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('navigation', { name: 'Hauptnavigation' })).toBeInTheDocument();
+  });
+
+  it('fuehrt „/vorgaenge/5/angebote/neu" ohne Sitzung auf die Anmeldeseite', async () => {
+    ohneSitzung();
+
+    renderApp(['/vorgaenge/5/angebote/neu'], 0);
+
+    expect(await screen.findByLabelText(/^E-Mail-Adresse/)).toBeInTheDocument();
+  });
+
+  it('zeigt „/vorgaenge/5/angebote/neu" als Maske — statisch vor der dynamischen Kennung', async () => {
+    fensterbreite(1440);
+    fetchNachPfad({
+      'GET /api/auth/me': json(200, KONTO),
+      'GET /api/instance': json(200, { version: '0.1.3' }),
+      'GET /api/vorgaenge/5/angebote': json(200, { angebote: [] }),
+    });
+
+    renderApp(['/vorgaenge/5/angebote/neu'], 0);
+
+    // „neu" ist die Maske und nicht das Angebot mit der Kennung „neu": Waere die dynamische
+    // Route zuerst dran, ginge hier ein Aufruf auf /api/angebote/neu hinaus.
+    expect(screen.getByRole('status')).toHaveTextContent('Sitzung wird geprüft');
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Neues Angebot' }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('navigation', { name: 'Hauptnavigation' })).toBeInTheDocument();
+  });
+
+  it('fuehrt „/vorgaenge/5/angebote/9" ohne Sitzung auf die Anmeldeseite', async () => {
+    ohneSitzung();
+
+    renderApp(['/vorgaenge/5/angebote/9'], 0);
+
+    expect(await screen.findByLabelText(/^E-Mail-Adresse/)).toBeInTheDocument();
+  });
+
+  it('zeigt „/vorgaenge/5/angebote/9" mit Sitzung im Rahmen', async () => {
+    fensterbreite(1440);
+    fetchNachPfad({
+      'GET /api/auth/me': json(200, KONTO),
+      'GET /api/instance': json(200, { version: '0.1.3' }),
+      'GET /api/angebote/9': json(200, ANGEBOT),
+    });
+
+    renderApp(['/vorgaenge/5/angebote/9'], 0);
+
+    expect(screen.getByRole('status')).toHaveTextContent('Sitzung wird geprüft');
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Angebot A-2026-001' }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('navigation', { name: 'Hauptnavigation' })).toBeInTheDocument();
+  });
+
+  it('fuehrt „/vorgaenge/5/angebote/9/bearbeiten" ohne Sitzung auf die Anmeldeseite', async () => {
+    ohneSitzung();
+
+    renderApp(['/vorgaenge/5/angebote/9/bearbeiten'], 0);
+
+    expect(await screen.findByLabelText(/^E-Mail-Adresse/)).toBeInTheDocument();
+  });
+
+  it('zeigt „/vorgaenge/5/angebote/9/bearbeiten" als Maske des Entwurfs', async () => {
+    fensterbreite(1440);
+    fetchNachPfad({
+      'GET /api/auth/me': json(200, KONTO),
+      'GET /api/instance': json(200, { version: '0.1.3' }),
+      'GET /api/angebote/9': json(200, { ...ANGEBOT, nummer: null, stand: 'ENTWURF' }),
+    });
+
+    renderApp(['/vorgaenge/5/angebote/9/bearbeiten'], 0);
+
+    expect(screen.getByRole('status')).toHaveTextContent('Sitzung wird geprüft');
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Angebot bearbeiten' }),
     ).toBeInTheDocument();
     expect(screen.getByRole('navigation', { name: 'Hauptnavigation' })).toBeInTheDocument();
   });

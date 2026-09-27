@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { betrag, euro, hundertstel } from './geld';
+import { betrag, dezimal, euro, hundertstel } from './geld';
 
 describe('hundertstel', () => {
   it.each<[string | number, number]>([
@@ -65,5 +65,21 @@ describe('euro', () => {
 
   it('traegt immer zwei Dezimalstellen', () => {
     expect(euro(700)).toMatch(/,\d{2} €$/u);
+  });
+});
+
+describe('dezimal', () => {
+  it('setzt Hundertstel mit dem gewuenschten Trenner und immer zwei Stellen', () => {
+    expect(dezimal(250, ',')).toBe('2,50');
+    expect(dezimal(100001, '.')).toBe('1000.01');
+  });
+
+  it('setzt kleine Werte mit fuehrender Null', () => {
+    expect(dezimal(5, ',')).toBe('0,05');
+    expect(dezimal(0, '.')).toBe('0.00');
+  });
+
+  it('setzt keinen Tausenderpunkt — der Rumpf einer Anfrage vertraegt keinen', () => {
+    expect(dezimal(123456789, '.')).toBe('1234567.89');
   });
 });
