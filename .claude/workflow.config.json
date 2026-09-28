@@ -118,7 +118,8 @@
       "planMin": 30,
       "paketeMin": 75,
       "reviewMin": 60,
-      "abdeckungMin": 10,
+      "abdeckungMin": 20,
+      "umsetzungMin": 240,
       "kostenUsd": 50,
       "korrekturrunden": 2
     },
