@@ -70,7 +70,14 @@ describe('navItems (E15, E18)', () => {
       ['Geschäft', [['Vorgänge', '/vorgaenge']]],
       // „Auswertungen" steht unter „Geschäft" (Kriterium 28) und damit vor „Stammdaten": Die
       // Auswertung folgt dem Geschaeft und steht vor seiner Voraussetzung (E15, E24).
-      ['Auswertungen', [['Pipeline', '/pipeline']]],
+      // „Auftragsbestand" steht unter „Pipeline": was sicher ist, nach dem, was kommen koennte.
+      [
+        'Auswertungen',
+        [
+          ['Pipeline', '/pipeline'],
+          ['Auftragsbestand', '/auftragsbestand'],
+        ],
+      ],
       // „Eigene Angaben" ist ein Stammdatum wie die Firma und steht neben ihr — nicht hinter
       // „Administration" und nicht in einem eigenen Block mit einem Eintrag (E14).
       [
@@ -121,6 +128,7 @@ describe('NavRail', () => {
     expect(bloecke.getAllByRole('link').map((link) => link.getAttribute('href'))).toEqual([
       '/vorgaenge',
       '/pipeline',
+      '/auftragsbestand',
       '/firmen',
       '/eigene-angaben',
     ]);
@@ -194,6 +202,7 @@ describe('NavRail', () => {
     ['/vorgaenge/12', 'Vorgänge'],
     ['/eigene-angaben', 'Eigene Angaben'],
     ['/pipeline', 'Pipeline'],
+    ['/auftragsbestand', 'Auftragsbestand'],
   ])('setzt auf %s aria-current="page" an „%s" und nur dort (K12)', (adresse, beschriftung) => {
     angemeldet();
 
@@ -267,6 +276,31 @@ describe('NavRail', () => {
 
     expect(screen.getByRole('navigation')).toHaveAttribute('data-eingeklappt', 'true');
     expect(localStorage.getItem(SCHIENE_SCHLUESSEL)).toBe('true');
+  });
+
+  it('zeichnet jeden Eintrag der Bloecke mit einem eigenen Symbol, keines ist das Markenmal', async () => {
+    angemeldet();
+    const nutzer = userEvent.setup();
+
+    renderSchiene();
+    await nutzer.click(screen.getByRole('button', { name: 'Einklappen' }));
+
+    const namen = NAV_BLOECKE.flatMap((block) => block.eintraege.map((e) => e.symbol));
+    const striche = namen.map((name) => screen.getByTestId(`nav-symbol-${name}`).innerHTML);
+    expect(new Set(namen).size).toBe(namen.length);
+    expect(new Set(striche).size).toBe(striche.length);
+    expect(namen).not.toContain('chart-bar');
+  });
+
+  it('fuehrt „Auftragsbestand" als Link unter „Pipeline"', () => {
+    angemeldet();
+
+    renderSchiene();
+
+    const pipeline = screen.getByRole('link', { name: 'Pipeline' });
+    const bestand = screen.getByRole('link', { name: 'Auftragsbestand' });
+    expect(bestand).toHaveAttribute('href', '/auftragsbestand');
+    expect(pipeline.compareDocumentPosition(bestand)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
   });
 
   it('zeichnet „Vorgänge" und „Firmen" mit verschiedenen Symbolen (E24)', async () => {

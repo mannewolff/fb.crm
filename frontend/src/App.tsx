@@ -24,6 +24,7 @@ const AuftragAnlegenMaske = lazy(async () => import('./pages/AuftragAnlegenMaske
 const AuftragPage = lazy(async () => import('./pages/AuftragPage'));
 const AuftragMaske = lazy(async () => import('./pages/AuftragMaske'));
 const PipelinePage = lazy(async () => import('./pages/PipelinePage'));
+const AuftragsbestandPage = lazy(async () => import('./pages/AuftragsbestandPage'));
 const EigeneAngabenMaske = lazy(async () => import('./pages/EigeneAngabenMaske'));
 
 /**
@@ -87,6 +88,7 @@ export default function App() {
               element={<AuftragMaske />}
             />
             <Route path="/pipeline" element={<PipelinePage />} />
+            <Route path="/auftragsbestand" element={<AuftragsbestandPage />} />
             <Route path="/firmen" element={<FirmenPage />} />
             {/* Statisch vor dynamisch: `/firmen/neu` ist die Maske, nicht die Firma „neu". */}
             <Route path="/firmen/neu" element={<FirmaMaske />} />

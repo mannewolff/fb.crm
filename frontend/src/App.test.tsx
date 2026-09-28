@@ -356,6 +356,30 @@ describe('App', () => {
     expect(screen.getByRole('navigation', { name: 'Hauptnavigation' })).toBeInTheDocument();
   });
 
+  it('fuehrt „/auftragsbestand" ohne Sitzung auf die Anmeldeseite', async () => {
+    ohneSitzung();
+
+    renderApp(['/auftragsbestand'], 0);
+
+    expect(await screen.findByLabelText(/^E-Mail-Adresse/)).toBeInTheDocument();
+  });
+
+  it('zeigt „/auftragsbestand" mit Sitzung im Rahmen', async () => {
+    fensterbreite(1440);
+    fetchNachPfad({
+      'GET /api/auth/me': json(200, KONTO),
+      'GET /api/instance': json(200, { version: '0.1.3' }),
+      'GET /api/auftragsbestand': json(200, { zeilen: [], beauftragt: 0, nochOffen: 0 }),
+    });
+
+    renderApp(['/auftragsbestand'], 0);
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Auftragsbestand' }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('navigation', { name: 'Hauptnavigation' })).toBeInTheDocument();
+  });
+
   it('fuehrt „/eigene-angaben" ohne Sitzung auf die Anmeldeseite', async () => {
     ohneSitzung();
 

@@ -21,6 +21,7 @@
 export type Symbolname =
   | 'stack-2'
   | 'trending-up'
+  | 'clipboard-list'
   | 'building-community'
   | 'id'
   | 'settings'
@@ -43,11 +44,14 @@ export const NAV_BLOECKE: readonly NavBlock[] = [
     eintraege: [{ beschriftung: 'Vorgänge', ziel: '/vorgaenge', symbol: 'stack-2' }],
   },
   {
-    // Ein Block mit einem Eintrag benennt fuer sich noch keine Gruppe (E14) — „Auswertungen" ist
-    // dennoch einer: Der naechste Auswertungsschritt tritt hier hinzu, und Pipeline neben
-    // „Vorgänge" zu stellen machte aus der Auswertung eine Arbeitsansicht.
+    // Die Reihenfolge folgt der Kette (Plan #112, E17): was kommen koennte, vor dem, was sicher
+    // ist. Das Symbol des Auftragsbestands ist eine Wahl des Plans; das Symbol des Markenmals
+    // bleibt der Marke vorbehalten.
     titel: 'Auswertungen',
-    eintraege: [{ beschriftung: 'Pipeline', ziel: '/pipeline', symbol: 'trending-up' }],
+    eintraege: [
+      { beschriftung: 'Pipeline', ziel: '/pipeline', symbol: 'trending-up' },
+      { beschriftung: 'Auftragsbestand', ziel: '/auftragsbestand', symbol: 'clipboard-list' },
+    ],
   },
   {
     titel: 'Stammdaten',

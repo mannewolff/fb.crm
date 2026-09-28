@@ -9,6 +9,7 @@ import {
   IconSettings,
   IconStack2,
   IconTrendingUp,
+  IconClipboardList,
 } from '@tabler/icons-react';
 import type { TablerIcon } from '@tabler/icons-react';
 import { useEffect, useState } from 'react';
@@ -52,6 +53,7 @@ const BREITE_EINGEKLAPPT = 76;
 const SYMBOLE: Readonly<Record<Symbolname, TablerIcon>> = {
   'stack-2': IconStack2,
   'trending-up': IconTrendingUp,
+  'clipboard-list': IconClipboardList,
   'building-community': IconBuildingCommunity,
   id: IconId,
   settings: IconSettings,
