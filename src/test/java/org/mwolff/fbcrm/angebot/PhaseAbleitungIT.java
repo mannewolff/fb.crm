@@ -211,6 +211,23 @@ class PhaseAbleitungIT extends AbstractIntegrationTest {
   }
 
   @Test
+  void phase_givenTheAngebotAsTheOnlyBelegstand_thenNoRowEverReachesAuftrag() {
+    // Given — die Phase AUFTRAG gibt es seit dem mehrfach besetzbaren Port, ihren Nachweis noch
+    // nicht: Solange nur das Angebot den Port besetzt, kann sie niemand begruenden.
+    final long mitAngebot = vorgang(1L, "Website-Relaunch");
+    vorgang(2L, "Schulung");
+    schreibe(
+        entwurf(mitAngebot)
+            .versendet(NUMMER, EMPFAENGER, ABSENDER, PDF_SCHLUESSEL, VERSANDZEITPUNKT));
+
+    // When
+    final VorgaengeUebersicht liste = uebersicht.uebersicht("", true);
+
+    // Then
+    assertThat(liste.zeilen()).extracting(VorgangZeile::phase).doesNotContain(Phase.AUFTRAG);
+  }
+
+  @Test
   void phase_givenTwoVorgaenge_thenOnlyTheOneWithACommittedOfferMovesOn() {
     // Given — die Auswahl trifft genau den Vorgang, an dem das Angebot haengt.
     final long mitAngebot = vorgang(1L, "Website-Relaunch");

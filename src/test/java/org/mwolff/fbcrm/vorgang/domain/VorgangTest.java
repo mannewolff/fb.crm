@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.List;
+import java.util.Set;
 import org.junit.jupiter.api.Test;
 
 /** Verhalten des Vorgangs: abgeleitete Phase, Aendern, Abschliessen und Wiedereroeffnen. */
@@ -29,12 +31,12 @@ class VorgangTest {
   }
 
   @Test
-  void phase_givenNoCommittedOffer_thenAnbahnung() {
+  void phase_givenNothingProven_thenAnbahnung() {
     // Given
     final Vorgang bestand = vorgang(false);
 
     // When
-    final Phase phase = bestand.phase(false);
+    final Phase phase = bestand.phase(List.of());
 
     // Then
     assertThat(phase).isEqualTo(Phase.ANBAHNUNG);
@@ -46,19 +48,43 @@ class VorgangTest {
     final Vorgang bestand = vorgang(false);
 
     // When
-    final Phase phase = bestand.phase(true);
+    final Phase phase = bestand.phase(Set.of(Phase.ANGEBOT));
 
     // Then
     assertThat(phase).isEqualTo(Phase.ANGEBOT);
   }
 
   @Test
-  void phase_givenAClosedVorgangWithoutACommittedOffer_thenStillAnbahnung() {
+  void phase_givenAnOrderOnTopOfAnOffer_thenAuftrag() {
+    // Given — Kriterium 10: der Auftrag steht in der Kette hinter dem Angebot.
+    final Vorgang bestand = vorgang(false);
+
+    // When
+    final Phase phase = bestand.phase(Set.of(Phase.ANGEBOT, Phase.AUFTRAG));
+
+    // Then — das Maximum der Menge entscheidet, nicht ihre Reihenfolge.
+    assertThat(phase).isEqualTo(Phase.AUFTRAG);
+  }
+
+  @Test
+  void phase_givenAnOrderWithoutAnOffer_thenStillAuftrag() {
+    // Given — ein Auftrag ohne vorheriges Angebot ist erlaubt (Kriterium 10).
+    final Vorgang bestand = vorgang(false);
+
+    // When
+    final Phase phase = bestand.phase(Set.of(Phase.AUFTRAG));
+
+    // Then
+    assertThat(phase).isEqualTo(Phase.AUFTRAG);
+  }
+
+  @Test
+  void phase_givenAClosedVorgangWithNothingProven_thenStillAnbahnung() {
     // Given — der Abschluss ist ein eigener Schalter und keine Phase.
     final Vorgang bestand = vorgang(true);
 
     // When
-    final Phase phase = bestand.phase(false);
+    final Phase phase = bestand.phase(List.of());
 
     // Then
     assertThat(phase).isEqualTo(Phase.ANBAHNUNG);
@@ -70,10 +96,22 @@ class VorgangTest {
     final Vorgang bestand = vorgang(true);
 
     // When
-    final Phase phase = bestand.phase(true);
+    final Phase phase = bestand.phase(Set.of(Phase.ANGEBOT));
 
     // Then
     assertThat(phase).isEqualTo(Phase.ANGEBOT);
+  }
+
+  @Test
+  void phase_givenAClosedVorgangWithAnOrder_thenStillAuftrag() {
+    // Given
+    final Vorgang bestand = vorgang(true);
+
+    // When
+    final Phase phase = bestand.phase(Set.of(Phase.ANGEBOT, Phase.AUFTRAG));
+
+    // Then
+    assertThat(phase).isEqualTo(Phase.AUFTRAG);
   }
 
   @Test

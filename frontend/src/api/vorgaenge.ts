@@ -37,10 +37,11 @@ import {
  * Wie weit der Vorgang in der Kette ist (`Phase` im Backend).
  *
  * Die Phase wird nicht gepflegt, sondern aus dem Stand der Dokumente abgeleitet: `ANGEBOT`, sobald
- * ein Angebot festgeschrieben ist (Kriterium 22). Auftrag und Rechnung bringen ihre Phasen mit,
- * wenn es sie gibt. Das Wort dazu steht in `lib/phase.ts` — hier steht nur der Wert.
+ * ein Angebot festgeschrieben ist (Kriterium 22), `AUFTRAG`, sobald ein Auftrag am Vorgang haengt
+ * (Kriterium 10). Haengt beides daran, gewinnt die weitere Phase. Rechnung und Zahlung bringen ihre
+ * Phasen mit, wenn es sie gibt. Das Wort dazu steht in `lib/phase.ts` — hier steht nur der Wert.
  */
-export type Phase = 'ANBAHNUNG' | 'ANGEBOT';
+export type Phase = 'ANBAHNUNG' | 'ANGEBOT' | 'AUFTRAG';
 
 /**
  * Was ein Eintrag der Historie ist (`Eintragsart` im Backend).
@@ -143,7 +144,7 @@ export interface EintragAenderung {
 }
 
 function phase(wert: unknown): Phase {
-  if (wert !== 'ANBAHNUNG' && wert !== 'ANGEBOT') {
+  if (wert !== 'ANBAHNUNG' && wert !== 'ANGEBOT' && wert !== 'AUFTRAG') {
     throw new TypeError(FORMFEHLER);
   }
   return wert;

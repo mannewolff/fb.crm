@@ -9,6 +9,7 @@ import org.mwolff.fbcrm.firma.domain.Firma;
 import org.mwolff.fbcrm.firma.domain.FirmaRepository;
 import org.mwolff.fbcrm.vorgang.domain.Belegstand;
 import org.mwolff.fbcrm.vorgang.domain.EintragRepository;
+import org.mwolff.fbcrm.vorgang.domain.Phase;
 import org.mwolff.fbcrm.vorgang.domain.Vorgang;
 
 /**
@@ -17,8 +18,8 @@ import org.mwolff.fbcrm.vorgang.domain.Vorgang;
  *
  * <p>Beide brauchen dieselben drei Angaben, die am Vorgang selbst nicht stehen: den Namen der
  * Firma, den Tag des juengsten Eintrags und die Phase. Sie an einer Stelle zu holen haelt die Zahl
- * der Abfragen gleich — <b>eine</b> fuer die Zeitpunkte aller Zeilen, <b>eine</b> fuer den
- * Belegstand aller Zeilen und eine je <b>Firma</b>, nicht je Zeile.
+ * der Abfragen gleich — <b>eine</b> fuer die Zeitpunkte aller Zeilen, <b>eine je Belegart</b> fuer
+ * den Belegstand aller Zeilen und eine je <b>Firma</b>, nicht je Zeile.
  *
  * <p>Kein eigenes Bean: Die beiden Anwendungsfaelle bauen sich ihre Instanz im Konstruktor. Die
  * Klasse haelt keinen Zustand ueber einen Aufruf hinaus.
@@ -27,13 +28,15 @@ final class VorgangZeilen {
 
   private final EintragRepository eintraege;
   private final FirmaRepository firmen;
-  private final Belegstand belege;
+  private final Phasen phasen;
 
   VorgangZeilen(
-      final EintragRepository eintraege, final FirmaRepository firmen, final Belegstand belege) {
+      final EintragRepository eintraege,
+      final FirmaRepository firmen,
+      final List<Belegstand> belege) {
     this.eintraege = eintraege;
     this.firmen = firmen;
-    this.belege = belege;
+    this.phasen = new Phasen(belege);
   }
 
   /**
@@ -44,15 +47,17 @@ final class VorgangZeilen {
   List<VorgangZeile> zu(final List<Vorgang> vorgaenge) {
     final List<Long> ids = vorgaenge.stream().map(Vorgang::requireId).toList();
     final Map<Long, Instant> juengste = eintraege.juengstesGeschehenJeVorgang(ids);
-    final Set<Long> mitAngebot = belege.mitFestgeschriebenemAngebot(ids);
+    final Map<Long, Set<Phase>> nachgewiesen = phasen.zu(ids);
     final Map<Long, String> namen = new HashMap<>();
-    return vorgaenge.stream().map(vorgang -> zeile(vorgang, juengste, mitAngebot, namen)).toList();
+    return vorgaenge.stream()
+        .map(vorgang -> zeile(vorgang, juengste, nachgewiesen, namen))
+        .toList();
   }
 
   private VorgangZeile zeile(
       final Vorgang vorgang,
       final Map<Long, Instant> juengste,
-      final Set<Long> mitAngebot,
+      final Map<Long, Set<Phase>> nachgewiesen,
       final Map<Long, String> namen) {
     final long id = vorgang.requireId();
     return new VorgangZeile(
@@ -60,7 +65,7 @@ final class VorgangZeilen {
         vorgang.nummer(),
         vorgang.titel(),
         firmaName(vorgang.firmaId(), namen),
-        vorgang.phase(mitAngebot.contains(id)),
+        vorgang.phase(nachgewiesen.getOrDefault(id, Set.of())),
         vorgang.abgeschlossen(),
         // Kriterium 2: ohne Eintrag zaehlt der Vorgang mit dem Zeitpunkt seines Anlegens.
         juengste.getOrDefault(id, vorgang.createdAt()));

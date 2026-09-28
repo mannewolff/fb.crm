@@ -35,7 +35,7 @@ public class VorgaengeUebersichtUseCase {
       final VorgangRepository vorgaenge,
       final EintragRepository eintraege,
       final FirmaRepository firmen,
-      final Belegstand belege) {
+      final List<Belegstand> belege) {
     this.vorgaenge = vorgaenge;
     this.zeilen = new VorgangZeilen(eintraege, firmen, belege);
   }

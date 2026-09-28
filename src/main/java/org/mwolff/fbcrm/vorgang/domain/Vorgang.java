@@ -2,6 +2,8 @@ package org.mwolff.fbcrm.vorgang.domain;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.Collection;
+import java.util.Comparator;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.fbcrm.common.Identifiable;
 
@@ -13,7 +15,7 @@ import org.mwolff.fbcrm.common.Identifiable;
  * #wiederEroeffnet} legen den Schalter um (E5) — dasselbe Muster wie {@code aktiv} an Firma und
  * Ansprechpartner.
  *
- * <p><b>Die Phase wird nicht gespeichert.</b> {@link #phase(boolean)} leitet sie ab (E4): Sie
+ * <p><b>Die Phase wird nicht gespeichert.</b> {@link #phase(Collection)} leitet sie ab (E4): Sie
  * haengt am Stand der Dokumente, und den kennt der Vorgang nicht selbst — er bekommt ihn ueber
  * {@link Belegstand} gesagt und nimmt ihn als Argument.
  *
@@ -49,16 +51,20 @@ public record Vorgang(
   /**
    * Die Phase des Vorgangs, abgeleitet statt gespeichert (E4).
    *
-   * <p>Solange kein Angebot festgeschrieben ist, ist jeder Vorgang in der Anbahnung — auch ein
-   * abgeschlossener: Der Abschluss ist ein eigener Schalter und keine Phase.
+   * <p><b>Die weiteste gewinnt.</b> An einem Vorgang haengen mehrere Belegarten nebeneinander — ein
+   * Auftrag loescht das Angebot nicht, auf das er folgt, und beide weisen ihre Phase nach. Die
+   * Entscheidung faellt darum hier und an keiner zweiten Stelle: als Maximum der Menge, und das
+   * Maximum eines Aufzaehlungstyps ist die Reihenfolge seiner Werte im Quelltext (siehe {@link
+   * Phase}).
    *
-   * @param angebotFestgeschrieben {@code true}, wenn an diesem Vorgang mindestens ein
-   *     festgeschriebenes Angebot haengt. Der Wert kommt aus {@link Belegstand} und meint
-   *     <b>nicht</b> „versendet": Ein angenommenes oder abgelehntes Angebot bleibt festgeschrieben,
-   *     und die Phase faellt darum nicht zurueck (F6).
+   * <p>Weist nichts eine Phase nach, ist der Vorgang in der Anbahnung — auch ein abgeschlossener:
+   * Der Abschluss ist ein eigener Schalter und keine Phase.
+   *
+   * @param nachgewiesen die Phasen, die die Belege dieses Vorgangs begruenden; leer, solange kein
+   *     Beleg an ihm haengt. Die Menge kommt aus den Umsetzungen von {@link Belegstand}.
    */
-  public Phase phase(final boolean angebotFestgeschrieben) {
-    return angebotFestgeschrieben ? Phase.ANGEBOT : Phase.ANBAHNUNG;
+  public Phase phase(final Collection<Phase> nachgewiesen) {
+    return nachgewiesen.stream().max(Comparator.naturalOrder()).orElse(Phase.ANBAHNUNG);
   }
 
   /**

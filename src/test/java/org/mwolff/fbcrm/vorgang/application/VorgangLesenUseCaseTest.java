@@ -58,8 +58,10 @@ class VorgangLesenUseCaseTest {
   /* Vorgabeweise haengt am Vorgang kein festgeschriebenes Angebot; er steht also in Anbahnung. */
   @BeforeEach
   void baueDenAnwendungsfall() {
-    lenient().when(belegstand.mitFestgeschriebenemAngebot(anyCollection())).thenReturn(Set.of());
-    useCase = new VorgangLesenUseCase(vorgaenge, eintraege, firmen, ansprechpartner, belegstand);
+    lenient().when(belegstand.phase()).thenReturn(Phase.ANGEBOT);
+    lenient().when(belegstand.mitBeleg(anyCollection())).thenReturn(Set.of());
+    useCase =
+        new VorgangLesenUseCase(vorgaenge, eintraege, firmen, ansprechpartner, List.of(belegstand));
   }
 
   private static Vorgang vorgang(final Long ansprechpartnerId) {
@@ -118,7 +120,7 @@ class VorgangLesenUseCaseTest {
     when(vorgaenge.findById(4L)).thenReturn(Optional.of(vorgang(null)));
     when(firmen.findById(7L)).thenReturn(Optional.of(firma(true)));
     when(eintraege.findByVorgang(4L)).thenReturn(List.of());
-    when(belegstand.mitFestgeschriebenemAngebot(List.of(4L))).thenReturn(Set.of(Long.valueOf(4L)));
+    when(belegstand.mitBeleg(List.of(4L))).thenReturn(Set.of(Long.valueOf(4L)));
 
     // When
     final VorgangMitHistorie gelesen = useCase.lese(4L);

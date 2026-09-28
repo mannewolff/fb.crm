@@ -50,8 +50,9 @@ class VorgaengeDerFirmaUseCaseTest {
   /* Wie in der Uebersicht: vorgabeweise haengt an keinem Vorgang ein festgeschriebenes Angebot. */
   @BeforeEach
   void baueDenAnwendungsfall() {
-    lenient().when(belegstand.mitFestgeschriebenemAngebot(anyCollection())).thenReturn(Set.of());
-    useCase = new VorgaengeDerFirmaUseCase(vorgaenge, eintraege, firmen, belegstand);
+    lenient().when(belegstand.phase()).thenReturn(Phase.ANGEBOT);
+    lenient().when(belegstand.mitBeleg(anyCollection())).thenReturn(Set.of());
+    useCase = new VorgaengeDerFirmaUseCase(vorgaenge, eintraege, firmen, List.of(belegstand));
   }
 
   private static Vorgang vorgang(final long id, final long nummer, final boolean abgeschlossen) {
@@ -131,7 +132,7 @@ class VorgaengeDerFirmaUseCaseTest {
     when(vorgaenge.findByFirma(7L)).thenReturn(List.of(vorgang(4L, 12L, false)));
     when(eintraege.juengstesGeschehenJeVorgang(List.of(4L))).thenReturn(Map.of());
     when(firmen.findById(7L)).thenReturn(Optional.of(adlerAg()));
-    when(belegstand.mitFestgeschriebenemAngebot(List.of(4L))).thenReturn(Set.of(Long.valueOf(4L)));
+    when(belegstand.mitBeleg(List.of(4L))).thenReturn(Set.of(Long.valueOf(4L)));
 
     // When
     final VorgaengeDerFirma gefunden = useCase.vorgaenge(7L);

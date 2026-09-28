@@ -33,7 +33,7 @@ public class VorgaengeDerFirmaUseCase {
       final VorgangRepository bestand,
       final EintragRepository eintraege,
       final FirmaRepository firmen,
-      final Belegstand belege) {
+      final List<Belegstand> belege) {
     this.bestand = bestand;
     this.zeilen = new VorgangZeilen(eintraege, firmen, belege);
   }

@@ -7,6 +7,7 @@ describe('phaseWort', () => {
   it.each<[Phase, string]>([
     ['ANBAHNUNG', 'Anbahnung'],
     ['ANGEBOT', 'Angebot'],
+    ['AUFTRAG', 'Auftrag'],
   ])('nennt %s beim Wort', (phase, wort) => {
     expect(phaseWort(phase)).toBe(wort);
   });

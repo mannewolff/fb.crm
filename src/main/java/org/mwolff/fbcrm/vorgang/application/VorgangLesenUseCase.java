@@ -1,6 +1,8 @@
 package org.mwolff.fbcrm.vorgang.application;
 
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.fbcrm.firma.domain.Ansprechpartner;
 import org.mwolff.fbcrm.firma.domain.AnsprechpartnerRepository;
@@ -8,6 +10,7 @@ import org.mwolff.fbcrm.firma.domain.Firma;
 import org.mwolff.fbcrm.firma.domain.FirmaRepository;
 import org.mwolff.fbcrm.vorgang.domain.Belegstand;
 import org.mwolff.fbcrm.vorgang.domain.EintragRepository;
+import org.mwolff.fbcrm.vorgang.domain.Phase;
 import org.mwolff.fbcrm.vorgang.domain.Vorgang;
 import org.mwolff.fbcrm.vorgang.domain.VorgangRepository;
 import org.springframework.stereotype.Service;
@@ -20,8 +23,9 @@ import org.springframework.transaction.annotation.Transactional;
  * Leseweg fuer sie braechte der Oberflaeche nur einen zweiten Ladezustand.
  *
  * <p>Die Phase entsteht hier und nicht in der Schnittstellenschicht: Sie wird abgeleitet (E4) und
- * braucht dazu den {@link Belegstand} — ein Port dieses Moduls, den {@code angebot} umsetzt, damit
- * {@code vorgang} das Angebot nicht kennen muss (Plan E2).
+ * braucht dazu den {@link Belegstand} — ein Port dieses Moduls, den die Belegmodule umsetzen, damit
+ * {@code vorgang} sie nicht kennen muss (Plan E2). Der Port ist mehrfach besetzbar; Spring spritzt
+ * alle Umsetzungen, und fuer diesen einen Vorgang fragt jede einmal mit einer einelementigen Liste.
  *
  * <p>Firma und Ansprechpartner kommen vollstaendig mit — einschliesslich ihres Stilllegungsstands.
  * Kriterium 23 verlangt, dass eine stillgelegte Zuordnung sichtbar bleibt und als solche
@@ -36,19 +40,19 @@ public class VorgangLesenUseCase {
   private final EintragRepository eintraege;
   private final FirmaRepository firmen;
   private final AnsprechpartnerRepository ansprechpartner;
-  private final Belegstand belege;
+  private final Phasen phasen;
 
   public VorgangLesenUseCase(
       final VorgangRepository vorgaenge,
       final EintragRepository eintraege,
       final FirmaRepository firmen,
       final AnsprechpartnerRepository ansprechpartner,
-      final Belegstand belege) {
+      final List<Belegstand> belege) {
     this.vorgaenge = vorgaenge;
     this.eintraege = eintraege;
     this.firmen = firmen;
     this.ansprechpartner = ansprechpartner;
-    this.belege = belege;
+    this.phasen = new Phasen(belege);
   }
 
   /**
@@ -59,11 +63,10 @@ public class VorgangLesenUseCase {
    */
   public VorgangMitHistorie lese(final long id) {
     final Vorgang vorgang = vorgaenge.findById(id).orElseThrow(VorgangNichtGefunden::new);
-    final boolean angebotFestgeschrieben =
-        !belege.mitFestgeschriebenemAngebot(List.of(id)).isEmpty();
+    final Map<Long, Set<Phase>> nachgewiesen = phasen.zu(List.of(id));
     return new VorgangMitHistorie(
         vorgang,
-        vorgang.phase(angebotFestgeschrieben),
+        vorgang.phase(nachgewiesen.getOrDefault(id, Set.of())),
         firma(vorgang.firmaId()),
         partner(vorgang.ansprechpartnerId()),
         eintraege.findByVorgang(id).stream().map(EintragAnsicht::of).toList());

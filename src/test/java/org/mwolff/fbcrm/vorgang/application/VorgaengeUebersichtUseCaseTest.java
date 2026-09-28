@@ -52,6 +52,7 @@ class VorgaengeUebersichtUseCaseTest {
   @Mock private EintragRepository eintraege;
   @Mock private FirmaRepository firmen;
   @Mock private Belegstand belegstand;
+  @Mock private Belegstand zweiterBelegstand;
 
   private VorgaengeUebersichtUseCase useCase;
 
@@ -59,11 +60,15 @@ class VorgaengeUebersichtUseCaseTest {
    * Der Belegstand antwortet vorgabeweise „an keinem dieser Vorgaenge haengt ein festgeschriebenes
    * Angebot" — der Regelfall dieser Klasse. Wo die Phase der Gegenstand ist, setzt der Test seine
    * eigene Antwort darueber.
+   *
+   * Der Port ist mehrfach besetzbar; der zweite Belegstand steht nur dort im Spiel, wo die Zahl der
+   * Abfragen oder das Zusammentreffen zweier Belegarten der Gegenstand ist.
    */
   @BeforeEach
   void baueDenAnwendungsfall() {
-    lenient().when(belegstand.mitFestgeschriebenemAngebot(anyCollection())).thenReturn(Set.of());
-    useCase = new VorgaengeUebersichtUseCase(vorgaenge, eintraege, firmen, belegstand);
+    lenient().when(belegstand.phase()).thenReturn(Phase.ANGEBOT);
+    lenient().when(belegstand.mitBeleg(anyCollection())).thenReturn(Set.of());
+    useCase = new VorgaengeUebersichtUseCase(vorgaenge, eintraege, firmen, List.of(belegstand));
   }
 
   private static Vorgang vorgang(final long id, final long nummer, final long firmaId) {
@@ -171,8 +176,13 @@ class VorgaengeUebersichtUseCaseTest {
   }
 
   @Test
-  void uebersicht_givenTwoVorgaenge_thenAsksTheBelegstandOnceForTheWholeSet() {
-    // Given — E2: eine Abfrage fuer die ganze Menge, nicht eine je Zeile.
+  void uebersicht_givenTwoVorgaenge_thenAsksEveryBelegstandOnceForTheWholeSet() {
+    // Given — E2: eine Abfrage je Belegart fuer die ganze Menge, nicht eine je Zeile.
+    lenient().when(zweiterBelegstand.phase()).thenReturn(Phase.AUFTRAG);
+    when(zweiterBelegstand.mitBeleg(anyCollection())).thenReturn(Set.of());
+    final VorgaengeUebersichtUseCase mitZweiBelegarten =
+        new VorgaengeUebersichtUseCase(
+            vorgaenge, eintraege, firmen, List.of(belegstand, zweiterBelegstand));
     when(vorgaenge.uebersicht("", null, false))
         .thenReturn(List.of(vorgang(9L, 1L, 7L), vorgang(3L, 2L, 7L)));
     when(eintraege.juengstesGeschehenJeVorgang(List.of(9L, 3L))).thenReturn(Map.of());
@@ -180,10 +190,32 @@ class VorgaengeUebersichtUseCaseTest {
     when(vorgaenge.zaehleAlle()).thenReturn(2L);
 
     // When
-    useCase.uebersicht("", false);
+    mitZweiBelegarten.uebersicht("", false);
 
     // Then
-    verify(belegstand, times(1)).mitFestgeschriebenemAngebot(List.of(9L, 3L));
+    verify(belegstand, times(1)).mitBeleg(List.of(9L, 3L));
+    verify(zweiterBelegstand, times(1)).mitBeleg(List.of(9L, 3L));
+  }
+
+  @Test
+  void uebersicht_givenAnOrderOnTopOfAnOffer_thenTheRowShowsAuftrag() {
+    // Given — Kriterium 10: an derselben Zeile haengen beide Belegarten.
+    when(zweiterBelegstand.phase()).thenReturn(Phase.AUFTRAG);
+    when(zweiterBelegstand.mitBeleg(List.of(9L))).thenReturn(Set.of(Long.valueOf(9L)));
+    final VorgaengeUebersichtUseCase mitZweiBelegarten =
+        new VorgaengeUebersichtUseCase(
+            vorgaenge, eintraege, firmen, List.of(belegstand, zweiterBelegstand));
+    when(vorgaenge.uebersicht("", null, false)).thenReturn(List.of(vorgang(9L, 1L, 7L)));
+    when(eintraege.juengstesGeschehenJeVorgang(List.of(9L))).thenReturn(Map.of());
+    when(firmen.findById(7L)).thenReturn(Optional.of(firma(7L, "Adler AG")));
+    when(belegstand.mitBeleg(List.of(9L))).thenReturn(Set.of(Long.valueOf(9L)));
+    when(vorgaenge.zaehleAlle()).thenReturn(1L);
+
+    // When
+    final VorgaengeUebersicht uebersicht = mitZweiBelegarten.uebersicht("", false);
+
+    // Then — das Maximum gewinnt, und das ist der Auftrag.
+    assertThat(uebersicht.zeilen()).extracting(VorgangZeile::phase).containsExactly(Phase.AUFTRAG);
   }
 
   @Test
@@ -193,8 +225,7 @@ class VorgaengeUebersichtUseCaseTest {
         .thenReturn(List.of(vorgang(9L, 1L, 7L), vorgang(3L, 2L, 7L)));
     when(eintraege.juengstesGeschehenJeVorgang(List.of(9L, 3L))).thenReturn(Map.of());
     when(firmen.findById(7L)).thenReturn(Optional.of(firma(7L, "Adler AG")));
-    when(belegstand.mitFestgeschriebenemAngebot(List.of(9L, 3L)))
-        .thenReturn(Set.of(Long.valueOf(9L)));
+    when(belegstand.mitBeleg(List.of(9L, 3L))).thenReturn(Set.of(Long.valueOf(9L)));
     when(vorgaenge.zaehleAlle()).thenReturn(2L);
 
     // When
