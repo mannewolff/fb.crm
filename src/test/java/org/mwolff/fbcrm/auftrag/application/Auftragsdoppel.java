@@ -120,14 +120,19 @@ final class Auftragsdoppel {
         ANGELEGT);
   }
 
-  /** Ein gespeicherter Auftrag mit einer Position. */
+  /** Ein gespeicherter Auftrag mit einer Position, offen. */
   static Auftrag auftrag(final long id) {
+    return auftrag(id, Auftragsstatus.OFFEN);
+  }
+
+  /** Derselbe Auftrag in einem beliebigen Status (Kriterium 7, F6). */
+  static Auftrag auftrag(final long id, final Auftragsstatus status) {
     return new Auftrag(
         Long.valueOf(id),
         VORGANG,
         ANGEBOT,
         AUFTRAGSNUMMER,
-        Auftragsstatus.OFFEN,
+        status,
         LocalDate.of(2026, 9, 28),
         "BST-4711",
         LocalDate.of(2026, 10, 1),

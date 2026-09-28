@@ -111,7 +111,7 @@ public class AuftragAnlegenUseCase {
                 positionen,
                 jetzt,
                 jetzt));
-    ereignisse.vermerken(angebot.vorgangId(), "Auftrag %s angelegt".formatted(nummer));
+    ereignisse.vermerken(angebot.vorgangId(), Auftragsereignis.angelegt(nummer));
     return new AuftragAnsicht(angelegt, angebot.nummer());
   }
 }

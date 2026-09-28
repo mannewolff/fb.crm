@@ -21,6 +21,10 @@ import org.jspecify.annotations.Nullable;
  * Maske an das richtige Eingabefeld schreibt. Gemeldet wird am <b>fehlenden</b> Tag, nicht am
  * vorhandenen: Dort muss der Anwender etwas tun.
  *
+ * <p>Sie sitzt an beiden Anfragen des Auftrags — der zum Anlegen und der zum Pflegen —, und beide
+ * reichen dem Validator ueber {@link Leistungszeitraum} dieselben zwei Tage: Zwei Abschriften
+ * derselben Regel liefen beim ersten Nachziehen auseinander.
+ *
  * <p>Dieselbe Regel steht ein zweites Mal als {@code CHECK} in {@code V8__auftrag.sql}. Das ist
  * keine Doppelung ohne Grund: Die Meldung am Feld braucht die Maske, den Riegel die
  * Datenintegritaet. Ein Datenbankfehler ohne Feldnamen ist fuer die Maske unbrauchbar, und eine
@@ -61,13 +65,12 @@ public @interface LeistungszeitraumConstraint {
   /** Nutzlast; von Bean Validation verlangt. */
   Class<? extends Payload>[] payload() default {};
 
-  /** Die Regel an der Anfrage zum Anlegen eines Auftrags. */
-  class Zeitraum
-      implements ConstraintValidator<LeistungszeitraumConstraint, AuftragAnlegenRequest> {
+  /** Die Regel an den Anfragen des Auftrags — beim Anlegen wie beim Pflegen. */
+  class Zeitraum implements ConstraintValidator<LeistungszeitraumConstraint, Leistungszeitraum> {
 
     @Override
     public boolean isValid(
-        final AuftragAnlegenRequest anfrage, final ConstraintValidatorContext kontext) {
+        final Leistungszeitraum anfrage, final ConstraintValidatorContext kontext) {
       kontext.disableDefaultConstraintViolation();
       return gueltig(anfrage.leistungAb(), anfrage.leistungBis(), kontext);
     }

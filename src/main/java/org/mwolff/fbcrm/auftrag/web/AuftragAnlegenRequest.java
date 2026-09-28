@@ -35,7 +35,8 @@ public record AuftragAnlegenRequest(
     @Nullable @Size(max = 100) String kundenbestellnummer,
     @Nullable LocalDate leistungAb,
     @Nullable LocalDate leistungBis,
-    @NotNull @Size(min = 1) @Valid List<AuftragPositionRequest> positionen) {
+    @NotNull @Size(min = 1) @Valid List<AuftragPositionRequest> positionen)
+    implements Leistungszeitraum {
 
   /** Dieselben Angaben in der Sprache der Fachschicht. */
   AuftragDaten daten() {
