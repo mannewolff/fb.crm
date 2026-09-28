@@ -9,9 +9,12 @@ import { Link as RouterLink, useParams } from 'react-router-dom';
 
 import { angeboteDesVorgangs } from '../api/angebote';
 import type { AngebotZeile } from '../api/angebote';
+import { auftraegeDesVorgangs } from '../api/auftraege';
+import type { AuftragZeile } from '../api/auftraege';
 import { vorgangAbschliessen, vorgangLesen, vorgangWiederEroeffnen } from '../api/vorgaenge';
 import type { Vorgang, Zuordnung } from '../api/vorgaenge';
 import Angebotsliste from '../components/Angebotsliste';
+import Auftragsliste from '../components/Auftragsliste';
 import EintragMaske from '../components/EintragMaske';
 import Historie from '../components/Historie';
 import Karte from '../components/Karte';
@@ -73,6 +76,9 @@ const LAEDT = 'Der Vorgang wird geladen …';
 const LAEDT_ANGEBOTE = 'Die Angebote werden geladen …';
 const AUSFALL_ANGEBOTE =
   'Die Angebote sind gerade nicht zu erreichen. Bitte später erneut versuchen.';
+const LAEDT_AUFTRAEGE = 'Die Aufträge werden geladen …';
+const AUSFALL_AUFTRAEGE =
+  'Die Aufträge sind gerade nicht zu erreichen. Bitte später erneut versuchen.';
 
 /** Die Symbolgroessen: 13 px im Chip, 16 px in den Tasten (wie in {@link FirmaPage}). */
 const SYMBOL_CHIP = 13;
@@ -284,6 +290,55 @@ function Angebotekarte({ vorgangId }: { readonly vorgangId: number }) {
   );
 }
 
+/** Was die Karte „Aufträge" gerade weiss. */
+type AuftraegeStand =
+  | { readonly art: 'laedt' }
+  | { readonly art: 'daten'; readonly auftraege: readonly AuftragZeile[] }
+  | { readonly art: 'ausfall' };
+
+/**
+ * Die Karte „Aufträge" mit ihrem eigenen Aufruf (Kriterium 9, Plan #112).
+ *
+ * Dasselbe Muster wie {@link Angebotekarte}: eigener Weg (`/api/vorgaenge/{id}/auftraege`), eigener
+ * Stand, und ihr Ausfall nimmt weder den Vorgang noch die Angebote mit.
+ */
+function Auftraegekarte({ vorgangId }: { readonly vorgangId: number }) {
+  const [stand, setzeStand] = useState<AuftraegeStand>({ art: 'laedt' });
+
+  useEffect(() => {
+    void auftraegeDesVorgangs(vorgangId)
+      .then((antwort) => {
+        setzeStand({ art: 'daten', auftraege: antwort.auftraege });
+      })
+      .catch(() => {
+        // Jeder Grund fuehrt zur selben Meldung; welcher es war, hilft dem Benutzer nicht.
+        setzeStand({ art: 'ausfall' });
+      });
+  }, [vorgangId]);
+
+  return (
+    <Karte
+      titel="Aufträge"
+      anzahl={stand.art === 'daten' ? stand.auftraege.length : undefined}
+    >
+      {stand.art === 'daten' ? (
+        <Auftragsliste vorgangId={vorgangId} auftraege={stand.auftraege} />
+      ) : stand.art === 'laedt' ? (
+        <Typography
+          sx={(theme) => ({
+            fontSize: 12.5,
+            color: theme.vars.palette.kupferwolke.textSchwach,
+          })}
+        >
+          {LAEDT_AUFTRAEGE}
+        </Typography>
+      ) : (
+        <Alert severity="error">{AUSFALL_AUFTRAEGE}</Alert>
+      )}
+    </Karte>
+  );
+}
+
 /** Ueber jeder Vorgangs-Ansicht steht die Uebersicht (E6). */
 const ZU_VORGAENGEN: readonly PfadVerweis[] = [{ titel: 'Vorgänge', ziel: '/vorgaenge' }];
 
@@ -399,6 +454,9 @@ export default function VorgangPage() {
         {/* Die Angebote stehen ueber dem Raster und nicht in einer Spalte: Ihre Tafel traegt
             fuenf Spalten und braucht die ganze Breite der Buehne (Kriterium 20). */}
         <Angebotekarte vorgangId={vorgang.id} />
+        {/* Die Auftraege stehen unter den Angeboten: Der Auftrag entsteht aus einem Angebot, und
+            die Reihenfolge der Karten folgt der Kette (Plan #112). */}
+        <Auftraegekarte vorgangId={vorgang.id} />
         <Box
           sx={{
             display: 'grid',

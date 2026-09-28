@@ -12,7 +12,7 @@ import {
 } from '@tabler/icons-react';
 import { Fragment, useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom';
 
 import {
   angebotAblehnen,
@@ -163,7 +163,7 @@ function Positionszeile({ position }: { readonly position: AngebotPosition }) {
 /**
  * Die Zeile „Auftrag" der Angaben — nur, wenn es etwas zu sagen gibt (Kriterium 1, F9).
  *
- * Die Nummer steht als Text: Der Weg zur Auftragsansicht kommt mit dem Paket, das sie baut.
+ * Die Nummer ist der Weg auf die Auftragsansicht — ein Wort und keine Kennung.
  */
 function auftragszeile(auftrag: Auftragsauskunft): readonly { name: string; wert: ReactNode }[] {
   if (auftrag.art === 'laedt') {
@@ -173,7 +173,22 @@ function auftragszeile(auftrag: Auftragsauskunft): readonly { name: string; wert
     return [{ name: 'Auftrag', wert: AUFTRAG_AUSFALL }];
   }
   if (auftrag.art === 'daten' && auftrag.auskunft.auftrag !== null) {
-    return [{ name: 'Auftrag', wert: auftrag.auskunft.auftrag.nummer }];
+    const bestehend = auftrag.auskunft.auftrag;
+    return [
+      {
+        name: 'Auftrag',
+        wert: (
+          <Link
+            component={RouterLink}
+            to={`/vorgaenge/${String(bestehend.vorgangId)}/auftraege/${String(bestehend.id)}`}
+            underline="hover"
+            sx={{ fontSize: 13.5, fontWeight: 500 }}
+          >
+            {bestehend.nummer}
+          </Link>
+        ),
+      },
+    ];
   }
   return [];
 }

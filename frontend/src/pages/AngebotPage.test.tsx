@@ -532,7 +532,10 @@ describe('AngebotPage — der Auftrag zum angenommenen Angebot (Kriterium 1, F9,
     renderSeite();
 
     const angaben = within(await screen.findByTestId('angebot-angaben'));
-    expect(await angaben.findByText('AU-2026-001')).toBeInTheDocument();
+    expect(await angaben.findByRole('link', { name: 'AU-2026-001' })).toHaveAttribute(
+      'href',
+      '/vorgaenge/5/auftraege/3',
+    );
     expect(angaben.getByText('Auftrag')).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Auftrag anlegen' })).not.toBeInTheDocument();
   });

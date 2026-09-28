@@ -252,11 +252,10 @@ export default function AuftragAnlegenMaske() {
     setzeGesendeteStellen(stellen);
     setzeLaeuft(true);
     try {
-      await auftragAnlegen(angebot.id, eingabe);
-      // Die Auftragsansicht kommt mit dem naechsten Paket; bis dahin zeigt die Angebotsansicht den
-      // Verweis auf den neuen Auftrag. `replace`: Die Maske eines angelegten Auftrags gibt es nicht
-      // mehr, ein Schritt zurueck fuehrte nur in eine Absage.
-      navigate(`/vorgaenge/${String(angebot.vorgangId)}/angebote/${String(angebot.id)}`, {
+      const auftrag = await auftragAnlegen(angebot.id, eingabe);
+      // `replace`: Die Maske eines angelegten Auftrags gibt es nicht mehr, ein Schritt zurueck
+      // fuehrte nur in eine Absage.
+      navigate(`/vorgaenge/${String(auftrag.vorgangId)}/auftraege/${String(auftrag.id)}`, {
         replace: true,
       });
     } catch (ursache) {

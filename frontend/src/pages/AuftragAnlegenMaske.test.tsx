@@ -73,6 +73,7 @@ function renderMaske(start = '/vorgaenge/5/angebote/9/auftrag/neu') {
             element={<AuftragAnlegenMaske />}
           />
           <Route path="/vorgaenge/:id/angebote/:angebotId" element={<p>Angebotsansicht</p>} />
+          <Route path="/vorgaenge/:id/auftraege/:auftragId" element={<p>Auftragsansicht</p>} />
         </Routes>
         <Adresse />
       </KopfPfadProvider>
@@ -241,7 +242,9 @@ describe('AuftragAnlegenMaske — was hinausgeht (Kriterien 2, 4, Plan E7)', () 
     await bereit();
     await userEvent.click(screen.getByRole('button', { name: 'Auftrag anlegen' }));
 
-    expect(await screen.findByText('Angebotsansicht')).toBeInTheDocument();
+    expect(await screen.findByText('Auftragsansicht')).toBeInTheDocument();
+    // Der Weg fuehrt auf den neuen Auftrag, seine Kennung kommt aus der Antwort.
+    expect(screen.getByTestId('adresse')).toHaveTextContent('/vorgaenge/5/auftraege/3');
     expect(gesendet).toEqual([
       {
         kundenbestellnummer: null,
@@ -264,7 +267,7 @@ describe('AuftragAnlegenMaske — was hinausgeht (Kriterien 2, 4, Plan E7)', () 
     await userEvent.click(zeile('Konzeption').getByRole('checkbox'));
     await userEvent.click(screen.getByRole('button', { name: 'Auftrag anlegen' }));
 
-    await screen.findByText('Angebotsansicht');
+    await screen.findByText('Auftragsansicht');
     expect(gesendet).toEqual([
       expect.objectContaining({
         positionen: [{ platz: 2, menge: '1.00', stundenJePersonentag: null }],
@@ -289,7 +292,7 @@ describe('AuftragAnlegenMaske — was hinausgeht (Kriterien 2, 4, Plan E7)', () 
     await userEvent.type(screen.getByLabelText('Leistung bis'), '2026-12-31');
     await userEvent.click(screen.getByRole('button', { name: 'Auftrag anlegen' }));
 
-    await screen.findByText('Angebotsansicht');
+    await screen.findByText('Auftragsansicht');
     expect(gesendet).toEqual([
       {
         auftragDatum: '2026-09-27',
@@ -314,7 +317,7 @@ describe('AuftragAnlegenMaske — was hinausgeht (Kriterien 2, 4, Plan E7)', () 
     await userEvent.type(menge, '2,50');
     await userEvent.click(screen.getByRole('button', { name: 'Auftrag anlegen' }));
 
-    await screen.findByText('Angebotsansicht');
+    await screen.findByText('Auftragsansicht');
     expect(gesendet).toHaveLength(1);
   });
 

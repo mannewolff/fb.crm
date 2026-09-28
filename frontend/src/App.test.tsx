@@ -292,6 +292,47 @@ describe('App', () => {
     expect(screen.getByRole('navigation', { name: 'Hauptnavigation' })).toBeInTheDocument();
   });
 
+  it.each([['/vorgaenge/5/auftraege/3'], ['/vorgaenge/5/auftraege/3/bearbeiten']])(
+    'fuehrt „%s" ohne Sitzung auf die Anmeldeseite',
+    async (adresse) => {
+      ohneSitzung();
+
+      renderApp([adresse], 0);
+
+      expect(await screen.findByLabelText(/^E-Mail-Adresse/)).toBeInTheDocument();
+    },
+  );
+
+  it.each([
+    ['/vorgaenge/5/auftraege/3', 'Auftrag AU-2026-001'],
+    ['/vorgaenge/5/auftraege/3/bearbeiten', 'Auftrag AU-2026-001 bearbeiten'],
+  ])('zeigt „%s" mit Sitzung im Rahmen', async (adresse, ueberschrift) => {
+    fensterbreite(1440);
+    fetchNachPfad({
+      'GET /api/auth/me': json(200, KONTO),
+      'GET /api/instance': json(200, { version: '0.1.3' }),
+      'GET /api/auftraege/3': json(200, {
+        id: 3,
+        vorgangId: 5,
+        angebotId: 9,
+        angebotNummer: 'A-2026-001',
+        nummer: 'AU-2026-001',
+        status: 'OFFEN',
+        auftragDatum: '2026-09-28',
+        kundenbestellnummer: null,
+        leistungAb: null,
+        leistungBis: null,
+        positionen: [],
+        summe: 0,
+      }),
+    });
+
+    renderApp([adresse], 0);
+
+    expect(await screen.findByRole('heading', { level: 1, name: ueberschrift })).toBeInTheDocument();
+    expect(screen.getByRole('navigation', { name: 'Hauptnavigation' })).toBeInTheDocument();
+  });
+
   it('fuehrt „/pipeline" ohne Sitzung auf die Anmeldeseite', async () => {
     ohneSitzung();
 

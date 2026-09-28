@@ -18,3 +18,17 @@ export function tagWort(tag: string): string {
   const treffer = TAG.exec(tag);
   return treffer === null ? tag : `${treffer[3]}.${treffer[2]}.${treffer[1]}`;
 }
+
+/** Was an der Stelle eines Leistungszeitraums steht, der nicht angegeben ist. */
+export const KEIN_ZEITRAUM = 'nicht angegeben';
+
+/**
+ * Ein Leistungszeitraum als Wort — „01.10.2026 – 31.12.2026" (Kriterium 3).
+ *
+ * Der Zeitraum steht ganz oder gar nicht: Das Backend nimmt nur beide Tage oder keinen an
+ * (`LeistungszeitraumConstraint`). Fehlt einer, gibt es also keinen Zeitraum, und dann steht dort
+ * ein Wort und kein leeres Feld — eine leere Zelle liest sich wie ein Ladefehler.
+ */
+export function zeitraumWort(ab: string | null, bis: string | null): string {
+  return ab === null || bis === null ? KEIN_ZEITRAUM : `${tagWort(ab)} – ${tagWort(bis)}`;
+}
