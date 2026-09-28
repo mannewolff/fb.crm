@@ -11,6 +11,7 @@ import java.util.stream.Collectors;
 import org.mwolff.fbcrm.auftrag.domain.Auftrag;
 import org.mwolff.fbcrm.auftrag.domain.AuftragRepository;
 import org.mwolff.fbcrm.auftrag.domain.Auftragsposition;
+import org.mwolff.fbcrm.auftrag.domain.Auftragsstatus;
 import org.springframework.stereotype.Repository;
 
 /**
@@ -25,7 +26,7 @@ import org.springframework.stereotype.Repository;
  * <p>Die Liste eines Vorgangs holt ihre Positionen in <b>einer</b> zweiten Abfrage und ordnet sie
  * danach den Auftraegen zu; je Zeile einzeln nachzuladen waere die bekannte Abfrage-Lawine.
  *
- * <p>PMD.TooManyMethods: Fuenf Wege des Ports und die Uebersetzungsschritte dazu — dieselbe
+ * <p>PMD.TooManyMethods: Sechs Wege des Ports und die Uebersetzungsschritte dazu — dieselbe
  * Abwaegung wie in {@code JpaAngebotRepository}. Die privaten Methoden sind die Abbildung einer
  * Zeile in ihre Teile, Auftrag und Position, und sie aufzuteilen zerschnitte die Uebersetzung
  * <b>eines</b> Aggregats auf zwei Klassen, die nur zusammen richtig sind.
@@ -62,7 +63,20 @@ class JpaAuftragRepository implements AuftragRepository {
 
   @Override
   public List<Auftrag> findByVorgang(final long vorgangId) {
-    final List<AuftragEntity> zeilen = auftraege.findByVorgang(vorgangId);
+    return mitPositionen(auftraege.findByVorgang(vorgangId));
+  }
+
+  @Override
+  public List<Auftrag> bestandskandidaten() {
+    return mitPositionen(auftraege.bestandskandidaten(Auftragsstatus.ABGESCHLOSSEN));
+  }
+
+  /*
+   * Die Positionen mehrerer Auftraege kommen in EINER zweiten Abfrage und werden danach zugeordnet;
+   * je Zeile nachzuladen waere die bekannte Abfrage-Lawine. Ohne sie liesse sich die Summe nicht
+   * rechnen (E11) — beide Listenwege brauchen sie deshalb, und sie teilen diesen einen Weg.
+   */
+  private List<Auftrag> mitPositionen(final List<AuftragEntity> zeilen) {
     if (zeilen.isEmpty()) {
       // Ohne diesen Zweig liefe eine Abfrage mit leerer IN-Liste los — kein gueltiges SQL.
       return List.of();

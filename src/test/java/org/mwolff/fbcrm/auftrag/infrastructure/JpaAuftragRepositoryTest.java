@@ -460,4 +460,39 @@ class JpaAuftragRepositoryTest {
     // Then
     assertThat(gefunden).containsExactly(Long.valueOf(3L));
   }
+
+  @Test
+  void bestandskandidaten_thenPassesTheQueryThroughAndCarriesThePositionsAlong() {
+    // Given — Kriterium 12: die nicht abgeschlossenen Auftraege samt ihren Positionen.
+    when(auftraege.bestandskandidaten(Auftragsstatus.ABGESCHLOSSEN))
+        .thenReturn(List.of(zeile(7L), zeile(8L)));
+    when(positionen.findByAuftraege(List.of(7L, 8L)))
+        .thenReturn(
+            List.of(
+                positionszeile(7L, (short) 1, SCHULUNG),
+                positionszeile(7L, (short) 2, KONZEPTION),
+                positionszeile(8L, (short) 1, KONZEPTION)));
+
+    // When
+    final List<Auftrag> gefunden = repository.bestandskandidaten();
+
+    // Then — in EINER zweiten Abfrage, nicht je Zeile: sonst die bekannte Abfrage-Lawine.
+    assertThat(gefunden)
+        .extracting(Auftrag::id, Auftrag::positionen)
+        .containsExactly(tuple(7L, List.of(SCHULUNG, KONZEPTION)), tuple(8L, List.of(KONZEPTION)));
+    verify(positionen, never()).findByAuftrag(anyLong());
+  }
+
+  @Test
+  void bestandskandidaten_givenNoUnfinishedOrder_thenAsksNothingMore() {
+    // Given — eine Abfrage mit leerer IN-Liste waere kein gueltiges SQL.
+    when(auftraege.bestandskandidaten(Auftragsstatus.ABGESCHLOSSEN)).thenReturn(List.of());
+
+    // When
+    final List<Auftrag> gefunden = repository.bestandskandidaten();
+
+    // Then
+    assertThat(gefunden).isEmpty();
+    verify(positionen, never()).findByAuftraege(any());
+  }
 }

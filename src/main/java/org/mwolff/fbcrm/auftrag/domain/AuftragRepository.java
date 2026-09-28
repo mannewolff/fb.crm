@@ -29,6 +29,21 @@ public interface AuftragRepository {
   List<Auftrag> findByVorgang(long vorgangId);
 
   /**
+   * Die Kandidaten des Auftragsbestands: die nicht abgeschlossenen Auftraege, jeder mit seinen
+   * Positionen (Kriterium 12).
+   *
+   * <p><b>Eine Einschraenkung der Menge, keine vollstaendige Auswahl.</b> Der Bestand grenzt auf
+   * den Status ein, den er hat — F7: Ein abgeschlossener Auftrag liegt nicht mehr vor uns, und
+   * seine restlichen Tage stellt niemand mehr in Rechnung. Die zweite Bedingung aus Kriterium 12,
+   * dass der tragende Vorgang offen ist, entscheidet der Anwendungsfall: Dieses Modul liest die
+   * Vorgangstabelle nicht selbst, sondern fragt den Port des Vorgang-Moduls.
+   *
+   * <p>Ohne zugesagte Reihenfolge — dieselbe Abwaegung wie bei {@link #findByVorgang}: Die Ordnung
+   * des Bestands ist eine Aussage der Ansicht (Plan E13) und keine Eigenschaft der Zeilen.
+   */
+  List<Auftrag> bestandskandidaten();
+
+  /**
    * Der Auftrag zu einem Angebot samt seinen Positionen, oder leer.
    *
    * <p>Hoechstens einer, und das haelt die Datenbank mit {@code UNIQUE} auf {@code angebot_id} fest
