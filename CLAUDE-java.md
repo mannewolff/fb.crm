@@ -57,7 +57,8 @@ Vor dem Markieren einer Aufgabe als „fertig" ist nachzuweisen:
 ### 3.1 Verteilung
 
 - **Unit-Tests (≥ 80 % der Tests):** JUnit 5 + AssertJ + Mockito. Schnell, isoliert, deterministisch.
-- **Slice-Tests:** `@WebMvcTest`, `@DataJpaTest`, `@JsonTest` etc. — eingesetzt zielgerichtet, nicht inflationär.
+- **Slice-Tests:** `@DataJpaTest`, `@JsonTest` etc. — eingesetzt zielgerichtet, nicht inflationär.
+- **Controller-Tests:** `@ExtendWith(MockitoExtension.class)` mit gemockten Anwendungsfällen. Werden Statuscode, Rumpf oder Problem-Details geprüft, läuft der Test über `MockMvcBuilders.standaloneSetup(controller).setControllerAdvice(new GlobalExceptionHandler())` mit dem echten `GlobalExceptionHandler` (Muster `VorgangControllerTest`); prüft er nur die Abbildung ohne HTTP-Semantik, ruft er den Controller direkt auf (Muster `FirmaVorgaengeControllerTest`). Der HTTP-Weg mit Security und Session liegt in den `*ControllerIT` mit `@SpringBootTest`. **Kein `@WebMvcTest`** — es zieht `SecurityConfig` samt Filterkette in den Slice-Test.
 - **Integrationstests:** `@SpringBootTest` mit Testcontainers für echte Infrastruktur (PostgreSQL, ggf. MinIO). **Niemals** H2 als Postgres-Ersatz.
 - **Architekturtests:** ArchUnit prüft Schichtentrennung, Paketregeln, Naming (siehe `ArchitectureTest`). Verstoß = Build-Fehler.
   **Achtung, gelernte Falle:** Die `archunit-junit5`-Engine (`@AnalyzeClasses`/`@ArchTest`) wird von Surefire in diesem Projekt **nicht ausgeführt** — die Regeln liefen als „0 Tests" durch, ein bewusst eingebauter Verstoß blieb unentdeckt (falsches Grün). ArchUnit-Regeln deshalb immer als reguläre JUnit-`@Test`-Methoden gegen einen `ClassFileImporter` (mit `DoNotIncludeTests`) schreiben.
@@ -128,16 +129,18 @@ Ausgeschlossen werden **ausschließlich**:
 - Spring-Boot-Application-Klasse mit reiner `main`-Methode.
 - Konfigurations-Properties-/Bean-Wiring-Klassen ohne Fachlogik (z. B. `OpenApiConfig`).
 - DTOs/Records/Projektionen **nur**, wenn sie keinerlei Logik enthalten (keine compact constructors, keine berechneten Felder).
-- **Infrastruktur-Adapter, Entities und Spring-Data-Repositories, die nur gegen echte
-  Infrastruktur sinnvoll testbar sind** und dort per Testcontainers-`*IT` zu 100 % abgedeckt
-  werden (Muster: die `*Entity`-Klassen, `*JpaRepository`, `*RepositoryAdapter`/`Jdbc*` sowie
-  die Mail-/S3-Adapter). Sie bleiben ausgeschlossen, weil sie ohne
-  echte Infrastruktur nicht sinnvoll prüfbar sind — **nicht**, weil IT-Coverage technisch nicht
-  ankäme: Surefire und Failsafe erben dieselbe JaCoCo-`argLine` und schreiben beide in
+- **Infrastruktur-Adapter, deren Code aus Aufrufen eines fremden SDK besteht** und die allein
+  gegen echte Infrastruktur prüfbar sind, abgedeckt per Testcontainers-`*IT` (Muster
+  `S3AnhangSpeicher`, nachgewiesen in `S3AnhangSpeicherIT`). Sie bleiben ausgeschlossen, weil sie
+  ohne echte Infrastruktur nicht sinnvoll prüfbar sind — **nicht**, weil IT-Coverage technisch
+  nicht ankäme: Surefire und Failsafe erben dieselbe JaCoCo-`argLine` und schreiben beide in
   `jacoco.exec` (die frühere Aussage an dieser Stelle war falsch, siehe kanban-kit#495). **Nicht**
-  ausgeschlossen werden Klassen, die mit gemockten Ports unit-testbar
-  sind — Controller, Security-Filter und Krypto-Adapter mit reiner Rechenlogik sind deshalb
-  unit-getestet und **in** der Coverage.
+  ausgeschlossen werden `*Entity`-Klassen, `Jpa*Repository` und Spring-Data-Schnittstellen: Sie
+  sind über `Jpa*RepositoryTest` (Unit, mit gemockten Ports) und `Jpa*RepositoryIT` gedeckt und
+  stehen **in** der Coverage. Ebenso nicht ausgeschlossen sind Controller, Security-Filter und
+  Krypto-Adapter mit reiner Rechenlogik — sie sind unit-testbar und deshalb unit-getestet.
+  Die **aktuelle Liste** der Ausschlüsse steht allein in der `pom.xml` (JaCoCo-`excludes`,
+  PIT-`excludedClasses`); dieser Leitfaden nennt Regeln, keine Liste.
 - **Krypto-Plumbing mit nachweislich nicht erreichbaren Zweigen** (Checked-Exceptions garantiert
   verfügbarer JCA-Provider): etwa die Token-Erzeugung `SecureTokens` (klassenweise) und der
   `hmac`-Catch der Session-Token-Signatur (methodengenau via
@@ -192,7 +195,7 @@ Wenn 100 % unmöglich erscheinen, lautet die Antwort **nicht** „Schwellwert se
 - **`@Component`/`@Service` sparsam.** Konfigurationsklassen mit `@Bean`-Methoden sind oft sauberer.
 - **Keine Geschäftslogik in Controllern.** Controller validieren, delegieren, mappen Statuscodes — mehr nicht.
 - **Transaktionsgrenzen** in der Application-Schicht (`@Transactional` auf Use-Case-Klassen), nicht auf Repositories oder Controllern.
-- **Konfiguration über `@ConfigurationProperties`-Records** mit Bean Validation (`@Validated`).
+- **Konfiguration über `@ConfigurationProperties`-Records** mit Bean Validation (`@Validated`). Sie liegen an der **Modulwurzel** (Muster `mail/MailProperties`) oder, wenn mehrere Module sie nutzen, in `config/` (Muster `config/MinioProperties`) — **nie** in `infrastructure`.
 - **Fehlerbehandlung nach außen:** zentral im globalen `@RestControllerAdvice` `GlobalExceptionHandler` (`org.mwolff.fbcrm.common.web`) — die einzige Stelle für Fehler-Mapping. Er mappt die `@ResponseStatus`-annotierten Domänenexceptions (Statuscode generisch aus der Annotation) und Bean-Validation-Fehler (400 + `fieldErrors`-Extension) auf RFC-9457 Problem Details (`ProblemDetail`, `application/problem+json`); unerwartete Fehler ergeben 500 mit generischem `detail` — keine Stacktraces/internen Details nach außen.
 
 ### 6.4 Datenbank
@@ -200,6 +203,7 @@ Wenn 100 % unmöglich erscheinen, lautet die Antwort **nicht** „Schwellwert se
 - Schemamigrationen ausschließlich über **Flyway**. Niemals `hibernate.ddl-auto=update/create` außerhalb von Tests. In Produktion: `validate`.
 - Integrationstests verwenden **dieselbe DB-Engine** wie Produktion (PostgreSQL via Testcontainers). Alle `*IT` erben von `AbstractIntegrationTest` (`org.mwolff.fbcrm`): **eine** geteilte Postgres-/MinIO-Singleton-Instanz für die ganze Suite (`@ServiceConnection`, Start im statischen Initialisierer — bewusst ohne `@Container`, die JUnit-Extension würde pro Klasse stoppen). Datenisolation: vor jeder Testmethode werden alle Fachtabellen geleert (Seed-Tabellen `permission`/`role_permission` bleiben).
 - Repository-Tests prüfen tatsächliche SQL-Ausführung, nicht nur Spring-Data-Methodennamen.
+- **Schema-Tests:** Wer eine Migration einführt, prüft ihre CHECK-, Fremdschlüssel- und Eindeutigkeitsbedingungen in einem `<Modul>SchemaIT` des Moduls, das die Migration fachlich trägt (Muster `VorgangSchemaIT`); V1/V2 bleiben in `SchemaBaselineIT`.
 - **Prepared Statements / Parameter-Bindung** ist Pflicht. Niemals Benutzereingaben in JPQL/SQL konkatenieren. Siehe [CLAUDE-security.md](CLAUDE-security.md).
 
 ### 6.5 Verboten
