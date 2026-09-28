@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { fetchNachPfad, formularWeg, json, leer, problem } from './fetchNachPfad';
+import { alsJson, fetchNachPfad, formularWeg, json, leer, problem } from './fetchNachPfad';
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -86,5 +86,18 @@ describe('formularWeg', () => {
       'kein Formular',
     );
     expect(merke).not.toHaveBeenCalled();
+  });
+});
+
+describe('alsJson', () => {
+  it('liest einen JSON-Rumpf', () => {
+    expect(alsJson('{"platz":1}')).toEqual({ platz: 1 });
+  });
+
+  it.each([
+    ['kein Rumpf', null],
+    ['ein Formular', new FormData()],
+  ])('scheitert laut bei %s', (_fall, rumpf) => {
+    expect(() => alsJson(rumpf)).toThrow('Der Rumpf dieses Aufrufs ist kein JSON-Text.');
   });
 });

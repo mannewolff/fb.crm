@@ -48,6 +48,20 @@ export function formularWeg(
   };
 }
 
+/**
+ * Der Rumpf eines Aufrufs als gelesenes JSON.
+ *
+ * Er scheitert laut, wenn der Rumpf keine Zeichenkette ist — aus demselben Grund wie
+ * {@link formularWeg}: Ein stilles Weiterreichen liesse die Erwartungen gegen nichts laufen.
+ */
+export function alsJson(rumpf: BodyInit | null): unknown {
+  if (typeof rumpf !== 'string') {
+    throw new TypeError('Der Rumpf dieses Aufrufs ist kein JSON-Text.');
+  }
+  const gelesen: unknown = JSON.parse(rumpf);
+  return gelesen;
+}
+
 /** Eine JSON-Antwort mit Status. */
 export function json(status: number, rumpf: unknown): () => Response {
   return () =>

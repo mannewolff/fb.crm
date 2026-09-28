@@ -20,6 +20,7 @@ const VorgangMaske = lazy(async () => import('./pages/VorgangMaske'));
 const VorgangPage = lazy(async () => import('./pages/VorgangPage'));
 const AngebotMaske = lazy(async () => import('./pages/AngebotMaske'));
 const AngebotPage = lazy(async () => import('./pages/AngebotPage'));
+const AuftragAnlegenMaske = lazy(async () => import('./pages/AuftragAnlegenMaske'));
 const PipelinePage = lazy(async () => import('./pages/PipelinePage'));
 const EigeneAngabenMaske = lazy(async () => import('./pages/EigeneAngabenMaske'));
 
@@ -71,6 +72,12 @@ export default function App() {
             <Route
               path="/vorgaenge/:id/angebote/:angebotId/bearbeiten"
               element={<AngebotMaske />}
+            />
+            {/* Der Auftrag entsteht unter dem Angebot, aus dem er kommt (Plan #112, E16): Die Adresse
+                traegt die Kennung des Angebots ohne Suchparameter. */}
+            <Route
+              path="/vorgaenge/:id/angebote/:angebotId/auftrag/neu"
+              element={<AuftragAnlegenMaske />}
             />
             <Route path="/pipeline" element={<PipelinePage />} />
             <Route path="/firmen" element={<FirmenPage />} />

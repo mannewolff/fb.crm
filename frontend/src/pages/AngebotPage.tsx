@@ -2,7 +2,14 @@ import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Link from '@mui/material/Link';
 import Typography from '@mui/material/Typography';
-import { IconPencil, IconSend, IconThumbDown, IconThumbUp, IconTrash } from '@tabler/icons-react';
+import {
+  IconFilePlus,
+  IconPencil,
+  IconSend,
+  IconThumbDown,
+  IconThumbUp,
+  IconTrash,
+} from '@tabler/icons-react';
 import { Fragment, useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -16,6 +23,8 @@ import {
   angebotVerwerfen,
 } from '../api/angebote';
 import type { Angebot, AngebotPosition } from '../api/angebote';
+import { auftragAmAngebot } from '../api/auftraege';
+import type { AngebotAuftrag } from '../api/auftraege';
 import type { FieldErrors } from '../api/client';
 import AktionsMenue from '../components/AktionsMenue';
 import Karte from '../components/Karte';
@@ -45,8 +54,9 @@ import { ZAHLEN_KLASSE } from '../theme';
  * „Versenden" als die eine Kupfertaste, „Bearbeiten" daneben und „Verwerfen" im ⋯-Menue mit
  * Rueckfrage — die folgenreiche, seltene Aktion steht nicht gleichrangig neben der taeglichen
  * (CLAUDE-design.md, Leitgedanke 2). Ein versendetes, abgelaufenes oder abgeloestes Angebot traegt
- * „Annehmen" als Kupfertaste und „Ablehnen" als weiche; am angenommenen und am abgelehnten steht
- * keine Aktion mehr, weil beide Zustaende endgueltig sind.
+ * „Annehmen" als Kupfertaste und „Ablehnen" als weiche; am abgelehnten steht keine Aktion mehr,
+ * am angenommenen hoechstens „Auftrag anlegen" — beide Zustaende sind endgueltig, der Auftrag ist
+ * der naechste Beleg und keine Aenderung am Angebot.
  *
  * <b>Nach jeder Aktion gilt die Antwort</b>, nicht ein selbst umgeschalteter Stand: Alle drei Wege
  * geben das geaenderte Angebot zurueck, und „abgelaufen" entsteht ohnehin gerechnet (E4) — was der
@@ -60,6 +70,13 @@ import { ZAHLEN_KLASSE } from '../theme';
  *
  * <b>Der Beleg ist ein Verweis, kein Aufruf</b> (E17): `target="_blank" rel="noopener"` auf den
  * Pfad. Kriterium 14 sagt „oeffnen", und ausgeliefert wird das beim Versenden abgelegte Dokument.
+ *
+ * <b>Der Auftrag kommt ueber einen zweiten Aufruf</b> (Plan #112, E3; Kriterium 1, F9): Das Modul
+ * `angebot` kennt den Auftrag nicht, also fragt die Ansicht `GET /api/angebote/{id}/auftrag` selbst,
+ * mit eigenem Ladezustand. Gefragt wird nur am angenommenen Angebot — nur dort kann ein Auftrag
+ * bestehen oder entstehen. „Auftrag anlegen" steht, solange `anlegbar` gilt **und** kein Auftrag
+ * steht; nicht allein am Stand, denn am abgeschlossenen Vorgang liefe die Taste in 409. Steht ein
+ * Auftrag, tragen die Angaben seine Nummer. Scheitert der Aufruf, bleibt das Angebot lesbar.
  */
 
 const NICHT_GEFUNDEN = 'Dieses Angebot gibt es nicht.';
@@ -69,6 +86,8 @@ const VERSAND_FEHLT = 'Zum Versenden dieses Angebots fehlen Angaben:';
 const LAEDT = 'Das Angebot wird geladen …';
 const OHNE_POSITION = 'Noch keine Position.';
 const NETTO = 'Alle Beträge netto, zzgl. gesetzlicher Umsatzsteuer';
+const AUFTRAG_LAEDT = 'wird geladen …';
+const AUFTRAG_AUSFALL = 'gerade nicht zu erreichen';
 const VERWERFEN_FRAGE =
   'Der Entwurf verschwindet dann vollständig, samt seinen Positionen. Das lässt sich nicht zurücknehmen.';
 
@@ -83,6 +102,13 @@ type Stand =
   | { readonly art: 'laedt' }
   | { readonly art: 'daten'; readonly angebot: Angebot }
   | { readonly art: 'unbekannt' }
+  | { readonly art: 'ausfall' };
+
+/** Was die Ansicht ueber den Auftrag zu diesem Angebot weiss (Plan E3). */
+type Auftragsauskunft =
+  | { readonly art: 'ungefragt' }
+  | { readonly art: 'laedt' }
+  | { readonly art: 'daten'; readonly auskunft: AngebotAuftrag }
   | { readonly art: 'ausfall' };
 
 /** Die Ueberschrift: die Nummer, oder das Wort fuer den Entwurf, der noch keine hat. */
@@ -134,8 +160,32 @@ function Positionszeile({ position }: { readonly position: AngebotPosition }) {
   );
 }
 
+/**
+ * Die Zeile „Auftrag" der Angaben — nur, wenn es etwas zu sagen gibt (Kriterium 1, F9).
+ *
+ * Die Nummer steht als Text: Der Weg zur Auftragsansicht kommt mit dem Paket, das sie baut.
+ */
+function auftragszeile(auftrag: Auftragsauskunft): readonly { name: string; wert: ReactNode }[] {
+  if (auftrag.art === 'laedt') {
+    return [{ name: 'Auftrag', wert: AUFTRAG_LAEDT }];
+  }
+  if (auftrag.art === 'ausfall') {
+    return [{ name: 'Auftrag', wert: AUFTRAG_AUSFALL }];
+  }
+  if (auftrag.art === 'daten' && auftrag.auskunft.auftrag !== null) {
+    return [{ name: 'Auftrag', wert: auftrag.auskunft.auftrag.nummer }];
+  }
+  return [];
+}
+
 /** Die Angaben des Angebots als Stammdaten-Liste (Vorlage `.stamm` Z. 100–102). */
-function Angabenkarte({ angebot }: { readonly angebot: Angebot }) {
+function Angabenkarte({
+  angebot,
+  auftrag,
+}: {
+  readonly angebot: Angebot;
+  readonly auftrag: Auftragsauskunft;
+}) {
   const zeilen: readonly { name: string; wert: ReactNode }[] = [
     { name: 'Nummer', wert: angebot.nummer ?? 'Entwurf' },
     { name: 'Angebotsdatum', wert: tagWort(angebot.angebotDatum) },
@@ -157,6 +207,7 @@ function Angabenkarte({ angebot }: { readonly angebot: Angebot }) {
           </Link>
         ),
     },
+    ...auftragszeile(auftrag),
   ];
   return (
     <Karte titel="Angaben">
@@ -201,6 +252,7 @@ export default function AngebotPage() {
   const [meldung, setzeMeldung] = useState<string | null>(null);
   const [felder, setzeFelder] = useState<FieldErrors>({});
   const [laeuft, setzeLaeuft] = useState(false);
+  const [auftrag, setzeAuftrag] = useState<Auftragsauskunft>({ art: 'ungefragt' });
   // Solange das Angebot nicht gelesen ist, traegt die Endstufe das Wort „Angebot": Ein Pfad, der
   // erst spaeter erscheint, liesse den Kopf bei jedem Aufruf einmal springen.
   useKopfPfad(
@@ -222,6 +274,25 @@ export default function AngebotPage() {
         setzeStand(nichtGefunden(ursache) ? { art: 'unbekannt' } : { art: 'ausfall' });
       });
   }, [kennung]);
+
+  // Der zweite Aufruf haengt am Stand: Nimmt der Kunde an, fragt die Ansicht danach neu.
+  const angenommen =
+    stand.art === 'daten' && stand.angebot.stand === 'ANGENOMMEN' ? stand.angebot.id : null;
+  useEffect(() => {
+    if (angenommen === null) {
+      setzeAuftrag({ art: 'ungefragt' });
+      return;
+    }
+    setzeAuftrag({ art: 'laedt' });
+    void auftragAmAngebot(angenommen)
+      .then((auskunft) => {
+        setzeAuftrag({ art: 'daten', auskunft });
+      })
+      .catch(() => {
+        // Jeder Grund fuehrt zum selben Ergebnis: Das Angebot bleibt lesbar, die Taste fehlt.
+        setzeAuftrag({ art: 'ausfall' });
+      });
+  }, [angenommen]);
 
   /** Ein Zustandswechsel: Der neue Stand kommt aus der Antwort, nicht aus der Oberflaeche. */
   const schalten = async (weg: (id: number) => Promise<Angebot>, angebot: Angebot) => {
@@ -318,6 +389,26 @@ export default function AngebotPage() {
             symbol={<IconThumbUp size={SYMBOL_TASTE} stroke={1.8} />}
           >
             Annehmen
+          </KupferTaste>
+        </Box>
+      );
+    }
+    if (
+      angebot.stand === 'ANGENOMMEN' &&
+      auftrag.art === 'daten' &&
+      auftrag.auskunft.anlegbar &&
+      auftrag.auskunft.auftrag === null
+    ) {
+      return (
+        <Box
+          data-testid="angebot-aktionen"
+          sx={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}
+        >
+          <KupferTaste
+            to={`/vorgaenge/${String(angebot.vorgangId)}/angebote/${String(angebot.id)}/auftrag/neu`}
+            symbol={<IconFilePlus size={SYMBOL_TASTE} stroke={1.8} />}
+          >
+            Auftrag anlegen
           </KupferTaste>
         </Box>
       );
@@ -442,7 +533,7 @@ export default function AngebotPage() {
               </Box>
             </Karte>
           )}
-          <Angabenkarte angebot={angebot} />
+          <Angabenkarte angebot={angebot} auftrag={auftrag} />
         </Box>
       </>
     );

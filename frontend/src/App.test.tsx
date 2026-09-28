@@ -267,6 +267,31 @@ describe('App', () => {
     expect(screen.getByRole('navigation', { name: 'Hauptnavigation' })).toBeInTheDocument();
   });
 
+  it('fuehrt „/vorgaenge/5/angebote/9/auftrag/neu" ohne Sitzung auf die Anmeldeseite', async () => {
+    ohneSitzung();
+
+    renderApp(['/vorgaenge/5/angebote/9/auftrag/neu'], 0);
+
+    expect(await screen.findByLabelText(/^E-Mail-Adresse/)).toBeInTheDocument();
+  });
+
+  it('zeigt „/vorgaenge/5/angebote/9/auftrag/neu" als Anlege-Maske im Rahmen', async () => {
+    fensterbreite(1440);
+    fetchNachPfad({
+      'GET /api/auth/me': json(200, KONTO),
+      'GET /api/instance': json(200, { version: '0.1.3' }),
+      'GET /api/angebote/9': json(200, { ...ANGEBOT, stand: 'ANGENOMMEN' }),
+    });
+
+    renderApp(['/vorgaenge/5/angebote/9/auftrag/neu'], 0);
+
+    expect(screen.getByRole('status')).toHaveTextContent('Sitzung wird geprüft');
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Neuer Auftrag' }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('navigation', { name: 'Hauptnavigation' })).toBeInTheDocument();
+  });
+
   it('fuehrt „/pipeline" ohne Sitzung auf die Anmeldeseite', async () => {
     ohneSitzung();
 
