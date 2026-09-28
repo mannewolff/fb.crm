@@ -5,9 +5,9 @@ import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import java.math.BigDecimal;
-import org.mwolff.fbcrm.angebot.domain.Abrechnungsmodus;
 import org.mwolff.fbcrm.angebot.domain.Angebotsposition;
-import org.mwolff.fbcrm.angebot.domain.Einheit;
+import org.mwolff.fbcrm.common.Abrechnungsmodus;
+import org.mwolff.fbcrm.common.Einheit;
 
 /**
  * Eine Position, wie die Entwurfsmaske sie einreicht (Kriterium 4).

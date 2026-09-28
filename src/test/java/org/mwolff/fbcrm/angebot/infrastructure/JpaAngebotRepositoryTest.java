@@ -23,14 +23,14 @@ import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.mwolff.fbcrm.angebot.domain.Abrechnungsmodus;
 import org.mwolff.fbcrm.angebot.domain.Angebot;
 import org.mwolff.fbcrm.angebot.domain.Angebotsposition;
 import org.mwolff.fbcrm.angebot.domain.Angebotszustand;
 import org.mwolff.fbcrm.angebot.domain.Belegabsender;
 import org.mwolff.fbcrm.angebot.domain.Belegempfaenger;
-import org.mwolff.fbcrm.angebot.domain.Einheit;
+import org.mwolff.fbcrm.common.Abrechnungsmodus;
 import org.mwolff.fbcrm.common.Anschrift;
+import org.mwolff.fbcrm.common.Einheit;
 
 /**
  * Die Uebersetzung zwischen Angebot und Zeilen — in beide Richtungen.

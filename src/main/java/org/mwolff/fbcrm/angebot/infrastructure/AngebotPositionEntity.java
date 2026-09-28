@@ -10,8 +10,8 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.math.BigDecimal;
 import org.jspecify.annotations.Nullable;
-import org.mwolff.fbcrm.angebot.domain.Abrechnungsmodus;
-import org.mwolff.fbcrm.angebot.domain.Einheit;
+import org.mwolff.fbcrm.common.Abrechnungsmodus;
+import org.mwolff.fbcrm.common.Einheit;
 
 /**
  * Die Zeile der Tabelle {@code angebot_position} aus {@code V6__angebot.sql}.

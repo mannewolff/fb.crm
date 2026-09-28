@@ -11,12 +11,12 @@ import static org.mwolff.fbcrm.angebot.application.Druckdatendoppel.SUMME;
 import java.math.BigDecimal;
 import java.util.List;
 import org.junit.jupiter.api.Test;
-import org.mwolff.fbcrm.angebot.domain.Abrechnungsmodus;
 import org.mwolff.fbcrm.angebot.domain.Angebotsposition;
 import org.mwolff.fbcrm.angebot.domain.Belegabsender;
 import org.mwolff.fbcrm.angebot.domain.Belegempfaenger;
-import org.mwolff.fbcrm.angebot.domain.Einheit;
+import org.mwolff.fbcrm.common.Abrechnungsmodus;
 import org.mwolff.fbcrm.common.Anschrift;
+import org.mwolff.fbcrm.common.Einheit;
 
 /**
  * Der Satz des Belegs — die Rechnung vor dem Druck (E10).

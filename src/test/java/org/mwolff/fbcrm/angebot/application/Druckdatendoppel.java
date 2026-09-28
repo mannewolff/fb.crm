@@ -5,12 +5,12 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.stream.IntStream;
 import org.jspecify.annotations.Nullable;
-import org.mwolff.fbcrm.angebot.domain.Abrechnungsmodus;
 import org.mwolff.fbcrm.angebot.domain.Angebotsposition;
 import org.mwolff.fbcrm.angebot.domain.Belegabsender;
 import org.mwolff.fbcrm.angebot.domain.Belegempfaenger;
-import org.mwolff.fbcrm.angebot.domain.Einheit;
+import org.mwolff.fbcrm.common.Abrechnungsmodus;
 import org.mwolff.fbcrm.common.Anschrift;
+import org.mwolff.fbcrm.common.Einheit;
 
 /**
  * Die Druckdaten, gegen die Satz und Druck geprueft werden.

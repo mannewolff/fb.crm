@@ -1,12 +1,12 @@
 package org.mwolff.fbcrm.angebot.domain;
 
 import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.fbcrm.angebot.application.AngebotNichtAenderbar;
+import org.mwolff.fbcrm.common.Geldrechnung;
 import org.mwolff.fbcrm.common.Identifiable;
 
 /**
@@ -72,10 +72,7 @@ public record Angebot(
 
   /** Die Netto-Summe: die Summe der gerundeten Positionsbetraege, Cent fuer Cent (Kriterium 5). */
   public BigDecimal summe() {
-    return positionen.stream()
-        .map(Angebotsposition::betrag)
-        .reduce(BigDecimal.ZERO, BigDecimal::add)
-        .setScale(2, RoundingMode.HALF_UP);
+    return Geldrechnung.summe(positionen.stream().map(Angebotsposition::betrag));
   }
 
   /**

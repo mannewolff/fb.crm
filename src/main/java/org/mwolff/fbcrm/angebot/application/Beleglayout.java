@@ -14,8 +14,8 @@ import org.jspecify.annotations.Nullable;
 import org.mwolff.fbcrm.angebot.domain.Angebotsposition;
 import org.mwolff.fbcrm.angebot.domain.Belegabsender;
 import org.mwolff.fbcrm.angebot.domain.Belegempfaenger;
-import org.mwolff.fbcrm.angebot.domain.Einheit;
 import org.mwolff.fbcrm.common.Anschrift;
+import org.mwolff.fbcrm.common.Einheit;
 
 /**
  * Setzt die Druckdaten eines Angebots in eine Folge von Druckzeilen (E10).

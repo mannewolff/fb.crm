@@ -12,11 +12,11 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
-import org.mwolff.fbcrm.angebot.domain.Abrechnungsmodus;
 import org.mwolff.fbcrm.angebot.domain.Angebot;
 import org.mwolff.fbcrm.angebot.domain.Angebotsposition;
-import org.mwolff.fbcrm.angebot.domain.Einheit;
+import org.mwolff.fbcrm.common.Abrechnungsmodus;
 import org.mwolff.fbcrm.common.Anschrift;
+import org.mwolff.fbcrm.common.Einheit;
 import org.mwolff.fbcrm.eigeneangaben.domain.EigeneAngaben;
 import org.mwolff.fbcrm.firma.domain.Firma;
 

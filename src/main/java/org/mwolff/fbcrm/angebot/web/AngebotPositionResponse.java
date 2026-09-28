@@ -1,9 +1,9 @@
 package org.mwolff.fbcrm.angebot.web;
 
 import java.math.BigDecimal;
-import org.mwolff.fbcrm.angebot.domain.Abrechnungsmodus;
 import org.mwolff.fbcrm.angebot.domain.Angebotsposition;
-import org.mwolff.fbcrm.angebot.domain.Einheit;
+import org.mwolff.fbcrm.common.Abrechnungsmodus;
+import org.mwolff.fbcrm.common.Einheit;
 
 /**
  * Eine Position, wie die Ansicht sie zeigt (Kriterien 4, 5).

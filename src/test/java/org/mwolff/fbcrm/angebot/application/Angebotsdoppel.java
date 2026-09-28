@@ -4,14 +4,14 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
-import org.mwolff.fbcrm.angebot.domain.Abrechnungsmodus;
 import org.mwolff.fbcrm.angebot.domain.Angebot;
 import org.mwolff.fbcrm.angebot.domain.Angebotsposition;
 import org.mwolff.fbcrm.angebot.domain.Angebotszustand;
 import org.mwolff.fbcrm.angebot.domain.Belegabsender;
 import org.mwolff.fbcrm.angebot.domain.Belegempfaenger;
-import org.mwolff.fbcrm.angebot.domain.Einheit;
+import org.mwolff.fbcrm.common.Abrechnungsmodus;
 import org.mwolff.fbcrm.common.Anschrift;
+import org.mwolff.fbcrm.common.Einheit;
 
 /**
  * Die Angebote, gegen die die Anwendungsfaelle dieses Pakets laufen.

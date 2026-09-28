@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.math.BigDecimal;
 import org.junit.jupiter.api.Test;
+import org.mwolff.fbcrm.common.Abrechnungsmodus;
+import org.mwolff.fbcrm.common.Einheit;
 
 /**
  * Der Betrag einer Position — Kriterium 5.

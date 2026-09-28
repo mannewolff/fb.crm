@@ -12,7 +12,9 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.mwolff.fbcrm.angebot.application.AngebotNichtAenderbar;
+import org.mwolff.fbcrm.common.Abrechnungsmodus;
 import org.mwolff.fbcrm.common.Anschrift;
+import org.mwolff.fbcrm.common.Einheit;
 
 /**
  * Das Angebot als Fachobjekt: die Rechenregel aus Kriterium 5, der Anzeigestand aus Kriterium 18
