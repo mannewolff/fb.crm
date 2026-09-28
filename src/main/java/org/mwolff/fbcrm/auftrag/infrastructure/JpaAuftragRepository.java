@@ -1,10 +1,12 @@
 package org.mwolff.fbcrm.auftrag.infrastructure;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 import org.mwolff.fbcrm.auftrag.domain.Auftrag;
 import org.mwolff.fbcrm.auftrag.domain.AuftragRepository;
@@ -22,7 +24,13 @@ import org.springframework.stereotype.Repository;
  *
  * <p>Die Liste eines Vorgangs holt ihre Positionen in <b>einer</b> zweiten Abfrage und ordnet sie
  * danach den Auftraegen zu; je Zeile einzeln nachzuladen waere die bekannte Abfrage-Lawine.
+ *
+ * <p>PMD.TooManyMethods: Fuenf Wege des Ports und die Uebersetzungsschritte dazu — dieselbe
+ * Abwaegung wie in {@code JpaAngebotRepository}. Die privaten Methoden sind die Abbildung einer
+ * Zeile in ihre Teile, Auftrag und Position, und sie aufzuteilen zerschnitte die Uebersetzung
+ * <b>eines</b> Aggregats auf zwei Klassen, die nur zusammen richtig sind.
  */
+@SuppressWarnings("PMD.TooManyMethods")
 @Repository
 class JpaAuftragRepository implements AuftragRepository {
 
@@ -72,6 +80,11 @@ class JpaAuftragRepository implements AuftragRepository {
                     zeile,
                     jeAuftrag.getOrDefault(Objects.requireNonNull(zeile.getId()), List.of())))
         .toList();
+  }
+
+  @Override
+  public Set<Long> vorgaengeMitAuftrag(final Collection<Long> vorgangIds) {
+    return Set.copyOf(auftraege.vorgaengeMitAuftrag(vorgangIds));
   }
 
   @Override

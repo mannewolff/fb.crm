@@ -14,6 +14,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -445,5 +446,18 @@ class JpaAuftragRepositoryTest {
     final InOrder reihenfolge = inOrder(positionen, auftraege);
     reihenfolge.verify(positionen).loescheZuAuftrag(7L);
     reihenfolge.verify(auftraege).deleteById(7L);
+  }
+
+  @Test
+  void vorgaengeMitAuftrag_thenAnswersWithASetOfTheKeys() {
+    // Given — die Auskunft, an der der Vorgang seine Phase ableitet (Kriterium 10). Die Abfrage
+    // liefert eine Liste, der Port sagt eine Menge zu.
+    when(auftraege.vorgaengeMitAuftrag(List.of(3L, 4L))).thenReturn(List.of(3L, 3L));
+
+    // When
+    final Set<Long> gefunden = repository.vorgaengeMitAuftrag(List.of(3L, 4L));
+
+    // Then
+    assertThat(gefunden).containsExactly(Long.valueOf(3L));
   }
 }

@@ -1,7 +1,9 @@
 package org.mwolff.fbcrm.auftrag.domain;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * Port auf den Bestand der Auftraege; die Umsetzung liegt in {@code auftrag.infrastructure}.
@@ -35,6 +37,23 @@ public interface AuftragRepository {
    * @param angebotId Kennung des Angebots, aus dem der Auftrag entstand
    */
   Optional<Auftrag> findByAngebot(long angebotId);
+
+  /**
+   * Die Kennungen derjenigen Vorgaenge aus {@code vorgangIds}, an denen mindestens ein Auftrag
+   * haengt.
+   *
+   * <p>Die Auswahl ist sein blosses Dasein und kein Zustand: Ein Auftrag hat keinen Entwurf und
+   * traegt seine Nummer ab dem Anlegen — es gibt keine Lage, in der er als Beleg nicht zaehlt (F6).
+   * Beim Angebot ist das anders, und darum steht die Regel je Belegart in ihrer eigenen Umsetzung
+   * des Ports und nicht am Port.
+   *
+   * <p>Nur die Kennungen, nicht die Auftraege: Der Aufrufer will wissen, <b>ob</b> einer haengt,
+   * und ganze Auftraege mit ihren Positionen zu laden waere Gewicht ohne Nutzen.
+   *
+   * @param vorgangIds die Kennungen der gefragten Vorgaenge; nie leer — der Aufrufer faengt den
+   *     Fall ab, weil {@code in ()} kein gueltiges SQL ist
+   */
+  Set<Long> vorgaengeMitAuftrag(Collection<Long> vorgangIds);
 
   /** Legt den Auftrag an oder schreibt ihn fort und liefert ihn mit gesetzter Id zurueck. */
   Auftrag save(Auftrag auftrag);

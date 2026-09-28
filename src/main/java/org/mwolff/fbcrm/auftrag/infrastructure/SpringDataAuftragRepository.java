@@ -1,5 +1,6 @@
 package org.mwolff.fbcrm.auftrag.infrastructure;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -37,4 +38,22 @@ interface SpringDataAuftragRepository extends JpaRepository<AuftragEntity, Long>
    */
   @Query("select a from AuftragEntity a where a.angebotId = :angebotId")
   Optional<AuftragEntity> findByAngebot(@Param("angebotId") long angebotId);
+
+  /**
+   * Die Vorgaenge unter {@code vorgangIds}, an denen mindestens ein Auftrag haengt — die Abfrage
+   * trifft {@code auftrag_vorgang_idx}.
+   *
+   * <p>Ohne Bedingung auf den Status: Ein Auftrag zaehlt ab dem Anlegen, und ein abgeschlossener
+   * zaehlt weiter (F6). {@code distinct}, weil an einem Vorgang mehrere Auftraege haengen duerfen —
+   * ein Rahmenauftrag mit Abrufen — und jede Kennung nur einmal gebraucht wird.
+   *
+   * @param vorgangIds die Kennungen der gefragten Vorgaenge; nie leer — der Aufrufer faengt den
+   *     Fall ab, weil {@code in ()} kein gueltiges SQL ist
+   */
+  @Query(
+      """
+      select distinct a.vorgangId from AuftragEntity a
+      where a.vorgangId in :vorgangIds
+      """)
+  List<Long> vorgaengeMitAuftrag(@Param("vorgangIds") Collection<Long> vorgangIds);
 }
