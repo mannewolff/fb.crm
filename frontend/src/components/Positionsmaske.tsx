@@ -8,13 +8,13 @@ import { betrag, euro, hundertstel } from '../lib/geld';
 import { RADIUS_MITTEL, RADIUS_RUND, ZAHLEN_KLASSE } from '../theme';
 
 /**
- * Eine Position im Entwurf: die fuenf Felder, der mitrechnende Betrag und die drei Griffe
- * (Kriterien 4, 5, 6).
+ * Eine Position in der Maske des Angebots: die fuenf Felder, der mitrechnende Betrag und die drei
+ * Griffe (Kriterien 4, 5, 6).
  *
  * <b>Gesteuert, nicht selbststaendig.</b> Der Zustand liegt in der Angebotsmaske: Die Liste wird
  * nach E8 als Ganzes geschickt, und eine Zeile, die ihre Eingaben selbst hielte, muesste sie beim
  * Absenden erst wieder herausgeben — oder beim Verschieben mitwandern lassen. Beides waere eine
- * zweite Wahrheit ueber denselben Entwurf.
+ * zweite Wahrheit ueber dasselbe Angebot.
  *
  * <b>Menge und Preis stehen als Text.</b> Kein `type="number"`: Dessen Wert ist eine
  * Gleitkommazahl, und `lib/geld.ts` rechnet ausdruecklich nicht in Gleitkomma (E5). Der Text geht
@@ -25,7 +25,7 @@ import { RADIUS_MITTEL, RADIUS_RUND, ZAHLEN_KLASSE } from '../theme';
  * setzt „Pauschal", einer auf „Aufwand" „Personentag" — aber nur, solange niemand die Einheit
  * selbst gewaehlt hat. Wer „Stunde" gewaehlt hat, hat entschieden; ein Vorschlag nimmt eine
  * Entscheidung nicht zurueck. Deshalb traegt die Position das Merkmal {@link
- * Entwurfsposition.einheitVonHand} — ohne es waere „hat der Mensch gewaehlt?" aus dem Wert allein
+ * Maskenposition.einheitVonHand} — ohne es waere „hat der Mensch gewaehlt?" aus dem Wert allein
  * nicht zu beantworten.
  *
  * Die Felder liegen in einer Gruppe mit dem Namen „Position <n>". Mehrere Zeilen tragen dieselben
@@ -34,7 +34,7 @@ import { RADIUS_MITTEL, RADIUS_RUND, ZAHLEN_KLASSE } from '../theme';
  */
 
 /** Eine Position, so wie sie in der Maske steht — Menge und Preis als Text des Feldes. */
-export interface Entwurfsposition {
+export interface Maskenposition {
   readonly bezeichnung: string;
   readonly abrechnungsmodus: Abrechnungsmodus;
   readonly menge: string;
@@ -71,7 +71,7 @@ const VORSCHLAG: Readonly<Record<Abrechnungsmodus, Einheit>> = {
  * falsch gemacht hat. Die Bezeichnung bleibt leer — sie ist der eine Text, den nur der Mensch
  * kennt, und was zum Versenden fehlt, nennt die Versandpruefung (E27).
  */
-export const FRISCHE_POSITION: Entwurfsposition = {
+export const FRISCHE_POSITION: Maskenposition = {
   bezeichnung: '',
   abrechnungsmodus: 'AUFWAND',
   menge: '1',
@@ -89,7 +89,7 @@ export const KEINE_ZAHL = 'Bitte eine Zahl mit höchstens zwei Nachkommastellen 
  * Steht hier und nicht in der Maske, obwohl beide ihn brauchen: Die Zeile zeigt ihn, die Maske
  * summiert ihn. Zwei Rechnungen fuer denselben Betrag zeigten irgendwann zwei Zahlen.
  */
-export function betragDerPosition(position: Entwurfsposition): number | null {
+export function betragDerPosition(position: Maskenposition): number | null {
   const menge = hundertstel(position.menge);
   const preis = hundertstel(position.einzelpreis);
   return menge === null || preis === null ? null : betrag(menge, preis);
@@ -98,13 +98,15 @@ export function betragDerPosition(position: Entwurfsposition): number | null {
 export interface PositionsmaskeProps {
   /** Die Nummer der Zeile in der gezeigten Reihenfolge, von 1 an — sie benennt die Gruppe. */
   readonly nummer: number;
-  readonly position: Entwurfsposition;
-  readonly aendere: (position: Entwurfsposition) => void;
+  readonly position: Maskenposition;
+  readonly aendere: (position: Maskenposition) => void;
   readonly loesche: () => void;
   readonly nachOben: () => void;
   readonly nachUnten: () => void;
   readonly erste: boolean;
   readonly letzte: boolean;
+  /** Die Meldung des Servers an der Bezeichnung (`positionen[n].bezeichnung`), sofern es eine gibt. */
+  readonly bezeichnungFehler?: string;
 }
 
 const SYMBOL = 17;
@@ -118,6 +120,7 @@ export default function Positionsmaske({
   nachUnten,
   erste,
   letzte,
+  bezeichnungFehler,
 }: PositionsmaskeProps) {
   const cent = betragDerPosition(position);
   const mengeFehlt = hundertstel(position.menge) === null;
@@ -155,6 +158,9 @@ export default function Positionsmaske({
           onChange={(ereignis) => {
             aendere({ ...position, bezeichnung: ereignis.target.value });
           }}
+          error={bezeichnungFehler !== undefined}
+          helperText={bezeichnungFehler}
+          required
           fullWidth
         />
         <Box

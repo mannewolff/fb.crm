@@ -4,10 +4,10 @@ import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
 import Positionsmaske, { FRISCHE_POSITION, betragDerPosition } from './Positionsmaske';
-import type { Entwurfsposition } from './Positionsmaske';
+import type { Maskenposition } from './Positionsmaske';
 import { renderMitTheme } from '../test/render';
 
-const POSITION: Entwurfsposition = {
+const POSITION: Maskenposition = {
   bezeichnung: 'Konzeption',
   abrechnungsmodus: 'AUFWAND',
   menge: '2,5',
@@ -29,13 +29,15 @@ function Halter({
   nachUnten = vi.fn(),
   erste = false,
   letzte = false,
+  bezeichnungFehler,
 }: {
-  readonly start?: Entwurfsposition;
+  readonly start?: Maskenposition;
   readonly loesche?: () => void;
   readonly nachOben?: () => void;
   readonly nachUnten?: () => void;
   readonly erste?: boolean;
   readonly letzte?: boolean;
+  readonly bezeichnungFehler?: string;
 }) {
   const [position, setzePosition] = useState(start);
   return (
@@ -48,6 +50,7 @@ function Halter({
       nachUnten={nachUnten}
       erste={erste}
       letzte={letzte}
+      bezeichnungFehler={bezeichnungFehler}
     />
   );
 }
@@ -207,6 +210,25 @@ describe('Positionsmaske — Reihenfolge und Loeschen (Kriterium 6)', () => {
     expect(gruppe().getByRole('button', { name: 'Position 1 nach oben' })).toBeDisabled();
     expect(gruppe().getByRole('button', { name: 'Position 1 nach unten' })).toBeDisabled();
     expect(gruppe().getByRole('button', { name: 'Position 1 löschen' })).toBeEnabled();
+  });
+});
+
+describe('Positionsmaske — die Meldung an der Bezeichnung (Issue #127)', () => {
+  it('zeigt die Meldung des Servers an der Bezeichnung', () => {
+    renderMitTheme(<Halter bezeichnungFehler="Jede Position braucht eine Bezeichnung." />);
+
+    const feld = gruppe().getByRole('textbox', { name: 'Bezeichnung' });
+    expect(feld).toHaveAttribute('aria-invalid', 'true');
+    expect(gruppe().getByText('Jede Position braucht eine Bezeichnung.')).toBeInTheDocument();
+  });
+
+  it('zeigt ohne Meldung kein Fehlerbild', () => {
+    renderMitTheme(<Halter />);
+
+    expect(gruppe().getByRole('textbox', { name: 'Bezeichnung' })).toHaveAttribute(
+      'aria-invalid',
+      'false',
+    );
   });
 });
 

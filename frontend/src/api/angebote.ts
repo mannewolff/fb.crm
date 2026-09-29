@@ -1,4 +1,4 @@
-import { apiJson, apiOhneInhalt } from './client';
+import { apiJson } from './client';
 import {
   FORMFEHLER,
   inHundertsteln,
@@ -9,11 +9,12 @@ import {
   zahl,
   zahlOderNull,
 } from './verengen';
-import type { Angebotsstand } from '../lib/angebotsstand';
+import { alsAngebotsstatus } from '../lib/angebotsstatus';
+import type { Angebotsstatus } from '../lib/angebotsstatus';
 
 /**
- * Die Wege zum Angebot: die Liste an der Firma, das Anlegen, das Fortschreiben eines Entwurfs, das
- * Verwerfen, das Versenden, die Reaktion des Kunden und der Beleg.
+ * Die Wege zum Angebot: die Liste an der Firma, das Anlegen, das Lesen, das Aendern und der
+ * Statuswechsel (Issue #127).
  *
  * Die Typen sind die Gegenstuecke zu `AngebotResponse`, `AngebotPositionResponse`,
  * `AngebotZeileResponse` und `FirmaAngeboteResponse` im Backend; aendert sich dort ein Feld,
@@ -36,10 +37,6 @@ import type { Angebotsstand } from '../lib/angebotsstand';
  * Hinaus gehen Menge und Preis als <b>Dezimaltext</b> („2.50"). Jackson liest daraus ein
  * `BigDecimal`; eine Gleitkommazahl im Rumpf waere die eine Umwandlung, die die Rechnung in
  * `lib/geld.ts` vermeidet.
- *
- * Fuer den Beleg steht hier nur ein <b>Pfad</b> und kein Aufruf (E17): Der Browser oeffnet das PDF
- * selbst, mit dem Sitzungs-Cookie und dem
- * `Content-Disposition` des Servers.
  */
 
 /** Wie eine Position abgerechnet wird (`Abrechnungsmodus` im Backend, Kriterium 4). */
@@ -61,7 +58,7 @@ export interface AngebotPosition {
   readonly betragInCent: number;
 }
 
-/** Ein Angebot mit seinen Positionen (Kriterien 5, 18). */
+/** Ein Angebot mit seinen Positionen (Issue #127). */
 export interface Angebot {
   readonly id: number;
   readonly firmaId: number;
@@ -69,33 +66,24 @@ export interface Angebot {
   /** Der Ansprechpartner ist optional (Issue #126). */
   readonly ansprechpartnerId: number | null;
   readonly ansprechpartnerName: string | null;
-  /** Angebotsnummer, oder `null` im Entwurf (Kriterium 11). */
-  readonly nummer: string | null;
-  readonly stand: Angebotsstand;
+  readonly status: Angebotsstatus;
   /** Tag (`YYYY-MM-DD`), wie das Backend ein `LocalDate` liefert. */
   readonly angebotDatum: string;
-  readonly gueltigBis: string;
-  readonly leistungsbeschreibung: string | null;
-  readonly zahlungsbedingungen: string | null;
-  /** Zeitpunkt in UTC, oder `null` im Entwurf. */
-  readonly versendetAm: string | null;
-  readonly reaktionAm: string | null;
+  readonly beschreibung: string | null;
   readonly positionen: readonly AngebotPosition[];
   /** Netto-Summe in ganzen Cent, vom Server gerechnet (E5). */
   readonly summeInCent: number;
 }
 
-/** Eine Zeile der Angebotsliste an der Firma (Kriterium 20). */
+/** Eine Zeile der Angebotsliste an der Firma (Kriterium 7). */
 export interface AngebotZeile {
   readonly id: number;
-  readonly nummer: string | null;
-  readonly stand: Angebotsstand;
   readonly angebotDatum: string;
-  readonly gueltigBis: string;
+  readonly status: Angebotsstatus;
   readonly summeInCent: number;
 }
 
-/** Die Angebote einer Firma, Entwuerfe zuerst (Kriterium 20, E25). */
+/** Die Angebote einer Firma, neueste zuerst (Kriterium 7). */
 export interface FirmaAngebote {
   readonly angebote: readonly AngebotZeile[];
 }
@@ -111,26 +99,21 @@ export interface PositionEingabe {
   readonly einzelpreis: string;
 }
 
-/** Der Entwurf als Ganzes — die Felder von `AngebotEntwurfRequest` (E8). */
-export interface EntwurfEingabe {
-  readonly gueltigBis: string;
-  readonly leistungsbeschreibung: string | null;
-  readonly zahlungsbedingungen: string | null;
+/** Das Angebot als Ganzes — die Felder von `AngebotRequest` (E8). */
+export interface AngebotEingabe {
+  /** Tag (`YYYY-MM-DD`). */
+  readonly angebotDatum: string;
+  readonly ansprechpartnerId: number | null;
+  readonly beschreibung: string | null;
   readonly positionen: readonly PositionEingabe[];
 }
 
-function angebotsstand(wert: unknown): Angebotsstand {
-  if (
-    wert !== 'ENTWURF' &&
-    wert !== 'VERSENDET' &&
-    wert !== 'ABGELAUFEN' &&
-    wert !== 'ANGENOMMEN' &&
-    wert !== 'ABGELEHNT' &&
-    wert !== 'ABGELOEST'
-  ) {
+function angebotsstatus(wert: unknown): Angebotsstatus {
+  const status = alsAngebotsstatus(wert);
+  if (status === null) {
     throw new TypeError(FORMFEHLER);
   }
-  return wert;
+  return status;
 }
 
 function abrechnungsmodus(wert: unknown): Abrechnungsmodus {
@@ -168,14 +151,9 @@ export function parseAngebot(wert: unknown): Angebot {
     firmaName: text(angebot.firmaName),
     ansprechpartnerId: zahlOderNull(angebot.ansprechpartnerId),
     ansprechpartnerName: textOderNull(angebot.ansprechpartnerName),
-    nummer: textOderNull(angebot.nummer),
-    stand: angebotsstand(angebot.stand),
+    status: angebotsstatus(angebot.status),
     angebotDatum: text(angebot.angebotDatum),
-    gueltigBis: text(angebot.gueltigBis),
-    leistungsbeschreibung: textOderNull(angebot.leistungsbeschreibung),
-    zahlungsbedingungen: textOderNull(angebot.zahlungsbedingungen),
-    versendetAm: textOderNull(angebot.versendetAm),
-    reaktionAm: textOderNull(angebot.reaktionAm),
+    beschreibung: textOderNull(angebot.beschreibung),
     positionen: liste(angebot.positionen).map(parsePosition),
     summeInCent: inHundertsteln(angebot.summe),
   };
@@ -185,10 +163,8 @@ function parseZeile(wert: unknown): AngebotZeile {
   const zeile = objekt(wert);
   return {
     id: zahl(zeile.id),
-    nummer: textOderNull(zeile.nummer),
-    stand: angebotsstand(zeile.stand),
     angebotDatum: text(zeile.angebotDatum),
-    gueltigBis: text(zeile.gueltigBis),
+    status: angebotsstatus(zeile.status),
     summeInCent: inHundertsteln(zeile.summe),
   };
 }
@@ -199,7 +175,7 @@ export function parseFirmaAngebote(wert: unknown): FirmaAngebote {
   return { angebote: liste(antwort.angebote).map(parseZeile) };
 }
 
-/** Die Angebote der Firma, Entwuerfe zuerst (Kriterium 20). */
+/** Die Angebote der Firma, neueste zuerst (Kriterium 7). */
 export function angeboteDerFirma(firmaId: number): Promise<FirmaAngebote> {
   return apiJson(
     `/api/firmen/${String(firmaId)}/angebote`,
@@ -209,7 +185,7 @@ export function angeboteDerFirma(firmaId: number): Promise<FirmaAngebote> {
 }
 
 /**
- * Legt an die Firma einen Angebotsentwurf an (Kriterien 2, 3; Issue #126).
+ * Legt an die Firma ein Angebot an (Kriterium 2; Issue #126).
  *
  * Der Rumpf geht immer hinaus, auch ohne Ansprechpartner: Das Backend nimmt ihn optional
  * (`@RequestBody(required = false)`), aber ein Aufruf mit stets derselben Form hat nur einen Weg
@@ -226,47 +202,27 @@ export function angebotAnlegen(
   );
 }
 
-/** Liest ein Angebot samt Positionen (Kriterien 5, 18). */
+/** Liest ein Angebot samt Positionen. */
 export function angebotLesen(id: number): Promise<Angebot> {
   return apiJson(`/api/angebote/${String(id)}`, { methode: 'GET' }, parseAngebot);
 }
 
 /**
- * Schreibt den Entwurf als Ganzes fort (Kriterium 6, E8).
+ * Aendert das Angebot als Ganzes, in jedem Status (Kriterium 5, E8).
  *
  * Die Antwort traegt das Angebot mit den neu gerechneten Betraegen — die Maske zeigt sie ohne
  * zweiten Aufruf.
  */
-export function angebotAendern(id: number, eingabe: EntwurfEingabe): Promise<Angebot> {
+export function angebotAendern(id: number, eingabe: AngebotEingabe): Promise<Angebot> {
   return apiJson(`/api/angebote/${String(id)}`, { methode: 'PUT', rumpf: eingabe }, parseAngebot);
 }
 
-/** Verwirft den Entwurf samt seinen Positionen (Kriterium 7, E19); die Antwort traegt nichts. */
-export function angebotVerwerfen(id: number): Promise<void> {
-  return apiOhneInhalt(`/api/angebote/${String(id)}`, { methode: 'DELETE' });
+/** Schaltet den Status eine Stufe weiter; die Antwort traegt das Angebot im neuen Status. */
+export function angebotStatusWeiter(id: number): Promise<Angebot> {
+  return apiJson(`/api/angebote/${String(id)}/status/weiter`, { methode: 'POST' }, parseAngebot);
 }
 
-/** Macht aus dem Entwurf ein festes Dokument (Kriterien 10 bis 16). */
-export function angebotVersenden(id: number): Promise<Angebot> {
-  return apiJson(`/api/angebote/${String(id)}/versenden`, { methode: 'POST' }, parseAngebot);
-}
-
-/** Haelt die Zusage des Kunden fest (Kriterium 17). */
-export function angebotAnnehmen(id: number): Promise<Angebot> {
-  return apiJson(`/api/angebote/${String(id)}/annehmen`, { methode: 'POST' }, parseAngebot);
-}
-
-/** Haelt die Absage des Kunden fest (Kriterium 17). */
-export function angebotAblehnen(id: number): Promise<Angebot> {
-  return apiJson(`/api/angebote/${String(id)}/ablehnen`, { methode: 'POST' }, parseAngebot);
-}
-
-/**
- * Der Weg zum Beleg — ein Pfad, kein Aufruf (E17, Kriterium 14).
- *
- * Er gehoert in ein `href` mit `target="_blank" rel="noopener"`. Der Server liefert das PDF mit
- * `Content-Disposition: inline`, also zeigt der Browser es an, statt es zu speichern.
- */
-export function angebotPdfPfad(id: number): string {
-  return `/api/angebote/${String(id)}/pdf`;
+/** Schaltet den Status eine Stufe zurueck; die Antwort traegt das Angebot im neuen Status. */
+export function angebotStatusZurueck(id: number): Promise<Angebot> {
+  return apiJson(`/api/angebote/${String(id)}/status/zurueck`, { methode: 'POST' }, parseAngebot);
 }

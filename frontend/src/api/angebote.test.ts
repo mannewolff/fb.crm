@@ -1,19 +1,16 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
-  angebotAblehnen,
   angebotAendern,
   angebotAnlegen,
-  angebotAnnehmen,
   angebotLesen,
-  angebotPdfPfad,
-  angebotVersenden,
-  angebotVerwerfen,
+  angebotStatusWeiter,
+  angebotStatusZurueck,
   angeboteDerFirma,
   parseAngebot,
   parseFirmaAngebote,
 } from './angebote';
-import { fetchNachPfad, json, leer } from '../test/fetchNachPfad';
+import { fetchNachPfad, json } from '../test/fetchNachPfad';
 
 /** Eine Position, wie Jackson sie schreibt: Menge und Preis als Zahl mit zwei Stellen. */
 const POSITION = {
@@ -25,20 +22,15 @@ const POSITION = {
   betrag: 2500.03,
 };
 
-const ENTWURF = {
+const ANGEBOT = {
   id: 9,
   firmaId: 5,
   firmaName: 'Adler AG',
   ansprechpartnerId: 8,
   ansprechpartnerName: 'Eva Adler',
-  nummer: null,
-  stand: 'ENTWURF',
+  status: 'ANGELEGT',
   angebotDatum: '2026-09-24',
-  gueltigBis: '2026-10-24',
-  leistungsbeschreibung: null,
-  zahlungsbedingungen: 'Zahlbar in 14 Tagen',
-  versendetAm: null,
-  reaktionAm: null,
+  beschreibung: null,
   positionen: [POSITION],
   summe: 2500.03,
 };
@@ -53,37 +45,30 @@ const POSITION_VERENGT = {
   betragInCent: 250003,
 };
 
-const ENTWURF_VERENGT = {
+const ANGEBOT_VERENGT = {
   id: 9,
   firmaId: 5,
   firmaName: 'Adler AG',
   ansprechpartnerId: 8,
   ansprechpartnerName: 'Eva Adler',
-  nummer: null,
-  stand: 'ENTWURF',
+  status: 'ANGELEGT',
   angebotDatum: '2026-09-24',
-  gueltigBis: '2026-10-24',
-  leistungsbeschreibung: null,
-  zahlungsbedingungen: 'Zahlbar in 14 Tagen',
-  versendetAm: null,
-  reaktionAm: null,
+  beschreibung: null,
   positionen: [POSITION_VERENGT],
   summeInCent: 250003,
 };
 
 const ZEILE = {
   id: 9,
-  nummer: 'A-2026-001',
-  stand: 'VERSENDET',
   angebotDatum: '2026-09-24',
-  gueltigBis: '2026-10-24',
+  status: 'BESTELLT',
   summe: 2500.03,
 };
 
 const EINGABE = {
-  gueltigBis: '2026-10-24',
-  leistungsbeschreibung: 'Neue Website',
-  zahlungsbedingungen: 'Zahlbar in 14 Tagen',
+  angebotDatum: '2026-09-24',
+  ansprechpartnerId: 8,
+  beschreibung: 'Neue Website',
   positionen: [
     {
       bezeichnung: 'Konzeption',
@@ -100,97 +85,82 @@ afterEach(() => {
 });
 
 describe('parseAngebot', () => {
-  it('verengt einen Entwurf samt Positionen und rechnet Geld in ganze Cent', () => {
-    expect(parseAngebot(ENTWURF)).toEqual(ENTWURF_VERENGT);
+  it('verengt ein Angebot samt Positionen und rechnet Geld in ganze Cent', () => {
+    expect(parseAngebot(ANGEBOT)).toEqual(ANGEBOT_VERENGT);
   });
 
-  it('nimmt ein versendetes Angebot mit Nummer und Zeitpunkten an', () => {
-    const versendet = {
-      ...ENTWURF,
-      nummer: 'A-2026-001',
-      stand: 'ANGENOMMEN',
-      leistungsbeschreibung: 'Neue Website',
-      versendetAm: '2026-09-24T08:00:00Z',
-      reaktionAm: '2026-09-26T09:30:00Z',
-    };
-
-    expect(parseAngebot(versendet)).toEqual({
-      ...ENTWURF_VERENGT,
-      nummer: 'A-2026-001',
-      stand: 'ANGENOMMEN',
-      leistungsbeschreibung: 'Neue Website',
-      versendetAm: '2026-09-24T08:00:00Z',
-      reaktionAm: '2026-09-26T09:30:00Z',
-    });
+  it('nimmt eine Beschreibung an', () => {
+    expect(parseAngebot({ ...ANGEBOT, beschreibung: 'Neue Website' }).beschreibung).toBe(
+      'Neue Website',
+    );
   });
 
   it('nimmt ein Angebot ohne Position mit der Summe null an', () => {
-    expect(parseAngebot({ ...ENTWURF, positionen: [], summe: 0 })).toEqual({
-      ...ENTWURF_VERENGT,
+    expect(parseAngebot({ ...ANGEBOT, positionen: [], summe: 0 })).toEqual({
+      ...ANGEBOT_VERENGT,
       positionen: [],
       summeInCent: 0,
     });
   });
 
-  it.each([
-    ['ENTWURF'],
-    ['VERSENDET'],
-    ['ABGELAUFEN'],
-    ['ANGENOMMEN'],
-    ['ABGELEHNT'],
-    ['ABGELOEST'],
-  ])('nimmt den Stand %s an', (stand) => {
-    expect(parseAngebot({ ...ENTWURF, stand }).stand).toBe(stand);
+  it('verengt ein Angebot ohne Ansprechpartner', () => {
+    expect(
+      parseAngebot({ ...ANGEBOT, ansprechpartnerId: null, ansprechpartnerName: null }),
+    ).toEqual({ ...ANGEBOT_VERENGT, ansprechpartnerId: null, ansprechpartnerName: null });
   });
 
-  it.each([
-    ['STUNDE'],
-    ['PERSONENTAG'],
-    ['PAUSCHAL'],
-  ])('nimmt die Einheit %s an', (einheit) => {
-    expect(parseAngebot({ ...ENTWURF, positionen: [{ ...POSITION, einheit }] }).positionen[0].einheit)
-      .toBe(einheit);
+  it.each([['ANGELEGT'], ['ABGEGEBEN'], ['BESTELLT'], ['ERLEDIGT'], ['ABGERECHNET']])(
+    'nimmt den Status %s an',
+    (status) => {
+      expect(parseAngebot({ ...ANGEBOT, status }).status).toBe(status);
+    },
+  );
+
+  it.each([['STUNDE'], ['PERSONENTAG'], ['PAUSCHAL']])('nimmt die Einheit %s an', (einheit) => {
+    expect(
+      parseAngebot({ ...ANGEBOT, positionen: [{ ...POSITION, einheit }] }).positionen[0].einheit,
+    ).toBe(einheit);
   });
 
   it('nimmt den Abrechnungsmodus FESTPREIS an', () => {
     const festpreis = { ...POSITION, abrechnungsmodus: 'FESTPREIS' };
 
-    expect(parseAngebot({ ...ENTWURF, positionen: [festpreis] }).positionen[0].abrechnungsmodus)
-      .toBe('FESTPREIS');
+    expect(
+      parseAngebot({ ...ANGEBOT, positionen: [festpreis] }).positionen[0].abrechnungsmodus,
+    ).toBe('FESTPREIS');
   });
 
   it.each([
     ['kein Objekt', 42],
     ['null', null],
-    ['ohne id', { ...ENTWURF, id: '9' }],
-    ['ohne firmaId', { ...ENTWURF, firmaId: undefined }],
-    ['ohne Firmenname', { ...ENTWURF, firmaName: null }],
-    ['Ansprechpartner als Text', { ...ENTWURF, ansprechpartnerId: '8' }],
-    ['Name des Ansprechpartners als Zahl', { ...ENTWURF, ansprechpartnerName: 8 }],
-    ['Nummer als Zahl', { ...ENTWURF, nummer: 2026001 }],
-    ['unbekannter Stand', { ...ENTWURF, stand: 'STORNIERT' }],
-    ['ohne Angebotsdatum', { ...ENTWURF, angebotDatum: null }],
-    ['ohne Gueltigkeit', { ...ENTWURF, gueltigBis: undefined }],
-    ['Leistungsbeschreibung als Zahl', { ...ENTWURF, leistungsbeschreibung: 7 }],
-    ['Zahlungsbedingungen als Zahl', { ...ENTWURF, zahlungsbedingungen: 7 }],
-    ['versendetAm als Zahl', { ...ENTWURF, versendetAm: 17 }],
-    ['reaktionAm als Zahl', { ...ENTWURF, reaktionAm: 17 }],
-    ['Positionen als Objekt', { ...ENTWURF, positionen: {} }],
-    ['Summe als Zeichenkette', { ...ENTWURF, summe: '2500.03' }],
-    ['Summe mit drei Nachkommastellen', { ...ENTWURF, summe: 2500.031 }],
-    ['Position ist kein Objekt', { ...ENTWURF, positionen: ['x'] }],
-    ['Position ohne Bezeichnung', { ...ENTWURF, positionen: [{ ...POSITION, bezeichnung: null }] }],
+    ['ohne id', { ...ANGEBOT, id: '9' }],
+    ['ohne firmaId', { ...ANGEBOT, firmaId: undefined }],
+    ['ohne Firmenname', { ...ANGEBOT, firmaName: null }],
+    ['Ansprechpartner als Text', { ...ANGEBOT, ansprechpartnerId: '8' }],
+    ['Name des Ansprechpartners als Zahl', { ...ANGEBOT, ansprechpartnerName: 8 }],
+    ['unbekannter Status', { ...ANGEBOT, status: 'VERHANDELT' }],
+    ['ohne Status', { ...ANGEBOT, status: undefined }],
+    ['ohne Angebotsdatum', { ...ANGEBOT, angebotDatum: null }],
+    ['Beschreibung als Zahl', { ...ANGEBOT, beschreibung: 7 }],
+    ['Positionen als Objekt', { ...ANGEBOT, positionen: {} }],
+    ['Summe als Zeichenkette', { ...ANGEBOT, summe: '2500.03' }],
+    ['Summe mit drei Nachkommastellen', { ...ANGEBOT, summe: 2500.031 }],
+    ['Position ist kein Objekt', { ...ANGEBOT, positionen: ['x'] }],
+    ['Position ohne Bezeichnung', { ...ANGEBOT, positionen: [{ ...POSITION, bezeichnung: null }] }],
     [
       'Position mit unbekanntem Modus',
-      { ...ENTWURF, positionen: [{ ...POSITION, abrechnungsmodus: 'SCHAETZUNG' }] },
+      { ...ANGEBOT, positionen: [{ ...POSITION, abrechnungsmodus: 'SCHAETZUNG' }] },
     ],
-    ['Position mit Menge als Text', { ...ENTWURF, positionen: [{ ...POSITION, menge: '2,5' }] }],
-    ['Position mit unbekannter Einheit', { ...ENTWURF, positionen: [{ ...POSITION, einheit: 'TAG' }] }],
+    ['Position mit Menge als Text', { ...ANGEBOT, positionen: [{ ...POSITION, menge: '2,5' }] }],
+    [
+      'Position mit unbekannter Einheit',
+      { ...ANGEBOT, positionen: [{ ...POSITION, einheit: 'TAG' }] },
+    ],
     [
       'Position mit negativem Einzelpreis',
-      { ...ENTWURF, positionen: [{ ...POSITION, einzelpreis: -1 }] },
+      { ...ANGEBOT, positionen: [{ ...POSITION, einzelpreis: -1 }] },
     ],
-    ['Position ohne Betrag', { ...ENTWURF, positionen: [{ ...POSITION, betrag: undefined }] }],
+    ['Position ohne Betrag', { ...ANGEBOT, positionen: [{ ...POSITION, betrag: undefined }] }],
   ])('weist eine Antwort ab: %s', (_fall, rumpf) => {
     expect(() => parseAngebot(rumpf)).toThrow(TypeError);
   });
@@ -199,16 +169,7 @@ describe('parseAngebot', () => {
 describe('parseFirmaAngebote', () => {
   it('verengt die Liste an der Firma', () => {
     expect(parseFirmaAngebote({ angebote: [ZEILE] })).toEqual({
-      angebote: [
-        {
-          id: 9,
-          nummer: 'A-2026-001',
-          stand: 'VERSENDET',
-          angebotDatum: '2026-09-24',
-          gueltigBis: '2026-10-24',
-          summeInCent: 250003,
-        },
-      ],
+      angebote: [{ id: 9, angebotDatum: '2026-09-24', status: 'BESTELLT', summeInCent: 250003 }],
     });
   });
 
@@ -221,10 +182,8 @@ describe('parseFirmaAngebote', () => {
     ['ohne angebote', {}],
     ['angebote ist kein Array', { angebote: 3 }],
     ['Zeile ohne id', { angebote: [{ ...ZEILE, id: null }] }],
-    ['Zeile mit Nummer als Zahl', { angebote: [{ ...ZEILE, nummer: 1 }] }],
-    ['Zeile mit unbekanntem Stand', { angebote: [{ ...ZEILE, stand: 'OFFEN' }] }],
+    ['Zeile mit unbekanntem Status', { angebote: [{ ...ZEILE, status: 'OFFEN' }] }],
     ['Zeile ohne Angebotsdatum', { angebote: [{ ...ZEILE, angebotDatum: 7 }] }],
-    ['Zeile ohne Gueltigkeit', { angebote: [{ ...ZEILE, gueltigBis: 7 }] }],
     ['Zeile ohne Summe', { angebote: [{ ...ZEILE, summe: null }] }],
   ])('weist eine Antwort ab: %s', (_fall, rumpf) => {
     expect(() => parseFirmaAngebote(rumpf)).toThrow(TypeError);
@@ -247,9 +206,9 @@ describe('die Wege', () => {
   });
 
   it('legt ein Angebot ohne Ansprechpartner an', async () => {
-    const fetchMock = fetchNachPfad({ 'POST /api/firmen/5/angebote': json(201, ENTWURF) });
+    const fetchMock = fetchNachPfad({ 'POST /api/firmen/5/angebote': json(201, ANGEBOT) });
 
-    expect(await angebotAnlegen(5, null)).toEqual(ENTWURF_VERENGT);
+    expect(await angebotAnlegen(5, null)).toEqual(ANGEBOT_VERENGT);
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/firmen/5/angebote',
       expect.objectContaining({ method: 'POST', body: JSON.stringify({ ansprechpartnerId: null }) }),
@@ -257,7 +216,7 @@ describe('die Wege', () => {
   });
 
   it('legt ein Angebot mit einem Ansprechpartner an', async () => {
-    const fetchMock = fetchNachPfad({ 'POST /api/firmen/5/angebote': json(201, ENTWURF) });
+    const fetchMock = fetchNachPfad({ 'POST /api/firmen/5/angebote': json(201, ANGEBOT) });
 
     await angebotAnlegen(5, 8);
 
@@ -267,22 +226,16 @@ describe('die Wege', () => {
     );
   });
 
-  it('verengt ein Angebot ohne Ansprechpartner', () => {
-    expect(
-      parseAngebot({ ...ENTWURF, ansprechpartnerId: null, ansprechpartnerName: null }),
-    ).toEqual({ ...ENTWURF_VERENGT, ansprechpartnerId: null, ansprechpartnerName: null });
-  });
-
   it('liest ein Angebot', async () => {
-    fetchNachPfad({ 'GET /api/angebote/9': json(200, ENTWURF) });
+    fetchNachPfad({ 'GET /api/angebote/9': json(200, ANGEBOT) });
 
-    expect(await angebotLesen(9)).toEqual(ENTWURF_VERENGT);
+    expect(await angebotLesen(9)).toEqual(ANGEBOT_VERENGT);
   });
 
-  it('schreibt den Entwurf als Ganzes fort und nimmt die Antwort (E8)', async () => {
-    const fetchMock = fetchNachPfad({ 'PUT /api/angebote/9': json(200, ENTWURF) });
+  it('aendert das Angebot als Ganzes und nimmt die Antwort (E8)', async () => {
+    const fetchMock = fetchNachPfad({ 'PUT /api/angebote/9': json(200, ANGEBOT) });
 
-    expect(await angebotAendern(9, EINGABE)).toEqual(ENTWURF_VERENGT);
+    expect(await angebotAendern(9, EINGABE)).toEqual(ANGEBOT_VERENGT);
     // Menge und Preis gehen als Dezimaltext hinaus und nicht als Gleitkommazahl (E5, geld.ts).
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/angebote/9',
@@ -290,34 +243,16 @@ describe('die Wege', () => {
     );
   });
 
-  it('verwirft einen Entwurf ohne Antwortrumpf (E19)', async () => {
-    const fetchMock = fetchNachPfad({ 'DELETE /api/angebote/9': leer(204) });
-
-    await expect(angebotVerwerfen(9)).resolves.toBeUndefined();
-    expect(fetchMock).toHaveBeenCalledWith(
-      '/api/angebote/9',
-      expect.objectContaining({ method: 'DELETE' }),
-    );
-  });
-
   it.each([
-    ['versenden', angebotVersenden, 'POST /api/angebote/9/versenden'],
-    ['annehmen', angebotAnnehmen, 'POST /api/angebote/9/annehmen'],
-    ['ablehnen', angebotAblehnen, 'POST /api/angebote/9/ablehnen'],
-  ])('schaltet den Zustand ueber den Pfad: %s', async (_name, weg, schluessel) => {
-    const fetchMock = fetchNachPfad({ [schluessel]: json(200, ENTWURF) });
+    ['weiter', angebotStatusWeiter, 'POST /api/angebote/9/status/weiter'],
+    ['zurueck', angebotStatusZurueck, 'POST /api/angebote/9/status/zurueck'],
+  ])('schaltet den Status %s und nimmt die Antwort', async (_name, weg, schluessel) => {
+    const fetchMock = fetchNachPfad({ [schluessel]: json(200, { ...ANGEBOT, status: 'ABGEGEBEN' }) });
 
-    expect(await weg(9)).toEqual(ENTWURF_VERENGT);
+    expect((await weg(9)).status).toBe('ABGEGEBEN');
     expect(fetchMock).toHaveBeenCalledWith(
       schluessel.slice('POST '.length),
       expect.objectContaining({ method: 'POST' }),
     );
-  });
-
-  it('nennt den Weg zum Beleg als Pfad und nicht als Aufruf (E17)', () => {
-    const fetchMock = fetchNachPfad({});
-
-    expect(angebotPdfPfad(9)).toBe('/api/angebote/9/pdf');
-    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

@@ -9,23 +9,32 @@ import { renderMitTheme } from './test/render';
 
 const KONTO = { id: 1, displayName: 'Manfred Wolff', email: 'info@mwolff.org' };
 
-/** Ein versendetes Angebot, wie das Backend es schreibt. */
+/** Ein Angebot, wie das Backend es schreibt. */
 const ANGEBOT = {
   id: 9,
   firmaId: 5,
   firmaName: 'Adler AG',
   ansprechpartnerId: null,
   ansprechpartnerName: null,
-  nummer: 'A-2026-001',
-  stand: 'VERSENDET',
+  status: 'ABGEGEBEN',
   angebotDatum: '2026-09-24',
-  gueltigBis: '2026-10-24',
-  leistungsbeschreibung: null,
-  zahlungsbedingungen: null,
-  versendetAm: '2026-09-24T08:00:00Z',
-  reaktionAm: null,
+  beschreibung: null,
   positionen: [],
   summe: 0,
+};
+
+/** Die Firma des Angebots, wie das Backend sie schreibt. */
+const FIRMA = {
+  id: 5,
+  name: 'Adler AG',
+  strasse: null,
+  plz: null,
+  ort: null,
+  land: null,
+  steuernummer: null,
+  umsatzsteuerId: null,
+  aktiv: true,
+  ansprechpartner: [],
 };
 
 /** Die Fensterbreite, gegen die `matchMedia` auswertet — nur der Rahmen fragt danach. */
@@ -114,18 +123,7 @@ describe('App', () => {
     fetchNachPfad({
       'GET /api/auth/me': json(200, KONTO),
       'GET /api/instance': json(200, { version: '0.1.3' }),
-      'GET /api/firmen/5': json(200, {
-        id: 5,
-        name: 'Adler AG',
-        strasse: null,
-        plz: null,
-        ort: null,
-        land: null,
-        steuernummer: null,
-        umsatzsteuerId: null,
-        aktiv: true,
-        ansprechpartner: [],
-      }),
+      'GET /api/firmen/5': json(200, FIRMA),
     });
 
     renderApp(['/firmen/5/angebote/neu'], 0);
@@ -158,7 +156,7 @@ describe('App', () => {
 
     expect(screen.getByRole('status')).toHaveTextContent('Sitzung wird geprüft');
     expect(
-      await screen.findByRole('heading', { level: 1, name: 'Angebot A-2026-001' }),
+      await screen.findByRole('heading', { level: 1, name: 'Angebot vom 24.09.2026' }),
     ).toBeInTheDocument();
     expect(screen.getByRole('navigation', { name: 'Hauptnavigation' })).toBeInTheDocument();
   });
@@ -171,12 +169,13 @@ describe('App', () => {
     expect(await screen.findByLabelText(/^E-Mail-Adresse/)).toBeInTheDocument();
   });
 
-  it('zeigt „/angebote/9/bearbeiten" als Maske des Entwurfs', async () => {
+  it('zeigt „/angebote/9/bearbeiten" als Maske des Angebots', async () => {
     fensterbreite(1440);
     fetchNachPfad({
       'GET /api/auth/me': json(200, KONTO),
       'GET /api/instance': json(200, { version: '0.1.3' }),
-      'GET /api/angebote/9': json(200, { ...ANGEBOT, nummer: null, stand: 'ENTWURF' }),
+      'GET /api/angebote/9': json(200, ANGEBOT),
+      'GET /api/firmen/5': json(200, FIRMA),
     });
 
     renderApp(['/angebote/9/bearbeiten'], 0);

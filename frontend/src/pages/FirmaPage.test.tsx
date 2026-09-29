@@ -51,32 +51,26 @@ const KONTO = { id: 1, displayName: 'Manfred Wolff', email: 'info@mwolff.org' };
 /** Eine Zeile der Angebotsliste, wie Jackson sie schreibt — die Summe als Dezimalzahl. */
 interface AngebotRoh {
   readonly id: number;
-  readonly nummer: string | null;
-  readonly stand: string;
   readonly angebotDatum: string;
-  readonly gueltigBis: string;
+  readonly status: string;
   readonly summe: number;
 }
 
-const ENTWURF: AngebotRoh = {
+const JUENGER: AngebotRoh = {
   id: 32,
-  nummer: null,
-  stand: 'ENTWURF',
   angebotDatum: '2026-09-26',
-  gueltigBis: '2026-10-26',
+  status: 'ANGELEGT',
   summe: 1200,
 };
 
-const VERSENDET: AngebotRoh = {
+const AELTER: AngebotRoh = {
   id: 31,
-  nummer: 'A-2026-001',
-  stand: 'VERSENDET',
   angebotDatum: '2026-09-24',
-  gueltigBis: '2026-10-24',
+  status: 'BESTELLT',
   summe: 2500.03,
 };
 
-const ANGEBOTE: readonly AngebotRoh[] = [ENTWURF, VERSENDET];
+const ANGEBOTE: readonly AngebotRoh[] = [JUENGER, AELTER];
 
 /** Die Adresse, an der sich ablesen laesst, wohin ein Weg gefuehrt hat. */
 function Adresse() {
@@ -532,7 +526,7 @@ describe('FirmaPage — die Aktionen je Ansprechpartner (Kriterium 15)', () => {
   });
 });
 
-describe('FirmaPage — die Angebote der Firma (Kriterium 20)', () => {
+describe('FirmaPage — die Angebote der Firma (Kriterium 7)', () => {
   it('zeigt sie in der Reihenfolge der Antwort und fuehrt auf das Angebot', async () => {
     firmaDoppel();
 
@@ -540,7 +534,7 @@ describe('FirmaPage — die Angebote der Firma (Kriterium 20)', () => {
 
     const tafel = within(await screen.findByRole('table', { name: 'Angebote' }));
     const wege = tafel.getAllByRole('link');
-    expect(wege.map((weg) => weg.textContent)).toEqual(['Entwurf', 'A-2026-001']);
+    expect(wege.map((weg) => weg.textContent)).toEqual(['26.09.2026', '24.09.2026']);
     expect(wege[0]).toHaveAttribute('href', '/angebote/32');
     expect(wege[1]).toHaveAttribute('href', '/angebote/31');
   });

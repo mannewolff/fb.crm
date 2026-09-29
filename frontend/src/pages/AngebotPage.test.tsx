@@ -1,6 +1,6 @@
 import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import AngebotPage from './AngebotPage';
@@ -17,36 +17,20 @@ const POSITION = {
   betrag: 2500.03,
 };
 
-const ENTWURF = {
+const ANGEBOT = {
   id: 9,
   firmaId: 5,
   firmaName: 'Adler AG',
   ansprechpartnerId: 8,
   ansprechpartnerName: 'Eva Adler',
-  nummer: null,
-  stand: 'ENTWURF',
+  status: 'ABGEGEBEN',
   angebotDatum: '2026-09-24',
-  gueltigBis: '2026-10-24',
-  leistungsbeschreibung: 'Neue Website mit Redaktionssystem',
-  zahlungsbedingungen: 'Zahlbar in 14 Tagen ohne Abzug',
-  versendetAm: null,
-  reaktionAm: null,
+  beschreibung: 'Neue Website mit Redaktionssystem',
   positionen: [POSITION],
   summe: 2500.03,
 };
 
-const VERSENDET = {
-  ...ENTWURF,
-  nummer: 'A-2026-001',
-  stand: 'VERSENDET',
-  versendetAm: '2026-09-24T08:00:00Z',
-};
-
-/** Die Adresse, an der sich ablesen laesst, wohin ein Weg gefuehrt hat. */
-function Adresse() {
-  const ort = useLocation();
-  return <p data-testid="adresse">{ort.pathname}</p>;
-}
+const UEBERSCHRIFT = 'Angebot vom 24.09.2026';
 
 function renderSeite(start = '/angebote/9') {
   return renderMitTheme(
@@ -54,16 +38,13 @@ function renderSeite(start = '/angebote/9') {
       <KopfPfadProvider>
         <Routes>
           <Route path="/angebote/:angebotId" element={<AngebotPage />} />
-          <Route path="/angebote/:angebotId/bearbeiten" element={<p>Maske</p>} />
-          <Route path="/firmen/:id" element={<p>Firmenseite</p>} />
         </Routes>
-        <Adresse />
       </KopfPfadProvider>
     </MemoryRouter>,
   );
 }
 
-/** Die Aktionen neben dem Inhalt — dort wird die eine Kupfertaste gezaehlt (E18). */
+/** Die Aktionen neben der Ueberschrift — dort wird die eine Kupfertaste gezaehlt. */
 function aktionen() {
   return within(screen.getByTestId('angebot-aktionen'));
 }
@@ -72,53 +53,92 @@ function aktionen() {
  * Die Kupfertasten unter den Aktionen.
  *
  * Sie tragen den Kupferverlauf, die weichen eine Flaeche (CLAUDE-design.md, „Tasten"). Die Rolle
- * unterscheidet beide nicht: „Bearbeiten" ist ein Weg und damit ein Link, „Versenden" eine Handlung
- * und damit ein Knopf.
+ * unterscheidet beide nicht: „Bearbeiten" ist ein Weg und damit ein Link, „Status weiter" eine
+ * Handlung und damit ein Knopf.
  */
 function kupfertasten(): readonly HTMLElement[] {
-  const felder = screen.queryAllByTestId('angebot-aktionen');
-  return felder
-    .flatMap((feld) => [
-      ...within(feld).queryAllByRole('link'),
-      ...within(feld).queryAllByRole('button'),
-    ])
-    .filter((taste) => getComputedStyle(taste).background.includes('linear-gradient'));
+  const feld = screen.getByTestId('angebot-aktionen');
+  return [...within(feld).queryAllByRole('link'), ...within(feld).queryAllByRole('button')].filter(
+    (taste) => getComputedStyle(taste).background.includes('linear-gradient'),
+  );
 }
 
 afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe('AngebotPage — was das Angebot zeigt (Kriterien 5, 18)', () => {
-  it('traegt Nummer und Stand als die eine Ueberschrift samt Chip', async () => {
-    fetchNachPfad({ 'GET /api/angebote/9': json(200, VERSENDET) });
+describe('AngebotPage — was das Angebot zeigt (Issue #127)', () => {
+  it('traegt „Angebot vom <Datum>" als die eine Ueberschrift', async () => {
+    fetchNachPfad({ 'GET /api/angebote/9': json(200, ANGEBOT) });
 
     renderSeite();
 
-    expect(
-      await screen.findByRole('heading', { level: 1, name: 'Angebot A-2026-001' }),
-    ).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { level: 1, name: UEBERSCHRIFT })).toBeInTheDocument();
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
-    // Das Wort traegt den Stand, die Toenung stuetzt ihn (CLAUDE-design.md, „Zustandsformen").
-    expect(screen.getByTestId('chip')).toHaveTextContent('Versendet');
   });
 
-  it('nennt einen Entwurf „Angebotsentwurf", weil er noch keine Nummer hat (Kriterium 11)', async () => {
-    fetchNachPfad({ 'GET /api/angebote/9': json(200, ENTWURF) });
+  it('nennt Firma, Ansprechpartner, Angebotsdatum und Status in den Angaben', async () => {
+    fetchNachPfad({ 'GET /api/angebote/9': json(200, ANGEBOT) });
 
     renderSeite();
+    await screen.findByRole('heading', { level: 1, name: UEBERSCHRIFT });
 
-    expect(
-      await screen.findByRole('heading', { level: 1, name: 'Angebotsentwurf' }),
-    ).toBeInTheDocument();
-    expect(screen.getByTestId('chip')).toHaveTextContent('Entwurf');
+    const angaben = within(screen.getByTestId('angebot-angaben'));
+    expect(angaben.getAllByRole('term').map((teil) => teil.textContent)).toEqual([
+      'Firma',
+      'Ansprechpartner',
+      'Angebotsdatum',
+      'Status',
+    ]);
+    expect(angaben.getByRole('link', { name: 'Adler AG' })).toHaveAttribute('href', '/firmen/5');
+    expect(angaben.getByText('Eva Adler')).toBeInTheDocument();
+    expect(angaben.getByText('24.09.2026')).toBeInTheDocument();
+    // Das Wort traegt den Status, die Toenung stuetzt ihn (CLAUDE-design.md, „Zustandsformen").
+    expect(angaben.getByTestId('chip')).toHaveTextContent('Abgegeben');
+  });
+
+  it('laesst die Zeile des Ansprechpartners weg, wo das Angebot keinen traegt', async () => {
+    fetchNachPfad({
+      'GET /api/angebote/9': json(200, {
+        ...ANGEBOT,
+        ansprechpartnerId: null,
+        ansprechpartnerName: null,
+      }),
+    });
+
+    renderSeite();
+    await screen.findByRole('heading', { level: 1, name: UEBERSCHRIFT });
+
+    const angaben = within(screen.getByTestId('angebot-angaben'));
+    expect(angaben.queryByText('Ansprechpartner')).not.toBeInTheDocument();
+    expect(angaben.getByText('Adler AG')).toBeInTheDocument();
+  });
+
+  it('zeigt die Beschreibung', async () => {
+    fetchNachPfad({ 'GET /api/angebote/9': json(200, ANGEBOT) });
+
+    renderSeite();
+    await screen.findByRole('heading', { level: 1, name: UEBERSCHRIFT });
+
+    expect(screen.getByRole('heading', { name: 'Beschreibung' })).toBeInTheDocument();
+    expect(screen.getByText('Neue Website mit Redaktionssystem')).toBeInTheDocument();
+  });
+
+  it('laesst die Karte der Beschreibung weg, wo keine steht — ohne Platzhalter', async () => {
+    fetchNachPfad({ 'GET /api/angebote/9': json(200, { ...ANGEBOT, beschreibung: null }) });
+
+    renderSeite();
+    await screen.findByRole('heading', { level: 1, name: UEBERSCHRIFT });
+
+    expect(screen.queryByRole('heading', { name: 'Beschreibung' })).not.toBeInTheDocument();
+    expect(screen.queryByText('—')).not.toBeInTheDocument();
   });
 
   it('stellt die Positionen als Tafel mit Menge, Einheit, Einzelpreis und Betrag', async () => {
-    fetchNachPfad({ 'GET /api/angebote/9': json(200, VERSENDET) });
+    fetchNachPfad({ 'GET /api/angebote/9': json(200, ANGEBOT) });
 
     renderSeite();
-    await screen.findByRole('heading', { level: 1, name: 'Angebot A-2026-001' });
+    await screen.findByRole('heading', { level: 1, name: UEBERSCHRIFT });
 
     expect(screen.getAllByRole('columnheader').map((kopf) => kopf.textContent)).toEqual([
       'Bezeichnung',
@@ -138,10 +158,10 @@ describe('AngebotPage — was das Angebot zeigt (Kriterien 5, 18)', () => {
   });
 
   it('nennt die Summe mit dem Hinweis auf die Umsatzsteuer', async () => {
-    fetchNachPfad({ 'GET /api/angebote/9': json(200, VERSENDET) });
+    fetchNachPfad({ 'GET /api/angebote/9': json(200, ANGEBOT) });
 
     renderSeite();
-    await screen.findByRole('heading', { level: 1, name: 'Angebot A-2026-001' });
+    await screen.findByRole('heading', { level: 1, name: UEBERSCHRIFT });
 
     expect(screen.getByTestId('angebot-summe')).toHaveTextContent('2.500,03 €');
     expect(
@@ -151,300 +171,97 @@ describe('AngebotPage — was das Angebot zeigt (Kriterien 5, 18)', () => {
 
   it('sagt es, wenn das Angebot noch keine Position hat', async () => {
     fetchNachPfad({
-      'GET /api/angebote/9': json(200, { ...ENTWURF, positionen: [], summe: 0 }),
+      'GET /api/angebote/9': json(200, { ...ANGEBOT, positionen: [], summe: 0 }),
     });
 
     renderSeite();
 
     expect(await screen.findByRole('status')).toHaveTextContent('Noch keine Position');
   });
-
-  it('nennt Firma, Ansprechpartner, Angebotsdatum und Gueltigkeit in den Angaben', async () => {
-    fetchNachPfad({ 'GET /api/angebote/9': json(200, VERSENDET) });
-
-    renderSeite();
-    await screen.findByRole('heading', { level: 1, name: 'Angebot A-2026-001' });
-
-    const angaben = within(screen.getByTestId('angebot-angaben'));
-    expect(angaben.getAllByRole('term').map((teil) => teil.textContent)).toEqual([
-      'Firma',
-      'Ansprechpartner',
-      'Nummer',
-      'Angebotsdatum',
-      'Gültig bis',
-      'Dokument',
-    ]);
-    expect(angaben.getByText('24.09.2026')).toBeInTheDocument();
-    expect(angaben.getByText('24.10.2026')).toBeInTheDocument();
-    expect(angaben.getByRole('link', { name: 'Adler AG' })).toHaveAttribute('href', '/firmen/5');
-    expect(angaben.getByText('Eva Adler')).toBeInTheDocument();
-  });
-
-  it('laesst die Zeile des Ansprechpartners weg, wo das Angebot keinen traegt', async () => {
-    fetchNachPfad({
-      'GET /api/angebote/9': json(200, {
-        ...VERSENDET,
-        ansprechpartnerId: null,
-        ansprechpartnerName: null,
-      }),
-    });
-
-    renderSeite();
-    await screen.findByRole('heading', { level: 1, name: 'Angebot A-2026-001' });
-
-    const angaben = within(screen.getByTestId('angebot-angaben'));
-    expect(angaben.queryByText('Ansprechpartner')).not.toBeInTheDocument();
-    expect(angaben.getByText('Adler AG')).toBeInTheDocument();
-  });
-
-  it('zeigt Leistungsbeschreibung und Zahlungsbedingungen', async () => {
-    fetchNachPfad({ 'GET /api/angebote/9': json(200, VERSENDET) });
-
-    renderSeite();
-    await screen.findByRole('heading', { level: 1, name: 'Angebot A-2026-001' });
-
-    expect(screen.getByText('Neue Website mit Redaktionssystem')).toBeInTheDocument();
-    expect(screen.getByText('Zahlbar in 14 Tagen ohne Abzug')).toBeInTheDocument();
-  });
-
-  it('laesst die Karte der Texte weg, wo keiner steht — ohne Platzhalter', async () => {
-    fetchNachPfad({
-      'GET /api/angebote/9': json(200, {
-        ...ENTWURF,
-        leistungsbeschreibung: null,
-        zahlungsbedingungen: null,
-      }),
-    });
-
-    renderSeite();
-    await screen.findByRole('heading', { level: 1, name: 'Angebotsentwurf' });
-
-    expect(screen.queryByRole('heading', { name: 'Leistungsbeschreibung' })).not.toBeInTheDocument();
-    expect(screen.queryByText('—')).not.toBeInTheDocument();
-  });
 });
 
-describe('AngebotPage — der Beleg (Kriterium 14, E17)', () => {
-  it('verweist auf das PDF zum Oeffnen im neuen Reiter', async () => {
-    fetchNachPfad({ 'GET /api/angebote/9': json(200, VERSENDET) });
+describe('AngebotPage — die Aktionen (Issue #127, Kriterien 4, 5)', () => {
+  it('traegt „Status weiter" als einzige Kupfertaste, „Status zurück" und „Bearbeiten" weich', async () => {
+    fetchNachPfad({ 'GET /api/angebote/9': json(200, ANGEBOT) });
 
     renderSeite();
+    await screen.findByRole('heading', { level: 1, name: UEBERSCHRIFT });
 
-    const weg = await screen.findByRole('link', { name: 'PDF öffnen' });
-    expect(weg).toHaveAttribute('href', '/api/angebote/9/pdf');
-    expect(weg).toHaveAttribute('target', '_blank');
-    expect(weg).toHaveAttribute('rel', 'noopener');
-  });
-
-  it('nennt beim Entwurf kein Dokument — es entsteht erst beim Versenden (Kriterium 10)', async () => {
-    fetchNachPfad({ 'GET /api/angebote/9': json(200, ENTWURF) });
-
-    renderSeite();
-    await screen.findByRole('heading', { level: 1, name: 'Angebotsentwurf' });
-
-    expect(screen.queryByRole('link', { name: 'PDF öffnen' })).not.toBeInTheDocument();
-    expect(within(screen.getByTestId('angebot-angaben')).getByText('noch keines'))
-      .toBeInTheDocument();
-  });
-});
-
-describe('AngebotPage — die Aktionen am Entwurf (Kriterien 6, 7, 10)', () => {
-  it('traegt „Versenden" als einzige Kupfertaste und „Bearbeiten" daneben', async () => {
-    fetchNachPfad({ 'GET /api/angebote/9': json(200, ENTWURF) });
-
-    renderSeite();
-    await screen.findByRole('heading', { level: 1, name: 'Angebotsentwurf' });
-
-    // Genau eine Kupfertaste je Ansicht (CLAUDE-design.md, Leitgedanke 2): Versenden ist die
-    // Hauptsache am Entwurf, Bearbeiten tritt als weiche Taste daneben zurueck.
-    expect(aktionen().getByRole('button', { name: 'Versenden' })).toBeInTheDocument();
+    // Genau eine Kupfertaste je Ansicht (CLAUDE-design.md, Leitgedanke 2).
+    expect(kupfertasten().map((taste) => taste.textContent)).toEqual(['Status weiter']);
+    expect(aktionen().getByRole('button', { name: 'Status zurück' })).toBeInTheDocument();
     expect(aktionen().getByRole('link', { name: 'Bearbeiten' })).toHaveAttribute(
       'href',
       '/angebote/9/bearbeiten',
     );
-    expect(aktionen().queryByRole('button', { name: 'Annehmen' })).not.toBeInTheDocument();
   });
 
-  it('versendet und nimmt Nummer und Stand aus der Antwort (Kriterien 10, 11)', async () => {
+  it('bietet bei „angelegt" kein „Status zurück" an', async () => {
+    fetchNachPfad({ 'GET /api/angebote/9': json(200, { ...ANGEBOT, status: 'ANGELEGT' }) });
+
+    renderSeite();
+    await screen.findByRole('heading', { level: 1, name: UEBERSCHRIFT });
+
+    expect(aktionen().queryByRole('button', { name: 'Status zurück' })).not.toBeInTheDocument();
+    expect(aktionen().getByRole('button', { name: 'Status weiter' })).toBeInTheDocument();
+  });
+
+  it('bietet bei „abgerechnet" kein „Status weiter" an, Bearbeiten aber schon', async () => {
+    fetchNachPfad({ 'GET /api/angebote/9': json(200, { ...ANGEBOT, status: 'ABGERECHNET' }) });
+
+    renderSeite();
+    await screen.findByRole('heading', { level: 1, name: UEBERSCHRIFT });
+
+    expect(aktionen().queryByRole('button', { name: 'Status weiter' })).not.toBeInTheDocument();
+    expect(kupfertasten()).toEqual([]);
+    expect(aktionen().getByRole('button', { name: 'Status zurück' })).toBeInTheDocument();
+    expect(aktionen().getByRole('link', { name: 'Bearbeiten' })).toBeInTheDocument();
+  });
+
+  it.each([
+    ['Status weiter', 'POST /api/angebote/9/status/weiter', 'BESTELLT', 'Bestellt'],
+    ['Status zurück', 'POST /api/angebote/9/status/zurueck', 'ANGELEGT', 'Angelegt'],
+  ])('schaltet mit „%s" und nimmt den Status aus der Antwort', async (
+    taste,
+    schluessel,
+    status,
+    wort,
+  ) => {
     const nutzer = userEvent.setup();
     const fetchMock = fetchNachPfad({
-      'GET /api/angebote/9': json(200, ENTWURF),
-      'POST /api/angebote/9/versenden': json(200, VERSENDET),
+      'GET /api/angebote/9': json(200, ANGEBOT),
+      [schluessel]: json(200, { ...ANGEBOT, status }),
     });
 
     renderSeite();
-    await screen.findByRole('heading', { level: 1, name: 'Angebotsentwurf' });
-    await nutzer.click(screen.getByRole('button', { name: 'Versenden' }));
+    await screen.findByRole('heading', { level: 1, name: UEBERSCHRIFT });
+    await nutzer.click(aktionen().getByRole('button', { name: taste }));
 
-    expect(
-      await screen.findByRole('heading', { level: 1, name: 'Angebot A-2026-001' }),
-    ).toBeInTheDocument();
-    expect(screen.getByTestId('chip')).toHaveTextContent('Versendet');
+    expect(await screen.findByText(wort)).toBeInTheDocument();
+    expect(within(screen.getByTestId('angebot-angaben')).getByTestId('chip')).toHaveTextContent(
+      wort,
+    );
     expect(fetchMock).toHaveBeenCalledWith(
-      '/api/angebote/9/versenden',
+      schluessel.slice('POST '.length),
       expect.objectContaining({ method: 'POST' }),
     );
   });
 
-  it('nennt alle fehlenden Angaben, wenn der Versand abgewiesen wird (Kriterium 12, E22)', async () => {
+  it('meldet, wenn der Statuswechsel nicht durchgeht, und behaelt den bisherigen Status', async () => {
     const nutzer = userEvent.setup();
     fetchNachPfad({
-      'GET /api/angebote/9': json(200, ENTWURF),
-      'POST /api/angebote/9/versenden': problem(409, 'Zum Versenden fehlen Angaben.', {
-        positionen: ['Das Angebot braucht mindestens eine Position.'],
-        gueltigBis: ['Die Gueltigkeit darf nicht vor dem Angebotsdatum liegen.'],
-        firma: ['Die Firma des Angebots braucht Strasse, PLZ und Ort.'],
-        eigeneAngaben: ['Unter „Eigene Angaben" fehlt der Name.', 'Unter „Eigene Angaben" fehlen Strasse, PLZ oder Ort.'],
-      }),
+      'GET /api/angebote/9': json(200, ANGEBOT),
+      'POST /api/angebote/9/status/weiter': problem(409, 'In diese Richtung gibt es keinen weiteren Status.'),
     });
 
     renderSeite();
-    await screen.findByRole('heading', { level: 1, name: 'Angebotsentwurf' });
-    await nutzer.click(screen.getByRole('button', { name: 'Versenden' }));
+    await screen.findByRole('heading', { level: 1, name: UEBERSCHRIFT });
+    await nutzer.click(aktionen().getByRole('button', { name: 'Status weiter' }));
 
-    const meldung = within(await screen.findByRole('alert'));
-    expect(meldung.getByText(/Zum Versenden dieses Angebots fehlen Angaben/)).toBeInTheDocument();
-    // Alle vier Schluessel auf einmal, in der Leserichtung der Antwort (E22).
-    expect(meldung.getAllByRole('listitem').map((zeile) => zeile.textContent)).toEqual([
-      'Das Angebot braucht mindestens eine Position.',
-      'Die Gueltigkeit darf nicht vor dem Angebotsdatum liegen.',
-      'Die Firma des Angebots braucht Strasse, PLZ und Ort.',
-      'Unter „Eigene Angaben" fehlt der Name.',
-      'Unter „Eigene Angaben" fehlen Strasse, PLZ oder Ort.',
-    ]);
-  });
-
-  it('meldet einen Fehlschlag ohne Feldliste als Ausfall', async () => {
-    const nutzer = userEvent.setup();
-    fetchNachPfad({
-      'GET /api/angebote/9': json(200, ENTWURF),
-      'POST /api/angebote/9/versenden': leer(500),
-    });
-
-    renderSeite();
-    await screen.findByRole('heading', { level: 1, name: 'Angebotsentwurf' });
-    await nutzer.click(screen.getByRole('button', { name: 'Versenden' }));
-
-    expect(await screen.findByRole('alert')).toHaveTextContent('nicht ausgeführt');
-  });
-
-  it('verwirft den Entwurf erst nach der Rueckfrage und fuehrt dann auf die Firma', async () => {
-    const nutzer = userEvent.setup();
-    const fetchMock = fetchNachPfad({
-      'GET /api/angebote/9': json(200, ENTWURF),
-      'DELETE /api/angebote/9': leer(204),
-    });
-
-    renderSeite();
-    await screen.findByRole('heading', { level: 1, name: 'Angebotsentwurf' });
-    await nutzer.click(aktionen().getByRole('button', { name: 'Weitere Aktionen' }));
-    await nutzer.click(screen.getByRole('menuitem', { name: 'Verwerfen' }));
-
-    // Die Rueckfrage ist ein eigener Dialog und kein `confirm` des Browsers (E19).
-    const dialog = within(await screen.findByRole('dialog'));
-    expect(dialog.getByText(/verschwindet dann vollständig/)).toBeInTheDocument();
-    expect(fetchMock).not.toHaveBeenCalledWith(
-      '/api/angebote/9',
-      expect.objectContaining({ method: 'DELETE' }),
+    expect(await screen.findByRole('alert')).toHaveTextContent('nicht geändert');
+    expect(within(screen.getByTestId('angebot-angaben')).getByTestId('chip')).toHaveTextContent(
+      'Abgegeben',
     );
-
-    await nutzer.click(dialog.getByRole('button', { name: 'Verwerfen' }));
-
-    expect(await screen.findByText('Firmenseite')).toBeInTheDocument();
-    expect(screen.getByTestId('adresse')).toHaveTextContent('/firmen/5');
-    expect(fetchMock).toHaveBeenCalledWith(
-      '/api/angebote/9',
-      expect.objectContaining({ method: 'DELETE' }),
-    );
-  });
-
-  it('meldet, wenn das Verwerfen nicht durchgeht', async () => {
-    const nutzer = userEvent.setup();
-    fetchNachPfad({
-      'GET /api/angebote/9': json(200, ENTWURF),
-      'DELETE /api/angebote/9': leer(500),
-    });
-
-    renderSeite();
-    await screen.findByRole('heading', { level: 1, name: 'Angebotsentwurf' });
-    await nutzer.click(aktionen().getByRole('button', { name: 'Weitere Aktionen' }));
-    await nutzer.click(screen.getByRole('menuitem', { name: 'Verwerfen' }));
-    await nutzer.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Verwerfen' }));
-
-    expect(await screen.findByRole('alert')).toHaveTextContent('nicht ausgeführt');
-  });
-});
-
-describe('AngebotPage — die Reaktion des Kunden (Kriterien 17, 18, F13)', () => {
-  it.each([['VERSENDET'], ['ABGELAUFEN'], ['ABGELOEST']])(
-    'bietet am Stand %s „Annehmen" und „Ablehnen" an',
-    async (stand) => {
-      fetchNachPfad({ 'GET /api/angebote/9': json(200, { ...VERSENDET, stand }) });
-
-      renderSeite();
-      await screen.findByRole('heading', { level: 1, name: 'Angebot A-2026-001' });
-
-      expect(aktionen().getByRole('button', { name: 'Annehmen' })).toBeInTheDocument();
-      expect(aktionen().getByRole('button', { name: 'Ablehnen' })).toBeInTheDocument();
-      // Kein Bearbeiten und kein Versenden: Ein versendetes Angebot ist fest (Kriterium 13).
-      expect(aktionen().queryByRole('link', { name: 'Bearbeiten' })).not.toBeInTheDocument();
-      expect(aktionen().queryByRole('button', { name: 'Versenden' })).not.toBeInTheDocument();
-    },
-  );
-
-  it.each([
-    ['ENTWURF', 'Versenden'],
-    ['VERSENDET', 'Annehmen'],
-    ['ABGELAUFEN', 'Annehmen'],
-    ['ABGELOEST', 'Annehmen'],
-  ])('traegt am Stand %s genau eine Kupfertaste: „%s"', async (stand, aufschrift) => {
-    fetchNachPfad({ 'GET /api/angebote/9': json(200, { ...VERSENDET, stand }) });
-
-    renderSeite();
-    await screen.findByTestId('angebot-aktionen');
-
-    // Genau eine Kupfertaste je Ansicht (CLAUDE-design.md, Leitgedanke 2).
-    expect(kupfertasten().map((taste) => taste.textContent)).toEqual([aufschrift]);
-  });
-
-  it.each([['ANGENOMMEN'], ['ABGELEHNT']])(
-    'bietet am endgueltigen Stand %s keine Aktion mehr an',
-    async (stand) => {
-      fetchNachPfad({
-        'GET /api/angebote/9': json(200, { ...VERSENDET, stand, reaktionAm: '2026-09-26T09:30:00Z' }),
-      });
-
-      renderSeite();
-      await screen.findByRole('heading', { level: 1, name: 'Angebot A-2026-001' });
-
-      expect(screen.queryByTestId('angebot-aktionen')).not.toBeInTheDocument();
-      expect(kupfertasten()).toEqual([]);
-      // Der Beleg bleibt erreichbar (Kriterium 14).
-      expect(screen.getByRole('link', { name: 'PDF öffnen' })).toBeInTheDocument();
-    },
-  );
-
-  it.each([
-    ['Annehmen', 'ANGENOMMEN', 'Angenommen', 'POST /api/angebote/9/annehmen'],
-    ['Ablehnen', 'ABGELEHNT', 'Abgelehnt', 'POST /api/angebote/9/ablehnen'],
-  ])('haelt mit „%s" die Reaktion fest und nimmt den Stand aus der Antwort', async (
-    taste,
-    stand,
-    wort,
-    schluessel,
-  ) => {
-    const nutzer = userEvent.setup();
-    fetchNachPfad({
-      'GET /api/angebote/9': json(200, VERSENDET),
-      [schluessel]: json(200, { ...VERSENDET, stand, reaktionAm: '2026-09-26T09:30:00Z' }),
-    });
-
-    renderSeite();
-    await screen.findByRole('heading', { level: 1, name: 'Angebot A-2026-001' });
-    await nutzer.click(screen.getByRole('button', { name: taste }));
-
-    expect(await screen.findByText(wort)).toBeInTheDocument();
-    expect(screen.queryByTestId('angebot-aktionen')).not.toBeInTheDocument();
   });
 });
 
@@ -475,7 +292,7 @@ describe('AngebotPage — unsinnige Kennung, unbekanntes Angebot, Ausfall', () =
   });
 
   it('zeigt waehrend des Ladens einen Hinweis statt einer leeren Seite', () => {
-    fetchNachPfad({ 'GET /api/angebote/9': json(200, VERSENDET) });
+    fetchNachPfad({ 'GET /api/angebote/9': json(200, ANGEBOT) });
 
     renderSeite();
 

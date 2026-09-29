@@ -3,70 +3,45 @@ import Typography from '@mui/material/Typography';
 import { Link as RouterLink } from 'react-router-dom';
 
 import type { AngebotZeile } from '../api/angebote';
-import { angebotsstandBild } from '../lib/angebotsstand';
 import { euro } from '../lib/geld';
 import { tagWort } from '../lib/tag';
 import { ZAHLEN_KLASSE } from '../theme';
+import AngebotsstatusChip from './AngebotsstatusChip';
 import Tafel from './Tafel';
-import ZustandsChip from './ZustandsChip';
 
 /**
- * Die Angebote einer Firma als Tafel (Kriterium 20).
+ * Die Angebote einer Firma als Tafel (Kriterium 7).
  *
- * <b>Nicht sortiert.</b> Die Reihenfolge kommt vom Server — Entwuerfe zuerst, innerhalb jeder
- * Gruppe nach dem Zeitpunkt der Anlage (E25). Eine zweite Sortierung hier waere eine zweite
- * Wahrheit und liefe beim naechsten Zustand auseinander.
+ * <b>Nicht sortiert.</b> Die Reihenfolge kommt vom Server — neueste zuerst. Eine zweite Sortierung
+ * hier waere eine zweite Wahrheit.
  *
- * <b>Der Weg liegt auf der Nummer, nicht auf der Zeile.</b> Eine ganze Tabellenzeile klickbar zu
+ * <b>Der Weg liegt auf dem Datum, nicht auf der Zeile.</b> Eine ganze Tabellenzeile klickbar zu
  * machen hiesse, ein `tr` mit `onClick` zu versehen — kein Ziel des Tabulators und fuer den
- * Screenreader kein Weg. Die Nummer ist der Name des Angebots und damit der richtige Trager.
- *
- * Ein Entwurf hat keine Nummer (Kriterium 11); dann steht dort das Wort „Entwurf" — sichtbar und
- * als Name des Weges, nicht ein Gedankenstrich, den niemand anklicken kann.
+ * Screenreader kein Weg. Ein Angebot hat keine Nummer; das Datum ist, was es in der Liste benennt.
  */
 
-const SPALTEN = ['Nummer', 'Datum', 'Gültig bis', 'Zustand', 'Summe'] as const;
+const SPALTEN = ['Datum', 'Status', 'Summe'] as const;
 const LEER = 'Noch kein Angebot an diese Firma.';
-const SYMBOL_CHIP = 13;
 
 function Zeile({ angebot }: { readonly angebot: AngebotZeile }) {
-  const bild = angebotsstandBild(angebot.stand);
-  const Symbol = bild.symbol;
   return (
     <Box component="tr">
-      <Box component="td" sx={{ fontWeight: 500 }}>
+      <Box component="td" sx={{ fontWeight: 500, whiteSpace: 'nowrap' }}>
         <Box
           component={RouterLink}
           to={`/angebote/${String(angebot.id)}`}
-          className={angebot.nummer === null ? undefined : ZAHLEN_KLASSE}
+          className={ZAHLEN_KLASSE}
           sx={(theme) => ({
             color: 'inherit',
             textDecoration: 'none',
             '&:hover': { color: theme.vars.palette.kupferwolke.kupfer },
           })}
         >
-          {angebot.nummer ?? 'Entwurf'}
+          {tagWort(angebot.angebotDatum)}
         </Box>
       </Box>
-      <Box component="td" className={ZAHLEN_KLASSE} sx={{ whiteSpace: 'nowrap' }}>
-        {tagWort(angebot.angebotDatum)}
-      </Box>
-      <Box
-        component="td"
-        className={ZAHLEN_KLASSE}
-        sx={(theme) => ({
-          whiteSpace: 'nowrap',
-          color: theme.vars.palette.kupferwolke.textMatt,
-        })}
-      >
-        {tagWort(angebot.gueltigBis)}
-      </Box>
       <Box component="td">
-        <ZustandsChip
-          wort={bild.wort}
-          toenung={bild.toenung}
-          symbol={<Symbol size={SYMBOL_CHIP} stroke={1.8} />}
-        />
+        <AngebotsstatusChip status={angebot.status} />
       </Box>
       <Box
         component="td"

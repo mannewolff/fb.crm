@@ -6,21 +6,17 @@ import Angebotsliste from './Angebotsliste';
 import type { AngebotZeile } from '../api/angebote';
 import { renderMitTheme } from '../test/render';
 
-const ENTWURF: AngebotZeile = {
+const JUENGER: AngebotZeile = {
   id: 12,
-  nummer: null,
-  stand: 'ENTWURF',
   angebotDatum: '2026-09-26',
-  gueltigBis: '2026-10-26',
+  status: 'ANGELEGT',
   summeInCent: 120000,
 };
 
-const VERSENDET: AngebotZeile = {
+const AELTER: AngebotZeile = {
   id: 9,
-  nummer: 'A-2026-001',
-  stand: 'VERSENDET',
   angebotDatum: '2026-09-24',
-  gueltigBis: '2026-10-24',
+  status: 'BESTELLT',
   summeInCent: 250003,
 };
 
@@ -32,56 +28,45 @@ function renderListe(angebote: readonly AngebotZeile[]) {
   );
 }
 
-describe('Angebotsliste (Kriterium 20)', () => {
-  it('traegt Nummer, Datum, Gueltigkeit, Zustand und Summe je Zeile', () => {
-    renderListe([VERSENDET]);
+describe('Angebotsliste (Kriterium 7)', () => {
+  it('traegt Datum, Status und Summe je Zeile', () => {
+    renderListe([AELTER]);
 
     const zeile = within(screen.getAllByRole('row')[1]);
-    expect(zeile.getByRole('link', { name: 'A-2026-001' })).toBeInTheDocument();
-    expect(zeile.getByText('24.09.2026')).toBeInTheDocument();
-    expect(zeile.getByText('24.10.2026')).toBeInTheDocument();
-    expect(zeile.getByText('Versendet')).toBeInTheDocument();
+    expect(zeile.getByRole('link', { name: '24.09.2026' })).toBeInTheDocument();
+    expect(zeile.getByText('Bestellt')).toBeInTheDocument();
     expect(zeile.getByText('2.500,03 €')).toBeInTheDocument();
   });
 
-  it('nennt ein Angebot ohne Nummer „Entwurf" (Kriterium 11)', () => {
-    renderListe([ENTWURF]);
-
-    expect(screen.getByRole('link', { name: 'Entwurf' })).toBeInTheDocument();
-  });
-
-  it('gibt die Reihenfolge der Antwort wieder — Entwuerfe oben (E25)', () => {
-    // Sortiert wird am Server; die Liste ordnet nicht um. Zwei Sortierungen fuer dieselbe Liste
-    // liefen beim naechsten Zustand auseinander.
-    renderListe([ENTWURF, VERSENDET]);
+  it('gibt die Reihenfolge der Antwort wieder — neueste zuerst', () => {
+    // Sortiert wird am Server; die Liste ordnet nicht um.
+    renderListe([JUENGER, AELTER]);
 
     expect(screen.getAllByRole('link').map((weg) => weg.textContent)).toEqual([
-      'Entwurf',
-      'A-2026-001',
+      '26.09.2026',
+      '24.09.2026',
     ]);
   });
 
   it('oeffnet aus jeder Zeile das Angebot', () => {
-    renderListe([ENTWURF, VERSENDET]);
+    renderListe([JUENGER, AELTER]);
 
-    expect(screen.getByRole('link', { name: 'Entwurf' })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: '26.09.2026' })).toHaveAttribute(
       'href',
       '/angebote/12',
     );
-    expect(screen.getByRole('link', { name: 'A-2026-001' })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: '24.09.2026' })).toHaveAttribute(
       'href',
       '/angebote/9',
     );
   });
 
   it('nennt die Spalten der Tafel', () => {
-    renderListe([VERSENDET]);
+    renderListe([AELTER]);
 
     expect(screen.getAllByRole('columnheader').map((kopf) => kopf.textContent)).toEqual([
-      'Nummer',
       'Datum',
-      'Gültig bis',
-      'Zustand',
+      'Status',
       'Summe',
     ]);
   });
