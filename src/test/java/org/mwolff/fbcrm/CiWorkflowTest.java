@@ -91,10 +91,10 @@ class CiWorkflowTest {
     return kommandos;
   }
 
-  /** Die {@code buildChecks} eines Bereichs, in der Reihenfolge der Config. */
+  /** Die {@code buildChecks} eines Bereichs, die in CI laufen, in der Reihenfolge der Config. */
   private static List<String> buildChecks(final String bereich) throws IOException {
     final List<String> kommandos = new ArrayList<>();
-    for (final JsonNode check : config().get("buildChecks")) {
+    for (final JsonNode check : ciChecks()) {
       for (final JsonNode area : check.get("areas")) {
         if (bereich.equals(area.asText())) {
           kommandos.add(check.get("cmd").asText());
@@ -102,6 +102,41 @@ class CiWorkflowTest {
       }
     }
     return kommandos;
+  }
+
+  /**
+   * Die {@code buildChecks}, die CI faehrt.
+   *
+   * <p>CI prueft den Stand, der veroeffentlicht wird. Fuehrt ein Bereich neben seinem
+   * Paketstufen-Eintrag einen Eintrag spaeterer Stufe ({@code push}, {@code merge}), ist der
+   * Paketstufen-Eintrag dessen lokale Abkuerzung (etwa {@code -DskipITs}) und laeuft in CI nicht
+   * mit — der spaetere Eintrag deckt ihn ab.
+   */
+  private static List<JsonNode> ciChecks() throws IOException {
+    final List<JsonNode> alle = new ArrayList<>();
+    config().get("buildChecks").forEach(alle::add);
+    final List<String> spaeterGeprueft = new ArrayList<>();
+    for (final JsonNode check : alle) {
+      if (!istPaketstufe(check)) {
+        check.get("areas").forEach(area -> spaeterGeprueft.add(area.asText()));
+      }
+    }
+    final List<JsonNode> inCi = new ArrayList<>();
+    for (final JsonNode check : alle) {
+      boolean abgedeckt = false;
+      for (final JsonNode area : check.get("areas")) {
+        abgedeckt |= spaeterGeprueft.contains(area.asText());
+      }
+      if (!(istPaketstufe(check) && abgedeckt)) {
+        inCi.add(check);
+      }
+    }
+    return inCi;
+  }
+
+  /** Ein Eintrag ohne {@code stufe} gilt als Paketstufe (checks.mjs, Issue #758). */
+  private static boolean istPaketstufe(final JsonNode check) {
+    return !check.has("stufe") || "paket".equals(check.get("stufe").asText());
   }
 
   /** Das {@code with}-Feld des Schritts, der die genannte Action benutzt. */
@@ -157,7 +192,7 @@ class CiWorkflowTest {
   void workflow_givenTheConfig_thenEveryLocalCheckRunsInCi() throws IOException {
     // Given — alle Kommandos, die lokal Pflicht sind
     final List<String> lokal = new ArrayList<>();
-    for (final JsonNode check : config().get("buildChecks")) {
+    for (final JsonNode check : ciChecks()) {
       lokal.add(check.get("cmd").asText());
     }
     lokal.add(config().get("mutationCommand").asText());
