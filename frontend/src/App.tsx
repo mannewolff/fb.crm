@@ -16,6 +16,7 @@ const FirmaMaske = lazy(async () => import('./pages/FirmaMaske'));
 const FirmaPage = lazy(async () => import('./pages/FirmaPage'));
 const AnsprechpartnerMaske = lazy(async () => import('./pages/AnsprechpartnerMaske'));
 const AngebotMaske = lazy(async () => import('./pages/AngebotMaske'));
+const AngebotePage = lazy(async () => import('./pages/AngebotePage'));
 const AngebotPage = lazy(async () => import('./pages/AngebotPage'));
 const EigeneAngabenMaske = lazy(async () => import('./pages/EigeneAngabenMaske'));
 
@@ -55,6 +56,7 @@ export default function App() {
             }
           >
             <Route path="/" element={<EmptyPanel />} />
+            <Route path="/angebote" element={<AngebotePage />} />
             <Route path="/angebote/:angebotId" element={<AngebotPage />} />
             <Route path="/angebote/:angebotId/bearbeiten" element={<AngebotMaske />} />
             <Route path="/firmen" element={<FirmenPage />} />

@@ -13,11 +13,11 @@ import { alsAngebotsstatus } from '../lib/angebotsstatus';
 import type { Angebotsstatus } from '../lib/angebotsstatus';
 
 /**
- * Die Wege zum Angebot: die Liste an der Firma, das Anlegen, das Lesen, das Aendern und der
- * Statuswechsel (Issue #127).
+ * Die Wege zum Angebot: die Uebersicht aller Angebote, die Liste an der Firma, das Anlegen, das
+ * Lesen, das Aendern und der Statuswechsel (Issue #127).
  *
  * Die Typen sind die Gegenstuecke zu `AngebotResponse`, `AngebotPositionResponse`,
- * `AngebotZeileResponse` und `FirmaAngeboteResponse` im Backend; aendert sich dort ein Feld,
+ * `AngebotZeileResponse`, `FirmaAngeboteResponse` und `AngeboteUebersichtResponse` im Backend; aendert sich dort ein Feld,
  * aendert es sich hier mit (CLAUDE-react.md). Jede Antwort geht durch einen Parser: Was ueber das
  * Netz kommt, ist `unknown`, bis es geprueft ist — kein `as`.
  *
@@ -81,6 +81,21 @@ export interface AngebotZeile {
   readonly angebotDatum: string;
   readonly status: Angebotsstatus;
   readonly summeInCent: number;
+}
+
+/** Eine Zeile der Uebersicht aller Angebote (Kriterium 8). */
+export interface AngebotUebersichtZeile {
+  readonly id: number;
+  readonly firmaId: number;
+  readonly firmaName: string;
+  readonly angebotDatum: string;
+  readonly status: Angebotsstatus;
+  readonly summeInCent: number;
+}
+
+/** Alle Angebote, neueste zuerst — das Gegenstueck zu `AngeboteUebersichtResponse`. */
+export interface AngeboteUebersicht {
+  readonly angebote: readonly AngebotUebersichtZeile[];
 }
 
 /** Die Angebote einer Firma, neueste zuerst (Kriterium 7). */
@@ -167,6 +182,34 @@ function parseZeile(wert: unknown): AngebotZeile {
     status: angebotsstatus(zeile.status),
     summeInCent: inHundertsteln(zeile.summe),
   };
+}
+
+function parseUebersichtZeile(wert: unknown): AngebotUebersichtZeile {
+  const zeile = objekt(wert);
+  return {
+    id: zahl(zeile.id),
+    firmaId: zahl(zeile.firmaId),
+    firmaName: text(zeile.firmaName),
+    angebotDatum: text(zeile.angebotDatum),
+    status: angebotsstatus(zeile.status),
+    summeInCent: inHundertsteln(zeile.summe),
+  };
+}
+
+/** Verengt die Uebersicht aller Angebote oder scheitert. */
+export function parseAngeboteUebersicht(wert: unknown): AngeboteUebersicht {
+  const antwort = objekt(wert);
+  return { angebote: liste(antwort.angebote).map(parseUebersichtZeile) };
+}
+
+/**
+ * Alle Angebote, neueste zuerst, wahlweise nur die in einem Status (Kriterium 8).
+ *
+ * @param status der gesuchte Status, oder `null` fuer alle
+ */
+export function angeboteUebersicht(status: Angebotsstatus | null): Promise<AngeboteUebersicht> {
+  const pfad = status === null ? '/api/angebote' : `/api/angebote?status=${status}`;
+  return apiJson(pfad, { methode: 'GET' }, parseAngeboteUebersicht);
 }
 
 /** Verengt die Angebotsliste einer Firma oder scheitert. */

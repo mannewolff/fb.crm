@@ -136,6 +136,28 @@ describe('App', () => {
     expect(screen.getByRole('navigation', { name: 'Hauptnavigation' })).toBeInTheDocument();
   });
 
+  it('fuehrt „/angebote" ohne Sitzung auf die Anmeldeseite', async () => {
+    ohneSitzung();
+
+    renderApp(['/angebote'], 0);
+
+    expect(await screen.findByLabelText(/^E-Mail-Adresse/)).toBeInTheDocument();
+  });
+
+  it('zeigt „/angebote" als Uebersicht im Rahmen und nicht als einzelnes Angebot', async () => {
+    fensterbreite(1440);
+    fetchNachPfad({
+      'GET /api/auth/me': json(200, KONTO),
+      'GET /api/instance': json(200, { version: '0.1.3' }),
+      'GET /api/angebote': json(200, { angebote: [] }),
+    });
+
+    renderApp(['/angebote'], 0);
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'Angebote' })).toBeInTheDocument();
+    expect(screen.getByRole('navigation', { name: 'Hauptnavigation' })).toBeInTheDocument();
+  });
+
   it('fuehrt „/angebote/9" ohne Sitzung auf die Anmeldeseite', async () => {
     ohneSitzung();
 

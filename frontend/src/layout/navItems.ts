@@ -2,9 +2,10 @@
  * Die Eintraege der Schiene (E15).
  *
  * Oberhalb des Fusses stehen die <b>Navigationsbloecke</b>, jeder mit einem Gruppentitel in
- * Satzschreibung (CLAUDE-design.md, „Rahmen"). Dieser Stand traegt einen Block, „Stammdaten":
- * Angebote entstehen an der Firma und stehen auf ihrer Seite (Issue #126). Welche Bloecke
- * dazukommen, entsteht mit den Fachplaenen.
+ * Satzschreibung (CLAUDE-design.md, „Rahmen"). Dieser Stand traegt zwei Bloecke: „Geschäft" mit der
+ * Uebersicht aller Angebote (Issue #127, Kriterium 8) und darunter „Stammdaten". Das Tagesgeschaeft
+ * steht oben, weil es der haeufigere Weg ist; Angebote entstehen weiterhin an der Firma
+ * (Issue #126). Welche Bloecke dazukommen, entsteht mit den Fachplaenen.
  *
  * Im Fuss stehen „Administration" und „Dokumentation" als eigene Gruppe ueber der Nutzerkarte
  * (E7). „Einklappen" steht nicht mehr darunter: Es ist eine Icontaste neben der Marke geworden
@@ -16,6 +17,7 @@
  */
 
 export type Symbolname =
+  | 'file-description'
   | 'building-community'
   | 'id'
   | 'settings'
@@ -33,6 +35,10 @@ export interface NavBlock {
 }
 
 export const NAV_BLOECKE: readonly NavBlock[] = [
+  {
+    titel: 'Geschäft',
+    eintraege: [{ beschriftung: 'Angebote', ziel: '/angebote', symbol: 'file-description' }],
+  },
   {
     titel: 'Stammdaten',
     eintraege: [

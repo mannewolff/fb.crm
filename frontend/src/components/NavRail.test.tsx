@@ -63,10 +63,11 @@ describe('navItems (E15, E18)', () => {
     ]);
   });
 
-  it('fuehrt „Stammdaten" mit seinen Eintraegen', () => {
+  it('fuehrt „Geschäft" mit „Angebote" oberhalb von „Stammdaten" (Issue #127)', () => {
     expect(
       NAV_BLOECKE.map((block) => [block.titel, block.eintraege.map((e) => [e.beschriftung, e.ziel])]),
     ).toEqual([
+      ['Geschäft', [['Angebote', '/angebote']]],
       // „Eigene Angaben" ist ein Stammdatum wie die Firma und steht neben ihr — nicht hinter
       // „Administration" und nicht in einem eigenen Block mit einem Eintrag (E14).
       [
@@ -110,13 +111,16 @@ describe('NavRail', () => {
 
     const bloecke = within(screen.getByTestId('schiene-bloecke'));
     // Die Reihenfolge der Titel und der Links haelt die Aussage der Bloecke fest (E24).
-    expect(bloecke.getAllByText(/^Stammdaten$/).map((e) => e.textContent)).toEqual([
+    expect(bloecke.getAllByText(/^(Geschäft|Stammdaten)$/).map((e) => e.textContent)).toEqual([
+      'Geschäft',
       'Stammdaten',
     ]);
     expect(bloecke.getAllByRole('link').map((link) => link.getAttribute('href'))).toEqual([
+      '/angebote',
       '/firmen',
       '/eigene-angaben',
     ]);
+    expect(bloecke.getByRole('link', { name: 'Angebote' })).toBeInTheDocument();
     expect(bloecke.getByRole('link', { name: 'Firmen' })).toBeInTheDocument();
     expect(bloecke.getByRole('link', { name: 'Eigene Angaben' })).toBeInTheDocument();
     // Kein Umschalter in den Bloecken — Tasten stehen an der Marke und im Fuss.
@@ -181,6 +185,9 @@ describe('NavRail', () => {
     // Auch die Detailansicht einer Firma laesst „Firmen" aktiv stehen (Plan-Review Fund 3).
     ['/firmen/7', 'Firmen'],
     ['/eigene-angaben', 'Eigene Angaben'],
+    ['/angebote', 'Angebote'],
+    // Auch die Ansicht eines Angebots laesst „Angebote" aktiv stehen.
+    ['/angebote/9', 'Angebote'],
   ])('setzt auf %s aria-current="page" an „%s" und nur dort (K12)', (adresse, beschriftung) => {
     angemeldet();
 
@@ -232,6 +239,7 @@ describe('NavRail', () => {
     expect(screen.getByRole('link', { name: 'Administration' })).toBeInTheDocument();
     // Ebenso im Block: der Gruppentitel entfaellt, der Link behaelt seinen Namen.
     expect(screen.queryByText('Stammdaten')).not.toBeInTheDocument();
+    expect(screen.queryByText('Geschäft')).not.toBeInTheDocument();
     expect(screen.queryByText('Firmen')).not.toBeInTheDocument();
     expect(screen.queryByText('Eigene Angaben')).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Firmen' })).toBeInTheDocument();

@@ -3,6 +3,7 @@ import Typography from '@mui/material/Typography';
 import {
   IconBook,
   IconBuildingCommunity,
+  IconFileDescription,
   IconId,
   IconLayoutSidebarLeftCollapse,
   IconLayoutSidebarLeftExpand,
@@ -48,6 +49,7 @@ const BREITE_EINGEKLAPPT = 76;
 
 /** Die Symbole der Vorlage — dieselbe Familie, dieselben Namen (E3). */
 const SYMBOLE: Readonly<Record<Symbolname, TablerIcon>> = {
+  'file-description': IconFileDescription,
   'building-community': IconBuildingCommunity,
   id: IconId,
   settings: IconSettings,

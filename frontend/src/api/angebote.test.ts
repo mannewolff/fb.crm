@@ -7,7 +7,9 @@ import {
   angebotStatusWeiter,
   angebotStatusZurueck,
   angeboteDerFirma,
+  angeboteUebersicht,
   parseAngebot,
+  parseAngeboteUebersicht,
   parseFirmaAngebote,
 } from './angebote';
 import { fetchNachPfad, json } from '../test/fetchNachPfad';
@@ -190,7 +192,70 @@ describe('parseFirmaAngebote', () => {
   });
 });
 
+const UEBERSICHT_ZEILE = {
+  id: 9,
+  firmaId: 5,
+  firmaName: 'Adler AG',
+  angebotDatum: '2026-09-24',
+  status: 'BESTELLT',
+  summe: 2500.03,
+};
+
+describe('parseAngeboteUebersicht', () => {
+  it('verengt die Uebersicht samt Firmenname', () => {
+    expect(parseAngeboteUebersicht({ angebote: [UEBERSICHT_ZEILE] })).toEqual({
+      angebote: [
+        {
+          id: 9,
+          firmaId: 5,
+          firmaName: 'Adler AG',
+          angebotDatum: '2026-09-24',
+          status: 'BESTELLT',
+          summeInCent: 250003,
+        },
+      ],
+    });
+  });
+
+  it.each([
+    ['kein Objekt', 'x'],
+    ['angebote ist kein Array', { angebote: 3 }],
+    ['Zeile ohne id', { angebote: [{ ...UEBERSICHT_ZEILE, id: null }] }],
+    ['Zeile ohne firmaId', { angebote: [{ ...UEBERSICHT_ZEILE, firmaId: '5' }] }],
+    ['Zeile ohne Firmenname', { angebote: [{ ...UEBERSICHT_ZEILE, firmaName: 5 }] }],
+    ['Zeile ohne Angebotsdatum', { angebote: [{ ...UEBERSICHT_ZEILE, angebotDatum: null }] }],
+    ['Zeile mit unbekanntem Status', { angebote: [{ ...UEBERSICHT_ZEILE, status: 'OFFEN' }] }],
+    ['Zeile ohne Summe', { angebote: [{ ...UEBERSICHT_ZEILE, summe: undefined }] }],
+  ])('weist eine Antwort ab: %s', (_fall, rumpf) => {
+    expect(() => parseAngeboteUebersicht(rumpf)).toThrow(TypeError);
+  });
+});
+
 describe('die Wege', () => {
+  it('holt die Uebersicht aller Angebote ohne Filter', async () => {
+    const fetchMock = fetchNachPfad({
+      'GET /api/angebote': json(200, { angebote: [UEBERSICHT_ZEILE] }),
+    });
+
+    expect((await angeboteUebersicht(null)).angebote).toHaveLength(1);
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/angebote',
+      expect.objectContaining({ method: 'GET' }),
+    );
+  });
+
+  it('holt die Uebersicht nach Status gefiltert', async () => {
+    const fetchMock = fetchNachPfad({
+      'GET /api/angebote?status=BESTELLT': json(200, { angebote: [] }),
+    });
+
+    expect((await angeboteUebersicht('BESTELLT')).angebote).toEqual([]);
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/angebote?status=BESTELLT',
+      expect.objectContaining({ method: 'GET' }),
+    );
+  });
+
   it('holt die Angebote einer Firma', async () => {
     const fetchMock = fetchNachPfad({
       'GET /api/firmen/5/angebote': json(200, { angebote: [ZEILE] }),
