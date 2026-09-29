@@ -20,11 +20,6 @@ const VorgangMaske = lazy(async () => import('./pages/VorgangMaske'));
 const VorgangPage = lazy(async () => import('./pages/VorgangPage'));
 const AngebotMaske = lazy(async () => import('./pages/AngebotMaske'));
 const AngebotPage = lazy(async () => import('./pages/AngebotPage'));
-const AuftragAnlegenMaske = lazy(async () => import('./pages/AuftragAnlegenMaske'));
-const AuftragPage = lazy(async () => import('./pages/AuftragPage'));
-const AuftragMaske = lazy(async () => import('./pages/AuftragMaske'));
-const PipelinePage = lazy(async () => import('./pages/PipelinePage'));
-const AuftragsbestandPage = lazy(async () => import('./pages/AuftragsbestandPage'));
 const EigeneAngabenMaske = lazy(async () => import('./pages/EigeneAngabenMaske'));
 
 /**
@@ -34,9 +29,9 @@ const EigeneAngabenMaske = lazy(async () => import('./pages/EigeneAngabenMaske')
  * Die geschuetzten Adressen teilen sich einen Rahmen ({@link AppShell}): Er steht einmal um
  * das `Outlet` und bleibt beim Wechsel zwischen ihnen stehen, statt je Ansicht neu zu entstehen.
  * `/`, `/administration` und `/dokumentation` zeigen in diesem Stand dasselbe leere Panel;
- * `/firmen`, `/vorgaenge` und `/eigene-angaben` tragen die fachlichen Ansichten, `/pipeline` die
- * erste Auswertung. Die Angebote liegen unter dem Vorgang (E16) — die Maske unter `neu` und
- * `bearbeiten`, die Ansicht dazwischen.
+ * `/firmen`, `/vorgaenge` und `/eigene-angaben` tragen die fachlichen Ansichten. Die Angebote
+ * liegen unter dem Vorgang (E16) — die Maske unter `neu` und `bearbeiten`, die Ansicht
+ * dazwischen.
  *
  * Die unbekannte Adresse bekommt keine eigene Ansicht: Mit Sitzung fuehrt sie auf die
  * Startadresse, ohne Sitzung uebernimmt {@link ProtectedRoute} und fuehrt auf die
@@ -76,19 +71,6 @@ export default function App() {
               path="/vorgaenge/:id/angebote/:angebotId/bearbeiten"
               element={<AngebotMaske />}
             />
-            {/* Der Auftrag entsteht unter dem Angebot, aus dem er kommt (Plan #112, E16): Die Adresse
-                traegt die Kennung des Angebots ohne Suchparameter. */}
-            <Route
-              path="/vorgaenge/:id/angebote/:angebotId/auftrag/neu"
-              element={<AuftragAnlegenMaske />}
-            />
-            <Route path="/vorgaenge/:id/auftraege/:auftragId" element={<AuftragPage />} />
-            <Route
-              path="/vorgaenge/:id/auftraege/:auftragId/bearbeiten"
-              element={<AuftragMaske />}
-            />
-            <Route path="/pipeline" element={<PipelinePage />} />
-            <Route path="/auftragsbestand" element={<AuftragsbestandPage />} />
             <Route path="/firmen" element={<FirmenPage />} />
             {/* Statisch vor dynamisch: `/firmen/neu` ist die Maske, nicht die Firma „neu". */}
             <Route path="/firmen/neu" element={<FirmaMaske />} />

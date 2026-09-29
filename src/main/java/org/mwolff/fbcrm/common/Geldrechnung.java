@@ -7,12 +7,12 @@ import java.util.stream.Stream;
 /**
  * Die eine Regel, nach der jeder Beleg seine Betraege rechnet (E5).
  *
- * <p>Sie steht hier und nicht im Modul eines Belegs, weil Angebot, Auftrag und Rechnung dieselbe
- * Formel brauchen: Menge mal Einzelpreis je Position, danach Cent fuer Cent addiert. Zwei
- * Abschriften derselben Formel driften beim ersten Nachziehen um einen Cent auseinander — und ein
- * Auftrag, der die Summe seines Angebots nicht trifft, ist gegenueber dem Kunden nicht erklaerbar.
- * Laege sie stattdessen im Modul {@code angebot}, haenge die Positionsdefinition jedes weiteren
- * Belegs am Belegtyp, aus dem er zufaellig entsteht.
+ * <p>Sie steht hier und nicht im Modul eines Belegs, weil Angebot und Rechnung dieselbe Formel
+ * brauchen: Menge mal Einzelpreis je Position, danach Cent fuer Cent addiert. Zwei Abschriften
+ * derselben Formel driften beim ersten Nachziehen um einen Cent auseinander — und eine Rechnung,
+ * die die Summe ihres Angebots nicht trifft, ist gegenueber dem Kunden nicht erklaerbar. Laege sie
+ * stattdessen im Modul {@code angebot}, haenge die Positionsdefinition jedes weiteren Belegs am
+ * Belegtyp, aus dem er zufaellig entsteht.
  *
  * <p><b>Kaufmaennisch, nicht mathematisch.</b> Gerundet wird mit {@link RoundingMode#HALF_UP}.
  * Kriterium 5 nennt dafuer ein Paar, das genau auf der halben Einheit liegt: 2,5 Personentage zu

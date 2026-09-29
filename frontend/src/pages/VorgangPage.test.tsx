@@ -127,7 +127,6 @@ function vorgangDoppel(start: Vorgang = VORGANG) {
         headers: { 'Content-Type': 'application/json' },
       }),
     'GET /api/vorgaenge/5/angebote': json(200, { angebote: [ANGEBOT_ZEILE] }),
-    'GET /api/vorgaenge/5/auftraege': json(200, { auftraege: [] }),
     'POST /api/vorgaenge/5/abschliessen': () => schalte(true),
     'POST /api/vorgaenge/5/wiedereroeffnen': () => schalte(false),
   });
@@ -349,7 +348,6 @@ describe('VorgangPage — Abschliessen und Wieder oeffnen (Kriterien 20, 21)', (
     fetchNachPfad({
       'GET /api/vorgaenge/5': json(200, VORGANG),
       'GET /api/vorgaenge/5/angebote': json(200, { angebote: [ANGEBOT_ZEILE] }),
-      'GET /api/vorgaenge/5/auftraege': json(200, { auftraege: [] }),
       'POST /api/vorgaenge/5/abschliessen': leer(500),
     });
 
@@ -370,7 +368,7 @@ describe('VorgangPage — die Maske fuer Eintraege (E20, Kriterien 13, 14)', () 
     await screen.findByRole('heading', { level: 1, name: KOPFZEILE });
     expect(
       screen.getAllByRole('heading', { level: 2 }).map((ueberschrift) => ueberschrift.textContent),
-    ).toEqual(['Angebote', 'Aufträge', 'Eintrag hinzufügen', 'Historie', 'Felder']);
+    ).toEqual(['Angebote', 'Eintrag hinzufügen', 'Historie', 'Felder']);
   });
 
   it('liest die Historie neu, nachdem ein Eintrag hinzugefuegt wurde', async () => {
@@ -393,7 +391,6 @@ describe('VorgangPage — die Maske fuer Eintraege (E20, Kriterien 13, 14)', () 
           headers: { 'Content-Type': 'application/json' },
         }),
       'GET /api/vorgaenge/5/angebote': json(200, { angebote: [ANGEBOT_ZEILE] }),
-      'GET /api/vorgaenge/5/auftraege': json(200, { auftraege: [] }),
       'POST /api/vorgaenge/5/eintraege': () => {
         historie = [NEUER, ANHANG, KOMMENTAR];
         return new Response(null, { status: 201 });
@@ -420,7 +417,6 @@ describe('VorgangPage — die Maske fuer Eintraege (E20, Kriterien 13, 14)', () 
           headers: { 'Content-Type': 'application/json' },
         }),
       'GET /api/vorgaenge/5/angebote': json(200, { angebote: [ANGEBOT_ZEILE] }),
-      'GET /api/vorgaenge/5/auftraege': json(200, { auftraege: [] }),
       // Der Vermerk und die neue Einordnung kommen vom Server, nicht aus der Oberflaeche.
       'PUT /api/vorgaenge/5/eintraege/31': () => {
         historie = [
@@ -479,7 +475,6 @@ describe('VorgangPage — der Pfad im Kopf (E6)', () => {
     fetchNachPfad({
       'GET /api/vorgaenge/5': json(200, VORGANG),
       'GET /api/vorgaenge/5/angebote': json(200, { angebote: [ANGEBOT_ZEILE] }),
-      'GET /api/vorgaenge/5/auftraege': json(200, { auftraege: [] }),
     });
 
     renderMitKopf();
@@ -586,7 +581,6 @@ describe('VorgangPage — die Karte „Angebote" (Kriterium 20)', () => {
     fetchNachPfad({
       'GET /api/vorgaenge/5': json(200, VORGANG),
       'GET /api/vorgaenge/5/angebote': json(200, { angebote: [] }),
-      'GET /api/vorgaenge/5/auftraege': json(200, { auftraege: [] }),
     });
 
     renderSeite();
@@ -599,7 +593,6 @@ describe('VorgangPage — die Karte „Angebote" (Kriterium 20)', () => {
       'GET /api/vorgaenge/5': json(200, VORGANG),
       // Die Antwort bleibt aus: Der Vorgang steht schon da, die Karte wartet noch.
       'GET /api/vorgaenge/5/angebote': () => new Promise<Response>(() => undefined),
-      'GET /api/vorgaenge/5/auftraege': json(200, { auftraege: [] }),
     });
 
     renderSeite();
@@ -612,7 +605,6 @@ describe('VorgangPage — die Karte „Angebote" (Kriterium 20)', () => {
     fetchNachPfad({
       'GET /api/vorgaenge/5': json(200, VORGANG),
       'GET /api/vorgaenge/5/angebote': leer(500),
-      'GET /api/vorgaenge/5/auftraege': json(200, { auftraege: [] }),
     });
 
     renderSeite();
@@ -622,78 +614,5 @@ describe('VorgangPage — die Karte „Angebote" (Kriterium 20)', () => {
       'Die Angebote sind gerade nicht zu erreichen.',
     );
     expect(screen.getByRole('list', { name: 'Historie' })).toBeInTheDocument();
-  });
-});
-
-describe('VorgangPage — die Karte „Aufträge" (Kriterium 9)', () => {
-  const AUFTRAG_ZEILE = {
-    id: 3,
-    nummer: 'AU-2026-001',
-    status: 'OFFEN',
-    auftragDatum: '2026-09-28',
-    leistungAb: null,
-    leistungBis: null,
-    summe: 3000.03,
-  };
-
-  it('steht unter der Karte „Angebote" und fuehrt mit der Nummer auf den Auftrag', async () => {
-    fetchNachPfad({
-      'GET /api/vorgaenge/5': json(200, VORGANG),
-      'GET /api/vorgaenge/5/angebote': json(200, { angebote: [ANGEBOT_ZEILE] }),
-      'GET /api/vorgaenge/5/auftraege': json(200, { auftraege: [AUFTRAG_ZEILE] }),
-    });
-
-    renderSeite();
-
-    expect(await screen.findByRole('link', { name: 'AU-2026-001' })).toHaveAttribute(
-      'href',
-      '/vorgaenge/5/auftraege/3',
-    );
-    const titel = screen
-      .getAllByRole('heading', { level: 2 })
-      .map((ueberschrift) => ueberschrift.textContent);
-    expect(titel.indexOf('Aufträge')).toBe(titel.indexOf('Angebote') + 1);
-  });
-
-  it('sagt es, wenn der Vorgang noch keinen Auftrag hat', async () => {
-    fetchNachPfad({
-      'GET /api/vorgaenge/5': json(200, VORGANG),
-      'GET /api/vorgaenge/5/angebote': json(200, { angebote: [] }),
-      'GET /api/vorgaenge/5/auftraege': json(200, { auftraege: [] }),
-    });
-
-    renderSeite();
-
-    expect(await screen.findByText('Noch kein Auftrag zu diesem Vorgang.')).toBeInTheDocument();
-  });
-
-  it('hat einen eigenen Ladezustand und laesst die uebrige Seite stehen', async () => {
-    fetchNachPfad({
-      'GET /api/vorgaenge/5': json(200, VORGANG),
-      'GET /api/vorgaenge/5/angebote': json(200, { angebote: [ANGEBOT_ZEILE] }),
-      'GET /api/vorgaenge/5/auftraege': () => new Promise<Response>(() => undefined),
-    });
-
-    renderSeite();
-    await screen.findByRole('heading', { level: 1, name: KOPFZEILE });
-
-    expect(screen.getByText('Die Aufträge werden geladen …')).toBeInTheDocument();
-    expect(await screen.findByRole('link', { name: 'A-2026-001' })).toBeInTheDocument();
-  });
-
-  it('meldet den Ausfall der Auftraege, ohne Angebote und Historie mitzunehmen', async () => {
-    fetchNachPfad({
-      'GET /api/vorgaenge/5': json(200, VORGANG),
-      'GET /api/vorgaenge/5/angebote': json(200, { angebote: [ANGEBOT_ZEILE] }),
-      'GET /api/vorgaenge/5/auftraege': leer(500),
-    });
-
-    renderSeite();
-
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      'Die Aufträge sind gerade nicht zu erreichen.',
-    );
-    expect(screen.getByRole('list', { name: 'Historie' })).toBeInTheDocument();
-    expect(await screen.findByRole('link', { name: 'A-2026-001' })).toBeInTheDocument();
   });
 });

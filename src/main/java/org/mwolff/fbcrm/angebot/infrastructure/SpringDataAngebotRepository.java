@@ -1,9 +1,7 @@
 package org.mwolff.fbcrm.angebot.infrastructure;
 
-import java.time.LocalDate;
 import java.util.Collection;
 import java.util.List;
-import org.mwolff.fbcrm.angebot.domain.Angebotszustand;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -26,29 +24,6 @@ interface SpringDataAngebotRepository extends JpaRepository<AngebotEntity, Long>
    */
   @Query("select a from AngebotEntity a where a.vorgangId = :vorgangId")
   List<AngebotEntity> findByVorgang(@Param("vorgangId") long vorgangId);
-
-  /**
-   * Die Kandidaten der Pipeline: Angebote in einem Zustand, deren Gueltigkeit {@code tag}
-   * einschliesst — die Abfrage trifft {@code angebot_zustand_gueltigkeit_idx}.
-   *
-   * <p>Der Zustand kommt als Parameter und steht nicht als Literal in der Abfrage: Welcher Zustand
-   * gemeint ist, ist eine Aussage in der Sprache der Domaene, und als gebundener Wert ist sie
-   * typsicher statt als Text in einer Zeichenkette.
-   *
-   * <p>{@code gueltig_bis >= :tag} grenzt die Menge ein und entscheidet nicht: Der abgeleitete
-   * Stand „abgelaufen" entsteht im Anwendungsfall (E4). Ohne {@code order by} — die Reihenfolge der
-   * Pipeline ist eine Aussage der Ansicht.
-   *
-   * @param zustand der gesuchte gespeicherte Zustand
-   * @param tag der Tag, den die Gueltigkeit einschliessen muss
-   */
-  @Query(
-      """
-      select a from AngebotEntity a
-      where a.zustand = :zustand and a.gueltigBis >= :tag
-      """)
-  List<AngebotEntity> pipelinekandidaten(
-      @Param("zustand") Angebotszustand zustand, @Param("tag") LocalDate tag);
 
   /**
    * Die Vorgaenge unter {@code vorgangIds}, an denen mindestens ein festgeschriebenes Angebot

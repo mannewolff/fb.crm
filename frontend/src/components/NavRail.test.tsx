@@ -63,21 +63,11 @@ describe('navItems (E15, E18)', () => {
     ]);
   });
 
-  it('fuehrt „Geschäft", „Auswertungen", „Stammdaten", jeden Block mit seinen Eintraegen', () => {
+  it('fuehrt „Geschäft" und „Stammdaten", jeden Block mit seinen Eintraegen', () => {
     expect(
       NAV_BLOECKE.map((block) => [block.titel, block.eintraege.map((e) => [e.beschriftung, e.ziel])]),
     ).toEqual([
       ['Geschäft', [['Vorgänge', '/vorgaenge']]],
-      // „Auswertungen" steht unter „Geschäft" (Kriterium 28) und damit vor „Stammdaten": Die
-      // Auswertung folgt dem Geschaeft und steht vor seiner Voraussetzung (E15, E24).
-      // „Auftragsbestand" steht unter „Pipeline": was sicher ist, nach dem, was kommen koennte.
-      [
-        'Auswertungen',
-        [
-          ['Pipeline', '/pipeline'],
-          ['Auftragsbestand', '/auftragsbestand'],
-        ],
-      ],
       // „Eigene Angaben" ist ein Stammdatum wie die Firma und steht neben ihr — nicht hinter
       // „Administration" und nicht in einem eigenen Block mit einem Eintrag (E14).
       [
@@ -109,7 +99,7 @@ describe('NavRail', () => {
     expect(screen.queryAllByRole('link', { current: true })).toHaveLength(0);
   });
 
-  it('traegt zwischen Marke und Fuss die drei Bloecke in ihrer Reihenfolge (K11, E18, E24)', () => {
+  it('traegt zwischen Marke und Fuss die zwei Bloecke in ihrer Reihenfolge (K11, E18, E24)', () => {
     angemeldet();
 
     renderSchiene();
@@ -120,20 +110,17 @@ describe('NavRail', () => {
     expect(kopf.getByText('fb.crm')).toBeInTheDocument();
 
     const bloecke = within(screen.getByTestId('schiene-bloecke'));
-    // „Auswertungen" steht zwischen „Geschäft" und „Stammdaten" (Kriterium 28, E24): die
-    // Reihenfolge der Titel und der Links haelt sie fest.
-    expect(
-      bloecke.getAllByText(/^(Geschäft|Auswertungen|Stammdaten)$/).map((e) => e.textContent),
-    ).toEqual(['Geschäft', 'Auswertungen', 'Stammdaten']);
+    // Die Reihenfolge der Titel und der Links haelt die Aussage der Bloecke fest (E24).
+    expect(bloecke.getAllByText(/^(Geschäft|Stammdaten)$/).map((e) => e.textContent)).toEqual([
+      'Geschäft',
+      'Stammdaten',
+    ]);
     expect(bloecke.getAllByRole('link').map((link) => link.getAttribute('href'))).toEqual([
       '/vorgaenge',
-      '/pipeline',
-      '/auftragsbestand',
       '/firmen',
       '/eigene-angaben',
     ]);
     expect(bloecke.getByRole('link', { name: 'Vorgänge' })).toBeInTheDocument();
-    expect(bloecke.getByRole('link', { name: 'Pipeline' })).toBeInTheDocument();
     expect(bloecke.getByRole('link', { name: 'Firmen' })).toBeInTheDocument();
     expect(bloecke.getByRole('link', { name: 'Eigene Angaben' })).toBeInTheDocument();
     // Kein Umschalter in den Bloecken — Tasten stehen an der Marke und im Fuss.
@@ -201,8 +188,6 @@ describe('NavRail', () => {
     // Dasselbe am Vorgang: die Detailansicht laesst „Vorgänge" aktiv stehen.
     ['/vorgaenge/12', 'Vorgänge'],
     ['/eigene-angaben', 'Eigene Angaben'],
-    ['/pipeline', 'Pipeline'],
-    ['/auftragsbestand', 'Auftragsbestand'],
   ])('setzt auf %s aria-current="page" an „%s" und nur dort (K12)', (adresse, beschriftung) => {
     angemeldet();
 
@@ -258,9 +243,6 @@ describe('NavRail', () => {
     expect(screen.queryByText('Firmen')).not.toBeInTheDocument();
     expect(screen.queryByText('Vorgänge')).not.toBeInTheDocument();
     expect(screen.queryByText('Eigene Angaben')).not.toBeInTheDocument();
-    expect(screen.queryByText('Auswertungen')).not.toBeInTheDocument();
-    expect(screen.queryByText('Pipeline')).not.toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Pipeline' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Firmen' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Vorgänge' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Eigene Angaben' })).toBeInTheDocument();
@@ -290,17 +272,6 @@ describe('NavRail', () => {
     expect(new Set(namen).size).toBe(namen.length);
     expect(new Set(striche).size).toBe(striche.length);
     expect(namen).not.toContain('chart-bar');
-  });
-
-  it('fuehrt „Auftragsbestand" als Link unter „Pipeline"', () => {
-    angemeldet();
-
-    renderSchiene();
-
-    const pipeline = screen.getByRole('link', { name: 'Pipeline' });
-    const bestand = screen.getByRole('link', { name: 'Auftragsbestand' });
-    expect(bestand).toHaveAttribute('href', '/auftragsbestand');
-    expect(pipeline.compareDocumentPosition(bestand)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
   });
 
   it('zeichnet „Vorgänge" und „Firmen" mit verschiedenen Symbolen (E24)', async () => {

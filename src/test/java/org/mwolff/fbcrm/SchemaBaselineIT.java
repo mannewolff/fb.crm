@@ -54,6 +54,19 @@ class SchemaBaselineIT extends AbstractIntegrationTest {
   }
 
   @Test
+  void flyway_thenTheRemovedOrderTablesAreGone() {
+    // When — V9 baut die Tabellen des entfallenen Auftrags ab (Issue #125).
+    final Integer tabellen =
+        jdbc.queryForObject(
+            "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public'"
+                + " AND table_name IN ('auftrag', 'auftrag_position', 'auftrag_nummernkreis')",
+            Integer.class);
+
+    // Then
+    assertThat(tabellen).isZero();
+  }
+
+  @Test
   void ddlAutoValidate_thenContextStartsAgainstTheMigratedSchema() {
     // When
     final Integer migrationen =

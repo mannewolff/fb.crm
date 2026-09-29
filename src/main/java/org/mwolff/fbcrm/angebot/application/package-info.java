@@ -10,8 +10,6 @@
  * Beleglayout} rechnet daraus die Druckzeilen, und der Port {@code Belegdrucker} schreibt sie weg.
  * Der Satz gehoert in diese Schicht und nicht in {@code domain} — er ist kein Begriff des
  * Geschaefts, sondern eine Rechnung ueber dessen Daten (E10).
- *
- * <p>Versenden, Reaktion und Pipeline folgen mit den naechsten Paketen.
  */
 @NullMarked
 package org.mwolff.fbcrm.angebot.application;

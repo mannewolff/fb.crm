@@ -10,8 +10,8 @@ import org.mwolff.fbcrm.common.Geldrechnung;
  *
  * <p>Der Betrag wird gerechnet und nicht gespeichert (E5): {@link #betrag()} ist Menge mal
  * Einzelpreis nach der einen Regel in {@link Geldrechnung} — dort steht auch, warum kaufmaennisch
- * und nicht mathematisch gerundet wird. Dieselbe Regel rechnet jeder weitere Beleg, damit ein
- * Auftrag die Summe seines Angebots auf den Cent trifft.
+ * und nicht mathematisch gerundet wird. Dieselbe Regel rechnet jeder weitere Beleg, damit eine
+ * Rechnung die Summe ihres Angebots auf den Cent trifft.
  *
  * <p>Die Position traegt ihren Platz in der Reihenfolge nicht: Die Reihenfolge ist die der Liste am
  * Angebot, und der Bestand vergibt sie beim Schreiben lueckenlos ab 1 (E24). Eine Nummer im Record

@@ -70,8 +70,9 @@ export function textOderNull(wert: unknown): string | null {
  * Betrag, den niemand gerechnet hat.
  *
  * Umgerechnet wird ueber {@link hundertstel} und damit ueber die Ziffern, nicht ueber Gleitkomma
- * (E5). Die Pruefung steht hier und nicht in jedem Schnittstellenmodul: Angebot und Pipeline
- * tragen dieselben Betraege, und zwei Abschriften derselben Regel liefen mit der Zeit auseinander.
+ * (E5). Die Pruefung steht hier und nicht in jedem Schnittstellenmodul: Angebot und jeder weitere
+ * Beleg tragen dieselben Betraege, und zwei Abschriften derselben Regel liefen mit der Zeit
+ * auseinander.
  */
 export function inHundertsteln(wert: unknown): number {
   const gelesen = hundertstel(zahl(wert));

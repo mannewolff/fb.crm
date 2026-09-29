@@ -17,7 +17,7 @@ import { createTheme } from '@mui/material/styles';
 
 /** Karte, Kopfkarte, Schiene. */
 export const RADIUS_GROSS = 28;
-/** Kennzahl-Kachel, Fuss der Schiene. */
+/** Kachel, Fuss der Schiene. */
 export const RADIUS_KACHEL = 24;
 /** Innenkarte, Hinzufuegen-Kachel, Menue, Dialog. */
 export const RADIUS_MITTEL = 22;
@@ -31,14 +31,6 @@ export const RADIUS_MAL = 26;
  * Angabe gilt — die Vorlage traegt denselben Wert (`.zeit .punkt` Z. 97).
  */
 export const RADIUS_SYMBOL = 12;
-/**
- * Das Symbolfeld einer Kennzahl-Kachel (48 px).
- *
- * CLAUDE-design.md nennt fuer Symbolfelder die Spanne „14–16 px (Symbolfelder 36–48 px)"; die
- * Vorlage traegt am grossen Ende dieser Spanne den genauen Wert (`.zahl-karte .ikon` Z. 73). Die
- * genauere Angabe gilt — dieselbe Ueberlegung wie bei {@link RADIUS_SYMBOL}.
- */
-export const RADIUS_SYMBOLFELD = 16;
 /** Navigationseintrag, Zeile, Eingabefeld. */
 export const RADIUS_KLEIN = 14;
 /** Tasten, Chips, Suche, Zaehler — die runde Form. */
@@ -225,17 +217,6 @@ export const SCHATTEN: KupferwolkeSchatten = {
 };
 
 export const KUPFERWOLKE: KupferwolkeFarben = farben;
-
-/**
- * Die Kennzahl einer Kachel: eine grosse Einzelzahl, darum **ohne** Tabellenziffern
- * (CLAUDE-design.md, Typografie). Sie steht als Bausatz hier und nicht als MUI-Variante, weil
- * die Kachel selbst erst mit dem Kachel-Paket entsteht.
- */
-export const KENNZAHL_TYPOGRAFIE = {
-  fontSize: 26,
-  fontWeight: 800,
-  letterSpacing: '-.02em',
-} as const;
 
 function palette() {
   return {

@@ -122,7 +122,7 @@ public class AngebotVersendenUseCase {
   }
 
   /*
-   * Kriterium 25: Eine Nachverhandlung traegt dieselbe Chance nicht doppelt in die Pipeline.
+   * Kriterium 25: Eine Nachverhandlung ersetzt das vorige offene Angebot desselben Vorgangs.
    * Abgeloest wird nur, was offen ist — ein Entwurf, ein angenommenes, ein abgelehntes und ein
    * bereits abgeloestes Angebot bleiben unberuehrt. Die verstrichene Gueltigkeit schliesst ein
    * Angebot dabei nicht (Kriterium 18), sie macht es nur alt.

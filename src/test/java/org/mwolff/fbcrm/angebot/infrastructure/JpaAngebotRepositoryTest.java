@@ -46,7 +46,6 @@ class JpaAngebotRepositoryTest {
 
   private static final LocalDate ANGEBOTSDATUM = LocalDate.of(2026, 9, 20);
   private static final LocalDate GUELTIG_BIS = LocalDate.of(2026, 10, 20);
-  private static final LocalDate HEUTE = LocalDate.of(2026, 9, 27);
   private static final Instant ANGELEGT = Instant.parse("2026-09-20T08:00:00Z");
   private static final Instant GEAENDERT = Instant.parse("2026-09-27T10:30:00Z");
   private static final String NUMMER = "A-2026-001";
@@ -563,41 +562,6 @@ class JpaAngebotRepositoryTest {
 
     // When
     final List<Angebot> gefunden = repository.findByVorgang(3L);
-
-    // Then
-    assertThat(gefunden).isEmpty();
-    verify(positionen, never()).findByAngebote(any());
-  }
-
-  @Test
-  void pipelinekandidaten_thenAsksForSentOffersAndLoadsTheirPositionsInOneQuery() {
-    // Given — der Zustand kommt aus dem Adapter, die Gueltigkeitsgrenze vom Aufrufer (Kriterium
-    // 23).
-    when(angebote.pipelinekandidaten(Angebotszustand.VERSENDET, HEUTE))
-        .thenReturn(List.of(entwurfszeile(11L), entwurfszeile(12L)));
-    when(positionen.findByAngebote(List.of(11L, 12L)))
-        .thenReturn(
-            List.of(
-                positionszeile(11L, (short) 1, KONZEPTION),
-                positionszeile(12L, (short) 1, SCHULUNG)));
-
-    // When
-    final List<Angebot> gefunden = repository.pipelinekandidaten(HEUTE);
-
-    // Then
-    assertThat(gefunden)
-        .extracting(Angebot::id, Angebot::positionen)
-        .containsExactly(tuple(11L, List.of(KONZEPTION)), tuple(12L, List.of(SCHULUNG)));
-    verify(positionen, never()).findByAngebot(anyLong());
-  }
-
-  @Test
-  void pipelinekandidaten_givenNoCandidate_thenAsksNothingMore() {
-    // Given — eine Abfrage mit leerer IN-Liste waere kein gueltiges SQL.
-    when(angebote.pipelinekandidaten(Angebotszustand.VERSENDET, HEUTE)).thenReturn(List.of());
-
-    // When
-    final List<Angebot> gefunden = repository.pipelinekandidaten(HEUTE);
 
     // Then
     assertThat(gefunden).isEmpty();

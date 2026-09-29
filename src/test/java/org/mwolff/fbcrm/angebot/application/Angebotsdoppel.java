@@ -94,13 +94,8 @@ final class Angebotsdoppel {
     return angebot(id, vorgangId, zustand, zeilen, angelegt, GUELTIG_BIS);
   }
 
-  /**
-   * Ein Angebot mit frei gewaehlter Gueltigkeit — fuer die Auswahl der Pipeline (Kriterium 23).
-   *
-   * <p>Die Gueltigkeit ist dort der Unterschied zwischen „zaehlt" und „abgelaufen" (E4), und sie
-   * liegt gegen den heutigen Tag der jeweiligen Pruefung, nicht gegen ein festes Datum.
-   */
-  static Angebot angebot(
+  /** Ein Angebot mit frei gewaehlter Gueltigkeit. */
+  private static Angebot angebot(
       final long id,
       final long vorgangId,
       final Angebotszustand zustand,

@@ -1,6 +1,5 @@
 package org.mwolff.fbcrm.angebot.domain;
 
-import java.time.LocalDate;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -28,24 +27,6 @@ public interface AngebotRepository {
    * @param vorgangId Kennung des Vorgangs
    */
   List<Angebot> findByVorgang(long vorgangId);
-
-  /**
-   * Die Kandidaten der Pipeline: die versendeten Angebote, deren Gueltigkeit {@code tag}
-   * einschliesst — jedes mit seinen Positionen (Kriterium 23).
-   *
-   * <p><b>Eine Einschraenkung der Menge, keine fachliche Auswahl.</b> Der Bestand grenzt auf die
-   * beiden gespeicherten Spalten ein, die er hat, damit nicht jedes je versendete Angebot mit allen
-   * Positionen ueber die Leitung kommt. <b>Ob</b> ein Angebot in die Pipeline gehoert, entscheidet
-   * der Anwendungsfall: „abgelaufen" ist ein abgeleiteter Stand und steht in keiner Spalte (E4),
-   * und ob der Vorgang abgeschlossen ist, weiss dieses Modul ohnehin nicht.
-   *
-   * <p>Ohne zugesagte Reihenfolge — dieselbe Abwaegung wie bei {@link #findByVorgang}: Die Ordnung
-   * der Pipeline ist eine Aussage der Ansicht, nicht eine Eigenschaft der Zeilen.
-   *
-   * @param tag der Tag, den die Gueltigkeit einschliessen muss; in der Regel der heutige in {@code
-   *     common.Geschaeftszone}
-   */
-  List<Angebot> pipelinekandidaten(LocalDate tag);
 
   /**
    * Die Kennungen derjenigen Vorgaenge aus {@code vorgangIds}, an denen mindestens ein
