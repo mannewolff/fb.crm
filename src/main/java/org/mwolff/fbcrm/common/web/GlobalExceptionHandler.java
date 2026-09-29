@@ -8,6 +8,7 @@ import org.jspecify.annotations.Nullable;
 import org.mwolff.fbcrm.common.Feldfehler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.TypeMismatchException;
 import org.springframework.core.annotation.AnnotatedElementUtils;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
@@ -34,6 +35,9 @@ public class GlobalExceptionHandler {
 
   /** Ersatztext, wenn eine Feldverletzung keine eigene Meldung mitbringt. */
   public static final String FALLBACK_FIELD_MESSAGE = "ist ungueltig";
+
+  /** Antworttext, wenn ein Parameter der Anfrage sich nicht in seinen Typ wandeln laesst. */
+  public static final String UNGUELTIGER_PARAMETER = "Ein Parameter der Anfrage ist ungueltig.";
 
   private static final Logger LOG = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
@@ -76,6 +80,19 @@ public class GlobalExceptionHandler {
     final ProblemDetail problem = handleUnexpected(exception);
     problem.setProperty("fieldErrors", exception.felder());
     return problem;
+  }
+
+  /**
+   * Ein Pfad- oder Anfrageparameter laesst sich nicht in seinen Typ wandeln — etwa ein unbekannter
+   * Status als Filter oder eine Kennung aus Buchstaben.
+   *
+   * <p>Das ist eine fehlerhafte Anfrage (400) und kein Serverfehler: Ohne diesen Zweig fiele die
+   * Ausnahme in {@link #handleUnexpected} und kaeme als 500 zurueck. Der Wert selbst geht nicht in
+   * die Antwort; er stammt vom Aufrufer und sagt ihm nichts Neues.
+   */
+  @ExceptionHandler(TypeMismatchException.class)
+  public ProblemDetail handleTypeMismatch(final TypeMismatchException exception) {
+    return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, UNGUELTIGER_PARAMETER);
   }
 
   @ExceptionHandler(Exception.class)

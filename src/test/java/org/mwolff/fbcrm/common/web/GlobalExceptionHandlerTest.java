@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.mwolff.fbcrm.common.Feldfehler;
+import org.springframework.beans.TypeMismatchException;
 import org.springframework.core.MethodParameter;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
@@ -101,6 +102,20 @@ class GlobalExceptionHandlerTest {
     assertThat(problem.getProperties())
         .containsEntry(
             "fieldErrors", Map.of("email", List.of(GlobalExceptionHandler.FALLBACK_FIELD_MESSAGE)));
+  }
+
+  @Test
+  void handleTypeMismatch_thenAnswers400WithoutEchoingTheValue() {
+    // Given — ein Anfrageparameter, der sich nicht in seinen Typ wandeln laesst, etwa ein
+    // unbekannter Status.
+    final TypeMismatchException exception = new TypeMismatchException("<script>", Integer.class);
+
+    // When
+    final ProblemDetail problem = handler.handleTypeMismatch(exception);
+
+    // Then
+    assertThat(problem.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST.value());
+    assertThat(problem.getDetail()).isEqualTo(GlobalExceptionHandler.UNGUELTIGER_PARAMETER);
   }
 
   @Test

@@ -27,6 +27,15 @@ public interface AngebotRepository {
   List<Angebot> findByFirma(long firmaId);
 
   /**
+   * Alle Angebote, wahlweise nur die in einem Status, jedes mit seinen Positionen (Kriterium 8).
+   *
+   * <p>Ohne zugesagte Reihenfolge, aus demselben Grund wie {@link #findByFirma(long)}.
+   *
+   * @param status der gesuchte Status, oder leer fuer alle
+   */
+  List<Angebot> findAlle(Optional<Angebotsstatus> status);
+
+  /**
    * Legt das Angebot an oder schreibt es fort und liefert es mit gesetzter Id zurueck.
    *
    * <p>Ein Loeschen gibt es nicht: Ein Angebot, aus dem nichts wird, bleibt liegen (Issue #127).

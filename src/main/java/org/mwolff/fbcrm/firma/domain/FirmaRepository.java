@@ -1,5 +1,6 @@
 package org.mwolff.fbcrm.firma.domain;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -18,6 +19,14 @@ public interface FirmaRepository {
 
   /** Die Firma zu einer technischen Id, oder leer. */
   Optional<Firma> findById(long id);
+
+  /**
+   * Die Firmen zu mehreren Kennungen in einer Abfrage, ohne zugesagte Reihenfolge; unbekannte
+   * Kennungen fehlen einfach. Eine leere Menge fragt nichts.
+   *
+   * @param ids die Kennungen
+   */
+  List<Firma> findAllById(Collection<Long> ids);
 
   /** Legt die Firma an oder schreibt sie fort und liefert sie mit gesetzter Id zurueck. */
   Firma save(Firma firma);

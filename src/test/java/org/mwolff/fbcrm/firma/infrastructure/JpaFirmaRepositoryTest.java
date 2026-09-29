@@ -3,6 +3,7 @@ package org.mwolff.fbcrm.firma.infrastructure;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.time.Instant;
@@ -189,5 +190,28 @@ class JpaFirmaRepositoryTest {
 
     // Then
     assertThat(anzahl).isEqualTo(3L);
+  }
+
+  @Test
+  void findAllById_thenAsksOnceAndTranslatesEveryRow() {
+    // Given — eine Abfrage fuer alle Kennungen, nicht eine je Firma.
+    when(jpa.findAllById(List.of(11L, 12L))).thenReturn(List.of(zeile(11L), zeile(12L)));
+
+    // When
+    final List<Firma> gefunden = repository.findAllById(List.of(11L, 12L));
+
+    // Then
+    assertThat(gefunden).containsExactly(firma(11L), firma(12L));
+    verify(jpa).findAllById(List.of(11L, 12L));
+  }
+
+  @Test
+  void findAllById_givenNoIds_thenAsksNothing() {
+    // When
+    final List<Firma> gefunden = repository.findAllById(List.of());
+
+    // Then
+    assertThat(gefunden).isEmpty();
+    verifyNoInteractions(jpa);
   }
 }

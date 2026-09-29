@@ -323,4 +323,39 @@ class JpaAngebotRepositoryTest {
     assertThat(gefunden).isEmpty();
     verify(positionen, never()).findByAngebote(any());
   }
+
+  @Test
+  void findAlle_withoutAStatus_thenReadsEveryRowWithItsPositionsInOneQuery() {
+    // Given
+    when(angebote.findAll()).thenReturn(List.of(zeile(11L), zeile(12L)));
+    when(positionen.findByAngebote(List.of(11L, 12L)))
+        .thenReturn(
+            List.of(
+                positionszeile(11L, (short) 1, KONZEPTION),
+                positionszeile(12L, (short) 1, SCHULUNG)));
+
+    // When
+    final List<Angebot> gefunden = repository.findAlle(Optional.empty());
+
+    // Then
+    assertThat(gefunden)
+        .extracting(Angebot::id, Angebot::positionen)
+        .containsExactly(tuple(11L, List.of(KONZEPTION)), tuple(12L, List.of(SCHULUNG)));
+    verify(angebote, never()).findByStatus(any());
+    verify(positionen, never()).findByAngebot(anyLong());
+  }
+
+  @Test
+  void findAlle_withAStatus_thenAsksOnlyForThatStatus() {
+    // Given
+    when(angebote.findByStatus(Angebotsstatus.BESTELLT)).thenReturn(List.of(zeile(11L)));
+    when(positionen.findByAngebote(List.of(11L))).thenReturn(List.of());
+
+    // When
+    final List<Angebot> gefunden = repository.findAlle(Optional.of(Angebotsstatus.BESTELLT));
+
+    // Then
+    assertThat(gefunden).extracting(Angebot::id).containsExactly(11L);
+    verify(angebote, never()).findAll();
+  }
 }

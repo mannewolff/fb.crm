@@ -9,6 +9,7 @@ import java.util.stream.Collectors;
 import org.mwolff.fbcrm.angebot.domain.Angebot;
 import org.mwolff.fbcrm.angebot.domain.AngebotRepository;
 import org.mwolff.fbcrm.angebot.domain.Angebotsposition;
+import org.mwolff.fbcrm.angebot.domain.Angebotsstatus;
 import org.springframework.stereotype.Repository;
 
 /**
@@ -22,7 +23,7 @@ import org.springframework.stereotype.Repository;
  *
  * <p>Jede Liste holt ihre Positionen in <b>einer</b> zweiten Abfrage und ordnet sie danach den
  * Angeboten zu; je Zeile einzeln nachzuladen waere die bekannte Abfrage-Lawine. Die Angebotsliste
- * einer Firma geht diesen Weg.
+ * einer Firma und die Uebersicht aller Angebote gehen diesen Weg.
  */
 @Repository
 class JpaAngebotRepository implements AngebotRepository {
@@ -45,6 +46,11 @@ class JpaAngebotRepository implements AngebotRepository {
   @Override
   public List<Angebot> findByFirma(final long firmaId) {
     return mitPositionen(angebote.findByFirma(firmaId));
+  }
+
+  @Override
+  public List<Angebot> findAlle(final Optional<Angebotsstatus> status) {
+    return mitPositionen(status.map(angebote::findByStatus).orElseGet(angebote::findAll));
   }
 
   /*

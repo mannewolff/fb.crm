@@ -1,5 +1,6 @@
 package org.mwolff.fbcrm.firma.infrastructure;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import org.mwolff.fbcrm.common.Anschrift;
@@ -27,6 +28,14 @@ class JpaFirmaRepository implements FirmaRepository {
   @Override
   public Optional<Firma> findById(final long id) {
     return jpa.findById(id).map(JpaFirmaRepository::toDomain);
+  }
+
+  @Override
+  public List<Firma> findAllById(final Collection<Long> ids) {
+    if (ids.isEmpty()) {
+      return List.of();
+    }
+    return jpa.findAllById(ids).stream().map(JpaFirmaRepository::toDomain).toList();
   }
 
   @Override
