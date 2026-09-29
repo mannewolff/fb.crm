@@ -9,9 +9,9 @@ import {
   angebotPdfPfad,
   angebotVersenden,
   angebotVerwerfen,
-  angeboteDesVorgangs,
+  angeboteDerFirma,
   parseAngebot,
-  parseVorgangAngebote,
+  parseFirmaAngebote,
 } from './angebote';
 import { fetchNachPfad, json, leer } from '../test/fetchNachPfad';
 
@@ -27,7 +27,10 @@ const POSITION = {
 
 const ENTWURF = {
   id: 9,
-  vorgangId: 5,
+  firmaId: 5,
+  firmaName: 'Adler AG',
+  ansprechpartnerId: 8,
+  ansprechpartnerName: 'Eva Adler',
   nummer: null,
   stand: 'ENTWURF',
   angebotDatum: '2026-09-24',
@@ -52,7 +55,10 @@ const POSITION_VERENGT = {
 
 const ENTWURF_VERENGT = {
   id: 9,
-  vorgangId: 5,
+  firmaId: 5,
+  firmaName: 'Adler AG',
+  ansprechpartnerId: 8,
+  ansprechpartnerName: 'Eva Adler',
   nummer: null,
   stand: 'ENTWURF',
   angebotDatum: '2026-09-24',
@@ -157,7 +163,10 @@ describe('parseAngebot', () => {
     ['kein Objekt', 42],
     ['null', null],
     ['ohne id', { ...ENTWURF, id: '9' }],
-    ['ohne vorgangId', { ...ENTWURF, vorgangId: undefined }],
+    ['ohne firmaId', { ...ENTWURF, firmaId: undefined }],
+    ['ohne Firmenname', { ...ENTWURF, firmaName: null }],
+    ['Ansprechpartner als Text', { ...ENTWURF, ansprechpartnerId: '8' }],
+    ['Name des Ansprechpartners als Zahl', { ...ENTWURF, ansprechpartnerName: 8 }],
     ['Nummer als Zahl', { ...ENTWURF, nummer: 2026001 }],
     ['unbekannter Stand', { ...ENTWURF, stand: 'STORNIERT' }],
     ['ohne Angebotsdatum', { ...ENTWURF, angebotDatum: null }],
@@ -187,9 +196,9 @@ describe('parseAngebot', () => {
   });
 });
 
-describe('parseVorgangAngebote', () => {
-  it('verengt die Liste am Vorgang', () => {
-    expect(parseVorgangAngebote({ angebote: [ZEILE] })).toEqual({
+describe('parseFirmaAngebote', () => {
+  it('verengt die Liste an der Firma', () => {
+    expect(parseFirmaAngebote({ angebote: [ZEILE] })).toEqual({
       angebote: [
         {
           id: 9,
@@ -204,7 +213,7 @@ describe('parseVorgangAngebote', () => {
   });
 
   it('verengt die leere Liste', () => {
-    expect(parseVorgangAngebote({ angebote: [] })).toEqual({ angebote: [] });
+    expect(parseFirmaAngebote({ angebote: [] })).toEqual({ angebote: [] });
   });
 
   it.each([
@@ -218,44 +227,50 @@ describe('parseVorgangAngebote', () => {
     ['Zeile ohne Gueltigkeit', { angebote: [{ ...ZEILE, gueltigBis: 7 }] }],
     ['Zeile ohne Summe', { angebote: [{ ...ZEILE, summe: null }] }],
   ])('weist eine Antwort ab: %s', (_fall, rumpf) => {
-    expect(() => parseVorgangAngebote(rumpf)).toThrow(TypeError);
+    expect(() => parseFirmaAngebote(rumpf)).toThrow(TypeError);
   });
 });
 
 describe('die Wege', () => {
-  it('holt die Angebote eines Vorgangs', async () => {
+  it('holt die Angebote einer Firma', async () => {
     const fetchMock = fetchNachPfad({
-      'GET /api/vorgaenge/5/angebote': json(200, { angebote: [ZEILE] }),
+      'GET /api/firmen/5/angebote': json(200, { angebote: [ZEILE] }),
     });
 
-    const antwort = await angeboteDesVorgangs(5);
+    const antwort = await angeboteDerFirma(5);
 
     expect(antwort.angebote).toHaveLength(1);
     expect(fetchMock).toHaveBeenCalledWith(
-      '/api/vorgaenge/5/angebote',
+      '/api/firmen/5/angebote',
       expect.objectContaining({ method: 'GET' }),
     );
   });
 
-  it('legt ein Angebot ohne Vorlage an', async () => {
-    const fetchMock = fetchNachPfad({ 'POST /api/vorgaenge/5/angebote': json(201, ENTWURF) });
+  it('legt ein Angebot ohne Ansprechpartner an', async () => {
+    const fetchMock = fetchNachPfad({ 'POST /api/firmen/5/angebote': json(201, ENTWURF) });
 
     expect(await angebotAnlegen(5, null)).toEqual(ENTWURF_VERENGT);
     expect(fetchMock).toHaveBeenCalledWith(
-      '/api/vorgaenge/5/angebote',
-      expect.objectContaining({ method: 'POST', body: JSON.stringify({ vorlageAngebotId: null }) }),
+      '/api/firmen/5/angebote',
+      expect.objectContaining({ method: 'POST', body: JSON.stringify({ ansprechpartnerId: null }) }),
     );
   });
 
-  it('legt ein Angebot mit einer Vorlage an (Kriterium 8)', async () => {
-    const fetchMock = fetchNachPfad({ 'POST /api/vorgaenge/5/angebote': json(201, ENTWURF) });
+  it('legt ein Angebot mit einem Ansprechpartner an', async () => {
+    const fetchMock = fetchNachPfad({ 'POST /api/firmen/5/angebote': json(201, ENTWURF) });
 
-    await angebotAnlegen(5, 7);
+    await angebotAnlegen(5, 8);
 
     expect(fetchMock).toHaveBeenCalledWith(
-      '/api/vorgaenge/5/angebote',
-      expect.objectContaining({ body: JSON.stringify({ vorlageAngebotId: 7 }) }),
+      '/api/firmen/5/angebote',
+      expect.objectContaining({ body: JSON.stringify({ ansprechpartnerId: 8 }) }),
     );
+  });
+
+  it('verengt ein Angebot ohne Ansprechpartner', () => {
+    expect(
+      parseAngebot({ ...ENTWURF, ansprechpartnerId: null, ansprechpartnerName: null }),
+    ).toEqual({ ...ENTWURF_VERENGT, ansprechpartnerId: null, ansprechpartnerName: null });
   });
 
   it('liest ein Angebot', async () => {

@@ -27,8 +27,8 @@ interface SpringDataAngebotPositionRepository extends JpaRepository<AngebotPosit
   /**
    * Die Positionen mehrerer Angebote in einer Abfrage, nach Angebot und Platz geordnet.
    *
-   * <p>Fuer die Angebotsliste eines Vorgangs: Ein {@code findByAngebot} je Zeile ergaebe die
-   * bekannte Abfrage-Lawine, und ohne die Positionen liesse sich die Summe nicht rechnen (E5, E20).
+   * <p>Fuer die Angebotsliste einer Firma: Ein {@code findByAngebot} je Zeile ergaebe die bekannte
+   * Abfrage-Lawine, und ohne die Positionen liesse sich die Summe nicht rechnen (E5, E20).
    *
    * @param angebotIds die Kennungen der Angebote; nie leer — der Aufrufer faengt den Fall ab, weil
    *     {@code in ()} kein gueltiges SQL ist

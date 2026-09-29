@@ -12,11 +12,8 @@ import org.springframework.transaction.annotation.Transactional;
  * <p>Geschrieben wird der Entwurf als Ganzes: Texte, Gueltigkeit und die vollstaendige
  * Positionsliste in der gewuenschten Reihenfolge (E8). Die Plaetze der Positionen vergibt der
  * Bestand daraus lueckenlos neu (E24) — Hinzufuegen, Aendern, Loeschen und Verschieben fallen aus
- * der Reihenfolge der Liste heraus, und der Schreibvorgang bleibt eine Transaktion mit einem
- * gueltigen Zwischenstand.
- *
- * <p><b>Keine Sperre am abgeschlossenen Vorgang</b> (E13): Dieser Anwendungsfall kennt den Vorgang
- * gar nicht. Kriterium 9 sperrt das Anlegen und das Versenden, nicht die Pflege eines Entwurfs.
+ * der Reihenfolge der Liste heraus, und das Schreiben bleibt eine Transaktion mit einem gueltigen
+ * Zwischenstand.
  *
  * <p>Ob der Uebergang zulaessig ist, entscheidet {@link Angebot#entwurfGeaendert} — in der Domaene
  * und nicht hier, damit kein Weg an der Zustandsmaschine vorbeifuehrt. Die Ausnahme fliegt, bevor

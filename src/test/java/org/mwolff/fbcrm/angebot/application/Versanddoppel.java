@@ -6,12 +6,11 @@ import org.mwolff.fbcrm.common.Anschrift;
 import org.mwolff.fbcrm.eigeneangaben.domain.EigeneAngaben;
 import org.mwolff.fbcrm.firma.domain.Ansprechpartner;
 import org.mwolff.fbcrm.firma.domain.Firma;
-import org.mwolff.fbcrm.vorgang.domain.Vorgang;
 
 /**
  * Die Umgebung, aus der ein Versand seine Anschriftskopien nimmt (R8, Kriterium 12).
  *
- * <p>Getrennt von {@link Angebotsdoppel}, weil hier nichts vom Angebot steht: Vorgang, Firma,
+ * <p>Getrennt von {@link Angebotsdoppel}, weil hier nichts vom Angebot steht: Firma,
  * Ansprechpartner und „Eigene Angaben" sind die Nachbarn, die das Festschreiben liest. Zwei
  * Testklassen brauchen sie — die Versandpruefung und der Anwendungsfall —, und beide muessen
  * dieselben vollstaendigen Angaben meinen, damit „vollstaendig" in beiden dasselbe heisst.
@@ -21,10 +20,10 @@ import org.mwolff.fbcrm.vorgang.domain.Vorgang;
  */
 final class Versanddoppel {
 
-  /** Die Firma, an der der Vorgang aus {@link Angebotsdoppel#VORGANG} haengt. */
-  static final long FIRMA = 5L;
+  /** Die Firma aus {@link Angebotsdoppel#FIRMA}. */
+  static final long FIRMA = Angebotsdoppel.FIRMA;
 
-  static final long ANSPRECHPARTNER = 8L;
+  static final long ANSPRECHPARTNER = Angebotsdoppel.ANSPRECHPARTNER;
 
   static final String FIRMENNAME = "Adler AG";
   static final String EIGENER_NAME = "Manfred Wolff";
@@ -42,26 +41,6 @@ final class Versanddoppel {
 
   private Versanddoppel() {}
 
-  /** Ein offener Vorgang mit Ansprechpartner. */
-  static Vorgang vorgang() {
-    return vorgang(Long.valueOf(ANSPRECHPARTNER), false);
-  }
-
-  /** Ein Vorgang mit frei gewaehltem Ansprechpartner und Abschlussstand. */
-  static Vorgang vorgang(final @Nullable Long ansprechpartnerId, final boolean abgeschlossen) {
-    return new Vorgang(
-        Long.valueOf(Angebotsdoppel.VORGANG),
-        7L,
-        "Website-Relaunch",
-        FIRMA,
-        ansprechpartnerId,
-        null,
-        null,
-        abgeschlossen,
-        ANGELEGT,
-        ANGELEGT);
-  }
-
   /** Eine Firma mit vollstaendiger Anschrift (Kriterium 12). */
   static Firma firma() {
     return firmaMit(FIRMENANSCHRIFT);
@@ -73,7 +52,7 @@ final class Versanddoppel {
         Long.valueOf(FIRMA), FIRMENNAME, anschrift, null, null, true, ANGELEGT, ANGELEGT);
   }
 
-  /** Der Ansprechpartner des Vorgangs. */
+  /** Der Ansprechpartner des Angebots. */
   static Ansprechpartner ansprechpartner() {
     return new Ansprechpartner(
         Long.valueOf(ANSPRECHPARTNER),
@@ -89,7 +68,7 @@ final class Versanddoppel {
         ANGELEGT);
   }
 
-  /** Die vollstaendigen Nachbarn eines Vorgangs, wie {@code Versandunterlagen} sie liefert. */
+  /** Die vollstaendigen Nachbarn eines Angebots, wie {@code Versandunterlagen} sie liefert. */
   static Belegangaben belegangaben() {
     return new Belegangaben(firma(), ansprechpartner(), eigeneAngaben());
   }

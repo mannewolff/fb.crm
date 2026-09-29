@@ -3,7 +3,7 @@
  *
  * „Anna Berg" oder, ohne Vornamen, „Clausen" — nie ein fuehrendes Leerzeichen. Die Regel steht
  * hier und nicht in jeder Ansicht, weil sie an mehreren Stellen dieselbe ist: in der Liste der
- * Firma und in der Auswahl der Vorgangsmaske. Zwei Abschriften liefen beim ersten Nachziehen
+ * Firma und in der Auswahl der Angebotsmaske. Zwei Abschriften liefen beim ersten Nachziehen
  * auseinander.
  */
 export function namensZug(partner: {

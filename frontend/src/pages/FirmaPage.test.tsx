@@ -4,7 +4,6 @@ import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { Ansprechpartner, Firma } from '../api/firmen';
-import type { VorgaengeDerFirma, VorgangZeile } from '../api/vorgaenge';
 import { AuthProvider } from '../auth/AuthContext';
 import AppShell from '../components/AppShell';
 import KopfPfad, { KopfPfadProvider } from '../components/KopfPfad';
@@ -49,27 +48,35 @@ const FIRMA: Firma = {
 
 const KONTO = { id: 1, displayName: 'Manfred Wolff', email: 'info@mwolff.org' };
 
-const OFFEN: VorgangZeile = {
+/** Eine Zeile der Angebotsliste, wie Jackson sie schreibt — die Summe als Dezimalzahl. */
+interface AngebotRoh {
+  readonly id: number;
+  readonly nummer: string | null;
+  readonly stand: string;
+  readonly angebotDatum: string;
+  readonly gueltigBis: string;
+  readonly summe: number;
+}
+
+const ENTWURF: AngebotRoh = {
+  id: 32,
+  nummer: null,
+  stand: 'ENTWURF',
+  angebotDatum: '2026-09-26',
+  gueltigBis: '2026-10-26',
+  summe: 1200,
+};
+
+const VERSENDET: AngebotRoh = {
   id: 31,
-  nummer: 101,
-  titel: 'Relaunch der Website',
-  firma: 'Beispiel GmbH',
-  phase: 'ANBAHNUNG',
-  abgeschlossen: false,
-  letzteAktivitaet: '2026-09-20T09:00:00Z',
+  nummer: 'A-2026-001',
+  stand: 'VERSENDET',
+  angebotDatum: '2026-09-24',
+  gueltigBis: '2026-10-24',
+  summe: 2500.03,
 };
 
-const ZWEITER_OFFEN: VorgangZeile = { ...OFFEN, id: 32, nummer: 102, titel: 'Wartungsvertrag' };
-
-const FERTIG: VorgangZeile = {
-  ...OFFEN,
-  id: 33,
-  nummer: 99,
-  titel: 'Schulung Redaktion',
-  abgeschlossen: true,
-};
-
-const VORGAENGE: VorgaengeDerFirma = { offene: [OFFEN, ZWEITER_OFFEN], abgeschlossene: [FERTIG] };
+const ANGEBOTE: readonly AngebotRoh[] = [ENTWURF, VERSENDET];
 
 /** Die Adresse, an der sich ablesen laesst, wohin ein Weg gefuehrt hat. */
 function Adresse() {
@@ -161,7 +168,7 @@ async function bestaetige(nutzer: ReturnType<typeof userEvent.setup>, aktion: st
  * Die Ansicht liest nach jeder Schaltung neu — ein Doppel mit festem Rumpf wuerde deshalb
  * gruen bleiben, auch wenn die Ansicht das Ergebnis gar nicht uebernaehme.
  */
-function firmaDoppel(start: Firma = FIRMA, vorgaenge: VorgaengeDerFirma = VORGAENGE) {
+function firmaDoppel(start: Firma = FIRMA, angebote: readonly AngebotRoh[] = ANGEBOTE) {
   let firma: Firma = start;
   /**
    * Schaltet den Ansprechpartner der Firma — so, wie der Server es taete.
@@ -182,7 +189,7 @@ function firmaDoppel(start: Firma = FIRMA, vorgaenge: VorgaengeDerFirma = VORGAE
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       }),
-    'GET /api/firmen/7/vorgaenge': json(200, vorgaenge),
+    'GET /api/firmen/7/angebote': json(200, { angebote }),
     'POST /api/firmen/7/stilllegen': () => {
       firma = { ...firma, aktiv: false };
       return new Response(null, { status: 204 });
@@ -257,13 +264,18 @@ describe('FirmaPage — die Kopfkarte', () => {
     expect(bearbeiten).toHaveClass('MuiButton-root');
   });
 
-  it('fuehrt die Kupfertaste auf die Maske des neuen Ansprechpartners', async () => {
+  it('fuehrt die Kupfertaste auf die Maske eines neuen Angebots (Issue #126)', async () => {
     firmaDoppel();
 
     renderSeite();
 
     await screen.findByRole('heading', { level: 1, name: 'Beispiel GmbH' });
-    expect(within(kopfkarte()).getByRole('link', { name: 'Neuer Ansprechpartner' })).toHaveAttribute(
+    const kopf = within(kopfkarte());
+    expect(kopf.getByRole('link', { name: 'Angebot anlegen' })).toHaveAttribute(
+      'href',
+      '/firmen/7/angebote/neu',
+    );
+    expect(kopf.getByRole('link', { name: 'Neuer Ansprechpartner' })).toHaveAttribute(
       'href',
       '/firmen/7/ansprechpartner/neu',
     );
@@ -348,13 +360,15 @@ describe('FirmaPage — Stilllegen und Wiederaktivieren der Firma', () => {
     expect(screen.getByRole('link', { name: 'Bearbeiten' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Neuer Ansprechpartner' })).toBeEnabled();
     expect(screen.getByTestId('innenkarten-raster')).toBeInTheDocument();
+    // Die eine Ausnahme: An eine stillgelegte Firma geht kein neues Angebot.
+    expect(screen.queryByRole('link', { name: 'Angebot anlegen' })).not.toBeInTheDocument();
   });
 
   it('meldet, wenn das Schalten nicht durchgeht', async () => {
     const nutzer = userEvent.setup();
     fetchNachPfad({
       'GET /api/firmen/7': json(200, FIRMA),
-      'GET /api/firmen/7/vorgaenge': json(200, VORGAENGE),
+      'GET /api/firmen/7/angebote': json(200, { angebote: ANGEBOTE }),
       'POST /api/firmen/7/stilllegen': leer(500),
     });
 
@@ -503,7 +517,7 @@ describe('FirmaPage — die Aktionen je Ansprechpartner (Kriterium 15)', () => {
     const nutzer = userEvent.setup();
     fetchNachPfad({
       'GET /api/firmen/7': json(200, { ...FIRMA, ansprechpartner: [ANNA] }),
-      'GET /api/firmen/7/vorgaenge': json(200, VORGAENGE),
+      'GET /api/firmen/7/angebote': json(200, { angebote: ANGEBOTE }),
       'POST /api/firmen/7/ansprechpartner/11/stilllegen': leer(500),
     });
 
@@ -518,74 +532,26 @@ describe('FirmaPage — die Aktionen je Ansprechpartner (Kriterium 15)', () => {
   });
 });
 
-describe('FirmaPage — die Vorgaenge der Firma (Kriterium 12)', () => {
-  it('zeigt die offenen in der Reihenfolge der Antwort, mit Nummer, Titel und Phase', async () => {
+describe('FirmaPage — die Angebote der Firma (Kriterium 20)', () => {
+  it('zeigt sie in der Reihenfolge der Antwort und fuehrt auf das Angebot', async () => {
     firmaDoppel();
 
     renderSeite();
 
-    const offene = within(await screen.findByRole('list', { name: 'Offene Vorgänge' }));
-    const wege = offene.getAllByRole('link');
-    expect(wege.map((weg) => weg.textContent)).toEqual([
-      '#101Relaunch der Website',
-      '#102Wartungsvertrag',
-    ]);
-    expect(wege[0]).toHaveAttribute('href', '/vorgaenge/31');
-    expect(wege[1]).toHaveAttribute('href', '/vorgaenge/32');
-    expect(offene.getAllByText('Anbahnung')).toHaveLength(2);
+    const tafel = within(await screen.findByRole('table', { name: 'Angebote' }));
+    const wege = tafel.getAllByRole('link');
+    expect(wege.map((weg) => weg.textContent)).toEqual(['Entwurf', 'A-2026-001']);
+    expect(wege[0]).toHaveAttribute('href', '/angebote/32');
+    expect(wege[1]).toHaveAttribute('href', '/angebote/31');
   });
 
-  it('setzt die abgeschlossenen darunter ab und nennt den Stand im zugaenglichen Namen', async () => {
-    firmaDoppel();
+  it('sagt es, wenn es kein Angebot gibt', async () => {
+    firmaDoppel({ ...FIRMA, ansprechpartner: [ANNA] }, []);
 
     renderSeite();
 
-    await screen.findByRole('list', { name: 'Offene Vorgänge' });
-    const ueberschriften = screen
-      .getAllByRole('heading')
-      .map((element) => element.textContent)
-      .filter((text) => text === 'Vorgänge' || text === 'Abgeschlossen');
-    expect(ueberschriften).toEqual(['Vorgänge', 'Abgeschlossen']);
-
-    const fertige = within(screen.getByRole('list', { name: 'Abgeschlossene Vorgänge' }));
-    const weg = fertige.getByRole('link', { name: '#99 Schulung Redaktion abgeschlossen' });
-    expect(weg).toHaveAttribute('href', '/vorgaenge/33');
-    // Der Stand haengt am Weg selbst, nicht nur an einer Farbe.
-    expect(
-      within(screen.getByRole('list', { name: 'Offene Vorgänge' })).queryByText('abgeschlossen'),
-    ).not.toBeInTheDocument();
-  });
-
-  it('laesst die Ueberschrift „Abgeschlossen" weg, wo keiner abgeschlossen ist', async () => {
-    firmaDoppel(FIRMA, { offene: [OFFEN], abgeschlossene: [] });
-
-    renderSeite();
-
-    await screen.findByRole('list', { name: 'Offene Vorgänge' });
-    expect(screen.queryByRole('heading', { name: 'Abgeschlossen' })).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole('list', { name: 'Abgeschlossene Vorgänge' }),
-    ).not.toBeInTheDocument();
-  });
-
-  it('zeigt nur die abgeschlossenen, wo keiner offen ist', async () => {
-    firmaDoppel(FIRMA, { offene: [], abgeschlossene: [FERTIG] });
-
-    renderSeite();
-
-    expect(
-      await screen.findByRole('list', { name: 'Abgeschlossene Vorgänge' }),
-    ).toBeInTheDocument();
-    expect(screen.queryByRole('list', { name: 'Offene Vorgänge' })).not.toBeInTheDocument();
-  });
-
-  it('sagt es, wenn es keinen Vorgang gibt', async () => {
-    firmaDoppel({ ...FIRMA, ansprechpartner: [ANNA] }, { offene: [], abgeschlossene: [] });
-
-    renderSeite();
-
-    expect(await screen.findByRole('status')).toHaveTextContent('Noch kein Vorgang angelegt');
-    expect(screen.queryByRole('list', { name: 'Offene Vorgänge' })).not.toBeInTheDocument();
+    expect(await screen.findByRole('status')).toHaveTextContent('Noch kein Angebot');
+    expect(screen.queryByRole('table', { name: 'Angebote' })).not.toBeInTheDocument();
   });
 
   it('zeigt den Ladehinweis, solange der zweite Leseweg noch laeuft', async () => {
@@ -596,37 +562,37 @@ describe('FirmaPage — die Vorgaenge der Firma (Kriterium 12)', () => {
     });
     fetchNachPfad({
       'GET /api/firmen/7': json(200, FIRMA),
-      'GET /api/firmen/7/vorgaenge': () => spaeter,
+      'GET /api/firmen/7/angebote': () => spaeter,
     });
 
     renderSeite();
 
-    // Die Firma ist da, die Vorgaenge noch nicht — die Karte sagt es, statt leer zu bleiben.
+    // Die Firma ist da, die Angebote noch nicht — die Karte sagt es, statt leer zu bleiben.
     await screen.findByRole('heading', { level: 1, name: 'Beispiel GmbH' });
-    expect(screen.getByText('Vorgänge werden geladen …')).toBeInTheDocument();
+    expect(screen.getByText('Angebote werden geladen …')).toBeInTheDocument();
 
-    liefere(json(200, VORGAENGE)());
+    liefere(json(200, { angebote: ANGEBOTE })());
 
-    expect(await screen.findByRole('list', { name: 'Offene Vorgänge' })).toBeInTheDocument();
+    expect(await screen.findByRole('table', { name: 'Angebote' })).toBeInTheDocument();
   });
 
   it('meldet den Ausfall des zweiten Lesewegs, laesst die Angaben der Firma aber stehen', async () => {
     fetchNachPfad({
       'GET /api/firmen/7': json(200, FIRMA),
-      'GET /api/firmen/7/vorgaenge': leer(500),
+      'GET /api/firmen/7/angebote': leer(500),
     });
 
     renderSeite();
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
-      'Die Vorgänge sind gerade nicht zu erreichen',
+      'Die Angebote sind gerade nicht zu erreichen',
     );
     expect(screen.getByRole('heading', { level: 1, name: 'Beispiel GmbH' })).toBeInTheDocument();
     expect(within(kopfkarte()).getByText(/Hauptstraße 1/)).toBeInTheDocument();
     expect(screen.getByTestId('innenkarten-raster')).toBeInTheDocument();
   });
 
-  it('fragt die Vorgaenge nicht ab, wo die Kennung keine ist', async () => {
+  it('fragt die Angebote nicht ab, wo die Kennung keine ist', async () => {
     const fetchMock = fetchNachPfad({});
 
     renderSeite('/firmen/keine-zahl');
@@ -640,7 +606,7 @@ describe('FirmaPage — der Pfad im Kopf (E6)', () => {
   it('meldet „Firmen" als Weg und den Namen der Firma als Endstufe', async () => {
     fetchNachPfad({
       'GET /api/firmen/7': json(200, FIRMA),
-      'GET /api/firmen/7/vorgaenge': json(200, VORGAENGE),
+      'GET /api/firmen/7/angebote': json(200, { angebote: ANGEBOTE }),
     });
 
     renderMitKopf();
@@ -651,7 +617,7 @@ describe('FirmaPage — der Pfad im Kopf (E6)', () => {
   });
 
   it('nennt die Endstufe „Firma", solange die Firma noch nicht gelesen ist', async () => {
-    fetchNachPfad({ 'GET /api/firmen/7': leer(503), 'GET /api/firmen/7/vorgaenge': leer(503) });
+    fetchNachPfad({ 'GET /api/firmen/7': leer(503), 'GET /api/firmen/7/angebote': leer(503) });
 
     renderMitKopf();
 
@@ -694,7 +660,7 @@ describe('FirmaPage — Kopf und Tastatur', () => {
       'GET /api/auth/me': json(200, KONTO),
       'GET /api/instance': json(200, { version: '0.1.3' }),
       'GET /api/firmen/7': json(200, FIRMA),
-      'GET /api/firmen/7/vorgaenge': json(200, VORGAENGE),
+      'GET /api/firmen/7/angebote': json(200, { angebote: ANGEBOTE }),
     });
 
     renderMitTheme(
@@ -711,10 +677,8 @@ describe('FirmaPage — Kopf und Tastatur', () => {
 
     await screen.findByRole('heading', { level: 1, name: 'Beispiel GmbH' });
     const kopf = within(screen.getByRole('banner'));
-    expect(kopf.queryByRole('link', { name: 'Neuer Ansprechpartner' })).not.toBeInTheDocument();
-    expect(
-      within(kopfkarte()).getByRole('link', { name: 'Neuer Ansprechpartner' }),
-    ).toBeInTheDocument();
+    expect(kopf.queryByRole('link', { name: 'Angebot anlegen' })).not.toBeInTheDocument();
+    expect(within(kopfkarte()).getByRole('link', { name: 'Angebot anlegen' })).toBeInTheDocument();
   });
 
   it('fuehrt mit dem Tabulator ueber die Aktionen der Kopfkarte und dann die Kacheln', async () => {
@@ -727,6 +691,7 @@ describe('FirmaPage — Kopf und Tastatur', () => {
     const reihe = [
       screen.getByRole('link', { name: 'Bearbeiten' }),
       screen.getByRole('link', { name: 'Neuer Ansprechpartner' }),
+      screen.getByRole('link', { name: 'Angebot anlegen' }),
       screen.getByRole('button', { name: 'Aktionen für Beispiel GmbH' }),
       screen.getByRole('link', { name: 'anna.berg@beispiel.de' }),
       screen.getByRole('link', { name: '+49 421 123456' }),

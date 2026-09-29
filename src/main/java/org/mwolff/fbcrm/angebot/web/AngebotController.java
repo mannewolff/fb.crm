@@ -1,6 +1,7 @@
 package org.mwolff.fbcrm.angebot.web;
 
 import jakarta.validation.Valid;
+import org.mwolff.fbcrm.angebot.application.AngebotAnsicht;
 import org.mwolff.fbcrm.angebot.application.AngebotEntwurfAendernUseCase;
 import org.mwolff.fbcrm.angebot.application.AngebotLesenUseCase;
 import org.mwolff.fbcrm.angebot.application.AngebotPdfLesenUseCase;
@@ -8,6 +9,7 @@ import org.mwolff.fbcrm.angebot.application.AngebotReaktionUseCase;
 import org.mwolff.fbcrm.angebot.application.AngebotVersendenUseCase;
 import org.mwolff.fbcrm.angebot.application.AngebotVerwerfenUseCase;
 import org.mwolff.fbcrm.angebot.application.Belegdokument;
+import org.mwolff.fbcrm.angebot.application.KundenangabenUseCase;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -27,10 +29,8 @@ import org.springframework.web.bind.annotation.RestController;
  * Die Wege am einzelnen Angebot: lesen, fortschreiben, verwerfen, versenden, Beleg oeffnen, die
  * Reaktion des Kunden festhalten (Kriterien 5, 6, 7, 10, 14, 17, 18).
  *
- * <p>Der Controller entscheidet nichts (CLAUDE-java.md §6.3). Insbesondere prueft er den
- * Abschlussstand des Vorgangs nicht: Kriterium 9 sperrt das Anlegen und das Versenden, nicht die
- * Pflege eines Entwurfs (E13) — dass dieser Klasse der Vorgang gar nicht bekannt ist, ist die
- * einfachste Form dieser Zusage.
+ * <p>Der Controller entscheidet nichts (CLAUDE-java.md §6.3). Jede Antwort mit einem Angebot traegt
+ * die Namen seines Kunden; die fragt er ueber {@link KundenangabenUseCase} hinzu.
  *
  * <p><b>Warum {@code PUT} mit einem Rumpf antwortet und {@code DELETE} ohne.</b> Nach dem
  * Fortschreiben haben sich die gerechneten Werte geaendert — Summe und Positionsbetraege —, und die
@@ -50,8 +50,7 @@ import org.springframework.web.bind.annotation.RestController;
  *
  * <p><b>Warum der Beleg {@code inline} hinausgeht</b> (E17): Kriterium 14 sagt „oeffnen", nicht
  * „herunterladen". Der Dateiname ist die Angebotsnummer und damit reines ASCII aus dem Nummernkreis
- * — anders als beim Anhang eines Vorgangs, dessen Name vom Anwender kommt und deshalb die
- * RFC-6266-Doppelform aus {@code vorgang.web.Anhangkopf} braucht.
+ * und braucht keine RFC-6266-Doppelform fuer Namen, die vom Anwender kommen.
  */
 @RestController
 @RequestMapping("/api/angebote/{id}")
@@ -63,6 +62,7 @@ public class AngebotController {
   private final AngebotVersendenUseCase versendenUseCase;
   private final AngebotReaktionUseCase reaktionUseCase;
   private final AngebotPdfLesenUseCase pdfUseCase;
+  private final KundenangabenUseCase kundenUseCase;
 
   public AngebotController(
       final AngebotLesenUseCase lesenUseCase,
@@ -70,26 +70,28 @@ public class AngebotController {
       final AngebotVerwerfenUseCase verwerfenUseCase,
       final AngebotVersendenUseCase versendenUseCase,
       final AngebotReaktionUseCase reaktionUseCase,
-      final AngebotPdfLesenUseCase pdfUseCase) {
+      final AngebotPdfLesenUseCase pdfUseCase,
+      final KundenangabenUseCase kundenUseCase) {
     this.lesenUseCase = lesenUseCase;
     this.aendernUseCase = aendernUseCase;
     this.verwerfenUseCase = verwerfenUseCase;
     this.versendenUseCase = versendenUseCase;
     this.reaktionUseCase = reaktionUseCase;
     this.pdfUseCase = pdfUseCase;
+    this.kundenUseCase = kundenUseCase;
   }
 
   /** Das Angebot samt seinen Positionen (Kriterien 5, 18). */
   @GetMapping
   public AngebotResponse lesen(@PathVariable final long id) {
-    return AngebotResponse.of(lesenUseCase.lese(id));
+    return antwort(lesenUseCase.lese(id));
   }
 
   /** Schreibt den Entwurf als Ganzes fort und liefert seinen neuen Stand (Kriterium 6, E8). */
   @PutMapping
   public AngebotResponse aendern(
       @PathVariable final long id, @Valid @RequestBody final AngebotEntwurfRequest anfrage) {
-    return AngebotResponse.of(aendernUseCase.aendere(id, anfrage.daten()));
+    return antwort(aendernUseCase.aendere(id, anfrage.daten()));
   }
 
   /** Verwirft den Entwurf samt seinen Positionen (Kriterium 7, E19). */
@@ -102,19 +104,19 @@ public class AngebotController {
   /** Macht aus dem Entwurf ein festes Dokument (Kriterien 10 bis 16). */
   @PostMapping("/versenden")
   public AngebotResponse versenden(@PathVariable final long id) {
-    return AngebotResponse.of(versendenUseCase.versende(id));
+    return antwort(versendenUseCase.versende(id));
   }
 
-  /** Haelt die Zusage des Kunden fest und loest die uebrigen offenen Angebote ab (Kriterium 17). */
+  /** Haelt die Zusage des Kunden fest (Kriterium 17). */
   @PostMapping("/annehmen")
   public AngebotResponse annehmen(@PathVariable final long id) {
-    return AngebotResponse.of(reaktionUseCase.nimmAn(id));
+    return antwort(reaktionUseCase.nimmAn(id));
   }
 
   /** Haelt die Absage des Kunden fest (Kriterium 17). */
   @PostMapping("/ablehnen")
   public AngebotResponse ablehnen(@PathVariable final long id) {
-    return AngebotResponse.of(reaktionUseCase.lehneAb(id));
+    return antwort(reaktionUseCase.lehneAb(id));
   }
 
   /** Der beim Versenden erzeugte Beleg, zum Ansehen im Browser (Kriterium 14, E17). */
@@ -127,5 +129,9 @@ public class AngebotController {
             ContentDisposition.inline().filename(beleg.dateiname()).build().toString())
         .contentType(MediaType.APPLICATION_PDF)
         .body(beleg.inhalt());
+  }
+
+  private AngebotResponse antwort(final AngebotAnsicht ansicht) {
+    return AngebotResponse.of(ansicht, kundenUseCase.zu(ansicht.angebot()));
   }
 }

@@ -27,10 +27,9 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 /**
  * Die Uebersetzung zwischen Anwendungsfall und HTTP fuer die beiden Wege der Selbstauskunft.
  *
- * <p>Zwei Blickwinkel in einer Klasse, wie bei {@code VorgangControllerTest}: die Abbildung direkt
- * an den Methoden, und die Faelle, bei denen die <b>Form</b> der Antwort die Aussage ist
- * (Statuscodes, Feldfehler), ueber eine schlanke MockMvc-Strecke mit dem echten {@link
- * GlobalExceptionHandler}.
+ * <p>Zwei Blickwinkel in einer Klasse, wie bei {@code FirmaControllerTest}: die Abbildung direkt an
+ * den Methoden, und die Faelle, bei denen die <b>Form</b> der Antwort die Aussage ist (Statuscodes,
+ * Feldfehler), ueber eine schlanke MockMvc-Strecke mit dem echten {@link GlobalExceptionHandler}.
  */
 @ExtendWith(MockitoExtension.class)
 class EigeneAngabenControllerTest {

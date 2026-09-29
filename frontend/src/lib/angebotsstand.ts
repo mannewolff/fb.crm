@@ -14,7 +14,7 @@ import type { ToenungName } from '../theme';
  * Der Stand eines Angebots, wie ihn die Oberflaeche zeigt (Kriterium 18).
  *
  * Wort, Toenung und Symbol stehen hier zusammen und nicht in der Ansicht: Der Stand erscheint in
- * der Angebotsansicht, in der Liste am Vorgang und spaeter in den Auswertungen — dreimal dieselbe
+ * der Angebotsansicht, in der Liste an der Firma und spaeter an der Rechnung — dreimal dieselbe
  * Zuordnung waere dreimal dieselbe Pflege.
  *
  * **Das Wort traegt den Stand, die Toenung stuetzt ihn** (CLAUDE-design.md, „Zustandsformen"). Die

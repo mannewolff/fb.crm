@@ -25,6 +25,6 @@ public enum Angebotsstand {
   /** Der Kunde hat abgesagt; endgueltig. */
   ABGELEHNT,
 
-  /** Durch ein spaeteres Angebot desselben Vorgangs ersetzt (Kriterium 19). */
+  /** Durch ein spaeteres Angebot ersetzt (Kriterium 19); entsteht nicht mehr neu. */
   ABGELOEST
 }

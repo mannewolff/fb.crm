@@ -2,8 +2,10 @@ package org.mwolff.fbcrm.angebot.web;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.hasSize;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
@@ -40,8 +42,9 @@ import org.mwolff.fbcrm.angebot.application.AngebotVersendenUseCase;
 import org.mwolff.fbcrm.angebot.application.AngebotVerwerfenUseCase;
 import org.mwolff.fbcrm.angebot.application.Belegdokument;
 import org.mwolff.fbcrm.angebot.application.EntwurfDaten;
+import org.mwolff.fbcrm.angebot.application.Kundenangaben;
+import org.mwolff.fbcrm.angebot.application.KundenangabenUseCase;
 import org.mwolff.fbcrm.angebot.application.VersandUnvollstaendig;
-import org.mwolff.fbcrm.angebot.application.VorgangAbgeschlossen;
 import org.mwolff.fbcrm.angebot.domain.Angebot;
 import org.mwolff.fbcrm.angebot.domain.Angebotsposition;
 import org.mwolff.fbcrm.angebot.domain.Angebotsstand;
@@ -60,15 +63,14 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 /**
  * Die Uebersetzung zwischen Anwendungsfall und HTTP fuer die Wege am einzelnen Angebot.
  *
- * <p>Dieselbe Strecke wie in {@code VorgangControllerTest}: {@code standaloneSetup} mit dem echten
+ * <p>Dieselbe Strecke wie in {@code FirmaControllerTest}: {@code standaloneSetup} mit dem echten
  * {@link GlobalExceptionHandler}, damit die Statuscodes der Ausnahmen mitgeprueft werden.
  *
  * <p>Zwei Aussagen sind hier der Gegenstand. Erstens die gerechneten Werte aus E5: Die Antwort
  * traegt {@code stand}, {@code summe} und je Position den {@code betrag}, obwohl keiner davon in
- * einer Spalte steht. Zweitens die Statuscodes: {@code PUT} antwortet 200 mit dem neuen Stand —
- * auch am abgeschlossenen Vorgang, denn dieser Weg fragt den Vorgang gar nicht (E13) —, {@code
- * DELETE} antwortet 204 ohne Rumpf (E19), und ein festgeschriebenes Angebot ist auf beiden Wegen
- * 409.
+ * einer Spalte steht, dazu die Namen des Kunden. Zweitens die Statuscodes: {@code PUT} antwortet
+ * 200 mit dem neuen Stand, {@code DELETE} antwortet 204 ohne Rumpf (E19), und ein festgeschriebenes
+ * Angebot ist auf beiden Wegen 409.
  *
  * <p>Dazu die Wege am festgeschriebenen Beleg. {@code POST …/versenden} antwortet 409 mit der
  * Erweiterung {@code fieldErrors} und genau den vier Schluesseln aus E22 — dieser Zweig des {@link
@@ -103,6 +105,7 @@ class AngebotControllerTest {
   @Mock private AngebotVersendenUseCase versenden;
   @Mock private AngebotPdfLesenUseCase pdfLesen;
   @Mock private AngebotReaktionUseCase reaktion;
+  @Mock private KundenangabenUseCase kunden;
 
   @Captor private ArgumentCaptor<EntwurfDaten> daten;
 
@@ -111,7 +114,10 @@ class AngebotControllerTest {
 
   @BeforeEach
   void baueDenController() {
-    controller = new AngebotController(lesen, aendern, verwerfen, versenden, reaktion, pdfLesen);
+    controller =
+        new AngebotController(lesen, aendern, verwerfen, versenden, reaktion, pdfLesen, kunden);
+    // Jede Antwort mit einem Angebot fragt die Namen des Kunden hinzu; die Fehlerwege nicht.
+    lenient().when(kunden.zu(any())).thenReturn(new Kundenangaben("Adler AG", "Eva Adler"));
     mockMvc =
         MockMvcBuilders.standaloneSetup(controller)
             .setControllerAdvice(new GlobalExceptionHandler())
@@ -123,6 +129,7 @@ class AngebotControllerTest {
         new Angebot(
             Long.valueOf(ANGEBOT),
             3L,
+            8L,
             null,
             Angebotszustand.ENTWURF,
             ANGEBOTSDATUM,
@@ -156,7 +163,10 @@ class AngebotControllerTest {
         .perform(get("/api/angebote/{id}", Long.valueOf(ANGEBOT)))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.id").value(Long.valueOf(ANGEBOT)))
-        .andExpect(jsonPath("$.vorgangId").value(3))
+        .andExpect(jsonPath("$.firmaId").value(3))
+        .andExpect(jsonPath("$.firmaName").value("Adler AG"))
+        .andExpect(jsonPath("$.ansprechpartnerId").value(8))
+        .andExpect(jsonPath("$.ansprechpartnerName").value("Eva Adler"))
         .andExpect(jsonPath("$.nummer").doesNotExist())
         .andExpect(jsonPath("$.stand").value("ENTWURF"))
         .andExpect(jsonPath("$.summe").value(2500.03))
@@ -177,7 +187,7 @@ class AngebotControllerTest {
 
   @Test
   void aendern_thenAnswers200WithTheNewStand() throws Exception {
-    // Given — auch am abgeschlossenen Vorgang: dieser Weg fragt den Vorgang nicht (E13).
+    // Given
     when(aendern.aendere(eq(ANGEBOT), daten.capture())).thenReturn(entwurf());
 
     // When / Then
@@ -356,17 +366,6 @@ class AngebotControllerTest {
         .andExpect(jsonPath("$.fieldErrors.firma").isNotEmpty())
         .andExpect(jsonPath("$.fieldErrors.eigeneAngaben").isNotEmpty())
         .andExpect(jsonPath("$.fieldErrors.*", hasSize(4)));
-  }
-
-  @Test
-  void versenden_atAClosedVorgang_thenAnswers409() throws Exception {
-    // Given — Kriterium 9, E13.
-    when(versenden.versende(ANGEBOT)).thenThrow(new VorgangAbgeschlossen());
-
-    // When / Then
-    mockMvc
-        .perform(post("/api/angebote/{id}/versenden", Long.valueOf(ANGEBOT)))
-        .andExpect(status().isConflict());
   }
 
   @Test

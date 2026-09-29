@@ -8,7 +8,7 @@ import org.mwolff.fbcrm.angebot.domain.Angebot;
 import org.mwolff.fbcrm.angebot.domain.Angebotsstand;
 
 /**
- * Eine Zeile der Angebotsliste am Vorgang (Kriterium 20).
+ * Eine Zeile der Angebotsliste an der Firma (Kriterium 20).
  *
  * <p>Nur, was die Liste zeigt: Nummer, Stand, die beiden Daten und die Summe. Die Positionen
  * bleiben draussen — die Liste zeigt sie nicht, und die Detailansicht holt sie ohnehin.

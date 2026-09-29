@@ -12,7 +12,10 @@ const KONTO = { id: 1, displayName: 'Manfred Wolff', email: 'info@mwolff.org' };
 /** Ein versendetes Angebot, wie das Backend es schreibt. */
 const ANGEBOT = {
   id: 9,
-  vorgangId: 5,
+  firmaId: 5,
+  firmaName: 'Adler AG',
+  ansprechpartnerId: null,
+  ansprechpartnerName: null,
   nummer: 'A-2026-001',
   stand: 'VERSENDET',
   angebotDatum: '2026-09-24',
@@ -98,118 +101,36 @@ describe('App', () => {
     expect(screen.getByRole('button', { name: 'Anmelden' })).toBeInTheDocument();
   });
 
-  it('fuehrt „/vorgaenge" ohne Sitzung auf die Anmeldeseite', async () => {
+  it('fuehrt „/firmen/5/angebote/neu" ohne Sitzung auf die Anmeldeseite', async () => {
     ohneSitzung();
 
-    renderApp(['/vorgaenge'], 0);
+    renderApp(['/firmen/5/angebote/neu'], 0);
 
     expect(await screen.findByLabelText(/^E-Mail-Adresse/)).toBeInTheDocument();
   });
 
-  it('zeigt „/vorgaenge" mit Sitzung im Rahmen — nachgeladen, nicht im ersten Rutsch', async () => {
+  it('zeigt „/firmen/5/angebote/neu" als Maske im Rahmen — nachgeladen', async () => {
     fensterbreite(1440);
     fetchNachPfad({
       'GET /api/auth/me': json(200, KONTO),
       'GET /api/instance': json(200, { version: '0.1.3' }),
-      'GET /api/vorgaenge?suche=&auchAbgeschlossene=false': json(200, {
-        vorgaenge: [],
-        gesamt: 0,
+      'GET /api/firmen/5': json(200, {
+        id: 5,
+        name: 'Adler AG',
+        strasse: null,
+        plz: null,
+        ort: null,
+        land: null,
+        steuernummer: null,
+        umsatzsteuerId: null,
+        aktiv: true,
+        ansprechpartner: [],
       }),
     });
 
-    renderApp(['/vorgaenge'], 0);
-
-    // Lazy und geschuetzt: Beim ersten Rendern steht erst die Sitzungspruefung da, die Ansicht
-    // kommt nachgeladen mit ihrem Bündel.
-    expect(screen.getByRole('status')).toHaveTextContent('Sitzung wird geprüft');
-    expect(await screen.findByText(/Es ist noch kein Vorgang angelegt/)).toBeInTheDocument();
-    expect(screen.getByRole('navigation', { name: 'Hauptnavigation' })).toBeInTheDocument();
-  });
-
-  it('fuehrt „/vorgaenge/neu" ohne Sitzung auf die Anmeldeseite', async () => {
-    ohneSitzung();
-
-    renderApp(['/vorgaenge/neu'], 0);
-
-    expect(await screen.findByLabelText(/^E-Mail-Adresse/)).toBeInTheDocument();
-  });
-
-  it('zeigt „/vorgaenge/neu" als Maske — statisch vor der dynamischen Kennung', async () => {
-    fensterbreite(1440);
-    fetchNachPfad({
-      'GET /api/auth/me': json(200, KONTO),
-      'GET /api/instance': json(200, { version: '0.1.3' }),
-      'GET /api/firmen?suche=&auchStillgelegte=false': json(200, { firmen: [], gesamt: 0 }),
-    });
-
-    renderApp(['/vorgaenge/neu'], 0);
+    renderApp(['/firmen/5/angebote/neu'], 0);
 
     // Lazy und geschuetzt: Beim ersten Rendern steht erst die Sitzungspruefung da.
-    expect(screen.getByRole('status')).toHaveTextContent('Sitzung wird geprüft');
-    // „neu" ist die Maske und nicht der Vorgang mit der Kennung „neu": Waere die dynamische
-    // Route zuerst dran, ginge hier ein Aufruf auf /api/vorgaenge/neu hinaus.
-    expect(await screen.findByRole('heading', { name: 'Neuer Vorgang' })).toBeInTheDocument();
-    expect(screen.getByRole('navigation', { name: 'Hauptnavigation' })).toBeInTheDocument();
-  });
-
-  it('fuehrt „/vorgaenge/5" ohne Sitzung auf die Anmeldeseite', async () => {
-    ohneSitzung();
-
-    renderApp(['/vorgaenge/5'], 0);
-
-    expect(await screen.findByLabelText(/^E-Mail-Adresse/)).toBeInTheDocument();
-  });
-
-  it('zeigt „/vorgaenge/5" mit Sitzung im Rahmen — nachgeladen, nicht im ersten Rutsch', async () => {
-    fensterbreite(1440);
-    fetchNachPfad({
-      'GET /api/auth/me': json(200, KONTO),
-      'GET /api/instance': json(200, { version: '0.1.3' }),
-      'GET /api/vorgaenge/5': json(200, {
-        id: 5,
-        nummer: 941,
-        titel: 'Anteilsbalken je Vorgang',
-        phase: 'ANBAHNUNG',
-        abgeschlossen: false,
-        abschlusswahrscheinlichkeit: null,
-        entscheidungErwartetAm: null,
-        firma: { id: 7, name: 'Beispiel GmbH', aktiv: true },
-        ansprechpartner: null,
-        historie: [],
-      }),
-      'GET /api/vorgaenge/5/angebote': json(200, { angebote: [] }),
-    });
-
-    renderApp(['/vorgaenge/5'], 0);
-
-    expect(screen.getByRole('status')).toHaveTextContent('Sitzung wird geprüft');
-    expect(
-      // Die Kopfkarte traegt Nummer und Titel als die eine Ueberschrift der Ansicht.
-      await screen.findByRole('heading', { level: 1, name: '#941 Anteilsbalken je Vorgang' }),
-    ).toBeInTheDocument();
-    expect(screen.getByRole('navigation', { name: 'Hauptnavigation' })).toBeInTheDocument();
-  });
-
-  it('fuehrt „/vorgaenge/5/angebote/neu" ohne Sitzung auf die Anmeldeseite', async () => {
-    ohneSitzung();
-
-    renderApp(['/vorgaenge/5/angebote/neu'], 0);
-
-    expect(await screen.findByLabelText(/^E-Mail-Adresse/)).toBeInTheDocument();
-  });
-
-  it('zeigt „/vorgaenge/5/angebote/neu" als Maske — statisch vor der dynamischen Kennung', async () => {
-    fensterbreite(1440);
-    fetchNachPfad({
-      'GET /api/auth/me': json(200, KONTO),
-      'GET /api/instance': json(200, { version: '0.1.3' }),
-      'GET /api/vorgaenge/5/angebote': json(200, { angebote: [] }),
-    });
-
-    renderApp(['/vorgaenge/5/angebote/neu'], 0);
-
-    // „neu" ist die Maske und nicht das Angebot mit der Kennung „neu": Waere die dynamische
-    // Route zuerst dran, ginge hier ein Aufruf auf /api/angebote/neu hinaus.
     expect(screen.getByRole('status')).toHaveTextContent('Sitzung wird geprüft');
     expect(
       await screen.findByRole('heading', { level: 1, name: 'Neues Angebot' }),
@@ -217,15 +138,15 @@ describe('App', () => {
     expect(screen.getByRole('navigation', { name: 'Hauptnavigation' })).toBeInTheDocument();
   });
 
-  it('fuehrt „/vorgaenge/5/angebote/9" ohne Sitzung auf die Anmeldeseite', async () => {
+  it('fuehrt „/angebote/9" ohne Sitzung auf die Anmeldeseite', async () => {
     ohneSitzung();
 
-    renderApp(['/vorgaenge/5/angebote/9'], 0);
+    renderApp(['/angebote/9'], 0);
 
     expect(await screen.findByLabelText(/^E-Mail-Adresse/)).toBeInTheDocument();
   });
 
-  it('zeigt „/vorgaenge/5/angebote/9" mit Sitzung im Rahmen', async () => {
+  it('zeigt „/angebote/9" mit Sitzung im Rahmen', async () => {
     fensterbreite(1440);
     fetchNachPfad({
       'GET /api/auth/me': json(200, KONTO),
@@ -233,7 +154,7 @@ describe('App', () => {
       'GET /api/angebote/9': json(200, ANGEBOT),
     });
 
-    renderApp(['/vorgaenge/5/angebote/9'], 0);
+    renderApp(['/angebote/9'], 0);
 
     expect(screen.getByRole('status')).toHaveTextContent('Sitzung wird geprüft');
     expect(
@@ -242,15 +163,15 @@ describe('App', () => {
     expect(screen.getByRole('navigation', { name: 'Hauptnavigation' })).toBeInTheDocument();
   });
 
-  it('fuehrt „/vorgaenge/5/angebote/9/bearbeiten" ohne Sitzung auf die Anmeldeseite', async () => {
+  it('fuehrt „/angebote/9/bearbeiten" ohne Sitzung auf die Anmeldeseite', async () => {
     ohneSitzung();
 
-    renderApp(['/vorgaenge/5/angebote/9/bearbeiten'], 0);
+    renderApp(['/angebote/9/bearbeiten'], 0);
 
     expect(await screen.findByLabelText(/^E-Mail-Adresse/)).toBeInTheDocument();
   });
 
-  it('zeigt „/vorgaenge/5/angebote/9/bearbeiten" als Maske des Entwurfs', async () => {
+  it('zeigt „/angebote/9/bearbeiten" als Maske des Entwurfs', async () => {
     fensterbreite(1440);
     fetchNachPfad({
       'GET /api/auth/me': json(200, KONTO),
@@ -258,7 +179,7 @@ describe('App', () => {
       'GET /api/angebote/9': json(200, { ...ANGEBOT, nummer: null, stand: 'ENTWURF' }),
     });
 
-    renderApp(['/vorgaenge/5/angebote/9/bearbeiten'], 0);
+    renderApp(['/angebote/9/bearbeiten'], 0);
 
     expect(screen.getByRole('status')).toHaveTextContent('Sitzung wird geprüft');
     expect(
@@ -301,58 +222,6 @@ describe('App', () => {
     expect(screen.getByRole('status')).toHaveTextContent('Sitzung wird geprüft');
     expect(
       await screen.findByRole('heading', { level: 1, name: 'Eigene Angaben' }),
-    ).toBeInTheDocument();
-    expect(screen.getByRole('navigation', { name: 'Hauptnavigation' })).toBeInTheDocument();
-  });
-
-  it('fuehrt „/vorgaenge/5/bearbeiten" ohne Sitzung auf die Anmeldeseite', async () => {
-    ohneSitzung();
-
-    renderApp(['/vorgaenge/5/bearbeiten'], 0);
-
-    expect(await screen.findByLabelText(/^E-Mail-Adresse/)).toBeInTheDocument();
-  });
-
-  it('zeigt „/vorgaenge/5/bearbeiten" als Maske — nachgeladen, nicht im ersten Rutsch', async () => {
-    fensterbreite(1440);
-    fetchNachPfad({
-      'GET /api/auth/me': json(200, KONTO),
-      'GET /api/instance': json(200, { version: '0.1.3' }),
-      'GET /api/vorgaenge/5': json(200, {
-        id: 5,
-        nummer: 941,
-        titel: 'Anteilsbalken je Vorgang',
-        phase: 'ANBAHNUNG',
-        abgeschlossen: false,
-        abschlusswahrscheinlichkeit: null,
-        entscheidungErwartetAm: null,
-        firma: { id: 7, name: 'Beispiel GmbH', aktiv: true },
-        ansprechpartner: null,
-        historie: [],
-      }),
-      'GET /api/firmen?suche=&auchStillgelegte=false': json(200, {
-        firmen: [{ id: 7, name: 'Beispiel GmbH', ort: 'Bremen', aktiveAnsprechpartner: 0, aktiv: true }],
-        gesamt: 1,
-      }),
-      'GET /api/firmen/7': json(200, {
-        id: 7,
-        name: 'Beispiel GmbH',
-        strasse: null,
-        plz: null,
-        ort: 'Bremen',
-        land: 'Deutschland',
-        steuernummer: null,
-        umsatzsteuerId: null,
-        aktiv: true,
-        ansprechpartner: [],
-      }),
-    });
-
-    renderApp(['/vorgaenge/5/bearbeiten'], 0);
-
-    expect(screen.getByRole('status')).toHaveTextContent('Sitzung wird geprüft');
-    expect(
-      await screen.findByRole('heading', { name: 'Vorgang bearbeiten' }),
     ).toBeInTheDocument();
     expect(screen.getByRole('navigation', { name: 'Hauptnavigation' })).toBeInTheDocument();
   });

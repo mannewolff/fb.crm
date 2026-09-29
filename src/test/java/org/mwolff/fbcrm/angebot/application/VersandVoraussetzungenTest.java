@@ -146,7 +146,7 @@ class VersandVoraussetzungenTest {
   @ParameterizedTest
   @MethodSource("unvollstaendigeAnschriften")
   void fehlend_whenTheFirmaLacksAPartOfItsAnschrift_thenNamesFirma(final Anschrift anschrift) {
-    // Given — Kriterium 12, F12: die Firma des Vorgangs traegt Strasse, PLZ und Ort.
+    // Given — Kriterium 12, F12: die Firma des Angebots traegt Strasse, PLZ und Ort.
 
     // When / Then
     assertThat(fehlend(Versanddoppel.firmaMit(anschrift)))
@@ -176,7 +176,7 @@ class VersandVoraussetzungenTest {
 
   @Test
   void fehlend_whenTheEigenerNameIsMissing_thenNamesEigeneAngaben() {
-    // Given — dieselbe Lage mit {@code null} statt eines leeren Textes (E9 des Vorgang-Moduls).
+    // Given — dieselbe Lage mit {@code null} statt eines leeren Textes.
 
     // When / Then
     assertThat(fehlend(Versanddoppel.eigeneAngabenMit(null, Versanddoppel.EIGENE_ANSCHRIFT)))

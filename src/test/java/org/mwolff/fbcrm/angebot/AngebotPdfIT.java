@@ -35,9 +35,9 @@ import org.springframework.jdbc.core.JdbcTemplate;
 
 /**
  * Das Versenden und das Wiederlesen des Belegs ueber HTTP, gegen echtes PostgreSQL und echtes MinIO
- * (Kriterien 10 bis 16, 19, 25).
+ * (Kriterien 10 bis 16).
  *
- * <p>Vier Zusagen sind nur hier pruefbar, weil sie an der echten Transaktion, am echten Schema und
+ * <p>Drei Zusagen sind nur hier pruefbar, weil sie an der echten Transaktion, am echten Schema und
  * am echten Objektspeicher haengen.
  *
  * <ul>
@@ -46,8 +46,6 @@ import org.springframework.jdbc.core.JdbcTemplate;
  *       liegt — eine Neuberechnung aus heutigen Daten faellt damit auf.
  *   <li>Kriterium 15: Jeder Pflichtinhalt ist aus dem ausgelieferten PDF wieder herauszulesen,
  *       gelesen mit demselben Werkzeug, mit dem ein Aussenstehender nachsehen wuerde.
- *   <li>Kriterien 19 und 25: Ein zweiter Versand am selben Vorgang loest das erste Angebot ab und
- *       schreibt dafuer <b>zwei</b> Ereignisse in die Historie.
  *   <li>Kriterium 13: Das versendete Angebot laesst sich nicht mehr fortschreiben.
  * </ul>
  *
@@ -75,7 +73,8 @@ class AngebotPdfIT extends AbstractIntegrationTest {
   private final Clock clock;
 
   private HttpHeaders sitzung = new HttpHeaders();
-  private long vorgangId;
+  private long firmaId;
+  private long ansprechpartnerId;
 
   @Autowired
   AngebotPdfIT(
@@ -94,10 +93,9 @@ class AngebotPdfIT extends AbstractIntegrationTest {
   }
 
   @BeforeEach
-  void legeEinenVersandfaehigenVorgangAn() {
+  void legeEineVersandfaehigeFirmaAn() {
     jdbc.execute(
-        "TRUNCATE angebot_position, angebot, vorgang_eintrag, vorgang, ansprechpartner, firma"
-            + " RESTART IDENTITY CASCADE");
+        "TRUNCATE angebot_position, angebot, ansprechpartner, firma RESTART IDENTITY CASCADE");
     jdbc.execute("DELETE FROM angebot_nummernkreis");
     jdbc.update(
         "UPDATE eigene_angaben SET name = ?, strasse = ?, plz = ?, ort = ?, land = ?, email = ?,"
@@ -121,19 +119,13 @@ class AngebotPdfIT extends AbstractIntegrationTest {
         "28195",
         "Bremen",
         "Deutschland");
-    final long firmaId = einzigeId("SELECT id FROM firma");
+    firmaId = einzigeId("SELECT id FROM firma");
     jdbc.update(
         "INSERT INTO ansprechpartner (firma_id, vorname, nachname) VALUES (?, ?, ?)",
         Long.valueOf(firmaId),
         "Eva",
         "Adler");
-    final long ansprechpartnerId = einzigeId("SELECT id FROM ansprechpartner");
-    jdbc.update(
-        "INSERT INTO vorgang (nummer, titel, firma_id, ansprechpartner_id) VALUES (1, ?, ?, ?)",
-        "Website-Relaunch",
-        Long.valueOf(firmaId),
-        Long.valueOf(ansprechpartnerId));
-    vorgangId = einzigeId("SELECT id FROM vorgang");
+    ansprechpartnerId = einzigeId("SELECT id FROM ansprechpartner");
     jdbc.execute("TRUNCATE outbox_message, password_reset_token, account RESTART IDENTITY CASCADE");
     accounts.save(
         new Account(null, MAIL, "Manne", hasher.hash(PASSWORT), Role.ADMIN, 0, ANGELEGT, ANGELEGT));
@@ -174,14 +166,14 @@ class AngebotPdfIT extends AbstractIntegrationTest {
     return felder;
   }
 
-  /** Ein fortgeschriebener Entwurf am Vorgang, versandfaehig nach Kriterium 12. */
+  /** Ein fortgeschriebener Entwurf an Firma und Ansprechpartner, versandfaehig (Kriterium 12). */
   private long versandfaehigerEntwurf() {
     final long angebotId =
         Objects.requireNonNull(
                 ruf(
-                        "/api/vorgaenge/" + vorgangId + "/angebote",
+                        "/api/firmen/" + firmaId + "/angebote",
                         HttpMethod.POST,
-                        null,
+                        Map.of("ansprechpartnerId", Long.valueOf(ansprechpartnerId)),
                         AngebotResponse.class)
                     .getBody())
             .id();
@@ -223,14 +215,6 @@ class AngebotPdfIT extends AbstractIntegrationTest {
     return Objects.requireNonNull(
         jdbc.queryForObject(
             "SELECT zustand FROM angebot WHERE id = ?", String.class, Long.valueOf(angebotId)));
-  }
-
-  private List<String> ereignisse() {
-    return jdbc.queryForList(
-        "SELECT text FROM vorgang_eintrag WHERE vorgang_id = ? AND art = 'EREIGNIS'"
-            + " ORDER BY geschehen_am, id",
-        String.class,
-        Long.valueOf(vorgangId));
   }
 
   private static String ausgelesen(final byte[] pdf) throws IOException {
@@ -327,23 +311,18 @@ class AngebotPdfIT extends AbstractIntegrationTest {
   }
 
   @Test
-  void versenden_aSecondTime_thenSupersedesTheFirstAngebotAndWritesTwoEreignisse() {
-    // Given — Kriterien 19 und 25: die Nachverhandlung traegt dieselbe Chance nicht doppelt.
+  void versenden_aSecondTime_thenLeavesTheFirstAngebotAsItWas() {
+    // Given — zwei Angebote an dieselbe Firma sind unabhaengig (Issue #126).
     final long erstes = versandfaehigerEntwurf();
-    final String ersteNummer = Objects.requireNonNull(versende(erstes).nummer());
+    versende(erstes);
     final long zweites = versandfaehigerEntwurf();
 
     // When
-    final String zweiteNummer = Objects.requireNonNull(versende(zweites).nummer());
+    versende(zweites);
 
     // Then
-    assertThat(zustand(erstes)).isEqualTo("ABGELOEST");
+    assertThat(zustand(erstes)).isEqualTo("VERSENDET");
     assertThat(zustand(zweites)).isEqualTo("VERSENDET");
-    assertThat(ereignisse())
-        .containsExactly(
-            "Angebot %s versendet".formatted(ersteNummer),
-            "Angebot %s versendet".formatted(zweiteNummer),
-            "Angebot %s abgeloest".formatted(ersteNummer));
   }
 
   @Test
@@ -370,9 +349,9 @@ class AngebotPdfIT extends AbstractIntegrationTest {
     final long angebotId =
         Objects.requireNonNull(
                 ruf(
-                        "/api/vorgaenge/" + vorgangId + "/angebote",
+                        "/api/firmen/" + firmaId + "/angebote",
                         HttpMethod.POST,
-                        null,
+                        Map.of("ansprechpartnerId", Long.valueOf(ansprechpartnerId)),
                         AngebotResponse.class)
                     .getBody())
             .id();

@@ -11,7 +11,7 @@ import Tafel from './Tafel';
 import ZustandsChip from './ZustandsChip';
 
 /**
- * Die Angebote eines Vorgangs als Tafel (Kriterium 20).
+ * Die Angebote einer Firma als Tafel (Kriterium 20).
  *
  * <b>Nicht sortiert.</b> Die Reihenfolge kommt vom Server — Entwuerfe zuerst, innerhalb jeder
  * Gruppe nach dem Zeitpunkt der Anlage (E25). Eine zweite Sortierung hier waere eine zweite
@@ -19,18 +19,17 @@ import ZustandsChip from './ZustandsChip';
  *
  * <b>Der Weg liegt auf der Nummer, nicht auf der Zeile.</b> Eine ganze Tabellenzeile klickbar zu
  * machen hiesse, ein `tr` mit `onClick` zu versehen — kein Ziel des Tabulators und fuer den
- * Screenreader kein Weg. Die Nummer ist der Name des Angebots und damit der richtige Trager
- * (dasselbe Muster wie der Titel in {@link VorgaengePage}).
+ * Screenreader kein Weg. Die Nummer ist der Name des Angebots und damit der richtige Trager.
  *
  * Ein Entwurf hat keine Nummer (Kriterium 11); dann steht dort das Wort „Entwurf" — sichtbar und
  * als Name des Weges, nicht ein Gedankenstrich, den niemand anklicken kann.
  */
 
 const SPALTEN = ['Nummer', 'Datum', 'Gültig bis', 'Zustand', 'Summe'] as const;
-const LEER = 'Noch kein Angebot zu diesem Vorgang.';
+const LEER = 'Noch kein Angebot an diese Firma.';
 const SYMBOL_CHIP = 13;
 
-function Zeile({ vorgangId, angebot }: { readonly vorgangId: number; readonly angebot: AngebotZeile }) {
+function Zeile({ angebot }: { readonly angebot: AngebotZeile }) {
   const bild = angebotsstandBild(angebot.stand);
   const Symbol = bild.symbol;
   return (
@@ -38,7 +37,7 @@ function Zeile({ vorgangId, angebot }: { readonly vorgangId: number; readonly an
       <Box component="td" sx={{ fontWeight: 500 }}>
         <Box
           component={RouterLink}
-          to={`/vorgaenge/${String(vorgangId)}/angebote/${String(angebot.id)}`}
+          to={`/angebote/${String(angebot.id)}`}
           className={angebot.nummer === null ? undefined : ZAHLEN_KLASSE}
           sx={(theme) => ({
             color: 'inherit',
@@ -81,11 +80,10 @@ function Zeile({ vorgangId, angebot }: { readonly vorgangId: number; readonly an
 }
 
 export interface AngebotslisteProps {
-  readonly vorgangId: number;
   readonly angebote: readonly AngebotZeile[];
 }
 
-export default function Angebotsliste({ vorgangId, angebote }: AngebotslisteProps) {
+export default function Angebotsliste({ angebote }: AngebotslisteProps) {
   if (angebote.length === 0) {
     return (
       <Typography
@@ -99,7 +97,7 @@ export default function Angebotsliste({ vorgangId, angebote }: AngebotslisteProp
   return (
     <Tafel beschriftung="Angebote" spalten={[...SPALTEN]}>
       {angebote.map((angebot) => (
-        <Zeile key={angebot.id} vorgangId={vorgangId} angebot={angebot} />
+        <Zeile key={angebot.id} angebot={angebot} />
       ))}
     </Tafel>
   );

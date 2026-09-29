@@ -12,10 +12,10 @@ import jakarta.persistence.Table;
  * keinen {@code GeneratedValue}. Angelegt wird die Zeile beim ersten Zug des Jahres, und zwar mit
  * {@code INSERT … ON CONFLICT DO NOTHING}: Welches Jahr das erste ist, weiss die Migration nicht.
  *
- * <p>Der Zaehler ist die einzige veraenderliche Entity des Moduls, und das mit Absicht — dieselbe
- * Begruendung wie bei {@code NummernkreisEntity} des Vorgangs: Das Fortschreiben <b>muss</b> auf
- * der geladenen, gesperrten Zeile geschehen. Ein Massenupdate ginge an der Sitzung vorbei und
- * liesse einen zweiten Zug in derselben Transaktion dieselbe Nummer erneut ziehen.
+ * <p>Der Zaehler ist die einzige veraenderliche Entity des Moduls, und das mit Absicht: Das
+ * Fortschreiben <b>muss</b> auf der geladenen, gesperrten Zeile geschehen. Ein Massenupdate ginge
+ * an der Sitzung vorbei und liesse einen zweiten Zug in derselben Transaktion dieselbe Nummer
+ * erneut ziehen.
  */
 @Entity
 @Table(name = "angebot_nummernkreis")

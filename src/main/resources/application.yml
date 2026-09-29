@@ -28,15 +28,6 @@ spring:
   flyway:
     enabled: true
     locations: classpath:db/migration
-  # Der Riegel des Containers fuer hochgeladene Anhaenge (E10). Er steht knapp ueber der Grenze von
-  # 25 MiB, die die Anwendung zusagt (common/Uploadgrenze): Die Meldung mit der Grenze soll aus der
-  # Bean Validation kommen und am Feld stehen, nicht aus dem Container. Der Riegel faengt nur die
-  # Faelle ab, die gar nicht erst in die Anwendung gelassen werden sollen — dort antwortet der
-  # GlobalExceptionHandler mit derselben Meldung.
-  servlet:
-    multipart:
-      max-file-size: 26MB
-      max-request-size: 27MB
   # Der SMTP-Zugang des Postausgangsfachs. spring.mail.host steht hier mit Default, damit die
   # Autokonfiguration den JavaMailSender in jedem Fall baut — sonst haette eine Instanz mit
   # FBCRM_MAIL_ENABLED=false und leerem Host keine Bean, und der Hintergrundjob liesse sich

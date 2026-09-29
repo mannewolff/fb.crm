@@ -13,7 +13,7 @@ import { jaNein, liste, objekt, text, textOderNull, zahl } from './verengen';
  * Detailantwort ihrer Firma (E7). Aus demselben Grund traegt die Eingabe des Ansprechpartners kein
  * Feld fuer die Firma — die steht im Pfad, und Umhaengen gibt es nicht (Kriterium 12).
  *
- * Die Bausteine der Pruefung stehen in `verengen.ts` und werden mit den Vorgaengen geteilt.
+ * Die Bausteine der Pruefung stehen in `verengen.ts` und werden mit den Angeboten geteilt.
  */
 
 /** Eine Zeile der Uebersicht. */

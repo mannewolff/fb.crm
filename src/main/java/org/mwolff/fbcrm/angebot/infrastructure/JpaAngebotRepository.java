@@ -1,12 +1,10 @@
 package org.mwolff.fbcrm.angebot.infrastructure;
 
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.Set;
 import java.util.stream.Collectors;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.fbcrm.angebot.domain.Angebot;
@@ -28,9 +26,9 @@ import org.springframework.stereotype.Repository;
  *
  * <p>Jede Liste holt ihre Positionen in <b>einer</b> zweiten Abfrage und ordnet sie danach den
  * Angeboten zu; je Zeile einzeln nachzuladen waere die bekannte Abfrage-Lawine. Die Angebotsliste
- * eines Vorgangs geht diesen Weg.
+ * einer Firma geht diesen Weg.
  *
- * <p>PMD.TooManyMethods: Fuenf Wege des Ports und die Uebersetzungsschritte dazu. Die privaten
+ * <p>PMD.TooManyMethods: Vier Wege des Ports und die Uebersetzungsschritte dazu. Die privaten
  * Methoden sind die Abbildung einer Zeile in ihre Teile — Angebot, Position, Empfaengerkopie,
  * Absenderkopie —, und sie aufzuteilen zerschnitte die Uebersetzung <b>eines</b> Aggregats auf zwei
  * Klassen, die nur zusammen richtig sind.
@@ -55,8 +53,8 @@ class JpaAngebotRepository implements AngebotRepository {
   }
 
   @Override
-  public List<Angebot> findByVorgang(final long vorgangId) {
-    return mitPositionen(angebote.findByVorgang(vorgangId));
+  public List<Angebot> findByFirma(final long firmaId) {
+    return mitPositionen(angebote.findByFirma(firmaId));
   }
 
   /*
@@ -82,11 +80,6 @@ class JpaAngebotRepository implements AngebotRepository {
                     zeile,
                     jeAngebot.getOrDefault(Objects.requireNonNull(zeile.getId()), List.of())))
         .toList();
-  }
-
-  @Override
-  public Set<Long> vorgaengeMitFestgeschriebenemAngebot(final Collection<Long> vorgangIds) {
-    return Set.copyOf(angebote.vorgaengeMitFestgeschriebenemAngebot(vorgangIds));
   }
 
   @Override
@@ -129,7 +122,8 @@ class JpaAngebotRepository implements AngebotRepository {
       final AngebotEntity zeile, final List<AngebotPositionEntity> positionszeilen) {
     return new Angebot(
         zeile.getId(),
-        zeile.getVorgangId(),
+        zeile.getFirmaId(),
+        zeile.getAnsprechpartnerId(),
         zeile.getNummer(),
         zeile.getZustand(),
         zeile.getAngebotDatum(),
@@ -199,7 +193,8 @@ class JpaAngebotRepository implements AngebotRepository {
     final AngebotEntity zeile =
         new AngebotEntity(
             angebot.id(),
-            angebot.vorgangId(),
+            angebot.firmaId(),
+            angebot.ansprechpartnerId(),
             angebot.nummer(),
             angebot.zustand(),
             angebot.angebotDatum(),

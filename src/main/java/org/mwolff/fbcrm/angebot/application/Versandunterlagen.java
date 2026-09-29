@@ -1,13 +1,13 @@
 package org.mwolff.fbcrm.angebot.application;
 
 import org.jspecify.annotations.Nullable;
+import org.mwolff.fbcrm.angebot.domain.Angebot;
 import org.mwolff.fbcrm.eigeneangaben.domain.EigeneAngabenRepository;
 import org.mwolff.fbcrm.firma.application.FirmaNichtGefunden;
 import org.mwolff.fbcrm.firma.domain.Ansprechpartner;
 import org.mwolff.fbcrm.firma.domain.AnsprechpartnerRepository;
 import org.mwolff.fbcrm.firma.domain.Firma;
 import org.mwolff.fbcrm.firma.domain.FirmaRepository;
-import org.mwolff.fbcrm.vorgang.domain.Vorgang;
 import org.springframework.stereotype.Service;
 
 /**
@@ -16,7 +16,7 @@ import org.springframework.stereotype.Service;
  * <p>Ein eigener Baustein und keine drei weiteren Ports am Anwendungsfall: Das Versenden ist eine
  * Reihenfolge von Schritten — pruefen, Nummer ziehen, drucken, festschreiben, abloesen, vermerken
  * —, und wer daneben noch drei Stammdatenbestaende aufsammelt, erzaehlt zwei Geschichten in einer
- * Methode. Hier steht die eine Frage „was liegt neben diesem Vorgang", dort die Reihenfolge.
+ * Methode. Hier steht die eine Frage „was liegt neben diesem Angebot", dort die Reihenfolge.
  *
  * <p>Ohne eigene Transaktionsgrenze: Gelesen wird in der Transaktion des Aufrufers, damit die
  * Angaben, die die Pruefung sieht, dieselben sind, die in die Kopien gehen.
@@ -38,18 +38,18 @@ class Versandunterlagen {
   }
 
   /**
-   * Die Angaben zu einem Vorgang.
+   * Die Angaben zu einem Angebot.
    *
-   * @param vorgang der Vorgang, an dem das Angebot haengt
-   * @throws FirmaNichtGefunden wenn es die Firma des Vorgangs nicht gibt
+   * @param angebot das Angebot, dessen Beleg entsteht
+   * @throws FirmaNichtGefunden wenn es die Firma des Angebots nicht gibt
    */
-  Belegangaben zu(final Vorgang vorgang) {
-    final Firma firma = firmen.findById(vorgang.firmaId()).orElseThrow(FirmaNichtGefunden::new);
-    return new Belegangaben(firma, person(vorgang.ansprechpartnerId()), eigeneAngaben.lies());
+  Belegangaben zu(final Angebot angebot) {
+    final Firma firma = firmen.findById(angebot.firmaId()).orElseThrow(FirmaNichtGefunden::new);
+    return new Belegangaben(firma, person(angebot.ansprechpartnerId()), eigeneAngaben.lies());
   }
 
   /*
-   * Ein am Vorgang vermerkter Ansprechpartner, den es im Bestand nicht mehr gibt, laesst den Versand
+   * Ein am Angebot vermerkter Ansprechpartner, den es im Bestand nicht mehr gibt, laesst den Versand
    * nicht scheitern: Kriterium 12 verlangt ihn nicht, und der Beleg traegt dann nur die Firma.
    */
   private @Nullable Ansprechpartner person(final @Nullable Long ansprechpartnerId) {

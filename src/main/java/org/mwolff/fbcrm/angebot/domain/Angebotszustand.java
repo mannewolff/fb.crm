@@ -23,7 +23,7 @@ public enum Angebotszustand {
   /** Der Kunde hat abgesagt; endgueltig (Kriterium 17). */
   ABGELEHNT(Angebotsstand.ABGELEHNT),
 
-  /** Durch ein spaeteres Angebot desselben Vorgangs ersetzt — annehmbar bleibt es (F13). */
+  /** Durch ein spaeteres Angebot ersetzt — annehmbar bleibt es (F13); entsteht nicht mehr neu. */
   ABGELOEST(Angebotsstand.ABGELOEST);
 
   private final Angebotsstand anzeigestand;

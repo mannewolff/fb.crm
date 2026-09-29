@@ -20,19 +20,21 @@ import org.mwolff.fbcrm.firma.domain.AnsprechpartnerRepository;
 import org.mwolff.fbcrm.firma.domain.FirmaRepository;
 
 /**
- * Die Nachbarn eines Vorgangs und die Kopien, die daraus entstehen (R8, Kriterium 12).
+ * Die Nachbarn eines Angebots und die Kopien, die daraus entstehen (R8, Kriterium 12).
  *
  * <p>Gegenstand ist zweierlei: dass die drei Bestaende ueberhaupt gelesen werden, und dass daraus
  * <b>Kopien</b> werden und keine Verweise — der Firmenname steht danach als Text am Angebot, und
  * ein spaeterer Umzug der Firma aendert das versendete Dokument nicht.
  *
- * <p>Der Ansprechpartner ist der Fall mit den drei Ausgaengen: keiner am Vorgang, einer am Vorgang
- * und im Bestand, einer am Vorgang und im Bestand nicht mehr. Nur der mittlere erscheint auf dem
+ * <p>Der Ansprechpartner ist der Fall mit den drei Ausgaengen: keiner am Angebot, einer am Angebot
+ * und im Bestand, einer am Angebot und im Bestand nicht mehr. Nur der mittlere erscheint auf dem
  * Beleg; die beiden anderen lassen den Versand nicht scheitern, weil Kriterium 12 ihn nicht
  * verlangt.
  */
 @ExtendWith(MockitoExtension.class)
 class VersandunterlagenTest {
+
+  private static final long ANGEBOT = 11L;
 
   @Mock private FirmaRepository firmen;
   @Mock private AnsprechpartnerRepository personen;
@@ -53,7 +55,7 @@ class VersandunterlagenTest {
         .thenReturn(Optional.of(Versanddoppel.ansprechpartner()));
 
     // When
-    final Belegempfaenger empfaenger = unterlagen.zu(Versanddoppel.vorgang()).empfaenger();
+    final Belegempfaenger empfaenger = unterlagen.zu(Angebotsdoppel.entwurf(ANGEBOT)).empfaenger();
 
     // Then
     assertThat(empfaenger)
@@ -70,7 +72,10 @@ class VersandunterlagenTest {
     bestandLiegtVor();
 
     // When
-    final Belegabsender absender = unterlagen.zu(Versanddoppel.vorgang(null, false)).absender();
+    final Belegabsender absender =
+        unterlagen
+            .zu(Angebotsdoppel.ohneAnsprechpartner(Angebotsdoppel.entwurf(ANGEBOT)))
+            .absender();
 
     // Then
     assertThat(absender)
@@ -86,13 +91,15 @@ class VersandunterlagenTest {
   }
 
   @Test
-  void zu_withoutAnAnsprechpartnerAtTheVorgang_thenAsksNobodyAndCopiesOnlyTheFirma() {
+  void zu_withoutAnAnsprechpartnerAtTheAngebot_thenAsksNobodyAndCopiesOnlyTheFirma() {
     // Given — Kriterium 12: ein Ansprechpartner ist nicht noetig.
     bestandLiegtVor();
 
     // When
     final Belegempfaenger empfaenger =
-        unterlagen.zu(Versanddoppel.vorgang(null, false)).empfaenger();
+        unterlagen
+            .zu(Angebotsdoppel.ohneAnsprechpartner(Angebotsdoppel.entwurf(ANGEBOT)))
+            .empfaenger();
 
     // Then
     assertThat(empfaenger.ansprechpartner()).isNull();
@@ -101,13 +108,13 @@ class VersandunterlagenTest {
 
   @Test
   void zu_whenTheAnsprechpartnerIsGone_thenCopiesOnlyTheFirma() {
-    // Given — am Vorgang vermerkt, im Bestand nicht mehr da; der Versand soll daran nicht
+    // Given — am Angebot vermerkt, im Bestand nicht mehr da; der Versand soll daran nicht
     // scheitern.
     bestandLiegtVor();
     when(personen.findById(Versanddoppel.ANSPRECHPARTNER)).thenReturn(Optional.empty());
 
     // When
-    final Belegempfaenger empfaenger = unterlagen.zu(Versanddoppel.vorgang()).empfaenger();
+    final Belegempfaenger empfaenger = unterlagen.zu(Angebotsdoppel.entwurf(ANGEBOT)).empfaenger();
 
     // Then
     assertThat(empfaenger.ansprechpartner()).isNull();
@@ -120,7 +127,7 @@ class VersandunterlagenTest {
     when(personen.findById(Versanddoppel.ANSPRECHPARTNER)).thenReturn(Optional.of(ohneVorname()));
 
     // When
-    final Belegempfaenger empfaenger = unterlagen.zu(Versanddoppel.vorgang()).empfaenger();
+    final Belegempfaenger empfaenger = unterlagen.zu(Angebotsdoppel.entwurf(ANGEBOT)).empfaenger();
 
     // Then
     assertThat(empfaenger.ansprechpartner()).isEqualTo("Adler");
@@ -134,7 +141,7 @@ class VersandunterlagenTest {
         .thenReturn(Optional.of(mitLeeremVornamen()));
 
     // When
-    final Belegempfaenger empfaenger = unterlagen.zu(Versanddoppel.vorgang()).empfaenger();
+    final Belegempfaenger empfaenger = unterlagen.zu(Angebotsdoppel.entwurf(ANGEBOT)).empfaenger();
 
     // Then
     assertThat(empfaenger.ansprechpartner()).isEqualTo("Adler");
@@ -146,7 +153,7 @@ class VersandunterlagenTest {
     when(firmen.findById(Versanddoppel.FIRMA)).thenReturn(Optional.empty());
 
     // When / Then
-    assertThatThrownBy(() -> unterlagen.zu(Versanddoppel.vorgang()))
+    assertThatThrownBy(() -> unterlagen.zu(Angebotsdoppel.entwurf(ANGEBOT)))
         .isInstanceOf(FirmaNichtGefunden.class);
     verifyNoInteractions(personen, eigeneAngaben);
   }

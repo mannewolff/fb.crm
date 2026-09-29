@@ -1,13 +1,22 @@
 import { apiJson, apiOhneInhalt } from './client';
-import { FORMFEHLER, inHundertsteln, liste, objekt, text, textOderNull, zahl } from './verengen';
+import {
+  FORMFEHLER,
+  inHundertsteln,
+  liste,
+  objekt,
+  text,
+  textOderNull,
+  zahl,
+  zahlOderNull,
+} from './verengen';
 import type { Angebotsstand } from '../lib/angebotsstand';
 
 /**
- * Die Wege zum Angebot: die Liste am Vorgang, das Anlegen, das Fortschreiben eines Entwurfs, das
+ * Die Wege zum Angebot: die Liste an der Firma, das Anlegen, das Fortschreiben eines Entwurfs, das
  * Verwerfen, das Versenden, die Reaktion des Kunden und der Beleg.
  *
  * Die Typen sind die Gegenstuecke zu `AngebotResponse`, `AngebotPositionResponse`,
- * `AngebotZeileResponse` und `VorgangAngeboteResponse` im Backend; aendert sich dort ein Feld,
+ * `AngebotZeileResponse` und `FirmaAngeboteResponse` im Backend; aendert sich dort ein Feld,
  * aendert es sich hier mit (CLAUDE-react.md). Jede Antwort geht durch einen Parser: Was ueber das
  * Netz kommt, ist `unknown`, bis es geprueft ist — kein `as`.
  *
@@ -28,8 +37,8 @@ import type { Angebotsstand } from '../lib/angebotsstand';
  * `BigDecimal`; eine Gleitkommazahl im Rumpf waere die eine Umwandlung, die die Rechnung in
  * `lib/geld.ts` vermeidet.
  *
- * Fuer den Beleg steht hier nur ein <b>Pfad</b> und kein Aufruf (E17), wie bei `anhangPfad` am
- * Vorgang: Der Browser oeffnet das PDF selbst, mit dem Sitzungs-Cookie und dem
+ * Fuer den Beleg steht hier nur ein <b>Pfad</b> und kein Aufruf (E17): Der Browser oeffnet das PDF
+ * selbst, mit dem Sitzungs-Cookie und dem
  * `Content-Disposition` des Servers.
  */
 
@@ -55,7 +64,11 @@ export interface AngebotPosition {
 /** Ein Angebot mit seinen Positionen (Kriterien 5, 18). */
 export interface Angebot {
   readonly id: number;
-  readonly vorgangId: number;
+  readonly firmaId: number;
+  readonly firmaName: string;
+  /** Der Ansprechpartner ist optional (Issue #126). */
+  readonly ansprechpartnerId: number | null;
+  readonly ansprechpartnerName: string | null;
   /** Angebotsnummer, oder `null` im Entwurf (Kriterium 11). */
   readonly nummer: string | null;
   readonly stand: Angebotsstand;
@@ -72,7 +85,7 @@ export interface Angebot {
   readonly summeInCent: number;
 }
 
-/** Eine Zeile der Angebotsliste am Vorgang (Kriterium 20). */
+/** Eine Zeile der Angebotsliste an der Firma (Kriterium 20). */
 export interface AngebotZeile {
   readonly id: number;
   readonly nummer: string | null;
@@ -82,8 +95,8 @@ export interface AngebotZeile {
   readonly summeInCent: number;
 }
 
-/** Die Angebote eines Vorgangs, Entwuerfe zuerst (Kriterium 20, E25). */
-export interface VorgangAngebote {
+/** Die Angebote einer Firma, Entwuerfe zuerst (Kriterium 20, E25). */
+export interface FirmaAngebote {
   readonly angebote: readonly AngebotZeile[];
 }
 
@@ -151,7 +164,10 @@ export function parseAngebot(wert: unknown): Angebot {
   const angebot = objekt(wert);
   return {
     id: zahl(angebot.id),
-    vorgangId: zahl(angebot.vorgangId),
+    firmaId: zahl(angebot.firmaId),
+    firmaName: text(angebot.firmaName),
+    ansprechpartnerId: zahlOderNull(angebot.ansprechpartnerId),
+    ansprechpartnerName: textOderNull(angebot.ansprechpartnerName),
     nummer: textOderNull(angebot.nummer),
     stand: angebotsstand(angebot.stand),
     angebotDatum: text(angebot.angebotDatum),
@@ -177,35 +193,35 @@ function parseZeile(wert: unknown): AngebotZeile {
   };
 }
 
-/** Verengt die Angebotsliste eines Vorgangs oder scheitert. */
-export function parseVorgangAngebote(wert: unknown): VorgangAngebote {
+/** Verengt die Angebotsliste einer Firma oder scheitert. */
+export function parseFirmaAngebote(wert: unknown): FirmaAngebote {
   const antwort = objekt(wert);
   return { angebote: liste(antwort.angebote).map(parseZeile) };
 }
 
-/** Die Angebote des Vorgangs, Entwuerfe zuerst (Kriterium 20). */
-export function angeboteDesVorgangs(vorgangId: number): Promise<VorgangAngebote> {
+/** Die Angebote der Firma, Entwuerfe zuerst (Kriterium 20). */
+export function angeboteDerFirma(firmaId: number): Promise<FirmaAngebote> {
   return apiJson(
-    `/api/vorgaenge/${String(vorgangId)}/angebote`,
+    `/api/firmen/${String(firmaId)}/angebote`,
     { methode: 'GET' },
-    parseVorgangAngebote,
+    parseFirmaAngebote,
   );
 }
 
 /**
- * Legt am Vorgang einen Angebotsentwurf an (Kriterien 2, 3, 8).
+ * Legt an die Firma einen Angebotsentwurf an (Kriterien 2, 3; Issue #126).
  *
- * Der Rumpf geht immer hinaus, auch ohne Vorlage: Das Backend nimmt ihn optional
+ * Der Rumpf geht immer hinaus, auch ohne Ansprechpartner: Das Backend nimmt ihn optional
  * (`@RequestBody(required = false)`), aber ein Aufruf mit stets derselben Form hat nur einen Weg
  * statt zweier, die auseinanderlaufen koennen.
  */
 export function angebotAnlegen(
-  vorgangId: number,
-  vorlageAngebotId: number | null,
+  firmaId: number,
+  ansprechpartnerId: number | null,
 ): Promise<Angebot> {
   return apiJson(
-    `/api/vorgaenge/${String(vorgangId)}/angebote`,
-    { methode: 'POST', rumpf: { vorlageAngebotId } },
+    `/api/firmen/${String(firmaId)}/angebote`,
+    { methode: 'POST', rumpf: { ansprechpartnerId } },
     parseAngebot,
   );
 }

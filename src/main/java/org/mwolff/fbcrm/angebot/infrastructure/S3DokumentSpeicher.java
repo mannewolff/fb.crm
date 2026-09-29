@@ -13,11 +13,11 @@ import software.amazon.awssdk.services.s3.model.PutObjectRequest;
  * Setzt den Port {@link DokumentSpeicher} auf MinIO um (E9).
  *
  * <p>Den Client baut nicht dieser Adapter, sondern {@code config.S3Config} — er ist der eine Zugang
- * der Anwendung, den auch das Modul {@code vorgang} braucht. Von dort kommt auch der angelegte
- * Eimer; dieser Adapter setzt ihn voraus und kennt aus {@link MinioProperties} nur seinen Namen.
+ * der Anwendung, den jeder weitere Beleg teilt. Von dort kommt auch der angelegte Eimer; dieser
+ * Adapter setzt ihn voraus und kennt aus {@link MinioProperties} nur seinen Namen.
  *
  * <p>Der Schluessel entsteht hier: {@code angebot/<angebotId>/<uuid>.pdf}. Das {@code angebot/}
- * davor trennt die Belege von den Anhaengen des Vorgangs, die Kennung macht sie im Speicher
+ * davor trennt die Angebote von kuenftigen Belegarten, die Kennung macht sie im Speicher
  * zuordenbar, und der Zufallsname sorgt dafuer, dass ein zweiter Versand am selben Angebot den
  * ersten Beleg nicht ueberschreibt.
  */

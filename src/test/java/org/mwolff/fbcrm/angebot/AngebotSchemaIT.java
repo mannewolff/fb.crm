@@ -23,7 +23,7 @@ class AngebotSchemaIT extends AbstractIntegrationTest {
 
   private static final String INSERT_ANGEBOT =
       "INSERT INTO angebot"
-          + " (vorgang_id, zustand, angebot_datum, gueltig_bis, nummer, versendet_am,"
+          + " (firma_id, zustand, angebot_datum, gueltig_bis, nummer, versendet_am,"
           + " pdf_schluessel, empfaenger_firma, absender_name)"
           + " VALUES (?, ?, DATE '2026-09-20', CAST(? AS date), ?, CAST(? AS timestamptz),"
           + " ?, ?, ?)";
@@ -43,7 +43,7 @@ class AngebotSchemaIT extends AbstractIntegrationTest {
 
   private final JdbcTemplate jdbc;
 
-  private long vorgangId;
+  private long firmaId;
 
   @Autowired
   AngebotSchemaIT(final JdbcTemplate jdbc) {
@@ -51,29 +51,24 @@ class AngebotSchemaIT extends AbstractIntegrationTest {
   }
 
   @BeforeEach
-  void leereFachtabellenUndLegeEinenVorgangAn() {
+  void leereFachtabellenUndLegeEineFirmaAn() {
     jdbc.execute(
-        "TRUNCATE angebot_position, angebot, vorgang_eintrag, vorgang, ansprechpartner, firma"
-            + " RESTART IDENTITY CASCADE");
+        "TRUNCATE angebot_position, angebot, ansprechpartner, firma RESTART IDENTITY CASCADE");
     jdbc.execute("DELETE FROM angebot_nummernkreis");
     jdbc.update("INSERT INTO firma (name) VALUES (?)", FIRMA);
-    final Long firmaId =
-        jdbc.queryForObject("SELECT id FROM firma WHERE name = ?", Long.class, FIRMA);
-    jdbc.update(
-        "INSERT INTO vorgang (nummer, titel, firma_id) VALUES (1, 'Website-Relaunch', ?)", firmaId);
-    vorgangId =
-        jdbc.queryForObject("SELECT id FROM vorgang WHERE nummer = 1", Long.class).longValue();
+    firmaId =
+        jdbc.queryForObject("SELECT id FROM firma WHERE name = ?", Long.class, FIRMA).longValue();
   }
 
   private int entwurf(final String gueltigBis) {
     return jdbc.update(
-        INSERT_ANGEBOT, vorgangId, "ENTWURF", gueltigBis, null, null, null, null, null);
+        INSERT_ANGEBOT, firmaId, "ENTWURF", gueltigBis, null, null, null, null, null);
   }
 
   private int versendet(final String gueltigBis, final String nummer) {
     return jdbc.update(
         INSERT_ANGEBOT,
-        vorgangId,
+        firmaId,
         "VERSENDET",
         gueltigBis,
         nummer,
@@ -107,7 +102,7 @@ class AngebotSchemaIT extends AbstractIntegrationTest {
     final Integer indizes =
         jdbc.queryForObject(
             "SELECT count(*) FROM pg_indexes WHERE schemaname = 'public'"
-                + " AND indexname IN ('angebot_vorgang_idx', 'angebot_zustand_gueltigkeit_idx')",
+                + " AND indexname IN ('angebot_firma_idx', 'angebot_zustand_gueltigkeit_idx')",
             Integer.class);
 
     // Then
@@ -138,7 +133,7 @@ class AngebotSchemaIT extends AbstractIntegrationTest {
     assertThatThrownBy(
             () ->
                 jdbc.update(
-                    INSERT_ANGEBOT, vorgangId, "ENTWURF", GUELTIG, NUMMER, null, null, null, null))
+                    INSERT_ANGEBOT, firmaId, "ENTWURF", GUELTIG, NUMMER, null, null, null, null))
         .isInstanceOf(DataIntegrityViolationException.class)
         .hasMessageContaining("angebot_entwurf");
   }
@@ -149,7 +144,7 @@ class AngebotSchemaIT extends AbstractIntegrationTest {
     assertThatThrownBy(
             () ->
                 jdbc.update(
-                    INSERT_ANGEBOT, vorgangId, "ENTWURF", GUELTIG, null, null, null, FIRMA, null))
+                    INSERT_ANGEBOT, firmaId, "ENTWURF", GUELTIG, null, null, null, FIRMA, null))
         .isInstanceOf(DataIntegrityViolationException.class)
         .hasMessageContaining("angebot_entwurf");
   }
@@ -181,7 +176,7 @@ class AngebotSchemaIT extends AbstractIntegrationTest {
 
   @Test
   void angebotNummer_givenTheSameNumberTwice_thenRejectedByTheDatabase() {
-    // Given — zwei Angebote am selben Vorgang, beide mit derselben Nummer.
+    // Given — zwei Angebote an dieselbe Firma, beide mit derselben Nummer.
     versendet(GUELTIG, NUMMER);
 
     // When / Then
@@ -197,7 +192,7 @@ class AngebotSchemaIT extends AbstractIntegrationTest {
     assertThatThrownBy(
             () ->
                 jdbc.update(
-                    INSERT_ANGEBOT, vorgangId, "VERHANDELT", GUELTIG, null, null, null, null, null))
+                    INSERT_ANGEBOT, firmaId, "VERHANDELT", GUELTIG, null, null, null, null, null))
         .isInstanceOf(DataIntegrityViolationException.class);
   }
 
@@ -210,7 +205,7 @@ class AngebotSchemaIT extends AbstractIntegrationTest {
             () ->
                 jdbc.update(
                     INSERT_ANGEBOT,
-                    vorgangId,
+                    firmaId,
                     "VERHANDELT",
                     GUELTIG,
                     NUMMER,
@@ -222,7 +217,7 @@ class AngebotSchemaIT extends AbstractIntegrationTest {
   }
 
   @Test
-  void angebotVorgangId_givenAnUnknownVorgang_thenRejectedByTheDatabase() {
+  void angebotFirmaId_givenAnUnknownFirma_thenRejectedByTheDatabase() {
     // When / Then
     assertThatThrownBy(
             () ->

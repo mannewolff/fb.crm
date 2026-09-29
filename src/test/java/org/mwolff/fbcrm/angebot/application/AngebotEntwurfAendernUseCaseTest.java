@@ -91,14 +91,14 @@ class AngebotEntwurfAendernUseCaseTest {
 
   @Test
   void aendere_thenKeepsIdentityAndStampsTheChange() {
-    // Given — Kennung, Vorgang, Zustand und Anlagezeitpunkt bleiben.
+    // Given — Kennung, Firma, Zustand und Anlagezeitpunkt bleiben.
 
     // When
     final Angebot geaendert = aendere(List.of());
 
     // Then
     assertThat(geaendert.requireId()).isEqualTo(ANGEBOT);
-    assertThat(geaendert.vorgangId()).isEqualTo(Angebotsdoppel.VORGANG);
+    assertThat(geaendert.firmaId()).isEqualTo(Angebotsdoppel.FIRMA);
     assertThat(geaendert.zustand()).isEqualTo(Angebotszustand.ENTWURF);
     assertThat(geaendert.createdAt()).isEqualTo(Angebotsdoppel.ANGELEGT);
     assertThat(geaendert.updatedAt()).isEqualTo(JETZT);

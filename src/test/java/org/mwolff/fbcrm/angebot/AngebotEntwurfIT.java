@@ -15,7 +15,7 @@ import org.junit.jupiter.api.Test;
 import org.mwolff.fbcrm.AbstractIntegrationTest;
 import org.mwolff.fbcrm.angebot.web.AngebotPositionResponse;
 import org.mwolff.fbcrm.angebot.web.AngebotResponse;
-import org.mwolff.fbcrm.angebot.web.VorgangAngeboteResponse;
+import org.mwolff.fbcrm.angebot.web.FirmaAngeboteResponse;
 import org.mwolff.fbcrm.auth.domain.Account;
 import org.mwolff.fbcrm.auth.domain.AccountRepository;
 import org.mwolff.fbcrm.auth.domain.PasswordHasher;
@@ -38,8 +38,9 @@ import org.springframework.jdbc.core.JdbcTemplate;
  * haengen. Erstens E24: Nach einem {@code PUT} mit umgestellter Liste tragen die Positionszeilen
  * die Plaetze 1 bis n in der gesendeten Reihenfolge — das steht in der Spalte, nicht im Speicher.
  * Zweitens Kriterium 7: Ein verworfener Entwurf ist samt seinen Positionszeilen wirklich weg.
- * Drittens die Grenze aus E13: Am abgeschlossenen Vorgang antwortet das Anlegen 409, waehrend
- * derselbe Entwurf sich weiterhin fortschreiben laesst.
+ * Drittens die Wahl des Kunden (Issue #126): An einer stillgelegten Firma antwortet das Anlegen
+ * 409, waehrend ein bestehender Entwurf sich weiterhin fortschreiben laesst; ein Ansprechpartner
+ * einer anderen Firma ist 422.
  *
  * <p>Der Nachweis der Zugangsregel steht hier und nicht nur in {@code AccessRuleIT}: Ein neuer Pfad
  * unter {@code /api} ist ohne Sitzung verschlossen, und das gehoert zu jedem neuen Weg dazu.
@@ -58,9 +59,9 @@ class AngebotEntwurfIT extends AbstractIntegrationTest {
   private final Clock clock;
 
   private HttpHeaders sitzung = new HttpHeaders();
-  private long vorgangId;
-  private long abgeschlossenerVorgangId;
-  private long fremderVorgangId;
+  private long firmaId;
+  private long ansprechpartnerId;
+  private long fremderAnsprechpartnerId;
 
   @Autowired
   AngebotEntwurfIT(
@@ -79,34 +80,32 @@ class AngebotEntwurfIT extends AbstractIntegrationTest {
   @BeforeEach
   void leereDenBestandUndMeldeAn() {
     jdbc.execute(
-        "TRUNCATE angebot_position, angebot, vorgang_eintrag, vorgang, ansprechpartner, firma"
-            + " RESTART IDENTITY CASCADE");
+        "TRUNCATE angebot_position, angebot, ansprechpartner, firma RESTART IDENTITY CASCADE");
     jdbc.update("UPDATE eigene_angaben SET zahlungsbedingungen = ?", STANDARDBEDINGUNGEN);
-    jdbc.update("INSERT INTO firma (name) VALUES ('Adler AG')");
-    final long firmaId =
-        Objects.requireNonNull(
-                jdbc.queryForObject("SELECT id FROM firma WHERE name = 'Adler AG'", Long.class))
-            .longValue();
-    vorgangId = vorgang(1L, "Website-Relaunch", firmaId, false);
-    abgeschlossenerVorgangId = vorgang(2L, "Altes Geschaeft", firmaId, true);
-    fremderVorgangId = vorgang(3L, "Anderes Geschaeft", firmaId, false);
+    firmaId = firma("Adler AG");
+    ansprechpartnerId = ansprechpartner(firmaId, "Adler");
+    fremderAnsprechpartnerId = ansprechpartner(firma("Biber GmbH"), "Biber");
     jdbc.execute("TRUNCATE outbox_message, password_reset_token, account RESTART IDENTITY CASCADE");
     accounts.save(
         new Account(null, MAIL, "Manne", hasher.hash(PASSWORT), Role.ADMIN, 0, ANGELEGT, ANGELEGT));
     sitzung = angemeldeterKopf();
   }
 
-  private long vorgang(
-      final long nummer, final String titel, final long firmaId, final boolean abgeschlossen) {
+  private long firma(final String name) {
+    jdbc.update("INSERT INTO firma (name) VALUES (?)", name);
+    return Objects.requireNonNull(
+            jdbc.queryForObject("SELECT id FROM firma WHERE name = ?", Long.class, name))
+        .longValue();
+  }
+
+  private long ansprechpartner(final long firma, final String nachname) {
     jdbc.update(
-        "INSERT INTO vorgang (nummer, titel, firma_id, abgeschlossen) VALUES (?, ?, ?, ?)",
-        Long.valueOf(nummer),
-        titel,
-        Long.valueOf(firmaId),
-        Boolean.valueOf(abgeschlossen));
+        "INSERT INTO ansprechpartner (firma_id, nachname) VALUES (?, ?)",
+        Long.valueOf(firma),
+        nachname);
     return Objects.requireNonNull(
             jdbc.queryForObject(
-                "SELECT id FROM vorgang WHERE nummer = ?", Long.class, Long.valueOf(nummer)))
+                "SELECT id FROM ansprechpartner WHERE nachname = ?", Long.class, nachname))
         .longValue();
   }
 
@@ -145,22 +144,17 @@ class AngebotEntwurfIT extends AbstractIntegrationTest {
     return felder;
   }
 
-  private ResponseEntity<AngebotResponse> anlegenMitVorlage(
-      final long anVorgang, final long vorlageAngebotId) {
+  private ResponseEntity<AngebotResponse> anlegenMit(final long ansprechpartner) {
     return ruf(
-        "/api/vorgaenge/" + anVorgang + "/angebote",
+        "/api/firmen/" + firmaId + "/angebote",
         HttpMethod.POST,
-        Map.of("vorlageAngebotId", Long.valueOf(vorlageAngebotId)),
+        Map.of("ansprechpartnerId", Long.valueOf(ansprechpartner)),
         AngebotResponse.class);
   }
 
   private AngebotResponse entwurf() {
     return Objects.requireNonNull(
-        ruf(
-                "/api/vorgaenge/" + vorgangId + "/angebote",
-                HttpMethod.POST,
-                null,
-                AngebotResponse.class)
+        ruf("/api/firmen/" + firmaId + "/angebote", HttpMethod.POST, null, AngebotResponse.class)
             .getBody());
   }
 
@@ -179,11 +173,7 @@ class AngebotEntwurfIT extends AbstractIntegrationTest {
 
     // When
     final ResponseEntity<AngebotResponse> antwort =
-        ruf(
-            "/api/vorgaenge/" + vorgangId + "/angebote",
-            HttpMethod.POST,
-            null,
-            AngebotResponse.class);
+        ruf("/api/firmen/" + firmaId + "/angebote", HttpMethod.POST, null, AngebotResponse.class);
 
     // Then
     assertThat(antwort.getStatusCode()).isEqualTo(HttpStatus.CREATED);
@@ -281,19 +271,19 @@ class AngebotEntwurfIT extends AbstractIntegrationTest {
   }
 
   @Test
-  void angebote_thenListsTheDraftsOfTheVorgangNewestFirst() {
+  void angebote_thenListsTheDraftsOfTheFirmaNewestFirst() {
     // Given — Kriterium 20, E25.
     final long aelterer = entwurf().id();
     final long juengerer = entwurf().id();
 
     // When
-    final VorgangAngeboteResponse liste =
+    final FirmaAngeboteResponse liste =
         Objects.requireNonNull(
             ruf(
-                    "/api/vorgaenge/" + vorgangId + "/angebote",
+                    "/api/firmen/" + firmaId + "/angebote",
                     HttpMethod.GET,
                     null,
-                    VorgangAngeboteResponse.class)
+                    FirmaAngeboteResponse.class)
                 .getBody());
 
     // Then
@@ -303,62 +293,38 @@ class AngebotEntwurfIT extends AbstractIntegrationTest {
   }
 
   @Test
-  void anlegen_withAVorlage_thenCopiesTheTextsAndThePositionen() {
-    // Given — E23.
-    final long quelle = entwurf().id();
-    ruf(
-        "/api/angebote/" + quelle,
-        HttpMethod.PUT,
-        entwurfsrumpf(List.of(position("Konzeption", "AUFWAND", "2.50", "PERSONENTAG"))),
-        AngebotResponse.class);
-
+  void anlegen_withAContactOfTheFirma_thenAnswersCreatedAndNamesFirmaAndContact() {
     // When
-    final AngebotResponse kopie =
-        Objects.requireNonNull(anlegenMitVorlage(vorgangId, quelle).getBody());
+    final ResponseEntity<AngebotResponse> antwort = anlegenMit(ansprechpartnerId);
 
     // Then
-    assertThat(kopie.id()).isNotEqualTo(quelle);
-    assertThat(kopie.leistungsbeschreibung()).isEqualTo("Neugestaltung der Website");
-    assertThat(kopie.positionen())
-        .extracting(AngebotPositionResponse::bezeichnung)
-        .containsExactly("Konzeption");
-    assertThat(kopie.gueltigBis()).isNotEqualTo(LocalDate.of(2026, 12, 31));
+    assertThat(antwort.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+    final AngebotResponse angelegt = Objects.requireNonNull(antwort.getBody());
+    assertThat(angelegt.firmaId()).isEqualTo(firmaId);
+    assertThat(angelegt.firmaName()).isEqualTo("Adler AG");
+    assertThat(angelegt.ansprechpartnerId()).isEqualTo(ansprechpartnerId);
+    assertThat(angelegt.ansprechpartnerName()).isEqualTo("Adler");
   }
 
   @Test
-  void anlegen_withAVorlageFromAnotherVorgang_thenAnswers422() {
-    // Given — E23: die Quelle haengt an einem anderen, offenen Vorgang.
-    final long quelle = entwurf().id();
-
+  void anlegen_withAContactOfAnotherFirma_thenAnswers422() {
     // When
-    final ResponseEntity<AngebotResponse> antwort = anlegenMitVorlage(fremderVorgangId, quelle);
+    final ResponseEntity<AngebotResponse> antwort = anlegenMit(fremderAnsprechpartnerId);
 
     // Then
     assertThat(antwort.getStatusCode()).isEqualTo(HttpStatus.UNPROCESSABLE_ENTITY);
   }
 
   @Test
-  void anlegen_atAClosedVorgangWithAVorlage_thenTheClosedVorgangDecidesFirst() {
-    // Given — E13 wird vor E23 geprueft: eine abgewiesene Anlage liest die Vorlage nicht einmal.
-    final long quelle = entwurf().id();
-
-    // When
-    final ResponseEntity<AngebotResponse> antwort =
-        anlegenMitVorlage(abgeschlossenerVorgangId, quelle);
-
-    // Then
-    assertThat(antwort.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
-  }
-
-  @Test
-  void schreibsperre_atAClosedVorgang_thenBlocksAnlegenButNotAendern() {
-    // Given — E13, Kriterium 9: die Sperre gilt dem Anlegen, nicht der Pflege eines Entwurfs.
+  void stilllegen_ofTheFirma_thenBlocksAnlegenButNotAendern() {
+    // Given — an eine stillgelegte Firma geht kein neues Angebot; ein bestehender Entwurf bleibt
+    // pflegbar.
     final long angebotId = entwurf().id();
-    jdbc.update("UPDATE vorgang SET abgeschlossen = true WHERE id = ?", Long.valueOf(vorgangId));
+    jdbc.update("UPDATE firma SET aktiv = false WHERE id = ?", Long.valueOf(firmaId));
 
     // When
     final ResponseEntity<String> anlegen =
-        ruf("/api/vorgaenge/" + vorgangId + "/angebote", HttpMethod.POST, null, String.class);
+        ruf("/api/firmen/" + firmaId + "/angebote", HttpMethod.POST, null, String.class);
     final ResponseEntity<AngebotResponse> aendern =
         ruf(
             "/api/angebote/" + angebotId,
@@ -378,7 +344,7 @@ class AngebotEntwurfIT extends AbstractIntegrationTest {
 
     // When / Then
     assertThat(
-            ruf("/api/vorgaenge/" + vorgangId + "/angebote", HttpMethod.GET, null, String.class)
+            ruf("/api/firmen/" + firmaId + "/angebote", HttpMethod.GET, null, String.class)
                 .getStatusCode())
         .isEqualTo(HttpStatus.UNAUTHORIZED);
     assertThat(ruf("/api/angebote/1", HttpMethod.GET, null, String.class).getStatusCode())

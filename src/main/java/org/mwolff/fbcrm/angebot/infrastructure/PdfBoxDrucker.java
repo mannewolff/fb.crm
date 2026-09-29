@@ -34,7 +34,7 @@ class PdfBoxDrucker implements Belegdrucker {
 
   /*
    * Ausgenommen ist allein dieser Rahmen, nicht die Arbeit darin: Der IOException-Zweig ist mit
-   * einem ByteArrayOutputStream nicht erreichbar — dort schlaegt kein Schreibvorgang fehl —, und ein
+   * einem ByteArrayOutputStream nicht erreichbar — dort scheitert kein Schreiben —, und ein
    * Test dafuer muesste die Bibliothek verbiegen. Methodengenaue Ausnahme nach CLAUDE-java.md §5.4;
    * geschrieben() bleibt in Abdeckung und Mutationstest, geprueft von PdfBoxDruckerTest.
    */

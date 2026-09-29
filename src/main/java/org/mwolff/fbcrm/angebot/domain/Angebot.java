@@ -10,7 +10,7 @@ import org.mwolff.fbcrm.common.Geldrechnung;
 import org.mwolff.fbcrm.common.Identifiable;
 
 /**
- * Ein Angebot — ein eigenstaendiges Dokument am Vorgang, mit eigenem Lebenszyklus (Kapitel 03).
+ * Ein Angebot — ein eigenstaendiges Dokument an eine Firma, mit eigenem Lebenszyklus (Kapitel 03).
  *
  * <p><b>Der Entwurf und das festgeschriebene Dokument.</b> Solange der Zustand {@link
  * Angebotszustand#ENTWURF} ist, traegt das Angebot keine Nummer, kein Dokument und keine Kopien der
@@ -28,7 +28,8 @@ import org.mwolff.fbcrm.common.Identifiable;
  * vorbeifuehrt.
  *
  * @param id technische Id — {@code null}, solange das Angebot nicht gespeichert ist
- * @param vorgangId Kennung des Vorgangs, zu dem das Angebot gehoert
+ * @param firmaId Kennung der Firma, an die das Angebot geht
+ * @param ansprechpartnerId Kennung des Ansprechpartners bei dieser Firma, oder {@code null}
  * @param nummer Angebotsnummer aus dem Nummernkreis, oder {@code null} im Entwurf (Kriterium 11)
  * @param zustand der gespeicherte Zustand
  * @param angebotDatum Datum des Angebots; im Entwurf der Tag der Anlage (Kriterium 3)
@@ -48,7 +49,8 @@ import org.mwolff.fbcrm.common.Identifiable;
  */
 public record Angebot(
     @Nullable Long id,
-    long vorgangId,
+    long firmaId,
+    @Nullable Long ansprechpartnerId,
     @Nullable String nummer,
     Angebotszustand zustand,
     LocalDate angebotDatum,
@@ -93,21 +95,6 @@ public record Angebot(
   }
 
   /**
-   * {@code true}, solange das Angebot auf eine Reaktion des Kunden wartet.
-   *
-   * <p>Das sind genau die beiden Staende {@link Angebotsstand#VERSENDET} und {@link
-   * Angebotsstand#ABGELAUFEN}: Die verstrichene Gueltigkeit schliesst ein Angebot nicht, sie macht
-   * es nur alt (Kriterium 18). Ein offenes Angebot ist es, das ein spaeterer Versand abloest
-   * (Kriterium 19) und das eine Annahme abloest (Kriterium 17).
-   *
-   * @param heute der heutige Tag in {@code common.Geschaeftszone}
-   */
-  public boolean offen(final LocalDate heute) {
-    final Angebotsstand stand = stand(heute);
-    return stand == Angebotsstand.VERSENDET || stand == Angebotsstand.ABGELAUFEN;
-  }
-
-  /**
    * Der Entwurf mit neuen Angaben (Kriterium 6).
    *
    * @param gueltigBis letzter Tag der Gueltigkeit
@@ -126,7 +113,8 @@ public record Angebot(
     nurWenn(zustand == Angebotszustand.ENTWURF);
     return new Angebot(
         id,
-        vorgangId,
+        firmaId,
+        ansprechpartnerId,
         nummer,
         zustand,
         angebotDatum,
@@ -163,7 +151,8 @@ public record Angebot(
     nurWenn(zustand == Angebotszustand.ENTWURF);
     return new Angebot(
         id,
-        vorgangId,
+        firmaId,
+        ansprechpartnerId,
         nummer,
         Angebotszustand.VERSENDET,
         angebotDatum,
@@ -200,36 +189,6 @@ public record Angebot(
     return mitReaktion(Angebotszustand.ABGELEHNT, zeitpunkt);
   }
 
-  /**
-   * Das Angebot als abgeloest (Kriterium 19).
-   *
-   * <p>Ohne Reaktionszeitpunkt: Die Abloesung ist ein Zug der Anwendung und keine Antwort des
-   * Kunden. Abgeloest wird nur, was offen ist.
-   *
-   * @param zeitpunkt Zeitpunkt der Abloesung
-   * @throws AngebotNichtAenderbar wenn das Angebot nicht versendet ist
-   */
-  public Angebot abgeloest(final Instant zeitpunkt) {
-    nurWenn(zustand == Angebotszustand.VERSENDET);
-    return new Angebot(
-        id,
-        vorgangId,
-        nummer,
-        Angebotszustand.ABGELOEST,
-        angebotDatum,
-        gueltigBis,
-        leistungsbeschreibung,
-        zahlungsbedingungen,
-        versendetAm,
-        reaktionAm,
-        pdfSchluessel,
-        empfaenger,
-        absender,
-        positionen,
-        createdAt,
-        zeitpunkt);
-  }
-
   /*
    * Annehmen und Ablehnen unterscheiden sich allein im Zielzustand — und beide sind aus VERSENDET
    * *und* aus ABGELOEST erlaubt, jeweils unabhaengig vom Datum (F13, Kriterium 18).
@@ -238,7 +197,8 @@ public record Angebot(
     nurWenn(zustand == Angebotszustand.VERSENDET || zustand == Angebotszustand.ABGELOEST);
     return new Angebot(
         id,
-        vorgangId,
+        firmaId,
+        ansprechpartnerId,
         nummer,
         ziel,
         angebotDatum,

@@ -91,6 +91,7 @@ class AngebotTest {
     return new Angebot(
         7L,
         3L,
+        8L,
         entwurf ? null : NUMMER,
         zustand,
         ANGEBOTSDATUM,
@@ -188,36 +189,6 @@ class AngebotTest {
 
     // When / Then
     assertThat(angebot.stand(HEUTE)).isEqualTo(Angebotsstand.ABGELOEST);
-  }
-
-  @Test
-  void offen_givenASentOfferStillValid_thenOpen() {
-    // Given
-    final Angebot angebot = angebot(Angebotszustand.VERSENDET, HEUTE);
-
-    // When / Then
-    assertThat(angebot.offen(HEUTE)).isTrue();
-  }
-
-  @Test
-  void offen_givenASentOfferWithLapsedValidity_thenStillOpen() {
-    // Given — Kriterium 18: das abgelaufene Angebot wartet weiter auf eine Reaktion.
-    final Angebot angebot = angebot(Angebotszustand.VERSENDET, HEUTE.minusDays(1));
-
-    // When / Then
-    assertThat(angebot.offen(HEUTE)).isTrue();
-  }
-
-  @ParameterizedTest
-  @EnumSource(
-      value = Angebotszustand.class,
-      names = {"ENTWURF", "ANGENOMMEN", "ABGELEHNT", "ABGELOEST"})
-  void offen_givenAnyOtherState_thenNotOpen(final Angebotszustand zustand) {
-    // Given
-    final Angebot angebot = angebot(zustand, HEUTE);
-
-    // When / Then
-    assertThat(angebot.offen(HEUTE)).isFalse();
   }
 
   @Test
@@ -361,34 +332,6 @@ class AngebotTest {
 
     // When / Then
     assertThatThrownBy(() -> angebot.abgelehnt(JETZT)).isInstanceOf(AngebotNichtAenderbar.class);
-  }
-
-  @Test
-  void abgeloest_givenASentOffer_thenSupersededWithoutAReaction() {
-    // Given — die Abloesung ist ein Zug der Anwendung und keine Reaktion des Kunden.
-    final Angebot angebot = angebot(Angebotszustand.VERSENDET, GUELTIG_BIS);
-
-    // When
-    final Angebot abgeloest = angebot.abgeloest(JETZT);
-
-    // Then
-    assertThat(abgeloest)
-        .satisfies(
-            a -> assertThat(a.zustand()).isEqualTo(Angebotszustand.ABGELOEST),
-            a -> assertThat(a.reaktionAm()).isNull(),
-            a -> assertThat(a.updatedAt()).isEqualTo(JETZT));
-  }
-
-  @ParameterizedTest
-  @EnumSource(
-      value = Angebotszustand.class,
-      names = {"ENTWURF", "ANGENOMMEN", "ABGELEHNT", "ABGELOEST"})
-  void abgeloest_givenAnyStateButSent_thenRejected(final Angebotszustand zustand) {
-    // Given — abgeloest wird nur, was offen ist (Kriterium 17).
-    final Angebot angebot = angebot(zustand, GUELTIG_BIS);
-
-    // When / Then
-    assertThatThrownBy(() -> angebot.abgeloest(JETZT)).isInstanceOf(AngebotNichtAenderbar.class);
   }
 
   @Test

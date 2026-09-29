@@ -23,11 +23,14 @@ import org.mwolff.fbcrm.common.Einheit;
  */
 final class Angebotsdoppel {
 
-  /** Der Vorgang, an dem die Angebote dieses Pakets haengen. */
-  static final long VORGANG = 3L;
+  /** Die Firma, an die die Angebote dieses Pakets gehen. */
+  static final long FIRMA = 5L;
 
-  /** Ein anderer Vorgang — die Quelle, die als Vorlage nicht zur Wahl steht (E23). */
-  static final long FREMDER_VORGANG = 4L;
+  /** Eine andere Firma — deren Ansprechpartner fuer {@link #FIRMA} nicht zur Wahl steht. */
+  static final long FREMDE_FIRMA = 6L;
+
+  /** Der Ansprechpartner bei {@link #FIRMA}, den die Angebote dieses Pakets tragen. */
+  static final long ANSPRECHPARTNER = 8L;
 
   static final LocalDate ANGEBOTSDATUM = LocalDate.of(2026, 9, 20);
   static final LocalDate GUELTIG_BIS = LocalDate.of(2026, 10, 20);
@@ -71,33 +74,55 @@ final class Angebotsdoppel {
 
   /** Ein Entwurf mit Kennung, zwei Positionen und beiden Texten. */
   static Angebot entwurf(final long id) {
-    return entwurf(id, VORGANG, List.of(KONZEPTION, SCHULUNG));
+    return entwurf(id, FIRMA, List.of(KONZEPTION, SCHULUNG));
   }
 
-  /** Ein Entwurf an einem beliebigen Vorgang mit beliebigen Positionen. */
-  static Angebot entwurf(final long id, final long vorgangId, final List<Angebotsposition> zeilen) {
-    return angebot(id, vorgangId, Angebotszustand.ENTWURF, zeilen, ANGELEGT);
+  /** Ein Entwurf an eine beliebige Firma mit beliebigen Positionen. */
+  static Angebot entwurf(final long id, final long firmaId, final List<Angebotsposition> zeilen) {
+    return angebot(id, firmaId, Angebotszustand.ENTWURF, zeilen, ANGELEGT);
+  }
+
+  /** Dasselbe Angebot ohne Ansprechpartner — der Ansprechpartner ist optional (Issue #126). */
+  static Angebot ohneAnsprechpartner(final Angebot angebot) {
+    return new Angebot(
+        angebot.id(),
+        angebot.firmaId(),
+        null,
+        angebot.nummer(),
+        angebot.zustand(),
+        angebot.angebotDatum(),
+        angebot.gueltigBis(),
+        angebot.leistungsbeschreibung(),
+        angebot.zahlungsbedingungen(),
+        angebot.versendetAm(),
+        angebot.reaktionAm(),
+        angebot.pdfSchluessel(),
+        angebot.empfaenger(),
+        angebot.absender(),
+        angebot.positionen(),
+        angebot.createdAt(),
+        angebot.updatedAt());
   }
 
   /** Ein Angebot in einem der vier festgeschriebenen Zustaende. */
   static Angebot festgeschrieben(final long id, final Angebotszustand zustand) {
-    return angebot(id, VORGANG, zustand, List.of(KONZEPTION), ANGELEGT);
+    return angebot(id, FIRMA, zustand, List.of(KONZEPTION), ANGELEGT);
   }
 
   /** Ein Angebot mit frei gewaehltem Anlagezeitpunkt — fuer die Reihenfolge aus Kriterium 20. */
   static Angebot angebot(
       final long id,
-      final long vorgangId,
+      final long firmaId,
       final Angebotszustand zustand,
       final List<Angebotsposition> zeilen,
       final Instant angelegt) {
-    return angebot(id, vorgangId, zustand, zeilen, angelegt, GUELTIG_BIS);
+    return angebot(id, firmaId, zustand, zeilen, angelegt, GUELTIG_BIS);
   }
 
   /** Ein Angebot mit frei gewaehlter Gueltigkeit. */
   private static Angebot angebot(
       final long id,
-      final long vorgangId,
+      final long firmaId,
       final Angebotszustand zustand,
       final List<Angebotsposition> zeilen,
       final Instant angelegt,
@@ -105,7 +130,8 @@ final class Angebotsdoppel {
     final boolean entwurf = zustand == Angebotszustand.ENTWURF;
     return new Angebot(
         Long.valueOf(id),
-        vorgangId,
+        firmaId,
+        Long.valueOf(ANSPRECHPARTNER),
         entwurf ? null : "A-2026-%03d".formatted(id),
         zustand,
         ANGEBOTSDATUM,

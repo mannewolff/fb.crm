@@ -14,7 +14,6 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -99,6 +98,7 @@ class JpaAngebotRepositoryTest {
     return new Angebot(
         11L,
         3L,
+        8L,
         null,
         Angebotszustand.ENTWURF,
         ANGEBOTSDATUM,
@@ -119,6 +119,7 @@ class JpaAngebotRepositoryTest {
     return new Angebot(
         11L,
         3L,
+        8L,
         NUMMER,
         Angebotszustand.VERSENDET,
         ANGEBOTSDATUM,
@@ -139,6 +140,7 @@ class JpaAngebotRepositoryTest {
     return new AngebotEntity(
         11L,
         3L,
+        8L,
         null,
         Angebotszustand.ENTWURF,
         ANGEBOTSDATUM,
@@ -157,6 +159,7 @@ class JpaAngebotRepositoryTest {
         new AngebotEntity(
             11L,
             3L,
+            8L,
             NUMMER,
             Angebotszustand.VERSENDET,
             ANGEBOTSDATUM,
@@ -177,6 +180,7 @@ class JpaAngebotRepositoryTest {
     return new Angebot(
         11L,
         3L,
+        8L,
         NUMMER,
         Angebotszustand.ANGENOMMEN,
         ANGEBOTSDATUM,
@@ -198,6 +202,7 @@ class JpaAngebotRepositoryTest {
         new AngebotEntity(
             11L,
             3L,
+            8L,
             NUMMER,
             Angebotszustand.ANGENOMMEN,
             ANGEBOTSDATUM,
@@ -245,7 +250,8 @@ class JpaAngebotRepositoryTest {
     assertThat(gespeicherte.getValue())
         .satisfies(
             zeile -> assertThat(zeile.getId()).isEqualTo(11L),
-            zeile -> assertThat(zeile.getVorgangId()).isEqualTo(3L),
+            zeile -> assertThat(zeile.getFirmaId()).isEqualTo(3L),
+            zeile -> assertThat(zeile.getAnsprechpartnerId()).isEqualTo(8L),
             zeile -> assertThat(zeile.getNummer()).isNull(),
             zeile -> assertThat(zeile.getZustand()).isEqualTo(Angebotszustand.ENTWURF),
             zeile -> assertThat(zeile.getAngebotDatum()).isEqualTo(ANGEBOTSDATUM),
@@ -494,6 +500,7 @@ class JpaAngebotRepositoryTest {
     return new AngebotEntity(
         Long.valueOf(id),
         3L,
+        8L,
         null,
         Angebotszustand.ENTWURF,
         ANGEBOTSDATUM,
@@ -521,9 +528,9 @@ class JpaAngebotRepositoryTest {
   }
 
   @Test
-  void findByVorgang_thenLoadsThePositionsOfEveryOfferInOneQuery() {
+  void findByFirma_thenLoadsThePositionsOfEveryOfferInOneQuery() {
     // Given — E20: ein findByAngebot je Zeile waere die bekannte Abfrage-Lawine.
-    when(angebote.findByVorgang(3L)).thenReturn(List.of(entwurfszeile(11L), entwurfszeile(12L)));
+    when(angebote.findByFirma(3L)).thenReturn(List.of(entwurfszeile(11L), entwurfszeile(12L)));
     when(positionen.findByAngebote(List.of(11L, 12L)))
         .thenReturn(
             List.of(
@@ -532,7 +539,7 @@ class JpaAngebotRepositoryTest {
                 positionszeile(12L, (short) 1, KONZEPTION)));
 
     // When
-    final List<Angebot> gefunden = repository.findByVorgang(3L);
+    final List<Angebot> gefunden = repository.findByFirma(3L);
 
     // Then
     assertThat(gefunden)
@@ -543,54 +550,29 @@ class JpaAngebotRepositoryTest {
   }
 
   @Test
-  void findByVorgang_givenAnOfferWithoutPositions_thenTranslatesItWithAnEmptyList() {
+  void findByFirma_givenAnOfferWithoutPositions_thenTranslatesItWithAnEmptyList() {
     // Given — ein frisch angelegter Entwurf hat noch keine Position.
-    when(angebote.findByVorgang(3L)).thenReturn(List.of(entwurfszeile(11L)));
+    when(angebote.findByFirma(3L)).thenReturn(List.of(entwurfszeile(11L)));
     when(positionen.findByAngebote(List.of(11L))).thenReturn(List.of());
 
     // When
-    final List<Angebot> gefunden = repository.findByVorgang(3L);
+    final List<Angebot> gefunden = repository.findByFirma(3L);
 
     // Then
     assertThat(gefunden).singleElement().satisfies(a -> assertThat(a.positionen()).isEmpty());
   }
 
   @Test
-  void findByVorgang_givenAVorgangWithoutOffers_thenAsksNothingMore() {
+  void findByFirma_givenAFirmaWithoutOffers_thenAsksNothingMore() {
     // Given — eine Abfrage mit leerer IN-Liste waere kein gueltiges SQL.
-    when(angebote.findByVorgang(3L)).thenReturn(List.of());
+    when(angebote.findByFirma(3L)).thenReturn(List.of());
 
     // When
-    final List<Angebot> gefunden = repository.findByVorgang(3L);
+    final List<Angebot> gefunden = repository.findByFirma(3L);
 
     // Then
     assertThat(gefunden).isEmpty();
     verify(positionen, never()).findByAngebote(any());
-  }
-
-  @Test
-  void vorgaengeMitFestgeschriebenemAngebot_thenPassesTheWholeSetToTheQuery() {
-    // Given — E2: die Auswahl fuer die Phasenableitung des Vorgangs.
-    when(angebote.vorgaengeMitFestgeschriebenemAngebot(List.of(4L, 5L)))
-        .thenReturn(List.of(Long.valueOf(4L)));
-
-    // When
-    final Set<Long> gefunden = repository.vorgaengeMitFestgeschriebenemAngebot(List.of(4L, 5L));
-
-    // Then
-    assertThat(gefunden).containsExactly(Long.valueOf(4L));
-  }
-
-  @Test
-  void vorgaengeMitFestgeschriebenemAngebot_givenNoCommittedOffer_thenEmpty() {
-    // Given
-    when(angebote.vorgaengeMitFestgeschriebenemAngebot(List.of(4L))).thenReturn(List.of());
-
-    // When
-    final Set<Long> gefunden = repository.vorgaengeMitFestgeschriebenemAngebot(List.of(4L));
-
-    // Then
-    assertThat(gefunden).isEmpty();
   }
 
   @Test

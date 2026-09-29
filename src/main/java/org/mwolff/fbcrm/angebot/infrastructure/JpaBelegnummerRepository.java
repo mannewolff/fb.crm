@@ -7,11 +7,10 @@ import org.springframework.stereotype.Repository;
 /**
  * Setzt den Port {@link BelegnummerRepository} auf JPA um.
  *
- * <p>Ohne eigene Transaktionsgrenze — und zwar absichtlich, wie bei {@code
- * JpaNummernkreisRepository} des Vorgangs: Der Zug laeuft in der Transaktion des Aufrufers, damit
- * die Sperre auf der Jahreszeile bis zum Ende <b>dessen</b> Arbeit haelt und ein Ruecklauf die
- * Nummer wieder freigibt (E6). Ein eigenes {@code @Transactional} schloesse die Sperre hier und
- * gaebe die Nummer heraus, bevor das Angebot dazu geschrieben ist.
+ * <p>Ohne eigene Transaktionsgrenze — und zwar absichtlich: Der Zug laeuft in der Transaktion des
+ * Aufrufers, damit die Sperre auf der Jahreszeile bis zum Ende <b>dessen</b> Arbeit haelt und ein
+ * Ruecklauf die Nummer wieder freigibt (E6). Ein eigenes {@code @Transactional} schloesse die
+ * Sperre hier und gaebe die Nummer heraus, bevor das Angebot dazu geschrieben ist.
  */
 @Repository
 class JpaBelegnummerRepository implements BelegnummerRepository {

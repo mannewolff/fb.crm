@@ -28,17 +28,12 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 /**
- * Die Reaktion des Kunden ueber HTTP, gegen echtes PostgreSQL (Kriterien 17, 18, 19).
+ * Die Reaktion des Kunden ueber HTTP, gegen echtes PostgreSQL (Kriterien 17, 18).
  *
- * <p>Hier steht der Fall, den F13 begruendet, und er ist nur an der echten Transaktion zu zeigen:
- * Zwei Angebote werden versendet — das erste wechselt dabei nach {@code ABGELOEST} —, und dann sagt
- * der Kunde „wir nehmen das erste". Danach ist das erste {@code ANGENOMMEN}, das zweite {@code
- * ABGELOEST}, und die Historie des Vorgangs traegt alle fuenf Wechsel in Zeitpunktreihenfolge.
- *
- * <p>Dazu zwei Zusagen, die ebenfalls nur hier greifen. Die Schreibsperre am abgeschlossenen
- * Vorgang gilt fuer diesen Weg <b>nicht</b> (E13) — Kriterium 9 zieht sie nur um Anlegen und
- * Versenden; der Anwendungsfall hat gar keinen Port zum Vorgang, gezeigt wird es am abgeschlossenen
- * Vorgang in der Datenbank. Und jeder neue Pfad unter {@code /api} ist ohne Sitzung verschlossen.
+ * <p>Nur an der echten Transaktion zu zeigen: Die Reaktion betrifft genau das eine Angebot. Zwei
+ * versendete Angebote an dieselbe Firma bleiben voneinander unabhaengig — die Zusage zu einem
+ * beendet das andere nicht (Issue #126). Und jeder neue Pfad unter {@code /api} ist ohne Sitzung
+ * verschlossen.
  */
 class AngebotReaktionIT extends AbstractIntegrationTest {
 
@@ -55,7 +50,7 @@ class AngebotReaktionIT extends AbstractIntegrationTest {
   private final Clock clock;
 
   private HttpHeaders sitzung = new HttpHeaders();
-  private long vorgangId;
+  private long firmaId;
 
   @Autowired
   AngebotReaktionIT(
@@ -72,10 +67,9 @@ class AngebotReaktionIT extends AbstractIntegrationTest {
   }
 
   @BeforeEach
-  void legeEinenVersandfaehigenVorgangAn() {
+  void legeEineVersandfaehigeFirmaAn() {
     jdbc.execute(
-        "TRUNCATE angebot_position, angebot, vorgang_eintrag, vorgang, ansprechpartner, firma"
-            + " RESTART IDENTITY CASCADE");
+        "TRUNCATE angebot_position, angebot, ansprechpartner, firma RESTART IDENTITY CASCADE");
     jdbc.execute("DELETE FROM angebot_nummernkreis");
     jdbc.update(
         "UPDATE eigene_angaben SET name = ?, strasse = ?, plz = ?, ort = ?, land = ?,"
@@ -94,12 +88,7 @@ class AngebotReaktionIT extends AbstractIntegrationTest {
         "28195",
         "Bremen",
         "Deutschland");
-    final long firmaId = einzigeId("SELECT id FROM firma");
-    jdbc.update(
-        "INSERT INTO vorgang (nummer, titel, firma_id) VALUES (1, ?, ?)",
-        "Website-Relaunch",
-        Long.valueOf(firmaId));
-    vorgangId = einzigeId("SELECT id FROM vorgang");
+    firmaId = einzigeId("SELECT id FROM firma");
     jdbc.execute("TRUNCATE outbox_message, password_reset_token, account RESTART IDENTITY CASCADE");
     accounts.save(
         new Account(null, MAIL, "Manne", hasher.hash(PASSWORT), Role.ADMIN, 0, ANGELEGT, ANGELEGT));
@@ -140,12 +129,12 @@ class AngebotReaktionIT extends AbstractIntegrationTest {
     return felder;
   }
 
-  /** Ein versendetes Angebot am Vorgang; geliefert wird seine Nummer. */
+  /** Ein versendetes Angebot an die Firma; geliefert wird seine Nummer. */
   private Versandeter versandtesAngebot() {
     final long angebotId =
         Objects.requireNonNull(
                 ruf(
-                        "/api/vorgaenge/" + vorgangId + "/angebote",
+                        "/api/firmen/" + firmaId + "/angebote",
                         HttpMethod.POST,
                         null,
                         AngebotResponse.class)
@@ -181,20 +170,11 @@ class AngebotReaktionIT extends AbstractIntegrationTest {
             "SELECT zustand FROM angebot WHERE id = ?", String.class, Long.valueOf(angebotId)));
   }
 
-  private List<String> ereignisse() {
-    return jdbc.queryForList(
-        "SELECT text FROM vorgang_eintrag WHERE vorgang_id = ? AND art = 'EREIGNIS'"
-            + " ORDER BY geschehen_am, id",
-        String.class,
-        Long.valueOf(vorgangId));
-  }
-
   @Test
-  void annehmen_theSupersededFirstAngebot_thenClosesTheSecondOneAndRecordsEveryWechsel() {
-    // Given — F13: nachverhandelt, und der Kunde nimmt am Ende das erste Angebot.
+  void annehmen_thenClosesOnlyTheAngebotItself() {
+    // Given — zwei unabhaengige Angebote an dieselbe Firma.
     final Versandeter erstes = versandtesAngebot();
     final Versandeter zweites = versandtesAngebot();
-    assertThat(zustand(erstes.id())).isEqualTo("ABGELOEST");
 
     // When
     final ResponseEntity<AngebotResponse> antwort = reagiere(erstes.id(), "annehmen");
@@ -204,19 +184,12 @@ class AngebotReaktionIT extends AbstractIntegrationTest {
     assertThat(Objects.requireNonNull(antwort.getBody()).stand().name()).isEqualTo("ANGENOMMEN");
     assertThat(antwort.getBody().reaktionAm()).isNotNull();
     assertThat(zustand(erstes.id())).isEqualTo("ANGENOMMEN");
-    assertThat(zustand(zweites.id())).isEqualTo("ABGELOEST");
-    assertThat(ereignisse())
-        .containsExactly(
-            "Angebot %s versendet".formatted(erstes.nummer()),
-            "Angebot %s versendet".formatted(zweites.nummer()),
-            "Angebot %s abgeloest".formatted(erstes.nummer()),
-            "Angebot %s angenommen".formatted(erstes.nummer()),
-            "Angebot %s abgeloest".formatted(zweites.nummer()));
+    assertThat(zustand(zweites.id())).isEqualTo("VERSENDET");
   }
 
   @Test
   void ablehnen_thenClosesOnlyTheAngebotItself() {
-    // Given — Kriterium 17 nennt allein die Annahme; eine Absage laesst die anderen offen.
+    // Given
     final Versandeter erstes = versandtesAngebot();
     final Versandeter zweites = versandtesAngebot();
 
@@ -226,8 +199,7 @@ class AngebotReaktionIT extends AbstractIntegrationTest {
     // Then
     assertThat(antwort.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(zustand(zweites.id())).isEqualTo("ABGELEHNT");
-    assertThat(zustand(erstes.id())).isEqualTo("ABGELOEST");
-    assertThat(ereignisse()).last().isEqualTo("Angebot %s abgelehnt".formatted(zweites.nummer()));
+    assertThat(zustand(erstes.id())).isEqualTo("VERSENDET");
   }
 
   @Test
@@ -245,20 +217,6 @@ class AngebotReaktionIT extends AbstractIntegrationTest {
             ruf("/api/angebote/" + angebot.id() + "/ablehnen", HttpMethod.POST, null, String.class)
                 .getStatusCode())
         .isEqualTo(HttpStatus.CONFLICT);
-  }
-
-  @Test
-  void annehmen_atAClosedVorgang_thenSucceeds() {
-    // Given — E13: Kriterium 9 sperrt das Anlegen und das Versenden, nicht die Reaktion.
-    final Versandeter angebot = versandtesAngebot();
-    jdbc.update("UPDATE vorgang SET abgeschlossen = true WHERE id = ?", Long.valueOf(vorgangId));
-
-    // When
-    final ResponseEntity<AngebotResponse> antwort = reagiere(angebot.id(), "annehmen");
-
-    // Then
-    assertThat(antwort.getStatusCode()).isEqualTo(HttpStatus.OK);
-    assertThat(zustand(angebot.id())).isEqualTo("ANGENOMMEN");
   }
 
   @Test

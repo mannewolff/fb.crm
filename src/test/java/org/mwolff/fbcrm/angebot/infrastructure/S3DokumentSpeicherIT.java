@@ -15,9 +15,9 @@ import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
  *
  * <p>Gegenstand ist der Port {@code DokumentSpeicher}: ablegen, byteweise wiederlesen — und die
  * beiden Zusagen, die der Adapter darueber hinaus gibt. Erstens die Form des Schluessels aus E9,
- * {@code angebot/<angebotId>/<uuid>.pdf}: Das {@code angebot/} trennt die Belege von den Anhaengen
- * des Vorgangs, die daneben im selben Eimer liegen. Zweitens, dass ein unbekannter Schluessel
- * scheitert und nicht leere Bytes liefert — ein leeres PDF sahe wie ein gueltiger Beleg aus.
+ * {@code angebot/<angebotId>/<uuid>.pdf}: Das {@code angebot/} trennt die Angebote von kuenftigen
+ * Belegarten im selben Eimer. Zweitens, dass ein unbekannter Schluessel scheitert und nicht leere
+ * Bytes liefert — ein leeres PDF sahe wie ein gueltiger Beleg aus.
  *
  * <p>Dieser Test deckt die Klasse, die in der {@code pom.xml} von Abdeckung und Mutationstest
  * ausgenommen ist: Sie besteht aus Aufrufen des AWS SDK und ist nur gegen einen echten

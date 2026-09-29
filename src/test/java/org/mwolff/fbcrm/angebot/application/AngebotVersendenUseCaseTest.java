@@ -4,8 +4,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
-import static org.mockito.ArgumentMatchers.anyLong;
-import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -17,7 +15,6 @@ import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
-import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -36,21 +33,17 @@ import org.mwolff.fbcrm.angebot.domain.Belegempfaenger;
 import org.mwolff.fbcrm.angebot.domain.BelegnummerRepository;
 import org.mwolff.fbcrm.angebot.domain.DokumentSpeicher;
 import org.mwolff.fbcrm.common.Anschrift;
-import org.mwolff.fbcrm.vorgang.application.EreignisVermerkenUseCase;
-import org.mwolff.fbcrm.vorgang.application.VorgangNichtGefunden;
-import org.mwolff.fbcrm.vorgang.domain.VorgangRepository;
 
 /**
- * Das Versenden eines Angebots (Kriterien 10 bis 16, 19, 25).
+ * Das Versenden eines Angebots (Kriterien 10 bis 16).
  *
  * <p>Der Anwendungsfall zieht in <b>einer</b> Transaktion die Nummer, kopiert die Anschriften, legt
- * das PDF ab, schreibt das Angebot fest, loest die uebrigen offenen Angebote ab und vermerkt jeden
- * Wechsel in der Historie. Zwei Zusagen sind hier der eigentliche Gegenstand.
+ * das PDF ab und schreibt das Angebot fest. Zwei Zusagen sind hier der eigentliche Gegenstand.
  *
  * <p><b>Ein abgewiesener Versuch verbraucht keine Nummer</b> (Kriterium 12, E22). Geprueft wird das
  * mit {@code verifyNoInteractions} am Nummernkreis, am Drucker und am Objektspeicher — auf allen
- * drei Abweisungswegen: fehlende Angaben, abgeschlossener Vorgang, kein Entwurf. Ein Rollback gaebe
- * die Nummer zwar zurueck, aber die Reihenfolge ist die Zusage, nicht ihr Ersatz.
+ * beiden Abweisungswegen: fehlende Angaben und kein Entwurf. Ein Rollback gaebe die Nummer zwar
+ * zurueck, aber die Reihenfolge ist die Zusage, nicht ihr Ersatz.
  *
  * <p><b>Das Jahr der Nummer ist das Kalenderjahr der Geschaeftszone</b> (Kriterium 11, E12). Der
  * {@code Clock}-Bean der Anwendung ist {@code systemUTC()}; deshalb steht hier ein Fall auf beiden
@@ -61,30 +54,24 @@ import org.mwolff.fbcrm.vorgang.domain.VorgangRepository;
 class AngebotVersendenUseCaseTest {
 
   private static final long ANGEBOT = 11L;
-  private static final long ZWEITES = 12L;
-  private static final long DRITTES = 13L;
   private static final Instant JETZT = Instant.parse("2026-09-28T09:30:00Z");
   private static final String NUMMER = "A-2026-001";
   private static final String SCHLUESSEL = "angebot/11/beleg.pdf";
   private static final byte[] PDF = "%PDF-1.7 Beleg".getBytes(StandardCharsets.UTF_8);
 
   @Mock private AngebotRepository angebote;
-  @Mock private VorgangRepository vorgaenge;
   @Mock private Versandunterlagen unterlagen;
   @Mock private BelegnummerRepository belegnummern;
   @Mock private Belegdrucker drucker;
   @Mock private DokumentSpeicher speicher;
-  @Mock private EreignisVermerkenUseCase ereignisse;
 
   private AngebotVersendenUseCase useCase(final Instant zeitpunkt) {
     return new AngebotVersendenUseCase(
         angebote,
-        vorgaenge,
         unterlagen,
         belegnummern,
         drucker,
         speicher,
-        ereignisse,
         Clock.fixed(zeitpunkt, ZoneOffset.UTC));
   }
 
@@ -92,17 +79,10 @@ class AngebotVersendenUseCaseTest {
     return useCase(JETZT);
   }
 
-  /** Die vollstaendige Lage: ein versandfaehiger Entwurf an einem offenen Vorgang mit Firma. */
+  /** Die vollstaendige Lage: ein versandfaehiger Entwurf an eine Firma mit Anschrift. */
   private void alleAngabenLiegenVor() {
     when(angebote.findById(ANGEBOT)).thenReturn(Optional.of(Angebotsdoppel.entwurf(ANGEBOT)));
-    // Nach dem Schreiben liefert der Bestand das Angebot dieses Versands selbst zurueck — und zwar
-    // festgeschrieben. Dass es sich nicht selbst abloest, haengt allein an der Pruefung der
-    // Kennung.
-    when(angebote.findByVorgang(Angebotsdoppel.VORGANG))
-        .thenReturn(List.of(Angebotsdoppel.festgeschrieben(ANGEBOT, Angebotszustand.VERSENDET)));
     when(angebote.save(any())).thenAnswer(aufruf -> aufruf.getArgument(0));
-    when(vorgaenge.findById(Angebotsdoppel.VORGANG))
-        .thenReturn(Optional.of(Versanddoppel.vorgang()));
     when(unterlagen.zu(any())).thenReturn(Versanddoppel.belegangaben());
     when(belegnummern.zieheNummer(anyInt())).thenReturn(NUMMER);
     when(drucker.drucke(any())).thenReturn(PDF);
@@ -153,98 +133,6 @@ class AngebotVersendenUseCaseTest {
   }
 
   @Test
-  void versende_thenWritesOneEreignisWhenNothingElseWasOpen() {
-    // Given — Kriterium 19: der Wechsel erscheint in der Historie des Vorgangs.
-    alleAngabenLiegenVor();
-
-    // When
-    versende();
-
-    // Then
-    verify(ereignisse).vermerken(Angebotsdoppel.VORGANG, "Angebot " + NUMMER + " versendet");
-    verify(ereignisse, times(1)).vermerken(anyLong(), anyString());
-  }
-
-  @Test
-  void versende_withTwoOpenAngebote_thenSupersedesThemAndWritesThreeEreignisse() {
-    // Given — Kriterium 25: eine Nachverhandlung traegt dieselbe Chance nicht doppelt.
-    alleAngabenLiegenVor();
-    when(angebote.findByVorgang(Angebotsdoppel.VORGANG))
-        .thenReturn(
-            List.of(
-                Angebotsdoppel.festgeschrieben(ANGEBOT, Angebotszustand.VERSENDET),
-                Angebotsdoppel.festgeschrieben(ZWEITES, Angebotszustand.VERSENDET),
-                Angebotsdoppel.festgeschrieben(DRITTES, Angebotszustand.VERSENDET)));
-
-    // When
-    versende();
-
-    // Then
-    verify(ereignisse).vermerken(Angebotsdoppel.VORGANG, "Angebot A-2026-012 abgeloest");
-    verify(ereignisse).vermerken(Angebotsdoppel.VORGANG, "Angebot A-2026-013 abgeloest");
-    verify(ereignisse, times(3)).vermerken(anyLong(), anyString());
-  }
-
-  @Test
-  void versende_withTwoOpenAngebote_thenWritesThemBackAsAbgeloest() {
-    // Given — Kriterium 25.
-    alleAngabenLiegenVor();
-    when(angebote.findByVorgang(Angebotsdoppel.VORGANG))
-        .thenReturn(
-            List.of(
-                Angebotsdoppel.festgeschrieben(ANGEBOT, Angebotszustand.VERSENDET),
-                Angebotsdoppel.festgeschrieben(ZWEITES, Angebotszustand.VERSENDET)));
-
-    // When
-    versende();
-
-    // Then — genau zwei Schreibvorgaenge: das festgeschriebene und das abgeloeste Angebot.
-    verify(angebote, times(2)).save(any());
-    verify(angebote)
-        .save(Angebotsdoppel.festgeschrieben(ZWEITES, Angebotszustand.VERSENDET).abgeloest(JETZT));
-  }
-
-  @ParameterizedTest
-  @EnumSource(
-      value = Angebotszustand.class,
-      names = {"ENTWURF", "ANGENOMMEN", "ABGELEHNT", "ABGELOEST"})
-  void versende_thenLeavesEveryAngebotThatIsNotOpenAlone(final Angebotszustand zustand) {
-    // Given — abgeloest wird nur, was offen ist (Kriterium 25).
-    alleAngabenLiegenVor();
-    when(angebote.findByVorgang(Angebotsdoppel.VORGANG))
-        .thenReturn(
-            List.of(
-                Angebotsdoppel.festgeschrieben(ANGEBOT, Angebotszustand.VERSENDET),
-                zustand == Angebotszustand.ENTWURF
-                    ? Angebotsdoppel.entwurf(ZWEITES, Angebotsdoppel.VORGANG, List.of())
-                    : Angebotsdoppel.festgeschrieben(ZWEITES, zustand)));
-
-    // When
-    versende();
-
-    // Then — nur das festgeschriebene Angebot selbst wird geschrieben, nur ein Ereignis.
-    verify(angebote, times(1)).save(any());
-    verify(ereignisse, times(1)).vermerken(anyLong(), anyString());
-  }
-
-  @Test
-  void versende_givenAnExpiredOpenAngebot_thenSupersedesItAsWell() {
-    // Given — Kriterium 18: die verstrichene Gueltigkeit schliesst ein Angebot nicht.
-    alleAngabenLiegenVor();
-    when(angebote.findByVorgang(Angebotsdoppel.VORGANG))
-        .thenReturn(
-            List.of(
-                Angebotsdoppel.festgeschrieben(ANGEBOT, Angebotszustand.VERSENDET),
-                Angebotsdoppel.festgeschrieben(ZWEITES, Angebotszustand.VERSENDET)));
-
-    // When — eine Uhr lange nach dem Ende der Gueltigkeit (20.10.2026).
-    useCase(Instant.parse("2026-12-01T09:00:00Z")).versende(ANGEBOT);
-
-    // Then
-    verify(ereignisse).vermerken(Angebotsdoppel.VORGANG, "Angebot A-2026-012 abgeloest");
-  }
-
-  @Test
   void versende_thenTheBelegCarriesTheCopiedAnschriften() {
     // Given — R8: die Kopien gehen an das festgeschriebene Angebot (gebaut von Belegangaben).
     alleAngabenLiegenVor();
@@ -263,6 +151,18 @@ class AngebotVersendenUseCaseTest {
   }
 
   @Test
+  void versende_thenReadsTheUnterlagenOfTheAngebotItself() {
+    // Given — Firma und Ansprechpartner stehen am Angebot (Issue #126).
+    alleAngabenLiegenVor();
+
+    // When
+    versende();
+
+    // Then
+    verify(unterlagen).zu(Angebotsdoppel.entwurf(ANGEBOT));
+  }
+
+  @Test
   void versende_whenAnAngabeIsMissing_thenDrawsNoNumberAndStoresNothing() {
     // Given — Kriterium 12, E22: geprueft wird vor jedem Zug am Nummernkreis.
     alleAngabenLiegenVor();
@@ -273,21 +173,8 @@ class AngebotVersendenUseCaseTest {
 
     // When / Then
     assertThatThrownBy(() -> useCase().versende(ANGEBOT)).isInstanceOf(VersandUnvollstaendig.class);
-    verifyNoInteractions(belegnummern, drucker, speicher, ereignisse);
+    verifyNoInteractions(belegnummern, drucker, speicher);
     verify(angebote, never()).save(any());
-  }
-
-  @Test
-  void versende_atAClosedVorgang_thenRejectsAndDrawsNoNumber() {
-    // Given — Kriterium 9, E13: am abgeschlossenen Vorgang wird nichts festgeschrieben.
-    alleAngabenLiegenVor();
-    when(vorgaenge.findById(Angebotsdoppel.VORGANG))
-        .thenReturn(
-            Optional.of(Versanddoppel.vorgang(Long.valueOf(Versanddoppel.ANSPRECHPARTNER), true)));
-
-    // When / Then
-    assertThatThrownBy(() -> useCase().versende(ANGEBOT)).isInstanceOf(VorgangAbgeschlossen.class);
-    verifyNoInteractions(belegnummern, drucker, speicher, ereignisse);
   }
 
   @ParameterizedTest
@@ -303,7 +190,7 @@ class AngebotVersendenUseCaseTest {
 
     // When / Then
     assertThatThrownBy(() -> useCase().versende(ANGEBOT)).isInstanceOf(AngebotNichtAenderbar.class);
-    verifyNoInteractions(belegnummern, drucker, speicher, ereignisse);
+    verifyNoInteractions(belegnummern, drucker, speicher);
     verify(angebote, never()).save(any());
   }
 
@@ -314,17 +201,6 @@ class AngebotVersendenUseCaseTest {
 
     // When / Then
     assertThatThrownBy(() -> useCase().versende(ANGEBOT)).isInstanceOf(AngebotNichtGefunden.class);
-    verifyNoInteractions(belegnummern, drucker, speicher);
-  }
-
-  @Test
-  void versende_whenTheVorgangIsUnknown_thenRejects() {
-    // Given
-    alleAngabenLiegenVor();
-    when(vorgaenge.findById(Angebotsdoppel.VORGANG)).thenReturn(Optional.empty());
-
-    // When / Then
-    assertThatThrownBy(() -> useCase().versende(ANGEBOT)).isInstanceOf(VorgangNichtGefunden.class);
     verifyNoInteractions(belegnummern, drucker, speicher);
   }
 

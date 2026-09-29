@@ -19,7 +19,10 @@ const POSITION = {
 
 const ENTWURF = {
   id: 9,
-  vorgangId: 5,
+  firmaId: 5,
+  firmaName: 'Adler AG',
+  ansprechpartnerId: 8,
+  ansprechpartnerName: 'Eva Adler',
   nummer: null,
   stand: 'ENTWURF',
   angebotDatum: '2026-09-24',
@@ -45,14 +48,14 @@ function Adresse() {
   return <p data-testid="adresse">{ort.pathname}</p>;
 }
 
-function renderSeite(start = '/vorgaenge/5/angebote/9') {
+function renderSeite(start = '/angebote/9') {
   return renderMitTheme(
     <MemoryRouter initialEntries={[start]}>
       <KopfPfadProvider>
         <Routes>
-          <Route path="/vorgaenge/:id/angebote/:angebotId" element={<AngebotPage />} />
-          <Route path="/vorgaenge/:id/angebote/:angebotId/bearbeiten" element={<p>Maske</p>} />
-          <Route path="/vorgaenge/:id" element={<p>Vorgangsseite</p>} />
+          <Route path="/angebote/:angebotId" element={<AngebotPage />} />
+          <Route path="/angebote/:angebotId/bearbeiten" element={<p>Maske</p>} />
+          <Route path="/firmen/:id" element={<p>Firmenseite</p>} />
         </Routes>
         <Adresse />
       </KopfPfadProvider>
@@ -156,7 +159,7 @@ describe('AngebotPage — was das Angebot zeigt (Kriterien 5, 18)', () => {
     expect(await screen.findByRole('status')).toHaveTextContent('Noch keine Position');
   });
 
-  it('nennt Angebotsdatum und Gueltigkeit in den Angaben', async () => {
+  it('nennt Firma, Ansprechpartner, Angebotsdatum und Gueltigkeit in den Angaben', async () => {
     fetchNachPfad({ 'GET /api/angebote/9': json(200, VERSENDET) });
 
     renderSeite();
@@ -164,6 +167,8 @@ describe('AngebotPage — was das Angebot zeigt (Kriterien 5, 18)', () => {
 
     const angaben = within(screen.getByTestId('angebot-angaben'));
     expect(angaben.getAllByRole('term').map((teil) => teil.textContent)).toEqual([
+      'Firma',
+      'Ansprechpartner',
       'Nummer',
       'Angebotsdatum',
       'Gültig bis',
@@ -171,6 +176,25 @@ describe('AngebotPage — was das Angebot zeigt (Kriterien 5, 18)', () => {
     ]);
     expect(angaben.getByText('24.09.2026')).toBeInTheDocument();
     expect(angaben.getByText('24.10.2026')).toBeInTheDocument();
+    expect(angaben.getByRole('link', { name: 'Adler AG' })).toHaveAttribute('href', '/firmen/5');
+    expect(angaben.getByText('Eva Adler')).toBeInTheDocument();
+  });
+
+  it('laesst die Zeile des Ansprechpartners weg, wo das Angebot keinen traegt', async () => {
+    fetchNachPfad({
+      'GET /api/angebote/9': json(200, {
+        ...VERSENDET,
+        ansprechpartnerId: null,
+        ansprechpartnerName: null,
+      }),
+    });
+
+    renderSeite();
+    await screen.findByRole('heading', { level: 1, name: 'Angebot A-2026-001' });
+
+    const angaben = within(screen.getByTestId('angebot-angaben'));
+    expect(angaben.queryByText('Ansprechpartner')).not.toBeInTheDocument();
+    expect(angaben.getByText('Adler AG')).toBeInTheDocument();
   });
 
   it('zeigt Leistungsbeschreibung und Zahlungsbedingungen', async () => {
@@ -236,7 +260,7 @@ describe('AngebotPage — die Aktionen am Entwurf (Kriterien 6, 7, 10)', () => {
     expect(aktionen().getByRole('button', { name: 'Versenden' })).toBeInTheDocument();
     expect(aktionen().getByRole('link', { name: 'Bearbeiten' })).toHaveAttribute(
       'href',
-      '/vorgaenge/5/angebote/9/bearbeiten',
+      '/angebote/9/bearbeiten',
     );
     expect(aktionen().queryByRole('button', { name: 'Annehmen' })).not.toBeInTheDocument();
   });
@@ -269,7 +293,7 @@ describe('AngebotPage — die Aktionen am Entwurf (Kriterien 6, 7, 10)', () => {
       'POST /api/angebote/9/versenden': problem(409, 'Zum Versenden fehlen Angaben.', {
         positionen: ['Das Angebot braucht mindestens eine Position.'],
         gueltigBis: ['Die Gueltigkeit darf nicht vor dem Angebotsdatum liegen.'],
-        firma: ['Die Firma des Vorgangs braucht Strasse, PLZ und Ort.'],
+        firma: ['Die Firma des Angebots braucht Strasse, PLZ und Ort.'],
         eigeneAngaben: ['Unter „Eigene Angaben" fehlt der Name.', 'Unter „Eigene Angaben" fehlen Strasse, PLZ oder Ort.'],
       }),
     });
@@ -284,7 +308,7 @@ describe('AngebotPage — die Aktionen am Entwurf (Kriterien 6, 7, 10)', () => {
     expect(meldung.getAllByRole('listitem').map((zeile) => zeile.textContent)).toEqual([
       'Das Angebot braucht mindestens eine Position.',
       'Die Gueltigkeit darf nicht vor dem Angebotsdatum liegen.',
-      'Die Firma des Vorgangs braucht Strasse, PLZ und Ort.',
+      'Die Firma des Angebots braucht Strasse, PLZ und Ort.',
       'Unter „Eigene Angaben" fehlt der Name.',
       'Unter „Eigene Angaben" fehlen Strasse, PLZ oder Ort.',
     ]);
@@ -304,7 +328,7 @@ describe('AngebotPage — die Aktionen am Entwurf (Kriterien 6, 7, 10)', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('nicht ausgeführt');
   });
 
-  it('verwirft den Entwurf erst nach der Rueckfrage und fuehrt dann auf den Vorgang', async () => {
+  it('verwirft den Entwurf erst nach der Rueckfrage und fuehrt dann auf die Firma', async () => {
     const nutzer = userEvent.setup();
     const fetchMock = fetchNachPfad({
       'GET /api/angebote/9': json(200, ENTWURF),
@@ -326,8 +350,8 @@ describe('AngebotPage — die Aktionen am Entwurf (Kriterien 6, 7, 10)', () => {
 
     await nutzer.click(dialog.getByRole('button', { name: 'Verwerfen' }));
 
-    expect(await screen.findByText('Vorgangsseite')).toBeInTheDocument();
-    expect(screen.getByTestId('adresse')).toHaveTextContent('/vorgaenge/5');
+    expect(await screen.findByText('Firmenseite')).toBeInTheDocument();
+    expect(screen.getByTestId('adresse')).toHaveTextContent('/firmen/5');
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/angebote/9',
       expect.objectContaining({ method: 'DELETE' }),
@@ -428,7 +452,7 @@ describe('AngebotPage — unsinnige Kennung, unbekanntes Angebot, Ausfall', () =
   it('faengt eine nicht numerische Kennung ab, bevor sie an die Schnittstelle geht', async () => {
     const fetchMock = fetchNachPfad({});
 
-    renderSeite('/vorgaenge/5/angebote/keine-zahl');
+    renderSeite('/angebote/keine-zahl');
 
     expect(await screen.findByRole('alert')).toHaveTextContent('gibt es nicht');
     expect(fetchMock).not.toHaveBeenCalled();

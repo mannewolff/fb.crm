@@ -20,8 +20,8 @@ import org.mwolff.fbcrm.firma.domain.Firma;
  * Angaben — kein Bestand, keine Uhr —, und der Anwendungsfall traegt danach nur noch die
  * Reihenfolge der Schritte.
  *
- * @param firma die Firma des Vorgangs
- * @param ansprechpartner der Ansprechpartner des Vorgangs, oder {@code null}
+ * @param firma die Firma des Angebots
+ * @param ansprechpartner der Ansprechpartner des Angebots, oder {@code null}
  * @param eigeneAngaben die Selbstauskunft der Instanz
  */
 record Belegangaben(
@@ -56,13 +56,6 @@ record Belegangaben(
   /* Ein Ansprechpartner ist nicht noetig (Kriterium 12); fehlt er, traegt der Beleg nur die Firma. */
   private @Nullable String person() {
     final Ansprechpartner benannt = ansprechpartner;
-    if (benannt == null) {
-      return null;
-    }
-    final String vorname = benannt.vorname();
-    if (vorname == null || vorname.isBlank()) {
-      return benannt.nachname();
-    }
-    return vorname + " " + benannt.nachname();
+    return benannt == null ? null : Personenname.von(benannt);
   }
 }

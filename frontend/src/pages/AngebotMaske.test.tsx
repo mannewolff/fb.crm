@@ -20,7 +20,10 @@ const POSITION = {
 
 const ENTWURF = {
   id: 9,
-  vorgangId: 5,
+  firmaId: 5,
+  firmaName: 'Adler AG',
+  ansprechpartnerId: null,
+  ansprechpartnerName: null,
   nummer: null,
   stand: 'ENTWURF',
   angebotDatum: '2026-09-24',
@@ -33,16 +36,37 @@ const ENTWURF = {
   summe: 2500.03,
 };
 
-const LISTE = {
-  angebote: [
-    { id: 12, nummer: null, stand: 'ENTWURF', angebotDatum: '2026-09-26', gueltigBis: '2026-10-26', summe: 0 },
+/** Eine Firma, wie `GET /api/firmen/5` sie liefert — ein aktiver und ein stillgelegter Partner. */
+const FIRMA = {
+  id: 5,
+  name: 'Adler AG',
+  strasse: null,
+  plz: null,
+  ort: null,
+  land: null,
+  steuernummer: null,
+  umsatzsteuerId: null,
+  aktiv: true,
+  ansprechpartner: [
     {
-      id: 9,
-      nummer: 'A-2026-001',
-      stand: 'VERSENDET',
-      angebotDatum: '2026-09-24',
-      gueltigBis: '2026-10-24',
-      summe: 2500.03,
+      id: 8,
+      vorname: 'Eva',
+      nachname: 'Adler',
+      rolle: null,
+      email: null,
+      telefonFestnetz: null,
+      telefonMobil: null,
+      aktiv: true,
+    },
+    {
+      id: 7,
+      vorname: null,
+      nachname: 'Alt',
+      rolle: null,
+      email: null,
+      telefonFestnetz: null,
+      telefonMobil: null,
+      aktiv: false,
     },
   ],
 };
@@ -58,13 +82,10 @@ function renderMaske(start: string) {
     <MemoryRouter initialEntries={[start]}>
       <KopfPfadProvider>
         <Routes>
-          <Route path="/vorgaenge/:id/angebote/neu" element={<AngebotMaske />} />
-          <Route
-            path="/vorgaenge/:id/angebote/:angebotId/bearbeiten"
-            element={<AngebotMaske />}
-          />
-          <Route path="/vorgaenge/:id/angebote/:angebotId" element={<p>Angebotsansicht</p>} />
-          <Route path="/vorgaenge/:id" element={<p>Vorgangsseite</p>} />
+          <Route path="/firmen/:id/angebote/neu" element={<AngebotMaske />} />
+          <Route path="/angebote/:angebotId/bearbeiten" element={<AngebotMaske />} />
+          <Route path="/angebote/:angebotId" element={<p>Angebotsansicht</p>} />
+          <Route path="/firmen/:id" element={<p>Firmenseite</p>} />
         </Routes>
         <Adresse />
       </KopfPfadProvider>
@@ -80,107 +101,127 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe('AngebotMaske — Anlegen mit Vorlagewahl (Kriterien 2, 8)', () => {
-  it('traegt genau eine Ueberschrift der ersten Ebene', async () => {
-    fetchNachPfad({ 'GET /api/vorgaenge/5/angebote': json(200, LISTE) });
+describe('AngebotMaske — Anlegen an einer Firma (Kriterium 2, Issue #126)', () => {
+  it('traegt genau eine Ueberschrift der ersten Ebene und nennt die Firma', async () => {
+    fetchNachPfad({ 'GET /api/firmen/5': json(200, FIRMA) });
 
-    renderMaske('/vorgaenge/5/angebote/neu');
+    renderMaske('/firmen/5/angebote/neu');
 
     expect(
       await screen.findByRole('heading', { level: 1, name: 'Neues Angebot' }),
     ).toBeInTheDocument();
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+    expect(screen.getByTestId('angebot-firma')).toHaveTextContent('An: Adler AG');
   });
 
-  it('stellt die Angebote des Vorgangs als Vorlage zur Wahl', async () => {
-    fetchNachPfad({ 'GET /api/vorgaenge/5/angebote': json(200, LISTE) });
+  it('stellt nur die aktiven Ansprechpartner der Firma zur Wahl', async () => {
+    fetchNachPfad({ 'GET /api/firmen/5': json(200, FIRMA) });
 
-    renderMaske('/vorgaenge/5/angebote/neu');
+    renderMaske('/firmen/5/angebote/neu');
 
-    const wahl = await screen.findByRole('combobox', { name: 'Vorlage' });
+    const wahl = await screen.findByRole('combobox', { name: 'Ansprechpartner' });
     expect(within(wahl).getAllByRole('option').map((eintrag) => eintrag.textContent)).toEqual([
-      '— keine —',
-      'Entwurf vom 26.09.2026',
-      'A-2026-001 vom 24.09.2026',
+      '— keiner —',
+      'Eva Adler',
     ]);
   });
 
-  it('legt ohne Vorlage an und fuehrt in die Maske des neuen Entwurfs', async () => {
+  it('legt ohne Ansprechpartner an und fuehrt in die Maske des neuen Entwurfs', async () => {
     const nutzer = userEvent.setup();
     const fetchMock = fetchNachPfad({
-      'GET /api/vorgaenge/5/angebote': json(200, LISTE),
-      'POST /api/vorgaenge/5/angebote': json(201, ENTWURF),
+      'GET /api/firmen/5': json(200, FIRMA),
+      'POST /api/firmen/5/angebote': json(201, ENTWURF),
       'GET /api/angebote/9': json(200, ENTWURF),
     });
 
-    renderMaske('/vorgaenge/5/angebote/neu');
-    await screen.findByRole('combobox', { name: 'Vorlage' });
+    renderMaske('/firmen/5/angebote/neu');
+    await screen.findByRole('combobox', { name: 'Ansprechpartner' });
     await nutzer.click(screen.getByRole('button', { name: 'Anlegen' }));
 
     expect(await screen.findByRole('heading', { level: 1, name: 'Angebot bearbeiten' }))
       .toBeInTheDocument();
-    expect(screen.getByTestId('adresse')).toHaveTextContent('/vorgaenge/5/angebote/9/bearbeiten');
+    expect(screen.getByTestId('adresse')).toHaveTextContent('/angebote/9/bearbeiten');
     expect(fetchMock).toHaveBeenCalledWith(
-      '/api/vorgaenge/5/angebote',
-      expect.objectContaining({ method: 'POST', body: JSON.stringify({ vorlageAngebotId: null }) }),
+      '/api/firmen/5/angebote',
+      expect.objectContaining({ method: 'POST', body: JSON.stringify({ ansprechpartnerId: null }) }),
     );
   });
 
-  it('legt mit der gewaehlten Vorlage an (Kriterium 8)', async () => {
+  it('legt mit dem gewaehlten Ansprechpartner an', async () => {
     const nutzer = userEvent.setup();
     const fetchMock = fetchNachPfad({
-      'GET /api/vorgaenge/5/angebote': json(200, LISTE),
-      'POST /api/vorgaenge/5/angebote': json(201, ENTWURF),
+      'GET /api/firmen/5': json(200, FIRMA),
+      'POST /api/firmen/5/angebote': json(201, ENTWURF),
       'GET /api/angebote/9': json(200, ENTWURF),
     });
 
-    renderMaske('/vorgaenge/5/angebote/neu');
-    await nutzer.selectOptions(await screen.findByRole('combobox', { name: 'Vorlage' }), '9');
+    renderMaske('/firmen/5/angebote/neu');
+    await nutzer.selectOptions(
+      await screen.findByRole('combobox', { name: 'Ansprechpartner' }),
+      '8',
+    );
     await nutzer.click(screen.getByRole('button', { name: 'Anlegen' }));
 
     expect(fetchMock).toHaveBeenCalledWith(
-      '/api/vorgaenge/5/angebote',
-      expect.objectContaining({ body: JSON.stringify({ vorlageAngebotId: 9 }) }),
+      '/api/firmen/5/angebote',
+      expect.objectContaining({ body: JSON.stringify({ ansprechpartnerId: 8 }) }),
     );
   });
 
-  it('meldet, wenn am abgeschlossenen Vorgang nicht angelegt werden darf (Kriterium 9)', async () => {
+  it('meldet, wenn das Anlegen scheitert', async () => {
     const nutzer = userEvent.setup();
     fetchNachPfad({
-      'GET /api/vorgaenge/5/angebote': json(200, LISTE),
-      'POST /api/vorgaenge/5/angebote': leer(409),
+      'GET /api/firmen/5': json(200, FIRMA),
+      'POST /api/firmen/5/angebote': leer(409),
     });
 
-    renderMaske('/vorgaenge/5/angebote/neu');
-    await screen.findByRole('combobox', { name: 'Vorlage' });
+    renderMaske('/firmen/5/angebote/neu');
+    await screen.findByRole('combobox', { name: 'Ansprechpartner' });
     await nutzer.click(screen.getByRole('button', { name: 'Anlegen' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('nicht angelegt');
   });
 
-  it('meldet den Ausfall beim Holen der Vorlagen', async () => {
-    fetchNachPfad({ 'GET /api/vorgaenge/5/angebote': leer(500) });
+  it('bietet an einer stillgelegten Firma kein Anlegen an', async () => {
+    fetchNachPfad({ 'GET /api/firmen/5': json(200, { ...FIRMA, aktiv: false }) });
 
-    renderMaske('/vorgaenge/5/angebote/neu');
+    renderMaske('/firmen/5/angebote/neu');
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('stillgelegt');
+    expect(screen.queryByRole('button', { name: 'Anlegen' })).not.toBeInTheDocument();
+  });
+
+  it('meldet eine unbekannte Firma', async () => {
+    fetchNachPfad({ 'GET /api/firmen/5': leer(404) });
+
+    renderMaske('/firmen/5/angebote/neu');
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('gibt es nicht');
+  });
+
+  it('meldet den Ausfall beim Lesen der Firma', async () => {
+    fetchNachPfad({ 'GET /api/firmen/5': leer(500) });
+
+    renderMaske('/firmen/5/angebote/neu');
 
     expect(await screen.findByRole('alert')).toHaveTextContent('nicht zu erreichen');
   });
 
-  it('fuehrt mit „Abbrechen" zurueck auf den Vorgang', async () => {
-    fetchNachPfad({ 'GET /api/vorgaenge/5/angebote': json(200, LISTE) });
+  it('fuehrt mit „Abbrechen" zurueck auf die Firma', async () => {
+    fetchNachPfad({ 'GET /api/firmen/5': json(200, FIRMA) });
 
-    renderMaske('/vorgaenge/5/angebote/neu');
+    renderMaske('/firmen/5/angebote/neu');
 
     expect(await screen.findByRole('link', { name: 'Abbrechen' })).toHaveAttribute(
       'href',
-      '/vorgaenge/5',
+      '/firmen/5',
     );
   });
 
-  it('faengt eine unsinnige Vorgangskennung ab, bevor sie an die Schnittstelle geht', async () => {
+  it('faengt eine unsinnige Firmenkennung ab, bevor sie an die Schnittstelle geht', async () => {
     const fetchMock = fetchNachPfad({});
 
-    renderMaske('/vorgaenge/keine-zahl/angebote/neu');
+    renderMaske('/firmen/keine-zahl/angebote/neu');
 
     expect(await screen.findByRole('alert')).toHaveTextContent('gibt es nicht');
     expect(fetchMock).not.toHaveBeenCalled();
@@ -191,7 +232,7 @@ describe('AngebotMaske — den Entwurf bearbeiten (Kriterien 3, 6)', () => {
   it('belegt die Felder aus dem Entwurf und nennt das Angebotsdatum', async () => {
     fetchNachPfad({ 'GET /api/angebote/9': json(200, ENTWURF) });
 
-    renderMaske('/vorgaenge/5/angebote/9/bearbeiten');
+    renderMaske('/angebote/9/bearbeiten');
 
     expect(await screen.findByLabelText(/^Gültig bis/)).toHaveValue('2026-10-24');
     expect(screen.getByRole('textbox', { name: 'Leistungsbeschreibung' })).toHaveValue(
@@ -212,7 +253,7 @@ describe('AngebotMaske — den Entwurf bearbeiten (Kriterien 3, 6)', () => {
     const nutzer = userEvent.setup();
     fetchNachPfad({ 'GET /api/angebote/9': json(200, ENTWURF) });
 
-    renderMaske('/vorgaenge/5/angebote/9/bearbeiten');
+    renderMaske('/angebote/9/bearbeiten');
     await screen.findByLabelText(/^Gültig bis/);
 
     expect(screen.getByTestId('angebot-summe')).toHaveTextContent('2.500,03 €');
@@ -228,7 +269,7 @@ describe('AngebotMaske — den Entwurf bearbeiten (Kriterien 3, 6)', () => {
     const nutzer = userEvent.setup();
     fetchNachPfad({ 'GET /api/angebote/9': json(200, ENTWURF) });
 
-    renderMaske('/vorgaenge/5/angebote/9/bearbeiten');
+    renderMaske('/angebote/9/bearbeiten');
     await screen.findByLabelText(/^Gültig bis/);
 
     await nutzer.click(screen.getByRole('button', { name: 'Position hinzufügen' }));
@@ -252,7 +293,7 @@ describe('AngebotMaske — den Entwurf bearbeiten (Kriterien 3, 6)', () => {
       'GET /api/angebote/9': json(200, { ...ENTWURF, positionen: [], summe: 0 }),
     });
 
-    renderMaske('/vorgaenge/5/angebote/9/bearbeiten');
+    renderMaske('/angebote/9/bearbeiten');
 
     expect(await screen.findByRole('status')).toHaveTextContent('Noch keine Position');
     expect(screen.getByTestId('angebot-summe')).toHaveTextContent('0,00 €');
@@ -265,7 +306,7 @@ describe('AngebotMaske — den Entwurf bearbeiten (Kriterien 3, 6)', () => {
       'PUT /api/angebote/9': json(200, ENTWURF),
     });
 
-    renderMaske('/vorgaenge/5/angebote/9/bearbeiten');
+    renderMaske('/angebote/9/bearbeiten');
     await screen.findByLabelText(/^Gültig bis/);
     await nutzer.click(screen.getByRole('button', { name: 'Position hinzufügen' }));
     await nutzer.type(gruppe(2).getByRole('textbox', { name: 'Bezeichnung' }), 'Betreuung');
@@ -310,7 +351,7 @@ describe('AngebotMaske — den Entwurf bearbeiten (Kriterien 3, 6)', () => {
       'PUT /api/angebote/9': json(200, ENTWURF),
     });
 
-    renderMaske('/vorgaenge/5/angebote/9/bearbeiten');
+    renderMaske('/angebote/9/bearbeiten');
     await nutzer.clear(await screen.findByRole('textbox', { name: 'Leistungsbeschreibung' }));
     await nutzer.clear(screen.getByRole('textbox', { name: 'Zahlungsbedingungen' }));
     await nutzer.click(screen.getByRole('button', { name: 'Speichern' }));
@@ -351,7 +392,7 @@ describe('AngebotMaske — den Entwurf bearbeiten (Kriterien 3, 6)', () => {
       }),
     });
 
-    renderMaske('/vorgaenge/5/angebote/9/bearbeiten');
+    renderMaske('/angebote/9/bearbeiten');
     await screen.findByLabelText(/^Gültig bis/);
     await nutzer.click(screen.getByRole('button', { name: 'Speichern' }));
 
@@ -364,11 +405,11 @@ describe('AngebotMaske — den Entwurf bearbeiten (Kriterien 3, 6)', () => {
   it('fuehrt mit „Zum Angebot" auf die Angebotsansicht', async () => {
     fetchNachPfad({ 'GET /api/angebote/9': json(200, ENTWURF) });
 
-    renderMaske('/vorgaenge/5/angebote/9/bearbeiten');
+    renderMaske('/angebote/9/bearbeiten');
 
     expect(await screen.findByRole('link', { name: 'Zum Angebot' })).toHaveAttribute(
       'href',
-      '/vorgaenge/5/angebote/9',
+      '/angebote/9',
     );
   });
 });
@@ -379,7 +420,7 @@ describe('AngebotMaske — was nicht geht', () => {
       'GET /api/angebote/9': json(200, { ...ENTWURF, nummer: 'A-2026-001', stand: 'VERSENDET' }),
     });
 
-    renderMaske('/vorgaenge/5/angebote/9/bearbeiten');
+    renderMaske('/angebote/9/bearbeiten');
 
     expect(await screen.findByRole('alert')).toHaveTextContent('nicht mehr änderbar');
     expect(screen.queryByRole('button', { name: 'Speichern' })).not.toBeInTheDocument();
@@ -388,7 +429,7 @@ describe('AngebotMaske — was nicht geht', () => {
   it('meldet ein unbekanntes Angebot', async () => {
     fetchNachPfad({ 'GET /api/angebote/9': leer(404) });
 
-    renderMaske('/vorgaenge/5/angebote/9/bearbeiten');
+    renderMaske('/angebote/9/bearbeiten');
 
     expect(await screen.findByRole('alert')).toHaveTextContent('gibt es nicht');
   });
@@ -396,7 +437,7 @@ describe('AngebotMaske — was nicht geht', () => {
   it('meldet den Ausfall beim Lesen', async () => {
     fetchNachPfad({ 'GET /api/angebote/9': leer(503) });
 
-    renderMaske('/vorgaenge/5/angebote/9/bearbeiten');
+    renderMaske('/angebote/9/bearbeiten');
 
     expect(await screen.findByRole('alert')).toHaveTextContent('nicht zu erreichen');
   });
@@ -404,7 +445,7 @@ describe('AngebotMaske — was nicht geht', () => {
   it('faengt eine unsinnige Angebotskennung ab, bevor sie an die Schnittstelle geht', async () => {
     const fetchMock = fetchNachPfad({});
 
-    renderMaske('/vorgaenge/5/angebote/keine-zahl/bearbeiten');
+    renderMaske('/angebote/keine-zahl/bearbeiten');
 
     expect(await screen.findByRole('alert')).toHaveTextContent('gibt es nicht');
     expect(fetchMock).not.toHaveBeenCalled();
@@ -414,7 +455,7 @@ describe('AngebotMaske — was nicht geht', () => {
     const nutzer = userEvent.setup();
     const fetchMock = fetchNachPfad({ 'GET /api/angebote/9': json(200, ENTWURF) });
 
-    renderMaske('/vorgaenge/5/angebote/9/bearbeiten');
+    renderMaske('/angebote/9/bearbeiten');
     const menge = await screen.findByRole('textbox', { name: 'Menge' });
     await nutzer.clear(menge);
     await nutzer.type(menge, '1,234');
@@ -430,7 +471,7 @@ describe('AngebotMaske — was nicht geht', () => {
     const nutzer = userEvent.setup();
     const fetchMock = fetchNachPfad({ 'GET /api/angebote/9': json(200, ENTWURF) });
 
-    renderMaske('/vorgaenge/5/angebote/9/bearbeiten');
+    renderMaske('/angebote/9/bearbeiten');
     await nutzer.clear(await screen.findByRole('textbox', { name: 'Einzelpreis (netto)' }));
     await nutzer.click(screen.getByRole('button', { name: 'Speichern' }));
 
@@ -442,7 +483,7 @@ describe('AngebotMaske — was nicht geht', () => {
     const nutzer = userEvent.setup();
     const fetchMock = fetchNachPfad({ 'GET /api/angebote/9': json(200, ENTWURF) });
 
-    renderMaske('/vorgaenge/5/angebote/9/bearbeiten');
+    renderMaske('/angebote/9/bearbeiten');
     await nutzer.clear(await screen.findByLabelText(/^Gültig bis/));
     await nutzer.click(screen.getByRole('button', { name: 'Speichern' }));
 
@@ -460,7 +501,7 @@ describe('AngebotMaske — was nicht geht', () => {
       }),
     });
 
-    renderMaske('/vorgaenge/5/angebote/9/bearbeiten');
+    renderMaske('/angebote/9/bearbeiten');
     await screen.findByLabelText(/^Gültig bis/);
     await nutzer.click(screen.getByRole('button', { name: 'Speichern' }));
 
@@ -474,7 +515,7 @@ describe('AngebotMaske — was nicht geht', () => {
       'PUT /api/angebote/9': leer(500),
     });
 
-    renderMaske('/vorgaenge/5/angebote/9/bearbeiten');
+    renderMaske('/angebote/9/bearbeiten');
     await screen.findByLabelText(/^Gültig bis/);
     await nutzer.click(screen.getByRole('button', { name: 'Speichern' }));
 
@@ -482,14 +523,14 @@ describe('AngebotMaske — was nicht geht', () => {
   });
 });
 
-describe('AngebotMaske — der Pfad im Kopf (E16)', () => {
-  it('fuehrt ueber „Vorgänge" und den Vorgang, ohne ihn nachzufragen', async () => {
+describe('AngebotMaske — der Pfad im Kopf (E6)', () => {
+  it('nimmt den Namen der Firma aus dem Angebot, ohne die Firma nachzufragen', async () => {
     const fetchMock = fetchNachPfad({ 'GET /api/angebote/9': json(200, ENTWURF) });
 
-    renderMaske('/vorgaenge/5/angebote/9/bearbeiten');
+    renderMaske('/angebote/9/bearbeiten');
     await screen.findByLabelText(/^Gültig bis/);
 
-    // Genau ein Aufruf: Der Pfad steht in der Adresse, der Vorgang wird dafuer nicht gelesen.
+    // Genau ein Aufruf: Das Angebot traegt den Namen seiner Firma.
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });

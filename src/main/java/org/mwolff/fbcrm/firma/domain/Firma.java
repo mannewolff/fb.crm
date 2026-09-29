@@ -9,9 +9,8 @@ import org.mwolff.fbcrm.common.Identifiable;
  * Eine Firma im Stammdatenbestand.
  *
  * <p><b>Stillgelegt statt geloescht.</b> Eine Firma, mit der nicht mehr gearbeitet wird, haengt an
- * Vorgaengen, Angeboten und Rechnungen, die bleiben — deshalb kennt der Bestand kein Loeschen,
- * sondern nur den Schalter {@link #aktiv}. {@link #stillgelegt} und {@link #aktiviert} legen ihn um
- * (E3).
+ * Angeboten und Rechnungen, die bleiben — deshalb kennt der Bestand kein Loeschen, sondern nur den
+ * Schalter {@link #aktiv}. {@link #stillgelegt} und {@link #aktiviert} legen ihn um (E3).
  *
  * <p>Unveraenderlich: Jeder der drei Uebergaenge liefert eine neue Firma, statt diese zu aendern.
  * Der Zeitpunkt kommt von aussen, weil die Domaene keine Uhr kennt (CLAUDE-java.md §6.2).

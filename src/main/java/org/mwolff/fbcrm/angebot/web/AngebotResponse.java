@@ -6,6 +6,7 @@ import java.time.LocalDate;
 import java.util.List;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.fbcrm.angebot.application.AngebotAnsicht;
+import org.mwolff.fbcrm.angebot.application.Kundenangaben;
 import org.mwolff.fbcrm.angebot.domain.Angebot;
 import org.mwolff.fbcrm.angebot.domain.Angebotsstand;
 
@@ -21,7 +22,10 @@ import org.mwolff.fbcrm.angebot.domain.Angebotsstand;
  * beim Versenden und kommen mit dem Paket, das es baut.
  *
  * @param id technische Id
- * @param vorgangId Kennung des Vorgangs, an dem das Angebot haengt
+ * @param firmaId Kennung der Firma, an die das Angebot geht
+ * @param firmaName Name der Firma
+ * @param ansprechpartnerId Kennung des Ansprechpartners, oder {@code null}
+ * @param ansprechpartnerName Name des Ansprechpartners, oder {@code null}
  * @param nummer Angebotsnummer, oder {@code null} im Entwurf (Kriterium 11)
  * @param stand der Stand, als der das Angebot heute gilt (Kriterium 18)
  * @param angebotDatum Datum des Angebots
@@ -35,7 +39,10 @@ import org.mwolff.fbcrm.angebot.domain.Angebotsstand;
  */
 public record AngebotResponse(
     long id,
-    long vorgangId,
+    long firmaId,
+    String firmaName,
+    @Nullable Long ansprechpartnerId,
+    @Nullable String ansprechpartnerName,
     @Nullable String nummer,
     Angebotsstand stand,
     LocalDate angebotDatum,
@@ -47,12 +54,15 @@ public record AngebotResponse(
     List<AngebotPositionResponse> positionen,
     BigDecimal summe) {
 
-  /** Die Sicht der Oberflaeche auf ein Angebot. */
-  static AngebotResponse of(final AngebotAnsicht ansicht) {
+  /** Die Sicht der Oberflaeche auf ein Angebot, beschriftet mit den Namen seines Kunden. */
+  static AngebotResponse of(final AngebotAnsicht ansicht, final Kundenangaben kunde) {
     final Angebot angebot = ansicht.angebot();
     return new AngebotResponse(
         angebot.requireId(),
-        angebot.vorgangId(),
+        angebot.firmaId(),
+        kunde.firmaName(),
+        angebot.ansprechpartnerId(),
+        kunde.ansprechpartnerName(),
         angebot.nummer(),
         ansicht.stand(),
         angebot.angebotDatum(),

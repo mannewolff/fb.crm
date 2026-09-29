@@ -13,8 +13,8 @@ import software.amazon.awssdk.services.s3.model.CreateBucketRequest;
 /**
  * Der eine Zugang zum Objektspeicher (E9).
  *
- * <p>Er steht hier und nicht in einem Fachmodul, weil ihn mehr als eines braucht: die Anhaenge am
- * Vorgang und die archivierten Belege. Ein Client je Modul waere ein zweiter Verbindungspool auf
+ * <p>Er steht hier und nicht in einem Fachmodul, weil ihn jeder archivierte Beleg braucht — heute
+ * das Angebot, spaeter die Rechnung. Ein Client je Modul waere ein zweiter Verbindungspool auf
  * denselben Dienst und eine zweite Stelle, an der Endpunkt, Pfadstil und Region altern.
  *
  * <p>Pfadstil-Adressierung statt der virtuellen Hosts von AWS: MinIO laeuft unter einem festen

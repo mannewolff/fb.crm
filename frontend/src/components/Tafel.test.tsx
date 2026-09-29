@@ -6,7 +6,7 @@ import Tafel from './Tafel';
 
 function renderTafel() {
   return renderMitTheme(
-    <Tafel beschriftung="Vorgänge" spalten={['Nr.', 'Vorgang', 'Phase']}>
+    <Tafel beschriftung="Angebote" spalten={['Nr.', 'Firma', 'Zustand']}>
       <tr>
         <td>#12</td>
         <td>Neue Website</td>
@@ -25,14 +25,14 @@ describe('Tafel', () => {
   it('traegt den uebergebenen Namen', () => {
     renderTafel();
 
-    expect(screen.getByRole('table', { name: 'Vorgänge' })).toBeInTheDocument();
+    expect(screen.getByRole('table', { name: 'Angebote' })).toBeInTheDocument();
   });
 
   it('macht aus jeder Spaltenbeschriftung eine Kopfzelle ihrer Spalte', () => {
     renderTafel();
 
     const kopf = screen.getAllByRole('columnheader');
-    expect(kopf.map((zelle) => zelle.textContent)).toEqual(['Nr.', 'Vorgang', 'Phase']);
+    expect(kopf.map((zelle) => zelle.textContent)).toEqual(['Nr.', 'Firma', 'Zustand']);
     // `scope="col"` ist die Zuordnung, aus der der Screenreader beim Vorlesen einer Zelle ihre
     // Spalte nennt. Ohne sie bleibt die Kopfzeile eine Zeile wie jede andere.
     expect(kopf.map((zelle) => zelle.getAttribute('scope'))).toEqual(['col', 'col', 'col']);

@@ -19,11 +19,10 @@ import org.mwolff.fbcrm.common.Anschrift;
 /**
  * Die Zeile der Tabelle {@code angebot} aus {@code V6__angebot.sql}.
  *
- * <p>Der Vorgang steht als blosse Kennung und nicht als Beziehung — dasselbe Muster wie in {@code
- * VorgangEntity}: Angebot und Vorgang sind eigene Wurzeln mit eigenem Lebenszyklus, und eine
- * Beziehung laedt das eine mit dem anderen, ohne dass es gebraucht wuerde. Die Positionen liegen
- * aus demselben Grund in {@link AngebotPositionEntity} mit blosser Kennung; ihre Reihenfolge fuehrt
- * {@code JpaAngebotRepository}.
+ * <p>Firma und Ansprechpartner stehen als blosse Kennungen und nicht als Beziehung: Angebot und
+ * Firma sind eigene Wurzeln mit eigenem Lebenszyklus, und eine Beziehung laedt das eine mit dem
+ * anderen, ohne dass es gebraucht wuerde (V10). Die Positionen liegen aus demselben Grund in {@link
+ * AngebotPositionEntity} mit blosser Kennung; ihre Reihenfolge fuehrt {@code JpaAngebotRepository}.
  *
  * <p>Die beiden Anschriftskopien kommen als Ganzes herein ({@link #setzeEmpfaenger}, {@link
  * #setzeAbsender}) und gehen Spalte fuer Spalte heraus. Der Entwurf traegt sie gar nicht, und genau
@@ -36,7 +35,7 @@ import org.mwolff.fbcrm.common.Anschrift;
  * die Bedeutung der bestehenden Zeilen nicht verschieben.
  */
 /*
- * PMD.TooManyFields: Neunundzwanzig Spalten ergeben neunundzwanzig Felder. Sechzehn davon sind die
+ * PMD.TooManyFields: Dreissig Spalten ergeben dreissig Felder. Sechzehn davon sind die
  * beiden Anschriftskopien, die nach R8 flach am Beleg stehen muessen — sie in eigene Tabellen zu
  * heben, machte aus einer Zeile drei, die immer zusammen gelesen werden. Die Zeile ist die Zeile der
  * Tabelle, nicht mehr.
@@ -50,8 +49,11 @@ class AngebotEntity {
   @GeneratedValue(strategy = GenerationType.IDENTITY)
   private @Nullable Long id;
 
-  @Column(name = "vorgang_id", nullable = false)
-  private long vorgangId;
+  @Column(name = "firma_id", nullable = false)
+  private long firmaId;
+
+  @Column(name = "ansprechpartner_id")
+  private @Nullable Long ansprechpartnerId;
 
   @Column(name = "nummer", length = 20)
   private @Nullable String nummer;
@@ -145,14 +147,15 @@ class AngebotEntity {
   }
 
   /*
-   * PMD.ExcessiveParameterList: Dreizehn eigene Spalten ergeben dreizehn Parameter — dieselbe Lage
+   * PMD.ExcessiveParameterList: Vierzehn eigene Spalten ergeben vierzehn Parameter — dieselbe Lage
    * wie bei EigeneAngabenEntity. Die beiden Anschriftskopien stehen bewusst nicht darin; sie kommen
    * als Ganzes ueber setzeEmpfaenger und setzeAbsender und fehlen im Entwurf vollstaendig.
    */
   @SuppressWarnings("PMD.ExcessiveParameterList")
   AngebotEntity(
       final @Nullable Long id,
-      final long vorgangId,
+      final long firmaId,
+      final @Nullable Long ansprechpartnerId,
       final @Nullable String nummer,
       final Angebotszustand zustand,
       final LocalDate angebotDatum,
@@ -165,7 +168,8 @@ class AngebotEntity {
       final Instant createdAt,
       final Instant updatedAt) {
     this.id = id;
-    this.vorgangId = vorgangId;
+    this.firmaId = firmaId;
+    this.ansprechpartnerId = ansprechpartnerId;
     this.nummer = nummer;
     this.zustand = zustand;
     this.angebotDatum = angebotDatum;
@@ -209,8 +213,12 @@ class AngebotEntity {
     return id;
   }
 
-  long getVorgangId() {
-    return vorgangId;
+  long getFirmaId() {
+    return firmaId;
+  }
+
+  @Nullable Long getAnsprechpartnerId() {
+    return ansprechpartnerId;
   }
 
   @Nullable String getNummer() {

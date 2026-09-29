@@ -60,7 +60,7 @@ export interface Toenung {
  * werden nicht der Reihe nach durchgefaerbt.
  */
 export interface KupferwolkeToenungen {
-  /** Kupfer-Familie: aktiver Navigationseintrag, Firmen-Mal, Hover der Icontaste, Vorgaenge. */
+  /** Kupfer-Familie: aktiver Navigationseintrag, Firmen-Mal, Hover der Icontaste. */
   readonly pfirsich: Toenung;
   /** erfolgreich, aktiv, bezahlt, Umsatz. */
   readonly salbei: Toenung;
@@ -260,7 +260,7 @@ export const theme = createTheme({
     h2: { fontSize: 18, fontWeight: 700, textWrap: 'balance' },
     // Markenname „fb.crm" in der Schiene.
     h3: { fontSize: 17, fontWeight: 800 },
-    // Name in Liste: Person, Firma, Vorgang in Karten und Zeilen.
+    // Name in Liste: Person, Firma, Angebot in Karten und Zeilen.
     h4: { fontSize: 15, fontWeight: 700 },
     h5: { fontSize: 15, fontWeight: 700 },
     h6: { fontSize: 15, fontWeight: 700 },

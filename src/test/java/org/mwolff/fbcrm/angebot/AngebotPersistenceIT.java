@@ -92,7 +92,8 @@ class AngebotPersistenceIT extends AbstractIntegrationTest {
   private final TransactionTemplate transaktion;
   private final JdbcTemplate jdbc;
 
-  private long vorgangId;
+  private long firmaId;
+  private Long ansprechpartnerId;
 
   @Autowired
   AngebotPersistenceIT(
@@ -105,23 +106,23 @@ class AngebotPersistenceIT extends AbstractIntegrationTest {
   }
 
   @BeforeEach
-  void leereFachtabellenUndLegeEinenVorgangAn() {
+  void leereFachtabellenUndLegeFirmaUndAnsprechpartnerAn() {
     jdbc.execute(
-        "TRUNCATE angebot_position, angebot, vorgang_eintrag, vorgang, ansprechpartner, firma"
-            + " RESTART IDENTITY CASCADE");
+        "TRUNCATE angebot_position, angebot, ansprechpartner, firma RESTART IDENTITY CASCADE");
     jdbc.update("INSERT INTO firma (name) VALUES ('Adler AG')");
-    final Long firmaId =
-        jdbc.queryForObject("SELECT id FROM firma WHERE name = 'Adler AG'", Long.class);
+    firmaId =
+        jdbc.queryForObject("SELECT id FROM firma WHERE name = 'Adler AG'", Long.class).longValue();
     jdbc.update(
-        "INSERT INTO vorgang (nummer, titel, firma_id) VALUES (1, 'Website-Relaunch', ?)", firmaId);
-    vorgangId =
-        jdbc.queryForObject("SELECT id FROM vorgang WHERE nummer = 1", Long.class).longValue();
+        "INSERT INTO ansprechpartner (firma_id, nachname) VALUES (?, 'Adler')",
+        Long.valueOf(firmaId));
+    ansprechpartnerId = jdbc.queryForObject("SELECT id FROM ansprechpartner", Long.class);
   }
 
   private Angebot entwurf(final LocalDate gueltigBis, final List<Angebotsposition> positionen) {
     return new Angebot(
         null,
-        vorgangId,
+        firmaId,
+        ansprechpartnerId,
         null,
         Angebotszustand.ENTWURF,
         ANGEBOTSDATUM,
@@ -159,7 +160,8 @@ class AngebotPersistenceIT extends AbstractIntegrationTest {
         .hasValueSatisfying(
             angebot -> {
               assertThat(angebot.id()).isEqualTo(gespeichert.requireId());
-              assertThat(angebot.vorgangId()).isEqualTo(vorgangId);
+              assertThat(angebot.firmaId()).isEqualTo(firmaId);
+              assertThat(angebot.ansprechpartnerId()).isEqualTo(ansprechpartnerId);
               assertThat(angebot.nummer()).isNull();
               assertThat(angebot.zustand()).isEqualTo(Angebotszustand.ENTWURF);
               assertThat(angebot.angebotDatum()).isEqualTo(ANGEBOTSDATUM);
@@ -286,7 +288,8 @@ class AngebotPersistenceIT extends AbstractIntegrationTest {
     final Angebot widerspruch =
         new Angebot(
             null,
-            vorgangId,
+            firmaId,
+            ansprechpartnerId,
             NUMMER,
             Angebotszustand.ENTWURF,
             ANGEBOTSDATUM,
@@ -313,7 +316,8 @@ class AngebotPersistenceIT extends AbstractIntegrationTest {
     final Angebot widerspruch =
         new Angebot(
             null,
-            vorgangId,
+            firmaId,
+            ansprechpartnerId,
             null,
             Angebotszustand.VERSENDET,
             ANGEBOTSDATUM,
@@ -340,7 +344,8 @@ class AngebotPersistenceIT extends AbstractIntegrationTest {
     final Angebot widerspruch =
         new Angebot(
             null,
-            vorgangId,
+            firmaId,
+            ansprechpartnerId,
             NUMMER,
             Angebotszustand.VERSENDET,
             ANGEBOTSDATUM,

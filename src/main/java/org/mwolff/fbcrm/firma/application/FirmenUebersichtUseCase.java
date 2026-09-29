@@ -13,7 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
  * Die Uebersicht der Firmen mit Suchtext und Schalter (Kriterien 2, 3, 6, 13).
  *
  * <p>Gefiltert und sortiert wird im Bestand, nicht hier und nicht im Browser (E5, E6): Die Zahl der
- * Firmen ist nach oben offen, und dieselbe Liste wird spaeter fuer die Zuordnung zu einem Vorgang
+ * Firmen ist nach oben offen, und dieselbe Liste wird spaeter fuer die Zuordnung eines Belegs
  * gebraucht — die Regel gehoert an eine Stelle.
  *
  * <p>Die Zahl der aktiven Ansprechpartner kommt in <b>einer</b> Abfrage fuer alle gefundenen

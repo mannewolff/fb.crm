@@ -36,7 +36,7 @@ final class VersandVoraussetzungen {
   /** Schluessel der Feldliste: die Gueltigkeit des Angebots. */
   static final String GUELTIG_BIS = "gueltigBis";
 
-  /** Schluessel der Feldliste: die Anschrift der Firma des Vorgangs. */
+  /** Schluessel der Feldliste: die Anschrift der Firma des Angebots. */
   static final String FIRMA = "firma";
 
   /** Schluessel der Feldliste: die eigenen Angaben. */
@@ -47,7 +47,7 @@ final class VersandVoraussetzungen {
   private static final String GUELTIGKEIT_ZU_FRUEH =
       "Die Gueltigkeit darf nicht vor dem Angebotsdatum liegen.";
   private static final String FIRMA_OHNE_ANSCHRIFT =
-      "Die Firma des Vorgangs braucht Strasse, PLZ und Ort.";
+      "Die Firma des Angebots braucht Strasse, PLZ und Ort.";
   private static final String OHNE_EIGENEN_NAMEN =
       "Unter „Eigene Angaben\" fehlt der Name, unter dem der Beleg hinausgeht.";
   private static final String OHNE_EIGENE_ANSCHRIFT =
@@ -59,7 +59,7 @@ final class VersandVoraussetzungen {
    * Prueft die Voraussetzungen und wirft, wenn etwas fehlt.
    *
    * @param angebot der Entwurf, der versendet werden soll
-   * @param firma die Firma des Vorgangs
+   * @param firma die Firma des Angebots
    * @param eigeneAngaben die Selbstauskunft der Instanz
    * @throws VersandUnvollstaendig wenn mindestens eine Angabe fehlt; die Ausnahme traegt alle
    */

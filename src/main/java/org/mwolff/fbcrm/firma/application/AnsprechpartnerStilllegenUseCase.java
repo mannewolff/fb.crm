@@ -10,7 +10,7 @@ import org.springframework.transaction.annotation.Transactional;
  * Stilllegen und Wiederaktivieren eines Ansprechpartners (Kriterium 15).
  *
  * <p>Beide Richtungen in einer Klasse, weil es dieselbe Umschaltung ist — wie bei {@link
- * FirmaStilllegenUseCase}. Ein Ansprechpartner haengt an Vorgaengen, die bleiben; deshalb gibt es
+ * FirmaStilllegenUseCase}. Ein Ansprechpartner haengt an Angeboten, die bleiben; deshalb gibt es
  * kein Loeschen, sondern nur diesen Schalter (E3).
  *
  * <p>Sein Stand gehoert ihm allein: Das Stilllegen seiner Firma laesst ihn unberuehrt, und sein

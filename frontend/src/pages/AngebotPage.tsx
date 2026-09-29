@@ -11,7 +11,7 @@ import {
 } from '@tabler/icons-react';
 import { Fragment, useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom';
 
 import {
   angebotAblehnen,
@@ -79,7 +79,7 @@ const NETTO = 'Alle Beträge netto, zzgl. gesetzlicher Umsatzsteuer';
 const VERWERFEN_FRAGE =
   'Der Entwurf verschwindet dann vollständig, samt seinen Positionen. Das lässt sich nicht zurücknehmen.';
 
-/** Die Symbolgroessen: 13 px im Chip, 16 px in den Tasten (wie in {@link VorgangPage}). */
+/** Die Symbolgroessen: 13 px im Chip, 16 px in den Tasten (wie in {@link FirmaPage}). */
 const SYMBOL_CHIP = 13;
 const SYMBOL_TASTE = 16;
 
@@ -144,6 +144,23 @@ function Positionszeile({ position }: { readonly position: AngebotPosition }) {
 /** Die Angaben des Angebots als Stammdaten-Liste (Vorlage `.stamm` Z. 100–102). */
 function Angabenkarte({ angebot }: { readonly angebot: Angebot }) {
   const zeilen: readonly { name: string; wert: ReactNode }[] = [
+    {
+      name: 'Firma',
+      wert: (
+        <Link
+          component={RouterLink}
+          to={`/firmen/${String(angebot.firmaId)}`}
+          underline="hover"
+          sx={{ fontSize: 13.5, fontWeight: 500 }}
+        >
+          {angebot.firmaName}
+        </Link>
+      ),
+    },
+    // Der Ansprechpartner ist optional (Issue #126); ohne ihn steht die Zeile gar nicht da.
+    ...(angebot.ansprechpartnerName === null
+      ? []
+      : [{ name: 'Ansprechpartner', wert: angebot.ansprechpartnerName }]),
     { name: 'Nummer', wert: angebot.nummer ?? 'Entwurf' },
     { name: 'Angebotsdatum', wert: tagWort(angebot.angebotDatum) },
     { name: 'Gültig bis', wert: tagWort(angebot.gueltigBis) },
@@ -196,22 +213,29 @@ function Angabenkarte({ angebot }: { readonly angebot: Angebot }) {
   );
 }
 
-/** Ueber jeder Angebotsansicht stehen die Uebersicht und der Vorgang (E6, E16). */
-const ZU_VORGAENGEN: PfadVerweis = { titel: 'Vorgänge', ziel: '/vorgaenge' };
+/** Ueber jeder Angebotsansicht stehen die Firmen und — sobald bekannt — die Firma (E6). */
+const ZU_FIRMEN: PfadVerweis = { titel: 'Firmen', ziel: '/firmen' };
 
 export default function AngebotPage() {
-  const { id, angebotId } = useParams();
-  const vorgangKennung = kennungAus(id);
+  const { angebotId } = useParams();
   const kennung = kennungAus(angebotId);
   const navigate = useNavigate();
   const [stand, setzeStand] = useState<Stand>({ art: 'laedt' });
   const [meldung, setzeMeldung] = useState<string | null>(null);
   const [felder, setzeFelder] = useState<FieldErrors>({});
   const [laeuft, setzeLaeuft] = useState(false);
-  // Solange das Angebot nicht gelesen ist, traegt die Endstufe das Wort „Angebot": Ein Pfad, der
-  // erst spaeter erscheint, liesse den Kopf bei jedem Aufruf einmal springen.
+  // Solange das Angebot nicht gelesen ist, traegt die Endstufe das Wort „Angebot"; die Firma kommt
+  // mit dem Angebot, denn erst das Angebot weiss, an wen es geht.
   useKopfPfad(
-    [ZU_VORGAENGEN, { titel: 'Vorgang', ziel: `/vorgaenge/${String(vorgangKennung)}` }],
+    stand.art === 'daten'
+      ? [
+          ZU_FIRMEN,
+          {
+            titel: stand.angebot.firmaName,
+            ziel: `/firmen/${String(stand.angebot.firmaId)}`,
+          },
+        ]
+      : [ZU_FIRMEN],
     stand.art === 'daten' ? ueberschriftZu(stand.angebot) : 'Angebot',
   );
 
@@ -256,7 +280,7 @@ export default function AngebotPage() {
     try {
       await angebotVerwerfen(angebot.id);
       // Der Entwurf ist weg — auf seiner Adresse gibt es nichts mehr zu sehen, also `replace`.
-      navigate(`/vorgaenge/${String(angebot.vorgangId)}`, { replace: true });
+      navigate(`/firmen/${String(angebot.firmaId)}`, { replace: true });
     } catch {
       setzeMeldung(AUSFALL_AKTION);
     }
@@ -271,7 +295,7 @@ export default function AngebotPage() {
           sx={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}
         >
           <WeicheTaste
-            to={`/vorgaenge/${String(angebot.vorgangId)}/angebote/${String(angebot.id)}/bearbeiten`}
+            to={`/angebote/${String(angebot.id)}/bearbeiten`}
             symbol={<IconPencil size={SYMBOL_TASTE} stroke={1.8} />}
           >
             Bearbeiten

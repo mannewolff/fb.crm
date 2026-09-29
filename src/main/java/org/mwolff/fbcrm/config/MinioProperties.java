@@ -13,9 +13,9 @@ import org.springframework.validation.annotation.Validated;
  * und damit keiner (CLAUDE-security.md); {@code docker-compose.yml} Z. 69 ff. setzt die Werte fuer
  * den lokalen Stack.
  *
- * <p>Die Klasse liegt in {@code config} und nicht im Modul {@code vorgang}: Schalter, die kein
+ * <p>Die Klasse liegt in {@code config} und nicht im Modul {@code angebot}: Schalter, die kein
  * Fachmodul besitzt, stehen hier ({@link OperationsProperties}). Der Adapter im Modul {@code
- * vorgang} liest sie nur.
+ * angebot} liest sie nur.
  *
  * @param endpoint Adresse des S3-Dienstes, etwa {@code http://minio:9000}
  * @param accessKey Kennung des Zugangs

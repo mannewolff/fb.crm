@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { ApiError, apiFormular, apiJson, apiOhneInhalt } from './client';
+import { ApiError, apiJson, apiOhneInhalt } from './client';
 
 /** Gibt den Wert unveraendert zurueck — fuer Faelle, in denen nicht der Parser geprueft wird. */
 const durchreichen = (wert: unknown): unknown => wert;
@@ -73,64 +73,15 @@ describe('apiOhneInhalt', () => {
   it('traegt DELETE ohne Rumpf hinaus (E19)', async () => {
     const fetchMock = fetchLiefert(() => new Response(null, { status: 204 }));
 
-    await apiOhneInhalt('/api/vorgaenge/3/angebote/9', { methode: 'DELETE' });
+    await apiOhneInhalt('/api/angebote/9', { methode: 'DELETE' });
 
     expect(fetchMock).toHaveBeenCalledWith(
-      '/api/vorgaenge/3/angebote/9',
+      '/api/angebote/9',
       expect.objectContaining({ method: 'DELETE', credentials: 'same-origin' }),
     );
     const optionen = fetchMock.mock.calls[0][1];
     expect(optionen?.body).toBeUndefined();
     expect(optionen?.headers).toBeUndefined();
-  });
-});
-
-describe('apiFormular', () => {
-  it('schickt das Formular als Rumpf und setzt keinen Inhaltstyp', async () => {
-    const fetchMock = fetchLiefert(() => new Response(null, { status: 201 }));
-    const formular = new FormData();
-    formular.append('art', 'ANHANG');
-
-    await apiFormular('/api/vorgaenge/3/eintraege', formular);
-
-    const optionen = fetchMock.mock.calls[0][1];
-    // Den `boundary` setzt erst der Browser beim Serialisieren des FormData. Ein hier
-    // gesetzter Content-Type haette keinen und machte die Anfrage unlesbar (E21).
-    expect(optionen?.headers).toBeUndefined();
-    expect(optionen?.body).toBe(formular);
-    expect(optionen?.method).toBe('POST');
-  });
-
-  it('schickt das Sitzungs-Cookie mit', async () => {
-    const fetchMock = fetchLiefert(() => new Response(null, { status: 201 }));
-
-    await apiFormular('/api/vorgaenge/3/eintraege', new FormData());
-
-    expect(fetchMock).toHaveBeenCalledWith(
-      '/api/vorgaenge/3/eintraege',
-      expect.objectContaining({ credentials: 'same-origin' }),
-    );
-  });
-
-  it('nimmt eine Antwort ohne Inhalt an', async () => {
-    fetchLiefert(() => new Response(null, { status: 201 }));
-
-    await expect(apiFormular('/api/test', new FormData())).resolves.toBeUndefined();
-  });
-
-  it('bildet eine Fehlerantwort auf einen ApiError samt Feldfehlern ab', async () => {
-    fetchLiefert(() =>
-      problemAntwort(400, {
-        detail: 'Die Eingabe ist ungueltig.',
-        fieldErrors: { datei: ['ist zu gross'] },
-      }),
-    );
-
-    await expect(apiFormular('/api/test', new FormData())).rejects.toMatchObject({
-      status: 400,
-      message: 'Die Eingabe ist ungueltig.',
-      fieldErrors: { datei: ['ist zu gross'] },
-    });
   });
 });
 

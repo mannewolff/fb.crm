@@ -12,7 +12,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
  * darueber, welcher der drei Riegel griff — und damit darueber, ob der geratene Schluessel richtig
  * war.
  *
- * <p>403 statt 401: Es geht nicht um eine fehlende Sitzung, sondern um einen Vorgang, der so nicht
+ * <p>403 statt 401: Es geht nicht um eine fehlende Sitzung, sondern um einen Schritt, der so nicht
  * stattfinden darf. Die Oberflaeche soll niemanden zur Anmeldung schicken, sondern sagen, dass die
  * Einrichtung nicht offen steht.
  */

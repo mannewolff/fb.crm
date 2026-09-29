@@ -10,8 +10,8 @@ import org.springframework.transaction.annotation.Transactional;
  * Stilllegen und Wiederaktivieren einer Firma (Kriterium 13).
  *
  * <p>Beide Richtungen in einer Klasse, weil es dieselbe Umschaltung ist. Eine Firma haengt an
- * Vorgaengen, Angeboten und Rechnungen, die bleiben — deshalb gibt es kein Loeschen, sondern nur
- * diesen Schalter (E3).
+ * Angeboten und Rechnungen, die bleiben — deshalb gibt es kein Loeschen, sondern nur diesen
+ * Schalter (E3).
  *
  * <p>Die Ansprechpartner der Firma bleiben unberuehrt: Ihr Stilllegungsstand gehoert ihnen allein
  * (E2, Kriterium 16).

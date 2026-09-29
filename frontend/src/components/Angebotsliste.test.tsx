@@ -27,7 +27,7 @@ const VERSENDET: AngebotZeile = {
 function renderListe(angebote: readonly AngebotZeile[]) {
   return renderMitTheme(
     <MemoryRouter>
-      <Angebotsliste vorgangId={5} angebote={angebote} />
+      <Angebotsliste angebote={angebote} />
     </MemoryRouter>,
   );
 }
@@ -61,16 +61,16 @@ describe('Angebotsliste (Kriterium 20)', () => {
     ]);
   });
 
-  it('oeffnet aus jeder Zeile das Angebot unter dem Vorgang (E16)', () => {
+  it('oeffnet aus jeder Zeile das Angebot', () => {
     renderListe([ENTWURF, VERSENDET]);
 
     expect(screen.getByRole('link', { name: 'Entwurf' })).toHaveAttribute(
       'href',
-      '/vorgaenge/5/angebote/12',
+      '/angebote/12',
     );
     expect(screen.getByRole('link', { name: 'A-2026-001' })).toHaveAttribute(
       'href',
-      '/vorgaenge/5/angebote/9',
+      '/angebote/9',
     );
   });
 
@@ -86,7 +86,7 @@ describe('Angebotsliste (Kriterium 20)', () => {
     ]);
   });
 
-  it('sagt es, wenn der Vorgang noch kein Angebot hat, statt eine leere Tafel zu zeigen', () => {
+  it('sagt es, wenn die Firma noch kein Angebot hat, statt eine leere Tafel zu zeigen', () => {
     renderListe([]);
 
     expect(screen.getByRole('status')).toHaveTextContent('Noch kein Angebot');

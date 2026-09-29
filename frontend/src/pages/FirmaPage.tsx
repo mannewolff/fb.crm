@@ -6,6 +6,7 @@ import {
   IconArchiveOff,
   IconCircleCheck,
   IconDeviceMobile,
+  IconFilePlus,
   IconMail,
   IconMapPin,
   IconPencil,
@@ -14,7 +15,7 @@ import {
 } from '@tabler/icons-react';
 import { Fragment, useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
-import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 
 import {
   ansprechpartnerAktivieren,
@@ -24,9 +25,10 @@ import {
   firmaStilllegen,
 } from '../api/firmen';
 import type { Ansprechpartner, Firma } from '../api/firmen';
-import { vorgaengeDerFirma } from '../api/vorgaenge';
-import type { VorgaengeDerFirma, VorgangZeile } from '../api/vorgaenge';
+import { angeboteDerFirma } from '../api/angebote';
+import type { AngebotZeile } from '../api/angebote';
 import AktionsMenue from '../components/AktionsMenue';
+import Angebotsliste from '../components/Angebotsliste';
 import type { AktionsEintrag } from '../components/AktionsMenue';
 import Innenkarte, { HinzufuegenKachel, InnenkartenRaster } from '../components/Innenkarte';
 import Karte from '../components/Karte';
@@ -39,16 +41,15 @@ import ZustandsChip from '../components/ZustandsChip';
 import { nichtGefunden } from '../lib/apifehler';
 import { kennungAus } from '../lib/kennung';
 import { namensZug } from '../lib/namenszug';
-import { phaseWort } from '../lib/phase';
 import { emailZiel, telefonZiel } from '../lib/telefonlink';
-import { ZAHLEN_KLASSE } from '../theme';
 
 /**
  * Die Detailansicht einer Firma (Kriterien 5, 10, 13, 14) in der Kupferwolke.
  *
  * Oben die {@link Kopfkarte} mit Mal, Namen, Adresszeile und genau einem Zustands-Chip, rechts die
  * Aktionen; darunter die Ansprechpartner als {@link Innenkarte}n im Raster, danach die Stammdaten
- * und die Vorgaenge der Firma. Vier Zusagen tragen die Ansicht:
+ * und die Angebote an die Firma. Die Kupfertaste der Ansicht ist „Angebot anlegen": Ein Angebot
+ * entsteht an der Firma (Issue #126). Vier Zusagen tragen die Ansicht:
  *
  * <ul>
  *   <li><b>Kein Platzhalter fuer eine fehlende Angabe</b> (Kriterium 5) — ein Teil der Adresszeile
@@ -59,7 +60,8 @@ import { ZAHLEN_KLASSE } from '../theme';
  *   <li><b>Folgenreiches steht im ⋯-Menue</b> (CLAUDE-design.md, „Tasten") — Stilllegen fragt vor
  *       der Ausfuehrung nach, Wiederaktivieren laeuft ohne Zwischenschritt.</li>
  *   <li><b>Alle Wege bleiben offen, auch bei stillgelegter Firma</b> (Kriterium 14) — stillgelegt
- *       heisst „nicht mehr im Angebot", nicht „gesperrt".</li>
+ *       heisst „nicht mehr im Angebot", nicht „gesperrt". Die eine Ausnahme ist ein neues Angebot:
+ *       An eine stillgelegte Firma geht keines, die Taste fehlt dort.</li>
  * </ul>
  *
  * Nach dem Stilllegen oder Wiederaktivieren liest die Ansicht die Firma neu, statt den Stand
@@ -73,12 +75,12 @@ const SCHALTEN_FEHLT = 'Der Stand der Firma wurde nicht geändert. Bitte später
 const PARTNER_SCHALTEN_FEHLT =
   'Der Stand des Ansprechpartners wurde nicht geändert. Bitte später erneut versuchen.';
 const OHNE_ANSPRECHPARTNER = 'Noch kein Ansprechpartner angelegt.';
-const OHNE_VORGANG = 'Noch kein Vorgang angelegt.';
-const VORGAENGE_AUSFALL = 'Die Vorgänge sind gerade nicht zu erreichen. Bitte später erneut versuchen.';
+const ANGEBOTE_AUSFALL =
+  'Die Angebote sind gerade nicht zu erreichen. Bitte später erneut versuchen.';
 
 /** Die Saetze der beiden Rueckfragen — sie erklaeren die Folge, nicht die Aktion. */
 const FIRMA_FRAGE =
-  'Eine stillgelegte Firma steht nicht mehr zur Auswahl. Ihre Vorgänge bleiben erhalten.';
+  'Eine stillgelegte Firma steht nicht mehr zur Auswahl. Ihre Angebote bleiben erhalten.';
 const PARTNER_FRAGE =
   'Ein stillgelegter Ansprechpartner steht nicht mehr zur Auswahl. Seine Angaben bleiben erhalten.';
 
@@ -94,42 +96,15 @@ type Stand =
   | { readonly art: 'ausfall' };
 
 /**
- * Was die Ansicht ueber die Vorgaenge der Firma weiss (Kriterium 12).
+ * Was die Ansicht ueber die Angebote der Firma weiss (Kriterium 20).
  *
  * Ein eigener Stand neben dem der Firma, weil es ein eigener Leseweg ist (E2): Faellt er aus,
  * bleiben die Angaben der Firma und ihre Ansprechpartner sichtbar — nur die eine Karte meldet.
  */
-type VorgangStand =
+type AngebotStand =
   | { readonly art: 'laedt' }
-  | { readonly art: 'daten'; readonly vorgaenge: VorgaengeDerFirma }
+  | { readonly art: 'daten'; readonly angebote: readonly AngebotZeile[] }
   | { readonly art: 'ausfall' };
-
-/**
- * Das Schild eines abgeschlossenen Vorgangs in der Vorgangsliste (Paket #71).
- *
- * Kein {@link ZustandsChip}: Das Wort steht **innerhalb** des Weges zum Vorgang, damit sein
- * zugaenglicher Name den Abschlussstand mittraegt — ein Chip daneben waere eine zweite,
- * stille Angabe.
- */
-function Schild({ wort }: { readonly wort: string }) {
-  return (
-    <Box
-      component="span"
-      sx={(theme) => ({
-        flex: 'none',
-        fontSize: 10,
-        fontWeight: 500,
-        padding: '1px 6px',
-        borderRadius: '5px',
-        color: theme.vars.palette.kupferwolke.melder.grau,
-        border: '1px solid currentColor',
-        background: 'color-mix(in srgb, currentColor 13%, transparent)',
-      })}
-    >
-      {wort}
-    </Box>
-  );
-}
 
 /** Ein dekoratives Symbol in einer Zeile — es stuetzt das Wort daneben und wird nicht vorgelesen. */
 function StuetzSymbol({ children }: { readonly children: ReactNode }) {
@@ -406,157 +381,21 @@ function Stammdatenkarte({ firma }: { readonly firma: Firma }) {
   );
 }
 
-/**
- * Eine Zeile der Vorgangsliste (Paket #71).
- *
- * Nummer und Titel bilden zusammen den Weg zum Vorgang, das Schild eines abgeschlossenen steht
- * darin: So traegt der Name des Weges den Abschlussstand, statt ihn nur nebenher zu zeigen — wer
- * die Liste mit dem Screenreader Weg fuer Weg durchgeht, hoert ihn mit. Die Phase steht daneben,
- * ausserhalb des Weges, weil sie kein Teil seines Ziels ist.
- */
-function VorgangZeileAnsicht({ vorgang }: { readonly vorgang: VorgangZeile }) {
-  return (
-    <Box
-      component="li"
-      sx={(theme) => ({
-        display: 'flex',
-        alignItems: 'center',
-        gap: 1.5,
-        flexWrap: 'wrap',
-        padding: '11px 16px',
-        borderBottom: `1px solid color-mix(in srgb, ${theme.vars.palette.kupferwolke.linie} 55%, transparent)`,
-        'li:last-of-type&': { borderBottom: 0 },
-      })}
-    >
-      <Box
-        component={RouterLink}
-        to={`/vorgaenge/${String(vorgang.id)}`}
-        sx={(theme) => ({
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: 1.5,
-          minWidth: 0,
-          color: 'inherit',
-          textDecoration: 'none',
-          '&:hover': { color: theme.vars.palette.kupferwolke.kupfer },
-        })}
-      >
-        <Box
-          component="span"
-          className={ZAHLEN_KLASSE}
-          sx={(theme) => ({
-            flex: 'none',
-            fontSize: 12,
-            color: theme.vars.palette.kupferwolke.textSchwach,
-          })}
-        >
-          {`#${String(vorgang.nummer)}`}
-        </Box>
-        <Box component="span" sx={{ fontSize: 13.5, fontWeight: 500, minWidth: 0 }}>
-          {vorgang.titel}
-        </Box>
-        {vorgang.abgeschlossen ? <Schild wort="abgeschlossen" /> : null}
-      </Box>
-      <Typography
-        component="span"
-        sx={(theme) => ({
-          marginLeft: 'auto',
-          fontSize: 11.5,
-          color: theme.vars.palette.kupferwolke.textMatt,
-        })}
-      >
-        {phaseWort(vorgang.phase)}
-      </Typography>
-    </Box>
-  );
-}
-
-/** Eine der beiden Vorgangslisten; ohne Eintraege entsteht sie gar nicht. */
-function Vorgangsliste({
-  vorgaenge,
-  bezeichnung,
-}: {
-  readonly vorgaenge: readonly VorgangZeile[];
-  readonly bezeichnung: string;
-}) {
-  if (vorgaenge.length === 0) {
-    return null;
-  }
-  return (
-    <Box
-      component="ul"
-      aria-label={bezeichnung}
-      sx={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column' }}
-    >
-      {vorgaenge.map((vorgang) => (
-        <VorgangZeileAnsicht key={vorgang.id} vorgang={vorgang} />
-      ))}
-    </Box>
-  );
-}
-
-/**
- * Der Inhalt der Karte „Vorgaenge" (Kriterium 12).
- *
- * Offene zuerst in der Reihenfolge der Antwort, die abgeschlossenen abgesetzt unter eigener
- * Ueberschrift. Ohne Vorgang sagt die Karte das, statt leer zu bleiben.
- */
-function Vorgangskarte({ stand }: { readonly stand: VorgangStand }) {
+/** Der Inhalt der Karte „Angebote" (Kriterium 20): laden, melden oder die Liste. */
+function Angebotekarte({ stand }: { readonly stand: AngebotStand }) {
   if (stand.art === 'laedt') {
     return (
       <Typography
-        sx={(theme) => ({
-          padding: '18px 16px',
-          fontSize: 12.5,
-          color: theme.vars.palette.kupferwolke.textSchwach,
-        })}
+        sx={(theme) => ({ fontSize: 12.5, color: theme.vars.palette.kupferwolke.textSchwach })}
       >
-        Vorgänge werden geladen …
+        Angebote werden geladen …
       </Typography>
     );
   }
   if (stand.art === 'ausfall') {
-    return (
-      <Alert severity="error" sx={{ borderRadius: 0 }}>
-        {VORGAENGE_AUSFALL}
-      </Alert>
-    );
+    return <Alert severity="error">{ANGEBOTE_AUSFALL}</Alert>;
   }
-  const { offene, abgeschlossene } = stand.vorgaenge;
-  if (offene.length === 0 && abgeschlossene.length === 0) {
-    return (
-      <Typography
-        role="status"
-        sx={(theme) => ({
-          padding: '18px 16px',
-          fontSize: 12.5,
-          color: theme.vars.palette.kupferwolke.textMatt,
-        })}
-      >
-        {OHNE_VORGANG}
-      </Typography>
-    );
-  }
-  return (
-    <>
-      <Vorgangsliste vorgaenge={offene} bezeichnung="Offene Vorgänge" />
-      {abgeschlossene.length === 0 ? null : (
-        <Typography
-          variant="h3"
-          sx={(theme) => ({
-            padding: '12px 16px 4px',
-            fontSize: 11.5,
-            fontWeight: 600,
-            color: theme.vars.palette.kupferwolke.textSchwach,
-            borderTop: `1px solid ${theme.vars.palette.kupferwolke.linie}`,
-          })}
-        >
-          Abgeschlossen
-        </Typography>
-      )}
-      <Vorgangsliste vorgaenge={abgeschlossene} bezeichnung="Abgeschlossene Vorgänge" />
-    </>
-  );
+  return <Angebotsliste angebote={stand.angebote} />;
 }
 
 /** Ueber jeder Firmen-Ansicht steht die Uebersicht (E6). */
@@ -567,7 +406,7 @@ export default function FirmaPage() {
   const kennung = kennungAus(id);
   const [stand, setzeStand] = useState<Stand>({ art: 'laedt' });
   const [schaltFehler, setzeSchaltFehler] = useState<string | null>(null);
-  const [vorgangStand, setzeVorgangStand] = useState<VorgangStand>({ art: 'laedt' });
+  const [angebotStand, setzeAngebotStand] = useState<AngebotStand>({ art: 'laedt' });
   // Solange die Firma nicht gelesen ist, traegt die Endstufe das Wort „Firma": Ein Pfad, der
   // erst spaeter erscheint, liesse den Kopf bei jedem Aufruf einmal springen.
   useKopfPfad(ZU_FIRMEN, stand.art === 'daten' ? stand.firma.name : 'Firma');
@@ -578,12 +417,12 @@ export default function FirmaPage() {
     if (kennung === null) {
       return;
     }
-    vorgaengeDerFirma(kennung)
-      .then((vorgaenge) => {
-        setzeVorgangStand({ art: 'daten', vorgaenge });
+    angeboteDerFirma(kennung)
+      .then((antwort) => {
+        setzeAngebotStand({ art: 'daten', angebote: antwort.angebote });
       })
       .catch(() => {
-        setzeVorgangStand({ art: 'ausfall' });
+        setzeAngebotStand({ art: 'ausfall' });
       });
   }, [kennung]);
 
@@ -649,12 +488,20 @@ export default function FirmaPage() {
               >
                 Bearbeiten
               </WeicheTaste>
-              <KupferTaste
+              <WeicheTaste
                 to={`/firmen/${String(firma.id)}/ansprechpartner/neu`}
                 symbol={<IconUserPlus size={SYMBOL_TASTE} stroke={1.8} />}
               >
                 Neuer Ansprechpartner
-              </KupferTaste>
+              </WeicheTaste>
+              {firma.aktiv ? (
+                <KupferTaste
+                  to={`/firmen/${String(firma.id)}/angebote/neu`}
+                  symbol={<IconFilePlus size={SYMBOL_TASTE} stroke={1.8} />}
+                >
+                  Angebot anlegen
+                </KupferTaste>
+              ) : null}
               <AktionsMenue
                 name={`Aktionen für ${firma.name}`}
                 objekt={firma.name}
@@ -674,8 +521,11 @@ export default function FirmaPage() {
           }}
         />
         <Stammdatenkarte firma={firma} />
-        <Karte titel="Vorgänge">
-          <Vorgangskarte stand={vorgangStand} />
+        <Karte
+          titel="Angebote"
+          anzahl={angebotStand.art === 'daten' ? angebotStand.angebote.length : undefined}
+        >
+          <Angebotekarte stand={angebotStand} />
         </Karte>
       </>
     );

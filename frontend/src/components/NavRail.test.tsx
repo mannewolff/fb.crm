@@ -63,11 +63,10 @@ describe('navItems (E15, E18)', () => {
     ]);
   });
 
-  it('fuehrt „Geschäft" und „Stammdaten", jeden Block mit seinen Eintraegen', () => {
+  it('fuehrt „Stammdaten" mit seinen Eintraegen', () => {
     expect(
       NAV_BLOECKE.map((block) => [block.titel, block.eintraege.map((e) => [e.beschriftung, e.ziel])]),
     ).toEqual([
-      ['Geschäft', [['Vorgänge', '/vorgaenge']]],
       // „Eigene Angaben" ist ein Stammdatum wie die Firma und steht neben ihr — nicht hinter
       // „Administration" und nicht in einem eigenen Block mit einem Eintrag (E14).
       [
@@ -111,16 +110,13 @@ describe('NavRail', () => {
 
     const bloecke = within(screen.getByTestId('schiene-bloecke'));
     // Die Reihenfolge der Titel und der Links haelt die Aussage der Bloecke fest (E24).
-    expect(bloecke.getAllByText(/^(Geschäft|Stammdaten)$/).map((e) => e.textContent)).toEqual([
-      'Geschäft',
+    expect(bloecke.getAllByText(/^Stammdaten$/).map((e) => e.textContent)).toEqual([
       'Stammdaten',
     ]);
     expect(bloecke.getAllByRole('link').map((link) => link.getAttribute('href'))).toEqual([
-      '/vorgaenge',
       '/firmen',
       '/eigene-angaben',
     ]);
-    expect(bloecke.getByRole('link', { name: 'Vorgänge' })).toBeInTheDocument();
     expect(bloecke.getByRole('link', { name: 'Firmen' })).toBeInTheDocument();
     expect(bloecke.getByRole('link', { name: 'Eigene Angaben' })).toBeInTheDocument();
     // Kein Umschalter in den Bloecken — Tasten stehen an der Marke und im Fuss.
@@ -184,9 +180,6 @@ describe('NavRail', () => {
     ['/firmen', 'Firmen'],
     // Auch die Detailansicht einer Firma laesst „Firmen" aktiv stehen (Plan-Review Fund 3).
     ['/firmen/7', 'Firmen'],
-    ['/vorgaenge', 'Vorgänge'],
-    // Dasselbe am Vorgang: die Detailansicht laesst „Vorgänge" aktiv stehen.
-    ['/vorgaenge/12', 'Vorgänge'],
     ['/eigene-angaben', 'Eigene Angaben'],
   ])('setzt auf %s aria-current="page" an „%s" und nur dort (K12)', (adresse, beschriftung) => {
     angemeldet();
@@ -239,12 +232,9 @@ describe('NavRail', () => {
     expect(screen.getByRole('link', { name: 'Administration' })).toBeInTheDocument();
     // Ebenso im Block: der Gruppentitel entfaellt, der Link behaelt seinen Namen.
     expect(screen.queryByText('Stammdaten')).not.toBeInTheDocument();
-    expect(screen.queryByText('Geschäft')).not.toBeInTheDocument();
     expect(screen.queryByText('Firmen')).not.toBeInTheDocument();
-    expect(screen.queryByText('Vorgänge')).not.toBeInTheDocument();
     expect(screen.queryByText('Eigene Angaben')).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Firmen' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Vorgänge' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Eigene Angaben' })).toBeInTheDocument();
     // Marke und Kuerzel bleiben; Name und E-Mail der Nutzerkarte entfallen.
     expect(screen.getByTestId('marke-mal')).toBeInTheDocument();
@@ -274,9 +264,9 @@ describe('NavRail', () => {
     expect(namen).not.toContain('chart-bar');
   });
 
-  it('zeichnet „Vorgänge" und „Firmen" mit verschiedenen Symbolen (E24)', async () => {
+  it('zeichnet „Firmen" und „Eigene Angaben" mit verschiedenen Symbolen (E24)', async () => {
     // Eingeklappt steht nur noch das Symbol da. Zwei Eintraege mit demselben Strich waeren dort
-    // nicht mehr zu unterscheiden — der Block „Geschäft" saehe aus wie „Stammdaten".
+    // nicht mehr zu unterscheiden.
     angemeldet();
     const nutzer = userEvent.setup();
 
@@ -284,11 +274,8 @@ describe('NavRail', () => {
     await nutzer.click(screen.getByRole('button', { name: 'Einklappen' }));
 
     // Eingeklappt steht keine Beschriftung mehr da — nur noch der Strich.
-    expect(screen.queryByText('Vorgänge')).not.toBeInTheDocument();
+    expect(screen.queryByText('Firmen')).not.toBeInTheDocument();
     const strich = (name: string) => screen.getByTestId(`nav-symbol-${name}`).innerHTML;
-    expect(strich('stack-2')).toBeTruthy();
-    expect(strich('stack-2')).not.toBe(strich('building-community'));
-    // Dasselbe im Block „Stammdaten": Zwei Eintraege, zwei Striche.
     expect(strich('id')).toBeTruthy();
     expect(strich('id')).not.toBe(strich('building-community'));
   });

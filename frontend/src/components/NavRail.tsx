@@ -7,7 +7,6 @@ import {
   IconLayoutSidebarLeftCollapse,
   IconLayoutSidebarLeftExpand,
   IconSettings,
-  IconStack2,
 } from '@tabler/icons-react';
 import type { TablerIcon } from '@tabler/icons-react';
 import { useEffect, useState } from 'react';
@@ -49,7 +48,6 @@ const BREITE_EINGEKLAPPT = 76;
 
 /** Die Symbole der Vorlage — dieselbe Familie, dieselben Namen (E3). */
 const SYMBOLE: Readonly<Record<Symbolname, TablerIcon>> = {
-  'stack-2': IconStack2,
   'building-community': IconBuildingCommunity,
   id: IconId,
   settings: IconSettings,
