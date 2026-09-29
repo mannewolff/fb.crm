@@ -13,6 +13,7 @@ import java.util.Objects;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mwolff.fbcrm.AbstractIntegrationTest;
+import org.mwolff.fbcrm.angebot.domain.Angebotsstatus;
 import org.mwolff.fbcrm.angebot.web.AngebotPositionResponse;
 import org.mwolff.fbcrm.angebot.web.AngebotResponse;
 import org.mwolff.fbcrm.angebot.web.FirmaAngeboteResponse;
@@ -31,26 +32,25 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 /**
- * Der Lebensweg eines Angebotsentwurfs ueber HTTP, mit Sitzung und gegen eine echte
- * PostgreSQL-Instanz: anlegen, fortschreiben, lesen, verwerfen.
+ * Der Lebensweg eines Angebots ueber HTTP, mit Sitzung und gegen eine echte PostgreSQL-Instanz:
+ * anlegen, aendern, lesen, Status weiter und zurueck (Issue #127).
  *
  * <p>Drei Zusagen sind nur hier pruefbar, weil sie an der echten Transaktion und am echten Schema
  * haengen. Erstens E24: Nach einem {@code PUT} mit umgestellter Liste tragen die Positionszeilen
  * die Plaetze 1 bis n in der gesendeten Reihenfolge — das steht in der Spalte, nicht im Speicher.
- * Zweitens Kriterium 7: Ein verworfener Entwurf ist samt seinen Positionszeilen wirklich weg.
- * Drittens die Wahl des Kunden (Issue #126): An einer stillgelegten Firma antwortet das Anlegen
- * 409, waehrend ein bestehender Entwurf sich weiterhin fortschreiben laesst; ein Ansprechpartner
+ * Zweitens der Status: Er steht nach jedem Wechsel in der Spalte, und an den Enden antwortet der
+ * Weg 409. Drittens die Wahl des Kunden (Issue #126): An einer stillgelegten Firma antwortet das
+ * Anlegen 409, waehrend ein bestehendes Angebot sich weiterhin aendern laesst; ein Ansprechpartner
  * einer anderen Firma ist 422.
  *
  * <p>Der Nachweis der Zugangsregel steht hier und nicht nur in {@code AccessRuleIT}: Ein neuer Pfad
  * unter {@code /api} ist ohne Sitzung verschlossen, und das gehoert zu jedem neuen Weg dazu.
  */
-class AngebotEntwurfIT extends AbstractIntegrationTest {
+class AngebotIT extends AbstractIntegrationTest {
 
   private static final String MAIL = "manne@example.org";
   private static final String PASSWORT = "richtiges-passwort";
   private static final Instant ANGELEGT = Instant.parse("2026-09-01T08:00:00Z");
-  private static final String STANDARDBEDINGUNGEN = "Zahlbar innerhalb von 30 Tagen netto.";
 
   private final TestRestTemplate rest;
   private final AccountRepository accounts;
@@ -64,7 +64,7 @@ class AngebotEntwurfIT extends AbstractIntegrationTest {
   private long fremderAnsprechpartnerId;
 
   @Autowired
-  AngebotEntwurfIT(
+  AngebotIT(
       final TestRestTemplate rest,
       final AccountRepository accounts,
       final PasswordHasher hasher,
@@ -81,7 +81,6 @@ class AngebotEntwurfIT extends AbstractIntegrationTest {
   void leereDenBestandUndMeldeAn() {
     jdbc.execute(
         "TRUNCATE angebot_position, angebot, ansprechpartner, firma RESTART IDENTITY CASCADE");
-    jdbc.update("UPDATE eigene_angaben SET zahlungsbedingungen = ?", STANDARDBEDINGUNGEN);
     firmaId = firma("Adler AG");
     ansprechpartnerId = ansprechpartner(firmaId, "Adler");
     fremderAnsprechpartnerId = ansprechpartner(firma("Biber GmbH"), "Biber");
@@ -135,24 +134,24 @@ class AngebotEntwurfIT extends AbstractIntegrationTest {
     return felder;
   }
 
-  private static Map<String, Object> entwurfsrumpf(final List<Map<String, Object>> positionen) {
+  private static Map<String, Object> rumpf(final List<Map<String, Object>> positionen) {
     final Map<String, Object> felder = new LinkedHashMap<>();
-    felder.put("gueltigBis", "2026-12-31");
-    felder.put("leistungsbeschreibung", "Neugestaltung der Website");
-    felder.put("zahlungsbedingungen", null);
+    felder.put("angebotDatum", "2026-09-25");
+    felder.put("ansprechpartnerId", null);
+    felder.put("beschreibung", "Neugestaltung der Website");
     felder.put("positionen", positionen);
     return felder;
   }
 
-  private ResponseEntity<AngebotResponse> anlegenMit(final long ansprechpartner) {
+  private <T> ResponseEntity<T> anlegenMit(final long ansprechpartner, final Class<T> typ) {
     return ruf(
         "/api/firmen/" + firmaId + "/angebote",
         HttpMethod.POST,
         Map.of("ansprechpartnerId", Long.valueOf(ansprechpartner)),
-        AngebotResponse.class);
+        typ);
   }
 
-  private AngebotResponse entwurf() {
+  private AngebotResponse angebot() {
     return Objects.requireNonNull(
         ruf("/api/firmen/" + firmaId + "/angebote", HttpMethod.POST, null, AngebotResponse.class)
             .getBody());
@@ -166,9 +165,8 @@ class AngebotEntwurfIT extends AbstractIntegrationTest {
   }
 
   @Test
-  void anlegen_thenAnswersCreatedWithThePrefilledDraft() {
-    // Given — Kriterium 3: Angebotsdatum heute in der Geschaeftszone, Gueltigkeit dreissig Tage,
-    // Zahlungsbedingungen aus „Eigene Angaben".
+  void anlegen_thenAnswersCreatedWithThePrefilledAngebot() {
+    // Given — Angebotsdatum heute in der Geschaeftszone, Status ANGELEGT.
     final LocalDate heute = LocalDate.now(clock.withZone(Geschaeftszone.ZONE));
 
     // When
@@ -178,22 +176,20 @@ class AngebotEntwurfIT extends AbstractIntegrationTest {
     // Then
     assertThat(antwort.getStatusCode()).isEqualTo(HttpStatus.CREATED);
     final AngebotResponse angelegt = Objects.requireNonNull(antwort.getBody());
-    assertThat(angelegt.stand().name()).isEqualTo("ENTWURF");
-    assertThat(angelegt.nummer()).isNull();
+    assertThat(angelegt.status()).isEqualTo(Angebotsstatus.ANGELEGT);
     assertThat(angelegt.angebotDatum()).isEqualTo(heute);
-    assertThat(angelegt.gueltigBis()).isEqualTo(heute.plusDays(30));
-    assertThat(angelegt.zahlungsbedingungen()).isEqualTo(STANDARDBEDINGUNGEN);
+    assertThat(angelegt.beschreibung()).isNull();
     assertThat(angelegt.positionen()).isEmpty();
   }
 
   @Test
   void aendern_withAReorderedList_thenRenumbersThePositionsFromOne() {
     // Given — E24: die Plaetze entstehen aus der Reihenfolge der gesendeten Liste.
-    final long angebotId = entwurf().id();
+    final long angebotId = angebot().id();
     ruf(
         "/api/angebote/" + angebotId,
         HttpMethod.PUT,
-        entwurfsrumpf(
+        rumpf(
             List.of(
                 position("Konzeption", "AUFWAND", "2.50", "PERSONENTAG"),
                 position("Schulungstag", "FESTPREIS", "1.00", "PAUSCHAL"))),
@@ -204,7 +200,7 @@ class AngebotEntwurfIT extends AbstractIntegrationTest {
         ruf(
             "/api/angebote/" + angebotId,
             HttpMethod.PUT,
-            entwurfsrumpf(
+            rumpf(
                 List.of(
                     position("Schulungstag", "FESTPREIS", "1.00", "PAUSCHAL"),
                     position("Konzeption", "AUFWAND", "2.50", "PERSONENTAG"))),
@@ -224,11 +220,11 @@ class AngebotEntwurfIT extends AbstractIntegrationTest {
   @Test
   void lesen_thenAnswersWithThePositionsInOrderAndTheCalculatedSumme() {
     // Given — Kriterium 5: 2,5 × 1.000,01 € = 2.500,03 €, plus 1 × 1.000,01 €.
-    final long angebotId = entwurf().id();
+    final long angebotId = angebot().id();
     ruf(
         "/api/angebote/" + angebotId,
         HttpMethod.PUT,
-        entwurfsrumpf(
+        rumpf(
             List.of(
                 position("Konzeption", "AUFWAND", "2.50", "PERSONENTAG"),
                 position("Schulungstag", "FESTPREIS", "1.00", "PAUSCHAL"))),
@@ -245,36 +241,74 @@ class AngebotEntwurfIT extends AbstractIntegrationTest {
         .extracting(AngebotPositionResponse::bezeichnung)
         .containsExactly("Konzeption", "Schulungstag");
     assertThat(gelesen.summe()).isEqualByComparingTo(new BigDecimal("3500.04"));
-    assertThat(gelesen.gueltigBis()).isEqualTo(LocalDate.of(2026, 12, 31));
+    assertThat(gelesen.angebotDatum()).isEqualTo(LocalDate.of(2026, 9, 25));
+    assertThat(gelesen.beschreibung()).isEqualTo("Neugestaltung der Website");
   }
 
   @Test
-  void verwerfen_thenTheDraftAndItsPositionsAreGone() {
-    // Given — Kriterium 7.
-    final long angebotId = entwurf().id();
-    ruf(
-        "/api/angebote/" + angebotId,
-        HttpMethod.PUT,
-        entwurfsrumpf(List.of(position("Konzeption", "AUFWAND", "2.50", "PERSONENTAG"))),
-        AngebotResponse.class);
+  void status_forwardThroughEveryStepAndBack_thenStoredAndBoundedByTheEnds() {
+    // Given — Kriterium 4: frei weiter und zurueck, immer genau eine Stufe.
+    final long angebotId = angebot().id();
+    final String pfad = "/api/angebote/" + angebotId + "/status/";
 
-    // When
-    final ResponseEntity<Void> antwort =
-        ruf("/api/angebote/" + angebotId, HttpMethod.DELETE, null, Void.class);
+    // When — viermal weiter bis ABGERECHNET, dann noch einmal.
+    for (int schritt = 0; schritt < 4; schritt++) {
+      assertThat(ruf(pfad + "weiter", HttpMethod.POST, null, AngebotResponse.class).getStatusCode())
+          .isEqualTo(HttpStatus.OK);
+    }
+    final ResponseEntity<String> ueberDasEnde =
+        ruf(pfad + "weiter", HttpMethod.POST, null, String.class);
+    final ResponseEntity<AngebotResponse> zurueck =
+        ruf(pfad + "zurueck", HttpMethod.POST, null, AngebotResponse.class);
 
     // Then
-    assertThat(antwort.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
+    assertThat(ueberDasEnde.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+    assertThat(Objects.requireNonNull(zurueck.getBody()).status())
+        .isEqualTo(Angebotsstatus.ERLEDIGT);
     assertThat(
-            ruf("/api/angebote/" + angebotId, HttpMethod.GET, null, String.class).getStatusCode())
-        .isEqualTo(HttpStatus.NOT_FOUND);
-    assertThat(bezeichnungenNachPlatz(angebotId)).isEmpty();
+            jdbc.queryForObject(
+                "SELECT status FROM angebot WHERE id = ?", String.class, Long.valueOf(angebotId)))
+        .isEqualTo("ERLEDIGT");
   }
 
   @Test
-  void angebote_thenListsTheDraftsOfTheFirmaNewestFirst() {
-    // Given — Kriterium 20, E25.
-    final long aelterer = entwurf().id();
-    final long juengerer = entwurf().id();
+  void statusZurueck_ofACreatedAngebot_thenAnswers409() {
+    // Given
+    final long angebotId = angebot().id();
+
+    // When
+    final ResponseEntity<String> antwort =
+        ruf("/api/angebote/" + angebotId + "/status/zurueck", HttpMethod.POST, null, String.class);
+
+    // Then
+    assertThat(antwort.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+  }
+
+  @Test
+  void aendern_inTheLastStatus_thenStillAllowed() {
+    // Given — Kriterium 5: auch ein abgerechnetes Angebot bleibt aenderbar.
+    final long angebotId = angebot().id();
+    jdbc.update("UPDATE angebot SET status = 'ABGERECHNET' WHERE id = ?", Long.valueOf(angebotId));
+
+    // When
+    final ResponseEntity<AngebotResponse> antwort =
+        ruf(
+            "/api/angebote/" + angebotId,
+            HttpMethod.PUT,
+            rumpf(List.of(position("Konzeption", "AUFWAND", "2.50", "PERSONENTAG"))),
+            AngebotResponse.class);
+
+    // Then
+    assertThat(antwort.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(Objects.requireNonNull(antwort.getBody()).status())
+        .isEqualTo(Angebotsstatus.ABGERECHNET);
+  }
+
+  @Test
+  void angebote_thenListsTheAngeboteOfTheFirmaNewestFirst() {
+    // Given — Kriterium 7: gleiches Datum, also entscheidet die hoehere Kennung.
+    final long aelterer = angebot().id();
+    final long juengerer = angebot().id();
 
     // When
     final FirmaAngeboteResponse liste =
@@ -295,7 +329,8 @@ class AngebotEntwurfIT extends AbstractIntegrationTest {
   @Test
   void anlegen_withAContactOfTheFirma_thenAnswersCreatedAndNamesFirmaAndContact() {
     // When
-    final ResponseEntity<AngebotResponse> antwort = anlegenMit(ansprechpartnerId);
+    final ResponseEntity<AngebotResponse> antwort =
+        anlegenMit(ansprechpartnerId, AngebotResponse.class);
 
     // Then
     assertThat(antwort.getStatusCode()).isEqualTo(HttpStatus.CREATED);
@@ -308,8 +343,8 @@ class AngebotEntwurfIT extends AbstractIntegrationTest {
 
   @Test
   void anlegen_withAContactOfAnotherFirma_thenAnswers422() {
-    // When
-    final ResponseEntity<AngebotResponse> antwort = anlegenMit(fremderAnsprechpartnerId);
+    // When — als Text gelesen: Das Problemdokument traegt ein Zahlenfeld „status".
+    final ResponseEntity<String> antwort = anlegenMit(fremderAnsprechpartnerId, String.class);
 
     // Then
     assertThat(antwort.getStatusCode()).isEqualTo(HttpStatus.UNPROCESSABLE_ENTITY);
@@ -317,9 +352,8 @@ class AngebotEntwurfIT extends AbstractIntegrationTest {
 
   @Test
   void stilllegen_ofTheFirma_thenBlocksAnlegenButNotAendern() {
-    // Given — an eine stillgelegte Firma geht kein neues Angebot; ein bestehender Entwurf bleibt
-    // pflegbar.
-    final long angebotId = entwurf().id();
+    // Given — an eine stillgelegte Firma geht kein neues Angebot; ein bestehendes bleibt pflegbar.
+    final long angebotId = angebot().id();
     jdbc.update("UPDATE firma SET aktiv = false WHERE id = ?", Long.valueOf(firmaId));
 
     // When
@@ -329,7 +363,7 @@ class AngebotEntwurfIT extends AbstractIntegrationTest {
         ruf(
             "/api/angebote/" + angebotId,
             HttpMethod.PUT,
-            entwurfsrumpf(List.of(position("Konzeption", "AUFWAND", "2.50", "PERSONENTAG"))),
+            rumpf(List.of(position("Konzeption", "AUFWAND", "2.50", "PERSONENTAG"))),
             AngebotResponse.class);
 
     // Then

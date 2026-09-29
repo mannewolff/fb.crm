@@ -68,7 +68,7 @@ Pastellflächen mit ihrer Schrift. Sie tragen **Kategorien und Zustände**, jede
 
 | Tönung | Fläche | Schrift | Bedeutung |
 |---|---|---|---|
-| Pfirsich | `#FDEBDD` | `#8A4418` | Kupfer-Familie: aktiver Navigationseintrag, Firmen-Mal, Hover der Icontaste, Vorgänge |
+| Pfirsich | `#FDEBDD` | `#8A4418` | Kupfer-Familie: aktiver Navigationseintrag, Firmen-Mal, Hover der Icontaste, bestellte Angebote (laufende Arbeit) |
 | Salbei | `#E4F1E8` | `#2E6B45` | erfolgreich, aktiv, bezahlt, Umsatz |
 | Himmel | `#E3EFFB` | `#1F5A96` | Information, laufend, versendet |
 | Bernstein | `#FBF0D9` | `#7A5510` | Warnung, Grenze erreicht, bald fällig |

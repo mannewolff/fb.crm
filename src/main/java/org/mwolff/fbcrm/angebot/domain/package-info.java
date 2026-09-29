@@ -3,7 +3,7 @@
  *
  * <p>Weder Spring noch JPA erscheinen hier; {@code ArchitectureTest} haelt das fest. Die eine
  * Ausnahme ist die Richtung nach {@code angebot.application}: Die Domaenenmethoden werfen {@code
- * AngebotNichtAenderbar}, und diese Ausnahme traegt ihren HTTP-Statuscode und liegt deshalb dort.
+ * StatusGrenzeErreicht}, und diese Ausnahme traegt ihren HTTP-Statuscode und liegt deshalb dort.
  * Der Import geht nur in diese Richtung und bleibt im Modul.
  */
 @NullMarked

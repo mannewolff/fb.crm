@@ -3,44 +3,36 @@ package org.mwolff.fbcrm.angebot;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mwolff.fbcrm.AbstractIntegrationTest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 /**
- * Prueft die Migration {@code V6__angebot.sql} gegen eine echte PostgreSQL-Instanz.
+ * Prueft das Schema des Angebots nach {@code V11__angebot_ohne_beleg.sql} gegen eine echte
+ * PostgreSQL-Instanz.
  *
- * <p>Gegenstand sind die Zusagen, die allein die Datenbank haelt: die beiden gegenlaeufigen Checks
- * um Entwurf und festgeschriebenes Dokument, die Gueltigkeitsregel, die Wertebereiche der
- * Positionen und die Reihenfolge als Schluessel. Gearbeitet wird mit {@link JdbcTemplate} und
- * direkten Anweisungen — der Weg ueber die Entities kaeme an einigen dieser Faelle gar nicht
- * vorbei.
+ * <p>Gegenstand sind die Zusagen, die allein die Datenbank haelt: die fuenf Status als CHECK, die
+ * Wertebereiche der Positionen und die Reihenfolge als Schluessel. Gearbeitet wird mit {@link
+ * JdbcTemplate} und direkten Anweisungen — der Weg ueber die Entities kaeme an einigen dieser
+ * Faelle gar nicht vorbei.
  */
 class AngebotSchemaIT extends AbstractIntegrationTest {
 
   private static final String INSERT_ANGEBOT =
-      "INSERT INTO angebot"
-          + " (firma_id, zustand, angebot_datum, gueltig_bis, nummer, versendet_am,"
-          + " pdf_schluessel, empfaenger_firma, absender_name)"
-          + " VALUES (?, ?, DATE '2026-09-20', CAST(? AS date), ?, CAST(? AS timestamptz),"
-          + " ?, ?, ?)";
+      "INSERT INTO angebot (firma_id, status, angebot_datum) VALUES (?, ?, DATE '2026-09-20')";
 
   private static final String INSERT_POSITION =
       "INSERT INTO angebot_position"
           + " (angebot_id, position, bezeichnung, abrechnungsmodus, menge, einheit, einzelpreis)"
           + " VALUES (?, ?, ?, ?, CAST(? AS numeric), ?, CAST(? AS numeric))";
 
-  private static final String GUELTIG = "2026-10-20";
-  private static final String VOR_DEM_ANGEBOTSDATUM = "2026-09-19";
-  private static final String NUMMER = "A-2026-001";
-  private static final String PDF_SCHLUESSEL = "angebot/1/abc.pdf";
   private static final String FIRMA = "Adler AG";
-  private static final String ABSENDER = "Manfred Wolff";
-  private static final String VERSANDZEITPUNKT = "2026-09-21 09:00:00+00";
-
   private final JdbcTemplate jdbc;
 
   private long firmaId;
@@ -54,37 +46,22 @@ class AngebotSchemaIT extends AbstractIntegrationTest {
   void leereFachtabellenUndLegeEineFirmaAn() {
     jdbc.execute(
         "TRUNCATE angebot_position, angebot, ansprechpartner, firma RESTART IDENTITY CASCADE");
-    jdbc.execute("DELETE FROM angebot_nummernkreis");
     jdbc.update("INSERT INTO firma (name) VALUES (?)", FIRMA);
     firmaId =
         jdbc.queryForObject("SELECT id FROM firma WHERE name = ?", Long.class, FIRMA).longValue();
   }
 
-  private int entwurf(final String gueltigBis) {
-    return jdbc.update(
-        INSERT_ANGEBOT, firmaId, "ENTWURF", gueltigBis, null, null, null, null, null);
-  }
-
-  private int versendet(final String gueltigBis, final String nummer) {
-    return jdbc.update(
-        INSERT_ANGEBOT,
-        firmaId,
-        "VERSENDET",
-        gueltigBis,
-        nummer,
-        VERSANDZEITPUNKT,
-        PDF_SCHLUESSEL,
-        FIRMA,
-        ABSENDER);
+  private int angebot(final @Nullable String status) {
+    return jdbc.update(INSERT_ANGEBOT, firmaId, status);
   }
 
   private Long angebotId() {
-    entwurf(GUELTIG);
+    angebot("ANGELEGT");
     return jdbc.queryForObject("SELECT id FROM angebot LIMIT 1", Long.class);
   }
 
   @Test
-  void migration_thenTheThreeTablesExist() {
+  void migration_thenBothTablesExistAndTheNumberRangeIsGone() {
     // When
     final Integer tabellen =
         jdbc.queryForObject(
@@ -93,11 +70,11 @@ class AngebotSchemaIT extends AbstractIntegrationTest {
             Integer.class);
 
     // Then
-    assertThat(tabellen).isEqualTo(3);
+    assertThat(tabellen).isEqualTo(2);
   }
 
   @Test
-  void migration_thenTheTwoIndexesExist() {
+  void migration_thenOnlyTheFirmaIndexRemains() {
     // When
     final Integer indizes =
         jdbc.queryForObject(
@@ -106,130 +83,43 @@ class AngebotSchemaIT extends AbstractIntegrationTest {
             Integer.class);
 
     // Then
-    assertThat(indizes).isEqualTo(2);
+    assertThat(indizes).isEqualTo(1);
   }
 
-  @Test
-  void angebot_givenADraftWithoutNumberAndCopies_thenAccepted() {
+  @ParameterizedTest
+  @ValueSource(strings = {"ANGELEGT", "ABGEGEBEN", "BESTELLT", "ERLEDIGT", "ABGERECHNET"})
+  void angebot_givenEachOfTheFiveStatus_thenAccepted(final String status) {
     // When
-    final int betroffen = entwurf(GUELTIG);
+    final int betroffen = angebot(status);
 
     // Then
     assertThat(betroffen).isEqualTo(1);
   }
 
   @Test
-  void angebot_givenADraftWithValidityBeforeTheOfferDate_thenAccepted() {
-    // When — E27: der Entwurf darf halbfertig sein.
-    final int betroffen = entwurf(VOR_DEM_ANGEBOTSDATUM);
-
-    // Then
-    assertThat(betroffen).isEqualTo(1);
-  }
-
-  @Test
-  void angebot_givenADraftWithANumber_thenRejectedByTheDatabase() {
+  void angebotStatus_givenAnUnknownStatus_thenRejectedByTheDatabase() {
     // When / Then
-    assertThatThrownBy(
-            () ->
-                jdbc.update(
-                    INSERT_ANGEBOT, firmaId, "ENTWURF", GUELTIG, NUMMER, null, null, null, null))
+    assertThatThrownBy(() -> angebot("ENTWURF"))
         .isInstanceOf(DataIntegrityViolationException.class)
-        .hasMessageContaining("angebot_entwurf");
+        .hasMessageContaining("angebot_status");
   }
 
   @Test
-  void angebot_givenADraftWithARecipientCopy_thenRejectedByTheDatabase() {
+  void angebotStatus_givenNoStatus_thenRejectedByTheDatabase() {
     // When / Then
-    assertThatThrownBy(
-            () ->
-                jdbc.update(
-                    INSERT_ANGEBOT, firmaId, "ENTWURF", GUELTIG, null, null, null, FIRMA, null))
-        .isInstanceOf(DataIntegrityViolationException.class)
-        .hasMessageContaining("angebot_entwurf");
-  }
-
-  @Test
-  void angebot_givenACommittedOfferWithNumberCopiesAndPdf_thenAccepted() {
-    // When
-    final int betroffen = versendet(GUELTIG, NUMMER);
-
-    // Then
-    assertThat(betroffen).isEqualTo(1);
-  }
-
-  @Test
-  void angebot_givenACommittedOfferWithoutANumber_thenRejectedByTheDatabase() {
-    // When / Then
-    assertThatThrownBy(() -> versendet(GUELTIG, null))
-        .isInstanceOf(DataIntegrityViolationException.class)
-        .hasMessageContaining("angebot_festgeschrieben");
-  }
-
-  @Test
-  void angebot_givenACommittedOfferWithValidityBeforeTheOfferDate_thenRejectedByTheDatabase() {
-    // When / Then
-    assertThatThrownBy(() -> versendet(VOR_DEM_ANGEBOTSDATUM, NUMMER))
-        .isInstanceOf(DataIntegrityViolationException.class)
-        .hasMessageContaining("angebot_gueltigkeit");
-  }
-
-  @Test
-  void angebotNummer_givenTheSameNumberTwice_thenRejectedByTheDatabase() {
-    // Given — zwei Angebote an dieselbe Firma, beide mit derselben Nummer.
-    versendet(GUELTIG, NUMMER);
-
-    // When / Then
-    assertThatThrownBy(() -> versendet(GUELTIG, NUMMER))
-        .isInstanceOf(DataIntegrityViolationException.class)
-        .hasMessageContaining("angebot_nummer_key");
-  }
-
-  @Test
-  void angebotZustand_givenAnUnknownState_thenRejectedByTheDatabase() {
-    // When / Then — welchen der drei Checks Postgres nennt, haengt an der Reihenfolge der
-    // Auswertung; gemeint ist, dass kein Weg hineinfuehrt.
-    assertThatThrownBy(
-            () ->
-                jdbc.update(
-                    INSERT_ANGEBOT, firmaId, "VERHANDELT", GUELTIG, null, null, null, null, null))
-        .isInstanceOf(DataIntegrityViolationException.class);
-  }
-
-  @Test
-  void angebotZustand_givenASixthStateWithEveryCommittedValue_thenRejectedByTheDatabase() {
-    // Given — jeder der beiden Checks benennt die Gegenseite; ein sechster Zustand faellt durch
-    // beide, ohne dass es dafuer eine eigene Regel braucht.
-    // When / Then
-    assertThatThrownBy(
-            () ->
-                jdbc.update(
-                    INSERT_ANGEBOT,
-                    firmaId,
-                    "VERHANDELT",
-                    GUELTIG,
-                    NUMMER,
-                    VERSANDZEITPUNKT,
-                    PDF_SCHLUESSEL,
-                    FIRMA,
-                    ABSENDER))
-        .isInstanceOf(DataIntegrityViolationException.class);
+    assertThatThrownBy(() -> angebot(null)).isInstanceOf(DataIntegrityViolationException.class);
   }
 
   @Test
   void angebotFirmaId_givenAnUnknownFirma_thenRejectedByTheDatabase() {
     // When / Then
-    assertThatThrownBy(
-            () ->
-                jdbc.update(
-                    INSERT_ANGEBOT, 4711L, "ENTWURF", GUELTIG, null, null, null, null, null))
+    assertThatThrownBy(() -> jdbc.update(INSERT_ANGEBOT, 4711L, "ANGELEGT"))
         .isInstanceOf(DataIntegrityViolationException.class);
   }
 
   @Test
   void position_givenABlankLabel_thenAccepted() {
-    // When — E27: was zum Versenden fehlt, meldet die Anwendung Feld fuer Feld, nicht die
-    // Datenbank.
+    // When — die fehlende Bezeichnung weist der Eingang der Maske ab, nicht die Datenbank.
     final int betroffen =
         jdbc.update(INSERT_POSITION, angebotId(), 1, "   ", "AUFWAND", "2.50", "PERSONENTAG", "0");
 
@@ -350,17 +240,6 @@ class AngebotSchemaIT extends AbstractIntegrationTest {
             () ->
                 jdbc.update(
                     INSERT_POSITION, 4711L, 1, "Konzeption", "AUFWAND", "1.00", "STUNDE", "95.00"))
-        .isInstanceOf(DataIntegrityViolationException.class);
-  }
-
-  @Test
-  void nummernkreis_givenTheSameYearTwice_thenRejectedByTheDatabase() {
-    // Given
-    jdbc.update("INSERT INTO angebot_nummernkreis (jahr, naechste) VALUES (2026, 1)");
-
-    // When / Then
-    assertThatThrownBy(
-            () -> jdbc.update("INSERT INTO angebot_nummernkreis (jahr, naechste) VALUES (2026, 5)"))
         .isInstanceOf(DataIntegrityViolationException.class);
   }
 

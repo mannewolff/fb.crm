@@ -1,7 +1,7 @@
 package org.mwolff.fbcrm.angebot.web;
 
 import java.util.List;
-import org.mwolff.fbcrm.angebot.application.AngebotAnsicht;
+import org.mwolff.fbcrm.angebot.domain.Angebot;
 
 /**
  * Die Angebote einer Firma (Kriterium 20).
@@ -10,12 +10,12 @@ import org.mwolff.fbcrm.angebot.application.AngebotAnsicht;
  * das, was die Karte sonst noch zeigt, ohne dass die Oberflaeche ihren Parser wechselt. Eine leere
  * Liste heisst „diese Firma hat noch kein Angebot".
  *
- * @param angebote die Angebote in der Reihenfolge aus E25 — Entwuerfe zuerst
+ * @param angebote die Angebote, neueste zuerst
  */
 public record FirmaAngeboteResponse(List<AngebotZeileResponse> angebote) {
 
   /** Die Sicht der Oberflaeche auf die Angebote einer Firma. */
-  static FirmaAngeboteResponse of(final List<AngebotAnsicht> ansichten) {
-    return new FirmaAngeboteResponse(ansichten.stream().map(AngebotZeileResponse::of).toList());
+  static FirmaAngeboteResponse of(final List<Angebot> angebote) {
+    return new FirmaAngeboteResponse(angebote.stream().map(AngebotZeileResponse::of).toList());
   }
 }

@@ -17,7 +17,7 @@ import org.mwolff.fbcrm.common.Geldrechnung;
  * Angebot, und der Bestand vergibt sie beim Schreiben lueckenlos ab 1 (E24). Eine Nummer im Record
  * waere eine zweite Wahrheit, die beim Umstellen nachgezogen werden muesste.
  *
- * @param bezeichnung die Leistung; darf im Entwurf leer sein (E27)
+ * @param bezeichnung die Leistung; nie leer, das prueft der Eingang der Maske
  * @param abrechnungsmodus nach Aufwand oder zum Festpreis
  * @param menge Menge in der angegebenen Einheit, nicht negativ
  * @param einheit Einheit der Menge

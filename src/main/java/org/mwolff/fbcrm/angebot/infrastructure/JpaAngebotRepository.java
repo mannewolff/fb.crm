@@ -6,13 +6,9 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.Collectors;
-import org.jspecify.annotations.Nullable;
 import org.mwolff.fbcrm.angebot.domain.Angebot;
 import org.mwolff.fbcrm.angebot.domain.AngebotRepository;
 import org.mwolff.fbcrm.angebot.domain.Angebotsposition;
-import org.mwolff.fbcrm.angebot.domain.Belegabsender;
-import org.mwolff.fbcrm.angebot.domain.Belegempfaenger;
-import org.mwolff.fbcrm.common.Anschrift;
 import org.springframework.stereotype.Repository;
 
 /**
@@ -22,18 +18,12 @@ import org.springframework.stereotype.Repository;
  * alten Positionszeilen fallen weg, und die neuen entstehen mit den Plaetzen 1 bis n in der
  * Reihenfolge der Liste (E24). Gelesen wird in derselben Ordnung zurueck — damit ist die
  * Reihenfolge eine Zusage des Bestands und nicht der Zufall der Einfuegereihenfolge. Geloescht wird
- * nach derselben Regel: erst die Positionen, dann die Zeile, die sie traegt.
+ * ein Angebot nie (Issue #127).
  *
  * <p>Jede Liste holt ihre Positionen in <b>einer</b> zweiten Abfrage und ordnet sie danach den
  * Angeboten zu; je Zeile einzeln nachzuladen waere die bekannte Abfrage-Lawine. Die Angebotsliste
  * einer Firma geht diesen Weg.
- *
- * <p>PMD.TooManyMethods: Vier Wege des Ports und die Uebersetzungsschritte dazu. Die privaten
- * Methoden sind die Abbildung einer Zeile in ihre Teile — Angebot, Position, Empfaengerkopie,
- * Absenderkopie —, und sie aufzuteilen zerschnitte die Uebersetzung <b>eines</b> Aggregats auf zwei
- * Klassen, die nur zusammen richtig sind.
  */
-@SuppressWarnings("PMD.TooManyMethods")
 @Repository
 class JpaAngebotRepository implements AngebotRepository {
 
@@ -83,14 +73,6 @@ class JpaAngebotRepository implements AngebotRepository {
   }
 
   @Override
-  public void loesche(final long id) {
-    // Erst die Positionen: Der Fremdschluessel angebot_position.angebot_id traegt kein ON DELETE,
-    // und das soll er auch nicht — eine Zeile verschwindet nur, wenn jemand es ausdruecklich sagt.
-    positionen.loescheZuAngebot(id);
-    angebote.deleteById(id);
-  }
-
-  @Override
   public Angebot save(final Angebot angebot) {
     final AngebotEntity zeile = angebote.save(toEntity(angebot));
     final long angebotId = Objects.requireNonNull(zeile.getId());
@@ -124,17 +106,9 @@ class JpaAngebotRepository implements AngebotRepository {
         zeile.getId(),
         zeile.getFirmaId(),
         zeile.getAnsprechpartnerId(),
-        zeile.getNummer(),
-        zeile.getZustand(),
+        zeile.getStatus(),
         zeile.getAngebotDatum(),
-        zeile.getGueltigBis(),
-        zeile.getLeistungsbeschreibung(),
-        zeile.getZahlungsbedingungen(),
-        zeile.getVersendetAm(),
-        zeile.getReaktionAm(),
-        zeile.getPdfSchluessel(),
-        empfaenger(zeile),
-        absender(zeile),
+        zeile.getBeschreibung(),
         positionszeilen.stream().map(JpaAngebotRepository::toDomain).toList(),
         zeile.getCreatedAt(),
         zeile.getUpdatedAt());
@@ -149,71 +123,15 @@ class JpaAngebotRepository implements AngebotRepository {
         zeile.getEinzelpreis());
   }
 
-  /*
-   * Der Firmenname traegt die Entscheidung: Er ist die einzige Pflichtangabe der Kopie, und der
-   * Check der Migration laesst ihn in keinem festgeschriebenen Zustand fehlen. Steht er leer, hat
-   * das Angebot keine Kopie — es ist ein Entwurf.
-   */
-  private static @Nullable Belegempfaenger empfaenger(final AngebotEntity zeile) {
-    final String firma = zeile.getEmpfaengerFirma();
-    if (firma == null) {
-      return null;
-    }
-    return new Belegempfaenger(
-        firma,
-        new Anschrift(
-            zeile.getEmpfaengerStrasse(),
-            zeile.getEmpfaengerPlz(),
-            zeile.getEmpfaengerOrt(),
-            zeile.getEmpfaengerLand()),
-        zeile.getEmpfaengerAnsprechpartner());
-  }
-
-  /* Dasselbe fuer die eigene Seite: der eigene Name ist ihre Pflichtangabe. */
-  private static @Nullable Belegabsender absender(final AngebotEntity zeile) {
-    final String name = zeile.getAbsenderName();
-    if (name == null) {
-      return null;
-    }
-    return new Belegabsender(
-        name,
-        new Anschrift(
-            zeile.getAbsenderStrasse(),
-            zeile.getAbsenderPlz(),
-            zeile.getAbsenderOrt(),
-            zeile.getAbsenderLand()),
-        zeile.getAbsenderEmail(),
-        zeile.getAbsenderTelefon(),
-        zeile.getAbsenderSteuernummer(),
-        zeile.getAbsenderUmsatzsteuerId(),
-        zeile.getAbsenderBankverbindung());
-  }
-
   private static AngebotEntity toEntity(final Angebot angebot) {
-    final AngebotEntity zeile =
-        new AngebotEntity(
-            angebot.id(),
-            angebot.firmaId(),
-            angebot.ansprechpartnerId(),
-            angebot.nummer(),
-            angebot.zustand(),
-            angebot.angebotDatum(),
-            angebot.gueltigBis(),
-            angebot.leistungsbeschreibung(),
-            angebot.zahlungsbedingungen(),
-            angebot.versendetAm(),
-            angebot.reaktionAm(),
-            angebot.pdfSchluessel(),
-            angebot.createdAt(),
-            angebot.updatedAt());
-    final Belegempfaenger empfaenger = angebot.empfaenger();
-    if (empfaenger != null) {
-      zeile.setzeEmpfaenger(empfaenger);
-    }
-    final Belegabsender absender = angebot.absender();
-    if (absender != null) {
-      zeile.setzeAbsender(absender);
-    }
-    return zeile;
+    return new AngebotEntity(
+        angebot.id(),
+        angebot.firmaId(),
+        angebot.ansprechpartnerId(),
+        angebot.status(),
+        angebot.angebotDatum(),
+        angebot.beschreibung(),
+        angebot.createdAt(),
+        angebot.updatedAt());
   }
 }

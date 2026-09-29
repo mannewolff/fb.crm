@@ -1,7 +1,6 @@
 package org.mwolff.fbcrm.angebot;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -14,56 +13,29 @@ import org.mwolff.fbcrm.AbstractIntegrationTest;
 import org.mwolff.fbcrm.angebot.domain.Angebot;
 import org.mwolff.fbcrm.angebot.domain.AngebotRepository;
 import org.mwolff.fbcrm.angebot.domain.Angebotsposition;
-import org.mwolff.fbcrm.angebot.domain.Angebotszustand;
-import org.mwolff.fbcrm.angebot.domain.Belegabsender;
-import org.mwolff.fbcrm.angebot.domain.Belegempfaenger;
+import org.mwolff.fbcrm.angebot.domain.Angebotsstatus;
 import org.mwolff.fbcrm.common.Abrechnungsmodus;
-import org.mwolff.fbcrm.common.Anschrift;
 import org.mwolff.fbcrm.common.Einheit;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * Der Bestand des Angebots gegen eine echte PostgreSQL-Instanz.
  *
- * <p>Gegenstand ist das Angebot als <b>eine</b> Einheit mit seinen Positionen: Anlegen,
- * Fortschreiben mit umgestellter Reihenfolge und Lesen in genau dieser Reihenfolge (E24). Daneben
- * die Grenze zwischen Entwurf und festgeschriebenem Dokument, die allein die Datenbank haelt — ein
- * halbfertiger Entwurf geht durch, ein widerspruechliches Dokument nicht (E27).
+ * <p>Gegenstand ist das Angebot als <b>eine</b> Einheit mit seinen Positionen: Anlegen, Aendern mit
+ * umgestellter Reihenfolge und Lesen in genau dieser Reihenfolge (E24), dazu der Status als Text in
+ * seiner Spalte.
  *
  * <p>Jeder Zug setzt seine Transaktionsgrenze selbst ueber {@link TransactionTemplate}: Der Adapter
- * loescht die alten Positionszeilen vor dem Schreiben der neuen und hat aus demselben Grund wie der
- * Nummernkreis keine eigene Grenze — sie gehoert dem Anwendungsfall.
+ * loescht die alten Positionszeilen vor dem Schreiben der neuen und hat keine eigene Grenze — sie
+ * gehoert dem Anwendungsfall.
  */
 class AngebotPersistenceIT extends AbstractIntegrationTest {
 
   private static final LocalDate ANGEBOTSDATUM = LocalDate.of(2026, 9, 20);
-  private static final LocalDate GUELTIG_BIS = LocalDate.of(2026, 10, 20);
   private static final Instant ANGELEGT = Instant.parse("2026-09-20T08:00:00Z");
-  private static final Instant VERSANDZEITPUNKT = Instant.parse("2026-09-21T09:00:00Z");
-  private static final String NUMMER = "A-2026-001";
-  private static final String PDF_SCHLUESSEL = "angebot/1/6f1c9a.pdf";
   private static final String BESCHREIBUNG = "Neugestaltung der Website";
-  private static final String BEDINGUNGEN = "Zahlbar innerhalb von 14 Tagen ohne Abzug.";
-
-  private static final Belegempfaenger EMPFAENGER =
-      new Belegempfaenger(
-          "Adler AG",
-          new Anschrift("Hauptstrasse 1", "28195", "Bremen", "Deutschland"),
-          "Frau Adler");
-
-  private static final Belegabsender ABSENDER =
-      new Belegabsender(
-          "Manfred Wolff",
-          new Anschrift("Am Deich 2", "28199", "Hansestadt", "Bundesrepublik"),
-          "manne@example.org",
-          "0421 123456",
-          "75/123/45678",
-          "DE123456789",
-          "IBAN DE00 1234");
-
   private static final Angebotsposition KONZEPTION =
       new Angebotsposition(
           "Konzeption",
@@ -118,22 +90,14 @@ class AngebotPersistenceIT extends AbstractIntegrationTest {
     ansprechpartnerId = jdbc.queryForObject("SELECT id FROM ansprechpartner", Long.class);
   }
 
-  private Angebot entwurf(final LocalDate gueltigBis, final List<Angebotsposition> positionen) {
+  private Angebot angebot(final List<Angebotsposition> positionen) {
     return new Angebot(
         null,
         firmaId,
         ansprechpartnerId,
-        null,
-        Angebotszustand.ENTWURF,
+        Angebotsstatus.ANGELEGT,
         ANGEBOTSDATUM,
-        gueltigBis,
         BESCHREIBUNG,
-        BEDINGUNGEN,
-        null,
-        null,
-        null,
-        null,
-        null,
         positionen,
         ANGELEGT,
         ANGELEGT);
@@ -148,9 +112,9 @@ class AngebotPersistenceIT extends AbstractIntegrationTest {
   }
 
   @Test
-  void save_givenANewDraft_thenReadsBackEveryFieldAndThePositionsInOrder() {
+  void save_givenANewAngebot_thenReadsBackEveryFieldAndThePositionsInOrder() {
     // Given
-    final Angebot gespeichert = geschrieben(entwurf(GUELTIG_BIS, List.of(KONZEPTION, SCHULUNG)));
+    final Angebot gespeichert = geschrieben(angebot(List.of(KONZEPTION, SCHULUNG)));
 
     // When
     final Optional<Angebot> gelesen = gelesen(gespeichert.requireId());
@@ -162,17 +126,11 @@ class AngebotPersistenceIT extends AbstractIntegrationTest {
               assertThat(angebot.id()).isEqualTo(gespeichert.requireId());
               assertThat(angebot.firmaId()).isEqualTo(firmaId);
               assertThat(angebot.ansprechpartnerId()).isEqualTo(ansprechpartnerId);
-              assertThat(angebot.nummer()).isNull();
-              assertThat(angebot.zustand()).isEqualTo(Angebotszustand.ENTWURF);
+              assertThat(angebot.status()).isEqualTo(Angebotsstatus.ANGELEGT);
               assertThat(angebot.angebotDatum()).isEqualTo(ANGEBOTSDATUM);
-              assertThat(angebot.gueltigBis()).isEqualTo(GUELTIG_BIS);
-              assertThat(angebot.leistungsbeschreibung()).isEqualTo(BESCHREIBUNG);
-              assertThat(angebot.zahlungsbedingungen()).isEqualTo(BEDINGUNGEN);
-              assertThat(angebot.versendetAm()).isNull();
-              assertThat(angebot.reaktionAm()).isNull();
-              assertThat(angebot.pdfSchluessel()).isNull();
-              assertThat(angebot.empfaenger()).isNull();
-              assertThat(angebot.absender()).isNull();
+              assertThat(angebot.beschreibung()).isEqualTo(BESCHREIBUNG);
+              assertThat(angebot.createdAt()).isEqualTo(ANGELEGT);
+              assertThat(angebot.updatedAt()).isEqualTo(ANGELEGT);
               assertThat(angebot.positionen()).containsExactly(KONZEPTION, SCHULUNG);
             });
   }
@@ -180,7 +138,7 @@ class AngebotPersistenceIT extends AbstractIntegrationTest {
   @Test
   void save_thenStoresThePlacesFromOneUpwards() {
     // Given
-    final Angebot gespeichert = geschrieben(entwurf(GUELTIG_BIS, List.of(SCHULUNG, KONZEPTION)));
+    final Angebot gespeichert = geschrieben(angebot(List.of(SCHULUNG, KONZEPTION)));
 
     // When
     final List<Short> plaetze =
@@ -194,16 +152,16 @@ class AngebotPersistenceIT extends AbstractIntegrationTest {
   }
 
   @Test
-  void save_givenAChangedDraft_thenReplacesThePositionsWithTheNewOrder() {
+  void save_givenAChangedAngebot_thenReplacesThePositionsWithTheNewOrder() {
     // Given
-    final Angebot gespeichert = geschrieben(entwurf(GUELTIG_BIS, List.of(KONZEPTION, SCHULUNG)));
+    final Angebot gespeichert = geschrieben(angebot(List.of(KONZEPTION, SCHULUNG)));
 
     // When — dieselben Positionen, umgestellt, und eine dritte dazu.
     geschrieben(
-        gespeichert.entwurfGeaendert(
-            GUELTIG_BIS,
+        gespeichert.geaendert(
+            ANGEBOTSDATUM,
+            ansprechpartnerId,
             BESCHREIBUNG,
-            BEDINGUNGEN,
             List.of(SCHULUNG, BETREUUNG, KONZEPTION),
             ANGELEGT));
 
@@ -215,14 +173,14 @@ class AngebotPersistenceIT extends AbstractIntegrationTest {
   }
 
   @Test
-  void save_givenAChangedDraft_thenLeavesNoOrphanedPositionRow() {
+  void save_givenAChangedAngebot_thenLeavesNoOrphanedPositionRow() {
     // Given
-    final Angebot gespeichert = geschrieben(entwurf(GUELTIG_BIS, List.of(KONZEPTION, SCHULUNG)));
+    final Angebot gespeichert = geschrieben(angebot(List.of(KONZEPTION, SCHULUNG)));
 
     // When
     geschrieben(
-        gespeichert.entwurfGeaendert(
-            GUELTIG_BIS, BESCHREIBUNG, BEDINGUNGEN, List.of(BETREUUNG), ANGELEGT));
+        gespeichert.geaendert(
+            ANGEBOTSDATUM, ansprechpartnerId, BESCHREIBUNG, List.of(BETREUUNG), ANGELEGT));
 
     // Then
     assertThat(jdbc.queryForObject("SELECT count(*) FROM angebot_position", Integer.class))
@@ -230,20 +188,44 @@ class AngebotPersistenceIT extends AbstractIntegrationTest {
   }
 
   @Test
-  void save_givenADraftWithValidityBeforeTheOfferDate_thenAccepted() {
-    // Given — E27: der Entwurf traegt seine Gueltigkeit frei.
+  void save_givenAStatusChange_thenStoresTheStatusAsText() {
+    // Given
+    final Angebot gespeichert = geschrieben(angebot(List.of(KONZEPTION)));
+
+    // When
+    geschrieben(gespeichert.statusWeiter(ANGELEGT).statusWeiter(ANGELEGT));
+
+    // Then — als Text und nicht als Ordnungszahl, damit der CHECK der Migration ihn kennt.
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT status FROM angebot WHERE id = ?",
+                String.class,
+                Long.valueOf(gespeichert.requireId())))
+        .isEqualTo("BESTELLT");
+    assertThat(gelesen(gespeichert.requireId()))
+        .hasValueSatisfying(
+            angebot -> assertThat(angebot.status()).isEqualTo(Angebotsstatus.BESTELLT));
+  }
+
+  @Test
+  void save_givenNoContactAndNoText_thenReadsBackBothAbsent() {
+    // Given — Ansprechpartner und Beschreibung sind optional.
     final Angebot gespeichert =
-        geschrieben(entwurf(ANGEBOTSDATUM.minusDays(1), List.of(KONZEPTION)));
+        geschrieben(angebot(List.of()).geaendert(ANGEBOTSDATUM, null, null, List.of(), ANGELEGT));
 
     // Then
     assertThat(gelesen(gespeichert.requireId()))
         .hasValueSatisfying(
-            angebot -> assertThat(angebot.gueltigBis()).isEqualTo(ANGEBOTSDATUM.minusDays(1)));
+            angebot -> {
+              assertThat(angebot.ansprechpartnerId()).isNull();
+              assertThat(angebot.beschreibung()).isNull();
+              assertThat(angebot.positionen()).isEmpty();
+            });
   }
 
   @Test
   void save_givenAPositionWithABlankLabel_thenAccepted() {
-    // Given — E27: die fehlende Bezeichnung meldet die Versandpruefung, nicht die Datenbank.
+    // Given — die fehlende Bezeichnung weist der Eingang der Maske ab, nicht die Datenbank.
     final Angebotsposition ohneBezeichnung =
         new Angebotsposition(
             "   ",
@@ -251,119 +233,12 @@ class AngebotPersistenceIT extends AbstractIntegrationTest {
             new BigDecimal("1.00"),
             Einheit.STUNDE,
             new BigDecimal("0.00"));
-    final Angebot gespeichert = geschrieben(entwurf(GUELTIG_BIS, List.of(ohneBezeichnung)));
+    final Angebot gespeichert = geschrieben(angebot(List.of(ohneBezeichnung)));
 
     // Then
     assertThat(gelesen(gespeichert.requireId()))
         .hasValueSatisfying(
             angebot -> assertThat(angebot.positionen()).containsExactly(ohneBezeichnung));
-  }
-
-  @Test
-  void save_givenACommittedOffer_thenReadsBackBothAddressCopies() {
-    // Given — R8: die Kopien stehen am Dokument.
-    final Angebot entwurf = geschrieben(entwurf(GUELTIG_BIS, List.of(KONZEPTION)));
-
-    // When
-    final Angebot versendet =
-        geschrieben(
-            entwurf.versendet(NUMMER, EMPFAENGER, ABSENDER, PDF_SCHLUESSEL, VERSANDZEITPUNKT));
-
-    // Then
-    assertThat(gelesen(versendet.requireId()))
-        .hasValueSatisfying(
-            angebot -> {
-              assertThat(angebot.zustand()).isEqualTo(Angebotszustand.VERSENDET);
-              assertThat(angebot.nummer()).isEqualTo(NUMMER);
-              assertThat(angebot.versendetAm()).isEqualTo(VERSANDZEITPUNKT);
-              assertThat(angebot.pdfSchluessel()).isEqualTo(PDF_SCHLUESSEL);
-              assertThat(angebot.empfaenger()).isEqualTo(EMPFAENGER);
-              assertThat(angebot.absender()).isEqualTo(ABSENDER);
-            });
-  }
-
-  @Test
-  void save_givenADraftCarryingANumber_thenRejectedByTheDatabase() {
-    // Given — die Datenbank haelt die Grenze auch dann, wenn ein Aufrufer sie umgeht.
-    final Angebot widerspruch =
-        new Angebot(
-            null,
-            firmaId,
-            ansprechpartnerId,
-            NUMMER,
-            Angebotszustand.ENTWURF,
-            ANGEBOTSDATUM,
-            GUELTIG_BIS,
-            BESCHREIBUNG,
-            BEDINGUNGEN,
-            null,
-            null,
-            null,
-            null,
-            null,
-            List.of(KONZEPTION),
-            ANGELEGT,
-            ANGELEGT);
-
-    // When / Then
-    assertThatThrownBy(() -> geschrieben(widerspruch))
-        .isInstanceOf(DataIntegrityViolationException.class);
-  }
-
-  @Test
-  void save_givenACommittedOfferWithoutANumber_thenRejectedByTheDatabase() {
-    // Given
-    final Angebot widerspruch =
-        new Angebot(
-            null,
-            firmaId,
-            ansprechpartnerId,
-            null,
-            Angebotszustand.VERSENDET,
-            ANGEBOTSDATUM,
-            GUELTIG_BIS,
-            BESCHREIBUNG,
-            BEDINGUNGEN,
-            VERSANDZEITPUNKT,
-            null,
-            PDF_SCHLUESSEL,
-            EMPFAENGER,
-            ABSENDER,
-            List.of(KONZEPTION),
-            ANGELEGT,
-            ANGELEGT);
-
-    // When / Then
-    assertThatThrownBy(() -> geschrieben(widerspruch))
-        .isInstanceOf(DataIntegrityViolationException.class);
-  }
-
-  @Test
-  void save_givenACommittedOfferWithValidityBeforeTheOfferDate_thenRejectedByTheDatabase() {
-    // Given
-    final Angebot widerspruch =
-        new Angebot(
-            null,
-            firmaId,
-            ansprechpartnerId,
-            NUMMER,
-            Angebotszustand.VERSENDET,
-            ANGEBOTSDATUM,
-            ANGEBOTSDATUM.minusDays(1),
-            BESCHREIBUNG,
-            BEDINGUNGEN,
-            VERSANDZEITPUNKT,
-            null,
-            PDF_SCHLUESSEL,
-            EMPFAENGER,
-            ABSENDER,
-            List.of(KONZEPTION),
-            ANGELEGT,
-            ANGELEGT);
-
-    // When / Then
-    assertThatThrownBy(() -> geschrieben(widerspruch))
-        .isInstanceOf(DataIntegrityViolationException.class);
   }
 
   @Test

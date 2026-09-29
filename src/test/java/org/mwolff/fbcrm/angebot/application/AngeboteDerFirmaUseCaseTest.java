@@ -3,9 +3,7 @@ package org.mwolff.fbcrm.angebot.application;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.when;
 
-import java.time.Clock;
-import java.time.Instant;
-import java.time.ZoneOffset;
+import java.time.LocalDate;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -14,25 +12,20 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mwolff.fbcrm.angebot.domain.Angebot;
 import org.mwolff.fbcrm.angebot.domain.AngebotRepository;
-import org.mwolff.fbcrm.angebot.domain.Angebotsstand;
-import org.mwolff.fbcrm.angebot.domain.Angebotszustand;
+import org.mwolff.fbcrm.angebot.domain.Angebotsstatus;
 
 /**
- * Die Angebotsliste einer Firma (Kriterium 20).
+ * Die Angebotsliste einer Firma (Issue #127, Kriterium 7).
  *
- * <p>Gegenstand ist die Reihenfolge aus E25: Entwuerfe stehen oben, und innerhalb jeder Gruppe
- * zaehlt der Anlagezeitpunkt absteigend; bei gleichem Zeitpunkt entscheidet die hoehere Kennung,
- * damit zwei Aufrufe dieselbe Liste liefern. Sortiert wird hier und nicht im Bestand: Die Ordnung
- * ist eine Aussage der Ansicht, und nur an dieser Stelle ist sie ohne Datenbank pruefbar.
- *
- * <p>Der Stand jeder Zeile entsteht wie beim einzelnen Angebot aus dem heutigen Tag (E4).
+ * <p>Gegenstand ist die Reihenfolge: das Angebotsdatum absteigend, bei gleichem Datum die hoehere
+ * Kennung zuerst, damit zwei Aufrufe dieselbe Liste liefern. Der Status spielt fuer die Reihenfolge
+ * keine Rolle.
  */
 @ExtendWith(MockitoExtension.class)
 class AngeboteDerFirmaUseCaseTest {
 
-  private static final Instant JETZT = Instant.parse("2026-10-21T08:00:00Z");
-  private static final Instant FRUEH = Instant.parse("2026-09-20T08:00:00Z");
-  private static final Instant SPAET = Instant.parse("2026-09-25T08:00:00Z");
+  private static final LocalDate FRUEH = LocalDate.of(2026, 9, 20);
+  private static final LocalDate SPAET = LocalDate.of(2026, 9, 25);
 
   @Mock private AngebotRepository angebote;
 
@@ -40,77 +33,45 @@ class AngeboteDerFirmaUseCaseTest {
 
   @BeforeEach
   void baueDenAnwendungsfall() {
-    useCase = new AngeboteDerFirmaUseCase(angebote, Clock.fixed(JETZT, ZoneOffset.UTC));
+    useCase = new AngeboteDerFirmaUseCase(angebote);
   }
 
   private static Angebot zeile(
-      final long id, final Angebotszustand zustand, final Instant angelegt) {
-    return Angebotsdoppel.angebot(
-        id, Angebotsdoppel.FIRMA, zustand, List.of(Angebotsdoppel.KONZEPTION), angelegt);
+      final long id, final Angebotsstatus status, final LocalDate angebotDatum) {
+    return Angebotsdoppel.angebot(id, Angebotsdoppel.FIRMA, status, angebotDatum);
   }
 
   private List<Long> kennungenIn(final List<Angebot> bestand) {
     when(angebote.findByFirma(Angebotsdoppel.FIRMA)).thenReturn(bestand);
     return useCase.angebote(Angebotsdoppel.FIRMA).stream()
-        .map(ansicht -> Long.valueOf(ansicht.angebot().requireId()))
+        .map(angebot -> Long.valueOf(angebot.requireId()))
         .toList();
   }
 
   @Test
-  void angebote_thenDraftsComeFirst() {
-    // Given — E25: ein Entwurf steht ueber jedem versendeten, auch wenn er aelter ist.
+  void angebote_thenTheNewestDateComesFirstWhateverTheStatus() {
+    // Given — das juengere Angebot steht oben, auch wenn das aeltere erst angelegt ist.
     final List<Long> kennungen =
         kennungenIn(
             List.of(
-                zeile(1L, Angebotszustand.VERSENDET, SPAET),
-                zeile(2L, Angebotszustand.ENTWURF, FRUEH)));
+                zeile(1L, Angebotsstatus.ANGELEGT, FRUEH),
+                zeile(2L, Angebotsstatus.ABGERECHNET, SPAET)));
 
     // Then
     assertThat(kennungen).containsExactly(Long.valueOf(2L), Long.valueOf(1L));
   }
 
   @Test
-  void angebote_withinAGroup_thenTheYoungestComesFirst() {
-    // Given — E25: created_at absteigend.
+  void angebote_withEqualDates_thenTheHigherIdComesFirst() {
+    // Given — der Tiebreak, damit zwei Aufrufe dieselbe Liste liefern.
     final List<Long> kennungen =
         kennungenIn(
             List.of(
-                zeile(1L, Angebotszustand.VERSENDET, FRUEH),
-                zeile(2L, Angebotszustand.ABGELEHNT, SPAET)));
+                zeile(1L, Angebotsstatus.ANGELEGT, FRUEH),
+                zeile(2L, Angebotsstatus.ANGELEGT, FRUEH)));
 
     // Then
     assertThat(kennungen).containsExactly(Long.valueOf(2L), Long.valueOf(1L));
-  }
-
-  @Test
-  void angebote_withEqualTimestamps_thenTheHigherIdComesFirst() {
-    // Given — E25: der Tiebreak, damit zwei Aufrufe dieselbe Liste liefern.
-    final List<Long> kennungen =
-        kennungenIn(
-            List.of(
-                zeile(1L, Angebotszustand.ENTWURF, FRUEH),
-                zeile(2L, Angebotszustand.ENTWURF, FRUEH)));
-
-    // Then
-    assertThat(kennungen).containsExactly(Long.valueOf(2L), Long.valueOf(1L));
-  }
-
-  @Test
-  void angebote_thenEachRowCarriesItsDerivedStand() {
-    // Given — E4: das versendete Angebot ist am 21.10. abgelaufen, der Entwurf nie.
-    when(angebote.findByFirma(Angebotsdoppel.FIRMA))
-        .thenReturn(
-            List.of(
-                zeile(1L, Angebotszustand.ENTWURF, SPAET),
-                zeile(2L, Angebotszustand.VERSENDET, FRUEH)));
-
-    // When
-    final List<AngebotAnsicht> ansichten = useCase.angebote(Angebotsdoppel.FIRMA);
-
-    // Then
-    assertThat(ansichten)
-        .extracting(AngebotAnsicht::stand)
-        .containsExactly(Angebotsstand.ENTWURF, Angebotsstand.ABGELAUFEN);
   }
 
   @Test

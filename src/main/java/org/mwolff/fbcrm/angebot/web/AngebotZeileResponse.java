@@ -2,41 +2,25 @@ package org.mwolff.fbcrm.angebot.web;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
-import org.jspecify.annotations.Nullable;
-import org.mwolff.fbcrm.angebot.application.AngebotAnsicht;
 import org.mwolff.fbcrm.angebot.domain.Angebot;
-import org.mwolff.fbcrm.angebot.domain.Angebotsstand;
+import org.mwolff.fbcrm.angebot.domain.Angebotsstatus;
 
 /**
- * Eine Zeile der Angebotsliste an der Firma (Kriterium 20).
+ * Eine Zeile der Angebotsliste an der Firma (Issue #127, Kriterium 7).
  *
- * <p>Nur, was die Liste zeigt: Nummer, Stand, die beiden Daten und die Summe. Die Positionen
- * bleiben draussen — die Liste zeigt sie nicht, und die Detailansicht holt sie ohnehin.
+ * <p>Ohne Positionen: Die Liste zeigt die Summe, nicht die Posten. Die Summe wird gerechnet (E5).
  *
  * @param id technische Id
- * @param nummer Angebotsnummer, oder {@code null} im Entwurf
- * @param stand der Stand, als der das Angebot heute gilt
  * @param angebotDatum Datum des Angebots
- * @param gueltigBis letzter Tag der Gueltigkeit
+ * @param status wie weit das Angebot gediehen ist
  * @param summe die Netto-Summe, gerechnet
  */
 public record AngebotZeileResponse(
-    long id,
-    @Nullable String nummer,
-    Angebotsstand stand,
-    LocalDate angebotDatum,
-    LocalDate gueltigBis,
-    BigDecimal summe) {
+    long id, LocalDate angebotDatum, Angebotsstatus status, BigDecimal summe) {
 
-  /** Die Sicht der Oberflaeche auf ein Angebot in der Liste. */
-  static AngebotZeileResponse of(final AngebotAnsicht ansicht) {
-    final Angebot angebot = ansicht.angebot();
+  /** Die Sicht der Liste auf ein Angebot. */
+  static AngebotZeileResponse of(final Angebot angebot) {
     return new AngebotZeileResponse(
-        angebot.requireId(),
-        angebot.nummer(),
-        ansicht.stand(),
-        angebot.angebotDatum(),
-        angebot.gueltigBis(),
-        angebot.summe());
+        angebot.requireId(), angebot.angebotDatum(), angebot.status(), angebot.summe());
   }
 }

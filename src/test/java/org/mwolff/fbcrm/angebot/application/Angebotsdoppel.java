@@ -6,20 +6,15 @@ import java.time.LocalDate;
 import java.util.List;
 import org.mwolff.fbcrm.angebot.domain.Angebot;
 import org.mwolff.fbcrm.angebot.domain.Angebotsposition;
-import org.mwolff.fbcrm.angebot.domain.Angebotszustand;
-import org.mwolff.fbcrm.angebot.domain.Belegabsender;
-import org.mwolff.fbcrm.angebot.domain.Belegempfaenger;
+import org.mwolff.fbcrm.angebot.domain.Angebotsstatus;
 import org.mwolff.fbcrm.common.Abrechnungsmodus;
-import org.mwolff.fbcrm.common.Anschrift;
 import org.mwolff.fbcrm.common.Einheit;
 
 /**
  * Die Angebote, gegen die die Anwendungsfaelle dieses Pakets laufen.
  *
- * <p>An einer Stelle, weil vier Testklassen dieselben brauchen: einen Entwurf und je ein Angebot in
- * jedem der vier festgeschriebenen Zustaende. Die festgeschriebenen tragen Nummer, Versandzeitpunkt
- * und beide Anschriftskopien — ohne sie waeren sie Gebilde, die es im Bestand nicht gibt, und die
- * Pruefung liefe gegen eine Erfindung.
+ * <p>An einer Stelle, weil mehrere Testklassen dieselben brauchen: ein Angebot mit zwei Positionen,
+ * wahlweise in einem beliebigen Status oder mit frei gewaehltem Datum.
  */
 final class Angebotsdoppel {
 
@@ -33,12 +28,9 @@ final class Angebotsdoppel {
   static final long ANSPRECHPARTNER = 8L;
 
   static final LocalDate ANGEBOTSDATUM = LocalDate.of(2026, 9, 20);
-  static final LocalDate GUELTIG_BIS = LocalDate.of(2026, 10, 20);
   static final Instant ANGELEGT = Instant.parse("2026-09-20T08:00:00Z");
-  static final Instant VERSENDET_AM = Instant.parse("2026-09-21T09:00:00Z");
 
   static final String BESCHREIBUNG = "Neugestaltung der Website";
-  static final String BEDINGUNGEN = "Zahlbar innerhalb von 14 Tagen ohne Abzug.";
 
   static final Angebotsposition KONZEPTION =
       new Angebotsposition(
@@ -56,30 +48,31 @@ final class Angebotsdoppel {
           Einheit.PAUSCHAL,
           new BigDecimal("1200.00"));
 
-  private static final Belegempfaenger EMPFAENGER =
-      new Belegempfaenger(
-          "Adler AG", new Anschrift("Hauptstrasse 1", "28195", "Bremen", "Deutschland"), null);
-
-  private static final Belegabsender ABSENDER =
-      new Belegabsender(
-          "Manfred Wolff",
-          new Anschrift("Am Deich 2", "28199", "Hansestadt", "Bundesrepublik"),
-          null,
-          null,
-          null,
-          null,
-          null);
-
   private Angebotsdoppel() {}
 
-  /** Ein Entwurf mit Kennung, zwei Positionen und beiden Texten. */
-  static Angebot entwurf(final long id) {
-    return entwurf(id, FIRMA, List.of(KONZEPTION, SCHULUNG));
+  /** Ein angelegtes Angebot mit Kennung, zwei Positionen und Beschreibung. */
+  static Angebot angebot(final long id) {
+    return angebot(id, Angebotsstatus.ANGELEGT);
   }
 
-  /** Ein Entwurf an eine beliebige Firma mit beliebigen Positionen. */
-  static Angebot entwurf(final long id, final long firmaId, final List<Angebotsposition> zeilen) {
-    return angebot(id, firmaId, Angebotszustand.ENTWURF, zeilen, ANGELEGT);
+  /** Dasselbe Angebot in einem frei gewaehlten Status. */
+  static Angebot angebot(final long id, final Angebotsstatus status) {
+    return angebot(id, FIRMA, status, ANGEBOTSDATUM);
+  }
+
+  /** Ein Angebot mit frei gewaehlter Firma, Status und Datum — fuer die Reihenfolge der Liste. */
+  static Angebot angebot(
+      final long id, final long firmaId, final Angebotsstatus status, final LocalDate datum) {
+    return new Angebot(
+        Long.valueOf(id),
+        firmaId,
+        Long.valueOf(ANSPRECHPARTNER),
+        status,
+        datum,
+        BESCHREIBUNG,
+        List.of(KONZEPTION, SCHULUNG),
+        ANGELEGT,
+        ANGELEGT);
   }
 
   /** Dasselbe Angebot ohne Ansprechpartner — der Ansprechpartner ist optional (Issue #126). */
@@ -88,63 +81,11 @@ final class Angebotsdoppel {
         angebot.id(),
         angebot.firmaId(),
         null,
-        angebot.nummer(),
-        angebot.zustand(),
+        angebot.status(),
         angebot.angebotDatum(),
-        angebot.gueltigBis(),
-        angebot.leistungsbeschreibung(),
-        angebot.zahlungsbedingungen(),
-        angebot.versendetAm(),
-        angebot.reaktionAm(),
-        angebot.pdfSchluessel(),
-        angebot.empfaenger(),
-        angebot.absender(),
+        angebot.beschreibung(),
         angebot.positionen(),
         angebot.createdAt(),
         angebot.updatedAt());
-  }
-
-  /** Ein Angebot in einem der vier festgeschriebenen Zustaende. */
-  static Angebot festgeschrieben(final long id, final Angebotszustand zustand) {
-    return angebot(id, FIRMA, zustand, List.of(KONZEPTION), ANGELEGT);
-  }
-
-  /** Ein Angebot mit frei gewaehltem Anlagezeitpunkt — fuer die Reihenfolge aus Kriterium 20. */
-  static Angebot angebot(
-      final long id,
-      final long firmaId,
-      final Angebotszustand zustand,
-      final List<Angebotsposition> zeilen,
-      final Instant angelegt) {
-    return angebot(id, firmaId, zustand, zeilen, angelegt, GUELTIG_BIS);
-  }
-
-  /** Ein Angebot mit frei gewaehlter Gueltigkeit. */
-  private static Angebot angebot(
-      final long id,
-      final long firmaId,
-      final Angebotszustand zustand,
-      final List<Angebotsposition> zeilen,
-      final Instant angelegt,
-      final LocalDate gueltigBis) {
-    final boolean entwurf = zustand == Angebotszustand.ENTWURF;
-    return new Angebot(
-        Long.valueOf(id),
-        firmaId,
-        Long.valueOf(ANSPRECHPARTNER),
-        entwurf ? null : "A-2026-%03d".formatted(id),
-        zustand,
-        ANGEBOTSDATUM,
-        gueltigBis,
-        BESCHREIBUNG,
-        BEDINGUNGEN,
-        entwurf ? null : VERSENDET_AM,
-        null,
-        entwurf ? null : "angebot/%d/beleg.pdf".formatted(id),
-        entwurf ? null : EMPFAENGER,
-        entwurf ? null : ABSENDER,
-        zeilen,
-        angelegt,
-        angelegt);
   }
 }

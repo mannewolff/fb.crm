@@ -1,28 +1,21 @@
 package org.mwolff.fbcrm.angebot.web;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.hamcrest.Matchers.hasSize;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
-import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.math.BigDecimal;
-import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
-import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -30,92 +23,72 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.mwolff.fbcrm.angebot.application.AngebotAnsicht;
-import org.mwolff.fbcrm.angebot.application.AngebotEntwurfAendernUseCase;
+import org.mwolff.fbcrm.angebot.application.AngebotAendernUseCase;
+import org.mwolff.fbcrm.angebot.application.AngebotDaten;
 import org.mwolff.fbcrm.angebot.application.AngebotLesenUseCase;
-import org.mwolff.fbcrm.angebot.application.AngebotNichtAenderbar;
 import org.mwolff.fbcrm.angebot.application.AngebotNichtGefunden;
-import org.mwolff.fbcrm.angebot.application.AngebotOhneBeleg;
-import org.mwolff.fbcrm.angebot.application.AngebotPdfLesenUseCase;
-import org.mwolff.fbcrm.angebot.application.AngebotReaktionUseCase;
-import org.mwolff.fbcrm.angebot.application.AngebotVersendenUseCase;
-import org.mwolff.fbcrm.angebot.application.AngebotVerwerfenUseCase;
-import org.mwolff.fbcrm.angebot.application.Belegdokument;
-import org.mwolff.fbcrm.angebot.application.EntwurfDaten;
+import org.mwolff.fbcrm.angebot.application.AngebotStatusUseCase;
+import org.mwolff.fbcrm.angebot.application.AnsprechpartnerNichtWaehlbar;
 import org.mwolff.fbcrm.angebot.application.Kundenangaben;
 import org.mwolff.fbcrm.angebot.application.KundenangabenUseCase;
-import org.mwolff.fbcrm.angebot.application.VersandUnvollstaendig;
+import org.mwolff.fbcrm.angebot.application.StatusGrenzeErreicht;
 import org.mwolff.fbcrm.angebot.domain.Angebot;
 import org.mwolff.fbcrm.angebot.domain.Angebotsposition;
-import org.mwolff.fbcrm.angebot.domain.Angebotsstand;
-import org.mwolff.fbcrm.angebot.domain.Angebotszustand;
-import org.mwolff.fbcrm.angebot.domain.Belegabsender;
-import org.mwolff.fbcrm.angebot.domain.Belegempfaenger;
+import org.mwolff.fbcrm.angebot.domain.Angebotsstatus;
 import org.mwolff.fbcrm.common.Abrechnungsmodus;
-import org.mwolff.fbcrm.common.Anschrift;
 import org.mwolff.fbcrm.common.Einheit;
 import org.mwolff.fbcrm.common.web.GlobalExceptionHandler;
-import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 /**
- * Die Uebersetzung zwischen Anwendungsfall und HTTP fuer die Wege am einzelnen Angebot.
+ * Die Uebersetzung zwischen Anwendungsfall und HTTP fuer die Wege am einzelnen Angebot (Issue
+ * #127).
  *
  * <p>Dieselbe Strecke wie in {@code FirmaControllerTest}: {@code standaloneSetup} mit dem echten
  * {@link GlobalExceptionHandler}, damit die Statuscodes der Ausnahmen mitgeprueft werden.
  *
- * <p>Zwei Aussagen sind hier der Gegenstand. Erstens die gerechneten Werte aus E5: Die Antwort
- * traegt {@code stand}, {@code summe} und je Position den {@code betrag}, obwohl keiner davon in
- * einer Spalte steht, dazu die Namen des Kunden. Zweitens die Statuscodes: {@code PUT} antwortet
- * 200 mit dem neuen Stand, {@code DELETE} antwortet 204 ohne Rumpf (E19), und ein festgeschriebenes
- * Angebot ist auf beiden Wegen 409.
- *
- * <p>Dazu die Wege am festgeschriebenen Beleg. {@code POST …/versenden} antwortet 409 mit der
- * Erweiterung {@code fieldErrors} und genau den vier Schluesseln aus E22 — dieser Zweig des {@link
- * GlobalExceptionHandler} ist neu, denn bisher entstand {@code fieldErrors} allein aus der Bean
- * Validation (400). {@code GET …/pdf} traegt {@code Content-Disposition: inline} und {@code
- * application/pdf}: Kriterium 14 sagt „oeffnen", nicht „herunterladen" (E17).
- *
- * <p>Und die beiden Wege der Reaktion: {@code POST …/annehmen} und {@code POST …/ablehnen}
- * antworten mit dem geaenderten Angebot — die Maske soll den neuen Stand ohne zweiten Aufruf zeigen
- * —, ein unzulaessiger Zustand ist 409 und ein unbekanntes Angebot 404.
+ * <p>Gegenstand sind die gerechneten Werte aus E5 — {@code summe} und je Position der {@code
+ * betrag}, obwohl keiner davon in einer Spalte steht —, die Namen des Kunden, die Pruefung der
+ * Anfrage und die Statuscodes: {@code PUT} und die beiden Statuswege antworten 200 mit dem neuen
+ * Stand, das Ende der Reihe ist 409, ein nicht waehlbarer Ansprechpartner 422.
  */
 @ExtendWith(MockitoExtension.class)
 class AngebotControllerTest {
 
   private static final long ANGEBOT = 11L;
   private static final LocalDate ANGEBOTSDATUM = LocalDate.of(2026, 9, 20);
-  private static final LocalDate GUELTIG_BIS = LocalDate.of(2026, 10, 20);
   private static final Instant ANGELEGT = Instant.parse("2026-09-20T08:00:00Z");
-  private static final String NUMMER = "A-2026-001";
-  private static final byte[] BELEG = "%PDF-1.7 Angebot".getBytes(StandardCharsets.UTF_8);
+
+  private static final Angebotsposition KONZEPTION =
+      new Angebotsposition(
+          "Konzeption",
+          Abrechnungsmodus.AUFWAND,
+          new BigDecimal("2.50"),
+          Einheit.PERSONENTAG,
+          new BigDecimal("1000.01"));
 
   private static final String RUMPF =
       """
-      {"gueltigBis":"2026-11-30","leistungsbeschreibung":"Neu","zahlungsbedingungen":null,
+      {"angebotDatum":"2026-09-25","ansprechpartnerId":9,"beschreibung":"Neu",
        "positionen":[{"bezeichnung":"Konzeption","abrechnungsmodus":"AUFWAND","menge":"2.50",
                       "einheit":"PERSONENTAG","einzelpreis":"1000.01"}]}
       """;
 
   @Mock private AngebotLesenUseCase lesen;
-  @Mock private AngebotEntwurfAendernUseCase aendern;
-  @Mock private AngebotVerwerfenUseCase verwerfen;
-  @Mock private AngebotVersendenUseCase versenden;
-  @Mock private AngebotPdfLesenUseCase pdfLesen;
-  @Mock private AngebotReaktionUseCase reaktion;
+  @Mock private AngebotAendernUseCase aendern;
+  @Mock private AngebotStatusUseCase statuswechsel;
   @Mock private KundenangabenUseCase kunden;
 
-  @Captor private ArgumentCaptor<EntwurfDaten> daten;
+  @Captor private ArgumentCaptor<AngebotDaten> daten;
 
-  private AngebotController controller;
   private MockMvc mockMvc;
 
   @BeforeEach
   void baueDenController() {
-    controller =
-        new AngebotController(lesen, aendern, verwerfen, versenden, reaktion, pdfLesen, kunden);
+    final AngebotController controller =
+        new AngebotController(lesen, aendern, statuswechsel, kunden);
     // Jede Antwort mit einem Angebot fragt die Namen des Kunden hinzu; die Fehlerwege nicht.
     lenient().when(kunden.zu(any())).thenReturn(new Kundenangaben("Adler AG", "Eva Adler"));
     mockMvc =
@@ -124,39 +97,28 @@ class AngebotControllerTest {
             .build();
   }
 
-  private static AngebotAnsicht entwurf() {
-    return new AngebotAnsicht(
-        new Angebot(
-            Long.valueOf(ANGEBOT),
-            3L,
-            8L,
-            null,
-            Angebotszustand.ENTWURF,
-            ANGEBOTSDATUM,
-            GUELTIG_BIS,
-            "Neugestaltung",
-            "Zahlbar in 14 Tagen.",
-            null,
-            null,
-            null,
-            null,
-            null,
-            List.of(
-                new Angebotsposition(
-                    "Konzeption",
-                    Abrechnungsmodus.AUFWAND,
-                    new BigDecimal("2.50"),
-                    Einheit.PERSONENTAG,
-                    new BigDecimal("1000.01"))),
-            ANGELEGT,
-            ANGELEGT),
-        Angebotsstand.ENTWURF);
+  private static Angebot angebot(final Angebotsstatus status) {
+    return new Angebot(
+        Long.valueOf(ANGEBOT),
+        3L,
+        8L,
+        status,
+        ANGEBOTSDATUM,
+        "Neugestaltung",
+        List.of(KONZEPTION),
+        ANGELEGT,
+        ANGELEGT);
+  }
+
+  private void aendernAntwortet() {
+    when(aendern.aendere(eq(ANGEBOT), daten.capture()))
+        .thenReturn(angebot(Angebotsstatus.ANGELEGT));
   }
 
   @Test
-  void lesen_thenAnswersWithTheDerivedStandAndTheCalculatedAmounts() throws Exception {
+  void lesen_thenAnswersWithStatusNamesAndTheCalculatedAmounts() throws Exception {
     // Given — E5: Betrag und Summe stehen in keiner Spalte.
-    when(lesen.lese(ANGEBOT)).thenReturn(entwurf());
+    when(lesen.lese(ANGEBOT)).thenReturn(angebot(Angebotsstatus.BESTELLT));
 
     // When / Then
     mockMvc
@@ -167,11 +129,12 @@ class AngebotControllerTest {
         .andExpect(jsonPath("$.firmaName").value("Adler AG"))
         .andExpect(jsonPath("$.ansprechpartnerId").value(8))
         .andExpect(jsonPath("$.ansprechpartnerName").value("Eva Adler"))
-        .andExpect(jsonPath("$.nummer").doesNotExist())
-        .andExpect(jsonPath("$.stand").value("ENTWURF"))
+        .andExpect(jsonPath("$.status").value("BESTELLT"))
+        .andExpect(jsonPath("$.beschreibung").value("Neugestaltung"))
         .andExpect(jsonPath("$.summe").value(2500.03))
         .andExpect(jsonPath("$.positionen[0].betrag").value(2500.03))
-        .andExpect(jsonPath("$.positionen[0].einheit").value("PERSONENTAG"));
+        .andExpect(jsonPath("$.positionen[0].einheit").value("PERSONENTAG"))
+        .andExpect(jsonPath("$.nummer").doesNotExist());
   }
 
   @Test
@@ -188,7 +151,7 @@ class AngebotControllerTest {
   @Test
   void aendern_thenAnswers200WithTheNewStand() throws Exception {
     // Given
-    when(aendern.aendere(eq(ANGEBOT), daten.capture())).thenReturn(entwurf());
+    aendernAntwortet();
 
     // When / Then
     mockMvc
@@ -197,13 +160,14 @@ class AngebotControllerTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(RUMPF))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.id").value(Long.valueOf(ANGEBOT)));
+        .andExpect(jsonPath("$.id").value(Long.valueOf(ANGEBOT)))
+        .andExpect(jsonPath("$.status").value("ANGELEGT"));
   }
 
   @Test
-  void aendern_thenPassesTextsAndTheCompletePositionList() throws Exception {
-    // Given — E8: der Entwurf wird als Ganzes geschrieben.
-    when(aendern.aendere(eq(ANGEBOT), daten.capture())).thenReturn(entwurf());
+  void aendern_thenPassesEveryFieldAndTheCompletePositionList() throws Exception {
+    // Given — E8: das Angebot wird als Ganzes geschrieben.
+    aendernAntwortet();
 
     // When
     mockMvc
@@ -214,24 +178,19 @@ class AngebotControllerTest {
         .andExpect(status().isOk());
 
     // Then
-    final EntwurfDaten uebergeben = daten.getValue();
-    assertThat(uebergeben.gueltigBis()).isEqualTo(LocalDate.of(2026, 11, 30));
-    assertThat(uebergeben.leistungsbeschreibung()).isEqualTo("Neu");
-    assertThat(uebergeben.zahlungsbedingungen()).isNull();
-    assertThat(uebergeben.positionen())
-        .containsExactly(
-            new Angebotsposition(
-                "Konzeption",
-                Abrechnungsmodus.AUFWAND,
-                new BigDecimal("2.50"),
-                Einheit.PERSONENTAG,
-                new BigDecimal("1000.01")));
+    final AngebotDaten uebergeben = daten.getValue();
+    assertThat(uebergeben.angebotDatum()).isEqualTo(LocalDate.of(2026, 9, 25));
+    assertThat(uebergeben.ansprechpartnerId()).isEqualTo(9L);
+    assertThat(uebergeben.beschreibung()).isEqualTo("Neu");
+    assertThat(uebergeben.positionen()).containsExactly(KONZEPTION);
   }
 
   @Test
-  void aendern_whenTheAngebotIsFestgeschrieben_thenAnswers409() throws Exception {
-    // Given — Kriterium 13.
-    when(aendern.aendere(eq(ANGEBOT), daten.capture())).thenThrow(new AngebotNichtAenderbar());
+  void aendern_withANotSelectableContact_thenAnswers422() throws Exception {
+    // Given — ein neu gewaehlter Ansprechpartner ist stillgelegt oder gehoert zu einer anderen
+    // Firma.
+    when(aendern.aendere(eq(ANGEBOT), daten.capture()))
+        .thenThrow(new AnsprechpartnerNichtWaehlbar());
 
     // When / Then
     mockMvc
@@ -239,7 +198,27 @@ class AngebotControllerTest {
             put("/api/angebote/{id}", Long.valueOf(ANGEBOT))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(RUMPF))
-        .andExpect(status().isConflict());
+        .andExpect(status().isUnprocessableEntity());
+  }
+
+  @Test
+  void aendern_withABlankBezeichnung_thenAnswersWithAFieldError() throws Exception {
+    // Given — jede Position braucht eine Bezeichnung (Issue #127).
+    final String leer =
+        """
+        {"angebotDatum":"2026-09-25","positionen":[{"bezeichnung":"  ",
+          "abrechnungsmodus":"AUFWAND","menge":"1.00","einheit":"STUNDE","einzelpreis":"10.00"}]}
+        """;
+
+    // When / Then
+    mockMvc
+        .perform(
+            put("/api/angebote/{id}", Long.valueOf(ANGEBOT))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(leer))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.fieldErrors['positionen[0].bezeichnung']").isNotEmpty());
+    verifyNoInteractions(aendern);
   }
 
   @Test
@@ -247,7 +226,7 @@ class AngebotControllerTest {
     // Given — die Form wird an der Anfrage geprueft, nicht erst in der Datenbank.
     final String negativ =
         """
-        {"gueltigBis":"2026-11-30","positionen":[{"bezeichnung":"Konzeption",
+        {"angebotDatum":"2026-09-25","positionen":[{"bezeichnung":"Konzeption",
           "abrechnungsmodus":"AUFWAND","menge":"-1.00","einheit":"STUNDE","einzelpreis":"10.00"}]}
         """;
 
@@ -262,8 +241,8 @@ class AngebotControllerTest {
   }
 
   @Test
-  void aendern_withoutGueltigBis_thenAnswersWithAFieldError() throws Exception {
-    // Given — die Gueltigkeit ist die eine Pflichtangabe des Entwurfs.
+  void aendern_withoutAngebotDatum_thenAnswersWithAFieldError() throws Exception {
+    // Given — das Datum ist die eine Pflichtangabe des Angebots.
     final String ohneDatum = "{\"positionen\":[]}";
 
     // When / Then
@@ -273,229 +252,64 @@ class AngebotControllerTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(ohneDatum))
         .andExpect(status().isBadRequest())
-        .andExpect(jsonPath("$.fieldErrors.gueltigBis").isNotEmpty());
+        .andExpect(jsonPath("$.fieldErrors.angebotDatum").isNotEmpty());
   }
 
   @Test
-  void verwerfen_thenAnswers204WithoutABody() throws Exception {
-    // When / Then — E19: danach gibt es nichts mehr zurueckzugeben.
-    mockMvc
-        .perform(delete("/api/angebote/{id}", Long.valueOf(ANGEBOT)))
-        .andExpect(status().isNoContent());
-    verify(verwerfen).verwirf(ANGEBOT);
-  }
-
-  @Test
-  void verwerfen_whenTheAngebotIsFestgeschrieben_thenAnswers409() throws Exception {
-    // Given — Kriterium 7 gilt nur dem Entwurf.
-    doThrow(new AngebotNichtAenderbar()).when(verwerfen).verwirf(ANGEBOT);
-
-    // When / Then
-    mockMvc
-        .perform(delete("/api/angebote/{id}", Long.valueOf(ANGEBOT)))
-        .andExpect(status().isConflict());
-  }
-
-  @Test
-  void verwerfen_whenTheAngebotIsUnknown_thenAnswers404() throws Exception {
+  void statusWeiter_thenAnswers200WithTheNewStatus() throws Exception {
     // Given
-    doThrow(new AngebotNichtGefunden()).when(verwerfen).verwirf(ANGEBOT);
+    when(statuswechsel.weiter(ANGEBOT)).thenReturn(angebot(Angebotsstatus.ERLEDIGT));
 
     // When / Then
     mockMvc
-        .perform(delete("/api/angebote/{id}", Long.valueOf(ANGEBOT)))
-        .andExpect(status().isNotFound());
-  }
-
-  private static AngebotAnsicht versendetesAngebot() {
-    final AngebotAnsicht entwurf = entwurf();
-    return new AngebotAnsicht(
-        entwurf
-            .angebot()
-            .versendet(
-                NUMMER,
-                new Belegempfaenger(
-                    "Adler AG",
-                    new Anschrift("Hauptstrasse 1", "28195", "Bremen", "Deutschland"),
-                    null),
-                new Belegabsender(
-                    "Manfred Wolff",
-                    new Anschrift("Am Deich 2", "28199", "Hansestadt", "Deutschland"),
-                    null,
-                    null,
-                    null,
-                    null,
-                    null),
-                "angebot/11/beleg.pdf",
-                ANGELEGT),
-        Angebotsstand.VERSENDET);
-  }
-
-  @Test
-  void versenden_thenAnswers200WithTheFestgeschriebenesAngebot() throws Exception {
-    // Given — Kriterium 10: aus dem Entwurf wird ein festes Dokument.
-    when(versenden.versende(ANGEBOT)).thenReturn(versendetesAngebot());
-
-    // When / Then
-    mockMvc
-        .perform(post("/api/angebote/{id}/versenden", Long.valueOf(ANGEBOT)))
+        .perform(post("/api/angebote/{id}/status/weiter", Long.valueOf(ANGEBOT)))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.nummer").value(NUMMER))
-        .andExpect(jsonPath("$.stand").value("VERSENDET"));
+        .andExpect(jsonPath("$.status").value("ERLEDIGT"))
+        .andExpect(jsonPath("$.firmaName").value("Adler AG"));
   }
 
   @Test
-  void versenden_whenAngabenAreMissing_thenAnswers409WithTheFourFieldKeys() throws Exception {
-    // Given — Kriterium 12, E22: alle fehlenden Angaben auf einmal, unter den Schluesseln der
-    // Karte.
-    when(versenden.versende(ANGEBOT))
-        .thenThrow(
-            new VersandUnvollstaendig(
-                Map.of(
-                    "positionen", List.of("fehlt"),
-                    "gueltigBis", List.of("fehlt"),
-                    "firma", List.of("fehlt"),
-                    "eigeneAngaben", List.of("fehlt"))));
-
-    // When / Then
-    mockMvc
-        .perform(post("/api/angebote/{id}/versenden", Long.valueOf(ANGEBOT)))
-        .andExpect(status().isConflict())
-        .andExpect(jsonPath("$.fieldErrors.positionen").isNotEmpty())
-        .andExpect(jsonPath("$.fieldErrors.gueltigBis").isNotEmpty())
-        .andExpect(jsonPath("$.fieldErrors.firma").isNotEmpty())
-        .andExpect(jsonPath("$.fieldErrors.eigeneAngaben").isNotEmpty())
-        .andExpect(jsonPath("$.fieldErrors.*", hasSize(4)));
-  }
-
-  @Test
-  void versenden_whenTheAngebotIsFestgeschrieben_thenAnswers409() throws Exception {
-    // Given — Kriterium 13: versendet wird nur ein Entwurf.
-    when(versenden.versende(ANGEBOT)).thenThrow(new AngebotNichtAenderbar());
-
-    // When / Then
-    mockMvc
-        .perform(post("/api/angebote/{id}/versenden", Long.valueOf(ANGEBOT)))
-        .andExpect(status().isConflict());
-  }
-
-  @Test
-  void pdf_thenOffersTheBelegForViewingInsteadOfSaving() throws Exception {
-    // Given — E17: Kriterium 14 sagt „oeffnen", nicht „herunterladen".
-    when(pdfLesen.pdf(ANGEBOT)).thenReturn(new Belegdokument(NUMMER + ".pdf", BELEG));
-
-    // When / Then
-    mockMvc
-        .perform(get("/api/angebote/{id}/pdf", Long.valueOf(ANGEBOT)))
-        .andExpect(status().isOk())
-        .andExpect(
-            header().string(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"A-2026-001.pdf\""))
-        .andExpect(content().contentType(MediaType.APPLICATION_PDF))
-        .andExpect(content().bytes(BELEG));
-  }
-
-  @Test
-  void pdf_givenADraft_thenAnswers409() throws Exception {
-    // Given — ein Entwurf hat kein Dokument.
-    when(pdfLesen.pdf(ANGEBOT)).thenThrow(new AngebotOhneBeleg());
-
-    // When / Then
-    mockMvc
-        .perform(get("/api/angebote/{id}/pdf", Long.valueOf(ANGEBOT)))
-        .andExpect(status().isConflict());
-  }
-
-  @Test
-  void pdf_whenTheAngebotIsUnknown_thenAnswers404() throws Exception {
+  void statusZurueck_thenAnswers200WithTheNewStatus() throws Exception {
     // Given
-    when(pdfLesen.pdf(ANGEBOT)).thenThrow(new AngebotNichtGefunden());
+    when(statuswechsel.zurueck(ANGEBOT)).thenReturn(angebot(Angebotsstatus.ABGEGEBEN));
 
     // When / Then
     mockMvc
-        .perform(get("/api/angebote/{id}/pdf", Long.valueOf(ANGEBOT)))
-        .andExpect(status().isNotFound());
-  }
-
-  private static AngebotAnsicht mitReaktion(
-      final Angebotszustand zustand, final Angebotsstand stand) {
-    final Angebot versendet = versendetesAngebot().angebot();
-    return new AngebotAnsicht(
-        zustand == Angebotszustand.ANGENOMMEN
-            ? versendet.angenommen(ANGELEGT)
-            : versendet.abgelehnt(ANGELEGT),
-        stand);
-  }
-
-  @Test
-  void annehmen_thenAnswers200WithTheNewStand() throws Exception {
-    // Given — Kriterium 17: der Kunde hat zugesagt.
-    when(reaktion.nimmAn(ANGEBOT))
-        .thenReturn(mitReaktion(Angebotszustand.ANGENOMMEN, Angebotsstand.ANGENOMMEN));
-
-    // When / Then
-    mockMvc
-        .perform(post("/api/angebote/{id}/annehmen", Long.valueOf(ANGEBOT)))
+        .perform(post("/api/angebote/{id}/status/zurueck", Long.valueOf(ANGEBOT)))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.nummer").value(NUMMER))
-        .andExpect(jsonPath("$.stand").value("ANGENOMMEN"))
-        .andExpect(jsonPath("$.reaktionAm").exists());
+        .andExpect(jsonPath("$.status").value("ABGEGEBEN"));
   }
 
   @Test
-  void ablehnen_thenAnswers200WithTheNewStand() throws Exception {
-    // Given — Kriterium 17: der Kunde hat abgesagt.
-    when(reaktion.lehneAb(ANGEBOT))
-        .thenReturn(mitReaktion(Angebotszustand.ABGELEHNT, Angebotsstand.ABGELEHNT));
+  void statusWeiter_atTheEnd_thenAnswers409() throws Exception {
+    // Given
+    when(statuswechsel.weiter(ANGEBOT)).thenThrow(new StatusGrenzeErreicht());
 
     // When / Then
     mockMvc
-        .perform(post("/api/angebote/{id}/ablehnen", Long.valueOf(ANGEBOT)))
-        .andExpect(status().isOk())
-        .andExpect(jsonPath("$.stand").value("ABGELEHNT"))
-        .andExpect(jsonPath("$.reaktionAm").exists());
-  }
-
-  @Test
-  void annehmen_fromAnUnreachableZustand_thenAnswers409() throws Exception {
-    // Given — Kriterium 17: beide Reaktionen sind endgueltig.
-    when(reaktion.nimmAn(ANGEBOT)).thenThrow(new AngebotNichtAenderbar());
-
-    // When / Then
-    mockMvc
-        .perform(post("/api/angebote/{id}/annehmen", Long.valueOf(ANGEBOT)))
+        .perform(post("/api/angebote/{id}/status/weiter", Long.valueOf(ANGEBOT)))
         .andExpect(status().isConflict());
   }
 
   @Test
-  void ablehnen_fromAnUnreachableZustand_thenAnswers409() throws Exception {
-    // Given — Kriterium 17.
-    when(reaktion.lehneAb(ANGEBOT)).thenThrow(new AngebotNichtAenderbar());
+  void statusZurueck_atTheStart_thenAnswers409() throws Exception {
+    // Given
+    when(statuswechsel.zurueck(ANGEBOT)).thenThrow(new StatusGrenzeErreicht());
 
     // When / Then
     mockMvc
-        .perform(post("/api/angebote/{id}/ablehnen", Long.valueOf(ANGEBOT)))
+        .perform(post("/api/angebote/{id}/status/zurueck", Long.valueOf(ANGEBOT)))
         .andExpect(status().isConflict());
   }
 
   @Test
-  void annehmen_whenTheAngebotIsUnknown_thenAnswers404() throws Exception {
+  void statusWeiter_whenTheAngebotIsUnknown_thenAnswers404() throws Exception {
     // Given
-    when(reaktion.nimmAn(ANGEBOT)).thenThrow(new AngebotNichtGefunden());
+    when(statuswechsel.weiter(ANGEBOT)).thenThrow(new AngebotNichtGefunden());
 
     // When / Then
     mockMvc
-        .perform(post("/api/angebote/{id}/annehmen", Long.valueOf(ANGEBOT)))
-        .andExpect(status().isNotFound());
-  }
-
-  @Test
-  void ablehnen_whenTheAngebotIsUnknown_thenAnswers404() throws Exception {
-    // Given
-    when(reaktion.lehneAb(ANGEBOT)).thenThrow(new AngebotNichtGefunden());
-
-    // When / Then
-    mockMvc
-        .perform(post("/api/angebote/{id}/ablehnen", Long.valueOf(ANGEBOT)))
+        .perform(post("/api/angebote/{id}/status/weiter", Long.valueOf(ANGEBOT)))
         .andExpect(status().isNotFound());
   }
 }

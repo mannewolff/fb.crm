@@ -39,35 +39,35 @@ class KundenangabenUseCaseTest {
   }
 
   private void firmaLiegtVor() {
-    when(firmen.findById(Versanddoppel.FIRMA)).thenReturn(Optional.of(Versanddoppel.firma()));
+    when(firmen.findById(Kundendoppel.FIRMA)).thenReturn(Optional.of(Kundendoppel.firma()));
   }
 
   @Test
   void zu_thenNamesTheFirmaAndTheContact() {
     // Given
     firmaLiegtVor();
-    when(personen.findById(Versanddoppel.ANSPRECHPARTNER))
-        .thenReturn(Optional.of(Versanddoppel.ansprechpartner()));
+    when(personen.findById(Kundendoppel.ANSPRECHPARTNER))
+        .thenReturn(Optional.of(Kundendoppel.ansprechpartner()));
 
     // When
-    final Kundenangaben kunde = useCase.zu(Angebotsdoppel.entwurf(ANGEBOT));
+    final Kundenangaben kunde = useCase.zu(Angebotsdoppel.angebot(ANGEBOT));
 
     // Then
     assertThat(kunde)
-        .isEqualTo(new Kundenangaben(Versanddoppel.FIRMENNAME, Versanddoppel.ANSPRECHPARTNER_TEXT));
+        .isEqualTo(new Kundenangaben(Kundendoppel.FIRMENNAME, Kundendoppel.ANSPRECHPARTNER_TEXT));
   }
 
   @Test
   void zu_withoutAContactAtTheAngebot_thenAsksNobodyAndNamesOnlyTheFirma() {
     // Given
     firmaLiegtVor();
-    final Angebot ohne = Angebotsdoppel.ohneAnsprechpartner(Angebotsdoppel.entwurf(ANGEBOT));
+    final Angebot ohne = Angebotsdoppel.ohneAnsprechpartner(Angebotsdoppel.angebot(ANGEBOT));
 
     // When
     final Kundenangaben kunde = useCase.zu(ohne);
 
     // Then
-    assertThat(kunde).isEqualTo(new Kundenangaben(Versanddoppel.FIRMENNAME, null));
+    assertThat(kunde).isEqualTo(new Kundenangaben(Kundendoppel.FIRMENNAME, null));
     verifyNoInteractions(personen);
   }
 
@@ -75,10 +75,10 @@ class KundenangabenUseCaseTest {
   void zu_whenTheContactIsGoneFromTheBestand_thenNamesOnlyTheFirma() {
     // Given — am Angebot vermerkt, im Bestand nicht mehr da.
     firmaLiegtVor();
-    when(personen.findById(Versanddoppel.ANSPRECHPARTNER)).thenReturn(Optional.empty());
+    when(personen.findById(Kundendoppel.ANSPRECHPARTNER)).thenReturn(Optional.empty());
 
     // When
-    final Kundenangaben kunde = useCase.zu(Angebotsdoppel.entwurf(ANGEBOT));
+    final Kundenangaben kunde = useCase.zu(Angebotsdoppel.angebot(ANGEBOT));
 
     // Then
     assertThat(kunde.ansprechpartnerName()).isNull();
@@ -88,8 +88,8 @@ class KundenangabenUseCaseTest {
   void zu_whenTheContactHasNoVorname_thenNamesOnlyTheNachname() {
     // Given — dieselbe Regel wie auf dem Beleg.
     firmaLiegtVor();
-    final Ansprechpartner person = Versanddoppel.ansprechpartner();
-    when(personen.findById(Versanddoppel.ANSPRECHPARTNER))
+    final Ansprechpartner person = Kundendoppel.ansprechpartner();
+    when(personen.findById(Kundendoppel.ANSPRECHPARTNER))
         .thenReturn(
             Optional.of(
                 person.geaendert(
@@ -102,7 +102,7 @@ class KundenangabenUseCaseTest {
                     person.updatedAt())));
 
     // When
-    final Kundenangaben kunde = useCase.zu(Angebotsdoppel.entwurf(ANGEBOT));
+    final Kundenangaben kunde = useCase.zu(Angebotsdoppel.angebot(ANGEBOT));
 
     // Then
     assertThat(kunde.ansprechpartnerName()).isEqualTo("Adler");
@@ -111,10 +111,10 @@ class KundenangabenUseCaseTest {
   @Test
   void zu_whenTheFirmaIsMissing_thenReports() {
     // Given — ein Widerspruch im Bestand: Firmen werden nie geloescht.
-    when(firmen.findById(Versanddoppel.FIRMA)).thenReturn(Optional.empty());
+    when(firmen.findById(Kundendoppel.FIRMA)).thenReturn(Optional.empty());
 
     // When / Then
-    assertThatThrownBy(() -> useCase.zu(Angebotsdoppel.entwurf(ANGEBOT)))
+    assertThatThrownBy(() -> useCase.zu(Angebotsdoppel.angebot(ANGEBOT)))
         .isInstanceOf(FirmaNichtGefunden.class);
   }
 }

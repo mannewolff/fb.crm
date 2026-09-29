@@ -22,7 +22,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mwolff.fbcrm.angebot.application.AngebotAnlegenUseCase;
-import org.mwolff.fbcrm.angebot.application.AngebotAnsicht;
 import org.mwolff.fbcrm.angebot.application.AngeboteDerFirmaUseCase;
 import org.mwolff.fbcrm.angebot.application.AnsprechpartnerNichtWaehlbar;
 import org.mwolff.fbcrm.angebot.application.FirmaStillgelegt;
@@ -30,8 +29,7 @@ import org.mwolff.fbcrm.angebot.application.Kundenangaben;
 import org.mwolff.fbcrm.angebot.application.KundenangabenUseCase;
 import org.mwolff.fbcrm.angebot.domain.Angebot;
 import org.mwolff.fbcrm.angebot.domain.Angebotsposition;
-import org.mwolff.fbcrm.angebot.domain.Angebotsstand;
-import org.mwolff.fbcrm.angebot.domain.Angebotszustand;
+import org.mwolff.fbcrm.angebot.domain.Angebotsstatus;
 import org.mwolff.fbcrm.common.Abrechnungsmodus;
 import org.mwolff.fbcrm.common.Einheit;
 import org.mwolff.fbcrm.common.web.GlobalExceptionHandler;
@@ -43,8 +41,8 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 /**
  * Die Uebersetzung zwischen Anwendungsfall und HTTP fuer die Wege an der Firma (Issue #126).
  *
- * <p>Zwei Wege unter dem Pfad der Firma: die Liste ihrer Angebote (Kriterium 20) und das Anlegen
- * eines Entwurfs (Kriterium 2). Geprueft wird die Form der Antwort und die Abbildung der drei
+ * <p>Zwei Wege unter dem Pfad der Firma: die Liste ihrer Angebote (Kriterium 7) und das Anlegen
+ * eines Angebots (Kriterium 2). Geprueft wird die Form der Antwort und die Abbildung der drei
  * Ausnahmen — 404 fuer eine unbekannte Firma, 409 fuer eine stillgelegte, 422 fuer einen
  * Ansprechpartner, der nicht zur Wahl steht.
  *
@@ -58,7 +56,6 @@ class FirmaAngeboteControllerTest {
   private static final long ANGEBOT = 11L;
   private static final Long PERSON = Long.valueOf(8L);
   private static final LocalDate ANGEBOTSDATUM = LocalDate.of(2026, 9, 20);
-  private static final LocalDate GUELTIG_BIS = LocalDate.of(2026, 10, 20);
   private static final Instant ANGELEGT = Instant.parse("2026-09-20T08:00:00Z");
   private static final String MIT_PERSON = "{\"ansprechpartnerId\":8}";
 
@@ -76,52 +73,35 @@ class FirmaAngeboteControllerTest {
             .build();
   }
 
-  private static AngebotAnsicht ansicht(
-      final long id,
-      final @Nullable Long ansprechpartnerId,
-      final Angebotszustand zustand,
-      final Angebotsstand stand) {
-    final boolean entwurf = zustand == Angebotszustand.ENTWURF;
-    return new AngebotAnsicht(
-        new Angebot(
-            Long.valueOf(id),
-            FIRMA,
-            ansprechpartnerId,
-            entwurf ? null : "A-2026-001",
-            zustand,
-            ANGEBOTSDATUM,
-            GUELTIG_BIS,
-            null,
-            null,
-            entwurf ? null : ANGELEGT,
-            null,
-            entwurf ? null : "angebot/1/beleg.pdf",
-            null,
-            null,
-            List.of(
-                new Angebotsposition(
-                    "Konzeption",
-                    Abrechnungsmodus.AUFWAND,
-                    new BigDecimal("2.50"),
-                    Einheit.PERSONENTAG,
-                    new BigDecimal("1000.01"))),
-            ANGELEGT,
-            ANGELEGT),
-        stand);
+  private static Angebot angebot(
+      final long id, final @Nullable Long ansprechpartnerId, final Angebotsstatus status) {
+    return new Angebot(
+        Long.valueOf(id),
+        FIRMA,
+        ansprechpartnerId,
+        status,
+        ANGEBOTSDATUM,
+        null,
+        List.of(
+            new Angebotsposition(
+                "Konzeption",
+                Abrechnungsmodus.AUFWAND,
+                new BigDecimal("2.50"),
+                Einheit.PERSONENTAG,
+                new BigDecimal("1000.01"))),
+        ANGELEGT,
+        ANGELEGT);
   }
 
-  private static AngebotAnsicht entwurf(final @Nullable Long ansprechpartnerId) {
-    return ansicht(ANGEBOT, ansprechpartnerId, Angebotszustand.ENTWURF, Angebotsstand.ENTWURF);
+  private static Angebot angelegt(final @Nullable Long ansprechpartnerId) {
+    return angebot(ANGEBOT, ansprechpartnerId, Angebotsstatus.ANGELEGT);
   }
 
   @Test
   void angebote_thenAnswersWithOneRowPerAngebot() throws Exception {
-    // Given — Kriterium 20: die Liste in der Reihenfolge des Anwendungsfalls.
+    // Given — Kriterium 7: die Liste in der Reihenfolge des Anwendungsfalls.
     when(liste.angebote(FIRMA))
-        .thenReturn(
-            List.of(
-                entwurf(null),
-                ansicht(9L, null, Angebotszustand.VERSENDET, Angebotsstand.ABGELAUFEN)));
+        .thenReturn(List.of(angelegt(null), angebot(9L, null, Angebotsstatus.BESTELLT)));
 
     // When / Then
     mockMvc
@@ -129,18 +109,17 @@ class FirmaAngeboteControllerTest {
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.angebote.length()").value(2))
         .andExpect(jsonPath("$.angebote[0].id").value(Long.valueOf(ANGEBOT)))
-        .andExpect(jsonPath("$.angebote[0].stand").value("ENTWURF"))
-        .andExpect(jsonPath("$.angebote[0].nummer").doesNotExist())
+        .andExpect(jsonPath("$.angebote[0].status").value("ANGELEGT"))
         .andExpect(jsonPath("$.angebote[0].summe").value(2500.03))
-        .andExpect(jsonPath("$.angebote[1].stand").value("ABGELAUFEN"))
-        .andExpect(jsonPath("$.angebote[1].nummer").value("A-2026-001"));
+        .andExpect(jsonPath("$.angebote[1].id").value(9))
+        .andExpect(jsonPath("$.angebote[1].status").value("BESTELLT"));
     verifyNoInteractions(kunden);
   }
 
   @Test
-  void anlegen_withoutABody_thenCreatesADraftWithoutAContact() throws Exception {
+  void anlegen_withoutABody_thenCreatesAnAngebotWithoutAContact() throws Exception {
     // Given
-    when(anlegen.anlegen(FIRMA, null)).thenReturn(entwurf(null));
+    when(anlegen.anlegen(FIRMA, null)).thenReturn(angelegt(null));
     when(kunden.zu(any())).thenReturn(new Kundenangaben("Adler AG", null));
 
     // When / Then
@@ -148,7 +127,7 @@ class FirmaAngeboteControllerTest {
         .perform(post("/api/firmen/{firmaId}/angebote", Long.valueOf(FIRMA)))
         .andExpect(status().isCreated())
         .andExpect(jsonPath("$.id").value(Long.valueOf(ANGEBOT)))
-        .andExpect(jsonPath("$.stand").value("ENTWURF"))
+        .andExpect(jsonPath("$.status").value("ANGELEGT"))
         .andExpect(jsonPath("$.firmaId").value(Long.valueOf(FIRMA)))
         .andExpect(jsonPath("$.firmaName").value("Adler AG"))
         .andExpect(jsonPath("$.ansprechpartnerId").doesNotExist())
@@ -159,7 +138,7 @@ class FirmaAngeboteControllerTest {
   @Test
   void anlegen_withAContact_thenPassesItOnAndNamesIt() throws Exception {
     // Given
-    when(anlegen.anlegen(FIRMA, PERSON)).thenReturn(entwurf(PERSON));
+    when(anlegen.anlegen(FIRMA, PERSON)).thenReturn(angelegt(PERSON));
     when(kunden.zu(any())).thenReturn(new Kundenangaben("Adler AG", "Eva Adler"));
 
     // When / Then

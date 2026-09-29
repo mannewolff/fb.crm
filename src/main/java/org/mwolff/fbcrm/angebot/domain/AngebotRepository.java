@@ -19,24 +19,17 @@ public interface AngebotRepository {
   /**
    * Alle Angebote einer Firma, jedes mit seinen Positionen.
    *
-   * <p>Ohne zugesagte Reihenfolge: Welche Ordnung die Ansicht zeigt, entscheidet Kriterium 20 und
-   * damit die Anwendungsschicht (E25) — der Bestand liefert den Inhalt, nicht die Darstellung.
+   * <p>Ohne zugesagte Reihenfolge: Welche Ordnung die Ansicht zeigt, entscheidet die
+   * Anwendungsschicht — der Bestand liefert den Inhalt, nicht die Darstellung.
    *
    * @param firmaId Kennung der Firma
    */
   List<Angebot> findByFirma(long firmaId);
 
-  /** Legt das Angebot an oder schreibt es fort und liefert es mit gesetzter Id zurueck. */
-  Angebot save(Angebot angebot);
-
   /**
-   * Loescht das Angebot samt seinen Positionen (Kriterium 7).
+   * Legt das Angebot an oder schreibt es fort und liefert es mit gesetzter Id zurueck.
    *
-   * <p>Der einzige Weg, auf dem im Modul etwas verschwindet — und er gilt nur dem Entwurf. Ob das
-   * Angebot einer ist, entscheidet der Anwendungsfall vor dem Aufruf; der Bestand kennt die
-   * Zustandsmaschine nicht.
-   *
-   * @param id Kennung des zu loeschenden Angebots
+   * <p>Ein Loeschen gibt es nicht: Ein Angebot, aus dem nichts wird, bleibt liegen (Issue #127).
    */
-  void loesche(long id);
+  Angebot save(Angebot angebot);
 }

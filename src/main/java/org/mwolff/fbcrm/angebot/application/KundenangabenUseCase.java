@@ -12,13 +12,13 @@ import org.springframework.transaction.annotation.Transactional;
  * Die Namen von Firma und Ansprechpartner eines Angebots, fuer Kopf und Angaben der Ansicht (Issue
  * #126).
  *
- * <p>Ein eigener Lesebaustein und kein Feld der {@link AngebotAnsicht}: Jeder Anwendungsfall am
- * Angebot liefert eine Ansicht, und keiner von ihnen braucht die Namen fuer seine eigene Arbeit.
- * Der Controller fragt sie einmal je Antwort hinzu.
+ * <p>Ein eigener Lesebaustein und kein Feld des Angebots: Jeder Anwendungsfall am Angebot liefert
+ * das Angebot, und keiner von ihnen braucht die Namen fuer seine eigene Arbeit. Der Controller
+ * fragt sie einmal je Antwort hinzu.
  *
- * <p>Ein Ansprechpartner, den es im Bestand nicht mehr gibt, ist kein Fehler — dieselbe Abwaegung
- * wie in {@link Versandunterlagen}: Die Ansicht nennt dann nur die Firma. Eine Firma wird nie
- * geloescht; fehlt sie trotzdem, ist das ein Widerspruch im Bestand und wird gemeldet.
+ * <p>Ein Ansprechpartner, den es im Bestand nicht mehr gibt, ist kein Fehler: Die Ansicht nennt
+ * dann nur die Firma. Eine Firma wird nie geloescht; fehlt sie trotzdem, ist das ein Widerspruch im
+ * Bestand und wird gemeldet.
  */
 @Service
 @Transactional(readOnly = true)
