@@ -7,7 +7,6 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
-import org.jspecify.annotations.Nullable;
 import org.mwolff.fbcrm.angebot.application.AngebotNichtGefunden;
 import org.mwolff.fbcrm.angebot.domain.Angebot;
 import org.mwolff.fbcrm.angebot.domain.AngebotRepository;
@@ -28,9 +27,9 @@ import org.springframework.transaction.annotation.Transactional;
  * einem</b> Aufruf fuer alle Zeilen; je Zeile nachzufragen waere die bekannte Abfrage-Lawine. Ohne
  * Rechnung wird gar nicht gefragt.
  *
- * <p><b>Der Steuersatz kommt aus zwei Quellen.</b> Ein Entwurf hat noch keinen und rechnet mit dem
- * der aktuellen Einstellungen; eine gestellte Rechnung traegt ihren eigenen und behaelt ihn, auch
- * wenn die Einstellungen sich danach aendern (Kriterium 14).
+ * <p><b>Der Steuersatz kommt aus zwei Quellen</b> ({@link GeltenderSteuersatz}): Ein Entwurf hat
+ * noch keinen und rechnet mit dem der aktuellen Einstellungen; eine gestellte Rechnung traegt ihren
+ * eigenen und behaelt ihn, auch wenn die Einstellungen sich danach aendern (Kriterium 14).
  */
 @Service
 @Transactional(readOnly = true)
@@ -77,13 +76,20 @@ public class RechnungenUebersichtUseCase {
     final BigDecimal aktuellerSatz = einstellungen.lies().steuersatz();
     return alle.stream()
         .sorted(Rechnungsreihenfolge.NEUESTE_ZUERST)
-        .map(
-            rechnung ->
-                new RechnungMitFirma(
-                    rechnung,
-                    nameVon(namen, angebotVon(jeAngebot, rechnung)),
-                    brutto(rechnung, aktuellerSatz)))
+        .map(rechnung -> zeile(rechnung, angebotVon(jeAngebot, rechnung), namen, aktuellerSatz))
         .toList();
+  }
+
+  private static RechnungMitFirma zeile(
+      final Rechnung rechnung,
+      final Angebot angebot,
+      final Map<Long, String> namen,
+      final BigDecimal aktuellerSatz) {
+    return new RechnungMitFirma(
+        rechnung,
+        angebot.firmaId(),
+        nameVon(namen, angebot),
+        rechnung.brutto(GeltenderSteuersatz.fuer(rechnung, aktuellerSatz)));
   }
 
   private static Angebot angebotVon(final Map<Long, Angebot> jeAngebot, final Rechnung rechnung) {
@@ -100,13 +106,5 @@ public class RechnungenUebersichtUseCase {
       throw new FirmaNichtGefunden();
     }
     return name;
-  }
-
-  /*
-   * Der eigene Satz der gestellten Rechnung schlaegt den der Einstellungen; ein Entwurf hat keinen.
-   */
-  private static BigDecimal brutto(final Rechnung rechnung, final BigDecimal aktuellerSatz) {
-    final @Nullable BigDecimal eigener = rechnung.steuersatz();
-    return rechnung.brutto(eigener == null ? aktuellerSatz : eigener);
   }
 }

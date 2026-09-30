@@ -105,7 +105,7 @@ class RechnungenUebersichtUseCaseTest {
   }
 
   @Test
-  void rechnungen_thenEachZeileCarriesTheNameOfItsFirma() {
+  void rechnungen_thenEachZeileCarriesTheIdAndNameOfItsFirma() {
     // Given — zwei Angebote an zwei Firmen.
     when(rechnungen.findAlle())
         .thenReturn(
@@ -144,8 +144,12 @@ class RechnungenUebersichtUseCaseTest {
 
     // Then
     assertThat(zeilen)
-        .extracting(zeile -> zeile.rechnung().requireId(), RechnungMitFirma::firmaName)
-        .containsExactlyInAnyOrder(tuple(1L, "Adler AG"), tuple(2L, "Biber GmbH"));
+        .extracting(
+            zeile -> zeile.rechnung().requireId(),
+            RechnungMitFirma::firmaId,
+            RechnungMitFirma::firmaName)
+        .containsExactlyInAnyOrder(
+            tuple(1L, Rechnungsdoppel.FIRMA, "Adler AG"), tuple(2L, ZWEITE_FIRMA, "Biber GmbH"));
     verify(firmen).findAllById(gefragteFirmen.capture());
     assertThat(gefragteFirmen.getValue())
         .containsExactlyInAnyOrder(Rechnungsdoppel.FIRMA, ZWEITE_FIRMA);
