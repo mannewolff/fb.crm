@@ -186,6 +186,9 @@ class FirmaAngeboteControllerTest {
             post("/api/firmen/{firmaId}/angebote", Long.valueOf(FIRMA))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(MIT_PERSON))
-        .andExpect(status().isUnprocessableEntity());
+        .andExpect(status().isUnprocessableEntity())
+        .andExpect(
+            jsonPath("$.fieldErrors.ansprechpartnerId[0]")
+                .value("Dieser Ansprechpartner steht für das Angebot nicht zur Wahl."));
   }
 }

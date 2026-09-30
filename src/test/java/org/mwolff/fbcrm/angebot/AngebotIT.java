@@ -348,6 +348,11 @@ class AngebotIT extends AbstractIntegrationTest {
 
     // Then
     assertThat(antwort.getStatusCode()).isEqualTo(HttpStatus.UNPROCESSABLE_ENTITY);
+    // Die Maske zeigt die Meldung am Feld und nicht als Sammelmeldung (Issue #138).
+    assertThat(antwort.getBody())
+        .contains("\"fieldErrors\"")
+        .contains("ansprechpartnerId")
+        .contains("Dieser Ansprechpartner steht für das Angebot nicht zur Wahl.");
   }
 
   @Test

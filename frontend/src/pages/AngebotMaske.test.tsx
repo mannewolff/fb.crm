@@ -294,6 +294,52 @@ describe('AngebotMaske — das Angebot bearbeiten (Issue #127, Kriterium 5)', ()
     ]);
   });
 
+  it('nimmt einen stillgelegten Ansprechpartner nach dem Wechsel aus der Wahl', async () => {
+    const nutzer = userEvent.setup();
+    // Gespeichert ist der stillgelegte Partner 7; gespeichert wird mit dem aktiven 8.
+    lesen(
+      { ...ANGEBOT, ansprechpartnerId: 7, ansprechpartnerName: 'Alt' },
+      {
+        'PUT /api/angebote/9': json(200, {
+          ...ANGEBOT,
+          ansprechpartnerId: 8,
+          ansprechpartnerName: 'Eva Adler',
+        }),
+      },
+    );
+
+    renderMaske('/angebote/9/bearbeiten');
+    await bereit();
+    const wahl = screen.getByRole('combobox', { name: 'Ansprechpartner' });
+    await nutzer.selectOptions(wahl, '8');
+    await nutzer.click(screen.getByRole('button', { name: 'Speichern' }));
+
+    await screen.findByRole('status');
+    expect(within(wahl).getAllByRole('option').map((eintrag) => eintrag.textContent)).toEqual([
+      '— keiner —',
+      'Eva Adler',
+    ]);
+  });
+
+  it('behaelt den stillgelegten Ansprechpartner, wenn er gespeichert bleibt', async () => {
+    const nutzer = userEvent.setup();
+    const gespeichert = { ...ANGEBOT, ansprechpartnerId: 7, ansprechpartnerName: 'Alt' };
+    lesen(gespeichert, { 'PUT /api/angebote/9': json(200, gespeichert) });
+
+    renderMaske('/angebote/9/bearbeiten');
+    await bereit();
+    await nutzer.click(screen.getByRole('button', { name: 'Speichern' }));
+
+    await screen.findByRole('status');
+    const wahl = screen.getByRole('combobox', { name: 'Ansprechpartner' });
+    expect(wahl).toHaveValue('7');
+    expect(within(wahl).getAllByRole('option').map((eintrag) => eintrag.textContent)).toEqual([
+      '— keiner —',
+      'Eva Adler',
+      'Alt (stillgelegt)',
+    ]);
+  });
+
   it.each([['ANGELEGT'], ['ABGEGEBEN'], ['BESTELLT'], ['ERLEDIGT'], ['ABGERECHNET']])(
     'oeffnet und speichert das Angebot im Status %s',
     async (status) => {

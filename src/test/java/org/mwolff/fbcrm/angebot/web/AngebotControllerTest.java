@@ -198,7 +198,10 @@ class AngebotControllerTest {
             put("/api/angebote/{id}", Long.valueOf(ANGEBOT))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(RUMPF))
-        .andExpect(status().isUnprocessableEntity());
+        .andExpect(status().isUnprocessableEntity())
+        .andExpect(
+            jsonPath("$.fieldErrors.ansprechpartnerId[0]")
+                .value("Dieser Ansprechpartner steht für das Angebot nicht zur Wahl."));
   }
 
   @Test

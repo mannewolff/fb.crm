@@ -90,6 +90,15 @@ type Stand =
       readonly angebotId: number;
       /** Die aktiven Ansprechpartner der Firma und der gespeicherte, auch wenn stillgelegt. */
       readonly personen: readonly Ansprechpartner[];
+      /**
+       * Alle Ansprechpartner der Firma, aktiv und stillgelegt (Issue #138).
+       *
+       * Aus ihnen entsteht {@link waehlbare} nach jedem Speichern neu. Fuehrte die Maske nur die
+       * gefilterte Liste, blieb ein ersetzter stillgelegter Ansprechpartner bis zum Neuladen in
+       * der Auswahl — und waehlte ihn jemand dort erneut, wies der Server das als unzulaessige
+       * Neuwahl ab.
+       */
+      readonly alle: readonly Ansprechpartner[];
     }
   | { readonly art: 'meldung'; readonly meldung: string };
 
@@ -217,15 +226,21 @@ interface Uebernahme {
   readonly positionen: readonly Maskenposition[];
 }
 
-/** Die Antwort als neuer Stand der Maske — in jedem Status zum Bearbeiten offen (Kriterium 5). */
-function uebernahme(angebot: Angebot, personen: readonly Ansprechpartner[]): Uebernahme {
+/**
+ * Die Antwort als neuer Stand der Maske — in jedem Status zum Bearbeiten offen (Kriterium 5).
+ *
+ * `alle` ist die vollstaendige Personenliste der Firma; die Wahl entsteht daraus jedes Mal neu am
+ * gespeicherten Ansprechpartner der Antwort (Issue #138).
+ */
+function uebernahme(angebot: Angebot, alle: readonly Ansprechpartner[]): Uebernahme {
   return {
     stand: {
       art: 'bearbeiten',
       firmaId: angebot.firmaId,
       firmaName: angebot.firmaName,
       angebotId: angebot.id,
-      personen,
+      personen: waehlbare(alle, angebot.ansprechpartnerId),
+      alle,
     },
     texte: alsTexte(angebot),
     positionen: alsZeilen(angebot),
@@ -292,10 +307,7 @@ export default function AngebotMaske() {
     void angebotLesen(angebotKennung)
       .then(async (angebot) => {
         const firma = await firmaLesen(angebot.firmaId);
-        const neu = uebernahme(
-          angebot,
-          waehlbare(firma.ansprechpartner, angebot.ansprechpartnerId),
-        );
+        const neu = uebernahme(angebot, firma.ansprechpartner);
         setzeStand(neu.stand);
         setzeTexte(neu.texte);
         setzePositionen(neu.positionen);
@@ -323,7 +335,7 @@ export default function AngebotMaske() {
     }
   };
 
-  const speichern = async (angebot: number, personen: readonly Ansprechpartner[]) => {
+  const speichern = async (angebot: number, alle: readonly Ansprechpartner[]) => {
     setzeGespeichert(false);
     setzeFehler(null);
     setzeFeldFehler({});
@@ -344,7 +356,7 @@ export default function AngebotMaske() {
           beschreibung: oderNull(texte.beschreibung),
           positionen: eingaben,
         }),
-        personen,
+        alle,
       );
       setzeStand(neu.stand);
       setzeTexte(neu.texte);
@@ -447,13 +459,14 @@ export default function AngebotMaske() {
 
   const zuAendern = stand.angebotId;
   const personen = stand.personen;
+  const allePersonen = stand.alle;
   return (
     <Box
       component="form"
       noValidate
       onSubmit={(ereignis: FormEvent<HTMLFormElement>) => {
         ereignis.preventDefault();
-        void speichern(zuAendern, personen);
+        void speichern(zuAendern, allePersonen);
       }}
       sx={spalten}
     >
