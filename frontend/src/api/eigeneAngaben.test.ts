@@ -5,31 +5,33 @@ import { fetchNachPfad, json, leer } from '../test/fetchNachPfad';
 
 const ANGABEN = {
   name: 'Manfred Wolff',
+  berufsbezeichnung: 'Freiberuflicher Softwareentwickler',
   strasse: 'Hauptstraße 1',
   plz: '28195',
   ort: 'Bremen',
   land: 'Deutschland',
   email: 'info@mwolff.org',
   telefon: '0421/1234',
+  webadresse: 'https://mwolff.org',
   steuernummer: '75/123/45678',
   umsatzsteuerId: 'DE123456789',
   bankverbindung: 'DE02120300000000202051',
-  zahlungsbedingungen: 'Zahlbar innerhalb 14 Tagen ohne Abzug.',
 };
 
 /** Die frische Instanz: die Zeile steht, aber kein Feld ist gepflegt. */
 const LEERE_ANGABEN = {
   name: null,
+  berufsbezeichnung: null,
   strasse: null,
   plz: null,
   ort: null,
   land: null,
   email: null,
   telefon: null,
+  webadresse: null,
   steuernummer: null,
   umsatzsteuerId: null,
   bankverbindung: null,
-  zahlungsbedingungen: null,
 };
 
 afterEach(() => {
@@ -51,7 +53,9 @@ describe('parseEigeneAngaben', () => {
     // Ein fehlendes Feld ist nicht dasselbe wie ein leeres: `undefined` heisst, dass die
     // Gegenstelle das Feld nicht kennt — dann stimmt der Typ hier nicht mehr.
     ['ohne name', { ...ANGABEN, name: undefined }],
-    ['ohne zahlungsbedingungen', { ...ANGABEN, zahlungsbedingungen: undefined }],
+    ['ohne berufsbezeichnung', { ...ANGABEN, berufsbezeichnung: undefined }],
+    ['ohne webadresse', { ...ANGABEN, webadresse: undefined }],
+    ['webadresse als Zahl', { ...ANGABEN, webadresse: 7 }],
     ['name als Zahl', { ...ANGABEN, name: 7 }],
     ['plz als Zahl', { ...ANGABEN, plz: 28195 }],
     ['email als Objekt', { ...ANGABEN, email: {} }],

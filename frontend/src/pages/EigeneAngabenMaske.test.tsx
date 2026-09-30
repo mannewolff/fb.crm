@@ -11,31 +11,33 @@ import EigeneAngabenMaske from './EigeneAngabenMaske';
 
 const ANGABEN: EigeneAngaben = {
   name: 'Manfred Wolff',
+  berufsbezeichnung: 'Freiberuflicher Softwareentwickler',
   strasse: 'Hauptstraße 1',
   plz: '28195',
   ort: 'Bremen',
   land: 'Deutschland',
   email: 'info@mwolff.org',
   telefon: '0421/1234',
+  webadresse: 'https://mwolff.org',
   steuernummer: '75/123/45678',
   umsatzsteuerId: 'DE123456789',
   bankverbindung: 'DE02120300000000202051',
-  zahlungsbedingungen: 'Zahlbar innerhalb 14 Tagen ohne Abzug.',
 };
 
 /** Die frische Instanz: die Zeile steht, aber kein Feld ist gepflegt. */
 const LEER: EigeneAngaben = {
   name: null,
+  berufsbezeichnung: null,
   strasse: null,
   plz: null,
   ort: null,
   land: null,
   email: null,
   telefon: null,
+  webadresse: null,
   steuernummer: null,
   umsatzsteuerId: null,
   bankverbindung: null,
-  zahlungsbedingungen: null,
 };
 
 const PFAD = 'GET /api/eigene-angaben';
@@ -80,7 +82,8 @@ describe('EigeneAngabenMaske', () => {
     expect(feld('Steuernummer')).toHaveValue('75/123/45678');
     expect(feld('Umsatzsteuer-Identifikationsnummer')).toHaveValue('DE123456789');
     expect(feld('Bankverbindung')).toHaveValue('DE02120300000000202051');
-    expect(feld('Zahlungsbedingungen')).toHaveValue('Zahlbar innerhalb 14 Tagen ohne Abzug.');
+    expect(feld('Berufsbezeichnung')).toHaveValue('Freiberuflicher Softwareentwickler');
+    expect(feld('Webadresse')).toHaveValue('https://mwolff.org');
   });
 
   it('laesst auf einer frischen Instanz jedes Feld leer — kein Platzhalter im Feld', async () => {
@@ -89,7 +92,8 @@ describe('EigeneAngabenMaske', () => {
     renderMaske();
 
     expect(await screen.findByRole('textbox', { name: 'Name' })).toHaveValue('');
-    expect(feld('Zahlungsbedingungen')).toHaveValue('');
+    expect(feld('Berufsbezeichnung')).toHaveValue('');
+    expect(feld('Webadresse')).toHaveValue('');
   });
 
   it('meldet sich mit „Eigene Angaben" im Kopf und traegt genau eine h1', async () => {
@@ -115,20 +119,20 @@ describe('EigeneAngabenMaske', () => {
     await screen.findByRole('textbox', { name: 'Name' });
 
     const felder = screen.getAllByRole('textbox');
-    expect(felder).toHaveLength(11);
+    expect(felder).toHaveLength(12);
     for (const eingabe of felder) {
       expect(eingabe).toHaveAccessibleName();
     }
   });
 
-  it('gibt die Zahlungsbedingungen als mehrzeiliges Feld', async () => {
+  it('fuehrt die Webadresse nur als Text und nicht als Verweis', async () => {
     fetchNachPfad({ [PFAD]: json(200, ANGABEN) });
 
     renderMaske();
     await screen.findByRole('textbox', { name: 'Name' });
 
-    expect(feld('Zahlungsbedingungen').tagName).toBe('TEXTAREA');
-    expect(feld('Name').tagName).toBe('INPUT');
+    expect(feld('Webadresse').tagName).toBe('INPUT');
+    expect(screen.queryByRole('link', { name: 'https://mwolff.org' })).not.toBeInTheDocument();
   });
 
   it('schickt die geaenderten Angaben mit PUT und meldet den Erfolg', async () => {
@@ -164,7 +168,7 @@ describe('EigeneAngabenMaske', () => {
     await nutzer.clear(await screen.findByRole('textbox', { name: 'Steuernummer' }));
     // Auch reine Leerzeichen sind keine Angabe.
     await nutzer.type(feld('Telefon'), '   ');
-    await nutzer.clear(feld('Zahlungsbedingungen'));
+    await nutzer.clear(feld('Berufsbezeichnung'));
     await nutzer.click(speichern());
 
     await screen.findByText('Die Angaben sind gespeichert.');
@@ -173,9 +177,9 @@ describe('EigeneAngabenMaske', () => {
       expect.objectContaining({
         body: JSON.stringify({
           ...ANGABEN,
+          berufsbezeichnung: null,
           steuernummer: null,
           telefon: '0421/1234',
-          zahlungsbedingungen: null,
         }),
       }),
     );

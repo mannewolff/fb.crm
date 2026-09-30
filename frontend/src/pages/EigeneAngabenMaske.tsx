@@ -42,34 +42,36 @@ const AUSFALL_SPEICHERN =
   'Die Angaben wurden nicht gespeichert. Bitte später erneut versuchen.';
 const GESPEICHERT = 'Die Angaben sind gespeichert.';
 
-/** Die elf Felder der Maske, jedes als Zeichenkette — leer heisst „keine Angabe". */
+/** Die zwoelf Felder der Maske, jedes als Zeichenkette — leer heisst „keine Angabe". */
 interface Werte {
   readonly name: string;
+  readonly berufsbezeichnung: string;
   readonly strasse: string;
   readonly plz: string;
   readonly ort: string;
   readonly land: string;
   readonly email: string;
   readonly telefon: string;
+  readonly webadresse: string;
   readonly steuernummer: string;
   readonly umsatzsteuerId: string;
   readonly bankverbindung: string;
-  readonly zahlungsbedingungen: string;
 }
 
 /** Der Stand vor dem Laden. Er wird nie angezeigt: Erst mit `bereit` steht das Formular. */
 const LEERE_WERTE: Werte = {
   name: '',
+  berufsbezeichnung: '',
   strasse: '',
   plz: '',
   ort: '',
   land: '',
   email: '',
   telefon: '',
+  webadresse: '',
   steuernummer: '',
   umsatzsteuerId: '',
   bankverbindung: '',
-  zahlungsbedingungen: '',
 };
 
 /** Was die Maske gerade weiss. */
@@ -96,16 +98,17 @@ function oderNull(wert: string): string | null {
 function alsWerte(angaben: EigeneAngaben): Werte {
   return {
     name: alsText(angaben.name),
+    berufsbezeichnung: alsText(angaben.berufsbezeichnung),
     strasse: alsText(angaben.strasse),
     plz: alsText(angaben.plz),
     ort: alsText(angaben.ort),
     land: alsText(angaben.land),
     email: alsText(angaben.email),
     telefon: alsText(angaben.telefon),
+    webadresse: alsText(angaben.webadresse),
     steuernummer: alsText(angaben.steuernummer),
     umsatzsteuerId: alsText(angaben.umsatzsteuerId),
     bankverbindung: alsText(angaben.bankverbindung),
-    zahlungsbedingungen: alsText(angaben.zahlungsbedingungen),
   };
 }
 
@@ -113,16 +116,17 @@ function alsWerte(angaben: EigeneAngaben): Werte {
 function alsEingabe(werte: Werte): EigeneAngaben {
   return {
     name: oderNull(werte.name),
+    berufsbezeichnung: oderNull(werte.berufsbezeichnung),
     strasse: oderNull(werte.strasse),
     plz: oderNull(werte.plz),
     ort: oderNull(werte.ort),
     land: oderNull(werte.land),
     email: oderNull(werte.email),
     telefon: oderNull(werte.telefon),
+    webadresse: oderNull(werte.webadresse),
     steuernummer: oderNull(werte.steuernummer),
     umsatzsteuerId: oderNull(werte.umsatzsteuerId),
     bankverbindung: oderNull(werte.bankverbindung),
-    zahlungsbedingungen: oderNull(werte.zahlungsbedingungen),
   };
 }
 
@@ -132,12 +136,10 @@ interface EingabeProps {
   readonly werte: Werte;
   readonly setzeWerte: Dispatch<SetStateAction<Werte>>;
   readonly meldung?: string;
-  /** Ein Fliesstext statt einer Zeile — fuer die Zahlungsbedingungen. */
-  readonly mehrzeilig?: boolean;
 }
 
-/** Ein Feld der Maske samt seiner Meldung — elfmal derselbe Bau, einmal aufgeschrieben. */
-function Eingabe({ label, feld, werte, setzeWerte, meldung, mehrzeilig = false }: EingabeProps) {
+/** Ein Feld der Maske samt seiner Meldung — zwoelfmal derselbe Bau, einmal aufgeschrieben. */
+function Eingabe({ label, feld, werte, setzeWerte, meldung }: EingabeProps) {
   return (
     <TextField
       label={label}
@@ -147,8 +149,6 @@ function Eingabe({ label, feld, werte, setzeWerte, meldung, mehrzeilig = false }
       }}
       error={meldung !== undefined}
       helperText={meldung}
-      multiline={mehrzeilig}
-      minRows={mehrzeilig ? 3 : undefined}
       fullWidth
     />
   );
@@ -250,6 +250,13 @@ export default function EigeneAngabenMaske() {
               meldung={meldungAm(feldFehler, 'name')}
             />
             <Eingabe
+              label="Berufsbezeichnung"
+              feld="berufsbezeichnung"
+              werte={werte}
+              setzeWerte={setzeWerte}
+              meldung={meldungAm(feldFehler, 'berufsbezeichnung')}
+            />
+            <Eingabe
               label="Straße und Hausnummer"
               feld="strasse"
               werte={werte}
@@ -292,6 +299,13 @@ export default function EigeneAngabenMaske() {
               meldung={meldungAm(feldFehler, 'telefon')}
             />
             <Eingabe
+              label="Webadresse"
+              feld="webadresse"
+              werte={werte}
+              setzeWerte={setzeWerte}
+              meldung={meldungAm(feldFehler, 'webadresse')}
+            />
+            <Eingabe
               label="Steuernummer"
               feld="steuernummer"
               werte={werte}
@@ -311,14 +325,6 @@ export default function EigeneAngabenMaske() {
               werte={werte}
               setzeWerte={setzeWerte}
               meldung={meldungAm(feldFehler, 'bankverbindung')}
-            />
-            <Eingabe
-              label="Zahlungsbedingungen"
-              feld="zahlungsbedingungen"
-              werte={werte}
-              setzeWerte={setzeWerte}
-              meldung={meldungAm(feldFehler, 'zahlungsbedingungen')}
-              mehrzeilig
             />
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, flexWrap: 'wrap' }}>
               <KupferTaste disabled={laeuft}>Speichern</KupferTaste>

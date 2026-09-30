@@ -43,6 +43,7 @@ public class EigeneAngabenPflegenUseCase {
     final Anschrift anschrift = angaben.anschrift();
     return new EigeneAngaben(
         ohneLeerraum(angaben.name()),
+        ohneLeerraum(angaben.berufsbezeichnung()),
         new Anschrift(
             ohneLeerraum(anschrift.strasse()),
             ohneLeerraum(anschrift.plz()),
@@ -50,10 +51,10 @@ public class EigeneAngabenPflegenUseCase {
             ohneLeerraum(anschrift.land())),
         ohneLeerraum(angaben.email()),
         ohneLeerraum(angaben.telefon()),
+        ohneLeerraum(angaben.webadresse()),
         ohneLeerraum(angaben.steuernummer()),
         ohneLeerraum(angaben.umsatzsteuerId()),
-        ohneLeerraum(angaben.bankverbindung()),
-        ohneLeerraum(angaben.zahlungsbedingungen()));
+        ohneLeerraum(angaben.bankverbindung()));
   }
 
   private static @Nullable String ohneLeerraum(final @Nullable String wert) {

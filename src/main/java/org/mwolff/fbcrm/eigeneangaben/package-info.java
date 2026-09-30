@@ -1,6 +1,9 @@
 /**
- * Die eigenen Angaben — Name, Anschrift, Kontakt, Steuernummern, Bankverbindung und der
- * Standardtext fuer Zahlungsbedingungen (Kriterium 1, fachliche Quelle F3).
+ * Die eigenen Angaben — Name, Berufsbezeichnung, Anschrift, Kontakt samt Webadresse, Steuernummern
+ * und Bankverbindung (Kriterium 1, fachliche Quelle F3).
+ *
+ * <p>Einen Standardtext fuer Zahlungsbedingungen gibt es hier nicht mehr: Den Satz zum Zahlungsziel
+ * bildet die Rechnung aus den Einstellungen (#160, Kriterien 22 und 30).
  *
  * <p>Ein eigenes Modul und kein Anhaengsel am Angebot (Plan E1): Das Angebot kopiert diese Angaben
  * beim Versenden in den Beleg (R8), und die Rechnung wird sie spaeter genauso brauchen.

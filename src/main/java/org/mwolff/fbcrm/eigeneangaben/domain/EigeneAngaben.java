@@ -17,20 +17,22 @@ import org.mwolff.fbcrm.common.Anschrift;
  * und geht am Port mit.
  *
  * @param name Name, unter dem Rechnungen und Angebote hinausgehen
+ * @param berufsbezeichnung Berufsbezeichnung fuer den Belegkopf, oder {@code null}
  * @param anschrift Postanschrift; jede ihrer Angaben darf fehlen
  * @param email E-Mail-Adresse, oder {@code null}
  * @param telefon Telefonnummer, oder {@code null}
+ * @param webadresse Webadresse als Text fuer den Belegkopf, oder {@code null}
  * @param steuernummer Steuernummer, oder {@code null}
  * @param umsatzsteuerId Umsatzsteuer-Identifikationsnummer, oder {@code null}
  * @param bankverbindung Bankverbindung als Text, oder {@code null}
- * @param zahlungsbedingungen Standardtext fuer Zahlungsbedingungen, oder {@code null}
  */
 public record EigeneAngaben(
     @Nullable String name,
+    @Nullable String berufsbezeichnung,
     Anschrift anschrift,
     @Nullable String email,
     @Nullable String telefon,
+    @Nullable String webadresse,
     @Nullable String steuernummer,
     @Nullable String umsatzsteuerId,
-    @Nullable String bankverbindung,
-    @Nullable String zahlungsbedingungen) {}
+    @Nullable String bankverbindung) {}

@@ -31,13 +31,14 @@ class EigeneAngabenLesenUseCaseTest {
     final EigeneAngaben gespeichert =
         new EigeneAngaben(
             "Manfred Wolff",
+            "Freiberuflicher Softwareentwickler",
             new Anschrift("Am Wall 1", "28195", "Bremen", "Deutschland"),
             "manne@example.org",
             "0421 1234",
+            "https://mwolff.org",
             "75/123/45678",
             "DE123456789",
-            "DE02120300000000202051",
-            "Zahlbar innerhalb von 14 Tagen ohne Abzug.");
+            "DE02120300000000202051");
     when(bestand.lies()).thenReturn(gespeichert);
 
     // When
@@ -52,7 +53,7 @@ class EigeneAngabenLesenUseCaseTest {
     // Given — nach der Migration steht die eine Zeile mit lauter NULL da.
     final EigeneAngaben leer =
         new EigeneAngaben(
-            null, new Anschrift(null, null, null, null), null, null, null, null, null, null);
+            null, null, new Anschrift(null, null, null, null), null, null, null, null, null, null);
     when(bestand.lies()).thenReturn(leer);
 
     // When

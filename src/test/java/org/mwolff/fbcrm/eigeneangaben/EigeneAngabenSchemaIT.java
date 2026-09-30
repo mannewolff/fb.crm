@@ -68,7 +68,7 @@ class EigeneAngabenSchemaIT extends AbstractIntegrationTest {
                 + " OR plz IS NOT NULL OR ort IS NOT NULL OR land IS NOT NULL"
                 + " OR email IS NOT NULL OR telefon IS NOT NULL OR steuernummer IS NOT NULL"
                 + " OR umsatzsteuer_id IS NOT NULL OR bankverbindung IS NOT NULL"
-                + " OR zahlungsbedingungen IS NOT NULL",
+                + " OR berufsbezeichnung IS NOT NULL OR webadresse IS NOT NULL",
             Integer.class);
 
     // Then
@@ -96,5 +96,48 @@ class EigeneAngabenSchemaIT extends AbstractIntegrationTest {
     // When / Then — der Primaerschluessel schliesst die zweite Zeile mit derselben Kennung aus.
     assertThatThrownBy(() -> jdbc.execute("INSERT INTO eigene_angaben DEFAULT VALUES"))
         .isInstanceOf(DataIntegrityViolationException.class);
+  }
+
+  @Test
+  void migration_thenPaymentTermsAreGone() {
+    // When — der Satz zum Zahlungsziel kommt aus den Einstellungen (#160, Kriterien 22 und 30).
+    final Integer spalten = spaltenZahl("zahlungsbedingungen");
+
+    // Then
+    assertThat(spalten).isZero();
+  }
+
+  @Test
+  void migration_thenTheJobTitleColumnIsThereAndMayBeAbsent() {
+    // When — der Belegkopf traegt eine Berufsbezeichnung (#160, Kriterium 29).
+    final String nullbar = nullbarkeit("berufsbezeichnung");
+
+    // Then
+    assertThat(nullbar).isEqualTo("YES");
+  }
+
+  @Test
+  void migration_thenTheWebAddressColumnIsThereAndMayBeAbsent() {
+    // When — der Belegkopf traegt eine Webadresse (#160, Kriterium 29).
+    final String nullbar = nullbarkeit("webadresse");
+
+    // Then
+    assertThat(nullbar).isEqualTo("YES");
+  }
+
+  private Integer spaltenZahl(final String spalte) {
+    return jdbc.queryForObject(
+        "SELECT count(*) FROM information_schema.columns WHERE table_schema = 'public'"
+            + " AND table_name = 'eigene_angaben' AND column_name = ?",
+        Integer.class,
+        spalte);
+  }
+
+  private String nullbarkeit(final String spalte) {
+    return jdbc.queryForObject(
+        "SELECT is_nullable FROM information_schema.columns WHERE table_schema = 'public'"
+            + " AND table_name = 'eigene_angaben' AND column_name = ?",
+        String.class,
+        spalte);
   }
 }

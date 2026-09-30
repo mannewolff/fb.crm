@@ -43,7 +43,7 @@ class EigeneAngabenPflegenUseCaseTest {
 
   private static EigeneAngaben angaben(final String wert) {
     return new EigeneAngaben(
-        wert, new Anschrift(wert, wert, wert, wert), wert, wert, wert, wert, wert, wert);
+        wert, wert, new Anschrift(wert, wert, wert, wert), wert, wert, wert, wert, wert, wert);
   }
 
   private EigeneAngaben pflegeUndFange(final EigeneAngaben eingereicht) {
@@ -58,13 +58,14 @@ class EigeneAngabenPflegenUseCaseTest {
     final EigeneAngaben eingereicht =
         new EigeneAngaben(
             "Manfred Wolff",
+            "Freiberuflicher Softwareentwickler",
             new Anschrift("Am Wall 1", "28195", "Bremen", "Deutschland"),
             "manne@example.org",
             "0421 1234",
+            "https://mwolff.org",
             "75/123/45678",
             "DE123456789",
-            "DE02120300000000202051",
-            "Zahlbar innerhalb von 14 Tagen ohne Abzug.");
+            "DE02120300000000202051");
 
     // When
     final EigeneAngaben gespeichert = pflegeUndFange(eingereicht);

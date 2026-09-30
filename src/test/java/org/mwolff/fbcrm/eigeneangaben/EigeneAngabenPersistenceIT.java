@@ -6,6 +6,7 @@ import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mwolff.fbcrm.AbstractIntegrationTest;
@@ -42,7 +43,8 @@ class EigeneAngabenPersistenceIT extends AbstractIntegrationTest {
   private static final String MAIL = "manne@example.org";
   private static final String PASSWORT = "richtiges-passwort";
   private static final Instant ANGELEGT = Instant.parse("2026-09-01T08:00:00Z");
-  private static final String ZAHLUNGSBEDINGUNGEN = "Zahlbar innerhalb von 14 Tagen ohne Abzug.";
+  private static final String BERUFSBEZEICHNUNG = "Freiberuflicher Softwareentwickler";
+  private static final String WEBADRESSE = "https://mwolff.org";
 
   private final TestRestTemplate rest;
   private final AccountRepository accounts;
@@ -92,16 +94,17 @@ class EigeneAngabenPersistenceIT extends AbstractIntegrationTest {
   private static Map<String, Object> rumpf(final String wert) {
     final Map<String, Object> felder = new LinkedHashMap<>();
     felder.put("name", wert);
+    felder.put("berufsbezeichnung", wert);
     felder.put("strasse", wert);
     felder.put("plz", wert);
     felder.put("ort", wert);
     felder.put("land", wert);
     felder.put("email", wert);
     felder.put("telefon", wert);
+    felder.put("webadresse", wert);
     felder.put("steuernummer", wert);
     felder.put("umsatzsteuerId", wert);
     felder.put("bankverbindung", wert);
-    felder.put("zahlungsbedingungen", wert);
     return felder;
   }
 
@@ -119,7 +122,7 @@ class EigeneAngabenPersistenceIT extends AbstractIntegrationTest {
             + " OR plz IS NOT NULL OR ort IS NOT NULL OR land IS NOT NULL"
             + " OR email IS NOT NULL OR telefon IS NOT NULL OR steuernummer IS NOT NULL"
             + " OR umsatzsteuer_id IS NOT NULL OR bankverbindung IS NOT NULL"
-            + " OR zahlungsbedingungen IS NOT NULL",
+            + " OR berufsbezeichnung IS NOT NULL OR webadresse IS NOT NULL",
         Integer.class);
   }
 
@@ -132,7 +135,7 @@ class EigeneAngabenPersistenceIT extends AbstractIntegrationTest {
     assertThat(antwort)
         .isEqualTo(
             new EigeneAngabenResponse(
-                null, null, null, null, null, null, null, null, null, null, null));
+                null, null, null, null, null, null, null, null, null, null, null, null));
   }
 
   @Test
@@ -150,7 +153,8 @@ class EigeneAngabenPersistenceIT extends AbstractIntegrationTest {
     final Map<String, Object> felder = rumpf(null);
     felder.put("name", "Manfred Wolff");
     felder.put("ort", "Bremen");
-    felder.put("zahlungsbedingungen", ZAHLUNGSBEDINGUNGEN);
+    felder.put("berufsbezeichnung", BERUFSBEZEICHNUNG);
+    felder.put("webadresse", WEBADRESSE);
     gepflegt(felder);
 
     // When
@@ -161,8 +165,9 @@ class EigeneAngabenPersistenceIT extends AbstractIntegrationTest {
         .extracting(
             EigeneAngabenResponse::name,
             EigeneAngabenResponse::ort,
-            EigeneAngabenResponse::zahlungsbedingungen)
-        .containsExactly("Manfred Wolff", "Bremen", ZAHLUNGSBEDINGUNGEN);
+            EigeneAngabenResponse::berufsbezeichnung,
+            EigeneAngabenResponse::webadresse)
+        .containsExactly("Manfred Wolff", "Bremen", BERUFSBEZEICHNUNG, WEBADRESSE);
   }
 
   @Test
@@ -189,7 +194,7 @@ class EigeneAngabenPersistenceIT extends AbstractIntegrationTest {
     assertThat(gelesen())
         .isEqualTo(
             new EigeneAngabenResponse(
-                null, null, null, null, null, null, null, null, null, null, null));
+                null, null, null, null, null, null, null, null, null, null, null, null));
   }
 
   @Test
@@ -210,5 +215,26 @@ class EigeneAngabenPersistenceIT extends AbstractIntegrationTest {
     // Then
     assertThat(ruf(HttpMethod.PUT, rumpf("Wert"), String.class).getStatusCode())
         .isEqualTo(HttpStatus.UNAUTHORIZED);
+  }
+
+  @Test
+  void pflegen_givenPaddedNewFields_thenTheColumnsHoldThemTrimmed() {
+    // Given — E9: Leerraum am Rand gehoert nicht zur Angabe. Der Nachweis liest die Spalten
+    // direkt, weil die Schnittstelle den beschnittenen und den unbeschnittenen Wert gleich
+    // zurueckgaebe.
+    final Map<String, Object> felder = rumpf(null);
+    felder.put("berufsbezeichnung", "  " + BERUFSBEZEICHNUNG + "  ");
+    felder.put("webadresse", "  " + WEBADRESSE + "  ");
+
+    // When
+    gepflegt(felder);
+
+    // Then
+    assertThat(spalte("berufsbezeichnung")).isEqualTo(BERUFSBEZEICHNUNG);
+    assertThat(spalte("webadresse")).isEqualTo(WEBADRESSE);
+  }
+
+  private @Nullable String spalte(final String name) {
+    return jdbc.queryForObject("SELECT " + name + " FROM eigene_angaben", String.class);
   }
 }

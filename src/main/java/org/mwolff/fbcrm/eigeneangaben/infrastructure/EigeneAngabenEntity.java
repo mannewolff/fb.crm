@@ -28,6 +28,9 @@ class EigeneAngabenEntity {
   @Column(name = "name", length = 200)
   private @Nullable String name;
 
+  @Column(name = "berufsbezeichnung", length = 200)
+  private @Nullable String berufsbezeichnung;
+
   @Column(name = "strasse", length = 200)
   private @Nullable String strasse;
 
@@ -46,6 +49,9 @@ class EigeneAngabenEntity {
   @Column(name = "telefon", length = 50)
   private @Nullable String telefon;
 
+  @Column(name = "webadresse", length = 200)
+  private @Nullable String webadresse;
+
   @Column(name = "steuernummer", length = 50)
   private @Nullable String steuernummer;
 
@@ -54,9 +60,6 @@ class EigeneAngabenEntity {
 
   @Column(name = "bankverbindung", length = 200)
   private @Nullable String bankverbindung;
-
-  @Column(name = "zahlungsbedingungen", columnDefinition = "text")
-  private @Nullable String zahlungsbedingungen;
 
   @Column(name = "updated_at", nullable = false)
   private Instant updatedAt;
@@ -71,7 +74,7 @@ class EigeneAngabenEntity {
   }
 
   /*
-   * PMD.ExcessiveParameterList: Zwoelf Spalten ergeben zwoelf Parameter. Ein Zwischenobjekt zu
+   * PMD.ExcessiveParameterList: Dreizehn Spalten ergeben dreizehn Parameter. Ein Zwischenobjekt zu
    * bauen, nur um die Liste zu kuerzen, verschoebe die Zahl, ohne etwas zu klaeren: Die Zeile ist
    * die Zeile der Tabelle, und genau die uebersetzt JpaEigeneAngabenRepository in beide
    * Richtungen. Die Kennung steht nicht in der Liste — sie ist fest.
@@ -79,29 +82,31 @@ class EigeneAngabenEntity {
   @SuppressWarnings("PMD.ExcessiveParameterList")
   EigeneAngabenEntity(
       final @Nullable String name,
+      final @Nullable String berufsbezeichnung,
       final @Nullable String strasse,
       final @Nullable String plz,
       final @Nullable String ort,
       final @Nullable String land,
       final @Nullable String email,
       final @Nullable String telefon,
+      final @Nullable String webadresse,
       final @Nullable String steuernummer,
       final @Nullable String umsatzsteuerId,
       final @Nullable String bankverbindung,
-      final @Nullable String zahlungsbedingungen,
       final Instant updatedAt) {
     this.id = ZEILE;
     this.name = name;
+    this.berufsbezeichnung = berufsbezeichnung;
     this.strasse = strasse;
     this.plz = plz;
     this.ort = ort;
     this.land = land;
     this.email = email;
     this.telefon = telefon;
+    this.webadresse = webadresse;
     this.steuernummer = steuernummer;
     this.umsatzsteuerId = umsatzsteuerId;
     this.bankverbindung = bankverbindung;
-    this.zahlungsbedingungen = zahlungsbedingungen;
     this.updatedAt = updatedAt;
   }
 
@@ -111,6 +116,10 @@ class EigeneAngabenEntity {
 
   @Nullable String getName() {
     return name;
+  }
+
+  @Nullable String getBerufsbezeichnung() {
+    return berufsbezeichnung;
   }
 
   @Nullable String getStrasse() {
@@ -137,6 +146,10 @@ class EigeneAngabenEntity {
     return telefon;
   }
 
+  @Nullable String getWebadresse() {
+    return webadresse;
+  }
+
   @Nullable String getSteuernummer() {
     return steuernummer;
   }
@@ -147,10 +160,6 @@ class EigeneAngabenEntity {
 
   @Nullable String getBankverbindung() {
     return bankverbindung;
-  }
-
-  @Nullable String getZahlungsbedingungen() {
-    return zahlungsbedingungen;
   }
 
   Instant getUpdatedAt() {

@@ -9,7 +9,7 @@ import { objekt, textOderNull } from './verengen';
  * Netz kommt, ist `unknown`, bis es geprueft ist — kein `as`.
  *
  * **Ein Typ fuer beide Richtungen.** `EigeneAngabenRequest` und `EigeneAngabenResponse` tragen
- * dieselben elf Felder; die Antwort traegt nichts, was die Eingabe nicht traegt — weder eine
+ * dieselben zwoelf Felder; die Antwort traegt nichts, was die Eingabe nicht traegt — weder eine
  * Kennung noch den Zeitpunkt der letzten Aenderung. Ein zweiter, gleichlautender Typ waere eine
  * Abschrift, die beim ersten neuen Feld auseinanderlaeuft. Bei der Firma ist das anders: Dort
  * traegt die Antwort `id`, `aktiv` und die Ansprechpartner, die keine Eingabe sind.
@@ -24,16 +24,17 @@ import { objekt, textOderNull } from './verengen';
 /** Die eigenen Angaben — jedes Feld darf fehlen, dann steht dort `null`. */
 export interface EigeneAngaben {
   readonly name: string | null;
+  readonly berufsbezeichnung: string | null;
   readonly strasse: string | null;
   readonly plz: string | null;
   readonly ort: string | null;
   readonly land: string | null;
   readonly email: string | null;
   readonly telefon: string | null;
+  readonly webadresse: string | null;
   readonly steuernummer: string | null;
   readonly umsatzsteuerId: string | null;
   readonly bankverbindung: string | null;
-  readonly zahlungsbedingungen: string | null;
 }
 
 /** Verengt die Antwort oder scheitert. */
@@ -41,16 +42,17 @@ export function parseEigeneAngaben(wert: unknown): EigeneAngaben {
   const angaben = objekt(wert);
   return {
     name: textOderNull(angaben.name),
+    berufsbezeichnung: textOderNull(angaben.berufsbezeichnung),
     strasse: textOderNull(angaben.strasse),
     plz: textOderNull(angaben.plz),
     ort: textOderNull(angaben.ort),
     land: textOderNull(angaben.land),
     email: textOderNull(angaben.email),
     telefon: textOderNull(angaben.telefon),
+    webadresse: textOderNull(angaben.webadresse),
     steuernummer: textOderNull(angaben.steuernummer),
     umsatzsteuerId: textOderNull(angaben.umsatzsteuerId),
     bankverbindung: textOderNull(angaben.bankverbindung),
-    zahlungsbedingungen: textOderNull(angaben.zahlungsbedingungen),
   };
 }
 

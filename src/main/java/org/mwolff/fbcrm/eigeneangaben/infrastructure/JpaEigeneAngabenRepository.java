@@ -36,13 +36,14 @@ class JpaEigeneAngabenRepository implements EigeneAngabenRepository {
   private static EigeneAngaben toDomain(final EigeneAngabenEntity zeile) {
     return new EigeneAngaben(
         zeile.getName(),
+        zeile.getBerufsbezeichnung(),
         new Anschrift(zeile.getStrasse(), zeile.getPlz(), zeile.getOrt(), zeile.getLand()),
         zeile.getEmail(),
         zeile.getTelefon(),
+        zeile.getWebadresse(),
         zeile.getSteuernummer(),
         zeile.getUmsatzsteuerId(),
-        zeile.getBankverbindung(),
-        zeile.getZahlungsbedingungen());
+        zeile.getBankverbindung());
   }
 
   private static EigeneAngabenEntity toEntity(
@@ -50,16 +51,17 @@ class JpaEigeneAngabenRepository implements EigeneAngabenRepository {
     final Anschrift anschrift = angaben.anschrift();
     return new EigeneAngabenEntity(
         angaben.name(),
+        angaben.berufsbezeichnung(),
         anschrift.strasse(),
         anschrift.plz(),
         anschrift.ort(),
         anschrift.land(),
         angaben.email(),
         angaben.telefon(),
+        angaben.webadresse(),
         angaben.steuernummer(),
         angaben.umsatzsteuerId(),
         angaben.bankverbindung(),
-        angaben.zahlungsbedingungen(),
         geaendertAm);
   }
 }

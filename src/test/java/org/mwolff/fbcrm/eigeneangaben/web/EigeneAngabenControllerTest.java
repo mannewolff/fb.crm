@@ -34,7 +34,8 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 @ExtendWith(MockitoExtension.class)
 class EigeneAngabenControllerTest {
 
-  private static final String ZAHLUNGSBEDINGUNGEN = "Zahlbar innerhalb von 14 Tagen ohne Abzug.";
+  private static final String BERUFSBEZEICHNUNG = "Freiberuflicher Softwareentwickler";
+  private static final String WEBADRESSE = "https://mwolff.org";
 
   @Mock private EigeneAngabenLesenUseCase lesen;
   @Mock private EigeneAngabenPflegenUseCase pflegen;
@@ -56,22 +57,27 @@ class EigeneAngabenControllerTest {
   private static EigeneAngaben gepflegt() {
     return new EigeneAngaben(
         "Manfred Wolff",
+        BERUFSBEZEICHNUNG,
         new Anschrift("Am Wall 1", "28195", "Bremen", "Deutschland"),
         "manne@example.org",
         "0421 1234",
+        WEBADRESSE,
         "75/123/45678",
         "DE123456789",
-        "DE02120300000000202051",
-        ZAHLUNGSBEDINGUNGEN);
+        "DE02120300000000202051");
   }
 
   private static EigeneAngaben leer() {
     return new EigeneAngaben(
-        null, new Anschrift(null, null, null, null), null, null, null, null, null, null);
+        null, null, new Anschrift(null, null, null, null), null, null, null, null, null, null);
   }
 
   private static String rumpf(final String name) {
-    return "{\"name\":\"" + name + "\"}";
+    return feldRumpf("name", name);
+  }
+
+  private static String feldRumpf(final String feld, final String wert) {
+    return "{\"" + feld + "\":\"" + wert + "\"}";
   }
 
   @Test
@@ -87,16 +93,17 @@ class EigeneAngabenControllerTest {
         .isEqualTo(
             new EigeneAngabenResponse(
                 "Manfred Wolff",
+                BERUFSBEZEICHNUNG,
                 "Am Wall 1",
                 "28195",
                 "Bremen",
                 "Deutschland",
                 "manne@example.org",
                 "0421 1234",
+                WEBADRESSE,
                 "75/123/45678",
                 "DE123456789",
-                "DE02120300000000202051",
-                ZAHLUNGSBEDINGUNGEN));
+                "DE02120300000000202051"));
   }
 
   @Test
@@ -110,7 +117,8 @@ class EigeneAngabenControllerTest {
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.name").isEmpty())
         .andExpect(jsonPath("$.strasse").isEmpty())
-        .andExpect(jsonPath("$.zahlungsbedingungen").isEmpty());
+        .andExpect(jsonPath("$.berufsbezeichnung").isEmpty())
+        .andExpect(jsonPath("$.webadresse").isEmpty());
   }
 
   @Test
@@ -119,16 +127,17 @@ class EigeneAngabenControllerTest {
     controller.pflegen(
         new EigeneAngabenRequest(
             "Manfred Wolff",
+            BERUFSBEZEICHNUNG,
             "Am Wall 1",
             "28195",
             "Bremen",
             "Deutschland",
             "manne@example.org",
             "0421 1234",
+            WEBADRESSE,
             "75/123/45678",
             "DE123456789",
-            "DE02120300000000202051",
-            ZAHLUNGSBEDINGUNGEN));
+            "DE02120300000000202051"));
 
     // Then
     verify(pflegen).pflege(eingereichte.capture());
@@ -139,7 +148,8 @@ class EigeneAngabenControllerTest {
   void pflegen_givenAnEmptyBody_thenPassesAbsentValuesOn() {
     // When — jede Fachangabe darf fehlen.
     controller.pflegen(
-        new EigeneAngabenRequest(null, null, null, null, null, null, null, null, null, null, null));
+        new EigeneAngabenRequest(
+            null, null, null, null, null, null, null, null, null, null, null, null));
 
     // Then
     verify(pflegen).pflege(eingereichte.capture());
@@ -167,5 +177,29 @@ class EigeneAngabenControllerTest {
                 .content(rumpf("N".repeat(201))))
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.fieldErrors.name").isArray());
+  }
+
+  @Test
+  void pflegen_givenAnOverlongJobTitle_thenAnswersWithTheFieldError() throws Exception {
+    // When / Then — 200 Zeichen wie die Spalte (#160, Kriterium 29).
+    mockMvc
+        .perform(
+            put("/api/eigene-angaben")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(feldRumpf("berufsbezeichnung", "B".repeat(201))))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.fieldErrors.berufsbezeichnung").isArray());
+  }
+
+  @Test
+  void pflegen_givenAnOverlongWebAddress_thenAnswersWithTheFieldError() throws Exception {
+    // When / Then — 200 Zeichen wie die Spalte (#160, Kriterium 29).
+    mockMvc
+        .perform(
+            put("/api/eigene-angaben")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(feldRumpf("webadresse", "W".repeat(201))))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.fieldErrors.webadresse").isArray());
   }
 }

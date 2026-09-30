@@ -224,16 +224,17 @@ describe('App', () => {
       'GET /api/instance': json(200, { version: '0.1.3' }),
       'GET /api/eigene-angaben': json(200, {
         name: 'Manfred Wolff',
+        berufsbezeichnung: null,
         strasse: null,
         plz: null,
         ort: 'Bremen',
         land: 'Deutschland',
         email: null,
         telefon: null,
+        webadresse: null,
         steuernummer: null,
         umsatzsteuerId: null,
         bankverbindung: null,
-        zahlungsbedingungen: null,
       }),
     });
 
