@@ -16,6 +16,12 @@ import { RADIUS_MITTEL, RADIUS_RUND, ZAHLEN_KLASSE } from '../theme';
  * Absenden erst wieder herausgeben — oder beim Verschieben mitwandern lassen. Beides waere eine
  * zweite Wahrheit ueber dasselbe Angebot.
  *
+ * <b>Kennung und Schluessel werden mitgefuehrt, nicht bedient</b> (Plan #169): Jede Aenderung
+ * reicht die ganze Position weiter, und beide Angaben kommen unveraendert mit. Sie sind kein Feld
+ * und stehen nirgends auf der Seite — die Kennung sagt dem Server, welche Position gemeint ist,
+ * und der Schluessel sagt React, welche Zeile gemeint ist. Beides geht niemanden an, der ein
+ * Angebot schreibt.
+ *
  * <b>Menge und Preis stehen als Text.</b> Kein `type="number"`: Dessen Wert ist eine
  * Gleitkommazahl, und `lib/geld.ts` rechnet ausdruecklich nicht in Gleitkomma (E5). Der Text geht
  * durch {@link hundertstel} und damit durch dieselbe Pruefung, die auch das Absenden benutzt;
@@ -35,6 +41,24 @@ import { RADIUS_MITTEL, RADIUS_RUND, ZAHLEN_KLASSE } from '../theme';
 
 /** Eine Position, so wie sie in der Maske steht — Menge und Preis als Text des Feldes. */
 export interface Maskenposition {
+  /**
+   * Die Kennung der gespeicherten Position, oder `null` an einer noch nicht gespeicherten
+   * (Plan #169, E2).
+   *
+   * Sie ist kein Eingabefeld und steht nirgends auf der Seite — die Maske fuehrt sie nur mit und
+   * schickt sie beim Speichern zurueck, damit dieselbe Position fortgeschrieben statt neu
+   * angelegt wird.
+   */
+  readonly id: number | null;
+  /**
+   * Der Schluessel dieser Zeile in der Liste der Maske — dauerhaft, solange die Zeile lebt.
+   *
+   * Die Stelle in der Liste taugt nicht als Schluessel: Beim Umordnen und Loeschen wandert sie,
+   * und React wies der wandernden Zeile den Zustand ihres Nachbarn zu. Bei einer gespeicherten
+   * Position entsteht der Schluessel aus der Kennung, bei einer frischen vergibt ihn die Maske
+   * ({@link frischePosition}) — zwei frische Zeilen sind sonst nicht zu unterscheiden.
+   */
+  readonly schluessel: string;
   readonly bezeichnung: string;
   readonly abrechnungsmodus: Abrechnungsmodus;
   readonly menge: string;
@@ -64,21 +88,31 @@ const VORSCHLAG: Readonly<Record<Abrechnungsmodus, Einheit>> = {
 };
 
 /**
- * Eine frisch hinzugefuegte Zeile.
+ * Eine frisch hinzugefuegte Zeile unter dem uebergebenen Schluessel.
  *
  * Menge „1" und Preis „0" statt zweier leerer Felder: Beide Angaben sind Pflicht, und ein leeres
  * Feld waere von der ersten Sekunde an eine Meldung an einer Zeile, an der noch niemand etwas
  * falsch gemacht hat. Die Bezeichnung bleibt leer — sie ist der eine Text, den nur der Mensch
  * kennt, und was zum Versenden fehlt, nennt die Versandpruefung (E27).
+ *
+ * Eine Funktion und keine Konstante mehr, seit die Zeile einen Schluessel traegt: Zwei frische
+ * Zeilen desselben Angebots muessen sich unterscheiden, und eine Konstante gaebe beiden denselben.
+ * Den Schluessel vergibt die Maske und nicht diese Funktion — sie allein kennt die Zeilen, die es
+ * schon gibt.
  */
-export const FRISCHE_POSITION: Maskenposition = {
-  bezeichnung: '',
-  abrechnungsmodus: 'AUFWAND',
-  menge: '1',
-  einheit: 'PERSONENTAG',
-  einzelpreis: '0',
-  einheitVonHand: false,
-};
+export function frischePosition(schluessel: string): Maskenposition {
+  return {
+    // Ohne Kennung: Die entsteht erst, wenn der Server die Position anlegt (Plan #169, E2).
+    id: null,
+    schluessel,
+    bezeichnung: '',
+    abrechnungsmodus: 'AUFWAND',
+    menge: '1',
+    einheit: 'PERSONENTAG',
+    einzelpreis: '0',
+    einheitVonHand: false,
+  };
+}
 
 /** Was an einem Feld steht, dessen Zahl keine ist. */
 export const KEINE_ZAHL = 'Bitte eine Zahl mit höchstens zwei Nachkommastellen angeben.';

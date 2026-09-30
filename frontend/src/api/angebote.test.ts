@@ -16,6 +16,7 @@ import { fetchNachPfad, json } from '../test/fetchNachPfad';
 
 /** Eine Position, wie Jackson sie schreibt: Menge und Preis als Zahl mit zwei Stellen. */
 const POSITION = {
+  id: 3,
   bezeichnung: 'Konzeption',
   abrechnungsmodus: 'AUFWAND',
   menge: 2.5,
@@ -39,6 +40,7 @@ const ANGEBOT = {
 
 /** Dieselbe Position nach dem Verengen: Menge in Hundertsteln, Geld in Cent (E5). */
 const POSITION_VERENGT = {
+  id: 3,
   bezeichnung: 'Konzeption',
   abrechnungsmodus: 'AUFWAND',
   mengeInHundertsteln: 250,
@@ -73,11 +75,28 @@ const EINGABE = {
   beschreibung: 'Neue Website',
   positionen: [
     {
+      id: 3,
       bezeichnung: 'Konzeption',
       abrechnungsmodus: 'AUFWAND' as const,
       menge: '2.50',
       einheit: 'PERSONENTAG' as const,
       einzelpreis: '1000.01',
+    },
+  ],
+};
+
+/** Eine hinzugefuegte Position geht ohne Kennung hinaus (Plan #169, E2). */
+const EINGABE_MIT_NEUER_POSITION = {
+  ...EINGABE,
+  positionen: [
+    ...EINGABE.positionen,
+    {
+      id: null,
+      bezeichnung: 'Betreuung',
+      abrechnungsmodus: 'FESTPREIS' as const,
+      menge: '1.00',
+      einheit: 'PAUSCHAL' as const,
+      einzelpreis: '0.00',
     },
   ],
 };
@@ -148,6 +167,9 @@ describe('parseAngebot', () => {
     ['Summe als Zeichenkette', { ...ANGEBOT, summe: '2500.03' }],
     ['Summe mit drei Nachkommastellen', { ...ANGEBOT, summe: 2500.031 }],
     ['Position ist kein Objekt', { ...ANGEBOT, positionen: ['x'] }],
+    // Ohne Kennung waere die Position beim naechsten Speichern eine neue (Plan #169, E2).
+    ['Position ohne Kennung', { ...ANGEBOT, positionen: [{ ...POSITION, id: null }] }],
+    ['Position mit Kennung als Text', { ...ANGEBOT, positionen: [{ ...POSITION, id: '3' }] }],
     ['Position ohne Bezeichnung', { ...ANGEBOT, positionen: [{ ...POSITION, bezeichnung: null }] }],
     [
       'Position mit unbekanntem Modus',
@@ -305,6 +327,17 @@ describe('die Wege', () => {
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/angebote/9',
       expect.objectContaining({ method: 'PUT', body: JSON.stringify(EINGABE) }),
+    );
+  });
+
+  it('schickt die Kennung einer bestehenden Position mit und laesst sie an einer neuen leer', async () => {
+    const fetchMock = fetchNachPfad({ 'PUT /api/angebote/9': json(200, ANGEBOT) });
+
+    await angebotAendern(9, EINGABE_MIT_NEUER_POSITION);
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/angebote/9',
+      expect.objectContaining({ body: JSON.stringify(EINGABE_MIT_NEUER_POSITION) }),
     );
   });
 

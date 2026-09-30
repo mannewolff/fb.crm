@@ -37,6 +37,13 @@ import type { Angebotsstatus } from '../lib/angebotsstatus';
  * Hinaus gehen Menge und Preis als <b>Dezimaltext</b> („2.50"). Jackson liest daraus ein
  * `BigDecimal`; eine Gleitkommazahl im Rumpf waere die eine Umwandlung, die die Rechnung in
  * `lib/geld.ts` vermeidet.
+ *
+ * <b>Jede Position traegt eine Kennung</b> (Plan #169, E2). Sie kommt mit der Antwort herein und
+ * geht mit der Eingabe wieder hinaus: Wer sie mitschickt, sagt „dieselbe Position wie vorher"; wer
+ * sie weglaesst, legt eine neue an. Darum ist sie in {@link AngebotPosition} eine Zahl und in
+ * {@link PositionEingabe} eine Zahl oder `null` — herein kommt sie immer, hinaus nur, wenn es die
+ * Position schon gibt. Sie ist der Griff, an dem spaeter eine Rechnungsposition haengt (#160,
+ * Kriterium 28); ohne sie zaehlte jedes Speichern die Positionen als neu und loeschte die alten.
  */
 
 /** Wie eine Position abgerechnet wird (`Abrechnungsmodus` im Backend, Kriterium 4). */
@@ -47,6 +54,8 @@ export type Einheit = 'STUNDE' | 'PERSONENTAG' | 'PAUSCHAL';
 
 /** Eine Position des Angebots, wie die Ansicht sie zeigt (Kriterien 4, 5). */
 export interface AngebotPosition {
+  /** Die dauerhafte Kennung der Position (Issue #171). */
+  readonly id: number;
   readonly bezeichnung: string;
   readonly abrechnungsmodus: Abrechnungsmodus;
   /** Menge in ganzen Hundertsteln — „2,5 Personentage" sind 250. */
@@ -105,6 +114,8 @@ export interface FirmaAngebote {
 
 /** Eine Position, wie die Maske sie einreicht — die Felder von `AngebotPositionRequest`. */
 export interface PositionEingabe {
+  /** Die Kennung der fortzuschreibenden Position — `null` legt eine neue an (Plan #169, E2). */
+  readonly id: number | null;
   readonly bezeichnung: string;
   readonly abrechnungsmodus: Abrechnungsmodus;
   /** Menge als Dezimaltext mit Punkt — „2.50", nie eine Gleitkommazahl. */
@@ -148,6 +159,8 @@ function einheit(wert: unknown): Einheit {
 function parsePosition(wert: unknown): AngebotPosition {
   const position = objekt(wert);
   return {
+    // Eine gespeicherte Position ohne Kennung gibt es nicht; eine Antwort ohne sie ist keine.
+    id: zahl(position.id),
     bezeichnung: text(position.bezeichnung),
     abrechnungsmodus: abrechnungsmodus(position.abrechnungsmodus),
     mengeInHundertsteln: inHundertsteln(position.menge),

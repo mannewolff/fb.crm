@@ -3,11 +3,13 @@ import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
-import Positionsmaske, { FRISCHE_POSITION, betragDerPosition } from './Positionsmaske';
+import Positionsmaske, { betragDerPosition, frischePosition } from './Positionsmaske';
 import type { Maskenposition } from './Positionsmaske';
 import { renderMitTheme } from '../test/render';
 
 const POSITION: Maskenposition = {
+  id: 3,
+  schluessel: 'position-3',
   bezeichnung: 'Konzeption',
   abrechnungsmodus: 'AUFWAND',
   menge: '2,5',
@@ -71,6 +73,15 @@ describe('Positionsmaske — die Felder (Kriterium 4)', () => {
     expect(gruppe().getByRole('textbox', { name: 'Einzelpreis (netto)' })).toHaveValue('1000,01');
   });
 
+  it('zeigt die Kennung nirgends und macht kein Feld daraus (Plan #169)', () => {
+    renderMitTheme(<Halter />);
+
+    // Fuenf Felder, nicht sechs: Die Kennung wird mitgefuehrt, nicht bedient.
+    expect(gruppe().getAllByRole('textbox')).toHaveLength(3);
+    expect(gruppe().getAllByRole('combobox')).toHaveLength(2);
+    expect(gruppe().queryByText('3')).not.toBeInTheDocument();
+  });
+
   it('nennt die Einheiten als Wort und nicht als Schluessel (F7)', () => {
     renderMitTheme(<Halter />);
 
@@ -84,6 +95,35 @@ describe('Positionsmaske — die Felder (Kriterium 4)', () => {
         .getAllByRole('option')
         .map((wahl) => wahl.textContent),
     ).toEqual(['Aufwand', 'Festpreis']);
+  });
+});
+
+describe('Positionsmaske — die Kennung wandert mit (Plan #169)', () => {
+  it('reicht Kennung und Schluessel bei jeder Aenderung unveraendert weiter', async () => {
+    const nutzer = userEvent.setup();
+    const aendere = vi.fn();
+    renderMitTheme(
+      <Positionsmaske
+        nummer={1}
+        position={POSITION}
+        aendere={aendere}
+        loesche={vi.fn()}
+        nachOben={vi.fn()}
+        nachUnten={vi.fn()}
+        erste={false}
+        letzte={false}
+      />,
+    );
+
+    await nutzer.type(gruppe().getByRole('textbox', { name: 'Bezeichnung' }), 'X');
+    await nutzer.selectOptions(gruppe().getByRole('combobox', { name: 'Abrechnung' }), 'FESTPREIS');
+    await nutzer.selectOptions(gruppe().getByRole('combobox', { name: 'Einheit' }), 'STUNDE');
+
+    for (const [neu] of aendere.mock.calls as [Maskenposition][]) {
+      expect(neu.id).toBe(3);
+      expect(neu.schluessel).toBe('position-3');
+    }
+    expect(aendere).toHaveBeenCalledTimes(3);
   });
 });
 
@@ -232,9 +272,12 @@ describe('Positionsmaske — die Meldung an der Bezeichnung (Issue #127)', () =>
   });
 });
 
-describe('FRISCHE_POSITION und betragDerPosition', () => {
+describe('frischePosition und betragDerPosition', () => {
   it('startet eine neue Zeile ohne Text, mit Aufwand, Personentag und einem gueltigen Betrag', () => {
-    expect(FRISCHE_POSITION).toEqual({
+    expect(frischePosition('neu-1')).toEqual({
+      // Eine frische Zeile hat noch keine Kennung — sie entsteht erst beim Speichern (E2).
+      id: null,
+      schluessel: 'neu-1',
       bezeichnung: '',
       abrechnungsmodus: 'AUFWAND',
       menge: '1',
@@ -242,7 +285,11 @@ describe('FRISCHE_POSITION und betragDerPosition', () => {
       einzelpreis: '0',
       einheitVonHand: false,
     });
-    expect(betragDerPosition(FRISCHE_POSITION)).toBe(0);
+    expect(betragDerPosition(frischePosition('neu-1'))).toBe(0);
+  });
+
+  it('gibt jeder frischen Zeile den uebergebenen Schluessel', () => {
+    expect(frischePosition('neu-2').schluessel).toBe('neu-2');
   });
 
   it('gibt nichts heraus, wenn Menge oder Einzelpreis keine Zahl sind', () => {

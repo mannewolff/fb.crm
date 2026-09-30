@@ -9,6 +9,7 @@ import { fetchNachPfad, json, leer, problem } from '../test/fetchNachPfad';
 import { renderMitTheme } from '../test/render';
 
 const POSITION = {
+  id: 3,
   bezeichnung: 'Konzeption',
   abrechnungsmodus: 'AUFWAND',
   menge: 2.5,

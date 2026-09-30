@@ -3,7 +3,7 @@ import Box from '@mui/material/Box';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { IconPlus } from '@tabler/icons-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 
@@ -16,7 +16,7 @@ import Karte from '../components/Karte';
 import { useKopfPfad } from '../components/KopfPfad';
 import type { PfadVerweis } from '../components/KopfPfad';
 import KupferTaste from '../components/KupferTaste';
-import Positionsmaske, { FRISCHE_POSITION, betragDerPosition } from '../components/Positionsmaske';
+import Positionsmaske, { betragDerPosition, frischePosition } from '../components/Positionsmaske';
 import type { Maskenposition } from '../components/Positionsmaske';
 import WeicheTaste from '../components/WeicheTaste';
 import { feldMeldungen, nichtGefunden } from '../lib/apifehler';
@@ -40,6 +40,12 @@ import { ZAHLEN_KLASSE } from '../theme';
  * <b>Die Liste ist Zustand der Maske.</b> Hinzufuegen, Loeschen und Verschieben aendern nur die
  * Reihenfolge im Zustand; geschickt wird sie beim Speichern als Ganzes (E8). Ein Netzweg je Klick
  * machte aus einer Reihenfolgeaenderung eine Kette halbfertiger Zustaende.
+ *
+ * <b>Jede Zeile fuehrt die Kennung ihrer Position mit</b> (Plan #169, E2). Beim Laden kommt sie aus
+ * der Antwort, beim Hinzufuegen bleibt sie leer, beim Umordnen und Aendern wandert sie mit der
+ * Zeile, und beim Speichern geht sie hinaus. Erst dadurch schreibt ein Speichern die vorhandenen
+ * Positionen fort, statt sie zu loeschen und neu anzulegen — woran sonst keine Rechnungsposition
+ * haengenbleiben koennte (#160, Kriterium 28). Sichtbar ist sie nirgends.
  *
  * <b>Nach dem Speichern gilt die Antwort.</b> Der `PUT` gibt das Angebot mit den neu gerechneten
  * Betraegen zurueck, und die Maske uebernimmt es — Menge, Preis, Betrag und Summe stehen danach so
@@ -113,9 +119,16 @@ interface Texte {
 
 const LEERE_TEXTE: Texte = { angebotDatum: '', ansprechpartner: '', beschreibung: '' };
 
+/** Der Schluessel einer gespeicherten Zeile — er haengt an der Kennung, nicht an der Stelle. */
+function schluesselZu(id: number): string {
+  return `position-${String(id)}`;
+}
+
 /** Die Positionen der Antwort als Zeilen der Maske. */
 function alsZeilen(angebot: Angebot): readonly Maskenposition[] {
   return angebot.positionen.map((position) => ({
+    id: position.id,
+    schluessel: schluesselZu(position.id),
     bezeichnung: position.bezeichnung,
     abrechnungsmodus: position.abrechnungsmodus,
     menge: dezimal(position.mengeInHundertsteln, ','),
@@ -147,6 +160,9 @@ function oderNull(wert: string): string | null {
  *
  * Die Reihenfolge der Felder ist die von `AngebotPositionRequest`; die Reihenfolge der Liste ist
  * die gezeigte (E24).
+ *
+ * Die Kennung geht mit: Eine geladene Zeile schreibt damit dieselbe Position fort, eine frische
+ * schickt `null` und laesst eine neue entstehen (Plan #169, E2).
  */
 function alsEingabe(position: Maskenposition): PositionEingabe | null {
   const menge = hundertstel(position.menge);
@@ -155,6 +171,7 @@ function alsEingabe(position: Maskenposition): PositionEingabe | null {
     return null;
   }
   return {
+    id: position.id,
     bezeichnung: position.bezeichnung,
     abrechnungsmodus: position.abrechnungsmodus,
     menge: dezimal(menge, '.'),
@@ -270,6 +287,18 @@ export default function AngebotMaske() {
   const [fehler, setzeFehler] = useState<string | null>(null);
   const [gespeichert, setzeGespeichert] = useState(false);
   const [laeuft, setzeLaeuft] = useState(false);
+  /**
+   * Der Zaehler, aus dem die Schluessel frischer Zeilen entstehen.
+   *
+   * Ein `useRef` und kein Zustand: Der Wert veraendert die Anzeige nicht und darf kein Neuzeichnen
+   * ausloesen. Er zaehlt nur aufwaerts, auch ueber ein Speichern hinweg — ein zurueckgesetzter
+   * Zaehler vergaebe einen Schluessel erneut, den es in der Liste noch gibt.
+   */
+  const zaehler = useRef(0);
+  const naechsterSchluessel = () => {
+    zaehler.current += 1;
+    return `neu-${String(zaehler.current)}`;
+  };
   useKopfPfad(pfadZu(stand), bearbeiten ? 'Angebot bearbeiten' : 'Neues Angebot');
 
   useEffect(() => {
@@ -541,7 +570,7 @@ export default function AngebotMaske() {
         werkzeug={
           <WeicheTaste
             onClick={() => {
-              setzePositionen([...positionen, FRISCHE_POSITION]);
+              setzePositionen([...positionen, frischePosition(naechsterSchluessel())]);
             }}
             symbol={<IconPlus size={16} stroke={1.8} />}
           >
@@ -560,9 +589,10 @@ export default function AngebotMaske() {
           ) : (
             positionen.map((position, stelle) => (
               <Positionsmaske
-                // Die Stelle ist der Schluessel: Zwei frische Zeilen sind ohne Kennung nicht zu
-                // unterscheiden, und eine Kennung gibt es erst nach dem Speichern.
-                key={stelle}
+                // Der Schluessel der Zeile und nicht ihre Stelle: Beim Umordnen wandert die Stelle,
+                // und React gaebe der wandernden Zeile den Zustand ihres Nachbarn. Gespeicherte
+                // Zeilen tragen ihn aus ihrer Kennung, frische aus dem Zaehler der Maske.
+                key={position.schluessel}
                 nummer={stelle + 1}
                 position={position}
                 aendere={(neu) => {

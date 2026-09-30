@@ -11,6 +11,7 @@ import { renderMitTheme } from '../test/render';
 
 /** Eine Position, wie Jackson sie schreibt. */
 const POSITION = {
+  id: 3,
   bezeichnung: 'Konzeption',
   abrechnungsmodus: 'AUFWAND',
   menge: 2.5,
@@ -241,7 +242,33 @@ async function bereit() {
   return screen.findByLabelText(/^Angebotsdatum/);
 }
 
+/** Eine zweite gespeicherte Position — sie macht das Umordnen an den Kennungen ablesbar. */
+const BETREUUNG = {
+  id: 4,
+  bezeichnung: 'Betreuung',
+  abrechnungsmodus: 'FESTPREIS',
+  menge: 1,
+  einheit: 'PAUSCHAL',
+  einzelpreis: 500,
+  betrag: 500,
+};
+
+/**
+ * Die Kennungen der Positionen im zuletzt geschickten Rumpf, in der geschickten Reihenfolge.
+ *
+ * Steht als Helfer hier, weil drei Proben dieselbe Frage stellen: Der Rumpf ist ein Text, und
+ * dreimal dieselbe Zerlegung im Testkoerper verdeckte, worum es geht.
+ */
+function kennungenDesRumpfs(fetchMock: ReturnType<typeof fetchNachPfad>): (number | null)[] {
+  const letzter = fetchMock.mock.calls.at(-1);
+  const rumpf: unknown = JSON.parse(String((letzter?.[1] as { body?: string } | undefined)?.body));
+  return (rumpf as { positionen: { id: number | null }[] }).positionen.map(
+    (position) => position.id,
+  );
+}
+
 const KONZEPTION_EINGABE = {
+  id: 3,
   bezeichnung: 'Konzeption',
   abrechnungsmodus: 'AUFWAND',
   menge: '2.50',
@@ -435,6 +462,8 @@ describe('AngebotMaske — das Angebot bearbeiten (Issue #127, Kriterium 5)', ()
           beschreibung: 'Neue Website',
           positionen: [
             {
+              // Eine hinzugefuegte Position hat noch keine Kennung (Plan #169, E2).
+              id: null,
               bezeichnung: 'Betreuung',
               abrechnungsmodus: 'FESTPREIS',
               menge: '1.00',
@@ -446,6 +475,55 @@ describe('AngebotMaske — das Angebot bearbeiten (Issue #127, Kriterium 5)', ()
         }),
       }),
     );
+  });
+
+  it('schickt die Kennungen eines geladenen Angebots unveraendert hinaus (Plan #169)', async () => {
+    const nutzer = userEvent.setup();
+    const fetchMock = lesen(ANGEBOT, { 'PUT /api/angebote/9': json(200, ANGEBOT) });
+
+    renderMaske('/angebote/9/bearbeiten');
+    await bereit();
+    await nutzer.click(screen.getByRole('button', { name: 'Speichern' }));
+
+    await screen.findByRole('status');
+    expect(kennungenDesRumpfs(fetchMock)).toEqual([3]);
+  });
+
+  it('laesst die Kennung einer hinzugefuegten Position leer (Plan #169)', async () => {
+    const nutzer = userEvent.setup();
+    const fetchMock = lesen(ANGEBOT, { 'PUT /api/angebote/9': json(200, ANGEBOT) });
+
+    renderMaske('/angebote/9/bearbeiten');
+    await bereit();
+    await nutzer.click(screen.getByRole('button', { name: 'Position hinzufügen' }));
+    await nutzer.type(gruppe(2).getByRole('textbox', { name: 'Bezeichnung' }), 'Betreuung');
+    await nutzer.click(screen.getByRole('button', { name: 'Speichern' }));
+
+    await screen.findByRole('status');
+    expect(kennungenDesRumpfs(fetchMock)).toEqual([3, null]);
+  });
+
+  it('laesst die Kennung beim Umordnen mit ihrer Position wandern (Plan #169)', async () => {
+    const nutzer = userEvent.setup();
+    const zwei = {
+      ...ANGEBOT,
+      positionen: [POSITION, BETREUUNG],
+      summe: 3000.03,
+    };
+    const fetchMock = lesen(zwei, { 'PUT /api/angebote/9': json(200, zwei) });
+
+    renderMaske('/angebote/9/bearbeiten');
+    await bereit();
+    expect(gruppe(1).getByRole('textbox', { name: 'Bezeichnung' })).toHaveValue('Konzeption');
+
+    await nutzer.click(gruppe(2).getByRole('button', { name: 'Position 2 nach oben' }));
+    expect(gruppe(1).getByRole('textbox', { name: 'Bezeichnung' })).toHaveValue('Betreuung');
+
+    await nutzer.click(screen.getByRole('button', { name: 'Speichern' }));
+
+    await screen.findByRole('status');
+    // Nicht [3, 4]: Die Kennung haengt an der Position, nicht an der Stelle in der Liste.
+    expect(kennungenDesRumpfs(fetchMock)).toEqual([4, 3]);
   });
 
   it('schickt eine geleerte Beschreibung und keinen Ansprechpartner als „keine Angabe"', async () => {

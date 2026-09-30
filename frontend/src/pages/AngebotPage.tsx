@@ -275,10 +275,11 @@ export default function AngebotPage() {
               </Typography>
             ) : (
               <Tafel beschriftung="Positionen" spalten={[...SPALTEN]}>
-                {angebot.positionen.map((position, stelle) => (
-                  // Die Reihenfolge ist der Schluessel: Eine Position traegt keine eigene
-                  // Kennung, ihre Stelle in der Liste ist ihre Identitaet (E24).
-                  <Positionszeile key={stelle} position={position} />
+                {angebot.positionen.map((position) => (
+                  // Die Kennung ist der Schluessel: Seit Issue #171 traegt jede Position eine
+                  // eigene und bleibt ueber ein Speichern hinweg dieselbe. Die Reihenfolge der
+                  // Liste bleibt die gezeigte (E24) — sie ordnet, sie benennt nicht mehr.
+                  <Positionszeile key={position.id} position={position} />
                 ))}
               </Tafel>
             )}
