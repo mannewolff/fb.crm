@@ -3,6 +3,7 @@ package org.mwolff.fbcrm.rechnung.infrastructure;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.util.Comparator;
 import java.util.List;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
@@ -13,21 +14,21 @@ import org.apache.pdfbox.pdmodel.font.PDType1Font;
 import org.apache.pdfbox.pdmodel.font.Standard14Fonts;
 import org.mwolff.fbcrm.common.ExcludeFromJacocoGeneratedReport;
 import org.mwolff.fbcrm.rechnung.application.Belegdrucker;
-import org.mwolff.fbcrm.rechnung.application.Druckzeile;
-import org.mwolff.fbcrm.rechnung.application.Schrift;
+import org.mwolff.fbcrm.rechnung.application.Druckelement;
 import org.springframework.stereotype.Component;
 
 /**
  * Setzt den Port {@link Belegdrucker} auf Apache PDFBox um (E10).
  *
- * <p>Absichtlich duenn: Der Drucker entscheidet nichts ueber den Beleg, er schreibt die Zeilen weg,
- * die der Satz gerechnet hat. Was hier stehen bleibt, ist der Umgang mit der Bibliothek — Seiten
- * anlegen, Schrift setzen, Text ausgeben.
+ * <p>Absichtlich duenn: Der Drucker entscheidet nichts ueber den Beleg, er schreibt die Elemente
+ * weg, die der Satz gerechnet hat. Was hier stehen bleibt, ist das Dokument — Schriften einmal
+ * laden, Seiten anlegen, die Elemente einer Seite in ihrer Tiefe ordnen. Gezeichnet wird von {@link
+ * Seitenzeichner}.
  *
  * <p>Geschrieben wird mit Helvetica aus den 14 Standardschriften: keine Schriftdatei im Abbild,
  * kein Einbetten, und die Umlaute und das Eurozeichen des deutschen Belegs deckt ihre
- * WinAnsi-Kodierung ab. Die Gestaltung im eigenen Erscheinungsbild ist Nicht-Ziel der fachlichen
- * Quelle.
+ * WinAnsi-Kodierung ab (siehe {@link WinAnsiText}). Die Gestaltung im eigenen Erscheinungsbild ist
+ * Nicht-Ziel der fachlichen Quelle.
  */
 @Component
 class PdfBoxDrucker implements Belegdrucker {
@@ -40,23 +41,23 @@ class PdfBoxDrucker implements Belegdrucker {
    */
   @Override
   @ExcludeFromJacocoGeneratedReport
-  public byte[] drucke(final List<Druckzeile> zeilen) {
+  public byte[] drucke(final List<Druckelement> elemente) {
     try {
-      return geschrieben(zeilen);
+      return geschrieben(elemente);
     } catch (final IOException nichtErreichbar) {
       throw new UncheckedIOException("Das Beleg-PDF liess sich nicht schreiben.", nichtErreichbar);
     }
   }
 
-  private static byte[] geschrieben(final List<Druckzeile> zeilen) throws IOException {
+  private static byte[] geschrieben(final List<Druckelement> elemente) throws IOException {
     try (PDDocument dokument = new PDDocument()) {
-      // Einmal je Dokument und nicht je Zeile: Der erste Zugriff auf eine Standardschrift baut den
-      // Schriftzwischenspeicher von PDFBox auf, und das dauert.
+      // Einmal je Dokument und nicht je Element: Der erste Zugriff auf eine Standardschrift baut
+      // den Schriftzwischenspeicher von PDFBox auf, und das dauert.
       final PDFont normal = new PDType1Font(Standard14Fonts.FontName.HELVETICA);
       final PDFont fett = new PDType1Font(Standard14Fonts.FontName.HELVETICA_BOLD);
-      final int seiten = zeilen.stream().mapToInt(Druckzeile::seite).max().orElse(1);
+      final int seiten = elemente.stream().mapToInt(Druckelement::seite).max().orElse(1);
       for (int seite = 1; seite <= seiten; seite++) {
-        schreibeSeite(dokument, zeilenDerSeite(zeilen, seite), normal, fett);
+        schreibeSeite(dokument, elementeDerSeite(elemente, seite), normal, fett);
       }
       final ByteArrayOutputStream ausgabe = new ByteArrayOutputStream();
       dokument.save(ausgabe);
@@ -64,25 +65,39 @@ class PdfBoxDrucker implements Belegdrucker {
     }
   }
 
-  private static List<Druckzeile> zeilenDerSeite(final List<Druckzeile> zeilen, final int seite) {
-    return zeilen.stream().filter(zeile -> zeile.seite() == seite).toList();
+  /**
+   * Die Elemente der Seite in der Tiefe, in der sie gezeichnet werden: erst die Flaechen, dann die
+   * Linien, dann der Text. Andersherum deckte eine Flaeche zu, was unter ihr liegt. Innerhalb einer
+   * Art bleibt die Reihenfolge des Satzes erhalten, weil {@code sorted} stabil ist.
+   */
+  private static List<Druckelement> elementeDerSeite(
+      final List<Druckelement> elemente, final int seite) {
+    return elemente.stream()
+        .filter(element -> element.seite() == seite)
+        .sorted(Comparator.comparingInt(PdfBoxDrucker::tiefe))
+        .toList();
+  }
+
+  private static int tiefe(final Druckelement element) {
+    return switch (element) {
+      case Druckelement.Flaeche _ -> 0;
+      case Druckelement.Linie _ -> 1;
+      case Druckelement.Text _ -> 2;
+    };
   }
 
   private static void schreibeSeite(
       final PDDocument dokument,
-      final List<Druckzeile> zeilen,
+      final List<Druckelement> elemente,
       final PDFont normal,
       final PDFont fett)
       throws IOException {
     final PDPage blatt = new PDPage(PDRectangle.A4);
     dokument.addPage(blatt);
     try (PDPageContentStream inhalt = new PDPageContentStream(dokument, blatt)) {
-      for (final Druckzeile zeile : zeilen) {
-        inhalt.beginText();
-        inhalt.setFont(zeile.schrift() == Schrift.FETT ? fett : normal, zeile.groesse());
-        inhalt.newLineAtOffset(zeile.x(), zeile.y());
-        inhalt.showText(zeile.text());
-        inhalt.endText();
+      final Seitenzeichner zeichner = new Seitenzeichner(inhalt, normal, fett);
+      for (final Druckelement element : elemente) {
+        zeichner.zeichne(element);
       }
     }
   }

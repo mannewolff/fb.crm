@@ -13,10 +13,10 @@
  * <p>Zu normalisieren gibt es nichts, anders als bei {@code eigeneangaben.application}: Die Werte
  * der Einstellungen sind Zahlen, und das Muster ist bereits an der Schnittstelle geprueft.
  *
- * <p>Hier liegt auch die Sprache des Belegdrucks: die {@code Druckzeile} mit ihrer {@code Schrift}
- * und der Port {@code Belegdrucker}, der eine Zeilenfolge als PDF wegschreibt. Sie gehoert in diese
- * Schicht und nicht in {@code domain} — der Satz eines Belegs ist kein Begriff des Geschaefts,
- * sondern eine Rechnung ueber dessen Daten.
+ * <p>Hier liegt auch die Sprache des Belegdrucks: das {@code Druckelement} — Text, Linie, Flaeche —
+ * mit {@code Schrift}, {@code Farbe} und {@code Ausrichtung} und der Port {@code Belegdrucker}, der
+ * eine Elementfolge als PDF wegschreibt. Sie gehoert in diese Schicht und nicht in {@code domain} —
+ * der Satz eines Belegs ist kein Begriff des Geschaefts, sondern eine Rechnung ueber dessen Daten.
  */
 @NullMarked
 package org.mwolff.fbcrm.rechnung.application;

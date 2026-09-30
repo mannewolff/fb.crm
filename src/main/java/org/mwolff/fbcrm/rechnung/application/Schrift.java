@@ -1,7 +1,7 @@
 package org.mwolff.fbcrm.rechnung.application;
 
 /**
- * Der Schnitt, in dem eine Druckzeile gesetzt wird.
+ * Der Schnitt, in dem ein Text des Belegs gesetzt wird.
  *
  * <p>Zwei Werte genuegen dem schlichten Beleg aus E10: der Lauftext und die Hervorhebung von Titel,
  * Spaltenkopf und Summe. Welche Schriftfamilie daraus wird, entscheidet der Drucker — das Layout

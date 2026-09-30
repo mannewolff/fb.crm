@@ -7,8 +7,8 @@ import java.util.List;
  * spricht PDFBox (E10).
  *
  * <p>Der Port steht in diesem Paket und nicht in {@code domain}, weil hier seine Sprache liegt: Er
- * nimmt die {@link Druckzeile}n, die der Satz des Belegs rechnet, und ein Satz gehoert nicht in das
- * Domaenenmodell. Die Richtung bleibt dabei die von CLAUDE-java.md §6.1 verlangte — der Adapter
+ * nimmt die {@link Druckelement}e, die der Satz des Belegs rechnet, und ein Satz gehoert nicht in
+ * das Domaenenmodell. Die Richtung bleibt dabei die von CLAUDE-java.md §6.1 verlangte — der Adapter
  * kennt die Anwendungsschicht, nicht umgekehrt: Kein Anwendungsfall nennt {@code PdfBoxDrucker}.
  *
  * <p>Eine Rechnung kennt der Drucker nicht. Was auf dem Beleg steht, hat der Satz entschieden; hier
@@ -26,10 +26,11 @@ import java.util.List;
 public interface Belegdrucker {
 
   /**
-   * Schreibt die Zeilenfolge als PDF.
+   * Schreibt die Elementfolge als PDF.
    *
-   * @param zeilen die gesetzten Zeilen, Seite fuer Seite
+   * @param elemente die gesetzten Elemente, Seite fuer Seite; die Reihenfolge innerhalb einer Art
+   *     bleibt erhalten, die Arten zeichnet der Drucker in der Tiefe Flaeche, Linie, Text
    * @return das vollstaendige PDF als Bytefolge
    */
-  byte[] drucke(List<Druckzeile> zeilen);
+  byte[] drucke(List<Druckelement> elemente);
 }
