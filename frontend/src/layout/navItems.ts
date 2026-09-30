@@ -8,8 +8,9 @@
  * (Issue #126). Welche Bloecke dazukommen, entsteht mit den Fachplaenen.
  *
  * Im Fuss stehen „Administration" und „Dokumentation" als eigene Gruppe ueber der Nutzerkarte
- * (E7). „Einklappen" steht nicht mehr darunter: Es ist eine Icontaste neben der Marke geworden
- * und damit kein Ziel der Navigation mehr.
+ * (E7). „Administration" traegt heute den Bereich „Rechnung" — Nummernmuster, naechste Nummer,
+ * Steuersatz und Zahlungsziel (Issue #166). „Einklappen" steht nicht mehr darunter: Es ist eine
+ * Icontaste neben der Marke geworden und damit kein Ziel der Navigation mehr.
  *
  * Die <b>Symbolnamen sind die der Symbolfamilie Tabler</b> (E3) — dieselbe, die die Vorlage
  * benutzt. {@link NavRail} loest sie in Komponenten auf; hier bleibt es bei Namen, damit diese

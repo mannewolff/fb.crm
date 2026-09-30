@@ -246,4 +246,35 @@ describe('App', () => {
     ).toBeInTheDocument();
     expect(screen.getByRole('navigation', { name: 'Hauptnavigation' })).toBeInTheDocument();
   });
+
+  it('fuehrt „/administration“ ohne Sitzung auf die Anmeldeseite', async () => {
+    ohneSitzung();
+
+    renderApp(['/administration'], 0);
+
+    expect(await screen.findByLabelText(/^E-Mail-Adresse/)).toBeInTheDocument();
+  });
+
+  it('zeigt „/administration“ mit Sitzung im Rahmen — nachgeladen, nicht im ersten Rutsch', async () => {
+    fensterbreite(1440);
+    fetchNachPfad({
+      'GET /api/auth/me': json(200, KONTO),
+      'GET /api/instance': json(200, { version: '0.1.3' }),
+      'GET /api/rechnung/einstellungen': json(200, {
+        nummerMuster: '{NNNN}-{JJJJ}',
+        naechsteNummer: 1,
+        steuersatz: 19,
+        zahlungszielTage: 10,
+      }),
+    });
+
+    renderApp(['/administration'], 0);
+
+    // Lazy und geschuetzt: Beim ersten Rendern steht erst die Sitzungspruefung da.
+    expect(screen.getByRole('status')).toHaveTextContent('Sitzung wird geprüft');
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Administration' }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('navigation', { name: 'Hauptnavigation' })).toBeInTheDocument();
+  });
 });

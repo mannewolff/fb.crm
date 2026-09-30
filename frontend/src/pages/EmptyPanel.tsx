@@ -8,14 +8,14 @@ import { RADIUS_MITTEL } from '../theme';
 /**
  * Der leere Zustand der Bereiche, in die noch keine Fachlichkeit eingezogen ist.
  *
- * Er dient `/`, `/administration` und `/dokumentation`. **Eine Einladung, keine Entschuldigung**
+ * Er dient `/` und `/dokumentation`. **Eine Einladung, keine Entschuldigung**
  * (CLAUDE-design.md, „Zustandsformen"): Symbol auf einer Toenung und ein Satz — keine Meldung ueber
  * fehlende Daten und keine Stoerung, denn es ist keine.
  *
  * Eine Taste traegt er nicht, obwohl die Designquelle sie beim leeren Zustand nennt: Es gibt hier
  * nichts anzulegen. Eine Taste ohne Ziel waere ein Bedienelement ohne Anlass (Plan A3).
  *
- * Eine Ueberschrift traegt er auch nicht — „Administration" stuende fuer etwas, das es noch nicht
+ * Eine Ueberschrift traegt er auch nicht — „Dokumentation" stuende fuer etwas, das es noch nicht
  * gibt.
  */
 
