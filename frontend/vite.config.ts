@@ -28,6 +28,12 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.ts'],
+    env: {
+      // Der Testlauf sieht auf jedem Rechner dieselbe Zone (Plan #141, E9). `zeitpunktWort`
+      // setzt einen Zeitstempel in der Ortszeit des Betrachters — ohne feste Zone haengt die
+      // Erwartung an der Einstellung des Rechners und ein Lauf in UTC waere rot.
+      TZ: 'Europe/Berlin',
+    },
     css: false,
     // Die Release-Skripte unter ../scripts sind JavaScript und laufen hier mit: Im
     // Repository gibt es genau eine Node-Werkzeugkette, und ein zweiter Wurzel-Kontext mit
