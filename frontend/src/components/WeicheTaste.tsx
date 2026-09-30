@@ -31,8 +31,15 @@ export interface WeicheTasteProps {
   readonly symbol?: ReactNode;
 }
 
-/** Die Gestalt der weichen Taste, geteilt von beiden Varianten. */
-function weichSx(theme: Theme) {
+/**
+ * Die Gestalt der weichen Taste, geteilt von beiden Varianten.
+ *
+ * Sie ist ausgewiesen, weil eine dritte Stelle dieselbe Pille braucht, die diese Komponente nicht
+ * bauen kann: das „Herunterladen" im {@link AnlageVorschau} ist ein `<a download>` auf einen Weg
+ * der Schnittstelle, kein Router-Link und kein Schalter. Eine Abschrift der Gestalt dort liefe beim
+ * naechsten Nachziehen der Vorlage auseinander.
+ */
+export function weichSx(theme: Theme) {
   return {
     borderRadius: `${RADIUS_RUND}px`,
     padding: '11px 20px',

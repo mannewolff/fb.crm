@@ -1,6 +1,6 @@
 import { fireEvent, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import Anlagen from './Anlagen';
 import { MAX_UPLOAD_BYTE } from '../lib/dateigroesse';
@@ -31,6 +31,15 @@ const ALTE = {
   groesse: 500,
   vorschauArt: 'PNG',
   createdAt: '2026-09-28T08:30:00Z',
+};
+
+/** Eine Anlage ohne Vorschauart — zu ihr gibt es nur „Herunterladen" (Kriterium 15). */
+const TABELLE = {
+  id: 3,
+  dateiName: 'Kalkulation.xlsx',
+  groesse: 4096,
+  vorschauArt: null,
+  createdAt: '2026-09-29T09:00:00Z',
 };
 
 const NEUE_WORT = '30.09.2026, 14:05';
@@ -90,14 +99,44 @@ function angehalten(antwort: () => Response) {
   };
 }
 
+/**
+ * Das Doppel fuer die Objekt-URL, die das Vorschaufenster anlegt (jsdom kennt beides nicht).
+ *
+ * Der Bereich selbst legt keine an; er oeffnet nur das Fenster. Ohne das Doppel scheiterte darum
+ * jede Probe, die „Anzeigen" anstoesst, an einer Stelle, die mit ihrem Fall nichts zu tun hat.
+ */
+function objektUrlDoppel() {
+  const erzeuge = vi.fn<(objekt: Blob) => string>(() => 'blob:fbcrm/vorschau');
+  const gebeFrei = vi.fn<(url: string) => void>();
+  Object.defineProperty(URL, 'createObjectURL', { value: erzeuge, configurable: true });
+  Object.defineProperty(URL, 'revokeObjectURL', { value: gebeFrei, configurable: true });
+  return { erzeuge, gebeFrei };
+}
+
+let objektUrl: ReturnType<typeof objektUrlDoppel>;
+
 /** Oeffnet das ⋯-Menue einer Anlage und waehlt einen Eintrag. */
 async function waehle(nutzer: Nutzer, dateiName: string, eintrag: string) {
   await nutzer.click(screen.getByRole('button', { name: `Aktionen für ${dateiName}` }));
   await nutzer.click(await screen.findByRole('menuitem', { name: eintrag }));
 }
 
+beforeEach(() => {
+  objektUrl = objektUrlDoppel();
+});
+
 afterEach(() => {
   vi.restoreAllMocks();
+});
+
+/**
+ * Abgeraeumt wird erst am Ende der Datei, nicht nach jeder Probe: Das `cleanup` aus dem
+ * Vitest-Setup baut die Ansicht in seinem eigenen `afterEach` ab, und dabei gibt das Fenster seine
+ * Objekt-URL frei. Ein vorher entfernter `revokeObjectURL` liesse genau diesen Abbau scheitern.
+ */
+afterAll(() => {
+  Reflect.deleteProperty(URL, 'createObjectURL');
+  Reflect.deleteProperty(URL, 'revokeObjectURL');
 });
 
 describe('Anlagen — was der Bereich zeigt (Kriterien 1, 4, 11)', () => {
@@ -376,5 +415,48 @@ describe('Anlagen — loeschen (Kriterien 9, 10)', () => {
 
     expect(await screen.findByText(AUSFALL_LOESCHEN)).toBeInTheDocument();
     expect(screen.getByTestId('anlage')).toBeInTheDocument();
+  });
+});
+
+describe('Anlagen — anzeigen (Kriterium 15)', () => {
+  it('bietet „Anzeigen" nur bei einer Anlage mit Vorschauart', async () => {
+    fetchNachPfad({ [`GET ${WEG}`]: json(200, { anlagen: [ALTE, TABELLE] }) });
+
+    renderBereich();
+    await screen.findAllByTestId('anlage');
+
+    expect(
+      screen.getByRole('button', { name: `Anzeigen: ${ALTE.dateiName}` }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: `Anzeigen: ${TABELLE.dateiName}` }),
+    ).not.toBeInTheDocument();
+    // Herunterladen gibt es zu jeder Anlage.
+    expect(
+      screen.getByRole('link', { name: `Herunterladen: ${TABELLE.dateiName}` }),
+    ).toBeInTheDocument();
+  });
+
+  it('oeffnet die Vorschau und gibt den Fokus danach an die Taste zurueck', async () => {
+    const nutzer = userEvent.setup();
+    fetchNachPfad({
+      [`GET ${WEG}`]: json(200, { anlagen: [ALTE] }),
+      [`GET ${WEG}/1/inhalt`]: () =>
+        new Response('inhalt', { status: 200, headers: { 'Content-Type': 'image/png' } }),
+    });
+
+    renderBereich();
+    await screen.findByText(ALTE.dateiName);
+    const taste = screen.getByRole('button', { name: `Anzeigen: ${ALTE.dateiName}` });
+    await nutzer.click(taste);
+
+    const fenster = await screen.findByRole('dialog');
+    expect(fenster).toHaveAccessibleName(ALTE.dateiName);
+
+    await nutzer.click(within(fenster).getByRole('button', { name: 'Schließen' }));
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(taste).toHaveFocus();
+    expect(objektUrl.gebeFrei).toHaveBeenCalledWith('blob:fbcrm/vorschau');
   });
 });

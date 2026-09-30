@@ -1,7 +1,7 @@
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
-import { IconDownload, IconTrash, IconUpload } from '@tabler/icons-react';
+import { IconDownload, IconEye, IconTrash, IconUpload } from '@tabler/icons-react';
 import { useEffect, useState } from 'react';
 import type { ChangeEvent, ReactNode } from 'react';
 
@@ -14,6 +14,8 @@ import { meldungAm } from '../lib/feldmeldung';
 import { zeitpunktWort } from '../lib/zeitpunkt';
 import { RADIUS_KLEIN, RADIUS_RUND, ZAHLEN_KLASSE } from '../theme';
 import AktionsMenue from './AktionsMenue';
+import AnlageVorschau from './AnlageVorschau';
+import type { AnlageMitVorschau } from './AnlageVorschau';
 import Karte from './Karte';
 import WeicheTaste from './WeicheTaste';
 
@@ -45,6 +47,14 @@ import WeicheTaste from './WeicheTaste';
  *
  * <b>Loeschen steht im ⋯-Menue</b> und fragt vorher nach (Kriterium 10). Der Dateiname geht als
  * Text in die Zeile; er kommt von aussen und wird nie als HTML gesetzt.
+ *
+ * <b>„Anzeigen" gibt es nur zu einer Anlage mit Vorschauart</b> (Kriterium 15). Woran die Anwendung
+ * sie erkennt, entscheidet allein das Backend am Inhalt; die Oberflaeche liest das Ergebnis und
+ * raet nicht am Dateinamen nach. Zu einer Tabelle steht darum nur „Herunterladen" — eine Taste, die
+ * ein Fenster mit einer leeren Flaeche oeffnete, waere ein Versprechen ohne Deckung.
+ *
+ * <b>Das Fenster wird beim Schliessen abgebaut</b> und nicht bloss zugeklappt: Daran haengt die
+ * Freigabe der Objekt-URL ({@link AnlageVorschau}).
  */
 
 export interface AnlagenProps {
@@ -112,6 +122,18 @@ async function laden(angebotId: number): Promise<readonly Anlage[] | null> {
   }
 }
 
+/**
+ * Die Anlage mit belegter Vorschauart, oder `null`, wenn es zu ihr keine Vorschau gibt.
+ *
+ * Die Verengung steht hier und nicht im Fenster: So gibt es „Anzeigen" und das Fenster genau zu
+ * denselben Anlagen, und {@link AnlageVorschau} braucht keinen Zweig fuer einen Fall, den es nicht
+ * gibt (Kriterium 15).
+ */
+function mitVorschau(anlage: Anlage): AnlageMitVorschau | null {
+  const { vorschauArt } = anlage;
+  return vorschauArt === null ? null : { ...anlage, vorschauArt };
+}
+
 /** Die Meldung zur gewaehlten Datei, wenn sie so nicht hinausgehen darf (Kriterien 5, 6). */
 function vorpruefung(datei: File): string | null {
   if (datei.size === 0) {
@@ -128,6 +150,7 @@ export default function Anlagen({ angebotId }: AnlagenProps) {
   // Das Dateifeld als Zustand und nicht als `useRef`: Die Taste steht erst, wenn es das Feld gibt,
   // auf das sie klickt — dasselbe Muster wie der Anker in {@link AktionsMenue}.
   const [feld, setzeFeld] = useState<HTMLInputElement | null>(null);
+  const [vorschau, setzeVorschau] = useState<AnlageMitVorschau | null>(null);
 
   useEffect(() => {
     let aktuell = true;
@@ -195,8 +218,12 @@ export default function Anlagen({ angebotId }: AnlagenProps) {
     }
   };
 
-  /** Eine Zeile: Name, Groesse, Zeitpunkt, der Weg zum Inhalt und das ⋯-Menue (Kriterien 1, 4, 9). */
+  /**
+   * Eine Zeile: Name, Groesse, Zeitpunkt, Anzeigen, der Weg zum Inhalt und das ⋯-Menue
+   * (Kriterien 1, 4, 9, 15).
+   */
   function zeileZu(anlage: Anlage): ReactNode {
+    const zeigbar = mitVorschau(anlage);
     return (
       <Box
         key={anlage.id}
@@ -239,6 +266,35 @@ export default function Anlagen({ angebotId }: AnlagenProps) {
         >
           {zeitpunktWort(anlage.createdAt)}
         </Typography>
+        {zeigbar === null ? null : (
+          <Box
+            component="button"
+            type="button"
+            aria-label={`Anzeigen: ${anlage.dateiName}`}
+            onClick={() => {
+              setzeVorschau(zeigbar);
+            }}
+            sx={(theme) => ({
+              width: ICONTASTE,
+              height: ICONTASTE,
+              flex: 'none',
+              borderRadius: `${RADIUS_RUND}px`,
+              border: 0,
+              cursor: 'pointer',
+              display: 'grid',
+              placeItems: 'center',
+              color: theme.vars.palette.kupferwolke.textMatt,
+              background: theme.vars.palette.kupferwolke.flaeche,
+              transition: 'background .15s ease, color .15s ease',
+              '&:hover': {
+                background: theme.vars.palette.kupferwolke.toenung.pfirsich.flaeche,
+                color: theme.vars.palette.kupferwolke.toenung.pfirsich.schrift,
+              },
+            })}
+          >
+            <IconEye size={18} stroke={1.8} aria-hidden />
+          </Box>
+        )}
         <Box
           component="a"
           href={anlageInhaltPfad(angebotId, anlage.id)}
@@ -345,6 +401,15 @@ export default function Anlagen({ angebotId }: AnlagenProps) {
         {meldung === null ? null : <Alert severity="error">{meldung}</Alert>}
         {bestand}
       </Box>
+      {vorschau === null ? null : (
+        <AnlageVorschau
+          angebotId={angebotId}
+          anlage={vorschau}
+          onSchliessen={() => {
+            setzeVorschau(null);
+          }}
+        />
+      )}
     </Karte>
   );
 }
