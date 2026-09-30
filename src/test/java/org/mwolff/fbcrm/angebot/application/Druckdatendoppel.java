@@ -89,6 +89,7 @@ public final class Druckdatendoppel {
         .mapToObj(
             nummer ->
                 new Angebotsposition(
+                    null,
                     "Posten %02d".formatted(nummer),
                     Abrechnungsmodus.FESTPREIS,
                     BigDecimal.ONE,

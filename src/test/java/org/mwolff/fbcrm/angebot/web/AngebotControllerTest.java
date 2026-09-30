@@ -31,6 +31,7 @@ import org.mwolff.fbcrm.angebot.application.AngebotStatusUseCase;
 import org.mwolff.fbcrm.angebot.application.AnsprechpartnerNichtWaehlbar;
 import org.mwolff.fbcrm.angebot.application.Kundenangaben;
 import org.mwolff.fbcrm.angebot.application.KundenangabenUseCase;
+import org.mwolff.fbcrm.angebot.application.PositionenNichtWaehlbar;
 import org.mwolff.fbcrm.angebot.application.StatusGrenzeErreicht;
 import org.mwolff.fbcrm.angebot.domain.Angebot;
 import org.mwolff.fbcrm.angebot.domain.Angebotsposition;
@@ -53,6 +54,10 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
  * betrag}, obwohl keiner davon in einer Spalte steht —, die Namen des Kunden, die Pruefung der
  * Anfrage und die Statuscodes: {@code PUT} und die beiden Statuswege antworten 200 mit dem neuen
  * Stand, das Ende der Reihe ist 409, ein nicht waehlbarer Ansprechpartner 422.
+ *
+ * <p>Dazu die dauerhafte Kennung der Position (Plan #169, E2): Die Antwort traegt sie je Position,
+ * die Anfrage darf sie mitschicken oder weglassen, und eine Kennung, die nicht zu diesem Angebot
+ * gehoert, ist ebenfalls 422 — mit der Meldung am Feld {@code positionen}.
  */
 @ExtendWith(MockitoExtension.class)
 class AngebotControllerTest {
@@ -61,8 +66,14 @@ class AngebotControllerTest {
   private static final LocalDate ANGEBOTSDATUM = LocalDate.of(2026, 9, 20);
   private static final Instant ANGELEGT = Instant.parse("2026-09-20T08:00:00Z");
 
+  /**
+   * Die Kennung der Position — dauerhaft und darum Teil von Antwort und Anfrage (Plan #169, E2).
+   */
+  private static final Long POSITION = Long.valueOf(42L);
+
   private static final Angebotsposition KONZEPTION =
       new Angebotsposition(
+          POSITION,
           "Konzeption",
           Abrechnungsmodus.AUFWAND,
           new BigDecimal("2.50"),
@@ -72,7 +83,7 @@ class AngebotControllerTest {
   private static final String RUMPF =
       """
       {"angebotDatum":"2026-09-25","ansprechpartnerId":9,"beschreibung":"Neu",
-       "positionen":[{"bezeichnung":"Konzeption","abrechnungsmodus":"AUFWAND","menge":"2.50",
+       "positionen":[{"id":42,"bezeichnung":"Konzeption","abrechnungsmodus":"AUFWAND","menge":"2.50",
                       "einheit":"PERSONENTAG","einzelpreis":"1000.01"}]}
       """;
 
@@ -138,6 +149,61 @@ class AngebotControllerTest {
   }
 
   @Test
+  void lesen_thenAnswersWithTheLastingIdOfEveryPosition() throws Exception {
+    // Given — Plan #169, E2: Ohne die Kennung in der Antwort hat die Maske keinen Griff, mit dem
+    // sie dieselbe Position zurueckschickt, statt sie neu anzulegen.
+    when(lesen.lese(ANGEBOT)).thenReturn(angebot(Angebotsstatus.ANGELEGT));
+
+    // When / Then
+    mockMvc
+        .perform(get("/api/angebote/{id}", Long.valueOf(ANGEBOT)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.positionen[0].id").value(POSITION));
+  }
+
+  @Test
+  void aendern_withAPositionWithoutAnId_thenPassesItOnAsANewOne() throws Exception {
+    // Given — die Kennung ist freiwillig; ohne sie ist die Position neu.
+    aendernAntwortet();
+    final String ohneKennung =
+        """
+        {"angebotDatum":"2026-09-25","positionen":[{"bezeichnung":"Konzeption",
+          "abrechnungsmodus":"AUFWAND","menge":"2.50","einheit":"PERSONENTAG",
+          "einzelpreis":"1000.01"}]}
+        """;
+
+    // When
+    mockMvc
+        .perform(
+            put("/api/angebote/{id}", Long.valueOf(ANGEBOT))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(ohneKennung))
+        .andExpect(status().isOk());
+
+    // Then
+    assertThat(daten.getValue().positionen())
+        .singleElement()
+        .satisfies(position -> assertThat(position.id()).isNull());
+  }
+
+  @Test
+  void aendern_withAPositionOfAnotherAngebot_thenAnswers422() throws Exception {
+    // Given — Plan #169, E2: Gueltig sind nur die Kennungen der Positionen dieses Angebots.
+    when(aendern.aendere(eq(ANGEBOT), daten.capture())).thenThrow(new PositionenNichtWaehlbar());
+
+    // When / Then
+    mockMvc
+        .perform(
+            put("/api/angebote/{id}", Long.valueOf(ANGEBOT))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(RUMPF))
+        .andExpect(status().isUnprocessableEntity())
+        .andExpect(
+            jsonPath("$.fieldErrors.positionen[0]")
+                .value("Die eingereichten Positionen passen nicht zu diesem Angebot."));
+  }
+
+  @Test
   void lesen_whenTheAngebotIsUnknown_thenAnswers404() throws Exception {
     // Given
     when(lesen.lese(ANGEBOT)).thenThrow(new AngebotNichtGefunden());
@@ -182,6 +248,8 @@ class AngebotControllerTest {
     assertThat(uebergeben.angebotDatum()).isEqualTo(LocalDate.of(2026, 9, 25));
     assertThat(uebergeben.ansprechpartnerId()).isEqualTo(9L);
     assertThat(uebergeben.beschreibung()).isEqualTo("Neu");
+    // Die Kennung der Position kommt mit durch: KONZEPTION traegt sie, und der Record vergleicht
+    // sie.
     assertThat(uebergeben.positionen()).containsExactly(KONZEPTION);
   }
 

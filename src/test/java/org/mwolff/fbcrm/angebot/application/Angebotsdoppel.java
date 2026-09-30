@@ -32,8 +32,24 @@ final class Angebotsdoppel {
 
   static final String BESCHREIBUNG = "Neugestaltung der Website";
 
+  /**
+   * Die Kennung der ersten Position der Angebote dieses Pakets.
+   *
+   * <p>Die Positionen tragen Kennungen, weil die Angebote hier gespeicherte sind (Plan #169, E2) —
+   * nur so laesst sich pruefen, dass eine eingereichte Kennung des Angebots durchgeht und eine
+   * fremde nicht.
+   */
+  static final Long KONZEPTION_ID = Long.valueOf(101L);
+
+  /** Die Kennung der zweiten Position der Angebote dieses Pakets. */
+  static final Long SCHULUNG_ID = Long.valueOf(102L);
+
+  /** Eine Kennung, die zu keiner Position der Angebote dieses Pakets gehoert. */
+  static final Long FREMDE_POSITION = Long.valueOf(999L);
+
   static final Angebotsposition KONZEPTION =
       new Angebotsposition(
+          KONZEPTION_ID,
           "Konzeption",
           Abrechnungsmodus.AUFWAND,
           new BigDecimal("2.50"),
@@ -42,6 +58,7 @@ final class Angebotsdoppel {
 
   static final Angebotsposition SCHULUNG =
       new Angebotsposition(
+          SCHULUNG_ID,
           "Schulungstag",
           Abrechnungsmodus.FESTPREIS,
           BigDecimal.ONE,

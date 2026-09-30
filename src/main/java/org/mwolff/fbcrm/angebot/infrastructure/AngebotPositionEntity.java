@@ -19,6 +19,12 @@ import org.mwolff.fbcrm.common.Einheit;
  * <p>{@code position} ist der Platz in der Reihenfolge und steht nur hier: Am Fachobjekt ist die
  * Reihenfolge die der Liste, und {@code JpaAngebotRepository} vergibt die Plaetze beim Schreiben
  * lueckenlos ab 1 (E24). Der Betrag hat keine Spalte — er wird gerechnet (E5).
+ *
+ * <p><b>Die Zeile ist veraenderlich</b> — anders als die Fachobjekte des Projekts. Seit Plan #169,
+ * E2 traegt die Position eine dauerhafte Kennung, und der Bestand schreibt eine bekannte Zeile fort
+ * statt sie zu ersetzen; dafuer nimmt {@link #uebernehme} den neuen Stand auf. Eine neue Instanz
+ * mit derselben Kennung waere fuer Hibernate eine abgeloeste Kopie, die erst wieder eingelesen
+ * werden muesste.
  */
 @Entity
 @Table(name = "angebot_position")
@@ -71,6 +77,31 @@ class AngebotPositionEntity {
       final BigDecimal einzelpreis) {
     this.id = id;
     this.angebotId = angebotId;
+    this.position = position;
+    this.bezeichnung = bezeichnung;
+    this.abrechnungsmodus = abrechnungsmodus;
+    this.menge = menge;
+    this.einheit = einheit;
+    this.einzelpreis = einzelpreis;
+  }
+
+  /**
+   * Nimmt den neuen Stand dieser Position auf — alles ausser Kennung und Angebot (Plan #169, E2).
+   *
+   * @param position der Platz in der Reihenfolge, lueckenlos ab 1
+   * @param bezeichnung die Leistung
+   * @param abrechnungsmodus nach Aufwand oder zum Festpreis
+   * @param menge Menge in der angegebenen Einheit
+   * @param einheit Einheit der Menge
+   * @param einzelpreis Netto-Preis je Einheit
+   */
+  void uebernehme(
+      final short position,
+      final String bezeichnung,
+      final Abrechnungsmodus abrechnungsmodus,
+      final BigDecimal menge,
+      final Einheit einheit,
+      final BigDecimal einzelpreis) {
     this.position = position;
     this.bezeichnung = bezeichnung;
     this.abrechnungsmodus = abrechnungsmodus;

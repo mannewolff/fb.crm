@@ -1,6 +1,7 @@
 package org.mwolff.fbcrm.angebot;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.tuple;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -27,9 +28,18 @@ import org.springframework.transaction.support.TransactionTemplate;
  * umgestellter Reihenfolge und Lesen in genau dieser Reihenfolge (E24), dazu der Status als Text in
  * seiner Spalte.
  *
+ * <p><b>Und die dauerhafte Kennung der Position</b> (Plan #169, E2): Umordnen und Umbenennen lassen
+ * sie unveraendert, eine neue Position bekommt eine neue, und eine weggelassene ist geloescht. Nur
+ * hier pruefbar, weil es an der echten Identitaetsspalte und an der aufgeschobenen Eindeutigkeit
+ * von {@code angebot_position_reihenfolge} haengt: Der Tausch zweier Plaetze traegt einen
+ * Zwischenstand, der sich widerspricht.
+ *
+ * <p>Die Konstanten dieser Klasse tragen keine Kennung — sie sind die eingereichte Sicht. Was
+ * zurueckgelesen wird, traegt eine; Vergleiche dagegen lassen das Feld {@code id} darum aus.
+ *
  * <p>Jeder Zug setzt seine Transaktionsgrenze selbst ueber {@link TransactionTemplate}: Der Adapter
- * loescht die alten Positionszeilen vor dem Schreiben der neuen und hat keine eigene Grenze — sie
- * gehoert dem Anwendungsfall.
+ * schreibt die Positionszeilen im Zug des Aufrufers fort und hat keine eigene Grenze — sie gehoert
+ * dem Anwendungsfall.
  */
 class AngebotPersistenceIT extends AbstractIntegrationTest {
 
@@ -38,6 +48,7 @@ class AngebotPersistenceIT extends AbstractIntegrationTest {
   private static final String BESCHREIBUNG = "Neugestaltung der Website";
   private static final Angebotsposition KONZEPTION =
       new Angebotsposition(
+          null,
           "Konzeption",
           Abrechnungsmodus.AUFWAND,
           new BigDecimal("2.50"),
@@ -46,6 +57,7 @@ class AngebotPersistenceIT extends AbstractIntegrationTest {
 
   private static final Angebotsposition SCHULUNG =
       new Angebotsposition(
+          null,
           "Schulungstag",
           Abrechnungsmodus.FESTPREIS,
           new BigDecimal("1.00"),
@@ -54,6 +66,7 @@ class AngebotPersistenceIT extends AbstractIntegrationTest {
 
   private static final Angebotsposition BETREUUNG =
       new Angebotsposition(
+          null,
           "Betreuung",
           Abrechnungsmodus.AUFWAND,
           new BigDecimal("8.00"),
@@ -111,6 +124,27 @@ class AngebotPersistenceIT extends AbstractIntegrationTest {
     return transaktion.execute(status -> repository.findById(id));
   }
 
+  /** Die Positionen des Angebots, so wie der Bestand sie fuehrt — samt ihren Kennungen. */
+  private List<Angebotsposition> positionenVon(final long id) {
+    return gelesen(id).orElseThrow().positionen();
+  }
+
+  /** Dasselbe Angebot mit einer neuen Positionsliste, geschrieben in einem eigenen Zug. */
+  private Angebot geschriebenMit(final Angebot angebot, final List<Angebotsposition> positionen) {
+    return geschrieben(
+        angebot.geaendert(ANGEBOTSDATUM, ansprechpartnerId, BESCHREIBUNG, positionen, ANGELEGT));
+  }
+
+  private static Angebotsposition umbenannt(final Angebotsposition position, final String name) {
+    return new Angebotsposition(
+        position.id(),
+        name,
+        position.abrechnungsmodus(),
+        position.menge(),
+        position.einheit(),
+        position.einzelpreis());
+  }
+
   @Test
   void save_givenANewAngebot_thenReadsBackEveryFieldAndThePositionsInOrder() {
     // Given
@@ -131,7 +165,9 @@ class AngebotPersistenceIT extends AbstractIntegrationTest {
               assertThat(angebot.beschreibung()).isEqualTo(BESCHREIBUNG);
               assertThat(angebot.createdAt()).isEqualTo(ANGELEGT);
               assertThat(angebot.updatedAt()).isEqualTo(ANGELEGT);
-              assertThat(angebot.positionen()).containsExactly(KONZEPTION, SCHULUNG);
+              assertThat(angebot.positionen())
+                  .usingRecursiveFieldByFieldElementComparatorIgnoringFields("id")
+                  .containsExactly(KONZEPTION, SCHULUNG);
             });
   }
 
@@ -152,24 +188,89 @@ class AngebotPersistenceIT extends AbstractIntegrationTest {
   }
 
   @Test
-  void save_givenAChangedAngebot_thenReplacesThePositionsWithTheNewOrder() {
+  void save_givenAChangedAngebot_thenStoresThePositionsInTheNewOrder() {
     // Given
     final Angebot gespeichert = geschrieben(angebot(List.of(KONZEPTION, SCHULUNG)));
+    final List<Angebotsposition> gefuehrt = positionenVon(gespeichert.requireId());
 
     // When — dieselben Positionen, umgestellt, und eine dritte dazu.
-    geschrieben(
-        gespeichert.geaendert(
-            ANGEBOTSDATUM,
-            ansprechpartnerId,
-            BESCHREIBUNG,
-            List.of(SCHULUNG, BETREUUNG, KONZEPTION),
-            ANGELEGT));
+    geschriebenMit(gespeichert, List.of(gefuehrt.get(1), BETREUUNG, gefuehrt.get(0)));
 
     // Then
-    assertThat(gelesen(gespeichert.requireId()))
-        .hasValueSatisfying(
-            angebot ->
-                assertThat(angebot.positionen()).containsExactly(SCHULUNG, BETREUUNG, KONZEPTION));
+    assertThat(positionenVon(gespeichert.requireId()))
+        .usingRecursiveFieldByFieldElementComparatorIgnoringFields("id")
+        .containsExactly(SCHULUNG, BETREUUNG, KONZEPTION);
+  }
+
+  @Test
+  void save_givenAReorderedList_thenBothPositionsKeepTheirIds() {
+    // Given — Plan #169, E2: Eine Rechnung soll sich auf eine Position berufen koennen, auch wenn
+    // das Angebot danach umgeordnet wird.
+    final Angebot gespeichert = geschrieben(angebot(List.of(KONZEPTION, SCHULUNG)));
+    final List<Angebotsposition> gefuehrt = positionenVon(gespeichert.requireId());
+
+    // When — getauscht; der Zwischenstand traegt zweimal denselben Platz.
+    geschriebenMit(gespeichert, List.of(gefuehrt.get(1), gefuehrt.get(0)));
+
+    // Then
+    assertThat(positionenVon(gespeichert.requireId()))
+        .extracting(Angebotsposition::id, Angebotsposition::bezeichnung)
+        .containsExactly(
+            tuple(gefuehrt.get(1).id(), "Schulungstag"), tuple(gefuehrt.get(0).id(), "Konzeption"));
+  }
+
+  @Test
+  void save_givenARenamedPosition_thenItKeepsItsId() {
+    // Given
+    final Angebot gespeichert = geschrieben(angebot(List.of(KONZEPTION, SCHULUNG)));
+    final List<Angebotsposition> gefuehrt = positionenVon(gespeichert.requireId());
+
+    // When
+    geschriebenMit(
+        gespeichert, List.of(umbenannt(gefuehrt.get(0), "Feinkonzept"), gefuehrt.get(1)));
+
+    // Then
+    assertThat(positionenVon(gespeichert.requireId()))
+        .extracting(Angebotsposition::id, Angebotsposition::bezeichnung)
+        .containsExactly(
+            tuple(gefuehrt.get(0).id(), "Feinkonzept"),
+            tuple(gefuehrt.get(1).id(), "Schulungstag"));
+  }
+
+  @Test
+  void save_givenAnAddedPosition_thenItGetsANewIdAndTheOldOnesKeepTheirs() {
+    // Given — ohne Kennung eingereicht heisst „neu".
+    final Angebot gespeichert = geschrieben(angebot(List.of(KONZEPTION, SCHULUNG)));
+    final List<Angebotsposition> gefuehrt = positionenVon(gespeichert.requireId());
+
+    // When
+    geschriebenMit(gespeichert, List.of(gefuehrt.get(0), gefuehrt.get(1), BETREUUNG));
+
+    // Then
+    final List<Angebotsposition> danach = positionenVon(gespeichert.requireId());
+    assertThat(danach)
+        .extracting(Angebotsposition::id)
+        .startsWith(gefuehrt.get(0).id(), gefuehrt.get(1).id())
+        .hasSize(3)
+        .doesNotHaveDuplicates();
+    assertThat(danach.get(2).bezeichnung()).isEqualTo("Betreuung");
+  }
+
+  @Test
+  void save_givenAnOmittedPosition_thenItsRowIsGone() {
+    // Given
+    final Angebot gespeichert = geschrieben(angebot(List.of(KONZEPTION, SCHULUNG)));
+    final List<Angebotsposition> gefuehrt = positionenVon(gespeichert.requireId());
+
+    // When — die zweite Position fehlt in der neuen Liste.
+    geschriebenMit(gespeichert, List.of(gefuehrt.get(0)));
+
+    // Then
+    assertThat(positionenVon(gespeichert.requireId()))
+        .extracting(Angebotsposition::id)
+        .containsExactly(gefuehrt.get(0).id());
+    assertThat(jdbc.queryForObject("SELECT count(*) FROM angebot_position", Integer.class))
+        .isEqualTo(1);
   }
 
   @Test
@@ -177,10 +278,8 @@ class AngebotPersistenceIT extends AbstractIntegrationTest {
     // Given
     final Angebot gespeichert = geschrieben(angebot(List.of(KONZEPTION, SCHULUNG)));
 
-    // When
-    geschrieben(
-        gespeichert.geaendert(
-            ANGEBOTSDATUM, ansprechpartnerId, BESCHREIBUNG, List.of(BETREUUNG), ANGELEGT));
+    // When — alle bisherigen weggelassen, eine neue dazu.
+    geschriebenMit(gespeichert, List.of(BETREUUNG));
 
     // Then
     assertThat(jdbc.queryForObject("SELECT count(*) FROM angebot_position", Integer.class))
@@ -228,6 +327,7 @@ class AngebotPersistenceIT extends AbstractIntegrationTest {
     // Given — die fehlende Bezeichnung weist der Eingang der Maske ab, nicht die Datenbank.
     final Angebotsposition ohneBezeichnung =
         new Angebotsposition(
+            null,
             "   ",
             Abrechnungsmodus.AUFWAND,
             new BigDecimal("1.00"),
@@ -238,7 +338,10 @@ class AngebotPersistenceIT extends AbstractIntegrationTest {
     // Then
     assertThat(gelesen(gespeichert.requireId()))
         .hasValueSatisfying(
-            angebot -> assertThat(angebot.positionen()).containsExactly(ohneBezeichnung));
+            angebot ->
+                assertThat(angebot.positionen())
+                    .usingRecursiveFieldByFieldElementComparatorIgnoringFields("id")
+                    .containsExactly(ohneBezeichnung));
   }
 
   @Test

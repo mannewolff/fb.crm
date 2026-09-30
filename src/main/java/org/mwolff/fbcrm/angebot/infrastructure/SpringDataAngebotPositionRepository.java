@@ -3,7 +3,6 @@ package org.mwolff.fbcrm.angebot.infrastructure;
 import java.util.Collection;
 import java.util.List;
 import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -12,6 +11,12 @@ import org.springframework.data.repository.query.Param;
  *
  * <p>Gelesen wird immer je Angebot und immer nach Platz — die Abfrage trifft damit den Schluessel
  * von {@code angebot_position_reihenfolge}.
+ *
+ * <p><b>Keine Massenloeschung je Angebot.</b> Bis Plan #169, E2 ersetzte {@code
+ * JpaAngebotRepository.save} die Positionszeilen und loeschte sie dafuer zuvor alle. Seit die
+ * Position eine dauerhafte Kennung traegt, werden die Zeilen fortgeschrieben, und weg muessen nur
+ * die, die die neue Liste nicht mehr nennt — die kennt der Adapter namentlich und gibt sie an
+ * {@code deleteAll}.
  */
 interface SpringDataAngebotPositionRepository extends JpaRepository<AngebotPositionEntity, Long> {
 
@@ -40,19 +45,4 @@ interface SpringDataAngebotPositionRepository extends JpaRepository<AngebotPosit
       order by p.angebotId, p.position
       """)
   List<AngebotPositionEntity> findByAngebote(@Param("angebotIds") Collection<Long> angebotIds);
-
-  /**
-   * Loescht alle Positionen eines Angebots.
-   *
-   * <p>Als Massenloeschung und nicht als {@code deleteAll} ueber geladene Zeilen: Hibernate ordnet
-   * Einfuegungen vor Loeschungen, und die neuen Plaetze stiessen dann auf die alten (UNIQUE je
-   * Platz). Diese Anweisung laeuft sofort — {@code flushAutomatically} schreibt vorher aus, {@code
-   * clearAutomatically} raeumt die Sitzung danach auf, damit keine geloeschte Zeile darin
-   * zurueckbleibt.
-   *
-   * @param angebotId Kennung des Angebots
-   */
-  @Modifying(flushAutomatically = true, clearAutomatically = true)
-  @Query("delete from AngebotPositionEntity p where p.angebotId = :angebotId")
-  void loescheZuAngebot(@Param("angebotId") long angebotId);
 }

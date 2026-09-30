@@ -35,7 +35,13 @@ import org.mwolff.fbcrm.firma.domain.AnsprechpartnerRepository;
  * <p>Das Angebot wird als Ganzes geschrieben (E8): Datum, Ansprechpartner, Beschreibung und die
  * vollstaendige Positionsliste in der gewuenschten Reihenfolge — in jedem Status.
  *
- * <p>Der zweite Gegenstand ist die Wahl des Ansprechpartners: Ein <em>neu</em> gewaehlter muss zur
+ * <p>Der zweite Gegenstand sind die Positionskennungen (Plan #169, E2). Eine Position mit Kennung
+ * sagt „dieselbe Position wie vorher"; gueltig sind darum nur die Kennungen der Positionen des
+ * geladenen Angebots, und jede hoechstens einmal. Eine fremde und eine doppelte Kennung sind {@link
+ * PositionenNichtWaehlbar}, und am Bestand kommt kein {@code save} an — die Pruefung laeuft vor dem
+ * Schreiben.
+ *
+ * <p>Der dritte Gegenstand ist die Wahl des Ansprechpartners: Ein <em>neu</em> gewaehlter muss zur
  * Firma gehoeren und aktiv sein. Der bereits gespeicherte bleibt waehlbar, auch wenn er inzwischen
  * stillgelegt ist — sonst liesse sich ein Angebot nach dem Stilllegen seines Ansprechpartners gar
  * nicht mehr speichern. Eine abgewiesene Wahl schreibt nichts; den Nachweis fuehrt {@code
@@ -80,6 +86,21 @@ class AngebotAendernUseCaseTest {
         aktiv,
         Angebotsdoppel.ANGELEGT,
         Angebotsdoppel.ANGELEGT);
+  }
+
+  private static Angebotsposition mitKennung(
+      final Angebotsposition position, final @Nullable Long id) {
+    return new Angebotsposition(
+        id,
+        position.bezeichnung(),
+        position.abrechnungsmodus(),
+        position.menge(),
+        position.einheit(),
+        position.einzelpreis());
+  }
+
+  private static Angebotsposition ohneKennung(final Angebotsposition position) {
+    return mitKennung(position, null);
   }
 
   private void angebotIst(final Angebot angebot) {
@@ -220,6 +241,64 @@ class AngebotAendernUseCaseTest {
     // When / Then
     assertThatThrownBy(() -> useCase.aendere(ANGEBOT, daten(ANDERE_PERSON, List.of())))
         .isInstanceOf(AnsprechpartnerNichtWaehlbar.class);
+  }
+
+  @Test
+  void aendere_keepingThePositionIdsOfTheAngebot_thenWritesThem() {
+    // Given — Plan #169, E2: Die Kennungen des geladenen Angebots gehen durch und bleiben dran.
+    angebotIst(Angebotsdoppel.ohneAnsprechpartner(Angebotsdoppel.angebot(ANGEBOT)));
+
+    // When — dieselben Positionen, umgestellt.
+    final Angebot geaendert =
+        aendere(daten(null, List.of(Angebotsdoppel.SCHULUNG, Angebotsdoppel.KONZEPTION)));
+
+    // Then
+    assertThat(geaendert.positionen())
+        .extracting(Angebotsposition::id)
+        .containsExactly(Angebotsdoppel.SCHULUNG_ID, Angebotsdoppel.KONZEPTION_ID);
+  }
+
+  @Test
+  void aendere_withAPositionWithoutAnId_thenTreatsItAsNew() {
+    // Given — die Kennung ist freiwillig; ohne sie ist die Position neu.
+    angebotIst(Angebotsdoppel.ohneAnsprechpartner(Angebotsdoppel.angebot(ANGEBOT)));
+    final Angebotsposition neue = ohneKennung(Angebotsdoppel.KONZEPTION);
+
+    // When
+    final Angebot geaendert = aendere(daten(null, List.of(neue)));
+
+    // Then
+    assertThat(geaendert.positionen()).containsExactly(neue);
+  }
+
+  @Test
+  void aendere_withAPositionIdOfAnotherAngebot_thenRejectsAndWritesNothing() {
+    // Given — eine Kennung, die zu keiner Position dieses Angebots gehoert.
+    angebotIst(Angebotsdoppel.ohneAnsprechpartner(Angebotsdoppel.angebot(ANGEBOT)));
+    final Angebotsposition fremde =
+        mitKennung(Angebotsdoppel.KONZEPTION, Angebotsdoppel.FREMDE_POSITION);
+
+    // When / Then
+    assertThatThrownBy(() -> useCase.aendere(ANGEBOT, daten(null, List.of(fremde))))
+        .isInstanceOf(PositionenNichtWaehlbar.class);
+    verify(angebote).findById(ANGEBOT);
+    verifyNoMoreInteractions(angebote);
+  }
+
+  @Test
+  void aendere_withTheSamePositionIdTwice_thenRejectsAndWritesNothing() {
+    // Given — zwei Positionen koennen nicht dieselbe Zeile fortschreiben.
+    angebotIst(Angebotsdoppel.ohneAnsprechpartner(Angebotsdoppel.angebot(ANGEBOT)));
+    final List<Angebotsposition> doppelt =
+        List.of(
+            Angebotsdoppel.KONZEPTION,
+            mitKennung(Angebotsdoppel.SCHULUNG, Angebotsdoppel.KONZEPTION_ID));
+
+    // When / Then
+    assertThatThrownBy(() -> useCase.aendere(ANGEBOT, daten(null, doppelt)))
+        .isInstanceOf(PositionenNichtWaehlbar.class);
+    verify(angebote).findById(ANGEBOT);
+    verifyNoMoreInteractions(angebote);
   }
 
   @Test

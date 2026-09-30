@@ -1,6 +1,7 @@
 package org.mwolff.fbcrm.angebot;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.tuple;
 
 import java.math.BigDecimal;
 import java.time.Clock;
@@ -42,6 +43,10 @@ import org.springframework.jdbc.core.JdbcTemplate;
  * Weg 409. Drittens die Wahl des Kunden (Issue #126): An einer stillgelegten Firma antwortet das
  * Anlegen 409, waehrend ein bestehendes Angebot sich weiterhin aendern laesst; ein Ansprechpartner
  * einer anderen Firma ist 422.
+ *
+ * <p><b>Dazu die Positionskennung ueber HTTP</b> (Plan #169, E2): Ein {@code PUT}, der sich auf
+ * eine Position eines <i>anderen</i> Angebots beruft, antwortet 422, und die fremde Position bleibt
+ * unberuehrt. Nur hier pruefbar, weil dazu zwei Angebote im echten Bestand stehen muessen.
  *
  * <p>Der Nachweis der Zugangsregel steht hier und nicht nur in {@code AccessRuleIT}: Ein neuer Pfad
  * unter {@code /api} ist ohne Sitzung verschlossen, und das gehoert zu jedem neuen Weg dazu.
@@ -134,6 +139,14 @@ class AngebotIT extends AbstractIntegrationTest {
     return felder;
   }
 
+  /** Dieselbe Position, aber mit einer Kennung: „schreib diese Zeile fort" (Plan #169, E2). */
+  private static Map<String, Object> positionMitKennung(
+      final long id, final String bezeichnung, final String modus, final String menge) {
+    final Map<String, Object> felder = position(bezeichnung, modus, menge, "PERSONENTAG");
+    felder.put("id", Long.valueOf(id));
+    return felder;
+  }
+
   private static Map<String, Object> rumpf(final List<Map<String, Object>> positionen) {
     final Map<String, Object> felder = new LinkedHashMap<>();
     felder.put("angebotDatum", "2026-09-25");
@@ -155,6 +168,13 @@ class AngebotIT extends AbstractIntegrationTest {
     return Objects.requireNonNull(
         ruf("/api/firmen/" + firmaId + "/angebote", HttpMethod.POST, null, AngebotResponse.class)
             .getBody());
+  }
+
+  private List<Long> positionskennungen(final long angebotId) {
+    return jdbc.queryForList(
+        "SELECT id FROM angebot_position WHERE angebot_id = ? ORDER BY position",
+        Long.class,
+        Long.valueOf(angebotId));
   }
 
   private List<String> bezeichnungenNachPlatz(final long angebotId) {
@@ -374,6 +394,79 @@ class AngebotIT extends AbstractIntegrationTest {
     // Then
     assertThat(anlegen.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
     assertThat(aendern.getStatusCode()).isEqualTo(HttpStatus.OK);
+  }
+
+  @Test
+  void aendern_withAPositionOfAnotherAngebot_thenAnswers422AndLeavesItUntouched() {
+    // Given — ein fremdes Angebot mit einer Position, und ein eigenes daneben.
+    final long fremdesAngebot = angebot().id();
+    ruf(
+        "/api/angebote/" + fremdesAngebot,
+        HttpMethod.PUT,
+        rumpf(List.of(position("Konzeption", "AUFWAND", "2.50", "PERSONENTAG"))),
+        AngebotResponse.class);
+    final long fremdePosition = positionskennungen(fremdesAngebot).get(0).longValue();
+    final long eigenesAngebot = angebot().id();
+
+    // When — das eigene Angebot beruft sich auf die fremde Position.
+    final ResponseEntity<String> antwort =
+        ruf(
+            "/api/angebote/" + eigenesAngebot,
+            HttpMethod.PUT,
+            rumpf(List.of(positionMitKennung(fremdePosition, "Geraubt", "AUFWAND", "1.00"))),
+            String.class);
+
+    // Then
+    assertThat(antwort.getStatusCode()).isEqualTo(HttpStatus.UNPROCESSABLE_ENTITY);
+    // Die Maske zeigt die Meldung am Feld der Positionsliste (Issue #138).
+    assertThat(antwort.getBody())
+        .contains("\"fieldErrors\"")
+        .contains("positionen")
+        .contains("Die eingereichten Positionen passen nicht zu diesem Angebot.");
+    // Die fremde Position haengt unveraendert an ihrem Angebot — nichts wurde geschrieben.
+    assertThat(
+            jdbc.queryForMap(
+                "SELECT angebot_id, position, bezeichnung FROM angebot_position WHERE id = ?",
+                Long.valueOf(fremdePosition)))
+        .containsEntry("angebot_id", Long.valueOf(fremdesAngebot))
+        .containsEntry("position", Integer.valueOf(1))
+        .containsEntry("bezeichnung", "Konzeption");
+    assertThat(bezeichnungenNachPlatz(eigenesAngebot)).isEmpty();
+  }
+
+  @Test
+  void aendern_resubmittingThePositionsWithTheirIds_thenTheyKeepThem() {
+    // Given — die dauerhafte Kennung ueber HTTP: gelesen, zurueckgeschickt, unveraendert.
+    final long angebotId = angebot().id();
+    ruf(
+        "/api/angebote/" + angebotId,
+        HttpMethod.PUT,
+        rumpf(
+            List.of(
+                position("Konzeption", "AUFWAND", "2.50", "PERSONENTAG"),
+                position("Schulungstag", "FESTPREIS", "1.00", "PAUSCHAL"))),
+        AngebotResponse.class);
+    final List<Long> vorher = positionskennungen(angebotId);
+
+    // When — umgestellt, aber mit ihren Kennungen.
+    final ResponseEntity<AngebotResponse> antwort =
+        ruf(
+            "/api/angebote/" + angebotId,
+            HttpMethod.PUT,
+            rumpf(
+                List.of(
+                    positionMitKennung(
+                        vorher.get(1).longValue(), "Schulungstag", "FESTPREIS", "1.00"),
+                    positionMitKennung(
+                        vorher.get(0).longValue(), "Feinkonzept", "AUFWAND", "2.50"))),
+            AngebotResponse.class);
+
+    // Then
+    assertThat(antwort.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(Objects.requireNonNull(antwort.getBody()).positionen())
+        .extracting(AngebotPositionResponse::id, AngebotPositionResponse::bezeichnung)
+        .containsExactly(tuple(vorher.get(1), "Schulungstag"), tuple(vorher.get(0), "Feinkonzept"));
+    assertThat(bezeichnungenNachPlatz(angebotId)).containsExactly("Schulungstag", "Feinkonzept");
   }
 
   @Test

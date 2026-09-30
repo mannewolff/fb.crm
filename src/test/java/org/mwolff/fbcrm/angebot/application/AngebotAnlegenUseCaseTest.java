@@ -17,6 +17,8 @@ import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
+import org.mockito.Captor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mwolff.fbcrm.angebot.domain.Angebot;
@@ -39,6 +41,13 @@ import org.mwolff.fbcrm.firma.domain.FirmaRepository;
  *
  * <p>Die Uhr steht bewusst auf 22:30 UTC: In der Geschaeftszone ist da bereits der naechste Tag.
  * Eine Uhr am Mittag liesse beide Rechnungen gleich aussehen.
+ *
+ * <p><b>Zu den Positionskennungen</b> (Plan #169, E2): Der Anlegeweg nimmt keine Positionen an —
+ * weder {@code anlegen} noch {@code AngebotAnlegenRequest} hat ein Feld dafuer, Inhalt bekommt das
+ * Angebot ausschliesslich ueber das Aendern. Eine fremde Kennung kann auf diesem Weg darum nicht
+ * eingereicht werden und braucht keine Abweisung; geprueft wird stattdessen die Zusage, auf der das
+ * beruht: Was an den Bestand geht, traegt keine Position. Faellt sie, greift die Regel in {@code
+ * AngebotAendernUseCase} fuer diesen Weg nicht mehr.
  */
 @ExtendWith(MockitoExtension.class)
 class AngebotAnlegenUseCaseTest {
@@ -46,6 +55,8 @@ class AngebotAnlegenUseCaseTest {
   private static final Instant JETZT = Instant.parse("2026-09-27T22:30:00Z");
   private static final LocalDate HEUTE_IN_BERLIN = LocalDate.of(2026, 9, 28);
   private static final Long PERSON = Long.valueOf(Angebotsdoppel.ANSPRECHPARTNER);
+
+  @Captor private ArgumentCaptor<Angebot> angelegtes;
 
   @Mock private AngebotRepository angebote;
   @Mock private FirmaRepository firmen;
@@ -116,6 +127,19 @@ class AngebotAnlegenUseCaseTest {
     assertThat(angelegt.createdAt()).isEqualTo(JETZT);
     assertThat(angelegt.updatedAt()).isEqualTo(JETZT);
     verifyNoInteractions(personen);
+  }
+
+  @Test
+  void anlegen_thenHandsTheStoreAnAngebotWithoutAnyPosition() {
+    // Given — Plan #169, E2: Ohne Position gibt es auf diesem Weg keine einzureichende Kennung.
+    firmaIstAktiv();
+
+    // When
+    legeAn(null);
+
+    // Then
+    verify(angebote).save(angelegtes.capture());
+    assertThat(angelegtes.getValue().positionen()).isEmpty();
   }
 
   @Test

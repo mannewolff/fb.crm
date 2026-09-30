@@ -6,6 +6,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import java.math.BigDecimal;
+import org.jspecify.annotations.Nullable;
 import org.mwolff.fbcrm.angebot.domain.Angebotsposition;
 import org.mwolff.fbcrm.common.Abrechnungsmodus;
 import org.mwolff.fbcrm.common.Einheit;
@@ -17,6 +18,11 @@ import org.mwolff.fbcrm.common.Einheit;
  * wird gerechnet (E5); beide als Feld hiesse, dem Absender eine Aussage zu glauben, die die
  * Anwendung selbst kennt.
  *
+ * <p><b>Die Kennung ist freiwillig</b> (Plan #169, E2). Wer sie mitschickt, sagt „dieselbe Position
+ * wie vorher"; wer sie weglaesst, legt eine neue an. Sie darf nur eine Position des Angebots
+ * benennen, das geaendert wird — das prueft {@code AngebotAendernUseCase} vor dem Schreiben und
+ * antwortet sonst 422. Die Maske schickt sie noch nicht mit (Issue #172).
+ *
  * <p>Jede Position braucht eine Bezeichnung (Kriterium 9); die Regel steht hier an der
  * Schnittstelle und nicht in der Datenbank, damit die Meldung am Feld der Position erscheint. Menge
  * und Einzelpreis duerfen nicht negativ sein und tragen hoechstens zwei Nachkommastellen —
@@ -24,6 +30,7 @@ import org.mwolff.fbcrm.common.Einheit;
  * Anwendung auf eine dritte Nachkommastelle mit einem stillen Rundungsfehler oder einem
  * Datenbankfehler.
  *
+ * @param id Kennung der Position, die fortgeschrieben werden soll, oder {@code null} fuer eine neue
  * @param bezeichnung die Leistung; nicht leer
  * @param abrechnungsmodus nach Aufwand oder zum Festpreis
  * @param menge Menge in der angegebenen Einheit, nicht negativ
@@ -31,6 +38,7 @@ import org.mwolff.fbcrm.common.Einheit;
  * @param einzelpreis Netto-Preis je Einheit, nicht negativ
  */
 public record AngebotPositionRequest(
+    @Nullable Long id,
     @NotBlank(message = BEZEICHNUNG_FEHLT) @Size(max = 300) String bezeichnung,
     @NotNull Abrechnungsmodus abrechnungsmodus,
     @NotNull @DecimalMin("0") @Digits(integer = 10, fraction = 2) BigDecimal menge,
@@ -42,6 +50,6 @@ public record AngebotPositionRequest(
 
   /** Dieselbe Position in der Sprache der Fachschicht. */
   Angebotsposition position() {
-    return new Angebotsposition(bezeichnung, abrechnungsmodus, menge, einheit, einzelpreis);
+    return new Angebotsposition(id, bezeichnung, abrechnungsmodus, menge, einheit, einzelpreis);
   }
 }

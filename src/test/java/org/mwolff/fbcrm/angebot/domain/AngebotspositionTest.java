@@ -19,6 +19,7 @@ class AngebotspositionTest {
 
   private static Angebotsposition position(final String menge, final String einzelpreis) {
     return new Angebotsposition(
+        null,
         "Konzeption",
         Abrechnungsmodus.AUFWAND,
         new BigDecimal(menge),

@@ -12,6 +12,7 @@ import org.mwolff.fbcrm.AbstractIntegrationTest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * Prueft das Schema des Angebots nach {@code V11__angebot_ohne_beleg.sql} gegen eine echte
@@ -21,6 +22,13 @@ import org.springframework.jdbc.core.JdbcTemplate;
  * Wertebereiche der Positionen und die Reihenfolge als Schluessel. Gearbeitet wird mit {@link
  * JdbcTemplate} und direkten Anweisungen — der Weg ueber die Entities kaeme an einigen dieser
  * Faelle gar nicht vorbei.
+ *
+ * <p><b>Seit {@code V15__angebot_position_kennung.sql} ist die Reihenfolge aufgeschoben
+ * eindeutig</b> (Plan #169, E2). Drei Zusagen gehoeren zusammen: {@code pg_constraint} meldet den
+ * Constraint als aufgeschoben, zwei Plaetze lassen sich in einer Transaktion tauschen, und zweimal
+ * derselbe Platz scheitert weiterhin — nur jetzt beim Commit und nicht nach der Anweisung. Ohne die
+ * letzte Zusage waere das Aufschieben ein Verzicht auf die Regel und nicht eine Verschiebung ihres
+ * Zeitpunkts.
  */
 class AngebotSchemaIT extends AbstractIntegrationTest {
 
@@ -33,13 +41,19 @@ class AngebotSchemaIT extends AbstractIntegrationTest {
           + " VALUES (?, ?, ?, ?, CAST(? AS numeric), ?, CAST(? AS numeric))";
 
   private static final String FIRMA = "Adler AG";
+
+  private static final String TAUSCHE_PLATZ =
+      "UPDATE angebot_position SET position = ? WHERE angebot_id = ? AND bezeichnung = ?";
+
   private final JdbcTemplate jdbc;
+  private final TransactionTemplate transaktion;
 
   private long firmaId;
 
   @Autowired
-  AngebotSchemaIT(final JdbcTemplate jdbc) {
+  AngebotSchemaIT(final JdbcTemplate jdbc, final TransactionTemplate transaktion) {
     this.jdbc = jdbc;
+    this.transaktion = transaktion;
   }
 
   @BeforeEach
@@ -125,6 +139,76 @@ class AngebotSchemaIT extends AbstractIntegrationTest {
 
     // Then
     assertThat(betroffen).isEqualTo(1);
+  }
+
+  @Test
+  void positionReihenfolge_thenTheUniqueConstraintIsDeferred() {
+    // When — Plan #169, E2: Ohne das Aufschieben scheiterte der Tausch zweier Plaetze.
+    final Boolean aufgeschoben =
+        jdbc.queryForObject(
+            "SELECT condeferred FROM pg_constraint WHERE conname = 'angebot_position_reihenfolge'",
+            Boolean.class);
+
+    // Then
+    assertThat(aufgeschoben).isTrue();
+  }
+
+  @Test
+  void positionReihenfolge_whenTwoPlacesAreSwappedInOneTransaction_thenCommitted() {
+    // Given — zwei Positionen auf den Plaetzen 1 und 2.
+    final Long angebotId = angebotId();
+    jdbc.update(INSERT_POSITION, angebotId, 1, "Konzeption", "AUFWAND", "1.00", "STUNDE", "95.00");
+    jdbc.update(INSERT_POSITION, angebotId, 2, "Schulung", "FESTPREIS", "1.00", "PAUSCHAL", "1200");
+
+    // When — zwei UPDATE in einer Transaktion; nach dem ersten steht der Platz 2 zweimal da.
+    transaktion.executeWithoutResult(
+        status -> {
+          jdbc.update(TAUSCHE_PLATZ, Integer.valueOf(2), angebotId, "Konzeption");
+          jdbc.update(TAUSCHE_PLATZ, Integer.valueOf(1), angebotId, "Schulung");
+        });
+
+    // Then
+    assertThat(
+            jdbc.queryForList(
+                "SELECT bezeichnung FROM angebot_position WHERE angebot_id = ? ORDER BY position",
+                String.class,
+                angebotId))
+        .containsExactly("Schulung", "Konzeption");
+  }
+
+  @Test
+  void positionReihenfolge_givenTheSamePlaceTwiceInOneTransaction_thenRejectedAtCommit() {
+    // Given — aufgeschoben heisst nicht aufgegeben: Geprueft wird weiter, nur spaeter.
+    final Long angebotId = angebotId();
+
+    // When / Then — beide INSERT laufen durch, der Commit nicht.
+    assertThatThrownBy(
+            () ->
+                transaktion.executeWithoutResult(
+                    status -> {
+                      jdbc.update(
+                          INSERT_POSITION,
+                          angebotId,
+                          1,
+                          "Konzeption",
+                          "AUFWAND",
+                          "1.00",
+                          "STUNDE",
+                          "95.00");
+                      jdbc.update(
+                          INSERT_POSITION,
+                          angebotId,
+                          1,
+                          "Schulung",
+                          "FESTPREIS",
+                          "1.00",
+                          "PAUSCHAL",
+                          "1200.00");
+                    }))
+        .isInstanceOf(DataIntegrityViolationException.class)
+        .hasMessageContaining("angebot_position_reihenfolge");
+    assertThat(jdbc.queryForObject("SELECT count(*) FROM angebot_position", Integer.class))
+        .isZero();
   }
 
   @Test

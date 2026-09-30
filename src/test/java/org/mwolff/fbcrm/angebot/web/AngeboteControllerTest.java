@@ -60,6 +60,7 @@ class AngeboteControllerTest {
             null,
             List.of(
                 new Angebotsposition(
+                    null,
                     "Konzeption",
                     Abrechnungsmodus.AUFWAND,
                     new BigDecimal("2.50"),

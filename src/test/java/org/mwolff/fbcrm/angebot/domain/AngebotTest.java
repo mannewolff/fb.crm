@@ -32,6 +32,7 @@ class AngebotTest {
   /** 2,5 × 1.000,01 € = 2.500,025 € und damit gerundet 2.500,03 €. */
   private static final Angebotsposition KONZEPTION =
       new Angebotsposition(
+          null,
           "Konzeption",
           Abrechnungsmodus.AUFWAND,
           new BigDecimal("2.50"),
@@ -41,6 +42,7 @@ class AngebotTest {
   /** 1,5 × 0,01 € = 0,015 € und damit gerundet 0,02 €. */
   private static final Angebotsposition KLEINKRAM =
       new Angebotsposition(
+          null,
           "Kleinkram",
           Abrechnungsmodus.AUFWAND,
           new BigDecimal("1.50"),
@@ -49,6 +51,7 @@ class AngebotTest {
 
   private static final Angebotsposition PAUSCHALE =
       new Angebotsposition(
+          null,
           "Schulungstag",
           Abrechnungsmodus.FESTPREIS,
           BigDecimal.ONE,

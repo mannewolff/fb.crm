@@ -48,7 +48,12 @@ class BeleglayoutTest {
 
   private static final Angebotsposition STUNDENPOSTEN =
       new Angebotsposition(
-          "Betreuung", Abrechnungsmodus.AUFWAND, BigDecimal.TEN, Einheit.STUNDE, BigDecimal.ONE);
+          null,
+          "Betreuung",
+          Abrechnungsmodus.AUFWAND,
+          BigDecimal.TEN,
+          Einheit.STUNDE,
+          BigDecimal.ONE);
 
   private static List<Druckzeile> satz() {
     return Beleglayout.zeilen(Druckdatendoppel.standard());
@@ -178,6 +183,7 @@ class BeleglayoutTest {
     // Given — ein Wort ohne Leerzeichen laesst sich nur hart trennen.
     final Angebotsposition sperrig =
         new Angebotsposition(
+            null,
             LANGES_WORT,
             Abrechnungsmodus.FESTPREIS,
             BigDecimal.ONE,
@@ -232,6 +238,7 @@ class BeleglayoutTest {
     // Given
     final Angebotsposition sperrig =
         new Angebotsposition(
+            null,
             LANGES_WORT,
             Abrechnungsmodus.FESTPREIS,
             BigDecimal.ONE,
@@ -282,6 +289,7 @@ class BeleglayoutTest {
     // Given — 46 Zeichen, die Breite der Spalte.
     final Angebotsposition passend =
         new Angebotsposition(
+            null,
             PASSENDES_WORT,
             Abrechnungsmodus.FESTPREIS,
             BigDecimal.ONE,
@@ -302,7 +310,12 @@ class BeleglayoutTest {
     // Given — der lange Text am Absatz und in der Spalte zugleich.
     final Angebotsposition sperrig =
         new Angebotsposition(
-            LANGER_TEXT, Abrechnungsmodus.AUFWAND, BigDecimal.ONE, Einheit.STUNDE, BigDecimal.TEN);
+            null,
+            LANGER_TEXT,
+            Abrechnungsmodus.AUFWAND,
+            BigDecimal.ONE,
+            Einheit.STUNDE,
+            BigDecimal.TEN);
 
     // When
     final List<Druckzeile> zeilen =

@@ -1,10 +1,10 @@
 package org.mwolff.fbcrm.angebot.infrastructure;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
-import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -12,13 +12,14 @@ import static org.mockito.Mockito.when;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
-import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -35,6 +36,12 @@ import org.mwolff.fbcrm.common.Einheit;
  * geprueft ist und nicht nur ihr Zusammenspiel mit der Datenbank ({@code AngebotPersistenceIT}).
  * Gegenstand ist vor allem: Die Plaetze der Positionen entstehen lueckenlos ab 1 aus der
  * Reihenfolge der Liste (E24), und der Status geht unveraendert hin und zurueck.
+ *
+ * <p><b>Dazu das Fortschreiben der Positionszeilen</b> (Plan #169, E2): Eine eingereichte Position
+ * mit bekannter Kennung uebernimmt den neuen Stand in ihrer Zeile, eine ohne Kennung wird
+ * eingefuegt, und die Zeilen des Angebots, die die neue Liste nicht mehr nennt, werden geloescht.
+ * Eine Kennung ausserhalb der Zeilen dieses Angebots ist hier ein Programmierfehler und wirft; die
+ * fachliche Abweisung mit 422 liegt im Anwendungsfall und laeuft vorher.
  */
 @ExtendWith(MockitoExtension.class)
 class JpaAngebotRepositoryTest {
@@ -43,8 +50,10 @@ class JpaAngebotRepositoryTest {
   private static final Instant ANGELEGT = Instant.parse("2026-09-20T08:00:00Z");
   private static final Instant GEAENDERT = Instant.parse("2026-09-27T10:30:00Z");
   private static final String BESCHREIBUNG = "Neugestaltung der Website";
+
   private static final Angebotsposition KONZEPTION =
       new Angebotsposition(
+          null,
           "Konzeption",
           Abrechnungsmodus.AUFWAND,
           new BigDecimal("2.50"),
@@ -53,11 +62,22 @@ class JpaAngebotRepositoryTest {
 
   private static final Angebotsposition SCHULUNG =
       new Angebotsposition(
+          null,
           "Schulungstag",
           Abrechnungsmodus.FESTPREIS,
           BigDecimal.ONE,
           Einheit.PAUSCHAL,
           new BigDecimal("1200.00"));
+
+  /** Dieselbe Position wie {@link #KONZEPTION}, umbenannt — fuer das Fortschreiben einer Zeile. */
+  private static final Angebotsposition UMBENANNT =
+      new Angebotsposition(
+          null,
+          "Entwurf",
+          Abrechnungsmodus.AUFWAND,
+          new BigDecimal("2.50"),
+          Einheit.PERSONENTAG,
+          new BigDecimal("1000.01"));
 
   @Mock private SpringDataAngebotRepository angebote;
 
@@ -66,6 +86,8 @@ class JpaAngebotRepositoryTest {
   @Captor private ArgumentCaptor<AngebotEntity> gespeicherte;
 
   @Captor private ArgumentCaptor<List<AngebotPositionEntity>> gespeichertePositionen;
+
+  @Captor private ArgumentCaptor<Collection<AngebotPositionEntity>> geloeschtePositionen;
 
   @InjectMocks private JpaAngebotRepository repository;
 
@@ -80,6 +102,17 @@ class JpaAngebotRepositoryTest {
         positionen,
         ANGELEGT,
         GEAENDERT);
+  }
+
+  private static Angebotsposition mitKennung(
+      final Angebotsposition position, final @Nullable Long id) {
+    return new Angebotsposition(
+        id,
+        position.bezeichnung(),
+        position.abrechnungsmodus(),
+        position.menge(),
+        position.einheit(),
+        position.einzelpreis());
   }
 
   private static AngebotEntity zeile() {
@@ -100,9 +133,14 @@ class JpaAngebotRepositoryTest {
 
   private static AngebotPositionEntity positionszeile(
       final short platz, final Angebotsposition position) {
+    return positionszeile(11L, platz, position);
+  }
+
+  private static AngebotPositionEntity positionszeile(
+      final long angebotId, final short platz, final Angebotsposition position) {
     return new AngebotPositionEntity(
-        null,
-        11L,
+        position.id(),
+        angebotId,
         platz,
         position.bezeichnung(),
         position.abrechnungsmodus(),
@@ -111,8 +149,21 @@ class JpaAngebotRepositoryTest {
         position.einzelpreis());
   }
 
+  /**
+   * Das Angebot wird geschrieben, und das Angebot hat noch keine Positionszeile.
+   *
+   * <p>{@code saveAll} gibt die uebergebenen Zeilen zurueck: Der Adapter uebersetzt sie danach
+   * zurueck, und genau diese Uebersetzung ist hier der Gegenstand.
+   */
   private void erwarteSchreibenDerZeile(final AngebotEntity zeile) {
+    erwarteSchreibenDerZeile(zeile, List.of());
+  }
+
+  /** Dasselbe, aber das Angebot traegt die genannten Positionszeilen schon. */
+  private void erwarteSchreibenDerZeile(
+      final AngebotEntity zeile, final List<AngebotPositionEntity> vorhandene) {
     when(angebote.save(any(AngebotEntity.class))).thenReturn(zeile);
+    when(positionen.findByAngebot(11L)).thenReturn(vorhandene);
     when(positionen.saveAll(any())).thenAnswer(aufruf -> aufruf.getArgument(0));
   }
 
@@ -179,23 +230,63 @@ class JpaAngebotRepositoryTest {
   }
 
   @Test
-  void save_thenDeletesTheOldPositionsBeforeWritingTheNewOnes() {
-    // Given — sonst stiesse die neue Reihenfolge auf die alten Plaetze (UNIQUE je Platz).
-    erwarteSchreibenDerZeile(zeile());
+  void save_givenAPositionWithAKnownId_thenCarriesItsRowOnInsteadOfReplacingIt() {
+    // Given — Plan #169, E2: die Zeile bleibt dieselbe und uebernimmt den neuen Stand.
+    final AngebotPositionEntity vorhandene = positionszeile((short) 1, mitKennung(KONZEPTION, 71L));
+    erwarteSchreibenDerZeile(zeile(), List.of(vorhandene));
 
-    // When
-    repository.save(angebot(List.of(KONZEPTION)));
+    // When — dieselbe Position, umbenannt und auf den zweiten Platz gestellt.
+    repository.save(angebot(List.of(SCHULUNG, mitKennung(UMBENANNT, 71L))));
 
     // Then
-    final InOrder reihenfolge = inOrder(positionen);
-    reihenfolge.verify(positionen).loescheZuAngebot(11L);
-    reihenfolge.verify(positionen).saveAll(any());
+    verify(positionen).saveAll(gespeichertePositionen.capture());
+    assertThat(gespeichertePositionen.getValue())
+        .extracting(
+            AngebotPositionEntity::getId,
+            AngebotPositionEntity::getPosition,
+            AngebotPositionEntity::getBezeichnung)
+        .containsExactly(tuple(null, (short) 1, "Schulungstag"), tuple(71L, (short) 2, "Entwurf"));
+    // Die vorhandene Zeile selbst ist fortgeschrieben und nicht durch eine neue ersetzt.
+    assertThat(vorhandene.getPosition()).isEqualTo((short) 2);
+    assertThat(vorhandene.getBezeichnung()).isEqualTo("Entwurf");
   }
 
   @Test
-  void save_givenNoPositions_thenWritesNoPositionRow() {
+  void save_thenDeletesOnlyTheRowsTheNewListNoLongerNames() {
+    // Given — die Positionen sind Teil des Angebots: Was die neue Liste nicht nennt, faellt weg.
+    final AngebotPositionEntity bleibt = positionszeile((short) 1, mitKennung(KONZEPTION, 71L));
+    final AngebotPositionEntity faelltWeg = positionszeile((short) 2, mitKennung(SCHULUNG, 72L));
+    erwarteSchreibenDerZeile(zeile(), List.of(bleibt, faelltWeg));
+
+    // When
+    repository.save(angebot(List.of(mitKennung(KONZEPTION, 71L))));
+
+    // Then
+    verify(positionen).deleteAll(geloeschtePositionen.capture());
+    assertThat(geloeschtePositionen.getValue()).containsExactly(faelltWeg);
+  }
+
+  @Test
+  void save_givenAnIdOutsideTheRowsOfTheAngebot_thenThrowsAndWritesNoPositionRow() {
+    // Given — nach der Pruefung im Anwendungsfall ist das ein Programmierfehler, kein
+    // Eingabefehler.
+    when(angebote.save(any(AngebotEntity.class))).thenReturn(zeile());
+    when(positionen.findByAngebot(11L))
+        .thenReturn(List.of(positionszeile((short) 1, mitKennung(KONZEPTION, 71L))));
+
+    // When / Then
+    assertThatThrownBy(() -> repository.save(angebot(List.of(mitKennung(SCHULUNG, 4711L)))))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("4711");
+    verify(positionen, never()).saveAll(any());
+    verify(positionen, never()).deleteAll(any());
+  }
+
+  @Test
+  void save_givenNoPositions_thenWritesNoPositionRowAndDeletesTheOldOnes() {
     // Given
-    erwarteSchreibenDerZeile(zeile());
+    final AngebotPositionEntity vorhandene = positionszeile((short) 1, mitKennung(KONZEPTION, 71L));
+    erwarteSchreibenDerZeile(zeile(), List.of(vorhandene));
 
     // When
     repository.save(angebot(List.of()));
@@ -203,6 +294,8 @@ class JpaAngebotRepositoryTest {
     // Then
     verify(positionen).saveAll(gespeichertePositionen.capture());
     assertThat(gespeichertePositionen.getValue()).isEmpty();
+    verify(positionen).deleteAll(geloeschtePositionen.capture());
+    assertThat(geloeschtePositionen.getValue()).containsExactly(vorhandene);
   }
 
   @Test
@@ -224,13 +317,14 @@ class JpaAngebotRepositoryTest {
   void findById_thenTranslatesTheRowAndItsPositions() {
     // Given
     when(angebote.findById(11L)).thenReturn(Optional.of(zeile()));
-    when(positionen.findByAngebot(11L)).thenReturn(List.of(positionszeile((short) 1, KONZEPTION)));
+    when(positionen.findByAngebot(11L))
+        .thenReturn(List.of(positionszeile((short) 1, mitKennung(KONZEPTION, 71L))));
 
     // When
     final Optional<Angebot> gefunden = repository.findById(11L);
 
-    // Then
-    assertThat(gefunden).contains(angebot(List.of(KONZEPTION)));
+    // Then — die Kennung der Zeile steht danach an der Position (Plan #169, E2).
+    assertThat(gefunden).contains(angebot(List.of(mitKennung(KONZEPTION, 71L))));
   }
 
   @Test
@@ -261,19 +355,6 @@ class JpaAngebotRepositoryTest {
     // Then
     assertThat(gefunden).isEmpty();
     verify(positionen, never()).findByAngebot(anyLong());
-  }
-
-  private static AngebotPositionEntity positionszeile(
-      final long angebotId, final short platz, final Angebotsposition position) {
-    return new AngebotPositionEntity(
-        null,
-        angebotId,
-        platz,
-        position.bezeichnung(),
-        position.abrechnungsmodus(),
-        position.menge(),
-        position.einheit(),
-        position.einzelpreis());
   }
 
   @Test
