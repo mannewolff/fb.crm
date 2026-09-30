@@ -5,6 +5,7 @@ import org.jspecify.annotations.Nullable;
 import org.mwolff.fbcrm.common.Abrechnungsmodus;
 import org.mwolff.fbcrm.common.Einheit;
 import org.mwolff.fbcrm.common.Geldrechnung;
+import org.mwolff.fbcrm.common.Identifiable;
 
 /**
  * Eine Position eines Angebots (Kriterium 4).
@@ -24,6 +25,11 @@ import org.mwolff.fbcrm.common.Geldrechnung;
  * Angebot, und der Bestand vergibt sie beim Schreiben lueckenlos ab 1 (E24). Eine Nummer im Record
  * waere eine zweite Wahrheit, die beim Umstellen nachgezogen werden muesste.
  *
+ * <p>Sie ist {@link Identifiable}, weil der Abrechnungsstand und der Rechnungsentwurf ihre Kennung
+ * als Zahl brauchen (Plan #169, E5, E6): Eine Rechnungsposition beruft sich auf sie. Die eine
+ * Pruefung dafuer steht in {@link Identifiable#requireId()} statt verstreut bei jedem Aufrufer
+ * (CLAUDE-java.md §6.2).
+ *
  * @param id technische Kennung — {@code null}, solange die Position nicht gespeichert ist
  * @param bezeichnung die Leistung; nie leer, das prueft der Eingang der Maske
  * @param abrechnungsmodus nach Aufwand oder zum Festpreis
@@ -37,7 +43,8 @@ public record Angebotsposition(
     Abrechnungsmodus abrechnungsmodus,
     BigDecimal menge,
     Einheit einheit,
-    BigDecimal einzelpreis) {
+    BigDecimal einzelpreis)
+    implements Identifiable {
 
   /** Der Netto-Betrag der Position, kaufmaennisch auf den Cent gerundet (Kriterium 5). */
   public BigDecimal betrag() {

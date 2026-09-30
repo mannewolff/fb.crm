@@ -1,12 +1,17 @@
 /**
- * Die beiden Anwendungsfaelle der Rechnungseinstellungen: lesen und pflegen.
+ * Die Anwendungsfaelle der Rechnung: die Einstellungen lesen und pflegen, die Liste aller
+ * Rechnungen, die abrechenbaren Angebote und der Entwurf — anlegen, lesen, aendern, loeschen.
  *
- * <p>Hier liegen die Transaktionsgrenzen und die Uhr, aus der der Zeitpunkt der Aenderung kommt.
- * Eine eigene Exception gibt es nicht — es gibt keine Lage, in der die Einstellungen fehlen
- * koennten (die Migration hat die eine Zeile mit ihren Vorbelegungen angelegt).
+ * <p>Hier liegen die Transaktionsgrenzen und die Uhr, aus der Zeitpunkt und Datum kommen; ein Datum
+ * rechnet dabei gegen die Geschaeftszone und nicht gegen UTC (E12).
  *
- * <p>Zu normalisieren gibt es nichts, anders als bei {@code eigeneangaben.application}: Drei der
- * vier Werte sind Zahlen, und das Muster ist bereits an der Schnittstelle geprueft.
+ * <p>Hier liegen auch die fachlichen Ausnahmen mit ihrem Statuscode. Sie stehen in dieser Schicht
+ * und nicht in {@code domain}, weil {@code @ResponseStatus} eine Spring-Annotation ist, die das
+ * framework-freie Domaenenmodell nicht tragen darf (CLAUDE-java.md §6.1) — auch dann, wenn die
+ * Domaene sie selbst wirft, wie {@code RechnungszustandPasstNicht}.
+ *
+ * <p>Zu normalisieren gibt es nichts, anders als bei {@code eigeneangaben.application}: Die Werte
+ * der Einstellungen sind Zahlen, und das Muster ist bereits an der Schnittstelle geprueft.
  *
  * <p>Hier liegt auch die Sprache des Belegdrucks: die {@code Druckzeile} mit ihrer {@code Schrift}
  * und der Port {@code Belegdrucker}, der eine Zeilenfolge als PDF wegschreibt. Sie gehoert in diese
