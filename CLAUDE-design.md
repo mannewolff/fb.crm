@@ -2,7 +2,7 @@
 
 Diese Datei ist die Designquelle der Anwendung **fb.crm**. Sie beschreibt, **was** die Oberfläche trägt: Vorlage, Erscheinungsbild, Palette, Schrift, Radien, Tiefe, Kontrast, Rahmen und Zustandsformen. **Wie** diese Werte im Code angewendet werden — Theme-zentral, über die `sx`-Prop, keine hartcodierten Werte — regelt [CLAUDE-react.md](CLAUDE-react.md).
 
-**Geltungsbereich:** ausschließlich diese Anwendung. Regeln für Veröffentlichungen (Blog, LinkedIn, Whitepaper, Website) und für Präsentationen gelten hier **nicht**. Auch die Gestaltung der erzeugten PDF-Dokumente (Angebot, Rechnung, Leistungsnachweis) fällt nicht hierunter — sie folgt Kapitel 06 der Spezifikation.
+**Geltungsbereich:** ausschließlich diese Anwendung. Regeln für Veröffentlichungen (Blog, LinkedIn, Whitepaper, Website) und für Präsentationen gelten hier **nicht**. Auch die Gestaltung der erzeugten PDF-Dokumente (Angebot, Rechnung, Leistungsnachweis) fällt nicht hierunter — sie folgt Kapitel 06 der Spezifikation; für die **Rechnung** gilt an dessen Stelle die verbindliche Vorlage [`docs/vorlage-rechnung.pdf`](docs/vorlage-rechnung.pdf).
 
 ---
 
