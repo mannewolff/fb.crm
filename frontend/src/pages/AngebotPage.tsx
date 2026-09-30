@@ -11,6 +11,7 @@ import { angebotLesen, angebotStatusWeiter, angebotStatusZurueck } from '../api/
 import type { Angebot, AngebotPosition } from '../api/angebote';
 import AngebotsstatusChip from '../components/AngebotsstatusChip';
 import Karte from '../components/Karte';
+import Kommentare from '../components/Kommentare';
 import { useKopfPfad } from '../components/KopfPfad';
 import type { PfadVerweis } from '../components/KopfPfad';
 import KupferTaste from '../components/KupferTaste';
@@ -27,8 +28,12 @@ import { ZAHLEN_KLASSE } from '../theme';
  * Die Ansicht eines Angebots (Issue #127).
  *
  * Oben die Karte mit der Ueberschrift, den Angaben und den Aktionen; darunter die Beschreibung,
- * sofern es eine gibt, und die Positionen mit Summe (Vorlage `.karte` Z. 53, `.kopfzeile` Z. 79–80,
- * `.stamm` Z. 100–102).
+ * sofern es eine gibt, die Positionen mit Summe und zuletzt die Kommentare (Vorlage `.karte` Z. 53,
+ * `.kopfzeile` Z. 79–80, `.stamm` Z. 100–102).
+ *
+ * <b>Die Kommentare laden sich selbst</b> ({@link Kommentare}, Issue #146): Die Seite gibt nur die
+ * Kennung weiter. Ein Ausfall des Kommentarwegs steht darum in dessen Karte und laesst Ueberschrift,
+ * Angaben und Positionen stehen.
  *
  * <b>Die Aktionen.</b> „Status weiter" ist die eine Kupfertaste — der gewoehnliche naechste Schritt.
  * „Status zurueck" und „Bearbeiten" stehen weich daneben (CLAUDE-design.md, Leitgedanke 2). An den
@@ -306,6 +311,7 @@ export default function AngebotPage() {
             </Box>
           </Box>
         </Karte>
+        <Kommentare angebotId={angebot.id} />
       </>
     );
   }
