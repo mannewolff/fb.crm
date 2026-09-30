@@ -47,6 +47,15 @@ export interface Anfrage {
   readonly methode: Methode;
   readonly rumpf?: unknown;
   /**
+   * Der Rumpf als Formulardaten, wenn eine Datei mitgeht (Issue #148, Kriterium 2).
+   *
+   * Steht er, geht kein `Content-Type` hinaus: Ein `multipart/form-data` braucht die
+   * `boundary`, und die kennt erst der Browser, wenn er das `FormData` serialisiert. Ein von
+   * Hand gesetzter Kopf haette keine — der Server bekaeme eine Nachricht, deren Teile er nicht
+   * trennen kann, und die Antwort waere ein Fehler ohne erkennbaren Grund.
+   */
+  readonly formular?: FormData;
+  /**
    * Bricht die Anfrage ab, sobald die Ansicht ihre Antwort nicht mehr braucht.
    *
    * Eine Ansicht, die auf jeden Tastendruck neu fragt, hat sonst mehrere Antworten unterwegs, und
@@ -106,13 +115,35 @@ async function fehlerAus(antwort: Response): Promise<ApiError> {
   return new ApiError(antwort.status, meldung, feldFehler(problem.fieldErrors));
 }
 
+/** Was von der Anfrage hinausgeht: Rumpf und der Kopf, der zu ihm gehoert — oder nichts. */
+interface Nutzlast {
+  readonly headers?: Record<string, string>;
+  readonly body?: BodyInit;
+}
+
+/**
+ * Formular vor JSON, und beides vor nichts.
+ *
+ * Die Reihenfolge steht hier ausdruecklich und nicht als Bedingung im `fetch`-Aufruf: Ein
+ * Formular bringt seinen eigenen Kopf mit `boundary` mit, und ein daneben gesetzter
+ * `Content-Type: application/json` machte die Nachricht unlesbar. Wer beides mitgibt, bekommt
+ * das Formular — nicht eine Mischung aus beidem.
+ */
+function nutzlast(anfrage: Anfrage): Nutzlast {
+  if (anfrage.formular !== undefined) {
+    return { body: anfrage.formular };
+  }
+  if (anfrage.rumpf !== undefined) {
+    return { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(anfrage.rumpf) };
+  }
+  return {};
+}
+
 async function anfragen(pfad: string, anfrage: Anfrage): Promise<Response> {
-  const mitRumpf = anfrage.rumpf !== undefined;
   const antwort = await fetch(pfad, {
     method: anfrage.methode,
     credentials: 'same-origin',
-    headers: mitRumpf ? { 'Content-Type': 'application/json' } : undefined,
-    body: mitRumpf ? JSON.stringify(anfrage.rumpf) : undefined,
+    ...nutzlast(anfrage),
     signal: anfrage.signal,
   });
   if (!antwort.ok) {
@@ -134,4 +165,18 @@ export async function apiJson<T>(
 /** Ruft auf, wo die Antwort keinen Inhalt traegt (204). */
 export async function apiOhneInhalt(pfad: string, anfrage: Anfrage): Promise<void> {
   await anfragen(pfad, anfrage);
+}
+
+/**
+ * Ruft auf, wo die Antwort kein JSON traegt, sondern Bytes — der Inhalt einer Anlage (E5).
+ *
+ * Denselben inneren Weg wie {@link apiJson}: dasselbe Cookie, dieselben Problem Details als
+ * {@link ApiError}. Die Ansicht sieht auch hier nie eine rohe Antwort. Was der Aufrufer mit dem
+ * `Blob` tut — ihn anzeigen oder sichern —, entscheidet er; **welche Art er ihm dabei gibt,
+ * auch**: Der `Content-Type` der Antwort ist der Art, die die Anwendung am Inhalt festgestellt
+ * hat, und kein Versprechen ueber die Bytes.
+ */
+export async function apiBlob(pfad: string, anfrage: Anfrage): Promise<Blob> {
+  const antwort = await anfragen(pfad, anfrage);
+  return await antwort.blob();
 }

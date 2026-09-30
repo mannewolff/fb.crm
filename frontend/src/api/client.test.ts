@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { ApiError, apiJson, apiOhneInhalt } from './client';
+import { ApiError, apiBlob, apiJson, apiOhneInhalt } from './client';
+import { blobText } from '../test/blobText';
 
 /** Gibt den Wert unveraendert zurueck — fuer Faelle, in denen nicht der Parser geprueft wird. */
 const durchreichen = (wert: unknown): unknown => wert;
@@ -165,5 +166,64 @@ describe('Fehlerantworten', () => {
       status: 503,
       fieldErrors: {},
     });
+  });
+});
+
+describe('Formulardaten', () => {
+  it('schickt das Formular als Rumpf, ohne einen Inhaltstyp zu setzen', async () => {
+    const fetchMock = fetchLiefert(() => problemAntwort(201, { id: 4 }));
+    const formular = new FormData();
+    formular.append('datei', new File(['x'], 'anfrage.pdf'));
+
+    await apiJson('/api/angebote/9/anlagen', { methode: 'POST', formular }, durchreichen);
+
+    const optionen = fetchMock.mock.calls[0][1];
+    // Ohne Kopf: Die `boundary` kennt erst der Browser, wenn er das FormData serialisiert.
+    expect(optionen?.headers).toBeUndefined();
+    expect(optionen?.body).toBe(formular);
+  });
+
+  it('laesst das Formular vor einem JSON-Rumpf den Vorrang', async () => {
+    const fetchMock = fetchLiefert(() => problemAntwort(201, {}));
+    const formular = new FormData();
+
+    await apiJson('/api/test', { methode: 'POST', formular, rumpf: { a: 1 } }, durchreichen);
+
+    const optionen = fetchMock.mock.calls[0][1];
+    expect(optionen?.headers).toBeUndefined();
+    expect(optionen?.body).toBe(formular);
+  });
+});
+
+describe('apiBlob', () => {
+  it('gibt den Rumpf der Antwort als Blob heraus', async () => {
+    fetchLiefert(
+      () =>
+        new Response('inhalt', { status: 200, headers: { 'Content-Type': 'application/pdf' } }),
+    );
+
+    const blob = await apiBlob('/api/angebote/9/anlagen/3/inhalt', { methode: 'GET' });
+
+    expect(blob).toBeInstanceOf(Blob);
+    await expect(blobText(blob)).resolves.toBe('inhalt');
+  });
+
+  it('schickt das Sitzungs-Cookie mit', async () => {
+    const fetchMock = fetchLiefert(() => new Response('inhalt', { status: 200 }));
+
+    await apiBlob('/api/angebote/9/anlagen/3/inhalt', { methode: 'GET' });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/angebote/9/anlagen/3/inhalt',
+      expect.objectContaining({ method: 'GET', credentials: 'same-origin' }),
+    );
+  });
+
+  it('wirft bei einer verschwundenen Anlage einen ApiError', async () => {
+    fetchLiefert(() => problemAntwort(404, { detail: 'Die Anlage wurde nicht gefunden.' }));
+
+    await expect(
+      apiBlob('/api/angebote/9/anlagen/3/inhalt', { methode: 'GET' }),
+    ).rejects.toMatchObject({ status: 404, message: 'Die Anlage wurde nicht gefunden.' });
   });
 });
