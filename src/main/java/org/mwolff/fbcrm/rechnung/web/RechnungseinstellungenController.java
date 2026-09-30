@@ -49,6 +49,6 @@ public class RechnungseinstellungenController {
   @PutMapping
   @ResponseStatus(HttpStatus.NO_CONTENT)
   public void pflegen(@Valid @RequestBody final RechnungseinstellungenRequest anfrage) {
-    pflegenUseCase.pflege(anfrage.einstellungen());
+    pflegenUseCase.pflege(anfrage.einstellungen(), anfrage.naechsteNummer());
   }
 }

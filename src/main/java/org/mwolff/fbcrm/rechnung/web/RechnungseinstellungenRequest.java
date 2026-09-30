@@ -33,9 +33,14 @@ public record RechnungseinstellungenRequest(
         BigDecimal steuersatz,
     @NotNull @Min(0) Integer zahlungszielTage) {
 
-  /** Dieselben Einstellungen in der Sprache der Fachschicht. */
+  /**
+   * Dieselben Einstellungen in der Sprache der Fachschicht — <b>ohne</b> die Nummer.
+   *
+   * <p>Sie gehoert seit #175 dem Nummernkreis und geht am Anwendungsfall getrennt mit; im JSON
+   * stehen beide weiter nebeneinander, denn die Maske zeigt einen Bereich.
+   */
   Rechnungseinstellungen einstellungen() {
     return new Rechnungseinstellungen(
-        new Nummernmuster(nummerMuster), naechsteNummer, steuersatz, zahlungszielTage);
+        new Nummernmuster(nummerMuster), steuersatz, zahlungszielTage);
   }
 }

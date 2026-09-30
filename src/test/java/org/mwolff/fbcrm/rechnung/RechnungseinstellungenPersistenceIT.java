@@ -45,6 +45,7 @@ class RechnungseinstellungenPersistenceIT extends AbstractIntegrationTest {
   void stelleDenStandDerMigrationHer() {
     jdbc.execute("DELETE FROM rechnung_einstellungen");
     jdbc.execute("INSERT INTO rechnung_einstellungen DEFAULT VALUES");
+    jdbc.execute("DELETE FROM rechnung_nummernkreis");
   }
 
   @Test
@@ -56,15 +57,14 @@ class RechnungseinstellungenPersistenceIT extends AbstractIntegrationTest {
     assertThat(gelesen)
         .isEqualTo(
             new Rechnungseinstellungen(
-                new Nummernmuster("{NNNN}-{JJJJ}"), 1, new BigDecimal("19.00"), 10));
+                new Nummernmuster("{NNNN}-{JJJJ}"), new BigDecimal("19.00"), 10));
   }
 
   @Test
   void speichere_thenLiesAnswersWithTheStoredValues() {
     // Given
     final Rechnungseinstellungen neu =
-        new Rechnungseinstellungen(
-            new Nummernmuster("R{JJ}-{NNNN}"), 4, new BigDecimal("19.50"), 14);
+        new Rechnungseinstellungen(new Nummernmuster("R{JJ}-{NNNN}"), new BigDecimal("19.50"), 14);
 
     // When
     repository.speichere(neu, GEAENDERT);
@@ -77,8 +77,7 @@ class RechnungseinstellungenPersistenceIT extends AbstractIntegrationTest {
   void speichere_thenUpdatesTheOneRowAndAddsNoSecond() {
     // When — die Kennung steht von Anfang an, das save ist ein UPDATE.
     repository.speichere(
-        new Rechnungseinstellungen(new Nummernmuster("{N}"), 7, new BigDecimal("7.00"), 0),
-        GEAENDERT);
+        new Rechnungseinstellungen(new Nummernmuster("{N}"), new BigDecimal("7.00"), 0), GEAENDERT);
 
     // Then
     final Integer zeilen =

@@ -29,9 +29,6 @@ class RechnungseinstellungenEntity {
   @Column(name = "nummer_muster", nullable = false, length = 50)
   private String nummerMuster;
 
-  @Column(name = "naechste_nummer", nullable = false)
-  private int naechsteNummer;
-
   @Column(name = "steuersatz", nullable = false, precision = 5, scale = 2)
   private BigDecimal steuersatz;
 
@@ -52,13 +49,11 @@ class RechnungseinstellungenEntity {
 
   RechnungseinstellungenEntity(
       final String nummerMuster,
-      final int naechsteNummer,
       final BigDecimal steuersatz,
       final int zahlungszielTage,
       final Instant updatedAt) {
     this.id = ZEILE;
     this.nummerMuster = nummerMuster;
-    this.naechsteNummer = naechsteNummer;
     this.steuersatz = steuersatz;
     this.zahlungszielTage = zahlungszielTage;
     this.updatedAt = updatedAt;
@@ -70,10 +65,6 @@ class RechnungseinstellungenEntity {
 
   String getNummerMuster() {
     return nummerMuster;
-  }
-
-  int getNaechsteNummer() {
-    return naechsteNummer;
   }
 
   BigDecimal getSteuersatz() {

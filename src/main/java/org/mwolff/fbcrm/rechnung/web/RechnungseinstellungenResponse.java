@@ -1,7 +1,7 @@
 package org.mwolff.fbcrm.rechnung.web;
 
 import java.math.BigDecimal;
-import org.mwolff.fbcrm.rechnung.domain.Rechnungseinstellungen;
+import org.mwolff.fbcrm.rechnung.application.RechnungseinstellungenMitNummer;
 
 /**
  * Die Rechnungseinstellungen mit ihren vier Werten (#159, Kriterium 5).
@@ -14,6 +14,9 @@ import org.mwolff.fbcrm.rechnung.domain.Rechnungseinstellungen;
  *
  * <p>Der Zeitpunkt der letzten Aenderung fehlt bewusst: Die Maske zeigt ihn nicht.
  *
+ * <p>Die naechste Nummer steht hier unveraendert neben den drei Einstellungen, obwohl sie seit #175
+ * aus dem Nummernkreis kommt: Die Maske zeigt einen Bereich, und das JSON ist ihr Vertrag.
+ *
  * @param nummerMuster Schreibweise der Rechnungsnummer
  * @param naechsteNummer die naechste laufende Nummer
  * @param steuersatz Mehrwertsteuersatz in Prozent
@@ -23,11 +26,11 @@ public record RechnungseinstellungenResponse(
     String nummerMuster, int naechsteNummer, BigDecimal steuersatz, int zahlungszielTage) {
 
   /** Die Sicht der Oberflaeche auf die Einstellungen. */
-  static RechnungseinstellungenResponse of(final Rechnungseinstellungen einstellungen) {
+  static RechnungseinstellungenResponse of(final RechnungseinstellungenMitNummer stand) {
     return new RechnungseinstellungenResponse(
-        einstellungen.nummerMuster().text(),
-        einstellungen.naechsteNummer(),
-        einstellungen.steuersatz(),
-        einstellungen.zahlungszielTage());
+        stand.einstellungen().nummerMuster().text(),
+        stand.naechsteNummer(),
+        stand.einstellungen().steuersatz(),
+        stand.einstellungen().zahlungszielTage());
   }
 }

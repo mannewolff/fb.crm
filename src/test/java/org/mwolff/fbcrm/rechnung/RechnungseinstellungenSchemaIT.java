@@ -38,6 +38,7 @@ class RechnungseinstellungenSchemaIT extends AbstractIntegrationTest {
   void stelleDenStandDerMigrationHer() {
     jdbc.execute("DELETE FROM rechnung_einstellungen");
     jdbc.execute("INSERT INTO rechnung_einstellungen DEFAULT VALUES");
+    jdbc.execute("DELETE FROM rechnung_nummernkreis");
   }
 
   @Test
@@ -58,13 +59,11 @@ class RechnungseinstellungenSchemaIT extends AbstractIntegrationTest {
     // When — Kriterium 11: die Vorbelegungen stehen nach der Migration schon da.
     final Map<String, Object> zeile =
         jdbc.queryForMap(
-            "SELECT nummer_muster, naechste_nummer, steuersatz,"
-                + " zahlungsziel_tage FROM rechnung_einstellungen");
+            "SELECT nummer_muster, steuersatz, zahlungsziel_tage FROM rechnung_einstellungen");
 
-    // Then
+    // Then — die naechste Nummer steht seit V17 im Nummernkreis und nicht mehr hier (#175).
     assertThat(zeile)
         .containsEntry("nummer_muster", "{NNNN}-{JJJJ}")
-        .containsEntry("naechste_nummer", 1)
         .containsEntry("zahlungsziel_tage", 10);
     assertThat((BigDecimal) zeile.get("steuersatz")).isEqualByComparingTo("19.00");
   }
@@ -97,12 +96,7 @@ class RechnungseinstellungenSchemaIT extends AbstractIntegrationTest {
   }
 
   @ParameterizedTest
-  @CsvSource({
-    "naechste_nummer, 0",
-    "steuersatz, -0.01",
-    "steuersatz, 100.01",
-    "zahlungsziel_tage, -1"
-  })
+  @CsvSource({"steuersatz, -0.01", "steuersatz, 100.01", "zahlungsziel_tage, -1"})
   void einstellungen_givenAValueOutsideItsRange_thenRejectedByTheDatabase(
       final String spalte, final String wert) {
     // When / Then — die Grenzen aus den Kriterien 7 bis 9 stehen als CHECK in der Tabelle.

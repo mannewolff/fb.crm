@@ -31,6 +31,9 @@ public record Nummernmuster(String text) {
   /** Die Spaltenbreite von {@code rechnung_einstellungen.nummer_muster}. */
   public static final int MAX_LAENGE = 50;
 
+  /** Das Zaehlerjahr eines Musters ohne Jahres-Platzhalter: ein einziger, durchlaufender Kreis. */
+  public static final int OHNE_JAHR = 0;
+
   private static final Pattern PLATZHALTER = Pattern.compile("\\{([^{}]*)\\}");
   private static final Pattern NUMMER = Pattern.compile("N+");
   private static final Pattern JAHR = Pattern.compile("JJ|JJJJ");
@@ -75,6 +78,29 @@ public record Nummernmuster(String text) {
     // getrennte Stuecke aneinanderstossen, aendert nichts: Geprueft wird Zeichen fuer Zeichen.
     final String ohnePlatzhalter = PLATZHALTER.matcher(text).replaceAll("");
     return nummern == 1 && jahre <= 1 && FESTER_TEXT.matcher(ohnePlatzhalter).matches();
+  }
+
+  /**
+   * Das Zaehlerjahr dieses Musters — der Schluessel, unter dem sein Nummernkreis zaehlt (#160,
+   * Kriterium 16).
+   *
+   * <p>Traegt das Muster einen Jahres-Platzhalter, zaehlt jedes Jahr fuer sich und beginnt wieder
+   * bei 1; ohne ihn gibt es einen einzigen, durchlaufenden Kreis, und der steht unter der {@value
+   * #OHNE_JAHR}. Ein Jahr 0 gibt es sonst nicht, also ist der Schluessel eindeutig.
+   *
+   * <p>Die Entscheidung faellt hier und nur hier: Wer sie anderswo noch einmal traefe — beim Lesen,
+   * beim Pflegen, beim Stellen —, koennte sie beim naechsten Mal anders treffen, und die Nummer
+   * landete in einem anderen Kreis, als sie gezogen wurde.
+   *
+   * @param jahr das Kalenderjahr in {@code common.Geschaeftszone}
+   */
+  public int zaehlerjahr(final int jahr) {
+    return PLATZHALTER
+            .matcher(text)
+            .results()
+            .anyMatch(treffer -> JAHR.matcher(treffer.group(1)).matches())
+        ? jahr
+        : OHNE_JAHR;
   }
 
   /**

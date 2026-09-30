@@ -36,7 +36,7 @@ class JpaRechnungseinstellungenRepositoryTest {
 
   private static Rechnungseinstellungen einstellungen() {
     return new Rechnungseinstellungen(
-        new Nummernmuster("R{JJ}-{NNNN}"), 4, new BigDecimal("19.50"), 14);
+        new Nummernmuster("R{JJ}-{NNNN}"), new BigDecimal("19.50"), 14);
   }
 
   @Test
@@ -46,7 +46,7 @@ class JpaRechnungseinstellungenRepositoryTest {
         .thenReturn(
             Optional.of(
                 new RechnungseinstellungenEntity(
-                    "R{JJ}-{NNNN}", 4, new BigDecimal("19.50"), 14, GEAENDERT)));
+                    "R{JJ}-{NNNN}", new BigDecimal("19.50"), 14, GEAENDERT)));
 
     // When
     final Rechnungseinstellungen gelesen = repository.lies();
@@ -62,7 +62,7 @@ class JpaRechnungseinstellungenRepositoryTest {
         .thenReturn(
             Optional.of(
                 new RechnungseinstellungenEntity(
-                    "{NNNN}-{JJJJ}", 1, new BigDecimal("19.00"), 10, GEAENDERT)));
+                    "{NNNN}-{JJJJ}", new BigDecimal("19.00"), 10, GEAENDERT)));
 
     // When
     final Rechnungseinstellungen gelesen = repository.lies();
@@ -71,7 +71,7 @@ class JpaRechnungseinstellungenRepositoryTest {
     assertThat(gelesen)
         .isEqualTo(
             new Rechnungseinstellungen(
-                new Nummernmuster("{NNNN}-{JJJJ}"), 1, new BigDecimal("19.00"), 10));
+                new Nummernmuster("{NNNN}-{JJJJ}"), new BigDecimal("19.00"), 10));
   }
 
   @Test
@@ -85,7 +85,6 @@ class JpaRechnungseinstellungenRepositoryTest {
         .satisfies(
             zeile -> assertThat(zeile.getId()).isEqualTo(RechnungseinstellungenEntity.ZEILE),
             zeile -> assertThat(zeile.getNummerMuster()).isEqualTo("R{JJ}-{NNNN}"),
-            zeile -> assertThat(zeile.getNaechsteNummer()).isEqualTo(4),
             zeile -> assertThat(zeile.getSteuersatz()).isEqualByComparingTo("19.50"),
             zeile -> assertThat(zeile.getZahlungszielTage()).isEqualTo(14),
             zeile -> assertThat(zeile.getUpdatedAt()).isEqualTo(GEAENDERT));

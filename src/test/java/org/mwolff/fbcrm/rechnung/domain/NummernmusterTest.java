@@ -83,4 +83,20 @@ class NummernmusterTest {
     // When / Then
     assertThat(new Nummernmuster(muster).text()).isEqualTo(muster);
   }
+
+  @ParameterizedTest
+  @CsvSource({
+    // mit Jahres-Platzhalter, lang wie kurz: der Kreis gehoert dem Jahr
+    "{NNNN}-{JJJJ}, 2026, 2026",
+    "R{JJ}-{NNNN}, 2026, 2026",
+    "{JJJJ}/{N}, 2025, 2025",
+    // ohne Jahres-Platzhalter: ein einziger, jahresloser Kreis unter der 0
+    "{NNNN}, 2026, 0",
+    "R-{N}.A, 2026, 0"
+  })
+  void zaehlerjahr_thenAnswersWithTheYearOnlyWhenThePatternCarriesOne(
+      final String muster, final int jahr, final int erwartet) {
+    // When / Then — an dieser einen Stelle entscheidet sich, welchem Zaehler eine Nummer gehoert.
+    assertThat(new Nummernmuster(muster).zaehlerjahr(jahr)).isEqualTo(erwartet);
+  }
 }

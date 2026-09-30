@@ -37,7 +37,6 @@ class JpaRechnungseinstellungenRepository implements RechnungseinstellungenRepos
   private static Rechnungseinstellungen toDomain(final RechnungseinstellungenEntity zeile) {
     return new Rechnungseinstellungen(
         new Nummernmuster(zeile.getNummerMuster()),
-        zeile.getNaechsteNummer(),
         zeile.getSteuersatz(),
         zeile.getZahlungszielTage());
   }
@@ -46,7 +45,6 @@ class JpaRechnungseinstellungenRepository implements RechnungseinstellungenRepos
       final Rechnungseinstellungen einstellungen, final Instant geaendertAm) {
     return new RechnungseinstellungenEntity(
         einstellungen.nummerMuster().text(),
-        einstellungen.naechsteNummer(),
         einstellungen.steuersatz(),
         einstellungen.zahlungszielTage(),
         geaendertAm);

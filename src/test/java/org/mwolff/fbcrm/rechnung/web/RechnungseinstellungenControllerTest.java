@@ -20,6 +20,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mwolff.fbcrm.common.web.GlobalExceptionHandler;
 import org.mwolff.fbcrm.rechnung.application.RechnungseinstellungenLesenUseCase;
+import org.mwolff.fbcrm.rechnung.application.RechnungseinstellungenMitNummer;
 import org.mwolff.fbcrm.rechnung.application.RechnungseinstellungenPflegenUseCase;
 import org.mwolff.fbcrm.rechnung.domain.Nummernmuster;
 import org.mwolff.fbcrm.rechnung.domain.Rechnungseinstellungen;
@@ -57,9 +58,10 @@ class RechnungseinstellungenControllerTest {
             .build();
   }
 
-  private static Rechnungseinstellungen vorbelegt() {
-    return new Rechnungseinstellungen(
-        new Nummernmuster("{NNNN}-{JJJJ}"), 1, new BigDecimal("19.00"), 10);
+  private static RechnungseinstellungenMitNummer vorbelegt() {
+    return new RechnungseinstellungenMitNummer(
+        new Rechnungseinstellungen(new Nummernmuster("{NNNN}-{JJJJ}"), new BigDecimal("19.00"), 10),
+        1);
   }
 
   /**
@@ -136,11 +138,12 @@ class RechnungseinstellungenControllerTest {
     controller.pflegen(
         new RechnungseinstellungenRequest("R{JJ}-{NNNN}", 4, new BigDecimal("19.50"), 14));
 
-    // Then
+    // Then — die Nummer geht getrennt mit; sie gehoert dem Nummernkreis (#175).
     verify(pflegen)
         .pflege(
             new Rechnungseinstellungen(
-                new Nummernmuster("R{JJ}-{NNNN}"), 4, new BigDecimal("19.50"), 14));
+                new Nummernmuster("R{JJ}-{NNNN}"), new BigDecimal("19.50"), 14),
+            4);
   }
 
   @Test
@@ -163,7 +166,8 @@ class RechnungseinstellungenControllerTest {
     verify(pflegen)
         .pflege(
             new Rechnungseinstellungen(
-                new Nummernmuster("R{JJ}-{NNNN}"), 4, new BigDecimal("19.50"), 14));
+                new Nummernmuster("R{JJ}-{NNNN}"), new BigDecimal("19.50"), 14),
+            4);
   }
 
   @ParameterizedTest

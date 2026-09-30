@@ -4,8 +4,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mwolff.fbcrm.AbstractIntegrationTest;
@@ -13,6 +16,8 @@ import org.mwolff.fbcrm.auth.domain.Account;
 import org.mwolff.fbcrm.auth.domain.AccountRepository;
 import org.mwolff.fbcrm.auth.domain.PasswordHasher;
 import org.mwolff.fbcrm.auth.domain.Role;
+import org.mwolff.fbcrm.common.Geschaeftszone;
+import org.mwolff.fbcrm.rechnung.domain.Nummernmuster;
 import org.mwolff.fbcrm.rechnung.web.RechnungseinstellungenResponse;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.web.client.TestRestTemplate;
@@ -68,6 +73,7 @@ class RechnungseinstellungenIT extends AbstractIntegrationTest {
   void stelleDenStandDerMigrationHerUndMeldeAn() {
     jdbc.execute("DELETE FROM rechnung_einstellungen");
     jdbc.execute("INSERT INTO rechnung_einstellungen DEFAULT VALUES");
+    jdbc.execute("DELETE FROM rechnung_nummernkreis");
     jdbc.execute("TRUNCATE outbox_message, password_reset_token, account RESTART IDENTITY CASCADE");
     accounts.save(
         new Account(null, MAIL, "Manne", hasher.hash(PASSWORT), Role.ADMIN, 0, ANGELEGT, ANGELEGT));
@@ -123,6 +129,16 @@ class RechnungseinstellungenIT extends AbstractIntegrationTest {
     assertThat(gelesen.zahlungszielTage()).isEqualTo(ziel);
   }
 
+  /** Der Zaehlerstand eines Zaehlerjahrs, direkt aus der Tabelle; ohne Zeile {@code null}. */
+  private @Nullable Integer zaehler(final int zaehlerjahr) {
+    final List<Integer> stand =
+        jdbc.queryForList(
+            "SELECT naechste_nummer FROM rechnung_nummernkreis WHERE jahr = ?",
+            Integer.class,
+            zaehlerjahr);
+    return stand.isEmpty() ? null : stand.get(0);
+  }
+
   @Test
   void lesen_givenTheFreshInstance_thenAnswersWithTheDefaults() {
     // When / Then — Kriterium 11: die Vorbelegungen sind von Anfang an da.
@@ -176,5 +192,29 @@ class RechnungseinstellungenIT extends AbstractIntegrationTest {
     assertThat(antwort.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
     assertThat(antwort.getBody()).contains("fieldErrors").contains("nummerMuster");
     pruefe(lies(), "{NNNN}-{JJJJ}", 1, "19", 10);
+  }
+
+  @Test
+  void pflegen_givenAPatternWithoutAYear_thenTheNumberLandsInTheYearlessCounter() {
+    // When — Kriterium 15: eine selbst gesetzte Nummer gilt.
+    schreibe("{NNNN}", 7, "19.00", 10);
+
+    // Then — der GET liefert sie wieder, und im Bestand steht sie unter dem Zaehlerjahr 0.
+    assertThat(lies().naechsteNummer()).isEqualTo(7);
+    assertThat(zaehler(Nummernmuster.OHNE_JAHR)).isEqualTo(7);
+  }
+
+  @Test
+  void pflegen_givenAPatternWithAYear_thenTheNumberLandsInTheCounterOfTheCurrentYear() {
+    // Given — Kriterium 16: mit Jahres-Platzhalter zaehlt jedes Jahr fuer sich.
+    final int jahr = LocalDate.now(Geschaeftszone.ZONE).getYear();
+
+    // When
+    schreibe("{NNNN}-{JJJJ}", 4, "19.00", 10);
+
+    // Then
+    assertThat(lies().naechsteNummer()).isEqualTo(4);
+    assertThat(zaehler(jahr)).isEqualTo(4);
+    assertThat(zaehler(Nummernmuster.OHNE_JAHR)).isNull();
   }
 }
