@@ -31,14 +31,19 @@ const ANGEBOT = {
 };
 
 const KOMMENTARE = 'GET /api/angebote/9/kommentare';
+const ANLAGEN = 'GET /api/angebote/9/anlagen';
 
 /**
- * Der Kommentarweg mit leerer Liste — er steht in jeder Tabelle dieser Datei.
+ * Die beiden selbstladenden Bereiche mit leerem Bestand — sie stehen in jeder Tabelle dieser Datei.
  *
- * Der Bereich „Kommentare" laedt selbst (Issue #146), und `fetchNachPfad` weist jeden nicht
- * gelisteten Weg ab: Ohne diesen Eintrag liefe jede Probe in den Ausfallzweig des Bereichs.
+ * Die Bereiche „Anlagen" (Issue #148) und „Kommentare" (Issue #146) laden selbst, und
+ * `fetchNachPfad` weist jeden nicht gelisteten Weg ab: Ohne diese Eintraege liefe jede Probe in den
+ * Ausfallzweig eines der beiden Bereiche.
  */
-const OHNE_KOMMENTAR = { [KOMMENTARE]: json(200, { kommentare: [] }) };
+const LEERE_BEREICHE = {
+  [KOMMENTARE]: json(200, { kommentare: [] }),
+  [ANLAGEN]: json(200, { anlagen: [] }),
+};
 
 const UEBERSCHRIFT = 'Angebot vom 24.09.2026';
 
@@ -80,7 +85,7 @@ afterEach(() => {
 describe('AngebotPage — was das Angebot zeigt (Issue #127)', () => {
   it('traegt „Angebot vom <Datum>" als die eine Ueberschrift', async () => {
     fetchNachPfad({
-      ...OHNE_KOMMENTAR,
+      ...LEERE_BEREICHE,
       'GET /api/angebote/9': json(200, ANGEBOT),
     });
 
@@ -92,7 +97,7 @@ describe('AngebotPage — was das Angebot zeigt (Issue #127)', () => {
 
   it('nennt Firma, Ansprechpartner, Angebotsdatum und Status in den Angaben', async () => {
     fetchNachPfad({
-      ...OHNE_KOMMENTAR,
+      ...LEERE_BEREICHE,
       'GET /api/angebote/9': json(200, ANGEBOT),
     });
 
@@ -115,7 +120,7 @@ describe('AngebotPage — was das Angebot zeigt (Issue #127)', () => {
 
   it('laesst die Zeile des Ansprechpartners weg, wo das Angebot keinen traegt', async () => {
     fetchNachPfad({
-      ...OHNE_KOMMENTAR,
+      ...LEERE_BEREICHE,
       'GET /api/angebote/9': json(200, {
         ...ANGEBOT,
         ansprechpartnerId: null,
@@ -133,7 +138,7 @@ describe('AngebotPage — was das Angebot zeigt (Issue #127)', () => {
 
   it('zeigt die Beschreibung', async () => {
     fetchNachPfad({
-      ...OHNE_KOMMENTAR,
+      ...LEERE_BEREICHE,
       'GET /api/angebote/9': json(200, ANGEBOT),
     });
 
@@ -146,7 +151,7 @@ describe('AngebotPage — was das Angebot zeigt (Issue #127)', () => {
 
   it('laesst die Karte der Beschreibung weg, wo keine steht — ohne Platzhalter', async () => {
     fetchNachPfad({
-      ...OHNE_KOMMENTAR,
+      ...LEERE_BEREICHE,
       'GET /api/angebote/9': json(200, { ...ANGEBOT, beschreibung: null }),
     });
 
@@ -159,7 +164,7 @@ describe('AngebotPage — was das Angebot zeigt (Issue #127)', () => {
 
   it('stellt die Positionen als Tafel mit Menge, Einheit, Einzelpreis und Betrag', async () => {
     fetchNachPfad({
-      ...OHNE_KOMMENTAR,
+      ...LEERE_BEREICHE,
       'GET /api/angebote/9': json(200, ANGEBOT),
     });
 
@@ -185,7 +190,7 @@ describe('AngebotPage — was das Angebot zeigt (Issue #127)', () => {
 
   it('nennt die Summe mit dem Hinweis auf die Umsatzsteuer', async () => {
     fetchNachPfad({
-      ...OHNE_KOMMENTAR,
+      ...LEERE_BEREICHE,
       'GET /api/angebote/9': json(200, ANGEBOT),
     });
 
@@ -200,7 +205,7 @@ describe('AngebotPage — was das Angebot zeigt (Issue #127)', () => {
 
   it('sagt es, wenn das Angebot noch keine Position hat', async () => {
     fetchNachPfad({
-      ...OHNE_KOMMENTAR,
+      ...LEERE_BEREICHE,
       'GET /api/angebote/9': json(200, { ...ANGEBOT, positionen: [], summe: 0 }),
     });
 
@@ -215,7 +220,7 @@ describe('AngebotPage — was das Angebot zeigt (Issue #127)', () => {
 describe('AngebotPage — die Aktionen (Issue #127, Kriterien 4, 5)', () => {
   it('traegt „Status weiter" als einzige Kupfertaste, „Status zurück" und „Bearbeiten" weich', async () => {
     fetchNachPfad({
-      ...OHNE_KOMMENTAR,
+      ...LEERE_BEREICHE,
       'GET /api/angebote/9': json(200, ANGEBOT),
     });
 
@@ -233,7 +238,7 @@ describe('AngebotPage — die Aktionen (Issue #127, Kriterien 4, 5)', () => {
 
   it('bietet bei „angelegt" kein „Status zurück" an', async () => {
     fetchNachPfad({
-      ...OHNE_KOMMENTAR,
+      ...LEERE_BEREICHE,
       'GET /api/angebote/9': json(200, { ...ANGEBOT, status: 'ANGELEGT' }),
     });
 
@@ -246,7 +251,7 @@ describe('AngebotPage — die Aktionen (Issue #127, Kriterien 4, 5)', () => {
 
   it('bietet bei „abgerechnet" kein „Status weiter" an, Bearbeiten aber schon', async () => {
     fetchNachPfad({
-      ...OHNE_KOMMENTAR,
+      ...LEERE_BEREICHE,
       'GET /api/angebote/9': json(200, { ...ANGEBOT, status: 'ABGERECHNET' }),
     });
 
@@ -270,7 +275,7 @@ describe('AngebotPage — die Aktionen (Issue #127, Kriterien 4, 5)', () => {
   ) => {
     const nutzer = userEvent.setup();
     const fetchMock = fetchNachPfad({
-      ...OHNE_KOMMENTAR,
+      ...LEERE_BEREICHE,
       'GET /api/angebote/9': json(200, ANGEBOT),
       [schluessel]: json(200, { ...ANGEBOT, status }),
     });
@@ -292,7 +297,7 @@ describe('AngebotPage — die Aktionen (Issue #127, Kriterien 4, 5)', () => {
   it('meldet, wenn der Statuswechsel nicht durchgeht, und behaelt den bisherigen Status', async () => {
     const nutzer = userEvent.setup();
     fetchNachPfad({
-      ...OHNE_KOMMENTAR,
+      ...LEERE_BEREICHE,
       'GET /api/angebote/9': json(200, ANGEBOT),
       'POST /api/angebote/9/status/weiter': problem(409, 'In diese Richtung gibt es keinen weiteren Status.'),
     });
@@ -320,7 +325,7 @@ describe('AngebotPage — unsinnige Kennung, unbekanntes Angebot, Ausfall', () =
 
   it('meldet ein unbekanntes Angebot', async () => {
     fetchNachPfad({
-      ...OHNE_KOMMENTAR,
+      ...LEERE_BEREICHE,
       'GET /api/angebote/9': leer(404),
     });
 
@@ -331,7 +336,7 @@ describe('AngebotPage — unsinnige Kennung, unbekanntes Angebot, Ausfall', () =
 
   it('meldet den Ausfall der Schnittstelle', async () => {
     fetchNachPfad({
-      ...OHNE_KOMMENTAR,
+      ...LEERE_BEREICHE,
       'GET /api/angebote/9': leer(503),
     });
 
@@ -342,7 +347,7 @@ describe('AngebotPage — unsinnige Kennung, unbekanntes Angebot, Ausfall', () =
 
   it('zeigt waehrend des Ladens einen Hinweis statt einer leeren Seite', () => {
     fetchNachPfad({
-      ...OHNE_KOMMENTAR,
+      ...LEERE_BEREICHE,
       'GET /api/angebote/9': json(200, ANGEBOT),
     });
 
@@ -355,7 +360,7 @@ describe('AngebotPage — unsinnige Kennung, unbekanntes Angebot, Ausfall', () =
 describe('AngebotPage — der Bereich „Kommentare" (Issue #146)', () => {
   it('stellt die Karte „Kommentare" unter die Positionen', async () => {
     fetchNachPfad({
-      ...OHNE_KOMMENTAR,
+      ...LEERE_BEREICHE,
       'GET /api/angebote/9': json(200, ANGEBOT),
     });
 
@@ -364,7 +369,7 @@ describe('AngebotPage — der Bereich „Kommentare" (Issue #146)', () => {
 
     expect(
       screen.getAllByRole('heading', { level: 2 }).map((kopf) => kopf.textContent),
-    ).toEqual(['Beschreibung', 'Positionen', 'Kommentare']);
+    ).toEqual(['Beschreibung', 'Positionen', 'Anlagen', 'Kommentare']);
     // Der Satz steht nur, wenn der Kommentarweg geantwortet hat — keine Probe dieser Datei laeuft
     // in „Unerwarteter Aufruf".
     expect(screen.getByText('Noch kein Kommentar.')).toBeInTheDocument();
@@ -373,6 +378,7 @@ describe('AngebotPage — der Bereich „Kommentare" (Issue #146)', () => {
   it('laesst Ueberschrift, Angaben und Positionen stehen, wenn der Kommentarweg ausfaellt', async () => {
     fetchNachPfad({
       [KOMMENTARE]: leer(503),
+      [ANLAGEN]: json(200, { anlagen: [] }),
       'GET /api/angebote/9': json(200, ANGEBOT),
     });
 
@@ -385,5 +391,43 @@ describe('AngebotPage — der Bereich „Kommentare" (Issue #146)', () => {
     expect(within(screen.getByTestId('angebot-angaben')).getByText('Adler AG')).toBeInTheDocument();
     expect(screen.getByText('Konzeption')).toBeInTheDocument();
     expect(screen.getByTestId('angebot-summe')).toHaveTextContent('2.500,03 €');
+  });
+});
+
+describe('AngebotPage — der Bereich „Anlagen" (Issue #148)', () => {
+  it('stellt die Karte „Anlagen" zwischen die Positionen und die Kommentare', async () => {
+    fetchNachPfad({
+      ...LEERE_BEREICHE,
+      'GET /api/angebote/9': json(200, ANGEBOT),
+    });
+
+    renderSeite();
+    await screen.findByRole('heading', { level: 1, name: UEBERSCHRIFT });
+
+    expect(
+      screen.getAllByRole('heading', { level: 2 }).map((kopf) => kopf.textContent),
+    ).toEqual(['Beschreibung', 'Positionen', 'Anlagen', 'Kommentare']);
+    // Der Satz steht nur, wenn der Anlagenweg geantwortet hat — keine Probe dieser Datei laeuft
+    // in „Unerwarteter Aufruf".
+    expect(screen.getByText('Noch keine Anlage.')).toBeInTheDocument();
+  });
+
+  it('laesst Ueberschrift, Angaben, Positionen und Kommentare stehen, wenn der Anlagenweg ausfaellt', async () => {
+    fetchNachPfad({
+      [KOMMENTARE]: json(200, { kommentare: [] }),
+      [ANLAGEN]: leer(503),
+      'GET /api/angebote/9': json(200, ANGEBOT),
+    });
+
+    renderSeite();
+
+    expect(
+      await screen.findByText('Die Anlagen sind gerade nicht zu erreichen. Bitte später erneut versuchen.'),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1, name: UEBERSCHRIFT })).toBeInTheDocument();
+    expect(within(screen.getByTestId('angebot-angaben')).getByText('Adler AG')).toBeInTheDocument();
+    expect(screen.getByText('Konzeption')).toBeInTheDocument();
+    expect(screen.getByTestId('angebot-summe')).toHaveTextContent('2.500,03 €');
+    expect(screen.getByText('Noch kein Kommentar.')).toBeInTheDocument();
   });
 });

@@ -10,6 +10,7 @@ import { Link as RouterLink, useParams } from 'react-router-dom';
 import { angebotLesen, angebotStatusWeiter, angebotStatusZurueck } from '../api/angebote';
 import type { Angebot, AngebotPosition } from '../api/angebote';
 import AngebotsstatusChip from '../components/AngebotsstatusChip';
+import Anlagen from '../components/Anlagen';
 import Karte from '../components/Karte';
 import Kommentare from '../components/Kommentare';
 import { useKopfPfad } from '../components/KopfPfad';
@@ -28,12 +29,12 @@ import { ZAHLEN_KLASSE } from '../theme';
  * Die Ansicht eines Angebots (Issue #127).
  *
  * Oben die Karte mit der Ueberschrift, den Angaben und den Aktionen; darunter die Beschreibung,
- * sofern es eine gibt, die Positionen mit Summe und zuletzt die Kommentare (Vorlage `.karte` Z. 53,
- * `.kopfzeile` Z. 79–80, `.stamm` Z. 100–102).
+ * sofern es eine gibt, die Positionen mit Summe, die Anlagen und zuletzt die Kommentare (Vorlage
+ * `.karte` Z. 53, `.kopfzeile` Z. 79–80, `.stamm` Z. 100–102).
  *
- * <b>Die Kommentare laden sich selbst</b> ({@link Kommentare}, Issue #146): Die Seite gibt nur die
- * Kennung weiter. Ein Ausfall des Kommentarwegs steht darum in dessen Karte und laesst Ueberschrift,
- * Angaben und Positionen stehen.
+ * <b>Anlagen und Kommentare laden sich selbst</b> ({@link Anlagen}, Issue #148; {@link Kommentare},
+ * Issue #146): Die Seite gibt nur die Kennung weiter. Ein Ausfall eines der beiden Wege steht darum
+ * in dessen Karte und laesst Ueberschrift, Angaben und Positionen stehen.
  *
  * <b>Die Aktionen.</b> „Status weiter" ist die eine Kupfertaste — der gewoehnliche naechste Schritt.
  * „Status zurueck" und „Bearbeiten" stehen weich daneben (CLAUDE-design.md, Leitgedanke 2). An den
@@ -311,6 +312,7 @@ export default function AngebotPage() {
             </Box>
           </Box>
         </Karte>
+        <Anlagen angebotId={angebot.id} />
         <Kommentare angebotId={angebot.id} />
       </>
     );
