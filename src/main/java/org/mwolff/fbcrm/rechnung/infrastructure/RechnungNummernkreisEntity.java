@@ -33,11 +33,6 @@ class RechnungNummernkreisEntity {
     // Von Hibernate benutzt.
   }
 
-  RechnungNummernkreisEntity(final int jahr, final int naechsteNummer) {
-    this.jahr = jahr;
-    this.naechsteNummer = naechsteNummer;
-  }
-
   int getNaechsteNummer() {
     return naechsteNummer;
   }
