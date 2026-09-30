@@ -185,6 +185,42 @@ class AngebotTest {
     assertThatThrownBy(() -> angebot.statusZurueck(JETZT)).isInstanceOf(StatusGrenzeErreicht.class);
   }
 
+  @ParameterizedTest
+  @EnumSource(value = Angebotsstatus.class, mode = EnumSource.Mode.EXCLUDE, names = "ABGERECHNET")
+  void abgerechnet_givenAnyOtherStatus_thenJumpsStraightToAbgerechnet(final Angebotsstatus status) {
+    // Given — #160, Kriterium 27: abgerechnet wird aus jedem Status erreicht, nicht Stufe fuer
+    // Stufe.
+
+    // When
+    final Angebot abgerechnet = angebot(status).abgerechnet(JETZT);
+
+    // Then
+    assertThat(abgerechnet)
+        .satisfies(
+            a -> assertThat(a.status()).isEqualTo(Angebotsstatus.ABGERECHNET),
+            a -> assertThat(a.updatedAt()).isEqualTo(JETZT),
+            a -> assertThat(a.createdAt()).isEqualTo(ANGELEGT),
+            a -> assertThat(a.id()).isEqualTo(7L),
+            a -> assertThat(a.firmaId()).isEqualTo(3L),
+            a -> assertThat(a.ansprechpartnerId()).isEqualTo(8L),
+            a -> assertThat(a.angebotDatum()).isEqualTo(ANGEBOTSDATUM),
+            a -> assertThat(a.beschreibung()).isEqualTo("Neugestaltung der Website"),
+            a -> assertThat(a.positionen()).containsExactly(KONZEPTION));
+  }
+
+  @Test
+  void abgerechnet_givenAnAlreadyBilledOffer_thenUnchanged() {
+    // Given — es ist schon abgerechnet; der Zug ist ein Nichts und traegt darum auch keinen neuen
+    // Zeitstempel ein.
+    final Angebot angebot = angebot(Angebotsstatus.ABGERECHNET);
+
+    // When
+    final Angebot nochmal = angebot.abgerechnet(JETZT);
+
+    // Then
+    assertThat(nochmal).isEqualTo(angebot);
+  }
+
   @Test
   void positionen_thenAreACopyAndNotTheHandedInList() {
     // Given — der Record ist unveraenderlich, auch wenn der Aufrufer seine Liste behaelt.

@@ -104,6 +104,24 @@ public record Angebot(
     return mitStatus(status.zurueck().orElseThrow(StatusGrenzeErreicht::new), zeitpunkt);
   }
 
+  /**
+   * Das Angebot als abgerechnet — aus jedem Status und ohne Zwischenstufen (#160, Kriterium 27).
+   *
+   * <p>Der eine Sprung neben der Reihe: Ist alles berechnet, ist das Angebot abgerechnet, auch wenn
+   * es noch in „bestellt" steht. {@link #statusWeiter} und {@link #statusZurueck} bleiben davon
+   * unberuehrt — sie sind der Weg von Hand, dieser hier der Schluss aus den Rechnungen.
+   *
+   * <p>Ist das Angebot schon abgerechnet, bleibt es unveraendert und traegt auch keinen neuen
+   * Zeitpunkt: Nichts ist geschehen.
+   *
+   * @param zeitpunkt Zeitpunkt des Wechsels
+   */
+  public Angebot abgerechnet(final Instant zeitpunkt) {
+    return status == Angebotsstatus.ABGERECHNET
+        ? this
+        : mitStatus(Angebotsstatus.ABGERECHNET, zeitpunkt);
+  }
+
   private Angebot mitStatus(final Angebotsstatus ziel, final Instant zeitpunkt) {
     return new Angebot(
         id,

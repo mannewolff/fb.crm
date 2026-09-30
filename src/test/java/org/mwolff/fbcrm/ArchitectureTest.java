@@ -78,6 +78,21 @@ class ArchitectureTest {
   }
 
   @Test
+  void angebotModule_thenDoesNotReachIntoRechnung() {
+    noClasses()
+        .that()
+        .resideInAPackage("org.mwolff.fbcrm.angebot..")
+        .should()
+        .dependOnClassesThat()
+        .resideInAPackage("org.mwolff.fbcrm.rechnung..")
+        .because(
+            "das Angebot kennt seine Rechnungen nur ueber den Port Positionsverwendung; die"
+                + " Richtung der Abhaengigkeit ist rechnung -> angebot (Plan #169, E1, E12)")
+        .allowEmptyShould(true)
+        .check(CLASSES);
+  }
+
+  @Test
   void modules_thenFreeOfCycles() {
     slices()
         .matching("org.mwolff.fbcrm.(*)..")

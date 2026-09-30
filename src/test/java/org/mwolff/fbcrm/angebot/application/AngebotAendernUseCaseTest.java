@@ -8,12 +8,17 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
+import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import org.assertj.core.api.InstanceOfAssertFactories;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -26,6 +31,8 @@ import org.mwolff.fbcrm.angebot.domain.Angebot;
 import org.mwolff.fbcrm.angebot.domain.AngebotRepository;
 import org.mwolff.fbcrm.angebot.domain.Angebotsposition;
 import org.mwolff.fbcrm.angebot.domain.Angebotsstatus;
+import org.mwolff.fbcrm.common.Abrechnungsmodus;
+import org.mwolff.fbcrm.common.Einheit;
 import org.mwolff.fbcrm.firma.domain.Ansprechpartner;
 import org.mwolff.fbcrm.firma.domain.AnsprechpartnerRepository;
 
@@ -41,7 +48,13 @@ import org.mwolff.fbcrm.firma.domain.AnsprechpartnerRepository;
  * PositionenNichtWaehlbar}, und am Bestand kommt kein {@code save} an — die Pruefung laeuft vor dem
  * Schreiben.
  *
- * <p>Der dritte Gegenstand ist die Wahl des Ansprechpartners: Ein <em>neu</em> gewaehlter muss zur
+ * <p>Der dritte Gegenstand ist die Bindung berechneter Positionen (#160, Kriterium 28): Eine
+ * Position, die in einer Rechnung steht, darf nicht entfallen und weder ihre Einheit noch ihre
+ * Abrechnungsart wechseln — sonst verloere die Rechnung ihren Bezug. Text, Menge, Preis und die
+ * Reihenfolge bleiben frei. Welche Positionen das sind, sagt {@link Positionsverwendung}; hier
+ * antwortet darauf ein Doppel, damit das Angebot nichts vom Modul {@code rechnung} wissen muss.
+ *
+ * <p>Der vierte Gegenstand ist die Wahl des Ansprechpartners: Ein <em>neu</em> gewaehlter muss zur
  * Firma gehoeren und aktiv sein. Der bereits gespeicherte bleibt waehlbar, auch wenn er inzwischen
  * stillgelegt ist — sonst liesse sich ein Angebot nach dem Stilllegen seines Ansprechpartners gar
  * nicht mehr speichern. Eine abgewiesene Wahl schreibt nichts; den Nachweis fuehrt {@code
@@ -59,13 +72,60 @@ class AngebotAendernUseCaseTest {
   @Mock private AngebotRepository angebote;
   @Mock private AnsprechpartnerRepository personen;
 
+  private final Verwendungsdoppel verwendung = new Verwendungsdoppel();
+
   private AngebotAendernUseCase useCase;
 
   @BeforeEach
   void baueDenAnwendungsfall() {
     useCase =
         new AngebotAendernUseCase(
-            angebote, new Ansprechpartnerwahl(personen), Clock.fixed(JETZT, ZoneOffset.UTC));
+            angebote,
+            new Ansprechpartnerwahl(personen),
+            verwendung,
+            Clock.fixed(JETZT, ZoneOffset.UTC));
+  }
+
+  /*
+   * Ein Doppel statt eines Mocks: Der Port wird nur auf den Erfolgspfaden gefragt, ein
+   * vorgestelltes when(...) waere in jedem Abweisungstest eine ungenutzte Stubbung. Die Karte je
+   * Angebot haelt zugleich fest, dass nach DIESEM Angebot gefragt wird — nach einem anderen
+   * gefragt, kaeme die leere Menge zurueck und die Bindung griffe nicht.
+   */
+  private static final class Verwendungsdoppel implements Positionsverwendung {
+
+    private final Map<Long, Set<Long>> jeAngebot = new HashMap<>();
+
+    @Override
+    public Set<Long> verwendeteKennungen(final long angebotId) {
+      return jeAngebot.getOrDefault(Long.valueOf(angebotId), Set.of());
+    }
+  }
+
+  private void inEinerRechnung(final Long... kennungen) {
+    verwendung.jeAngebot.put(Long.valueOf(ANGEBOT), Set.of(kennungen));
+  }
+
+  private static Angebotsposition mitEinheit(
+      final Angebotsposition position, final Einheit einheit) {
+    return new Angebotsposition(
+        position.id(),
+        position.bezeichnung(),
+        position.abrechnungsmodus(),
+        position.menge(),
+        einheit,
+        position.einzelpreis());
+  }
+
+  private static Angebotsposition mitModus(
+      final Angebotsposition position, final Abrechnungsmodus modus) {
+    return new Angebotsposition(
+        position.id(),
+        position.bezeichnung(),
+        modus,
+        position.menge(),
+        position.einheit(),
+        position.einzelpreis());
   }
 
   private static AngebotDaten daten(
@@ -299,6 +359,102 @@ class AngebotAendernUseCaseTest {
         .isInstanceOf(PositionenNichtWaehlbar.class);
     verify(angebote).findById(ANGEBOT);
     verifyNoMoreInteractions(angebote);
+  }
+
+  @Test
+  void aendere_droppingAPositionThatIsInARechnung_thenRejectsAndWritesNothing() {
+    // Given — #160, Kriterium 28: Die berechnete Position verloere sonst ihren Bezug.
+    angebotIst(Angebotsdoppel.ohneAnsprechpartner(Angebotsdoppel.angebot(ANGEBOT)));
+    inEinerRechnung(Angebotsdoppel.KONZEPTION_ID);
+
+    // When / Then
+    assertThatThrownBy(
+            () -> useCase.aendere(ANGEBOT, daten(null, List.of(Angebotsdoppel.SCHULUNG))))
+        .isInstanceOf(PositionInRechnungVerwendet.class)
+        .hasMessageContaining(Angebotsdoppel.KONZEPTION.bezeichnung())
+        .asInstanceOf(InstanceOfAssertFactories.type(PositionInRechnungVerwendet.class))
+        .extracting(PositionInRechnungVerwendet::felder)
+        .satisfies(
+            felder ->
+                assertThat(felder)
+                    .containsOnlyKeys(PositionInRechnungVerwendet.FELD)
+                    .hasEntrySatisfying(
+                        PositionInRechnungVerwendet.FELD,
+                        meldungen ->
+                            assertThat(meldungen)
+                                .singleElement()
+                                .asString()
+                                .contains(Angebotsdoppel.KONZEPTION.bezeichnung())));
+    verify(angebote).findById(ANGEBOT);
+    verifyNoMoreInteractions(angebote);
+  }
+
+  @Test
+  void aendere_changingTheEinheitOfAPositionInARechnung_thenRejectsAndWritesNothing() {
+    // Given — die Einheit steht so auf der Rechnung; sie zu wechseln aenderte deren Aussage.
+    angebotIst(Angebotsdoppel.ohneAnsprechpartner(Angebotsdoppel.angebot(ANGEBOT)));
+    inEinerRechnung(Angebotsdoppel.KONZEPTION_ID);
+    final List<Angebotsposition> umgestellt =
+        List.of(mitEinheit(Angebotsdoppel.KONZEPTION, Einheit.STUNDE), Angebotsdoppel.SCHULUNG);
+
+    // When / Then
+    assertThatThrownBy(() -> useCase.aendere(ANGEBOT, daten(null, umgestellt)))
+        .isInstanceOf(PositionInRechnungVerwendet.class)
+        .hasMessageContaining(Angebotsdoppel.KONZEPTION.bezeichnung());
+    verify(angebote).findById(ANGEBOT);
+    verifyNoMoreInteractions(angebote);
+  }
+
+  @Test
+  void aendere_changingTheAbrechnungsmodusOfAPositionInARechnung_thenRejectsAndWritesNothing() {
+    // Given — dasselbe fuer die Abrechnungsart: Aufwand und Festpreis sind nicht dasselbe.
+    angebotIst(Angebotsdoppel.ohneAnsprechpartner(Angebotsdoppel.angebot(ANGEBOT)));
+    inEinerRechnung(Angebotsdoppel.KONZEPTION_ID);
+    final List<Angebotsposition> umgestellt =
+        List.of(
+            mitModus(Angebotsdoppel.KONZEPTION, Abrechnungsmodus.FESTPREIS),
+            Angebotsdoppel.SCHULUNG);
+
+    // When / Then
+    assertThatThrownBy(() -> useCase.aendere(ANGEBOT, daten(null, umgestellt)))
+        .isInstanceOf(PositionInRechnungVerwendet.class)
+        .hasMessageContaining(Angebotsdoppel.KONZEPTION.bezeichnung());
+    verify(angebote).findById(ANGEBOT);
+    verifyNoMoreInteractions(angebote);
+  }
+
+  @Test
+  void aendere_changingTextMengeAndPreisOfAPositionInARechnung_thenWrites() {
+    // Given — Text, Menge und Preis bleiben frei; die Rechnung haelt ihre eigenen Werte fest.
+    angebotIst(Angebotsdoppel.ohneAnsprechpartner(Angebotsdoppel.angebot(ANGEBOT)));
+    inEinerRechnung(Angebotsdoppel.KONZEPTION_ID);
+    final Angebotsposition neuGefasst =
+        new Angebotsposition(
+            Angebotsdoppel.KONZEPTION_ID,
+            "Konzeption und Abstimmung",
+            Angebotsdoppel.KONZEPTION.abrechnungsmodus(),
+            new BigDecimal("4.00"),
+            Angebotsdoppel.KONZEPTION.einheit(),
+            new BigDecimal("999.00"));
+
+    // When — und zugleich umgeordnet: die Reihenfolge ist ebenfalls frei.
+    final Angebot geaendert = aendere(daten(null, List.of(Angebotsdoppel.SCHULUNG, neuGefasst)));
+
+    // Then
+    assertThat(geaendert.positionen()).containsExactly(Angebotsdoppel.SCHULUNG, neuGefasst);
+  }
+
+  @Test
+  void aendere_droppingAPositionThatIsInNoRechnung_thenWrites() {
+    // Given — nur die erste Position steht in einer Rechnung; die zweite ist frei.
+    angebotIst(Angebotsdoppel.ohneAnsprechpartner(Angebotsdoppel.angebot(ANGEBOT)));
+    inEinerRechnung(Angebotsdoppel.KONZEPTION_ID);
+
+    // When
+    final Angebot geaendert = aendere(daten(null, List.of(Angebotsdoppel.KONZEPTION)));
+
+    // Then
+    assertThat(geaendert.positionen()).containsExactly(Angebotsdoppel.KONZEPTION);
   }
 
   @Test
