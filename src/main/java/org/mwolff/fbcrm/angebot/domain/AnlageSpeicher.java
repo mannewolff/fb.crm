@@ -17,6 +17,13 @@ import java.util.Optional;
  *
  * <p>In welcher Reihenfolge Objekt und Zeile geschrieben und geloescht werden, entscheidet der
  * Anwendungsfall (E9); {@link Angebotsanlage#objektSchluessel()} verbindet beide.
+ *
+ * <p><b>Ausfall des Speichers.</b> Faellt der Zugriff aus — der Speicher ist nicht erreichbar oder
+ * weist ihn ab —, meldet jede der drei Methoden {@link AnlageSpeicherAusfall}. Der Port nennt den
+ * Fall ausdruecklich, weil ein Aufrufer ihn unterschiedlich behandeln muss: Beim Loeschen nach dem
+ * Commit wird er protokolliert und nicht gemeldet (E9), sonst geht er nach oben. Ein Aufrufer, der
+ * ihn fangen will, braucht dafuer einen Namen, den er kennen darf — die Ausnahmen des Speicher-SDK
+ * gehoeren dem Adapter.
  */
 public interface AnlageSpeicher {
 
@@ -36,6 +43,7 @@ public interface AnlageSpeicher {
    * @param inhalt der Datenstrom; der Aufrufer schliesst ihn
    * @param groesse Zahl der Byte, die zu lesen sind
    * @return der Schluessel des abgelegten Objekts
+   * @throws AnlageSpeicherAusfall wenn der Speicher den Inhalt nicht angenommen hat
    */
   String ablegen(long angebotId, InputStream inhalt, long groesse);
 
@@ -48,6 +56,7 @@ public interface AnlageSpeicher {
    *
    * @param objektSchluessel der Schluessel aus {@link #ablegen}
    * @return der Datenstrom des Inhalts, oder leer
+   * @throws AnlageSpeicherAusfall wenn der Speicher nicht zu erreichen war
    */
   Optional<InputStream> lesen(String objektSchluessel);
 
@@ -59,6 +68,8 @@ public interface AnlageSpeicher {
    * Objekt nie entstand. Nach dem Aufruf liefert {@link #lesen} zu diesem Schluessel leer.
    *
    * @param objektSchluessel der Schluessel aus {@link #ablegen}
+   * @throws AnlageSpeicherAusfall wenn der Speicher nicht zu erreichen war — ein unbekannter
+   *     Schluessel gehoert nicht dazu
    */
   void loeschen(String objektSchluessel);
 }
