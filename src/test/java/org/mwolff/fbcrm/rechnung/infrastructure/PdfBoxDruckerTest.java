@@ -1,4 +1,4 @@
-package org.mwolff.fbcrm.angebot.infrastructure;
+package org.mwolff.fbcrm.rechnung.infrastructure;
 
 import static java.nio.charset.StandardCharsets.US_ASCII;
 import static org.assertj.core.api.Assertions.assertThat;

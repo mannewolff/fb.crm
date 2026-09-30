@@ -12,10 +12,12 @@ import java.util.Objects;
 import java.util.regex.Pattern;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.fbcrm.angebot.domain.Angebotsposition;
-import org.mwolff.fbcrm.angebot.domain.Belegabsender;
-import org.mwolff.fbcrm.angebot.domain.Belegempfaenger;
 import org.mwolff.fbcrm.common.Anschrift;
 import org.mwolff.fbcrm.common.Einheit;
+import org.mwolff.fbcrm.rechnung.application.Druckzeile;
+import org.mwolff.fbcrm.rechnung.application.Schrift;
+import org.mwolff.fbcrm.rechnung.domain.Belegabsender;
+import org.mwolff.fbcrm.rechnung.domain.Belegempfaenger;
 
 /**
  * Setzt die Druckdaten eines Angebots in eine Folge von Druckzeilen (E10).

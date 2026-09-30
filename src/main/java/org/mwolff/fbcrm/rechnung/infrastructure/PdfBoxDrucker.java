@@ -1,4 +1,4 @@
-package org.mwolff.fbcrm.angebot.infrastructure;
+package org.mwolff.fbcrm.rechnung.infrastructure;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -11,18 +11,18 @@ import org.apache.pdfbox.pdmodel.common.PDRectangle;
 import org.apache.pdfbox.pdmodel.font.PDFont;
 import org.apache.pdfbox.pdmodel.font.PDType1Font;
 import org.apache.pdfbox.pdmodel.font.Standard14Fonts;
-import org.mwolff.fbcrm.angebot.application.Belegdrucker;
-import org.mwolff.fbcrm.angebot.application.Druckzeile;
-import org.mwolff.fbcrm.angebot.application.Schrift;
 import org.mwolff.fbcrm.common.ExcludeFromJacocoGeneratedReport;
+import org.mwolff.fbcrm.rechnung.application.Belegdrucker;
+import org.mwolff.fbcrm.rechnung.application.Druckzeile;
+import org.mwolff.fbcrm.rechnung.application.Schrift;
 import org.springframework.stereotype.Component;
 
 /**
  * Setzt den Port {@link Belegdrucker} auf Apache PDFBox um (E10).
  *
  * <p>Absichtlich duenn: Der Drucker entscheidet nichts ueber den Beleg, er schreibt die Zeilen weg,
- * die {@code Beleglayout} gerechnet hat. Was hier stehen bleibt, ist der Umgang mit der Bibliothek
- * — Seiten anlegen, Schrift setzen, Text ausgeben.
+ * die der Satz gerechnet hat. Was hier stehen bleibt, ist der Umgang mit der Bibliothek — Seiten
+ * anlegen, Schrift setzen, Text ausgeben.
  *
  * <p>Geschrieben wird mit Helvetica aus den 14 Standardschriften: keine Schriftdatei im Abbild,
  * kein Einbetten, und die Umlaute und das Eurozeichen des deutschen Belegs deckt ihre

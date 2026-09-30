@@ -5,8 +5,8 @@ import java.time.LocalDate;
 import java.util.List;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.fbcrm.angebot.domain.Angebotsposition;
-import org.mwolff.fbcrm.angebot.domain.Belegabsender;
-import org.mwolff.fbcrm.angebot.domain.Belegempfaenger;
+import org.mwolff.fbcrm.rechnung.domain.Belegabsender;
+import org.mwolff.fbcrm.rechnung.domain.Belegempfaenger;
 
 /**
  * Alles, was auf dem Beleg steht — die Vorlage des Satzes (Kriterium 15).

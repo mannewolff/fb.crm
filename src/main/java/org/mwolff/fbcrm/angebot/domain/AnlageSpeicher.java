@@ -7,10 +7,11 @@ import java.util.Optional;
  * Port auf den Objektspeicher der Anlagen am Angebot; die Umsetzung liegt in {@code
  * angebot.infrastructure} und spricht MinIO (Plan #150, E3).
  *
- * <p>Ein eigener Port neben {@link DokumentSpeicher} und nicht dessen Erweiterung: Der
- * Belegspeicher fuehrt ganze Belege als Byte-Feld im Arbeitsspeicher und haengt {@code .pdf} an den
- * Schluessel — beides passt nicht zu einer Anlage, die bis zur Upload-Grenze gross sein darf und
- * jede Dateiart tragen kann. Dieser Port arbeitet deshalb durchgehend mit Datenstroemen.
+ * <p>Ein eigener Port neben dem Belegspeicher in {@code rechnung.domain} und nicht dessen
+ * Erweiterung: Der Belegspeicher fuehrt ganze Belege als Byte-Feld im Arbeitsspeicher und haengt
+ * {@code .pdf} an den Schluessel — beides passt nicht zu einer Anlage, die bis zur Upload-Grenze
+ * gross sein darf und jede Dateiart tragen kann. Dieser Port arbeitet deshalb durchgehend mit
+ * Datenstroemen.
  *
  * <p>Der Speicher kennt nur Schluessel und Bytes. Dateiname, Groesse und Vorschauart stehen allein
  * in der Datenbank — der Name kommt von aussen und waere im Schluessel eine Pfadangabe.

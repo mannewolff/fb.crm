@@ -1,12 +1,12 @@
-package org.mwolff.fbcrm.angebot.domain;
+package org.mwolff.fbcrm.rechnung.domain;
 
 import org.jspecify.annotations.Nullable;
 import org.mwolff.fbcrm.common.Anschrift;
 
 /**
- * Der Empfaenger eines Belegs, wie er beim Versenden galt (R8).
+ * Der Empfaenger eines Belegs, wie er beim Stellen der Rechnung galt (R8).
  *
- * <p>Eine Kopie und kein Verweis: Zieht die Firma spaeter um, zeigt das versendete Angebot
+ * <p>Eine Kopie und kein Verweis: Zieht die Firma spaeter um, zeigt die gestellte Rechnung
  * weiterhin die Anschrift, die der Kunde auf seinem Dokument gelesen hat. Genau deshalb steht der
  * Name der Firma hier als Text und nicht als Kennung.
  *

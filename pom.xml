@@ -158,7 +158,7 @@
 
     <!-- Der Drucker der Belege (E10): PDFBox 3 unter Apache-2.0, ohne Copyleft in einer selbst
          gehosteten Anwendung. Nur der duenne Schreiber PdfBoxDrucker laeuft dagegen; Umbruch und
-         Seitenwechsel rechnet Beleglayout ohne die Bibliothek. -->
+         Seitenwechsel rechnet der Satz des Belegs ohne die Bibliothek. -->
     <dependency>
       <groupId>org.apache.pdfbox</groupId>
       <artifactId>pdfbox</artifactId>
@@ -325,11 +325,11 @@
             <exclude>org/mwolff/fbcrm/config/S3Config.class</exclude>
             <!-- Derselbe Grund fuer den Port auf denselben Speicher (E9): Der Adapter der
                  archivierten Belege besteht aus Aufrufen des AWS SDK. Was er zusagt — ablegen,
-                 byteweise wiederlesen, die Schluesselform angebot/<angebotId>/<uuid>.pdf und der
+                 byteweise wiederlesen, die Schluesselform rechnung/<rechnungId>/<uuid>.pdf und der
                  Fehlschlag bei unbekanntem Schluessel — weist S3DokumentSpeicherIT gegen den
-                 MinIO-Container nach (E28). Beleglayout und PdfBoxDrucker bleiben in Abdeckung: Das
-                 Layout rechnet ohne Fremdcode, und der Drucker ist ohne Infrastruktur pruefbar. -->
-            <exclude>org/mwolff/fbcrm/angebot/infrastructure/S3DokumentSpeicher.class</exclude>
+                 MinIO-Container nach (E28). PdfBoxDrucker bleibt in Abdeckung: Der Drucker ist
+                 ohne Infrastruktur pruefbar. -->
+            <exclude>org/mwolff/fbcrm/rechnung/infrastructure/S3DokumentSpeicher.class</exclude>
             <!-- Derselbe Grund fuer den Adapter der Anlagen am Angebot (Plan #150, E3): Aufrufe des
                  AWS SDK, nur gegen einen echten Objektspeicher sinnvoll pruefbar. Was er zusagt —
                  gestreamt ablegen, byteweise wiederlesen, die Schluesselform
@@ -622,7 +622,7 @@
                 <!-- Der S3-Adapter der Belege (E9), dieselbe Begruendung wie beim JaCoCo-Ausschluss:
                      Aufrufe des AWS SDK, nachgewiesen von S3DokumentSpeicherIT gegen den
                      MinIO-Container. -->
-                <param>org.mwolff.fbcrm.angebot.infrastructure.S3DokumentSpeicher</param>
+                <param>org.mwolff.fbcrm.rechnung.infrastructure.S3DokumentSpeicher</param>
                 <!-- Der S3-Adapter der Anlagen (Plan #150, E3), dieselbe Begruendung wie beim
                      JaCoCo-Ausschluss: Aufrufe des AWS SDK, nachgewiesen von S3AnlageSpeicherIT
                      gegen den MinIO-Container. -->

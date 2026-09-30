@@ -6,11 +6,11 @@ import java.util.List;
 import java.util.stream.IntStream;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.fbcrm.angebot.domain.Angebotsposition;
-import org.mwolff.fbcrm.angebot.domain.Belegabsender;
-import org.mwolff.fbcrm.angebot.domain.Belegempfaenger;
 import org.mwolff.fbcrm.common.Abrechnungsmodus;
 import org.mwolff.fbcrm.common.Anschrift;
 import org.mwolff.fbcrm.common.Einheit;
+import org.mwolff.fbcrm.rechnung.domain.Belegabsender;
+import org.mwolff.fbcrm.rechnung.domain.Belegempfaenger;
 
 /**
  * Die Druckdaten, gegen die Satz und Druck geprueft werden.
@@ -43,12 +43,14 @@ public final class Druckdatendoppel {
   public static final Belegabsender ABSENDER =
       new Belegabsender(
           "Manfred Wolff",
+          null,
           EIGENE_ANSCHRIFT,
           "manne@example.org",
           "0421 123456",
           "12/345/67890",
           "DE123456789",
-          "Sparkasse, IBAN DE02 1203 0000 0000 2020 51");
+          "Sparkasse, IBAN DE02 1203 0000 0000 2020 51",
+          null);
 
   /** Firma mit Ansprechpartner — die vollstaendige Empfaengeranschrift (Kriterium 12). */
   public static final Belegempfaenger EMPFAENGER =

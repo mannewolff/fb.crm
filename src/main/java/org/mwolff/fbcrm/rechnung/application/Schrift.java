@@ -1,4 +1,4 @@
-package org.mwolff.fbcrm.angebot.application;
+package org.mwolff.fbcrm.rechnung.application;
 
 /**
  * Der Schnitt, in dem eine Druckzeile gesetzt wird.

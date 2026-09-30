@@ -1,8 +1,8 @@
-package org.mwolff.fbcrm.angebot.infrastructure;
+package org.mwolff.fbcrm.rechnung.infrastructure;
 
 import java.util.UUID;
-import org.mwolff.fbcrm.angebot.domain.DokumentSpeicher;
 import org.mwolff.fbcrm.config.MinioProperties;
+import org.mwolff.fbcrm.rechnung.domain.DokumentSpeicher;
 import org.springframework.stereotype.Component;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
@@ -16,10 +16,10 @@ import software.amazon.awssdk.services.s3.model.PutObjectRequest;
  * der Anwendung, den jeder weitere Beleg teilt. Von dort kommt auch der angelegte Eimer; dieser
  * Adapter setzt ihn voraus und kennt aus {@link MinioProperties} nur seinen Namen.
  *
- * <p>Der Schluessel entsteht hier: {@code angebot/<angebotId>/<uuid>.pdf}. Das {@code angebot/}
- * davor trennt die Angebote von kuenftigen Belegarten, die Kennung macht sie im Speicher
- * zuordenbar, und der Zufallsname sorgt dafuer, dass ein zweiter Versand am selben Angebot den
- * ersten Beleg nicht ueberschreibt.
+ * <p>Der Schluessel entsteht hier: {@code rechnung/<rechnungId>/<uuid>.pdf}. Das {@code rechnung/}
+ * davor trennt die Rechnungen von den Anlagen am Angebot und von kuenftigen Belegarten, die Kennung
+ * macht sie im Speicher zuordenbar, und der Zufallsname sorgt dafuer, dass eine zweite Ablage zur
+ * selben Rechnung die erste nicht ueberschreibt.
  */
 @Component
 class S3DokumentSpeicher implements DokumentSpeicher {
@@ -33,8 +33,8 @@ class S3DokumentSpeicher implements DokumentSpeicher {
   }
 
   @Override
-  public String lege(final long angebotId, final byte[] inhalt) {
-    final String schluessel = "angebot/" + angebotId + "/" + UUID.randomUUID() + ".pdf";
+  public String lege(final long rechnungId, final byte[] inhalt) {
+    final String schluessel = "rechnung/" + rechnungId + "/" + UUID.randomUUID() + ".pdf";
     s3.putObject(
         PutObjectRequest.builder().bucket(bucket).key(schluessel).build(),
         RequestBody.fromBytes(inhalt));

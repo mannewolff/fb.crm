@@ -12,11 +12,13 @@ import java.math.BigDecimal;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.mwolff.fbcrm.angebot.domain.Angebotsposition;
-import org.mwolff.fbcrm.angebot.domain.Belegabsender;
-import org.mwolff.fbcrm.angebot.domain.Belegempfaenger;
 import org.mwolff.fbcrm.common.Abrechnungsmodus;
 import org.mwolff.fbcrm.common.Anschrift;
 import org.mwolff.fbcrm.common.Einheit;
+import org.mwolff.fbcrm.rechnung.application.Druckzeile;
+import org.mwolff.fbcrm.rechnung.application.Schrift;
+import org.mwolff.fbcrm.rechnung.domain.Belegabsender;
+import org.mwolff.fbcrm.rechnung.domain.Belegempfaenger;
 
 /**
  * Der Satz des Belegs — die Rechnung vor dem Druck (E10).
@@ -471,7 +473,9 @@ class BeleglayoutTest {
     final Belegabsender knapp =
         new Belegabsender(
             "Manfred Wolff",
+            null,
             new Anschrift("Am Deich 2", null, null, null),
+            null,
             null,
             null,
             null,

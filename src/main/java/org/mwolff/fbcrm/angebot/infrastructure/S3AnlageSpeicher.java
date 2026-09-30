@@ -22,11 +22,11 @@ import software.amazon.awssdk.services.s3.model.PutObjectRequest;
  * der Anwendung, den jedes Modul teilt. Von dort kommt auch der angelegte Eimer; dieser Adapter
  * setzt ihn voraus und kennt aus {@link MinioProperties} nur seinen Namen.
  *
- * <p>Gestreamt statt als Byte-Feld, anders als {@code S3DokumentSpeicher}: Eine Anlage kommt von
- * aussen und darf bis zur Upload-Grenze gross sein — sie ganz in den Arbeitsspeicher zu heben,
- * waere je Aufruf eine Kopie dieser Groesse. Darum reicht {@code ablegen} den Datenstrom mit der
- * bekannten Laenge weiter, und {@code lesen} gibt den Strom des SDK heraus, den der Aufrufer
- * schliesst.
+ * <p>Gestreamt statt als Byte-Feld, anders als der Belegspeicher in {@code
+ * rechnung.infrastructure}: Eine Anlage kommt von aussen und darf bis zur Upload-Grenze gross sein
+ * — sie ganz in den Arbeitsspeicher zu heben, waere je Aufruf eine Kopie dieser Groesse. Darum
+ * reicht {@code ablegen} den Datenstrom mit der bekannten Laenge weiter, und {@code lesen} gibt den
+ * Strom des SDK heraus, den der Aufrufer schliesst.
  *
  * <p>Der Schluessel entsteht hier: {@code angebot/<angebotId>/anlage/<uuid>}. Das {@code angebot/}
  * davor trennt die Angebote von kuenftigen Belegarten, das {@code anlage/} die Anlagen von den
