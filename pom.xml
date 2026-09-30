@@ -330,6 +330,14 @@
                  MinIO-Container nach (E28). Beleglayout und PdfBoxDrucker bleiben in Abdeckung: Das
                  Layout rechnet ohne Fremdcode, und der Drucker ist ohne Infrastruktur pruefbar. -->
             <exclude>org/mwolff/fbcrm/angebot/infrastructure/S3DokumentSpeicher.class</exclude>
+            <!-- Derselbe Grund fuer den Adapter der Anlagen am Angebot (Plan #150, E3): Aufrufe des
+                 AWS SDK, nur gegen einen echten Objektspeicher sinnvoll pruefbar. Was er zusagt —
+                 gestreamt ablegen, byteweise wiederlesen, die Schluesselform
+                 angebot/<angebotId>/anlage/<uuid> ohne Teil des Dateinamens, leer bei unbekanntem
+                 Schluessel und ein Loeschen, das an einem unbekannten Schluessel nicht scheitert —
+                 weist S3AnlageSpeicherIT gegen den MinIO-Container nach. Klassenweise und nicht per
+                 Paket-Wildcard, damit die uebrigen Adapter des Pakets in Abdeckung bleiben. -->
+            <exclude>org/mwolff/fbcrm/angebot/infrastructure/S3AnlageSpeicher.class</exclude>
           </excludes>
         </configuration>
         <executions>
@@ -615,6 +623,10 @@
                      Aufrufe des AWS SDK, nachgewiesen von S3DokumentSpeicherIT gegen den
                      MinIO-Container. -->
                 <param>org.mwolff.fbcrm.angebot.infrastructure.S3DokumentSpeicher</param>
+                <!-- Der S3-Adapter der Anlagen (Plan #150, E3), dieselbe Begruendung wie beim
+                     JaCoCo-Ausschluss: Aufrufe des AWS SDK, nachgewiesen von S3AnlageSpeicherIT
+                     gegen den MinIO-Container. -->
+                <param>org.mwolff.fbcrm.angebot.infrastructure.S3AnlageSpeicher</param>
               </excludedClasses>
               <mutators>
                 <mutator>STRONGER</mutator>
