@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.mwolff.fbcrm.common.Feldfehler;
+import org.mwolff.fbcrm.common.Uploadgrenze;
 import org.springframework.beans.TypeMismatchException;
 import org.springframework.core.MethodParameter;
 import org.springframework.http.HttpStatus;
@@ -16,6 +17,7 @@ import org.springframework.validation.BindingResult;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.server.ResponseStatusException;
 
 class GlobalExceptionHandlerTest {
@@ -237,6 +239,32 @@ class GlobalExceptionHandlerTest {
 
     // Then
     assertThat(problem.getDetail()).isEqualTo("Es fehlen Angaben.");
+  }
+
+  @Test
+  void handleMaxUploadSize_thenAnswersPayloadTooLarge() {
+    // Given — Plan #150, E8: der Riegel des Containers greift, bevor ein Anwendungsfall zum Zuge
+    // kommt. Ohne diesen Zweig faellt die Ausnahme in handleUnexpected und kaeme als 500 zurueck.
+
+    // When
+    final ProblemDetail problem =
+        handler.handleMaxUploadSize(new MaxUploadSizeExceededException(Uploadgrenze.MAX_BYTE));
+
+    // Then
+    assertThat(problem.getStatus()).isEqualTo(HttpStatus.PAYLOAD_TOO_LARGE.value());
+  }
+
+  @Test
+  void handleMaxUploadSize_thenDetailIsTheSameSentenceTheUseCaseWouldHaveGiven() {
+    // Given — dieselbe Zahl und derselbe Satz wie am Feld datei (Uploadgrenze): Zwei Grenzen mit
+    // zwei Meldungen liefen auseinander.
+
+    // When
+    final ProblemDetail problem =
+        handler.handleMaxUploadSize(new MaxUploadSizeExceededException(Uploadgrenze.MAX_BYTE));
+
+    // Then
+    assertThat(problem.getDetail()).isEqualTo(Uploadgrenze.MELDUNG);
   }
 
   private static MethodArgumentNotValidException validationException(final FieldError... errors)

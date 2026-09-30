@@ -6,6 +6,7 @@ import java.util.Map;
 import java.util.stream.Collectors;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.fbcrm.common.Feldfehler;
+import org.mwolff.fbcrm.common.Uploadgrenze;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.TypeMismatchException;
@@ -18,6 +19,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
 /**
  * Die einzige Stelle, an der Fehler auf HTTP-Antworten abgebildet werden (CLAUDE-java.md §6.3).
@@ -93,6 +95,25 @@ public class GlobalExceptionHandler {
   @ExceptionHandler(TypeMismatchException.class)
   public ProblemDetail handleTypeMismatch(final TypeMismatchException exception) {
     return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, UNGUELTIGER_PARAMETER);
+  }
+
+  /**
+   * Der Rumpf einer Anfrage ueberschreitet die Multipart-Grenze des Containers (Plan #150, E8).
+   *
+   * <p>Der Riegel greift, <b>bevor</b> ein Anwendungsfall zum Zuge kommt: Tomcat weist den Rumpf
+   * beim Zerlegen ab, und ohne diesen Zweig fiele die Ausnahme in {@link #handleUnexpected} und
+   * kaeme als 500 zurueck — ein Serverfehler fuer eine Datei, die zu gross ist.
+   *
+   * <p>Die Antwort nennt denselben Satz, den {@link Uploadgrenze} auch am Feld {@code datei}
+   * liefert, wenn die Datei den Anwendungsfall erreicht. Zwei Meldungen fuer dieselbe Grenze liefen
+   * auseinander; die Oberflaeche zeigt hier {@code detail}, weil eine abgebrochene Zerlegung keine
+   * Felder kennt.
+   *
+   * <p>413 und nicht 400: Die Anfrage ist nicht fehlerhaft gebaut, sie ist zu gross.
+   */
+  @ExceptionHandler(MaxUploadSizeExceededException.class)
+  public ProblemDetail handleMaxUploadSize(final MaxUploadSizeExceededException exception) {
+    return ProblemDetail.forStatusAndDetail(HttpStatus.PAYLOAD_TOO_LARGE, Uploadgrenze.MELDUNG);
   }
 
   @ExceptionHandler(Exception.class)
