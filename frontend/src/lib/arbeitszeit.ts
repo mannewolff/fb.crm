@@ -190,6 +190,23 @@ function alsText(jahr: number, monat: number): string {
   return `${String(jahr).padStart(4, '0')}-${String(monat).padStart(2, '0')}`;
 }
 
+/**
+ * Der laufende Monat als `JJJJ-MM`, aus der Ortszeit des Betrachters (A17).
+ *
+ * Aus den Feldern der Ortszeit gesetzt und nicht ueber `toISOString`, aus demselben Grund wie bei
+ * {@link heute}: Das rechnet nach UTC um, und am letzten Abend eines Monats stuende oestlich von
+ * Greenwich noch der alte da.
+ *
+ * <b>Hier entscheidet nicht der Server</b>, anders als in der Monatsliste (E4): Die Wahl des
+ * Monats trifft der Betrachter, und sie geht als ausdrueckliche Angabe hinaus. Vorbelegt ist sie
+ * mit dem Monat, in dem er gerade sitzt — die Liste der waehlbaren Monate muss dastehen, bevor
+ * irgendeine Antwort da ist.
+ */
+export function laufenderMonat(): string {
+  const jetzt = new Date();
+  return alsText(jetzt.getFullYear(), jetzt.getMonth() + 1);
+}
+
 /** Der Monat vor diesem — am Jahresanfang der Dezember des Vorjahres. */
 export function vormonat(monat: string): string {
   const treffer = MONAT.exec(monat);

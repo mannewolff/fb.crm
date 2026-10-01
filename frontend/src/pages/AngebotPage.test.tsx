@@ -1,7 +1,7 @@
 import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import AngebotPage from './AngebotPage';
 import { KopfPfadProvider } from '../components/KopfPfad';
@@ -112,7 +112,20 @@ function kupfertasten(): readonly HTMLElement[] {
   );
 }
 
+/** Die Wahl des Monats im Dialog „Rechnung schreiben". */
+function monatswahl(): HTMLSelectElement {
+  return screen.getByRole('combobox', { name: 'Monat der Arbeitszeit' });
+}
+
+beforeEach(() => {
+  // Die Monatswahl belegt mit dem laufenden Monat vor; ohne feste Zeit liefe die Probe zum
+  // Monatswechsel auf einen anderen Erwartungswert.
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+  vi.setSystemTime(new Date('2026-11-12T10:00:00Z'));
+});
+
 afterEach(() => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
 });
 
@@ -587,6 +600,26 @@ describe('AngebotPage — der Bereich „Rechnungen" (Issue #187, Kriterium 26)'
 });
 
 describe('AngebotPage — „Rechnung schreiben" (Issue #187, Kriterium 3)', () => {
+  /** Der frische Entwurf, mit dem das Anlegen antwortet — die Seite braucht nur seine Kennung. */
+  const FRISCH = {
+    id: 7,
+    angebotId: 9,
+    firmaId: 5,
+    firmaName: 'Adler AG',
+    rechnungDatum: '2026-09-30',
+    leistungszeitraum: null,
+    zustand: 'ENTWURF',
+    nummer: null,
+    steuersatz: 19,
+    netto: 0,
+    steuer: 0,
+    brutto: 0,
+    zahlungszielTage: null,
+    empfaenger: null,
+    absender: null,
+    zeilen: [],
+  };
+
   /** Die Wege eines bestellten Angebots mit einer Teilabrechnung. */
   const OFFEN = {
     ...LEERE_BEREICHE,
@@ -639,38 +672,108 @@ describe('AngebotPage — „Rechnung schreiben" (Issue #187, Kriterium 3)', () 
     ).not.toBeInTheDocument();
   });
 
-  it('legt den Entwurf an und fuehrt auf die Rechnung', async () => {
+  it('oeffnet die Wahl des Monats, statt sofort anzulegen', async () => {
     const nutzer = userEvent.setup();
-    const fetchMock = fetchNachPfad({
-      ...OFFEN,
-      'POST /api/angebote/9/rechnungen': json(200, {
-        id: 7,
-        angebotId: 9,
-        firmaId: 5,
-        firmaName: 'Adler AG',
-        rechnungDatum: '2026-09-30',
-        leistungszeitraum: null,
-        zustand: 'ENTWURF',
-        nummer: null,
-        steuersatz: 19,
-        netto: 0,
-        steuer: 0,
-        brutto: 0,
-        zahlungszielTage: null,
-        empfaenger: null,
-        absender: null,
-        zeilen: [],
-      }),
-    });
+    const fetchMock = fetchNachPfad(OFFEN);
 
     renderSeite();
     await screen.findByRole('heading', { level: 1, name: UEBERSCHRIFT });
     await nutzer.click(await aktionen().findByRole('button', { name: 'Rechnung schreiben' }));
 
+    const dialog = within(await screen.findByRole('dialog'));
+    expect(monatswahl()).toHaveValue('2026-11');
+    expect(dialog.getByRole('button', { name: 'Anlegen' })).toBeInTheDocument();
+    // Der Klick auf die Taste legt noch nichts an — erst „Anlegen" im Dialog.
+    expect(fetchMock.mock.calls.map(([weg]) => weg)).not.toContain('/api/angebote/9/rechnungen');
+  });
+
+  it('schliesst die Wahl mit „Abbrechen", ohne etwas anzulegen', async () => {
+    const nutzer = userEvent.setup();
+    const fetchMock = fetchNachPfad(OFFEN);
+
+    renderSeite();
+    await screen.findByRole('heading', { level: 1, name: UEBERSCHRIFT });
+    await nutzer.click(await aktionen().findByRole('button', { name: 'Rechnung schreiben' }));
+    await screen.findByRole('dialog');
+    await nutzer.click(screen.getByRole('button', { name: 'Abbrechen' }));
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(fetchMock.mock.calls.map(([weg]) => weg)).not.toContain('/api/angebote/9/rechnungen');
+  });
+
+  it('legt mit dem gewaehlten Vormonat an', async () => {
+    const nutzer = userEvent.setup();
+    const fetchMock = fetchNachPfad({ ...OFFEN, 'POST /api/angebote/9/rechnungen': json(201, FRISCH) });
+
+    renderSeite();
+    await screen.findByRole('heading', { level: 1, name: UEBERSCHRIFT });
+    await nutzer.click(await aktionen().findByRole('button', { name: 'Rechnung schreiben' }));
+    await screen.findByRole('dialog');
+    await nutzer.selectOptions(monatswahl(), '2026-10');
+    await nutzer.click(screen.getByRole('button', { name: 'Anlegen' }));
+
     expect(await screen.findByText('Rechnung angekommen')).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/angebote/9/rechnungen',
-      expect.objectContaining({ method: 'POST' }),
+      expect.objectContaining({ method: 'POST', body: JSON.stringify({ monat: '2026-10' }) }),
+    );
+  });
+
+  it('schickt bei „ohne Arbeitszeit" keinen Rumpf', async () => {
+    const nutzer = userEvent.setup();
+    const fetchMock = fetchNachPfad({ ...OFFEN, 'POST /api/angebote/9/rechnungen': json(201, FRISCH) });
+
+    renderSeite();
+    await screen.findByRole('heading', { level: 1, name: UEBERSCHRIFT });
+    await nutzer.click(await aktionen().findByRole('button', { name: 'Rechnung schreiben' }));
+    await screen.findByRole('dialog');
+    await nutzer.selectOptions(monatswahl(), '');
+    await nutzer.click(screen.getByRole('button', { name: 'Anlegen' }));
+
+    expect(await screen.findByText('Rechnung angekommen')).toBeInTheDocument();
+    const anlegen = fetchMock.mock.calls.find(([weg]) => weg === '/api/angebote/9/rechnungen');
+    expect(anlegen?.[1]).not.toHaveProperty('body');
+  });
+
+  it('sperrt die Tasten der Wahl, solange das Anlegen laeuft', async () => {
+    const nutzer = userEvent.setup();
+    // Ohne Platzhalter-Funktion: Ein nie gerufener Vorbelegungswert waere ungetesteter Code.
+    let liefere!: (antwort: Response) => void;
+    const spaeter = new Promise<Response>((aufloesen) => {
+      liefere = aufloesen;
+    });
+    fetchNachPfad({ ...OFFEN, 'POST /api/angebote/9/rechnungen': () => spaeter });
+
+    renderSeite();
+    await screen.findByRole('heading', { level: 1, name: UEBERSCHRIFT });
+    await nutzer.click(await aktionen().findByRole('button', { name: 'Rechnung schreiben' }));
+    await screen.findByRole('dialog');
+    await nutzer.click(screen.getByRole('button', { name: 'Anlegen' }));
+
+    expect(screen.getByRole('button', { name: 'Anlegen' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Abbrechen' })).toBeDisabled();
+    expect(monatswahl()).toBeDisabled();
+    liefere(json(201, FRISCH)());
+    expect(await screen.findByText('Rechnung angekommen')).toBeInTheDocument();
+  });
+
+  it('legt den Entwurf fuer den laufenden Monat an und fuehrt auf die Rechnung', async () => {
+    const nutzer = userEvent.setup();
+    const fetchMock = fetchNachPfad({
+      ...OFFEN,
+      'POST /api/angebote/9/rechnungen': json(200, FRISCH),
+    });
+
+    renderSeite();
+    await screen.findByRole('heading', { level: 1, name: UEBERSCHRIFT });
+    await nutzer.click(await aktionen().findByRole('button', { name: 'Rechnung schreiben' }));
+    await screen.findByRole('dialog');
+    await nutzer.click(screen.getByRole('button', { name: 'Anlegen' }));
+
+    expect(await screen.findByText('Rechnung angekommen')).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/angebote/9/rechnungen',
+      expect.objectContaining({ method: 'POST', body: JSON.stringify({ monat: '2026-11' }) }),
     );
   });
 
@@ -687,9 +790,14 @@ describe('AngebotPage — „Rechnung schreiben" (Issue #187, Kriterium 3)', () 
     renderSeite();
     await screen.findByRole('heading', { level: 1, name: UEBERSCHRIFT });
     await nutzer.click(await aktionen().findByRole('button', { name: 'Rechnung schreiben' }));
+    await screen.findByRole('dialog');
+    await nutzer.click(screen.getByRole('button', { name: 'Anlegen' }));
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('nichts mehr offen');
-    expect(screen.getByRole('heading', { level: 1, name: UEBERSCHRIFT })).toBeInTheDocument();
+    // Die Meldung steht im Dialog, und der bleibt offen — der Betrachter kann einen anderen
+    // Monat waehlen, ohne die Wahl neu zu oeffnen.
+    const dialog = within(await screen.findByRole('dialog'));
+    expect(await dialog.findByRole('alert')).toHaveTextContent('nichts mehr offen');
+    expect(screen.queryByText('Rechnung angekommen')).not.toBeInTheDocument();
   });
 
   it('laesst Ueberschrift, Angaben und Positionen stehen, wenn der Abrechnungsweg ausfaellt', async () => {

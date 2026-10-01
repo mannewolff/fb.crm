@@ -1,9 +1,10 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   dauerInHundertsteln,
   folgemonat,
   imRaster,
+  laufenderMonat,
   monatWort,
   alsMonat,
   stundenWort,
@@ -160,5 +161,26 @@ describe('uhrzeitFeld (A16: der Wert eines Zeitfeldes)', () => {
     // Anders als {@link uhrzeitWort}: Ein Zeitfeld traegt eine Uhrzeit oder nichts — der rohe
     // Wert waere dort ein Wert, den der Browser ohnehin verwirft.
     expect(uhrzeitFeld('spaeter')).toBe('');
+  });
+});
+
+describe('laufenderMonat (A17: die Vorbelegung der Monatswahl)', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('setzt den laufenden Monat in der Ortszeit des Betrachters', () => {
+    vi.useFakeTimers();
+    // UTC ist noch der 31. Oktober, Europe/Berlin schon der 1. November.
+    vi.setSystemTime(new Date('2026-10-31T23:30:00Z'));
+
+    expect(laufenderMonat()).toBe('2026-11');
+  });
+
+  it('fuellt den Monat auf zwei Stellen auf', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-01-05T12:00:00Z'));
+
+    expect(laufenderMonat()).toBe('2026-01');
   });
 });

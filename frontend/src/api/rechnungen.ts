@@ -377,15 +377,22 @@ export function abrechenbareAngebote(): Promise<AbrechenbareAngebote> {
 }
 
 /**
- * Legt zum Angebot einen Rechnungsentwurf an (Kriterium 3).
+ * Legt zum Angebot einen Rechnungsentwurf an (Kriterium 3; Issue #203, Plan A17).
  *
- * Kein Rumpf: Datum, Leistungszeitraum und die vorbelegten Mengen entstehen im Anwendungsfall. Die
- * Antwort traegt den fertigen Entwurf — die Maske zeigt ihn ohne zweiten Aufruf.
+ * Datum, Leistungszeitraum und die vorbelegten Mengen entstehen im Anwendungsfall. Die Antwort
+ * traegt den fertigen Entwurf — die Maske zeigt ihn ohne zweiten Aufruf.
+ *
+ * <b>Der Monat ist die einzige Angabe von aussen</b>: Mit ihm belegt der Anwendungsfall die Mengen
+ * aus der Arbeitszeit dieses Monats vor (Issue #199). Ohne ihn geht <b>kein Rumpf</b> hinaus und
+ * der Entwurf entsteht ohne Mengen — nicht ein Rumpf mit `null`, denn das waere dieselbe Auskunft
+ * in einer Form, die die Schnittstelle nicht braucht.
+ *
+ * @param monat der Monat als `JJJJ-MM`, oder `undefined` fuer „ohne Arbeitszeit"
  */
-export function rechnungAnlegen(angebotId: number): Promise<Rechnung> {
+export function rechnungAnlegen(angebotId: number, monat?: string): Promise<Rechnung> {
   return apiJson(
     `/api/angebote/${String(angebotId)}/rechnungen`,
-    { methode: 'POST' },
+    { methode: 'POST', rumpf: monat === undefined ? undefined : { monat } },
     parseRechnung,
   );
 }

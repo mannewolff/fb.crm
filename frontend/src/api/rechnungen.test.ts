@@ -399,13 +399,25 @@ describe('die Wege', () => {
     );
   });
 
-  it('legt zum Angebot einen Entwurf an und nimmt die Antwort', async () => {
+  it('legt zum Angebot einen Entwurf ohne Rumpf an, wo kein Monat gewaehlt ist', async () => {
     const fetchMock = fetchNachPfad({ 'POST /api/angebote/9/rechnungen': json(201, ENTWURF) });
 
     expect(await rechnungAnlegen(9)).toEqual(ENTWURF_VERENGT);
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/angebote/9/rechnungen',
       expect.objectContaining({ method: 'POST' }),
+    );
+    // Ohne Monat geht kein Rumpf hinaus — der Anwendungsfall belegt dann keine Menge vor.
+    expect(fetchMock.mock.calls[0][1]).not.toHaveProperty('body');
+  });
+
+  it('schickt den gewaehlten Monat als `monat` mit', async () => {
+    const fetchMock = fetchNachPfad({ 'POST /api/angebote/9/rechnungen': json(201, ENTWURF) });
+
+    expect(await rechnungAnlegen(9, '2026-10')).toEqual(ENTWURF_VERENGT);
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/angebote/9/rechnungen',
+      expect.objectContaining({ method: 'POST', body: JSON.stringify({ monat: '2026-10' }) }),
     );
   });
 

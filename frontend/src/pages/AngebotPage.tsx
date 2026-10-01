@@ -1,9 +1,13 @@
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
+import Dialog from '@mui/material/Dialog';
+import DialogActions from '@mui/material/DialogActions';
+import DialogContent from '@mui/material/DialogContent';
+import DialogTitle from '@mui/material/DialogTitle';
 import Link from '@mui/material/Link';
 import Typography from '@mui/material/Typography';
 import { IconArrowLeft, IconArrowRight, IconFilePlus, IconPencil } from '@tabler/icons-react';
-import { Fragment, useEffect, useState } from 'react';
+import { Fragment, useEffect, useId, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom';
 
@@ -22,6 +26,7 @@ import Kommentare from '../components/Kommentare';
 import { useKopfPfad } from '../components/KopfPfad';
 import type { PfadVerweis } from '../components/KopfPfad';
 import KupferTaste from '../components/KupferTaste';
+import Monatswahl, { monatOderKeiner, monatswahlWert } from '../components/Monatswahl';
 import { EINHEIT_WORT, MODUS_WORT } from '../components/Positionsmaske';
 import RechnungszustandChip from '../components/RechnungszustandChip';
 import Tafel from '../components/Tafel';
@@ -65,7 +70,10 @@ import { ZAHLEN_KLASSE } from '../theme';
  * <b>„Rechnung schreiben" ist weich</b>: Die eine Kupfertaste der Ansicht bleibt „Status weiter"
  * (CLAUDE-design.md, Leitgedanke 2). Sie steht nur, wo sie etwas bewirkt — ab „bestellt" und solange
  * an einer Position etwas offen ist. <b>Die Taste fuehrt, der Server entscheidet</b>, wie in
- * {@link RechnungenPage}: Weist das Anlegen mit 409 ab, steht seine Meldung oben in der Ansicht.
+ * {@link RechnungenPage}. <b>Sie legt nicht selbst an</b>, sondern oeffnet einen kleinen Dialog mit
+ * der einen Frage, die vorher zu beantworten ist: welchen Monat der Arbeitszeit der Entwurf
+ * vorbelegen soll ({@link Monatswahl}, Issue #203). Weist das Anlegen mit 409 ab, steht die Meldung
+ * des Servers in diesem Dialog — dort, wo die Wahl steht, die der Betrachter aendern kann.
  */
 
 const NICHT_GEFUNDEN = 'Dieses Angebot gibt es nicht.';
@@ -83,6 +91,9 @@ const LAEDT_ABRECHNUNG = 'Der Abrechnungsstand wird geladen …';
 const AUSFALL_ABRECHNUNG =
   'Der Abrechnungsstand ist gerade nicht zu erreichen. Bitte später erneut versuchen.';
 const AUSFALL_ENTWURF = 'Der Rechnungsentwurf wurde nicht angelegt. Bitte später erneut versuchen.';
+
+/** Die Ueberschrift des Dialogs, in dem der Monat gewaehlt wird (Issue #203). */
+const WAHL_TITEL = 'Rechnung schreiben';
 
 /** Was an der Stelle der Nummer steht, solange die Rechnung keine hat (wie in {@link RechnungenPage}). */
 const OHNE_NUMMER = 'Entwurf';
@@ -340,10 +351,14 @@ export default function AngebotPage() {
   const { angebotId } = useParams();
   const kennung = kennungAus(angebotId);
   const navigate = useNavigate();
+  const titelId = useId();
   const [stand, setzeStand] = useState<Stand>({ art: 'laedt' });
   const [abrechnung, setzeAbrechnung] = useState<Abrechnungsstand>({ art: 'laedt' });
   const [meldung, setzeMeldung] = useState<string | null>(null);
   const [laeuft, setzeLaeuft] = useState(false);
+  const [wahlOffen, setzeWahlOffen] = useState(false);
+  const [wahlmeldung, setzeWahlmeldung] = useState<string | null>(null);
+  const [monat, setzeMonat] = useState(monatswahlWert);
   // Solange das Angebot nicht gelesen ist, traegt die Endstufe das Wort „Angebot"; die Firma kommt
   // mit dem Angebot, denn erst das Angebot weiss, an wen es geht.
   useKopfPfad(
@@ -409,19 +424,64 @@ export default function AngebotPage() {
     }
   };
 
-  /** „Rechnung schreiben": Der Entwurf entsteht am Server, die Antwort nennt seine Kennung. */
+  /**
+   * „Anlegen" im Dialog: Der Entwurf entsteht am Server, die Antwort nennt seine Kennung.
+   *
+   * Nach dem Fehlschlag bleibt der Dialog stehen — die Wahl des Monats ist dann noch da, und der
+   * Betrachter kann eine andere treffen, ohne von vorn zu beginnen.
+   */
   const entwurfAnlegen = async (angebot: Angebot) => {
-    setzeMeldung(null);
+    setzeWahlmeldung(null);
     setzeLaeuft(true);
     try {
-      const entwurf = await rechnungAnlegen(angebot.id);
+      const entwurf = await rechnungAnlegen(angebot.id, monatOderKeiner(monat));
       navigate(`/rechnungen/${String(entwurf.id)}`);
     } catch (ursache: unknown) {
       // Die Meldung des Servers, wo er eine schickt — er allein weiss, warum er abgewiesen hat.
-      setzeMeldung(serverMeldung(ursache, AUSFALL_ENTWURF));
+      setzeWahlmeldung(serverMeldung(ursache, AUSFALL_ENTWURF));
       setzeLaeuft(false);
     }
   };
+
+  /** Die Wahl schliessen — ohne etwas anzulegen; die Meldung des letzten Versuchs geht mit. */
+  const wahlSchliessen = () => {
+    setzeWahlOffen(false);
+    setzeWahlmeldung(null);
+  };
+
+  /** Der Dialog mit der einen Frage: welcher Monat die Mengen vorbelegt (Issue #203). */
+  function wahlZu(angebot: Angebot): ReactNode {
+    return (
+      <Dialog
+        open
+        onClose={wahlSchliessen}
+        fullWidth
+        maxWidth="xs"
+        aria-labelledby={titelId}
+      >
+        <DialogTitle id={titelId} sx={{ fontSize: 16 }}>
+          {WAHL_TITEL}
+        </DialogTitle>
+        <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          {wahlmeldung === null ? null : <Alert severity="error">{wahlmeldung}</Alert>}
+          <Monatswahl monat={monat} setzeMonat={setzeMonat} disabled={laeuft} />
+        </DialogContent>
+        <DialogActions sx={{ padding: '4px 24px 20px', gap: '10px' }}>
+          <WeicheTaste onClick={wahlSchliessen} disabled={laeuft}>
+            Abbrechen
+          </WeicheTaste>
+          <KupferTaste
+            onClick={() => {
+              void entwurfAnlegen(angebot);
+            }}
+            disabled={laeuft}
+          >
+            Anlegen
+          </KupferTaste>
+        </DialogActions>
+      </Dialog>
+    );
+  }
 
   /**
    * Steht „Rechnung schreiben" da? Nur ab „bestellt" und nur mit etwas Offenem (Kriterium 3).
@@ -453,7 +513,7 @@ export default function AngebotPage() {
         {schreibbar(angebot) ? (
           <WeicheTaste
             onClick={() => {
-              void entwurfAnlegen(angebot);
+              setzeWahlOffen(true);
             }}
             disabled={laeuft}
             symbol={<IconFilePlus size={SYMBOL_TASTE} stroke={1.8} />}
@@ -504,6 +564,7 @@ export default function AngebotPage() {
         <Karte titel={ueberschriftZu(angebot)} titelEbene={1} werkzeug={aktionenZu(angebot)}>
           <Angaben angebot={angebot} />
         </Karte>
+        {wahlOffen ? wahlZu(angebot) : null}
         {angebot.beschreibung === null ? null : (
           <Karte titel="Beschreibung">
             <Typography sx={{ fontSize: 13.5, whiteSpace: 'pre-wrap' }}>

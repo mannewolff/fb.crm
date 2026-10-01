@@ -1,7 +1,7 @@
 import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import RechnungenPage from './RechnungenPage';
 import { KopfPfadProvider } from '../components/KopfPfad';
@@ -95,7 +95,20 @@ function kupfertasten(): readonly HTMLElement[] {
   );
 }
 
+/** Die Wahl des Monats im Dialog — ihr zugaenglicher Name ist ihre Beschriftung. */
+function monatswahl(): HTMLSelectElement {
+  return screen.getByRole('combobox', { name: 'Monat der Arbeitszeit' });
+}
+
+beforeEach(() => {
+  // Die Monatswahl belegt mit dem laufenden Monat vor; ohne feste Zeit liefe die Probe zum
+  // Monatswechsel auf einen anderen Erwartungswert.
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+  vi.setSystemTime(new Date('2026-11-12T10:00:00Z'));
+});
+
 afterEach(() => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
 });
 
@@ -213,7 +226,24 @@ describe('RechnungenPage — die Wahl „Neue Rechnung" (#160, Kriterium 2)', ()
     expect(eintrag).toHaveTextContent('9.600,00 €');
   });
 
-  it('legt mit der Wahl den Entwurf an und fuehrt auf die Rechnung', async () => {
+  it('traegt die Monatswahl ueber der Liste, vorbelegt mit dem laufenden Monat', async () => {
+    const nutzer = userEvent.setup();
+    fetchNachPfad({
+      [WEG_LISTE]: json(200, { rechnungen: [] }),
+      [WEG_WAHL]: json(200, { angebote: [WAHL] }),
+    });
+
+    renderSeite();
+    await nutzer.click(await screen.findByRole('button', { name: 'Neue Rechnung' }));
+    await screen.findByRole('dialog');
+
+    expect(monatswahl()).toHaveValue('2026-11');
+    // Ueber der Liste: Erst der Monat, dann das Angebot, mit dem die Wahl zuschlaegt.
+    expect(monatswahl().compareDocumentPosition(screen.getByRole('button', { name: /Adler AG/ })))
+      .toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+  });
+
+  it('legt mit der Wahl den Entwurf fuer den laufenden Monat an und fuehrt auf die Rechnung', async () => {
     const nutzer = userEvent.setup();
     const fetchMock = fetchNachPfad({
       [WEG_LISTE]: json(200, { rechnungen: [] }),
@@ -229,8 +259,48 @@ describe('RechnungenPage — die Wahl „Neue Rechnung" (#160, Kriterium 2)', ()
     expect(screen.getByTestId('adresse')).toHaveTextContent('/rechnungen/7');
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/angebote/9/rechnungen',
-      expect.objectContaining({ method: 'POST' }),
+      expect.objectContaining({ method: 'POST', body: JSON.stringify({ monat: '2026-11' }) }),
     );
+  });
+
+  it('legt mit dem gewaehlten Vormonat an', async () => {
+    const nutzer = userEvent.setup();
+    const fetchMock = fetchNachPfad({
+      [WEG_LISTE]: json(200, { rechnungen: [] }),
+      [WEG_WAHL]: json(200, { angebote: [WAHL] }),
+      [WEG_ANLEGEN]: json(201, NEUER_ENTWURF),
+    });
+
+    renderSeite();
+    await nutzer.click(await screen.findByRole('button', { name: 'Neue Rechnung' }));
+    await screen.findByRole('dialog');
+    await nutzer.selectOptions(monatswahl(), '2026-10');
+    await nutzer.click(screen.getByRole('button', { name: /Adler AG/ }));
+
+    expect(await screen.findByText('Die Rechnung')).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/angebote/9/rechnungen',
+      expect.objectContaining({ method: 'POST', body: JSON.stringify({ monat: '2026-10' }) }),
+    );
+  });
+
+  it('schickt bei „ohne Arbeitszeit" keinen Rumpf', async () => {
+    const nutzer = userEvent.setup();
+    const fetchMock = fetchNachPfad({
+      [WEG_LISTE]: json(200, { rechnungen: [] }),
+      [WEG_WAHL]: json(200, { angebote: [WAHL] }),
+      [WEG_ANLEGEN]: json(201, NEUER_ENTWURF),
+    });
+
+    renderSeite();
+    await nutzer.click(await screen.findByRole('button', { name: 'Neue Rechnung' }));
+    await screen.findByRole('dialog');
+    await nutzer.selectOptions(monatswahl(), '');
+    await nutzer.click(screen.getByRole('button', { name: /Adler AG/ }));
+
+    expect(await screen.findByText('Die Rechnung')).toBeInTheDocument();
+    const anlegen = fetchMock.mock.calls.find(([weg]) => weg === '/api/angebote/9/rechnungen');
+    expect(anlegen?.[1]).not.toHaveProperty('body');
   });
 
   it('sagt mit einem Satz, wenn es kein abrechenbares Angebot gibt', async () => {
@@ -290,6 +360,7 @@ describe('RechnungenPage — die Wahl „Neue Rechnung" (#160, Kriterium 2)', ()
     // „Neue Rechnung" liegt hinter dem Modal und ist fuer Hilfsmittel ohnehin verdeckt.
     expect(screen.getByRole('button', { name: /Adler AG/ })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Abbrechen' })).toBeDisabled();
+    expect(monatswahl()).toBeDisabled();
     liefere(json(201, NEUER_ENTWURF)());
     expect(await screen.findByText('Die Rechnung')).toBeInTheDocument();
   });

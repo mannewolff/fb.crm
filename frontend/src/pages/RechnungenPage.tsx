@@ -28,6 +28,7 @@ import Karte from '../components/Karte';
 import { useKopfPfad } from '../components/KopfPfad';
 import type { PfadVerweis } from '../components/KopfPfad';
 import KupferTaste from '../components/KupferTaste';
+import Monatswahl, { monatOderKeiner, monatswahlWert } from '../components/Monatswahl';
 import RechnungszustandChip from '../components/RechnungszustandChip';
 import Tafel from '../components/Tafel';
 import TastenSymbol from '../components/TastenSymbol';
@@ -58,6 +59,10 @@ import { RADIUS_KLEIN, ZAHLEN_KLASSE } from '../theme';
  * Angeboten; die Wahl legt den Entwurf an und fuehrt auf ihn. <b>Die Liste fuehrt, der Server
  * entscheidet</b>: Dass ein Angebot in der Wahl steht, ist eine Auskunft und keine Zusage — weist
  * das Anlegen mit 409 ab, steht die Meldung des Servers in der Wahl.
+ *
+ * <b>Ueber der Liste steht der Monat der Arbeitszeit</b> ({@link Monatswahl}, Issue #203): Erst
+ * sagt der Betrachter, welcher Monat vorbelegt werden soll, dann waehlt er das Angebot — der Klick
+ * auf das Angebot ist der Abschluss, und was er mitnimmt, muss vorher dastehen.
  */
 
 /** Die Liste ist die erste Stufe des Pfades — ueber ihr steht nichts (E6). */
@@ -268,6 +273,7 @@ export default function RechnungenPage() {
   const [wahlstand, setzeWahlstand] = useState<Wahlstand>({ art: 'laedt' });
   const [meldung, setzeMeldung] = useState<string | null>(null);
   const [laeuft, setzeLaeuft] = useState(false);
+  const [monat, setzeMonat] = useState(monatswahlWert);
 
   useEffect(() => {
     let gueltig = true;
@@ -308,7 +314,7 @@ export default function RechnungenPage() {
     setzeMeldung(null);
     setzeLaeuft(true);
     try {
-      const entwurf = await rechnungAnlegen(angebotId);
+      const entwurf = await rechnungAnlegen(angebotId, monatOderKeiner(monat));
       navigate(`/rechnungen/${String(entwurf.id)}`);
     } catch (ursache: unknown) {
       // Die Meldung des Servers, wo er eine schickt — er allein weiss, warum er abgewiesen hat.
@@ -380,6 +386,7 @@ export default function RechnungenPage() {
           </DialogTitle>
           <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
             {meldung === null ? null : <Alert severity="error">{meldung}</Alert>}
+            <Monatswahl monat={monat} setzeMonat={setzeMonat} disabled={laeuft} />
             {wahlinhalt}
           </DialogContent>
           <DialogActions sx={{ padding: '4px 24px 20px' }}>
