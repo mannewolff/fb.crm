@@ -1,6 +1,11 @@
 package org.mwolff.fbcrm.rechnung.application;
 
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
 import java.time.Clock;
@@ -12,6 +17,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mwolff.fbcrm.rechnung.domain.Nummernkreis;
 import org.mwolff.fbcrm.rechnung.domain.Nummernmuster;
+import org.mwolff.fbcrm.rechnung.domain.RechnungRepository;
 import org.mwolff.fbcrm.rechnung.domain.Rechnungseinstellungen;
 import org.mwolff.fbcrm.rechnung.domain.RechnungseinstellungenRepository;
 
@@ -24,6 +30,10 @@ import org.mwolff.fbcrm.rechnung.domain.RechnungseinstellungenRepository;
  *
  * <p>Zeitpunkt und laufendes Jahr kommen aus der injizierten Uhr, nie aus {@code Instant.now()}
  * (CLAUDE-java.md §6.2); das Jahr rechnet gegen die Geschaeftszone (E12).
+ *
+ * <p>Dazu die Pruefung der eingereichten Nummer gegen den Bestand (#160, Kriterium 19; Plan #169,
+ * E16): Gefragt wird mit der Nummer, die das <b>eingereichte</b> Muster in seinem Zaehlerjahr
+ * ergaebe — und traegt sie schon eine Rechnung, wird nichts geschrieben.
  */
 @ExtendWith(MockitoExtension.class)
 class RechnungseinstellungenPflegenUseCaseTest {
@@ -35,10 +45,11 @@ class RechnungseinstellungenPflegenUseCaseTest {
 
   @Mock private RechnungseinstellungenRepository bestand;
   @Mock private Nummernkreis nummernkreis;
+  @Mock private RechnungRepository rechnungen;
 
   private RechnungseinstellungenPflegenUseCase useCase(final Instant jetzt) {
     return new RechnungseinstellungenPflegenUseCase(
-        bestand, nummernkreis, Clock.fixed(jetzt, ZoneOffset.UTC));
+        bestand, nummernkreis, rechnungen, Clock.fixed(jetzt, ZoneOffset.UTC));
   }
 
   private static Rechnungseinstellungen einstellungen(final String muster) {
@@ -83,5 +94,38 @@ class RechnungseinstellungenPflegenUseCaseTest {
 
     // Then — ohne die Geschaeftszone landete die gesetzte Nummer im Zaehler des alten Jahres.
     verify(nummernkreis).setze(2027, 4);
+  }
+
+  @Test
+  void pflege_thenAsksTheBestandForTheNummerTheSubmittedPatternWouldForm() {
+    // When — Kriterium 19: gefragt wird mit dem eingereichten Muster, nicht dem gespeicherten.
+    useCase(JETZT).pflege(einstellungen("R{JJ}-{NNNN}"), 4);
+
+    // Then
+    verify(rechnungen).existiertNummer("R26-0004");
+  }
+
+  @Test
+  void pflege_givenAPatternWithoutAYear_thenAsksWithoutAYear() {
+    // When — ohne Jahres-Platzhalter steht in der Nummer kein Jahr, also auch in der Frage keines.
+    useCase(JETZT).pflege(einstellungen("{NNNN}"), 7);
+
+    // Then
+    verify(rechnungen).existiertNummer("0007");
+  }
+
+  @Test
+  void pflege_givenANummerAnExistingRechnungAlreadyCarries_thenRefusesAndWritesNothing() {
+    // Given — Kriterium 19: die 1 des laufenden Jahres steht schon auf einem Beleg.
+    when(rechnungen.existiertNummer("0001-2026")).thenReturn(true);
+
+    // When / Then — die Meldung nennt die Nummer und haengt am Feld der Maske.
+    assertThatThrownBy(() -> useCase(JETZT).pflege(einstellungen("{NNNN}-{JJJJ}"), 1))
+        .isInstanceOf(NaechsteNummerSchonVergeben.class)
+        .hasMessageContaining("0001-2026");
+
+    // Then — nichts gespeichert, kein Zaehler gesetzt.
+    verify(bestand, never()).speichere(any(), any());
+    verifyNoInteractions(nummernkreis);
   }
 }

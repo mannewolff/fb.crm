@@ -4,6 +4,7 @@ import java.time.Clock;
 import java.time.LocalDate;
 import org.mwolff.fbcrm.common.Geschaeftszone;
 import org.mwolff.fbcrm.rechnung.domain.Nummernkreis;
+import org.mwolff.fbcrm.rechnung.domain.RechnungRepository;
 import org.mwolff.fbcrm.rechnung.domain.Rechnungseinstellungen;
 import org.mwolff.fbcrm.rechnung.domain.RechnungseinstellungenRepository;
 import org.springframework.stereotype.Service;
@@ -23,6 +24,12 @@ import org.springframework.transaction.annotation.Transactional;
  * <p>Der Zeitpunkt der Aenderung und das laufende Jahr kommen aus der injizierten {@link Clock} und
  * nicht aus {@code Instant.now()} — sonst waeren sie im Test nicht festzuhalten (CLAUDE-java.md
  * §6.2). Das Jahr rechnet gegen die Geschaeftszone (E12).
+ *
+ * <p><b>Vor dem Schreiben steht eine Pruefung</b> (#160, Kriterium 19; Plan #169, E16): Ergaebe die
+ * eingereichte Nummer mit dem eingereichten Muster eine Rechnungsnummer, die eine Rechnung schon
+ * traegt, wird abgewiesen. Ohne sie koennte der Anwender den Zaehler widerspruchsfrei auf eine Zahl
+ * setzen, an der das naechste Stellen unvermeidlich scheitern muesste — und er erfuehre es an einer
+ * Maske, an der die Ursache nicht steht.
  */
 @Service
 @Transactional
@@ -30,14 +37,17 @@ public class RechnungseinstellungenPflegenUseCase {
 
   private final RechnungseinstellungenRepository bestand;
   private final Nummernkreis nummernkreis;
+  private final RechnungRepository rechnungen;
   private final Clock clock;
 
   public RechnungseinstellungenPflegenUseCase(
       final RechnungseinstellungenRepository bestand,
       final Nummernkreis nummernkreis,
+      final RechnungRepository rechnungen,
       final Clock clock) {
     this.bestand = bestand;
     this.nummernkreis = nummernkreis;
+    this.rechnungen = rechnungen;
     this.clock = clock;
   }
 
@@ -46,10 +56,19 @@ public class RechnungseinstellungenPflegenUseCase {
    *
    * @param einstellungen die eingereichten Einstellungen, an der Schnittstelle bereits geprueft
    * @param naechsteNummer die eingereichte naechste laufende Nummer, ab 1
+   * @throws NaechsteNummerSchonVergeben wenn die Nummer eine vergebene Rechnungsnummer ergaebe
    */
   public void pflege(final Rechnungseinstellungen einstellungen, final int naechsteNummer) {
-    bestand.speichere(einstellungen, clock.instant());
     final int jahr = LocalDate.now(clock.withZone(Geschaeftszone.ZONE)).getYear();
-    nummernkreis.setze(einstellungen.nummerMuster().zaehlerjahr(jahr), naechsteNummer);
+    final int zaehlerjahr = einstellungen.nummerMuster().zaehlerjahr(jahr);
+    // Gefragt wird mit dem Zaehlerjahr und nicht mit dem Kalenderjahr: Traegt das Muster ein Jahr,
+    // sind beide gleich; traegt es keines, steht in der Nummer ohnehin keines (Nummernmuster).
+    final String wuerdeEntstehen =
+        einstellungen.nummerMuster().rechnungsnummer(naechsteNummer, zaehlerjahr);
+    if (rechnungen.existiertNummer(wuerdeEntstehen)) {
+      throw new NaechsteNummerSchonVergeben(wuerdeEntstehen);
+    }
+    bestand.speichere(einstellungen, clock.instant());
+    nummernkreis.setze(zaehlerjahr, naechsteNummer);
   }
 }

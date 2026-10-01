@@ -25,6 +25,30 @@ import java.util.Map;
 public abstract class Feldfehler extends RuntimeException {
 
   /**
+   * Eine Lage, deren Text schon in {@code @ResponseStatus(reason = …)} steht.
+   *
+   * <p>Der Regelfall: Die meisten Feldfehler sagen immer denselben Satz, und {@code
+   * common.web.GlobalExceptionHandler} liest ihn aus der Annotation.
+   */
+  protected Feldfehler() {
+    super();
+  }
+
+  /**
+   * Eine Lage, deren Text einen Wert nennt und darum nicht in eine Annotation passt.
+   *
+   * <p>Ein {@code reason} ist eine Konstante. Nennt die Meldung einen Wert — eine Nummer, einen
+   * Namen —, muss sie zur Laufzeit entstehen; {@code GlobalExceptionHandler} nimmt dann {@code
+   * getMessage()} und faellt nur ohne Meldung auf den {@code reason} zurueck. Dieselbe Meldung
+   * gehoert dann auch in {@link #felder()}: Antwortrumpf und Feld sollen nicht auseinanderlaufen.
+   *
+   * @param message was der Anwender liest, mit dem Wert darin
+   */
+  protected Feldfehler(final String message) {
+    super(message);
+  }
+
+  /**
    * Die betroffenen Felder und je Feld die Meldungen dazu.
    *
    * <p>Die Schluessel sind die Feldnamen, die die Oberflaeche kennt; die Reihenfolge ist die, in
