@@ -6,6 +6,7 @@ import org.jspecify.annotations.Nullable;
 import org.mwolff.fbcrm.angebot.application.AngebotsanlageUseCase;
 import org.mwolff.fbcrm.angebot.application.Anlageninhalt;
 import org.mwolff.fbcrm.angebot.domain.Vorschauart;
+import org.mwolff.fbcrm.common.web.Anlagekopf;
 import org.springframework.core.io.InputStreamResource;
 import org.springframework.core.io.Resource;
 import org.springframework.http.HttpHeaders;

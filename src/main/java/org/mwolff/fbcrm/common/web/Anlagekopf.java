@@ -1,11 +1,16 @@
-package org.mwolff.fbcrm.angebot.web;
+package org.mwolff.fbcrm.common.web;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Locale;
 import java.util.regex.Pattern;
 
 /**
- * Die Kopfzeilen, mit denen eine Anlage hinausgeht (Issue #148, Kriterium 9; Plan #150, E5).
+ * Die Kopfzeilen, mit denen eine Datei zum Herunterladen hinausgeht (Issue #148, Kriterium 9; Plan
+ * #150, E5).
+ *
+ * <p>Liegt in {@code common.web}, weil zwei Module davon ausliefern: die Anlagen am Angebot und das
+ * Dokument einer gestellten Rechnung (Issue #183). Dieselben strengen Kopfzeilen fuer beide — eine
+ * zweite Fassung liefe mit der Zeit auseinander.
  *
  * <p>Der Dateiname kommt von aussen und geht hier in eine HTTP-Kopfzeile. Ein Umlaut oder ein
  * Anfuehrungszeichen darin darf die Zeile weder zerreissen noch beim Empfaenger als etwas anderes
@@ -26,10 +31,10 @@ import java.util.regex.Pattern;
  * unveraendert im Anfuehrungszeichen-Paar, mit maskiertem Anfuehrungszeichen und rohen
  * UTF-8-Zeichen. Das ist kein ASCII-Rueckfall, sondern dieselbe Zeichenkette zweimal.
  */
-final class Anlagekopf {
+public final class Anlagekopf {
 
   /** Der Name der Kopfzeile, die die Sandbox-Regel traegt. */
-  static final String INHALTSREGEL = "Content-Security-Policy";
+  public static final String INHALTSREGEL = "Content-Security-Policy";
 
   /**
    * Die Regel selbst: eigene Herkunft, kein Skript, keine Formulare, keine Navigation.
@@ -37,7 +42,7 @@ final class Anlagekopf {
    * <p>Die letzte Schranke, falls ein Empfaenger den Inhalt entgegen {@code Content-Disposition}
    * und {@code Content-Type} doch rendert.
    */
-  static final String SANDKASTEN = "sandbox";
+  public static final String SANDKASTEN = "sandbox";
 
   /**
    * Alles, was druckbares ASCII ist, ausser {@code "} (0x22) und {@code \} (0x5C) — beide wuerden
@@ -61,7 +66,7 @@ final class Anlagekopf {
    *
    * @param dateiName der Name, unter dem der Empfaenger die Datei speichern soll
    */
-  static String contentDisposition(final String dateiName) {
+  public static String contentDisposition(final String dateiName) {
     return "attachment; filename=\""
         + NICHT_RUECKFALLFAEHIG.matcher(dateiName).replaceAll("_")
         + "\"; filename*=UTF-8''"

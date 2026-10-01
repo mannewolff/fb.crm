@@ -37,6 +37,7 @@ import org.mwolff.fbcrm.angebot.application.Anlageninhalt;
 import org.mwolff.fbcrm.angebot.domain.Angebotsanlage;
 import org.mwolff.fbcrm.angebot.domain.Vorschauart;
 import org.mwolff.fbcrm.common.Uploadgrenze;
+import org.mwolff.fbcrm.common.web.Anlagekopf;
 import org.mwolff.fbcrm.common.web.GlobalExceptionHandler;
 import org.springframework.http.HttpHeaders;
 import org.springframework.mock.web.MockMultipartFile;

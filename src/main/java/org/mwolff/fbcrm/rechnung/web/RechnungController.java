@@ -1,11 +1,19 @@
 package org.mwolff.fbcrm.rechnung.web;
 
 import jakarta.validation.Valid;
+import org.mwolff.fbcrm.common.web.Anlagekopf;
 import org.mwolff.fbcrm.rechnung.application.RechnungAendernUseCase;
+import org.mwolff.fbcrm.rechnung.application.RechnungDokumentLesenUseCase;
 import org.mwolff.fbcrm.rechnung.application.RechnungLesenUseCase;
 import org.mwolff.fbcrm.rechnung.application.RechnungLoeschenUseCase;
 import org.mwolff.fbcrm.rechnung.application.RechnungStellenUseCase;
+import org.mwolff.fbcrm.rechnung.application.Rechnungsdokument;
+import org.springframework.core.io.InputStreamResource;
+import org.springframework.core.io.Resource;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -17,11 +25,13 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Die Wege an der einzelnen Rechnung: lesen, aendern, loeschen, stellen (Plan #169, E7, E11).
+ * Die Wege an der einzelnen Rechnung: lesen, aendern, loeschen, stellen, Dokument (Plan #169, E7,
+ * E11).
  *
  * <p>Der Controller entscheidet nichts (CLAUDE-java.md §6.3). Was der Zustand zulaesst, entscheidet
  * die Domaene: Eine gestellte Rechnung laesst sich weder aendern noch loeschen noch ein zweites Mal
- * stellen, und alles drei ist 409 ({@code RechnungszustandPasstNicht}).
+ * stellen, und alles drei ist 409 ({@code RechnungszustandPasstNicht}); umgekehrt gibt ein Entwurf
+ * kein Dokument heraus, weil er keines hat, und das ist aus demselben Grund 409.
  *
  * <p><b>Warum {@code PUT} mit einem Rumpf antwortet.</b> Nach dem Aendern haben sich die
  * gerechneten Werte geaendert — Netto, Steuer, Brutto und je Zeile offen und Ueberschreitung —, und
@@ -36,16 +46,19 @@ public class RechnungController {
   private final RechnungAendernUseCase aendernUseCase;
   private final RechnungLoeschenUseCase loeschenUseCase;
   private final RechnungStellenUseCase stellenUseCase;
+  private final RechnungDokumentLesenUseCase dokumentUseCase;
 
   public RechnungController(
       final RechnungLesenUseCase lesenUseCase,
       final RechnungAendernUseCase aendernUseCase,
       final RechnungLoeschenUseCase loeschenUseCase,
-      final RechnungStellenUseCase stellenUseCase) {
+      final RechnungStellenUseCase stellenUseCase,
+      final RechnungDokumentLesenUseCase dokumentUseCase) {
     this.lesenUseCase = lesenUseCase;
     this.aendernUseCase = aendernUseCase;
     this.loeschenUseCase = loeschenUseCase;
     this.stellenUseCase = stellenUseCase;
+    this.dokumentUseCase = dokumentUseCase;
   }
 
   /** Die Rechnung samt den Zeilen ihrer Maske. */
@@ -73,6 +86,34 @@ public class RechnungController {
   public RechnungResponse stellen(@PathVariable final long id) {
     stellenUseCase.stelle(id);
     return RechnungResponse.of(lesenUseCase.lese(id));
+  }
+
+  /**
+   * Gibt das archivierte Dokument der gestellten Rechnung heraus (Kriterium 24, E11).
+   *
+   * <p><b>Dieselben strengen Kopfzeilen wie bei den Anlagen am Angebot</b>, und aus demselben
+   * Grund: {@code attachment} statt Anzeige, die Sandbox-Regel als letzte Schranke, falls ein
+   * Empfaenger den Inhalt doch rendert. Der {@code Content-Type} ist hier fest {@code
+   * application/pdf} und folgt nicht einer gespeicherten Art — die Anwendung hat das Dokument
+   * selbst gedruckt und weiss, was es ist. {@code X-Content-Type-Options: nosniff} und {@code
+   * X-Frame-Options: DENY} stehen nicht in dieser Klasse, weil sie aus den Spring-Security-Vorgaben
+   * auf jede Antwort gehen; {@code RechnungDokumentIT} prueft, dass sie <b>auch auf diesem Weg</b>
+   * ankommen.
+   *
+   * <p>Keine Aenderung an {@code SecurityConfig}: Der Weg faellt unter das bestehende {@code
+   * /api/**} fuer angemeldete Benutzer.
+   */
+  @GetMapping("/dokument")
+  public ResponseEntity<Resource> dokument(@PathVariable final long id) {
+    final Rechnungsdokument dokument = dokumentUseCase.lese(id);
+    return ResponseEntity.ok()
+        .header(
+            HttpHeaders.CONTENT_DISPOSITION,
+            Anlagekopf.contentDisposition(Rechnungsdateiname.fuer(dokument.nummer())))
+        .header(Anlagekopf.INHALTSREGEL, Anlagekopf.SANDKASTEN)
+        .contentType(MediaType.APPLICATION_PDF)
+        .contentLength(dokument.groesse())
+        .body(new InputStreamResource(dokument.inhalt()));
   }
 
   /** Loescht den Entwurf (Kriterium 12). */

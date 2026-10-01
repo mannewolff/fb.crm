@@ -1,11 +1,11 @@
-package org.mwolff.fbcrm.angebot.web;
+package org.mwolff.fbcrm.common.web;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 import org.junit.jupiter.api.Test;
 
 /**
- * Die Kopfzeilen, mit denen eine Anlage hinausgeht (Plan #150, E5).
+ * Die Kopfzeilen, mit denen eine Datei zum Herunterladen hinausgeht (Plan #150, E5).
  *
  * <p>Gegenstand ist allein der Dateiname, denn nur er kommt von aussen. Geprueft werden die drei
  * Zeichenklassen, die die Zeile zerreissen oder den Namen verfaelschen koennten: ein Umlaut (nicht

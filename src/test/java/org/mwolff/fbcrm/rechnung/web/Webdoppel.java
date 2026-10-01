@@ -1,6 +1,8 @@
 package org.mwolff.fbcrm.rechnung.web;
 
+import java.io.ByteArrayInputStream;
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
@@ -12,6 +14,7 @@ import org.mwolff.fbcrm.common.Anschrift;
 import org.mwolff.fbcrm.common.Einheit;
 import org.mwolff.fbcrm.rechnung.application.Abrechnungszeile;
 import org.mwolff.fbcrm.rechnung.application.Rechnungsansicht;
+import org.mwolff.fbcrm.rechnung.application.Rechnungsdokument;
 import org.mwolff.fbcrm.rechnung.domain.Belegabsender;
 import org.mwolff.fbcrm.rechnung.domain.Belegempfaenger;
 import org.mwolff.fbcrm.rechnung.domain.Rechnung;
@@ -40,6 +43,14 @@ final class Webdoppel {
 
   /** Die Kennung der Rechnung, um die es in den Tests geht. */
   static final long RECHNUNG = 7L;
+
+  /**
+   * Die Bytes, die als Dokument einer gestellten Rechnung hinausgehen.
+   *
+   * <p>Kein echtes PDF: Der Controller deutet den Inhalt nicht, er traegt ihn nur. Die Signatur
+   * steht da, damit erkennbar bleibt, was gemeint ist.
+   */
+  static final byte[] PDF = "%PDF-1.7 Beleg".getBytes(StandardCharsets.US_ASCII);
 
   static final LocalDate ANGEBOTSDATUM = LocalDate.of(2026, 9, 20);
   static final LocalDate RECHNUNGSDATUM = LocalDate.of(2026, 9, 30);
@@ -78,6 +89,15 @@ final class Webdoppel {
           "https://example.org");
 
   private Webdoppel() {}
+
+  /**
+   * Das Dokument einer gestellten Rechnung, wie der Anwendungsfall es liefert.
+   *
+   * @param nummer die Rechnungsnummer, aus der der Dateiname entsteht
+   */
+  static Rechnungsdokument dokument(final String nummer) {
+    return new Rechnungsdokument(nummer, PDF.length, new ByteArrayInputStream(PDF.clone()));
+  }
 
   /** Das bestellte Angebot mit seiner einen Position. */
   static Angebot angebot() {

@@ -11,6 +11,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -25,12 +27,14 @@ import org.mwolff.fbcrm.common.web.GlobalExceptionHandler;
 import org.mwolff.fbcrm.rechnung.application.Abrechnungsangabe;
 import org.mwolff.fbcrm.rechnung.application.RechnungAendernUseCase;
 import org.mwolff.fbcrm.rechnung.application.RechnungDaten;
+import org.mwolff.fbcrm.rechnung.application.RechnungDokumentLesenUseCase;
 import org.mwolff.fbcrm.rechnung.application.RechnungLesenUseCase;
 import org.mwolff.fbcrm.rechnung.application.RechnungLoeschenUseCase;
 import org.mwolff.fbcrm.rechnung.application.RechnungNichtGefunden;
 import org.mwolff.fbcrm.rechnung.application.RechnungOhnePosition;
 import org.mwolff.fbcrm.rechnung.application.RechnungStellenUseCase;
 import org.mwolff.fbcrm.rechnung.application.RechnungszustandPasstNicht;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
@@ -62,6 +66,7 @@ class RechnungControllerTest {
   @Mock private RechnungAendernUseCase aendern;
   @Mock private RechnungLoeschenUseCase loeschen;
   @Mock private RechnungStellenUseCase stellen;
+  @Mock private RechnungDokumentLesenUseCase dokument;
 
   @Captor private ArgumentCaptor<RechnungDaten> daten;
 
@@ -70,7 +75,8 @@ class RechnungControllerTest {
   @BeforeEach
   void baueDenController() {
     mockMvc =
-        MockMvcBuilders.standaloneSetup(new RechnungController(lesen, aendern, loeschen, stellen))
+        MockMvcBuilders.standaloneSetup(
+                new RechnungController(lesen, aendern, loeschen, stellen, dokument))
             .setControllerAdvice(new GlobalExceptionHandler())
             .build();
   }
@@ -474,5 +480,63 @@ class RechnungControllerTest {
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.fieldErrors['positionen[0].menge']").isNotEmpty());
     verifyNoInteractions(aendern, lesen);
+  }
+
+  @Test
+  void dokument_thenTheAnswerCarriesThePdfWithItsStrictHeaders() throws Exception {
+    // Given — dieselben Kopfzeilen wie bei den Anlagen am Angebot (Kriterium 24, E11).
+    when(dokument.lese(Webdoppel.RECHNUNG)).thenReturn(Webdoppel.dokument("0001-2026"));
+
+    // When / Then
+    mockMvc
+        .perform(get(PFAD + "/dokument"))
+        .andExpect(status().isOk())
+        .andExpect(content().contentType(MediaType.APPLICATION_PDF))
+        .andExpect(content().bytes(Webdoppel.PDF.clone()))
+        .andExpect(
+            header()
+                .string(
+                    HttpHeaders.CONTENT_DISPOSITION,
+                    "attachment; filename=\"Rechnung-0001-2026.pdf\";"
+                        + " filename*=UTF-8''Rechnung-0001-2026.pdf"))
+        .andExpect(header().string("Content-Security-Policy", "sandbox"))
+        .andExpect(
+            header().string(HttpHeaders.CONTENT_LENGTH, String.valueOf(Webdoppel.PDF.length)));
+  }
+
+  @Test
+  void dokument_withASlashInTheNummer_thenTheDateinameCarriesAHyphen() throws Exception {
+    // Given — „2026/3" ist mit einem eigenen Muster eine gueltige Nummer; im Dateinamen waere der
+    // Schraegstrich ein Pfadtrenner.
+    when(dokument.lese(Webdoppel.RECHNUNG)).thenReturn(Webdoppel.dokument("2026/3"));
+
+    // When / Then
+    mockMvc
+        .perform(get(PFAD + "/dokument"))
+        .andExpect(status().isOk())
+        .andExpect(
+            header()
+                .string(
+                    HttpHeaders.CONTENT_DISPOSITION,
+                    "attachment; filename=\"Rechnung-2026-3.pdf\";"
+                        + " filename*=UTF-8''Rechnung-2026-3.pdf"));
+  }
+
+  @Test
+  void dokument_atAnEntwurf_thenConflict() throws Exception {
+    // Given — ein Entwurf traegt kein Dokument.
+    when(dokument.lese(Webdoppel.RECHNUNG)).thenThrow(new RechnungszustandPasstNicht());
+
+    // When / Then
+    mockMvc.perform(get(PFAD + "/dokument")).andExpect(status().isConflict());
+  }
+
+  @Test
+  void dokument_withAnUnknownRechnung_thenNotFound() throws Exception {
+    // Given
+    when(dokument.lese(Webdoppel.RECHNUNG)).thenThrow(new RechnungNichtGefunden());
+
+    // When / Then
+    mockMvc.perform(get(PFAD + "/dokument")).andExpect(status().isNotFound());
   }
 }
