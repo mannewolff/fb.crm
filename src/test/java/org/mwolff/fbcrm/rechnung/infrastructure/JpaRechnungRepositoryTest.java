@@ -366,6 +366,79 @@ class JpaRechnungRepositoryTest {
   }
 
   @Test
+  void findByIdMitSperre_thenReadsTheLockedRowWithItsPositions() {
+    // Given — der Lesepfad des Stellens: dieselbe Abbildung, nur mit Sperre auf der Zeile.
+    when(rechnungen.sperreUndLies(RECHNUNG_ID)).thenReturn(Optional.of(entwurfszeile()));
+    when(positionen.findByRechnung(RECHNUNG_ID))
+        .thenReturn(List.of(positionszeile((short) 1, BERATUNG)));
+
+    // When / Then
+    assertThat(repository.findByIdMitSperre(RECHNUNG_ID))
+        .get()
+        .satisfies(
+            rechnung -> assertThat(rechnung.requireId()).isEqualTo(RECHNUNG_ID),
+            rechnung -> assertThat(rechnung.positionen()).containsExactly(BERATUNG));
+  }
+
+  @Test
+  void findByIdMitSperre_givenAnUnknownId_thenEmpty() {
+    // Given
+    when(rechnungen.sperreUndLies(RECHNUNG_ID)).thenReturn(Optional.empty());
+
+    // When / Then — keine zweite Abfrage nach Positionen einer Rechnung, die es nicht gibt.
+    assertThat(repository.findByIdMitSperre(RECHNUNG_ID)).isEmpty();
+    verify(positionen, never()).findByRechnung(anyLong());
+  }
+
+  @Test
+  void saveAndFlush_thenTheRowGoesToTheDatabaseAtOnce() {
+    // Given — nur so faellt eine Verletzung von UNIQUE auf, solange daraus noch ein 409 wird.
+    when(rechnungen.saveAndFlush(any(RechnungEntity.class))).thenReturn(entwurfszeile());
+    when(positionen.findByRechnung(RECHNUNG_ID)).thenReturn(List.of());
+    when(positionen.saveAll(any())).thenAnswer(aufruf -> aufruf.getArgument(0));
+
+    // When
+    repository.saveAndFlush(gestellt(List.of(BERATUNG)));
+
+    // Then
+    verify(rechnungen).saveAndFlush(gespeicherte.capture());
+    assertThat(gespeicherte.getValue().getNummer()).isEqualTo("R26-0004");
+    verify(rechnungen, never()).save(any(RechnungEntity.class));
+  }
+
+  @Test
+  void saveAndFlush_thenReturnsTheWrittenRechnungWithItsPositions() {
+    // Given — der Anwendungsfall arbeitet mit dem Rueckgabewert weiter: Er haengt das Dokument
+    // daran und liefert ihn als Antwort aus.
+    when(rechnungen.saveAndFlush(any(RechnungEntity.class))).thenReturn(entwurfszeile());
+    when(positionen.findByRechnung(RECHNUNG_ID)).thenReturn(List.of());
+    when(positionen.saveAll(any())).thenAnswer(aufruf -> aufruf.getArgument(0));
+
+    // When / Then
+    assertThat(repository.saveAndFlush(gestellt(List.of(BERATUNG))))
+        .satisfies(
+            rechnung -> assertThat(rechnung.requireId()).isEqualTo(RECHNUNG_ID),
+            rechnung -> assertThat(rechnung.positionen()).containsExactly(BERATUNG));
+  }
+
+  @Test
+  void saveAndFlush_thenNumbersThePositionsLikeSave() {
+    // Given — beide Schreibwege gehen durch dieselbe Fortschreibung der Positionszeilen (E24).
+    when(rechnungen.saveAndFlush(any(RechnungEntity.class))).thenReturn(entwurfszeile());
+    when(positionen.findByRechnung(RECHNUNG_ID)).thenReturn(List.of());
+    when(positionen.saveAll(any())).thenAnswer(aufruf -> aufruf.getArgument(0));
+
+    // When
+    repository.saveAndFlush(gestellt(List.of(KONZEPTION, BERATUNG)));
+
+    // Then
+    verify(positionen).saveAll(gespeichertePositionen.capture());
+    assertThat(gespeichertePositionen.getValue())
+        .extracting(RechnungPositionEntity::getPosition)
+        .containsExactly((short) 1, (short) 2);
+  }
+
+  @Test
   void findById_givenAnUnknownId_thenEmpty() {
     // Given
     when(rechnungen.findById(4711L)).thenReturn(Optional.empty());

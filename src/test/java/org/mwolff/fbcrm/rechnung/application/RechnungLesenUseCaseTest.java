@@ -236,6 +236,23 @@ class RechnungLesenUseCaseTest {
     assertThat(ansicht.zeilen().get(1).einzelpreis()).isEqualByComparingTo("1200.00");
   }
 
+  @Test
+  void lese_forAGestellteRechnung_thenTheFirmaNameComesFromTheCopy() {
+    // Given — die Firma heisst heute anders als beim Stellen (Kriterium 14).
+    gegebeneRechnung(
+        Rechnungsdoppel.gestelltMitKopien(
+            ENTWURF, "R26-0001", List.of(Rechnungsdoppel.beratung("40.00"))),
+        List.of(),
+        Rechnungsdoppel.angebot());
+
+    // When
+    final Rechnungsansicht ansicht = useCase.lese(ENTWURF);
+
+    // Then — der Beleg zeigt den Namen, den der Kunde darauf gelesen hat.
+    assertThat(ansicht.firmaName()).isEqualTo(Rechnungsdoppel.EMPFAENGER_KOPIE.firma());
+    assertThat(ansicht.firmaId()).isEqualTo(Rechnungsdoppel.FIRMA);
+  }
+
   private void gegebenerEntwurf(
       final List<Rechnungsposition> eigene, final List<Rechnung> weitere) {
     gegebeneRechnung(Rechnungsdoppel.entwurf(ENTWURF, eigene), weitere, Rechnungsdoppel.angebot());

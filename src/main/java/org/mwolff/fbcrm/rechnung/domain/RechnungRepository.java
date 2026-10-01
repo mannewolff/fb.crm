@@ -38,8 +38,36 @@ public interface RechnungRepository {
    */
   List<Rechnung> findByAngebot(long angebotId);
 
+  /**
+   * Die Rechnung zu einer technischen Kennung, mit <b>Sperre</b> auf ihrer Zeile, oder leer.
+   *
+   * <p>Fuer den einen nicht umkehrbaren Schritt: das Stellen. Die Sperre haelt bis zum Ende der
+   * Transaktion des Aufrufers, und erst sie macht aus „lesen, pruefen, schreiben" einen Schritt.
+   * Ohne sie laesen zwei gleichzeitige Aufrufe fuer denselben Entwurf beide {@code ENTWURF} und
+   * stellten beide — eine Nummer waere verbraucht und verschwunden. Der zweite Aufruf wartet
+   * stattdessen und sieht danach die gestellte Rechnung.
+   *
+   * <p>Nicht der Standardweg: Jedes Lesen zu sperren machte aus jeder Ansicht einen Engpass.
+   * Gelesen wird darum sonst ueber {@link #findById(long)}.
+   *
+   * @param id Kennung der Rechnung
+   */
+  Optional<Rechnung> findByIdMitSperre(long id);
+
   /** Legt die Rechnung an oder schreibt sie fort und liefert sie mit gesetzter Kennung zurueck. */
   Rechnung save(Rechnung rechnung);
+
+  /**
+   * Dasselbe, aber die Zeile geht <b>sofort</b> in die Datenbank.
+   *
+   * <p>Fuer das Stellen: Die Nummer ist in {@code V18__rechnung.sql} eindeutig, und eine Verletzung
+   * dieser Zusage soll dort auffallen, wo der Anwendungsfall sie noch in ein 409 uebersetzen kann.
+   * Erst beim Commit gemeldet waere sie ein Serverfehler, obwohl die Lage fachlich benannt ist
+   * (#160, Kriterium 18).
+   *
+   * @param rechnung die zu schreibende Rechnung
+   */
+  Rechnung saveAndFlush(Rechnung rechnung);
 
   /**
    * Loescht die Rechnung samt ihren Positionen.

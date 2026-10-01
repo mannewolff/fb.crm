@@ -10,7 +10,10 @@ import org.mwolff.fbcrm.angebot.domain.Angebotsstatus;
 import org.mwolff.fbcrm.common.Abrechnungsmodus;
 import org.mwolff.fbcrm.common.Anschrift;
 import org.mwolff.fbcrm.common.Einheit;
+import org.mwolff.fbcrm.eigeneangaben.domain.EigeneAngaben;
 import org.mwolff.fbcrm.firma.domain.Firma;
+import org.mwolff.fbcrm.rechnung.domain.Belegabsender;
+import org.mwolff.fbcrm.rechnung.domain.Belegempfaenger;
 import org.mwolff.fbcrm.rechnung.domain.Rechnung;
 import org.mwolff.fbcrm.rechnung.domain.Rechnungsposition;
 import org.mwolff.fbcrm.rechnung.domain.Rechnungszustand;
@@ -125,6 +128,26 @@ final class Rechnungsdoppel {
         ANGELEGT);
   }
 
+  /** Die Kopie des Empfaengers an einer gestellten Rechnung — die Firma hiess damals anders. */
+  static final Belegempfaenger EMPFAENGER_KOPIE =
+      new Belegempfaenger(
+          "Adler Aktiengesellschaft",
+          new Anschrift("Hauptstrasse 1", "28195", "Bremen", "Deutschland"),
+          null);
+
+  /** Die Kopie der eigenen Angaben an einer gestellten Rechnung. */
+  static final Belegabsender ABSENDER_KOPIE =
+      new Belegabsender(
+          "Manfred Wolff",
+          "Softwarearchitekt",
+          new Anschrift("Am Deich 2", "28199", "Bremen", "Deutschland"),
+          "post@example.org",
+          "0421 123456",
+          "75/123/45678",
+          "DE123456789",
+          "DE02 1203 0000 0000 2020 51",
+          "https://example.org");
+
   /** Eine gestellte Rechnung auf {@link #ANGEBOT}, festgeschrieben mit ihrem eigenen Steuersatz. */
   static Rechnung gestellt(
       final long id, final String nummer, final List<Rechnungsposition> positionen) {
@@ -156,6 +179,13 @@ final class Rechnungsdoppel {
         ANGELEGT);
   }
 
+  /** Dieselbe gestellte Rechnung, festgeschrieben mit den Kopien von Empfaenger und Absender. */
+  static Rechnung gestelltMitKopien(
+      final long id, final String nummer, final List<Rechnungsposition> positionen) {
+    return entwurf(id, positionen)
+        .gestellt(nummer, new BigDecimal("7.00"), 10, EMPFAENGER_KOPIE, ABSENDER_KOPIE, ANGELEGT);
+  }
+
   /** Eine Rechnungsposition zur Beratung ueber die angegebene Menge. */
   static Rechnungsposition beratung(final String menge) {
     return beratung(menge, STUNDENSATZ);
@@ -173,6 +203,11 @@ final class Rechnungsdoppel {
         PAUSCHALE_ID, "Schulungstag", new BigDecimal(menge), Einheit.PAUSCHAL, PAUSCHALPREIS);
   }
 
+  /** Die Firma, an die das Angebot geht — mit vollstaendiger Anschrift. */
+  static Firma firma() {
+    return firma(FIRMA, FIRMENNAME);
+  }
+
   /** Die Firma zu einer Kennung. */
   static Firma firma(final long id, final String name) {
     return new Firma(
@@ -184,5 +219,19 @@ final class Rechnungsdoppel {
         true,
         ANGELEGT,
         ANGELEGT);
+  }
+
+  /** Vollstaendige eigene Angaben: alles, was das Stellen verlangt, und die freiwilligen dazu. */
+  static EigeneAngaben eigeneAngaben() {
+    return new EigeneAngaben(
+        "Manfred Wolff",
+        "Softwarearchitekt",
+        new Anschrift("Am Deich 2", "28199", "Bremen", "Deutschland"),
+        "post@example.org",
+        "0421 123456",
+        "https://example.org",
+        "75/123/45678",
+        "DE123456789",
+        "DE02 1203 0000 0000 2020 51");
   }
 }

@@ -9,6 +9,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -27,6 +28,8 @@ import org.mwolff.fbcrm.rechnung.application.RechnungDaten;
 import org.mwolff.fbcrm.rechnung.application.RechnungLesenUseCase;
 import org.mwolff.fbcrm.rechnung.application.RechnungLoeschenUseCase;
 import org.mwolff.fbcrm.rechnung.application.RechnungNichtGefunden;
+import org.mwolff.fbcrm.rechnung.application.RechnungOhnePosition;
+import org.mwolff.fbcrm.rechnung.application.RechnungStellenUseCase;
 import org.mwolff.fbcrm.rechnung.application.RechnungszustandPasstNicht;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
@@ -58,6 +61,7 @@ class RechnungControllerTest {
   @Mock private RechnungLesenUseCase lesen;
   @Mock private RechnungAendernUseCase aendern;
   @Mock private RechnungLoeschenUseCase loeschen;
+  @Mock private RechnungStellenUseCase stellen;
 
   @Captor private ArgumentCaptor<RechnungDaten> daten;
 
@@ -66,7 +70,7 @@ class RechnungControllerTest {
   @BeforeEach
   void baueDenController() {
     mockMvc =
-        MockMvcBuilders.standaloneSetup(new RechnungController(lesen, aendern, loeschen))
+        MockMvcBuilders.standaloneSetup(new RechnungController(lesen, aendern, loeschen, stellen))
             .setControllerAdvice(new GlobalExceptionHandler())
             .build();
   }
@@ -122,6 +126,102 @@ class RechnungControllerTest {
         .andExpect(jsonPath("$.zeilen[0].offen").value(60.00))
         .andExpect(jsonPath("$.zeilen[0].menge").value(80.00))
         .andExpect(jsonPath("$.zeilen[0].ueberschreitung").value(20.00));
+  }
+
+  @Test
+  void lesen_forAnEntwurf_thenZahlungszielAndBothCopiesAreAbsent() throws Exception {
+    // Given — ein Entwurf traegt weder Zahlungsziel noch Kopien; sie entstehen mit dem Stellen.
+    when(lesen.lese(Webdoppel.RECHNUNG))
+        .thenReturn(Webdoppel.ansicht(Webdoppel.entwurf("80.00"), "0"));
+
+    // When / Then
+    mockMvc
+        .perform(get(PFAD))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.zahlungszielTage").doesNotExist())
+        .andExpect(jsonPath("$.empfaenger").doesNotExist())
+        .andExpect(jsonPath("$.absender").doesNotExist());
+  }
+
+  @Test
+  void lesen_forAGestellteRechnung_thenTheAnswerCarriesZahlungszielAndBothCopies()
+      throws Exception {
+    // Given — die Firma heisst heute anders als beim Stellen (Kriterium 14).
+    when(lesen.lese(Webdoppel.RECHNUNG))
+        .thenReturn(Webdoppel.ansicht(Webdoppel.gestelltMitKopien("0001-2026", "80.00"), "0"));
+
+    // When / Then
+    mockMvc
+        .perform(get(PFAD))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.nummer").value("0001-2026"))
+        .andExpect(jsonPath("$.zahlungszielTage").value(14))
+        .andExpect(jsonPath("$.firmaName").value("Adler Aktiengesellschaft"))
+        .andExpect(jsonPath("$.empfaenger.firma").value("Adler Aktiengesellschaft"))
+        .andExpect(jsonPath("$.empfaenger.strasse").value("Hauptstrasse 1"))
+        .andExpect(jsonPath("$.empfaenger.plz").value("28195"))
+        .andExpect(jsonPath("$.empfaenger.ort").value("Bremen"))
+        .andExpect(jsonPath("$.empfaenger.land").value("Deutschland"))
+        .andExpect(jsonPath("$.absender.name").value("Manfred Wolff"))
+        .andExpect(jsonPath("$.absender.berufsbezeichnung").value("Softwarearchitekt"))
+        .andExpect(jsonPath("$.absender.strasse").value("Am Deich 2"))
+        .andExpect(jsonPath("$.absender.plz").value("28199"))
+        .andExpect(jsonPath("$.absender.ort").value("Bremen"))
+        .andExpect(jsonPath("$.absender.land").value("Deutschland"))
+        .andExpect(jsonPath("$.absender.email").value("post@example.org"))
+        .andExpect(jsonPath("$.absender.telefon").value("0421 123456"))
+        .andExpect(jsonPath("$.absender.steuernummer").value("75/123/45678"))
+        .andExpect(jsonPath("$.absender.umsatzsteuerId").value("DE123456789"))
+        .andExpect(jsonPath("$.absender.bankverbindung").value("DE02 1203 0000 0000 2020 51"))
+        .andExpect(jsonPath("$.absender.webadresse").value("https://example.org"));
+  }
+
+  @Test
+  void stellen_thenTheAnswerCarriesTheGestellteRechnung() throws Exception {
+    // Given — gelesen wird derselbe Weg wie beim GET, damit beide dasselbe zeigen.
+    when(lesen.lese(Webdoppel.RECHNUNG))
+        .thenReturn(Webdoppel.ansicht(Webdoppel.gestelltMitKopien("0001-2026", "80.00"), "0"));
+
+    // When / Then
+    mockMvc
+        .perform(post(PFAD + "/stellen"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.zustand").value("GESTELLT"))
+        .andExpect(jsonPath("$.nummer").value("0001-2026"));
+    verify(stellen).stelle(Webdoppel.RECHNUNG);
+  }
+
+  @Test
+  void stellen_withoutAPosition_thenUnprocessable() throws Exception {
+    // Given
+    when(stellen.stelle(Webdoppel.RECHNUNG)).thenThrow(new RechnungOhnePosition());
+
+    // When / Then
+    mockMvc
+        .perform(post(PFAD + "/stellen"))
+        .andExpect(status().isUnprocessableEntity())
+        .andExpect(jsonPath("$.detail").value(RechnungOhnePosition.MELDUNG));
+    verifyNoInteractions(lesen);
+  }
+
+  @Test
+  void stellen_atAGestellteRechnung_thenConflict() throws Exception {
+    // Given
+    when(stellen.stelle(Webdoppel.RECHNUNG)).thenThrow(new RechnungszustandPasstNicht());
+
+    // When / Then
+    mockMvc.perform(post(PFAD + "/stellen")).andExpect(status().isConflict());
+    verifyNoInteractions(lesen);
+  }
+
+  @Test
+  void stellen_withAnUnknownRechnung_thenNotFound() throws Exception {
+    // Given
+    when(stellen.stelle(Webdoppel.RECHNUNG)).thenThrow(new RechnungNichtGefunden());
+
+    // When / Then
+    mockMvc.perform(post(PFAD + "/stellen")).andExpect(status().isNotFound());
+    verifyNoInteractions(lesen);
   }
 
   @Test

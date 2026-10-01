@@ -14,6 +14,7 @@ import org.mwolff.fbcrm.firma.application.FirmaNichtGefunden;
 import org.mwolff.fbcrm.firma.domain.Firma;
 import org.mwolff.fbcrm.firma.domain.FirmaRepository;
 import org.mwolff.fbcrm.rechnung.domain.Abrechnungsstand;
+import org.mwolff.fbcrm.rechnung.domain.Belegempfaenger;
 import org.mwolff.fbcrm.rechnung.domain.Positionsstand;
 import org.mwolff.fbcrm.rechnung.domain.Rechnung;
 import org.mwolff.fbcrm.rechnung.domain.RechnungRepository;
@@ -37,6 +38,12 @@ import org.springframework.transaction.annotation.Transactional;
  * <p>Die Firma und der geltende Steuersatz gehoeren zur Antwort, weil die Maske beide zeigt. Der
  * Satz wird immer gelesen und nicht nur beim Entwurf: Ein Zweig sparte eine Abfrage an der einen
  * festen Zeile der Einstellungen und brachte dafuer einen zweiten Weg durch denselben Code.
+ *
+ * <p><b>Der Name der Firma kommt bei einer gestellten Rechnung aus ihrer Kopie</b> und nicht von
+ * der Firma von heute (#160, Kriterium 14): Zieht die Firma um oder benennt sie sich um, zeigt der
+ * Beleg weiterhin, was der Kunde darauf gelesen hat. Die Kennung bleibt die der Firma — sie ist der
+ * Griff, mit dem die Oberflaeche zu ihr springt, und eine Kopie hat keinen. Die Firma wird deshalb
+ * auch bei einer gestellten Rechnung gelesen, aus demselben Grund wie der Steuersatz.
  */
 @Service
 @Transactional(readOnly = true)
@@ -81,10 +88,11 @@ public class RechnungLesenUseCase {
             .collect(Collectors.toMap(Rechnungsposition::angebotPositionId, Function.identity()));
     final List<Abrechnungszeile> zeilen =
         stand.positionen().stream().map(positionsstand -> zeile(positionsstand, eigene)).toList();
+    final @Nullable Belegempfaenger kopie = rechnung.empfaenger();
     return new Rechnungsansicht(
         rechnung,
         angebot.firmaId(),
-        firma.name(),
+        kopie == null ? firma.name() : kopie.firma(),
         GeltenderSteuersatz.fuer(rechnung, einstellungen.lies().steuersatz()),
         zeilen);
   }

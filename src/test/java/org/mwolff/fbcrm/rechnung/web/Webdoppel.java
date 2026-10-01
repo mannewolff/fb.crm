@@ -8,9 +8,12 @@ import org.mwolff.fbcrm.angebot.domain.Angebot;
 import org.mwolff.fbcrm.angebot.domain.Angebotsposition;
 import org.mwolff.fbcrm.angebot.domain.Angebotsstatus;
 import org.mwolff.fbcrm.common.Abrechnungsmodus;
+import org.mwolff.fbcrm.common.Anschrift;
 import org.mwolff.fbcrm.common.Einheit;
 import org.mwolff.fbcrm.rechnung.application.Abrechnungszeile;
 import org.mwolff.fbcrm.rechnung.application.Rechnungsansicht;
+import org.mwolff.fbcrm.rechnung.domain.Belegabsender;
+import org.mwolff.fbcrm.rechnung.domain.Belegempfaenger;
 import org.mwolff.fbcrm.rechnung.domain.Rechnung;
 import org.mwolff.fbcrm.rechnung.domain.Rechnungsposition;
 import org.mwolff.fbcrm.rechnung.domain.Rechnungszustand;
@@ -53,6 +56,26 @@ final class Webdoppel {
           new BigDecimal("160.00"),
           Einheit.STUNDE,
           STUNDENSATZ);
+
+  /** Die Kopie des Empfaengers an einer gestellten Rechnung — die Firma hiess damals anders. */
+  static final Belegempfaenger EMPFAENGER_KOPIE =
+      new Belegempfaenger(
+          "Adler Aktiengesellschaft",
+          new Anschrift("Hauptstrasse 1", "28195", "Bremen", "Deutschland"),
+          null);
+
+  /** Die Kopie der eigenen Angaben an einer gestellten Rechnung. */
+  static final Belegabsender ABSENDER_KOPIE =
+      new Belegabsender(
+          "Manfred Wolff",
+          "Softwarearchitekt",
+          new Anschrift("Am Deich 2", "28199", "Bremen", "Deutschland"),
+          "post@example.org",
+          "0421 123456",
+          "75/123/45678",
+          "DE123456789",
+          "DE02 1203 0000 0000 2020 51",
+          "https://example.org");
 
   private Webdoppel() {}
 
@@ -110,6 +133,12 @@ final class Webdoppel {
         ANGELEGT);
   }
 
+  /** Dieselbe gestellte Rechnung, festgeschrieben mit den Kopien von Empfaenger und Absender. */
+  static Rechnung gestelltMitKopien(final String nummer, final String menge) {
+    return entwurf(menge)
+        .gestellt(nummer, new BigDecimal("7.00"), 14, EMPFAENGER_KOPIE, ABSENDER_KOPIE, ANGELEGT);
+  }
+
   /** Eine Rechnungsposition zur Beratung ueber die angegebene Menge. */
   static Rechnungsposition beratung(final String menge) {
     return new Rechnungsposition(
@@ -129,7 +158,7 @@ final class Webdoppel {
     return new Rechnungsansicht(
         rechnung,
         FIRMA,
-        FIRMENNAME,
+        rechnung.empfaenger() == null ? FIRMENNAME : rechnung.empfaenger().firma(),
         rechnung.steuersatz() == null ? STEUERSATZ : rechnung.steuersatz(),
         List.of(
             new Abrechnungszeile(

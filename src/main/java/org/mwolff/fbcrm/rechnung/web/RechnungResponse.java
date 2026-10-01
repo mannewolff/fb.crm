@@ -16,7 +16,14 @@ import org.mwolff.fbcrm.rechnung.domain.Rechnungszustand;
  * und nicht je Position. Der {@code steuersatz} ist der, der fuer diese Rechnung gilt — beim
  * Entwurf der der aktuellen Einstellungen, bei der gestellten Rechnung ihr eigener (Kriterium 14).
  *
- * <p>Die {@code nummer} fehlt beim Entwurf; sie entsteht erst mit dem Stellen.
+ * <p>Die {@code nummer} fehlt beim Entwurf; sie entsteht erst mit dem Stellen. Ebenso das {@code
+ * zahlungszielTage} und die beiden Kopien {@code empfaenger} und {@code absender} — sie werden mit
+ * dem Stellen festgeschrieben (Kriterium 14).
+ *
+ * <p><b>Der {@code firmaName} einer gestellten Rechnung kommt aus der Kopie</b> und nicht von der
+ * Firma von heute; entschieden wird das in {@code RechnungLesenUseCase}, das hier die fertige
+ * Ansicht liefert. Die {@code firmaId} bleibt die der Firma — sie ist der Griff, mit dem die
+ * Oberflaeche zu ihr springt, und eine Kopie hat keinen.
  *
  * @param id Kennung der Rechnung
  * @param angebotId Kennung des Angebots, das abgerechnet wird
@@ -30,6 +37,9 @@ import org.mwolff.fbcrm.rechnung.domain.Rechnungszustand;
  * @param netto die Netto-Summe, gerechnet
  * @param steuer die Steuer auf die Netto-Summe, gerechnet
  * @param brutto die Brutto-Summe, gerechnet
+ * @param zahlungszielTage das festgeschriebene Zahlungsziel in Tagen, oder {@code null} im Entwurf
+ * @param empfaenger Kopie des Empfaengers, oder {@code null} im Entwurf
+ * @param absender Kopie der eigenen Angaben, oder {@code null} im Entwurf
  * @param zeilen je Position des Angebots eine Zeile, in der Reihenfolge des Angebots
  */
 public record RechnungResponse(
@@ -45,6 +55,9 @@ public record RechnungResponse(
     BigDecimal netto,
     BigDecimal steuer,
     BigDecimal brutto,
+    @Nullable Integer zahlungszielTage,
+    @Nullable BelegempfaengerResponse empfaenger,
+    @Nullable BelegabsenderResponse absender,
     List<RechnungZeileResponse> zeilen) {
 
   /** Die Sicht der Oberflaeche auf eine Rechnung. */
@@ -64,6 +77,9 @@ public record RechnungResponse(
         rechnung.netto(),
         rechnung.steuer(satz),
         rechnung.brutto(satz),
+        rechnung.zahlungszielTage(),
+        BelegempfaengerResponse.of(rechnung.empfaenger()),
+        BelegabsenderResponse.of(rechnung.absender()),
         ansicht.zeilen().stream().map(RechnungZeileResponse::of).toList());
   }
 }

@@ -37,7 +37,7 @@ import org.springframework.stereotype.Repository;
  * der Anwendungsfall fest.
  */
 /*
- * Sieben Methoden des Ports und fuenf private Uebersetzer ergeben zwoelf. Sie weiter aufzuteilen
+ * Neun Methoden des Ports und sechs private Uebersetzer ergeben fuenfzehn. Sie weiter aufzuteilen
  * verschoebe die Zahl, ohne etwas zu klaeren: Der Adapter ist die eine Stelle, an der Rechnung und
  * Zeile ineinander uebergehen, und genau darum stehen beide Richtungen hier beieinander.
  */
@@ -58,6 +58,13 @@ class JpaRechnungRepository implements RechnungRepository {
   @Override
   public Optional<Rechnung> findById(final long id) {
     return rechnungen.findById(id).map(zeile -> toDomain(zeile, positionen.findByRechnung(id)));
+  }
+
+  @Override
+  public Optional<Rechnung> findByIdMitSperre(final long id) {
+    return rechnungen
+        .sperreUndLies(id)
+        .map(zeile -> toDomain(zeile, positionen.findByRechnung(id)));
   }
 
   @Override
@@ -97,9 +104,23 @@ class JpaRechnungRepository implements RechnungRepository {
 
   @Override
   public Rechnung save(final Rechnung rechnung) {
-    final RechnungEntity zeile = rechnungen.save(toEntity(rechnung));
+    return mitZeilen(rechnungen.save(toEntity(rechnung)), rechnung.positionen());
+  }
+
+  @Override
+  public Rechnung saveAndFlush(final Rechnung rechnung) {
+    return mitZeilen(rechnungen.saveAndFlush(toEntity(rechnung)), rechnung.positionen());
+  }
+
+  /*
+   * Die geschriebene Zeile samt ihren fortgeschriebenen Positionszeilen, zurueck in der Sprache der
+   * Domaene. Beide Schreibwege gehen hier zusammen; sie unterscheiden sich nur darin, wann die
+   * Rechnungszeile die Datenbank erreicht.
+   */
+  private Rechnung mitZeilen(
+      final RechnungEntity zeile, final List<Rechnungsposition> eingereicht) {
     final long rechnungId = Objects.requireNonNull(zeile.getId());
-    return toDomain(zeile, fortgeschrieben(rechnungId, rechnung.positionen()));
+    return toDomain(zeile, fortgeschrieben(rechnungId, eingereicht));
   }
 
   @Override
