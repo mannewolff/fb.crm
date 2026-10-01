@@ -4,6 +4,7 @@ import { apiJson, apiOhneInhalt } from './client';
 import {
   FORMFEHLER,
   inHundertsteln,
+  jaNein,
   liste,
   objekt,
   text,
@@ -155,7 +156,14 @@ export interface Rechnung {
   readonly zeilen: readonly Rechnungsmaskenzeile[];
 }
 
-/** Eine Position des Angebots mit ihrem Abrechnungsstand (Kriterium 26). */
+/**
+ * Eine Position des Angebots mit ihrem Abrechnungsstand (Kriterium 26).
+ *
+ * `buchbar` und `angefallen` kommen aus der Zeiterfassung (Issue #193, Kriterien 7, 8, 11): Eine
+ * Position traegt Stunden, wenn sie nach Aufwand in der Einheit Stunde abrechnet. An einer nicht
+ * buchbaren Position ist `angefallenInHundertsteln` 0 und sagt nichts — die Spalte „Angefallen"
+ * haengt deshalb an `buchbar` und nicht an der Zahl.
+ */
 export interface Abrechnungsposition {
   readonly angebotPositionId: number;
   readonly bezeichnung: string;
@@ -164,6 +172,10 @@ export interface Abrechnungsposition {
   readonly abgerechnetInHundertsteln: number;
   readonly offenInHundertsteln: number;
   readonly ueberschreitungInHundertsteln: number;
+  /** Ob auf die Position Arbeitszeit gebucht werden kann. */
+  readonly buchbar: boolean;
+  /** Die insgesamt erfassten Stunden, in Hundertsteln; 0 an einer nicht buchbaren Position. */
+  readonly angefallenInHundertsteln: number;
 }
 
 /**
@@ -329,6 +341,8 @@ function parseAbrechnungsposition(wert: unknown): Abrechnungsposition {
     abgerechnetInHundertsteln: inHundertsteln(zeile.abgerechnet),
     offenInHundertsteln: inHundertsteln(zeile.offen),
     ueberschreitungInHundertsteln: inHundertsteln(zeile.ueberschreitung),
+    buchbar: jaNein(zeile.buchbar),
+    angefallenInHundertsteln: inHundertsteln(zeile.angefallen),
   };
 }
 

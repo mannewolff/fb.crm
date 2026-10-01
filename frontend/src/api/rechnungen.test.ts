@@ -171,6 +171,8 @@ const STAND_ZEILE = {
   abgerechnet: 80,
   offen: 80,
   ueberschreitung: 0,
+  buchbar: true,
+  angefallen: 22,
 };
 
 const STAND_ZEILE_VERENGT = {
@@ -181,6 +183,8 @@ const STAND_ZEILE_VERENGT = {
   abgerechnetInHundertsteln: 8000,
   offenInHundertsteln: 8000,
   ueberschreitungInHundertsteln: 0,
+  buchbar: true,
+  angefallenInHundertsteln: 2200,
 };
 
 /** Eine Rechnung des Angebots, wie der Abrechnungsstand sie listet — ohne Firma. */
@@ -358,6 +362,8 @@ describe('parseAngebotsabrechnung', () => {
     ['Position ohne abgerechnet', { positionen: [{ ...STAND_ZEILE, abgerechnet: '0' }], rechnungen: [] }],
     ['Position ohne offen', { positionen: [{ ...STAND_ZEILE, offen: undefined }], rechnungen: [] }],
     ['Position ohne Ueberschreitung', { positionen: [{ ...STAND_ZEILE, ueberschreitung: null }], rechnungen: [] }],
+    ['Position mit buchbar als Wort', { positionen: [{ ...STAND_ZEILE, buchbar: 'ja' }], rechnungen: [] }],
+    ['Position ohne angefallen', { positionen: [{ ...STAND_ZEILE, angefallen: null }], rechnungen: [] }],
     ['Rechnung ohne id', { positionen: [], rechnungen: [{ ...STAND_RECHNUNG, id: '4' }] }],
     ['Rechnung mit Nummer als Zahl', { positionen: [], rechnungen: [{ ...STAND_RECHNUNG, nummer: 1 }] }],
     ['Rechnung ohne Datum', { positionen: [], rechnungen: [{ ...STAND_RECHNUNG, rechnungDatum: null }] }],

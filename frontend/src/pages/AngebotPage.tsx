@@ -58,14 +58,18 @@ import { ZAHLEN_KLASSE } from '../theme';
  * Server fuehrt, ist die Wahrheit.
  *
  * <b>Der Abrechnungsstand ist ein eigener Weg</b> (#160, Kriterien 3 und 26; Issue #187): Er traegt
- * je Position, was abgerechnet und was offen ist, und dazu die Rechnungen dieses Angebots. Er faellt
- * fuer sich aus, genau wie Anlagen und Kommentare — dann steht seine Meldung in der Karte
+ * je Position, was abgerechnet, offen und angefallen ist, und dazu die Rechnungen dieses Angebots.
+ * Er faellt fuer sich aus, genau wie Anlagen und Kommentare — dann steht seine Meldung in der Karte
  * „Rechnungen", und Ueberschrift, Angaben und Positionen bleiben stehen. Was er nicht weiss, zeigt
- * die Ansicht nicht: Ohne ihn fehlen die zwei Spalten und „Rechnung schreiben".
+ * die Ansicht nicht: Ohne ihn fehlen die Zusatzspalten und „Rechnung schreiben".
  *
- * <b>Die zwei Spalten stehen erst, wenn es eine Rechnung gibt</b>: Solange keine existiert, sagten
- * „Abgerechnet" mit 0,00 und „Offen" mit der vollen Menge nichts, was die Spalte „Menge" nicht schon
- * sagt — zwei Spalten Rauschen in jeder Angebotsansicht der Anwendung.
+ * <b>Die Zusatzspalten haengen an zwei verschiedenen Fragen</b> ({@link Zusatzspalten}).
+ * „Abgerechnet" und „Offen" stehen erst, wenn es eine Rechnung gibt: Solange keine existiert, sagten
+ * sie mit 0,00 und der vollen Menge nichts, was die Spalte „Menge" nicht schon sagt — zwei Spalten
+ * Rauschen in jeder Angebotsansicht der Anwendung. „Angefallen" steht dagegen, sobald eine Position
+ * buchbar ist (Issue #193, Kriterien 7, 8, 11): Die Stunden sind da, bevor etwas abgerechnet ist,
+ * und sie bleiben sichtbar, nachdem das Stellen der letzten Rechnung das Angebot auf „abgerechnet"
+ * gesetzt hat.
  *
  * <b>„Rechnung schreiben" ist weich</b>: Die eine Kupfertaste der Ansicht bleibt „Status weiter"
  * (CLAUDE-design.md, Leitgedanke 2). Sie steht nur, wo sie etwas bewirkt — ab „bestellt" und solange
@@ -98,25 +102,38 @@ const WAHL_TITEL = 'Rechnung schreiben';
 /** Was an der Stelle der Nummer steht, solange die Rechnung keine hat (wie in {@link RechnungenPage}). */
 const OHNE_NUMMER = 'Entwurf';
 
-/** Die Spalten der Positionstafel ohne den Abrechnungsstand. */
-const SPALTEN = ['Bezeichnung', 'Abrechnung', 'Menge', 'Einheit', 'Einzelpreis', 'Betrag'] as const;
+/** Die Spalten der Positionstafel vor den Mengen des Stands. */
+const SPALTEN_VOR: readonly string[] = ['Bezeichnung', 'Abrechnung', 'Menge'];
+
+/** Die Spalten dahinter — „Einheit" gilt fuer jede Menge links von ihr. */
+const SPALTEN_NACH: readonly string[] = ['Einheit', 'Einzelpreis', 'Betrag'];
 
 /**
- * Dieselben Spalten mit dem Stand — „Abgerechnet" und „Offen" stehen bei der Menge.
+ * Welche Zusatzspalten die Positionstafel traegt — zwei Fragen, zwei Antworten.
  *
- * Dort und nicht am Ende der Zeile: Alle drei sind Mengen in derselben Einheit, und die Spalte
- * „Einheit" dahinter gilt damit fuer alle drei.
+ * Beide Zusaetze stehen bei der Menge und nicht am Ende der Zeile: Alle sind Mengen in derselben
+ * Einheit, und die Spalte „Einheit" dahinter gilt damit fuer alle.
  */
-const SPALTEN_MIT_STAND = [
-  'Bezeichnung',
-  'Abrechnung',
-  'Menge',
-  'Abgerechnet',
-  'Offen',
-  'Einheit',
-  'Einzelpreis',
-  'Betrag',
-] as const;
+interface Zusatzspalten {
+  /**
+   * „Angefallen" — sobald eine Position buchbar ist, <b>auch ohne Rechnung</b> (Issue #193,
+   * Kriterien 7, 8, 11). Die Stunden sind da, bevor etwas abgerechnet ist, und sie bleiben da,
+   * nachdem das Angebot auf „abgerechnet" gesprungen ist.
+   */
+  readonly angefallen: boolean;
+  /** „Abgerechnet" und „Offen" — erst mit einer Rechnung. */
+  readonly stand: boolean;
+}
+
+/** Die Spalten zu den gewaehlten Zusaetzen. */
+function spaltenZu(zusatz: Zusatzspalten): readonly string[] {
+  return [
+    ...SPALTEN_VOR,
+    ...(zusatz.angefallen ? ['Angefallen'] : []),
+    ...(zusatz.stand ? ['Abgerechnet', 'Offen'] : []),
+    ...SPALTEN_NACH,
+  ];
+}
 
 /** Die Spalten der Rechnungstafel — ohne Firma, die steht schon im Kopf des Angebots. */
 const SPALTEN_RECHNUNGEN: readonly string[] = ['Nummer', 'Rechnungsdatum', 'Betrag', 'Zustand'];
@@ -148,19 +165,33 @@ function ueberschriftZu(angebot: Angebot): string {
 }
 
 /**
- * Eine Zeile der Positionstafel (Kriterien 4, 5, 26).
+ * Eine Zeile der Positionstafel (Kriterien 4, 5, 26; Issue #193, Kriterien 7, 8, 11).
  *
- * `stand` ist der Abrechnungsstand dieser Position, oder `undefined` — dann fehlen die zwei Spalten.
- * Eine Position ohne Stand bei vorhandenen Rechnungen gibt es nicht; die Zellen stuenden sonst leer
- * da, und das ist hier die ehrlichere Zelle als eine erfundene Null.
+ * `stand` ist der Abrechnungsstand dieser Position, oder `undefined` — dann bleiben die Zellen der
+ * Zusatzspalten leer. Eine Position ohne Stand bei geladenem Abrechnungsweg gibt es nicht; die
+ * leere Zelle ist hier die ehrlichere als eine erfundene Null.
+ *
+ * `zusatz` entscheidet, <b>welche</b> Zellen die Zeile ueberhaupt setzt — sie muss dieselben
+ * stellen wie der Kopf der Tafel, sonst verrutscht die Spalte.
+ *
+ * <b>Die Zelle „Angefallen" haengt an `buchbar`</b>, nicht an der Zahl: 0 angefallene Stunden an
+ * einer buchbaren Position sind eine Auskunft, an einer Festpreisposition dagegen keine — dort
+ * bleibt die Zelle leer.
  */
 function Positionszeile({
   position,
   stand,
+  zusatz,
 }: {
   readonly position: AngebotPosition;
   readonly stand: Abrechnungsposition | undefined;
+  readonly zusatz: Zusatzspalten;
 }) {
+  // Was ueber das Kontingent hinaus erfasst wurde (Kriterium 8), oder 0.
+  const ueberKontingent =
+    stand === undefined || !stand.buchbar
+      ? 0
+      : Math.max(0, stand.angefallenInHundertsteln - stand.angebotenInHundertsteln);
   return (
     <Box component="tr">
       <Box component="td" sx={{ fontWeight: 500 }}>
@@ -174,28 +205,54 @@ function Positionszeile({
       >
         {dezimal(position.mengeInHundertsteln, ',')}
       </Box>
-      {stand === undefined ? null : (
+      {!zusatz.angefallen ? null : (
+        <Box component="td" sx={{ textAlign: 'right' }}>
+          {stand === undefined || !stand.buchbar ? null : (
+            <>
+              <Box className={ZAHLEN_KLASSE} sx={{ whiteSpace: 'nowrap' }}>
+                {dezimal(stand.angefallenInHundertsteln, ',')}
+              </Box>
+              {ueberKontingent > 0 ? (
+                // Der Hinweis steht an der Zahl, die das Kontingent sprengt (Kriterium 8).
+                <Box sx={{ fontSize: 12.5 }}>
+                  <Ueberschreitungshinweis
+                    mengeInHundertsteln={ueberKontingent}
+                    angebotPositionId={stand.angebotPositionId}
+                    art="angefallen"
+                  />
+                </Box>
+              ) : null}
+            </>
+          )}
+        </Box>
+      )}
+      {!zusatz.stand ? null : (
         <>
           <Box
             component="td"
             className={ZAHLEN_KLASSE}
             sx={{ textAlign: 'right', whiteSpace: 'nowrap' }}
           >
-            {dezimal(stand.abgerechnetInHundertsteln, ',')}
+            {stand === undefined ? null : dezimal(stand.abgerechnetInHundertsteln, ',')}
           </Box>
           <Box component="td" sx={{ textAlign: 'right' }}>
-            <Box className={ZAHLEN_KLASSE} sx={{ whiteSpace: 'nowrap' }}>
-              {dezimal(stand.offenInHundertsteln, ',')}
-            </Box>
-            {stand.ueberschreitungInHundertsteln > 0 ? (
-              // Der Hinweis steht bei „Offen": Dort steht 0,00, und er sagt, warum das zu wenig ist.
-              <Box sx={{ fontSize: 12.5 }}>
-                <Ueberschreitungshinweis
-                  mengeInHundertsteln={stand.ueberschreitungInHundertsteln}
-                  angebotPositionId={stand.angebotPositionId}
-                />
-              </Box>
-            ) : null}
+            {stand === undefined ? null : (
+              <>
+                <Box className={ZAHLEN_KLASSE} sx={{ whiteSpace: 'nowrap' }}>
+                  {dezimal(stand.offenInHundertsteln, ',')}
+                </Box>
+                {stand.ueberschreitungInHundertsteln > 0 ? (
+                  // Der Hinweis steht bei „Offen": Dort steht 0,00, und er sagt, warum das zu wenig
+                  // ist.
+                  <Box sx={{ fontSize: 12.5 }}>
+                    <Ueberschreitungshinweis
+                      mengeInHundertsteln={stand.ueberschreitungInHundertsteln}
+                      angebotPositionId={stand.angebotPositionId}
+                    />
+                  </Box>
+                ) : null}
+              </>
+            )}
           </Box>
         </>
       )}
@@ -549,9 +606,9 @@ export default function AngebotPage() {
 
   /** Die Karte mit Ueberschrift, Angaben und Aktionen, darunter Beschreibung und Positionen. */
   function inhaltZu(angebot: Angebot): ReactNode {
-    // Der Stand je Position, aber nur wo es Rechnungen gibt: Ohne sie fehlen die zwei Spalten.
+    // Der Stand je Position, sobald der Abrechnungsweg geladen ist — er traegt beide Zusaetze.
     const staende =
-      abrechnung.art === 'daten' && abrechnung.abrechnung.rechnungen.length > 0
+      abrechnung.art === 'daten'
         ? new Map(
             abrechnung.abrechnung.positionen.map((position) => [
               position.angebotPositionId,
@@ -559,6 +616,14 @@ export default function AngebotPage() {
             ]),
           )
         : null;
+    // „Abgerechnet" und „Offen" erst mit einer Rechnung, „Angefallen" schon mit einer buchbaren
+    // Position: Zwei Fragen an denselben Stand, und die zweite haengt nicht an der ersten.
+    const zusatz: Zusatzspalten = {
+      angefallen:
+        abrechnung.art === 'daten' &&
+        abrechnung.abrechnung.positionen.some((position) => position.buchbar),
+      stand: abrechnung.art === 'daten' && abrechnung.abrechnung.rechnungen.length > 0,
+    };
     return (
       <>
         <Karte titel={ueberschriftZu(angebot)} titelEbene={1} werkzeug={aktionenZu(angebot)}>
@@ -585,10 +650,7 @@ export default function AngebotPage() {
                 {OHNE_POSITION}
               </Typography>
             ) : (
-              <Tafel
-                beschriftung="Positionen"
-                spalten={staende === null ? [...SPALTEN] : [...SPALTEN_MIT_STAND]}
-              >
+              <Tafel beschriftung="Positionen" spalten={[...spaltenZu(zusatz)]}>
                 {angebot.positionen.map((position) => (
                   // Die Kennung ist der Schluessel: Seit Issue #171 traegt jede Position eine
                   // eigene und bleibt ueber ein Speichern hinweg dieselbe. Die Reihenfolge der
@@ -597,6 +659,7 @@ export default function AngebotPage() {
                     key={position.id}
                     position={position}
                     stand={staende?.get(position.id)}
+                    zusatz={zusatz}
                   />
                 ))}
               </Tafel>

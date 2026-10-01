@@ -16,26 +16,54 @@ import { dezimal } from '../lib/geld';
  *
  * Die Kennung im `data-testid` ist die der <b>Angebotsposition</b> — an ihr haengt der Stand in
  * beiden Ansichten.
+ *
+ * <b>Zwei Arten, zwei Saetze</b> (Issue #193, Kriterium 8): Die abgerechnete Menge geht „ueber das
+ * Angebot" hinaus, die angefallene Zeit „ueberschreitet das Kontingent". Beide koennen an derselben
+ * Zeile stehen — darum traegt jede Art ihre eigene Kennung, sonst gaebe es `data-testid` zweimal.
  */
 
 /** Die Symbolgroesse im Hinweis an einer Zeile. */
 const SYMBOL_HINWEIS = 14;
+
+/** Woran der Hinweis haengt: an der abgerechneten Menge oder an der angefallenen Zeit. */
+export type Hinweisart = 'abrechnung' | 'angefallen';
+
+/**
+ * Der Satz je Art.
+ *
+ * Die Einheit steht nur im Satz zur Zeit, und sie steht dort fest: Angefallen ist nur, was auf eine
+ * Position nach Aufwand in <b>Stunden</b> gebucht wurde — eine andere Einheit kommt hier nicht an
+ * (`arbeitszeit.application.Buchbarkeit`).
+ */
+const SATZ: Readonly<Record<Hinweisart, (menge: string) => string>> = {
+  abrechnung: (menge) => `${menge} über dem Angebot`,
+  angefallen: (menge) => `Kontingent um ${menge} Std. überschritten`,
+};
+
+/** Die Kennung je Art — zwei Hinweise an einer Zeile bleiben damit unterscheidbar. */
+const KENNUNG: Readonly<Record<Hinweisart, string>> = {
+  abrechnung: 'zeile-hinweis',
+  angefallen: 'zeile-angefallen-hinweis',
+};
 
 export interface UeberschreitungshinweisProps {
   /** Was mit dieser Menge zusammen zu viel waere, in Hundertsteln — stets groesser als 0. */
   readonly mengeInHundertsteln: number;
   /** Die Kennung der Angebotsposition, an der der Hinweis steht. */
   readonly angebotPositionId: number;
+  /** Woran der Hinweis haengt; ohne Angabe die abgerechnete Menge. */
+  readonly art?: Hinweisart;
 }
 
 export default function Ueberschreitungshinweis({
   mengeInHundertsteln,
   angebotPositionId,
+  art = 'abrechnung',
 }: UeberschreitungshinweisProps) {
   return (
     <Box
       component="span"
-      data-testid={`zeile-hinweis-${String(angebotPositionId)}`}
+      data-testid={`${KENNUNG[art]}-${String(angebotPositionId)}`}
       sx={(theme) => ({
         display: 'inline-flex',
         alignItems: 'center',
@@ -44,7 +72,7 @@ export default function Ueberschreitungshinweis({
       })}
     >
       <IconAlertTriangle size={SYMBOL_HINWEIS} stroke={1.8} aria-hidden />
-      {`${dezimal(mengeInHundertsteln, ',')} über dem Angebot`}
+      {SATZ[art](dezimal(mengeInHundertsteln, ','))}
     </Box>
   );
 }

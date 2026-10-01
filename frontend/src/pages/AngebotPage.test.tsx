@@ -51,7 +51,12 @@ const LEERE_BEREICHE = {
   [ABRECHNUNG]: json(200, LEERER_STAND),
 };
 
-/** Die Position des Angebots mit ihrem Stand: 160 angeboten, 80 davon abgerechnet. */
+/**
+ * Die Position des Angebots mit ihrem Stand: 160 angeboten, 80 davon abgerechnet.
+ *
+ * Nicht buchbar: Sie rechnet in Personentagen ab, und Arbeitszeit traegt nur eine Position nach
+ * Aufwand in Stunden (Issue #193, Antworten 3 und 5).
+ */
 const STAND_POSITION = {
   angebotPositionId: 3,
   bezeichnung: 'Konzeption',
@@ -60,6 +65,35 @@ const STAND_POSITION = {
   abgerechnet: 80,
   offen: 80,
   ueberschreitung: 0,
+  buchbar: false,
+  angefallen: 0,
+};
+
+/** Eine Position nach Aufwand in Stunden — auf sie laesst sich Arbeitszeit buchen (Issue #193). */
+const STUNDEN_POSITION = {
+  id: 4,
+  bezeichnung: 'Umsetzung',
+  abrechnungsmodus: 'AUFWAND',
+  menge: 20,
+  einheit: 'STUNDE',
+  einzelpreis: 120,
+  betrag: 2400,
+};
+
+/** Dasselbe Angebot, dessen eine Position Stunden traegt. */
+const ANGEBOT_MIT_STUNDEN = { ...ANGEBOT, positionen: [STUNDEN_POSITION], summe: 2400 };
+
+/** Ihr Stand: 20 angeboten, davon 8 Stunden angefallen — noch innerhalb des Kontingents. */
+const STAND_STUNDEN = {
+  angebotPositionId: 4,
+  bezeichnung: 'Umsetzung',
+  einheit: 'STUNDE',
+  angeboten: 20,
+  abgerechnet: 0,
+  offen: 20,
+  ueberschreitung: 0,
+  buchbar: true,
+  angefallen: 8,
 };
 
 /** Eine gestellte Rechnung dieses Angebots. */
@@ -527,6 +561,25 @@ describe('AngebotPage — der Abrechnungsstand an den Positionen (Issue #187, Kr
     expect(screen.queryByText('Abgerechnet')).not.toBeInTheDocument();
   });
 
+  it('laesst die Zellen leer, wo der Stand die Position nicht nennt', async () => {
+    fetchNachPfad({
+      ...LEERE_BEREICHE,
+      // Rechnungen, aber kein Stand zu dieser Position — die Zellen stehen, sie sagen nichts.
+      [ABRECHNUNG]: json(200, { positionen: [], rechnungen: [GESTELLTE] }),
+      'GET /api/angebote/9': json(200, ANGEBOT),
+    });
+
+    renderSeite();
+    await screen.findByRole('heading', { level: 1, name: UEBERSCHRIFT });
+
+    await screen.findByText('Abgerechnet');
+    const zellen = within(
+      within(screen.getByRole('table', { name: 'Positionen' })).getAllByRole('row')[1],
+    ).getAllByRole('cell');
+    expect(zellen[3]).toHaveTextContent('');
+    expect(zellen[4]).toHaveTextContent('');
+  });
+
   it('stellt eine Ueberschreitung als Hinweis mit Wort und Symbol in die Zeile', async () => {
     fetchNachPfad({
       ...LEERE_BEREICHE,
@@ -542,6 +595,115 @@ describe('AngebotPage — der Abrechnungsstand an den Positionen (Issue #187, Kr
 
     expect(await screen.findByTestId('zeile-hinweis-3')).toHaveTextContent(
       '40,00 über dem Angebot',
+    );
+  });
+});
+
+describe('AngebotPage — die Spalte „Angefallen" (Issue #193, Kriterien 7, 8, 11)', () => {
+  it('stellt die Spalte an einer buchbaren Position, auch ohne Rechnung', async () => {
+    fetchNachPfad({
+      ...LEERE_BEREICHE,
+      [ABRECHNUNG]: json(200, { positionen: [STAND_STUNDEN], rechnungen: [] }),
+      'GET /api/angebote/9': json(200, ANGEBOT_MIT_STUNDEN),
+    });
+
+    renderSeite();
+    await screen.findByRole('heading', { level: 1, name: UEBERSCHRIFT });
+
+    expect(await screen.findByText('Angefallen')).toBeInTheDocument();
+    const tafel = within(screen.getByRole('table', { name: 'Positionen' }));
+    // „Abgerechnet" und „Offen" fehlen: Die Regel „erst mit Rechnung" gilt weiter nur fuer sie.
+    expect(tafel.getAllByRole('columnheader').map((kopf) => kopf.textContent)).toEqual([
+      'Bezeichnung',
+      'Abrechnung',
+      'Menge',
+      'Angefallen',
+      'Einheit',
+      'Einzelpreis',
+      'Betrag',
+    ]);
+    expect(within(tafel.getAllByRole('row')[1]).getByText('8,00')).toBeInTheDocument();
+  });
+
+  it('laesst die Spalte weg, wenn keine Position buchbar ist', async () => {
+    fetchNachPfad({
+      ...LEERE_BEREICHE,
+      [ABRECHNUNG]: json(200, { positionen: [STAND_POSITION], rechnungen: [] }),
+      'GET /api/angebote/9': json(200, ANGEBOT),
+    });
+
+    renderSeite();
+    await screen.findByRole('heading', { level: 1, name: UEBERSCHRIFT });
+
+    expect(screen.getAllByRole('columnheader').map((kopf) => kopf.textContent)).toEqual([
+      'Bezeichnung',
+      'Abrechnung',
+      'Menge',
+      'Einheit',
+      'Einzelpreis',
+      'Betrag',
+    ]);
+    expect(screen.queryByText('Angefallen')).not.toBeInTheDocument();
+  });
+
+  it('laesst die Zelle an einer Festpreisposition leer', async () => {
+    fetchNachPfad({
+      ...LEERE_BEREICHE,
+      [ABRECHNUNG]: json(200, {
+        positionen: [STAND_POSITION, STAND_STUNDEN],
+        rechnungen: [],
+      }),
+      'GET /api/angebote/9': json(200, {
+        ...ANGEBOT,
+        positionen: [POSITION, STUNDEN_POSITION],
+        summe: 4900.03,
+      }),
+    });
+
+    renderSeite();
+    await screen.findByRole('heading', { level: 1, name: UEBERSCHRIFT });
+
+    await screen.findByText('Angefallen');
+    const zeilen = within(screen.getByRole('table', { name: 'Positionen' })).getAllByRole('row');
+    // Die vierte Zelle ist „Angefallen": an der Stundenposition 8,00, an der anderen nichts.
+    expect(within(zeilen[1]).getAllByRole('cell')[3]).toHaveTextContent('');
+    expect(within(zeilen[2]).getAllByRole('cell')[3]).toHaveTextContent('8,00');
+  });
+
+  it('stellt eine Ueberschreitung des Kontingents als Hinweis in die Zelle', async () => {
+    fetchNachPfad({
+      ...LEERE_BEREICHE,
+      [ABRECHNUNG]: json(200, {
+        positionen: [{ ...STAND_STUNDEN, angefallen: 22 }],
+        rechnungen: [],
+      }),
+      'GET /api/angebote/9': json(200, ANGEBOT_MIT_STUNDEN),
+    });
+
+    renderSeite();
+    await screen.findByRole('heading', { level: 1, name: UEBERSCHRIFT });
+
+    expect(await screen.findByTestId('zeile-angefallen-hinweis-4')).toHaveTextContent(
+      'Kontingent um 2,00 Std. überschritten',
+    );
+  });
+
+  it('haelt Spalte und Hinweis auch an einem abgerechneten Angebot', async () => {
+    fetchNachPfad({
+      ...LEERE_BEREICHE,
+      [ABRECHNUNG]: json(200, {
+        positionen: [{ ...STAND_STUNDEN, abgerechnet: 20, offen: 0, angefallen: 22 }],
+        rechnungen: [GESTELLTE],
+      }),
+      'GET /api/angebote/9': json(200, { ...ANGEBOT_MIT_STUNDEN, status: 'ABGERECHNET' }),
+    });
+
+    renderSeite();
+    await screen.findByRole('heading', { level: 1, name: UEBERSCHRIFT });
+
+    expect(await screen.findByText('Angefallen')).toBeInTheDocument();
+    expect(screen.getByTestId('zeile-angefallen-hinweis-4')).toHaveTextContent(
+      'Kontingent um 2,00 Std. überschritten',
     );
   });
 });
