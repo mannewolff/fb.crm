@@ -7,6 +7,7 @@ import {
   monatWort,
   alsMonat,
   stundenWort,
+  uhrzeitFeld,
   uhrzeitWort,
   vormonat,
   zeitspanneWort,
@@ -143,5 +144,21 @@ describe('monatWort', () => {
     // Zwei Formen von „kein Monat": die falsche Gestalt und eine Zahl ausserhalb der zwoelf.
     expect(monatWort('November 2026')).toBe('November 2026');
     expect(monatWort('2026-13')).toBe('2026-13');
+  });
+});
+
+describe('uhrzeitFeld (A16: der Wert eines Zeitfeldes)', () => {
+  it('schreibt die Uhrzeit zweistellig und ohne Sekunden', () => {
+    expect(uhrzeitFeld('09:00:00')).toBe('09:00');
+  });
+
+  it('nimmt die Uhrzeit auch ohne Sekunden an', () => {
+    expect(uhrzeitFeld('14:45')).toBe('14:45');
+  });
+
+  it('gibt ein leeres Feld heraus, wo keine Uhrzeit steht', () => {
+    // Anders als {@link uhrzeitWort}: Ein Zeitfeld traegt eine Uhrzeit oder nichts — der rohe
+    // Wert waere dort ein Wert, den der Browser ohnehin verwirft.
+    expect(uhrzeitFeld('spaeter')).toBe('');
   });
 });

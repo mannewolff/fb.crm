@@ -1,18 +1,20 @@
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
-import { IconChevronLeft, IconChevronRight, IconClockPlus } from '@tabler/icons-react';
+import { IconChevronLeft, IconChevronRight, IconClockPlus, IconTrash } from '@tabler/icons-react';
 import { Fragment, useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useSearchParams } from 'react-router-dom';
 
-import { arbeitszeitMonat } from '../api/arbeitszeit';
+import { arbeitszeitMonat, zeiteintragLoeschen } from '../api/arbeitszeit';
 import type { Arbeitsmonat, Arbeitstag, Zeitzeile } from '../api/arbeitszeit';
+import AktionsMenue from '../components/AktionsMenue';
 import Karte from '../components/Karte';
 import { useKopfPfad } from '../components/KopfPfad';
 import type { PfadVerweis } from '../components/KopfPfad';
 import KupferTaste from '../components/KupferTaste';
 import Tafel from '../components/Tafel';
+import ZeiteintragMaske from '../components/ZeiteintragMaske';
 import {
   alsMonat,
   folgemonat,
@@ -44,9 +46,15 @@ import { RADIUS_RUND, ZAHLEN_KLASSE } from '../theme';
  * eine Zeile mit seinem Namen und seiner Summe, danach kommen seine Eintraege. Die Tafel bleibt
  * damit, was sie ist — eine Tabelle, die fertige Zeilen annimmt.
  *
- * <b>„Zeit erfassen" ist die eine Kupfertaste</b> der Ansicht (A14). In diesem Stand ist sie
- * gesperrt: Der Dialog zum Erfassen und Aendern entsteht in Issue #202, und eine Taste, die nichts
- * oeffnet, waere keine Taste.
+ * <b>„Zeit erfassen" ist die eine Kupfertaste</b> der Ansicht (A14); sie oeffnet die
+ * {@link ZeiteintragMaske}. Zum Aendern ist die Zeitspanne der Zeile eine <b>Textschaltflaeche</b>,
+ * und Loeschen steht im ⋯-Menue der Zeile — <b>die Zeile selbst ist nicht klickbar</b> (Konvention
+ * aus {@link RechnungenPage} und {@link FirmenPage}): Je Zeile gibt es genau diese zwei
+ * fokussierbaren Elemente, und beide sind mit der Tastatur zu erreichen.
+ *
+ * <b>Nach jeder Schreibung laedt der Monat neu</b> (`runde`), statt die Liste hier
+ * fortzuschreiben: Tagessummen und Monatssumme rechnet der Server, und ein Eintrag kann den Monat
+ * wechseln. Eine hier nachgezogene Liste waere eine zweite Wahrheit ueber dieselben Zahlen.
  */
 
 /** Die Ansicht ist die erste Stufe des Pfades — ueber ihr steht nichts (E6). */
@@ -59,13 +67,19 @@ const LAEDT = 'Die Arbeitszeit wird geladen …';
 const AUSFALL = 'Die Arbeitszeit ist gerade nicht zu erreichen. Bitte später erneut versuchen.';
 const LEER = 'Noch keine Arbeitszeit in diesem Monat. Erfassen Sie die erste über „Zeit erfassen".';
 
-const SPALTEN: readonly string[] = ['Zeit', 'Dauer', 'Position'];
+const LOESCHEN_FRAGE = 'Der Eintrag wird gelöscht. Das lässt sich nicht zurücknehmen.';
+const AUSFALL_LOESCHEN = 'Der Eintrag wurde nicht gelöscht. Bitte später erneut versuchen.';
+
+const SPALTEN: readonly string[] = ['Zeit', 'Dauer', 'Position', 'Aktionen'];
 
 /** Die Symbolgroesse in den Tasten (wie in {@link RechnungenPage}). */
 const SYMBOL_TASTE = 16;
 
 /** Kantenlaenge der Icontaste (CLAUDE-design.md, „Tasten": Kreis 40 px). */
 const ICONTASTE = 40;
+
+/** Die Symbolgroesse in den Menueeintraegen (wie in {@link Kommentare}). */
+const SYMBOL_MENUE = 17;
 
 /**
  * Die Gestalt einer Zelle, die eine Gruppe oder die Summe benennt.
@@ -80,6 +94,9 @@ const GRUPPENZELLE = {
   fontWeight: 600,
   whiteSpace: 'nowrap',
 } as const;
+
+/** Der offene Dialog: eine neue Buchung, oder die Zeile, die geaendert wird (A14). */
+type Maske = { readonly art: 'neu' } | { readonly art: 'aendern'; readonly zeile: Zeitzeile };
 
 /** Was die Ansicht gerade weiss. */
 type Stand =
@@ -211,12 +228,28 @@ function Tagesgruppe({ arbeitstag }: { readonly arbeitstag: Arbeitstag }) {
         {stundenWort(arbeitstag.stundenInHundertsteln)}
       </Box>
       <Box component="td" />
+      <Box component="td" />
     </Box>
   );
 }
 
-/** Ein Eintrag: Zeitspanne, Dauer, Position mit ihrer Firma. */
-function Zeile({ zeile }: { readonly zeile: Zeitzeile }) {
+/**
+ * Ein Eintrag: Zeitspanne, Dauer, Position mit ihrer Firma, ⋯-Menue (A14).
+ *
+ * Die Zeitspanne ist eine <b>Textschaltflaeche</b> und kein Link: Sie oeffnet einen Dialog und
+ * wechselt keinen Weg — ein `a` ohne Ziel waere ein Versprechen, das es nicht haelt. Ihre Gestalt
+ * ist die der Zeilenverweise der anderen Tafeln (Kupfer im Hover), ihre Rolle die eines Schalters.
+ */
+function Zeile({
+  zeile,
+  onAendern,
+  onLoeschen,
+}: {
+  readonly zeile: Zeitzeile;
+  readonly onAendern: () => void;
+  readonly onLoeschen: () => void;
+}) {
+  const wort = `${tagWort(zeile.tag)}, ${zeitspanneWort(zeile.von, zeile.bis)}`;
   return (
     <Box component="tr">
       <Box
@@ -224,7 +257,22 @@ function Zeile({ zeile }: { readonly zeile: Zeitzeile }) {
         className={ZAHLEN_KLASSE}
         sx={{ fontWeight: 500, whiteSpace: 'nowrap' }}
       >
-        {zeitspanneWort(zeile.von, zeile.bis)}
+        <Box
+          component="button"
+          type="button"
+          onClick={onAendern}
+          sx={(theme) => ({
+            padding: 0,
+            border: 0,
+            background: 'transparent',
+            cursor: 'pointer',
+            font: 'inherit',
+            color: 'inherit',
+            '&:hover': { color: theme.vars.palette.kupferwolke.kupfer },
+          })}
+        >
+          {zeitspanneWort(zeile.von, zeile.bis)}
+        </Box>
       </Box>
       <Box
         component="td"
@@ -246,6 +294,20 @@ function Zeile({ zeile }: { readonly zeile: Zeitzeile }) {
           {zeile.position.firmaName}
         </Typography>
       </Box>
+      <Box component="td" sx={{ textAlign: 'right' }}>
+        <AktionsMenue
+          name={`Aktionen für ${wort}`}
+          objekt={wort}
+          eintraege={[
+            {
+              titel: 'Löschen',
+              symbol: <IconTrash size={SYMBOL_MENUE} stroke={1.8} />,
+              rueckfrage: LOESCHEN_FRAGE,
+              onAuswahl: onLoeschen,
+            },
+          ]}
+        />
+      </Box>
     </Box>
   );
 }
@@ -265,12 +327,17 @@ function Monatssumme({ monatsliste }: { readonly monatsliste: Arbeitsmonat }) {
         {stundenWort(monatsliste.stundenInHundertsteln)}
       </Box>
       <Box component="td" />
+      <Box component="td" />
     </Box>
   );
 }
 
 /** Was in der Karte steht: Ladehinweis, Meldung, Einladung oder die Tafel. */
-function inhaltZu(stand: Stand): ReactNode {
+function inhaltZu(
+  stand: Stand,
+  oeffneMaske: (maske: Maske) => void,
+  loesche: (zeile: Zeitzeile) => void,
+): ReactNode {
   if (stand.art === 'laedt') {
     return (
       <Typography
@@ -299,7 +366,16 @@ function inhaltZu(stand: Stand): ReactNode {
         <Fragment key={arbeitstag.tag}>
           <Tagesgruppe arbeitstag={arbeitstag} />
           {arbeitstag.eintraege.map((zeile) => (
-            <Zeile key={zeile.id} zeile={zeile} />
+            <Zeile
+              key={zeile.id}
+              zeile={zeile}
+              onAendern={() => {
+                oeffneMaske({ art: 'aendern', zeile });
+              }}
+              onLoeschen={() => {
+                loesche(zeile);
+              }}
+            />
           ))}
         </Fragment>
       ))}
@@ -313,6 +389,10 @@ export default function ArbeitszeitPage() {
   const [parameter, setzeParameter] = useSearchParams();
   const monat = alsMonat(parameter.get(PARAM_MONAT));
   const [stand, setzeStand] = useState<Stand>({ art: 'laedt' });
+  const [maske, setzeMaske] = useState<Maske | null>(null);
+  const [loeschfehler, setzeLoeschfehler] = useState<string | null>(null);
+  /** Jede Schreibung zaehlt eine Runde weiter — der Effekt holt den Monat dann erneut. */
+  const [runde, setzeRunde] = useState(0);
 
   useEffect(() => {
     let gueltig = true;
@@ -326,7 +406,24 @@ export default function ArbeitszeitPage() {
     return () => {
       gueltig = false;
     };
-  }, [monat]);
+  }, [monat, runde]);
+
+  const neuLaden = () => {
+    setzeLoeschfehler(null);
+    setzeRunde((alt) => alt + 1);
+  };
+
+  const loeschen = async (zeile: Zeitzeile) => {
+    try {
+      await zeiteintragLoeschen(zeile.id);
+      neuLaden();
+    } catch {
+      // Ein eigener Satz und nicht die Meldung des Servers: Das Loeschen hat keine fachliche
+      // Abweisung, die er begruenden koennte — was hier ankommt, ist ein Ausfall (wie
+      // {@link Kommentare}).
+      setzeLoeschfehler(AUSFALL_LOESCHEN);
+    }
+  };
 
   // Der Monat der Adresse, solange sie einen nennt; sonst der, den die Antwort nennt (E4).
   const gezeigterMonat = monat ?? (stand.art === 'daten' ? stand.monatsliste.monat : null);
@@ -348,17 +445,36 @@ export default function ArbeitszeitPage() {
                 }}
               />
             )}
-            {/* Gesperrt und ohne Rueckruf: Der Dialog zum Erfassen entsteht in Issue #202. Ein
-                leerer Rueckruf waere Code, den nichts erreicht — eine gesperrte Taste loest
-                keinen aus. */}
-            <KupferTaste disabled symbol={<IconClockPlus size={SYMBOL_TASTE} stroke={1.8} />}>
+            <KupferTaste
+              onClick={() => {
+                setzeMaske({ art: 'neu' });
+              }}
+              symbol={<IconClockPlus size={SYMBOL_TASTE} stroke={1.8} />}
+            >
               Zeit erfassen
             </KupferTaste>
           </>
         }
       >
-        {inhaltZu(stand)}
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          {loeschfehler === null ? null : <Alert severity="error">{loeschfehler}</Alert>}
+          {inhaltZu(stand, setzeMaske, (zeile) => {
+            void loeschen(zeile);
+          })}
+        </Box>
       </Karte>
+      {maske === null ? null : (
+        <ZeiteintragMaske
+          zeile={maske.art === 'neu' ? null : maske.zeile}
+          onGespeichert={() => {
+            setzeMaske(null);
+            neuLaden();
+          }}
+          onSchliessen={() => {
+            setzeMaske(null);
+          }}
+        />
+      )}
     </Box>
   );
 }

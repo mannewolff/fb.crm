@@ -5,14 +5,18 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import ArbeitszeitPage from './ArbeitszeitPage';
 import { KopfPfadProvider } from '../components/KopfPfad';
-import { fetchNachPfad, json, problem } from '../test/fetchNachPfad';
+import { fetchNachPfad, json, leer, problem } from '../test/fetchNachPfad';
 import type { Routen } from '../test/fetchNachPfad';
 import { renderMitTheme } from '../test/render';
 
 const OHNE_MONAT = 'GET /api/arbeitszeit';
-const NOVEMBER = 'GET /api/arbeitszeit?monat=2026-11';
+const WEG_NOVEMBER = '/api/arbeitszeit?monat=2026-11';
+const NOVEMBER = `GET ${WEG_NOVEMBER}`;
 const OKTOBER = 'GET /api/arbeitszeit?monat=2026-10';
 const DEZEMBER = 'GET /api/arbeitszeit?monat=2026-12';
+const POSITIONEN = 'GET /api/arbeitszeit/buchbare-positionen';
+const ANLEGEN = 'POST /api/arbeitszeit';
+const LOESCHEN = 'DELETE /api/arbeitszeit/7';
 
 const KONZEPTION = {
   id: 101,
@@ -76,6 +80,32 @@ const MONATSLISTE = {
 
 /** Ein Monat ohne einen einzigen Eintrag. */
 const LEERER_MONAT = { monat: '2026-11', tage: [], stunden: 0 };
+
+/** Die Antwort auf das Erfassen — die Ansicht liest daraus nichts, sie laedt den Monat neu. */
+const ANGELEGT = {
+  id: 12,
+  angebotPositionId: 101,
+  tag: '2026-11-12',
+  von: '09:00:00',
+  bis: '10:45:00',
+  stunden: 1.75,
+};
+
+type Nutzer = ReturnType<typeof userEvent.setup>;
+
+/** Wie oft die Monatsliste gefragt wurde — der Dialog fragt daneben nach seinen Positionen. */
+function monatsaufrufe(aufruf: ReturnType<typeof fetchNachPfad>): number {
+  // Der Weg kommt als Zeichenkette heraus — `api/client.ts` ruft `fetch` nie mit einem `Request`.
+  return aufruf.mock.calls.filter(([ziel]) => ziel === WEG_NOVEMBER).length;
+}
+
+/** Oeffnet das ⋯-Menue des ersten Eintrags und waehlt „Löschen". */
+async function waehleLoeschen(nutzer: Nutzer) {
+  await nutzer.click(
+    await screen.findByRole('button', { name: 'Aktionen für 12.11.2026, 9:00 bis 10:45' }),
+  );
+  await nutzer.click(await screen.findByRole('menuitem', { name: 'Löschen' }));
+}
 
 /** Die Adresse — daran haengt, was der Monatswechsel in `?monat=` geschrieben hat. */
 function Adresse() {
@@ -226,12 +256,128 @@ describe('ArbeitszeitPage (Kriterium 5, Plan A13, A20)', () => {
     expect(screen.queryByRole('table')).not.toBeInTheDocument();
   });
 
-  it('traegt „Zeit erfassen" als Kupfertaste, in diesem Stand noch gesperrt (Issue #202)', async () => {
+  it('traegt „Zeit erfassen" als Kupfertaste', async () => {
     mitRouten({ [NOVEMBER]: json(200, MONATSLISTE) });
 
     renderSeite('/arbeitszeit?monat=2026-11');
 
-    const taste = await screen.findByRole('button', { name: 'Zeit erfassen' });
-    expect(taste).toBeDisabled();
+    expect(await screen.findByRole('button', { name: 'Zeit erfassen' })).toBeEnabled();
+  });
+});
+
+describe('ArbeitszeitPage — erfassen und aendern (Kriterien 1 und 6, Plan A14)', () => {
+  it('oeffnet den Dialog zum Erfassen und laedt den Monat nach dem Speichern neu', async () => {
+    const nutzer = userEvent.setup();
+    const aufruf = mitRouten({
+      [NOVEMBER]: json(200, MONATSLISTE),
+      [POSITIONEN]: json(200, [KONZEPTION]),
+      [ANLEGEN]: json(201, ANGELEGT),
+    });
+
+    renderSeite('/arbeitszeit?monat=2026-11');
+    await nutzer.click(await screen.findByRole('button', { name: 'Zeit erfassen' }));
+    await nutzer.type(await screen.findByLabelText(/^von/), '09:00');
+    await nutzer.type(screen.getByLabelText(/^bis/), '10:45');
+    await nutzer.selectOptions(screen.getByRole('combobox', { name: 'Position' }), '101');
+    await nutzer.click(screen.getByRole('button', { name: 'Speichern' }));
+
+    // Die Monatsliste ist ein zweites Mal gefragt worden, und der Dialog ist weg.
+    await vi.waitFor(() => {
+      expect(monatsaufrufe(aufruf)).toBe(2);
+    });
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('schliesst den Dialog beim Abbrechen, ohne den Monat neu zu laden', async () => {
+    const nutzer = userEvent.setup();
+    const aufruf = mitRouten({
+      [NOVEMBER]: json(200, MONATSLISTE),
+      [POSITIONEN]: json(200, [KONZEPTION]),
+    });
+
+    renderSeite('/arbeitszeit?monat=2026-11');
+    await nutzer.click(await screen.findByRole('button', { name: 'Zeit erfassen' }));
+    await nutzer.click(await screen.findByRole('button', { name: 'Abbrechen' }));
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(monatsaufrufe(aufruf)).toBe(1);
+  });
+
+  it('oeffnet das Aendern ueber die Zeitspanne der Zeile (A14)', async () => {
+    const nutzer = userEvent.setup();
+    mitRouten({ [NOVEMBER]: json(200, MONATSLISTE), [POSITIONEN]: json(200, [KONZEPTION]) });
+
+    renderSeite('/arbeitszeit?monat=2026-11');
+    await nutzer.click(await screen.findByRole('button', { name: '9:00 bis 10:45' }));
+
+    expect(
+      await screen.findByRole('heading', { name: 'Arbeitszeit ändern' }),
+    ).toBeInTheDocument();
+    // Die Werte stammen aus der Zeile, auf die geklickt wurde.
+    expect(screen.getByLabelText(/^Tag/)).toHaveValue('2026-11-12');
+    expect(screen.getByLabelText(/^von/)).toHaveValue('09:00');
+    expect(screen.getByRole('combobox', { name: 'Position' })).toHaveValue('101');
+  });
+
+  it('macht die Zeile nicht klickbar — die Spanne und das ⋯-Menue sind ihre Schalter', async () => {
+    mitRouten({ [NOVEMBER]: json(200, MONATSLISTE) });
+
+    renderSeite('/arbeitszeit?monat=2026-11');
+    const tafel = within(await screen.findByRole('table'));
+
+    // Je Eintrag genau zwei Schalter in dieser Reihenfolge: die Spanne, dann das ⋯-Menue.
+    expect(tafel.getAllByRole('button').map((taste) => taste.textContent)).toEqual([
+      '9:00 bis 10:45',
+      '',
+      '13:00 bis 15:00',
+      '',
+      '8:00 bis 10:00',
+      '',
+    ]);
+    // Und kein Verweis, der die Zeile als Ganzes anfasst.
+    expect(tafel.queryAllByRole('link')).toHaveLength(0);
+  });
+});
+
+describe('ArbeitszeitPage — loeschen (Kriterium 6, Antwort 4)', () => {
+  it('fragt vor dem Loeschen zurueck und tut nichts, wenn der Mensch abbricht', async () => {
+    const nutzer = userEvent.setup();
+    const aufruf = mitRouten({ [NOVEMBER]: json(200, MONATSLISTE) });
+
+    renderSeite('/arbeitszeit?monat=2026-11');
+    await waehleLoeschen(nutzer);
+    expect(
+      await screen.findByText('Der Eintrag wird gelöscht. Das lässt sich nicht zurücknehmen.'),
+    ).toBeInTheDocument();
+    await nutzer.click(screen.getByRole('button', { name: 'Abbrechen' }));
+
+    // Nur der Leseweg des Monats, kein DELETE.
+    expect(aufruf).toHaveBeenCalledTimes(1);
+  });
+
+  it('loescht nach der Rueckfrage und laedt den Monat neu', async () => {
+    const nutzer = userEvent.setup();
+    const aufruf = mitRouten({ [NOVEMBER]: json(200, MONATSLISTE), [LOESCHEN]: leer(204) });
+
+    renderSeite('/arbeitszeit?monat=2026-11');
+    await waehleLoeschen(nutzer);
+    await nutzer.click(await screen.findByRole('button', { name: 'Löschen' }));
+
+    await vi.waitFor(() => {
+      expect(monatsaufrufe(aufruf)).toBe(2);
+    });
+  });
+
+  it('meldet den Fehlschlag des Loeschens, statt ihn zu verschweigen', async () => {
+    const nutzer = userEvent.setup();
+    mitRouten({ [NOVEMBER]: json(200, MONATSLISTE), [LOESCHEN]: problem(500, 'Kaputt.') });
+
+    renderSeite('/arbeitszeit?monat=2026-11');
+    await waehleLoeschen(nutzer);
+    await nutzer.click(await screen.findByRole('button', { name: 'Löschen' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Der Eintrag wurde nicht gelöscht. Bitte später erneut versuchen.',
+    );
   });
 });

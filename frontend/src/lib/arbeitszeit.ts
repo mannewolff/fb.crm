@@ -93,6 +93,22 @@ export function uhrzeitWort(uhrzeit: string): string {
   return `${String(teile.stunde)}:${String(teile.minute).padStart(2, '0')}`;
 }
 
+/**
+ * Die Uhrzeit als Wert eines Zeitfeldes — „09:00" (A16).
+ *
+ * Zweistellig und ohne Sekunden, denn genau das nimmt `input type="time"` an. Was keine Uhrzeit
+ * ist, wird zum <b>leeren Feld</b> und nicht zum rohen Wert — anders als bei {@link uhrzeitWort}:
+ * Ein Zeitfeld traegt eine Uhrzeit oder nichts, und der Browser verwirft alles andere ohnehin
+ * stillschweigend. Dann lieber ein sichtbar leeres Feld als eine Eingabe, die niemand sieht.
+ */
+export function uhrzeitFeld(uhrzeit: string): string {
+  const teile = geteilt(uhrzeit);
+  if (teile === null) {
+    return '';
+  }
+  return `${String(teile.stunde).padStart(2, '0')}:${String(teile.minute).padStart(2, '0')}`;
+}
+
 /** Die Zeitspanne einer Zeile als Wort — „9:00 bis 11:00" (A14). */
 export function zeitspanneWort(von: string, bis: string): string {
   return `${uhrzeitWort(von)} bis ${uhrzeitWort(bis)}`;

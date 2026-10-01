@@ -1,5 +1,6 @@
 /**
- * Ein Tag aus dem Backend als deutsche Schreibweise — „2026-09-24" wird „24.09.2026".
+ * Der Tag in dieser Oberflaeche: aus dem Backend in deutscher Schreibweise — „2026-09-24" wird
+ * „24.09.2026" — und, fuer die Vorbelegung eines Datumsfeldes, der heutige ({@link heute}).
  *
  * Gesetzt wird aus den Ziffern und nicht ueber `Date`: Ein `LocalDate` traegt keine Zeitzone,
  * `new Date('2026-09-24')` liest ihn aber als Mitternacht UTC. Westlich von Greenwich zeigte
@@ -12,6 +13,25 @@
  */
 
 const TAG = /^(\d{4})-(\d{2})-(\d{2})$/u;
+
+function zweistellig(wert: number): string {
+  return String(wert).padStart(2, '0');
+}
+
+/**
+ * Der heutige Tag in der Form `YYYY-MM-DD` — die Vorbelegung des Datumsfeldes (Plan #194, A16).
+ *
+ * Aus den Feldern der Ortszeit gesetzt und nicht ueber `toISOString`: Das rechnet nach UTC um, und
+ * oestlich von Greenwich stuende am spaeten Abend der Vortag im Feld. Die Zone des Betrachters ist
+ * hier die richtige — er traegt ein, wann *er* gearbeitet hat. Welcher Monat der laufende ist,
+ * entscheidet weiter der Server an seiner Uhr (Plan #194, E4); das ist eine andere Frage, und sie
+ * wird anderswo gestellt.
+ */
+export function heute(): string {
+  const jetzt = new Date();
+  const jahr = String(jetzt.getFullYear()).padStart(4, '0');
+  return `${jahr}-${zweistellig(jetzt.getMonth() + 1)}-${zweistellig(jetzt.getDate())}`;
+}
 
 /** Der Tag in deutscher Schreibweise, oder der rohe Wert, wenn er kein Tag ist. */
 export function tagWort(tag: string): string {

@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { KEIN_ZEITRAUM, tagWort, zeitraumWort } from './tag';
+import { KEIN_ZEITRAUM, heute, tagWort, zeitraumWort } from './tag';
 
 describe('tagWort', () => {
   it('setzt einen Tag aus dem Backend in deutscher Schreibweise', () => {
@@ -30,5 +30,26 @@ describe('zeitraumWort', () => {
     ['ohne Beginn', null, '2026-12-31'],
   ])('sagt „nicht angegeben" %s', (_fall, ab, bis) => {
     expect(zeitraumWort(ab, bis)).toBe(KEIN_ZEITRAUM);
+  });
+});
+
+describe('heute (A16: der Tag ist mit heute vorbelegt)', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('setzt den heutigen Tag in der Ortszeit des Betrachters', () => {
+    vi.useFakeTimers();
+    // UTC ist noch der 12., Europe/Berlin schon der 13. — gemeint ist die Zone des Betrachters.
+    vi.setSystemTime(new Date('2026-11-12T23:30:00Z'));
+
+    expect(heute()).toBe('2026-11-13');
+  });
+
+  it('fuellt Monat und Tag auf zwei Stellen auf', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-01-05T12:00:00Z'));
+
+    expect(heute()).toBe('2026-01-05');
   });
 });
