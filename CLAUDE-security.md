@@ -36,7 +36,7 @@ Verbindliche Sicherheits-Regeln für Spring-Boot-Backend und React-Frontend. Die
 
 **Passwörter:** ausschließlich über Spring Securitys `PasswordEncoder` (**Argon2id**, `Argon2PasswordEncoder.defaultsForSpringSecurity_v5_8()`) gehasht — nie im Klartext gespeichert, übertragen oder geloggt.
 
-**Registrierung / E-Mail-Verifikation / Passwort-Reset:** über einmalige, zeitlich begrenzte, nicht ratbare Tokens (`SecureTokens`), per Mail zugestellt. Der erste Plattform-Admin wird über einen Bootstrap-Token angelegt.
+**Einrichtung / Passwort-Reset:** Eine Registrierung gibt es nicht (CLAUDE.md, *Betriebsform*). Das eine Konto entsteht einmalig über einen Bootstrap-Token (Einrichtung); der Passwort-Reset läuft über ein einmaliges, zeitlich begrenztes, nicht ratbares Token (`SecureTokens`), per Mail zugestellt.
 
 ### Input & XSS
 
