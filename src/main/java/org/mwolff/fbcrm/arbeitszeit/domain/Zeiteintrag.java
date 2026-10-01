@@ -113,12 +113,22 @@ public record Zeiteintrag(
     return tag.equals(anderer.tag) && von.isBefore(anderer.bis) && anderer.von.isBefore(bis);
   }
 
-  /*
-   * Auf einer Viertelstunde und ohne Bruchteil einer Sekunde. Die Sekunde wird getrennt von den
-   * Nanosekunden geprueft, weil LocalTime beides einzeln fuehrt: 9:00:00.5 traegt die Sekunde 0
-   * und kaeme sonst durch.
+  /**
+   * Ob eine Uhrzeit auf einer Viertelstunde liegt und keinen Bruchteil einer Sekunde traegt.
+   *
+   * <p>Die Sekunde wird getrennt von den Nanosekunden geprueft, weil {@link LocalTime} beides
+   * einzeln fuehrt: 9:00:00.5 traegt die Sekunde 0 und kaeme sonst durch.
+   *
+   * <p><b>Oeffentlich, damit die Regel nur hier steht.</b> Der kompakte Konstruktor prueft sie als
+   * Invariante und hat dafuer nur eine {@code IllegalArgumentException}; die Meldung am Feld, die
+   * der Nutzer liest, kommt aus der Anwendungsschicht und muss darum <em>vor</em> dem Bau des
+   * Eintrags fragen koennen (Plan #194, A19). Ohne diese Frage muesste die Anwendungsschicht die
+   * Rechnung abschreiben, und zwei Abschriften derselben Regel liefen beim ersten Nachziehen
+   * auseinander.
+   *
+   * @param zeit die zu pruefende Uhrzeit
    */
-  private static boolean imRaster(final LocalTime zeit) {
+  public static boolean imRaster(final LocalTime zeit) {
     return zeit.getNano() == 0 && zeit.getSecond() == 0 && zeit.getMinute() % VIERTELSTUNDE == 0;
   }
 }
