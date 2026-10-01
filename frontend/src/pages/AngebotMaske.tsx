@@ -579,6 +579,16 @@ export default function AngebotMaske() {
         }
       >
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          {/*
+            Die Meldung zur Liste als Ganzes — etwa, dass eine berechnete Position erhalten bleiben
+            muss (#160, Kriterium 28). Sie kommt als Feldmeldung an `positionen` und steht darum
+            hier und nicht oben: Sie gilt der Liste, nicht einer einzelnen Zeile, und die Zeile, um
+            die es geht, hat der Mensch moeglicherweise gerade geloescht. Die Eingaben bleiben dabei
+            stehen — ein abgewiesenes Speichern ist nichts Verlorenes.
+          */}
+          {meldung('positionen') === undefined ? null : (
+            <Alert severity="error">{meldung('positionen')}</Alert>
+          )}
           {positionen.length === 0 ? (
             <Typography
               role="status"

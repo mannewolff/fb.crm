@@ -10,7 +10,6 @@ import Link from '@mui/material/Link';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import {
-  IconAlertTriangle,
   IconDeviceFloppy,
   IconDownload,
   IconFileInvoice,
@@ -38,6 +37,7 @@ import KupferTaste, { kupferSx } from '../components/KupferTaste';
 import { EINHEIT_WORT } from '../components/Positionsmaske';
 import RechnungszustandChip from '../components/RechnungszustandChip';
 import Tafel from '../components/Tafel';
+import Ueberschreitungshinweis from '../components/Ueberschreitungshinweis';
 import TastenSymbol from '../components/TastenSymbol';
 import WeicheTaste from '../components/WeicheTaste';
 import { rechnungssummen, ueberschreitung } from '../lib/abrechnung';
@@ -126,9 +126,6 @@ const BEZEICHNUNG_LAENGE = 300;
 
 /** Die Symbolgroesse in den Tasten (wie in {@link AngebotPage}). */
 const SYMBOL_TASTE = 16;
-
-/** Die Symbolgroesse im Hinweis an einer Zeile. */
-const SYMBOL_HINWEIS = 14;
 
 /** Ueber jeder Rechnungsansicht steht die Liste der Rechnungen (E6). */
 const ZU_RECHNUNGEN: PfadVerweis = { titel: 'Rechnungen', ziel: '/rechnungen' };
@@ -332,31 +329,6 @@ function eigenePruefung(texte: Texte, zeilen: readonly Maskenzeile[]): FieldErro
     }
   });
   return fehler;
-}
-
-/** Der Hinweis an einer Zeile: Wort und Symbol, nicht Farbe allein (CLAUDE-design.md). */
-function Ueberschreitungshinweis({
-  mengeInHundertsteln,
-  angebotPositionId,
-}: {
-  readonly mengeInHundertsteln: number;
-  readonly angebotPositionId: number;
-}) {
-  return (
-    <Box
-      component="span"
-      data-testid={`zeile-hinweis-${String(angebotPositionId)}`}
-      sx={(theme) => ({
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: '4px',
-        color: theme.vars.palette.kupferwolke.toenung.bernstein.schrift,
-      })}
-    >
-      <IconAlertTriangle size={SYMBOL_HINWEIS} stroke={1.8} aria-hidden />
-      {`${dezimal(mengeInHundertsteln, ',')} über dem Angebot`}
-    </Box>
-  );
 }
 
 /** Eine Zahl in der Tafel: rechts, in Tabellenziffern, ohne Umbruch. */

@@ -725,6 +725,27 @@ describe('AngebotMaske — was nicht geht', () => {
     expect(await screen.findByText('Das Datum darf nicht fehlen.')).toBeInTheDocument();
   });
 
+  it('zeigt die Meldung zu einer berechneten Position und laesst die Eingaben stehen', async () => {
+    const nutzer = userEvent.setup();
+    const gebunden =
+      'Die Position „Konzeption“ steht in einer Rechnung: Sie muss erhalten bleiben, und ihre' +
+      ' Einheit und ihre Abrechnungsart bleiben, wie sie sind.';
+    lesen(ANGEBOT, {
+      'PUT /api/angebote/9': problem(422, gebunden, { positionen: [gebunden] }),
+    });
+
+    renderMaske('/angebote/9/bearbeiten');
+    await bereit();
+    await nutzer.clear(gruppe(1).getByRole('textbox', { name: 'Menge' }));
+    await nutzer.type(gruppe(1).getByRole('textbox', { name: 'Menge' }), '3,00');
+    await nutzer.click(screen.getByRole('button', { name: 'Speichern' }));
+
+    expect(await screen.findByText(gebunden)).toBeInTheDocument();
+    // Die Eingaben bleiben stehen: Was abgewiesen wurde, ist nicht verloren.
+    expect(gruppe(1).getByRole('textbox', { name: 'Menge' })).toHaveValue('3,00');
+    expect(gruppe(1).getByRole('textbox', { name: 'Bezeichnung' })).toHaveValue('Konzeption');
+  });
+
   it('meldet den Ausfall beim Speichern', async () => {
     const nutzer = userEvent.setup();
     lesen(ANGEBOT, { 'PUT /api/angebote/9': leer(500) });
