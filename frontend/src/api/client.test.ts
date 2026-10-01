@@ -204,7 +204,9 @@ describe('apiBlob', () => {
 
     const blob = await apiBlob('/api/angebote/9/anlagen/3/inhalt', { methode: 'GET' });
 
-    expect(blob).toBeInstanceOf(Blob);
+    // Geprueft werden Art und Inhalt, nicht die Klasse: Darauf verlaesst sich der Aufrufer,
+    // waehrend `instanceof` an der Testumgebung haengt (Issue #191).
+    expect(blob.type).toBe('application/pdf');
     await expect(blobText(blob)).resolves.toBe('inhalt');
   });
 
