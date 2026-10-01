@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { ApiError } from '../api/client';
-import { feldMeldungen, nichtGefunden } from './apifehler';
+import { feldMeldungen, nichtGefunden, serverMeldung } from './apifehler';
 
 describe('nichtGefunden', () => {
   it('erkennt die Antwort mit Status 404', () => {
@@ -25,5 +25,16 @@ describe('feldMeldungen', () => {
 
   it('gibt nichts zurueck, wo der Fehlschlag keine Antwort traegt', () => {
     expect(feldMeldungen(new TypeError('Netz weg'))).toEqual({});
+  });
+});
+
+describe('serverMeldung', () => {
+  it('reicht die Meldung der Antwort durch', () => {
+    const fehler = new ApiError(409, 'Der Zustand passt nicht.', {});
+    expect(serverMeldung(fehler, 'Ersatz')).toBe('Der Zustand passt nicht.');
+  });
+
+  it('nimmt den Ersatz, wo gar keine Antwort ankam', () => {
+    expect(serverMeldung(new TypeError('Netz weg'), 'Ersatz')).toBe('Ersatz');
   });
 });

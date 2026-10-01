@@ -19,3 +19,19 @@ export function nichtGefunden(ursache: unknown): boolean {
 export function feldMeldungen(ursache: unknown): FieldErrors {
   return ursache instanceof ApiError ? ursache.fieldErrors : {};
 }
+
+/**
+ * Die Meldung des Servers zu einem Fehlschlag, oder der eigene Ersatztext.
+ *
+ * Gedacht fuer die fachliche Abweisung, deren Grund nur der Server kennt — eine Rechnung, die sich
+ * im Zustand des Augenblicks nicht stellen laesst (409). Dort waere ein eigener Satz der Ansicht
+ * eine zweite, aermere Auskunft neben der vorhandenen.
+ *
+ * Der Ersatz greift, wo gar keine Antwort ankam: Ein abgebrochenes Netz traegt keine Meldung, und
+ * die Ansicht soll dann ihren eigenen Satz zeigen statt den einer Ausnahme aus dem Programm. Was
+ * der Server selbst nicht sagen will, sagt er auch nicht — unerwartete Fehler kommen durchgaengig
+ * als ein Satz ohne Innenleben heraus (`GlobalExceptionHandler`).
+ */
+export function serverMeldung(ursache: unknown, ersatz: string): string {
+  return ursache instanceof ApiError ? ursache.message : ersatz;
+}

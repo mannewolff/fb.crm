@@ -9,12 +9,12 @@ import { alsJson, fetchNachPfad, json, leer, problem } from '../test/fetchNachPf
 import { renderMitTheme } from '../test/render';
 
 /**
- * Die Entwurfsmaske der Rechnung (Issue #185).
+ * Die Entwurfsmaske der Rechnung (Issue #185), das Stellen und die gestellte Rechnung (Issue #186).
  *
  * Die Proben gehen den Weg des Freiberuflers: Er oeffnet den Entwurf, traegt an einer Position eine
- * Menge ein, sieht Betrag und Summen mitlaufen, speichert — und loescht den Entwurf, wenn er ihn
- * nicht braucht. Geprueft wird dabei zweierlei, was sich mit einem Blick auf die Seite nicht
- * unterscheiden laesst: <b>was dasteht</b> und <b>was hinausgeht</b>.
+ * Menge ein, sieht Betrag und Summen mitlaufen, speichert — und stellt die Rechnung, oder loescht
+ * den Entwurf, wenn er ihn nicht braucht. Geprueft wird dabei zweierlei, was sich mit einem Blick
+ * auf die Seite nicht unterscheiden laesst: <b>was dasteht</b> und <b>was hinausgeht</b>.
  *
  * Die Mengen und Betraege der Proben sind die des Akzeptanzkriteriums: 160 Stunden zu 120,00
  * angeboten, davon 80 abgerechnet — 9.600,00 netto, 1.824,00 Steuer, 11.424,00 brutto.
@@ -23,6 +23,7 @@ import { renderMitTheme } from '../test/render';
 const WEG = 'GET /api/rechnungen/4';
 const WEG_AENDERN = 'PUT /api/rechnungen/4';
 const WEG_LOESCHEN = 'DELETE /api/rechnungen/4';
+const WEG_STELLEN = 'POST /api/rechnungen/4/stellen';
 
 /** Eine Position mit 160 angebotenen Stunden zu 120,00, noch nichts abgerechnet. */
 const ZEILE_STUNDEN = {
@@ -163,6 +164,27 @@ function haltenderWeg(): {
 async function waehle(nutzer: ReturnType<typeof userEvent.setup>, eintrag: string) {
   await nutzer.click(screen.getByRole('button', { name: 'Aktionen für diese Rechnung' }));
   await nutzer.click(await screen.findByRole('menuitem', { name: eintrag }));
+}
+
+/** Die Taste „Rechnung stellen" der Seite — nicht die gleichnamige in der Rueckfrage. */
+function stellenTaste(): HTMLElement {
+  return within(screen.getByTestId('rechnung-aktionen')).getByRole('button', {
+    name: 'Rechnung stellen',
+  });
+}
+
+/** Oeffnet die Rueckfrage vor dem Stellen und gibt sie heraus. */
+async function frageOeffnen(
+  nutzer: ReturnType<typeof userEvent.setup>,
+): Promise<HTMLElement> {
+  await nutzer.click(stellenTaste());
+  return screen.findByRole('dialog');
+}
+
+/** Oeffnet die Rueckfrage und bestaetigt sie. */
+async function stelle(nutzer: ReturnType<typeof userEvent.setup>) {
+  const frage = await frageOeffnen(nutzer);
+  await nutzer.click(within(frage).getByRole('button', { name: 'Rechnung stellen' }));
 }
 
 afterEach(() => {
@@ -369,7 +391,8 @@ describe('RechnungPage — die Maske des Entwurfs (Kriterien 4, 6 bis 8)', () =>
     renderSeite();
     await screen.findByRole('table', { name: 'Positionen' });
 
-    expect(kupfertasten().map((taste) => taste.textContent)).toEqual(['Speichern']);
+    // „Rechnung stellen" ist die Hauptaktion des Entwurfs; „Speichern" tritt daneben zurueck.
+    expect(kupfertasten().map((taste) => taste.textContent)).toEqual(['Rechnung stellen']);
   });
 });
 
@@ -532,8 +555,216 @@ describe('RechnungPage — den Entwurf loeschen (Kriterium 12)', () => {
   });
 });
 
-describe('RechnungPage — die gestellte Rechnung in diesem Stand (Issue #186 folgt)', () => {
-  it('nennt sie mit ihrer Nummer und zeigt keine Eingabefelder', async () => {
+describe('RechnungPage — die Rechnung stellen (Kriterien 5 und 13, Issue #186)', () => {
+  it('fragt vor dem Stellen nach und nennt den Bruttobetrag', async () => {
+    const nutzer = userEvent.setup();
+    fetchNachPfad({ [WEG]: json(200, GESPEICHERT) });
+
+    renderSeite();
+    await screen.findByRole('table', { name: 'Positionen' });
+    const frage = await frageOeffnen(nutzer);
+
+    expect(frage).toHaveAccessibleName('Rechnung stellen');
+    expect(frage).toHaveTextContent('11.424,00 €');
+    expect(frage).toHaveTextContent('weder geändert noch gelöscht');
+  });
+
+  it('stellt nicht, wenn die Rueckfrage abgebrochen wird, und gibt den Fokus zurueck', async () => {
+    const nutzer = userEvent.setup();
+    const fetchMock = fetchNachPfad({ [WEG]: json(200, GESPEICHERT) });
+
+    renderSeite();
+    await screen.findByRole('table', { name: 'Positionen' });
+    const frage = await frageOeffnen(nutzer);
+    await nutzer.click(within(frage).getByRole('button', { name: 'Abbrechen' }));
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(stellenTaste()).toHaveFocus();
+  });
+
+  it('stellt nicht, wenn die Rueckfrage mit Escape geschlossen wird', async () => {
+    const nutzer = userEvent.setup();
+    const fetchMock = fetchNachPfad({ [WEG]: json(200, GESPEICHERT) });
+
+    renderSeite();
+    await screen.findByRole('table', { name: 'Positionen' });
+    await frageOeffnen(nutzer);
+    await nutzer.keyboard('{Escape}');
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(stellenTaste()).toHaveFocus();
+  });
+
+  it('zeigt nach der Bestaetigung die gestellte Rechnung mit ihrer Nummer', async () => {
+    const nutzer = userEvent.setup();
+    fetchNachPfad({ [WEG]: json(200, GESPEICHERT), [WEG_STELLEN]: json(200, GESTELLT) });
+
+    renderSeite();
+    await screen.findByRole('table', { name: 'Positionen' });
+    await stelle(nutzer);
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Rechnung 0001-2026' }),
+    ).toBeInTheDocument();
+  });
+
+  it('schickt ungespeicherte Aenderungen vor dem Stellen hinaus', async () => {
+    const nutzer = userEvent.setup();
+    const reihenfolge: string[] = [];
+    let gesendet: unknown;
+    fetchNachPfad({
+      [WEG]: json(200, ENTWURF),
+      [WEG_AENDERN]: (rumpf) => {
+        gesendet = alsJson(rumpf);
+        reihenfolge.push('PUT');
+        return json(200, GESPEICHERT)();
+      },
+      [WEG_STELLEN]: () => {
+        reihenfolge.push('POST');
+        return json(200, GESTELLT)();
+      },
+    });
+
+    renderSeite();
+    await screen.findByRole('table', { name: 'Positionen' });
+    await trageEin(nutzer, 1, '80');
+    await stelle(nutzer);
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Rechnung 0001-2026' }),
+    ).toBeInTheDocument();
+    expect(reihenfolge).toEqual(['PUT', 'POST']);
+    expect(gesendet).toEqual({
+      rechnungDatum: '2026-10-01',
+      leistungszeitraum: 'Oktober 2026',
+      positionen: [
+        { angebotPositionId: 11, bezeichnung: 'Entwicklung', menge: '80.00' },
+        { angebotPositionId: 12, bezeichnung: 'Konzept', menge: '0.00' },
+      ],
+    });
+  });
+
+  it('stellt nicht, wenn das Speichern davor scheitert', async () => {
+    const nutzer = userEvent.setup();
+    const fetchMock = fetchNachPfad({
+      [WEG]: json(200, ENTWURF),
+      [WEG_AENDERN]: problem(503, 'kaputt'),
+    });
+
+    renderSeite();
+    await screen.findByRole('table', { name: 'Positionen' });
+    await trageEin(nutzer, 1, '80');
+    await nutzer.click(stellenTaste());
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Die Rechnung wurde nicht gespeichert.',
+    );
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    // Nur das Lesen und das gescheiterte Speichern — kein Stellen.
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('zeigt bei 422 die fehlenden Angaben mit den zwei Verweisen', async () => {
+    const nutzer = userEvent.setup();
+    fetchNachPfad({
+      [WEG]: json(200, GESPEICHERT),
+      [WEG_STELLEN]: problem(422, 'Fuer das Stellen fehlen Pflichtangaben.', {
+        strasse: ['Diese Angabe ist fuer eine Rechnung noetig.'],
+        'firma.ort': ['Diese Angabe ist fuer eine Rechnung noetig.'],
+        zukunft: ['Etwas Neues fehlt.'],
+      }),
+    });
+
+    renderSeite();
+    await screen.findByRole('table', { name: 'Positionen' });
+    await stelle(nutzer);
+    const hinweis = await screen.findByTestId('rechnung-pflichtangaben');
+
+    expect(within(hinweis).getByText(/^Straße und Hausnummer —/u)).toBeInTheDocument();
+    expect(within(hinweis).getByText(/^Ort der Firma —/u)).toBeInTheDocument();
+    // Ein Feld, das diese Oberflaeche nicht kennt, steht mit seinem Namen da statt zu fehlen.
+    expect(within(hinweis).getByText('zukunft — Etwas Neues fehlt.')).toBeInTheDocument();
+    expect(within(hinweis).getByRole('link', { name: 'Eigene Angaben' })).toHaveAttribute(
+      'href',
+      '/eigene-angaben',
+    );
+    expect(within(hinweis).getByRole('link', { name: 'Adler AG' })).toHaveAttribute(
+      'href',
+      '/firmen/5',
+    );
+  });
+
+  it('zeigt bei 409 die Meldung des Servers', async () => {
+    const nutzer = userEvent.setup();
+    fetchNachPfad({
+      [WEG]: json(200, GESPEICHERT),
+      [WEG_STELLEN]: problem(409, 'Der Zustand der Rechnung lässt diesen Schritt nicht zu.'),
+    });
+
+    renderSeite();
+    await screen.findByRole('table', { name: 'Positionen' });
+    await stelle(nutzer);
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Der Zustand der Rechnung lässt diesen Schritt nicht zu.',
+    );
+  });
+
+  it('meldet einen Ausfall des Weges beim Stellen', async () => {
+    const nutzer = userEvent.setup();
+    fetchNachPfad({
+      [WEG]: json(200, GESPEICHERT),
+      [WEG_STELLEN]: () => Promise.reject(new Error('Leitung weg')),
+    });
+
+    renderSeite();
+    await screen.findByRole('table', { name: 'Positionen' });
+    await stelle(nutzer);
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Die Rechnung wurde nicht gestellt.');
+  });
+
+  it('sperrt das Stellen ohne Position mit einer Menge ueber 0 und sagt warum', async () => {
+    const nutzer = userEvent.setup();
+    fetchNachPfad({ [WEG]: json(200, ENTWURF) });
+
+    renderSeite();
+    await screen.findByRole('table', { name: 'Positionen' });
+
+    expect(stellenTaste()).toBeDisabled();
+    expect(screen.getByTestId('stellen-grund')).toHaveTextContent(
+      'Ohne eine Position mit einer Menge über 0',
+    );
+
+    await trageEin(nutzer, 1, '80');
+
+    expect(stellenTaste()).toBeEnabled();
+    expect(screen.queryByTestId('stellen-grund')).not.toBeInTheDocument();
+  });
+
+  it('sperrt die Tasten, solange das Stellen laeuft', async () => {
+    const nutzer = userEvent.setup();
+    const haltend = haltenderWeg();
+    fetchNachPfad({ [WEG]: json(200, GESPEICHERT), [WEG_STELLEN]: haltend.weg });
+
+    renderSeite();
+    await screen.findByRole('table', { name: 'Positionen' });
+    await stelle(nutzer);
+
+    expect(stellenTaste()).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Speichern' })).toBeDisabled();
+
+    haltend.freigeben(json(200, GESTELLT));
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Rechnung 0001-2026' }),
+    ).toBeInTheDocument();
+  });
+});
+
+describe('RechnungPage — die gestellte Rechnung (Kriterien 14, 15 und 24)', () => {
+  it('nennt sie mit ihrer Nummer und zeigt Datum, Zeitraum, Steuersatz und Zahlungsziel', async () => {
     fetchNachPfad({ [WEG]: json(200, GESTELLT) });
 
     renderSeite();
@@ -541,14 +772,68 @@ describe('RechnungPage — die gestellte Rechnung in diesem Stand (Issue #186 fo
     expect(
       await screen.findByRole('heading', { level: 1, name: 'Rechnung 0001-2026' }),
     ).toBeInTheDocument();
-    expect(await screen.findByRole('status')).toHaveTextContent(
-      'Die Ansicht der gestellten Rechnung folgt.',
-    );
+    const stammdaten = screen.getByTestId('rechnung-stammdaten');
+    expect(stammdaten).toHaveTextContent('01.10.2026');
+    expect(stammdaten).toHaveTextContent('Oktober 2026');
+    expect(stammdaten).toHaveTextContent('19,00 %');
+    expect(stammdaten).toHaveTextContent('14 Tage');
+  });
+
+  it('zeigt nur die abgerechneten Positionen mit Anzahl, Einheit, Text und Preisen', async () => {
+    fetchNachPfad({ [WEG]: json(200, GESTELLT) });
+
+    renderSeite();
+    const tafel = await screen.findByRole('table', { name: 'Positionen' });
+    const zeilen = within(tafel).getAllByRole('row');
+
+    // Kopfzeile und genau eine Position: „Konzept" traegt die Menge 0 und gehoert nicht dazu.
+    expect(zeilen).toHaveLength(2);
+    expect(zeilen[1]).toHaveTextContent('80,00');
+    expect(zeilen[1]).toHaveTextContent('Stunde');
+    expect(zeilen[1]).toHaveTextContent('Entwicklung');
+    expect(zeilen[1]).toHaveTextContent('120,00 €');
+    expect(zeilen[1]).toHaveTextContent('9.600,00 €');
+    expect(screen.getByTestId('rechnung-netto')).toHaveTextContent('9.600,00 €');
+    expect(screen.getByTestId('rechnung-steuer')).toHaveTextContent('1.824,00 €');
+    expect(screen.getByTestId('rechnung-steuer')).toHaveTextContent('19,00 %');
+    expect(screen.getByTestId('rechnung-brutto')).toHaveTextContent('11.424,00 €');
+  });
+
+  it('bietet genau eine Kupfertaste „Herunterladen" auf das Dokument', async () => {
+    fetchNachPfad({ [WEG]: json(200, GESTELLT) });
+
+    renderSeite();
+    const verweis = await screen.findByRole('link', { name: 'Herunterladen' });
+
+    expect(verweis).toHaveAttribute('href', '/api/rechnungen/4/dokument');
+    expect(verweis).toHaveAttribute('download');
+    expect(kupfertasten().map((taste) => taste.textContent)).toEqual(['Herunterladen']);
+  });
+
+  it('zeigt keine Eingabefelder, kein Speichern und kein Loeschen', async () => {
+    fetchNachPfad({ [WEG]: json(200, GESTELLT) });
+
+    renderSeite();
+    await screen.findByRole('table', { name: 'Positionen' });
+
     expect(screen.queryAllByRole('textbox')).toEqual([]);
     expect(screen.queryByRole('button', { name: 'Speichern' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Rechnung stellen' })).not.toBeInTheDocument();
     expect(
       screen.queryByRole('button', { name: 'Aktionen für diese Rechnung' }),
     ).not.toBeInTheDocument();
-    expect(kupfertasten()).toEqual([]);
+  });
+
+  it('nennt fehlenden Zeitraum und fehlendes Zahlungsziel als Wort', async () => {
+    fetchNachPfad({
+      [WEG]: json(200, { ...GESTELLT, leistungszeitraum: null, zahlungszielTage: null }),
+    });
+
+    renderSeite();
+    await screen.findByRole('table', { name: 'Positionen' });
+    const stammdaten = screen.getByTestId('rechnung-stammdaten');
+
+    expect(stammdaten).toHaveTextContent('nicht angegeben');
+    expect(stammdaten).toHaveTextContent('nicht festgelegt');
   });
 });

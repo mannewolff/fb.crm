@@ -35,8 +35,16 @@ export interface KupferTasteProps {
   readonly symbol?: ReactNode;
 }
 
-/** Die Gestalt der Kupfertaste, geteilt von beiden Varianten. */
-function kupferSx(theme: Theme) {
+/**
+ * Die Gestalt der Kupfertaste, geteilt von beiden Varianten.
+ *
+ * Sie ist ausgewiesen, aus demselben Grund wie {@link weichSx}: Eine dritte Stelle braucht dieselbe
+ * Pille, die diese Komponente nicht bauen kann — das „Herunterladen" der gestellten Rechnung ist
+ * ein `<a download>` auf einen Weg der Schnittstelle, kein Router-Link und kein Schalter
+ * (Issue #186). Eine Abschrift der Gestalt dort liefe beim naechsten Nachziehen der Vorlage
+ * auseinander.
+ */
+export function kupferSx(theme: Theme) {
   return {
     borderRadius: `${RADIUS_RUND}px`,
     padding: '11px 20px',
