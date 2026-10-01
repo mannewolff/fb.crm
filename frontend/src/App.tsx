@@ -18,6 +18,7 @@ const AnsprechpartnerMaske = lazy(async () => import('./pages/AnsprechpartnerMas
 const AngebotMaske = lazy(async () => import('./pages/AngebotMaske'));
 const AngebotePage = lazy(async () => import('./pages/AngebotePage'));
 const AngebotPage = lazy(async () => import('./pages/AngebotPage'));
+const ArbeitszeitPage = lazy(async () => import('./pages/ArbeitszeitPage'));
 const RechnungenPage = lazy(async () => import('./pages/RechnungenPage'));
 const RechnungPage = lazy(async () => import('./pages/RechnungPage'));
 const EigeneAngabenMaske = lazy(async () => import('./pages/EigeneAngabenMaske'));
@@ -35,7 +36,8 @@ const AdministrationPage = lazy(async () => import('./pages/AdministrationPage')
  * `/angebote/:angebotId` — es braucht seine Firma nicht in der Adresse, denn es kennt sie
  * selbst (Issue #126). Dasselbe gilt fuer die Rechnung: Sie entsteht an ihrem Angebot und steht
  * danach unter `/rechnungen/:rechnungId`, die Liste aller Rechnungen unter `/rechnungen`
- * (Issue #184).
+ * (Issue #184). Die Arbeitszeit steht quer dazu unter `/arbeitszeit` — sie haengt an keinem
+ * einzelnen Angebot, sondern zeigt einen Monat ueber alle (Issue #193).
  *
  * Die unbekannte Adresse bekommt keine eigene Ansicht: Mit Sitzung fuehrt sie auf die
  * Startadresse, ohne Sitzung uebernimmt {@link ProtectedRoute} und fuehrt auf die
@@ -65,6 +67,9 @@ export default function App() {
             <Route path="/angebote" element={<AngebotePage />} />
             <Route path="/angebote/:angebotId" element={<AngebotPage />} />
             <Route path="/angebote/:angebotId/bearbeiten" element={<AngebotMaske />} />
+            {/* Die Arbeitszeit traegt ihren Monat als Parameter (`?monat=`) und nicht im Pfad:
+                Er filtert eine Ansicht, er benennt kein eigenes Objekt (Plan #194, A13). */}
+            <Route path="/arbeitszeit" element={<ArbeitszeitPage />} />
             <Route path="/rechnungen" element={<RechnungenPage />} />
             <Route path="/rechnungen/:rechnungId" element={<RechnungPage />} />
             <Route path="/firmen" element={<FirmenPage />} />

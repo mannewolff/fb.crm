@@ -63,15 +63,17 @@ describe('navItems (E15, E18)', () => {
     ]);
   });
 
-  it('fuehrt „Geschäft" mit Angeboten und Rechnungen oberhalb von „Stammdaten" (Issue #184)', () => {
+  it('fuehrt „Geschäft" mit Angeboten, Arbeitszeit und Rechnungen oberhalb von „Stammdaten"', () => {
     expect(
       NAV_BLOECKE.map((block) => [block.titel, block.eintraege.map((e) => [e.beschriftung, e.ziel])]),
     ).toEqual([
-      // „Rechnungen" steht unter „Angebote" — die Reihenfolge der Kette (Issue #184).
+      // Die Reihenfolge der Kette (Issue #184): „Arbeitszeit" liegt zwischen Bestellung und
+      // Rechnung (Plan #194, A13).
       [
         'Geschäft',
         [
           ['Angebote', '/angebote'],
+          ['Arbeitszeit', '/arbeitszeit'],
           ['Rechnungen', '/rechnungen'],
         ],
       ],
@@ -124,11 +126,13 @@ describe('NavRail', () => {
     ]);
     expect(bloecke.getAllByRole('link').map((link) => link.getAttribute('href'))).toEqual([
       '/angebote',
+      '/arbeitszeit',
       '/rechnungen',
       '/firmen',
       '/eigene-angaben',
     ]);
     expect(bloecke.getByRole('link', { name: 'Angebote' })).toBeInTheDocument();
+    expect(bloecke.getByRole('link', { name: 'Arbeitszeit' })).toBeInTheDocument();
     expect(bloecke.getByRole('link', { name: 'Rechnungen' })).toBeInTheDocument();
     expect(bloecke.getByRole('link', { name: 'Firmen' })).toBeInTheDocument();
     expect(bloecke.getByRole('link', { name: 'Eigene Angaben' })).toBeInTheDocument();
@@ -197,6 +201,7 @@ describe('NavRail', () => {
     ['/angebote', 'Angebote'],
     // Auch die Ansicht eines Angebots laesst „Angebote" aktiv stehen.
     ['/angebote/9', 'Angebote'],
+    ['/arbeitszeit', 'Arbeitszeit'],
     ['/rechnungen', 'Rechnungen'],
     // Und die Ansicht einer Rechnung laesst „Rechnungen" aktiv stehen (Issue #184).
     ['/rechnungen/4', 'Rechnungen'],

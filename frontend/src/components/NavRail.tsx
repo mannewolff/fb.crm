@@ -3,6 +3,7 @@ import Typography from '@mui/material/Typography';
 import {
   IconBook,
   IconBuildingCommunity,
+  IconClock,
   IconFileDescription,
   IconFileInvoice,
   IconId,
@@ -51,6 +52,7 @@ const BREITE_EINGEKLAPPT = 76;
 /** Die Symbole der Vorlage — dieselbe Familie, dieselben Namen (E3). */
 const SYMBOLE: Readonly<Record<Symbolname, TablerIcon>> = {
   'file-description': IconFileDescription,
+  clock: IconClock,
   'file-invoice': IconFileInvoice,
   'building-community': IconBuildingCommunity,
   id: IconId,
