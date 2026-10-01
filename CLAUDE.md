@@ -30,9 +30,11 @@ Diese Datei ist der Einstiegspunkt für alle Engineering-Regeln in diesem Projek
 
 ## 🌐 Projektkontext
 
-**Ziel:** **fb.crm** — ein self-hostbares Mini-CRM für Freiberufler nach [`mini-crm-spezifikation.pdf`](mini-crm-spezifikation.pdf). Es bildet die Kette von der ersten Anfrage bis zum Zahlungseingang an einer Stelle ab: Anfrage, Angebot, Auftrag, Rechnung, Zahlung. Klammer darüber ist der **Vorgang** — er trägt die durchgehende Historie aus Kommentaren, eingefügten Nachrichten und Anhängen, während Angebot, Auftrag und Rechnung eigenständige Dokumente mit eigenem Lebenszyklus sind (Spezifikation R2, Kapitel 03). Dazu Zeiterfassung gegen Auftragspositionen mit Budgetüberwachung, Angebot/Rechnung/Leistungsnachweis als PDF mit Nummernkreis und Festschreibung, Fälligkeits- und Zahlungsüberwachung sowie die Auswertungen Pipeline, Auftragsbestand und Umsatz. UI im Stil eines Dashboards: linke Navigation, rechter Inhaltsbereich.
+**Ziel:** **fb.crm** — ein self-hostbares Mini-CRM für Freiberufler nach [`mini-crm-spezifikation.pdf`](mini-crm-spezifikation.pdf). Seit dem Rückschnitt vom 2026-09-30 ist die Kette kurz: **Kunde** (Firma mit Ansprechpartnern) → **Angebot** (Positionen, Status, Kommentare, Anlagen) → **Rechnung** (Teilabrechnung gegen die Angebotspositionen, Nummernkreis, Festschreibung beim Stellen, PDF nach Vorlage). Auftrag, Vorgang und Pipeline aus der Spezifikation sind bewusst entfallen. Was die Spezifikation darüber hinaus beschreibt (etwa Zeiterfassung, Zahlungseingang, Auswertungen), entsteht nur über eine eigene Idee. UI im Stil eines Dashboards: linke Navigation, rechter Inhaltsbereich.
 
-**Nicht im Umfang** (Kapitel 01 der Spezifikation): Buchhaltung, Umsatzsteuervoranmeldung und Steuererklärung; Kalender, Aufgabenverwaltung und Terminplanung; automatischer Abgleich von Kontoumsätzen (Zahlungseingänge werden manuell erfasst). **Eine bewusste Ausnahme:** Mehrbenutzerbetrieb, Rollen und Rechte schließt die Spezifikation aus — die Anwendung bringt sie trotzdem mit, in der Form unten unter *Identity / Auth* (Entscheidung Manne, 2026-09-17).
+**Betriebsform: ein Rechner, ein Mandant, eine Person.** fb.crm hat genau ein Konto. Es gibt keinen Mehrbenutzerbetrieb, keine Mandanten und keine Rollen mit unterschiedlichen Rechten, und die Anwendung schützt sich nicht gegen gleichzeitiges Bearbeiten desselben Datensatzes (Entscheidung Manne, 2026-10-01, Idee #139). Technisch Zwingendes bleibt: Der Nummernkreis der Rechnung vergibt mit Zeilensperre keine Nummer doppelt.
+
+**Nicht im Umfang** (Kapitel 01 der Spezifikation): Buchhaltung, Umsatzsteuervoranmeldung und Steuererklärung; Kalender, Aufgabenverwaltung und Terminplanung; automatischer Abgleich von Kontoumsätzen; Mehrbenutzerbetrieb, Rollen und Rechte (siehe *Betriebsform*).
 
 **Stack:**
 
@@ -42,7 +44,7 @@ Diese Datei ist der Einstiegspunkt für alle Engineering-Regeln in diesem Projek
 | Backend-Framework | Spring Boot 3.5, Spring Data JPA, Spring Web |
 | Build (Backend) | Maven (inkl. `frontend-maven-plugin` für den Vite-Build) |
 | Datenbank | PostgreSQL 16 |
-| Objektspeicher | MinIO (S3-kompatibel) für Anhänge an Vorgängen und archivierte Dokumente (Angebot, Rechnung, Leistungsnachweis — Spezifikation R10) |
+| Objektspeicher | MinIO (S3-kompatibel) für Anlagen am Angebot und archivierte Rechnungsdokumente (Spezifikation R10) |
 | Schema-Migrationen | Flyway (`db/migration/V<n>__…sql`) |
 | Test (Backend) | JUnit 5, AssertJ, Mockito, Testcontainers, ArchUnit, PIT |
 | Frontend-Sprache | TypeScript (`strict: true`) |
@@ -56,7 +58,7 @@ Diese Datei ist der Einstiegspunkt für alle Engineering-Regeln in diesem Projek
 
 **Verbindung Frontend↔Backend:** Im Dev leitet der Vite-Dev-Server (`:5173`) `/api/*` an Spring Boot auf `:8080` weiter. In Produktion serviert Spring Boot den React-Build aus `classpath:/static/` (SPA-Forwarding über eine eigene Web-Konfiguration in `config/`); davor liegt Caddy als Reverse-Proxy mit TLS. Eine Origin, kein CORS.
 
-**Identity / Auth:** Authentifizierung ist projekteigen — kein externer Identity-Provider. Registrierung mit E-Mail-Verifikation, Passwort-Reset per Einmal-Token/Mail, ein per Bootstrap-Token angelegter erster Plattform-Admin, sowie signierte, zustandslose Session-Tokens (HttpOnly-Cookie) mit kontogebundener Sitzungs-Generation; Passwörter mit Argon2id. Autorisierung ist rollenbasiert: **Plattform-Admin** plus weitere Rollen. Welche Rollen es gibt und worauf sie wirken, entsteht mit dem ersten Fachplan, der Rechte berührt — fb.crm kennt keine Projekt-Klammer, an der Rollen hängen könnten. Regeln dazu: [CLAUDE-security.md](CLAUDE-security.md).
+**Identity / Auth:** Authentifizierung ist projekteigen — kein externer Identity-Provider. Das eine Konto entsteht einmalig per Bootstrap-Token (Einrichtung), danach gibt es Anmelden, Abmelden und Passwort-Reset per Einmal-Token/Mail, sowie signierte, zustandslose Session-Tokens (HttpOnly-Cookie) mit kontogebundener Sitzungs-Generation; Passwörter mit Argon2id. Eine Registrierung gibt es nicht. Das Konto trägt die Rolle `ADMIN` (`auth.domain.Role`, einziger Wert); weitere Rollen sind nicht vorgesehen (*Betriebsform*). Regeln dazu: [CLAUDE-security.md](CLAUDE-security.md).
 
 ---
 
@@ -77,12 +79,11 @@ Das Folgende ist die **Soll-Struktur**. Sie steht hier, damit jedes Arbeitspaket
 ├── .claude/workflow.config.json        # issueTracker: toolbox — Issues auf dem Board (node .claude/kit/board.mjs)
 ├── src/main/java/org/mwolff/fbcrm/     # Backend (je Modul: domain/application/web/infrastructure)
 │   ├── FbCrmApplication.java
-│   ├── auth/                           # Registrierung, Login, Session, Passwort-Reset, Bootstrap-Admin
+│   ├── auth/                           # Einrichtung des Kontos, Login, Session, Passwort-Reset
 │   ├── config/                         # SPA-Forwarding und sonstiges Wiring
 │   ├── common/                         # SecureTokens, gemeinsame Token-Utilities
-│   └── …                               # fachliche Module (Vorgang, Angebot, Auftrag, Zeit,
-│                                       #   Rechnung, Zahlung, …) — Schnitt und Namen entstehen
-│                                       #   mit den Plänen, nicht hier
+│   └── …                               # fachliche Module (firma, angebot, rechnung,
+│                                       #   eigeneangaben, …) — weitere entstehen mit den Plänen
 ├── src/main/resources/                 # application.yml + Flyway-Migrationen
 │   └── db/migration/                   # V1__baseline.sql … (Flyway-Konvention, Postgres)
 ├── src/test/java/org/mwolff/fbcrm/     # Tests (*Test = Unit/Slice, *IT = Testcontainers-Integration)
@@ -145,7 +146,7 @@ Keine kurzfristige Bequemlichkeit rechtfertigt unsicheren, untypisierten oder sc
 
 ---
 
-**TL;DR:** fb.crm ist ein Mini-CRM für Freiberufler — Anfrage bis Zahlungseingang, der Vorgang als Klammer. Java 25 + Spring Boot 3 (TDD-pflichtig, 100 % Coverage) auf PostgreSQL 16 + MinIO. React 18 + TypeScript strict + MUI im Erscheinungsbild „Kupferwolke". Eigenes Session-Auth, rollenbasierte Rechte. Sicherheit > Korrektheit > Komfort. Vor jedem Push: `mvn verify` und `npm run build`/`lint`/`test` grün. Plan-Mode und Board-Issues sind verbindlich (siehe Workflow).
+**TL;DR:** fb.crm ist ein Mini-CRM für Freiberufler — Kunde, Angebot, Rechnung; ein Rechner, ein Mandant, eine Person. Java 25 + Spring Boot 3 (TDD-pflichtig, 100 % Coverage) auf PostgreSQL 16 + MinIO. React 18 + TypeScript strict + MUI im Erscheinungsbild „Kupferwolke". Eigenes Session-Auth mit genau einem Konto. Sicherheit > Korrektheit > Komfort. Vor jedem Push: `mvn verify` und `npm run build`/`lint`/`test` grün. Plan-Mode und Board-Issues sind verbindlich (siehe Workflow).
 
 ## Gedächtnis (Obsidian-Vault)
 
