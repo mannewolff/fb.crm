@@ -60,6 +60,23 @@ public class Arbeitszeitauskunft {
     return zeiten.stundenJePositionImMonat(positionen(angebotId), monat);
   }
 
+  /**
+   * Die insgesamt erfassten Stunden je Position des Angebots (Issue #193, Kriterium 7).
+   *
+   * <p>Ueber alle Monate: Das ist die Spalte „Angefallen" am Angebot, die auch nach dem Sprung auf
+   * „abgerechnet" stehen bleibt (Kriterium 8). Welche Position Stunden tragen darf, entscheidet der
+   * Leser an {@link Buchbarkeit} — eine nicht buchbare Position steht mit {@code 0.00} darin.
+   *
+   * @param angebotId Kennung des Angebots
+   * @return je Position des Angebots ihre insgesamt erfassten Stunden; eine Position ohne Eintrag
+   *     steht mit {@code 0.00} darin, keine fehlt
+   * @throws AngebotNichtGefunden wenn es das Angebot nicht gibt — ohne seine Positionen ist nicht
+   *     bekannt, nach welchen Stunden zu fragen waere
+   */
+  public Map<Long, BigDecimal> angefallen(final long angebotId) {
+    return zeiten.angefallenJePosition(positionen(angebotId));
+  }
+
   private Set<Long> positionen(final long angebotId) {
     final Angebot angebot = angebote.findById(angebotId).orElseThrow(AngebotNichtGefunden::new);
     return angebot.positionen().stream()

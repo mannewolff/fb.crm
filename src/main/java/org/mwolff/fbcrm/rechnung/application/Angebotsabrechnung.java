@@ -1,22 +1,29 @@
 package org.mwolff.fbcrm.rechnung.application;
 
 import java.util.List;
-import org.mwolff.fbcrm.rechnung.domain.Abrechnungsstand;
 
 /**
- * Der Abrechnungsstand eines Angebots samt seinen Rechnungen (#160, Kriterium 26).
+ * Der Abrechnungsstand eines Angebots samt seinen Rechnungen (#160, Kriterium 26; Issue #193,
+ * Kriterien 7, 8, 11).
  *
- * <p>Zwei Haelften, eine Frage: „Was ist von diesem Angebot abgerechnet?" Der {@link
- * Abrechnungsstand} antwortet je Position — angeboten, abgerechnet, offen, Ueberschreitung —, die
- * Liste antwortet mit den Belegen, aus denen das entstanden ist.
+ * <p>Zwei Haelften, eine Frage: „Was ist von diesem Angebot abgerechnet?" Die erste Liste antwortet
+ * je Position — angeboten, abgerechnet, offen, Ueberschreitung, dazu angefallen aus der
+ * Zeiterfassung —, die zweite antwortet mit den Belegen, aus denen das entstanden ist.
  *
- * @param stand je Position des Angebots ein Stand, in der Reihenfolge des Angebots
+ * <p>Je Position <b>eine</b> Zeile und keine zweite Liste neben der ersten: Alles, was die Ansicht
+ * zu einer Position zeigt, steht in ihrer {@link Positionsabrechnung}. Eine Abbildung von der
+ * Kennung auf die Arbeitszeit daneben waere derselbe Inhalt, nur nachzuschlagen — und der Leser
+ * muesste eine Position behandeln, die darin fehlt.
+ *
+ * @param positionen je Position des Angebots eine Zeile, in der Reihenfolge des Angebots
  * @param rechnungen die Rechnungen dieses Angebots, neueste zuerst
  */
-public record Angebotsabrechnung(Abrechnungsstand stand, List<RechnungMitBetrag> rechnungen) {
+public record Angebotsabrechnung(
+    List<Positionsabrechnung> positionen, List<RechnungMitBetrag> rechnungen) {
 
-  /** Nimmt die Liste als Kopie: Der Aufrufer darf seine Liste danach weiterverwenden. */
+  /** Nimmt die Listen als Kopie: Der Aufrufer darf seine Listen danach weiterverwenden. */
   public Angebotsabrechnung {
+    positionen = List.copyOf(positionen);
     rechnungen = List.copyOf(rechnungen);
   }
 }

@@ -7,6 +7,7 @@ import org.jspecify.annotations.Nullable;
 import org.mwolff.fbcrm.angebot.domain.Angebotsposition;
 import org.mwolff.fbcrm.common.Einheit;
 import org.mwolff.fbcrm.rechnung.application.Angebotsabrechnung;
+import org.mwolff.fbcrm.rechnung.application.Positionsabrechnung;
 import org.mwolff.fbcrm.rechnung.application.RechnungMitBetrag;
 import org.mwolff.fbcrm.rechnung.domain.Positionsstand;
 import org.mwolff.fbcrm.rechnung.domain.Rechnung;
@@ -15,8 +16,8 @@ import org.mwolff.fbcrm.rechnung.domain.Rechnungszustand;
 /**
  * Der Abrechnungsstand eines Angebots, wie seine Ansicht ihn zeigt (#160, Kriterium 26).
  *
- * <p>Zwei Listen: je Position des Angebots, was angeboten, abgerechnet und offen ist, und die
- * Rechnungen, aus denen das entstanden ist. Entwuerfe zaehlen dabei mit (Kriterium 6).
+ * <p>Zwei Listen: je Position des Angebots, was angeboten, abgerechnet, offen und angefallen ist,
+ * und die Rechnungen, aus denen das entstanden ist. Entwuerfe zaehlen dabei mit (Kriterium 6).
  *
  * @param positionen je Angebotsposition eine Zeile, in der Reihenfolge des Angebots
  * @param rechnungen die Rechnungen dieses Angebots, neueste zuerst
@@ -27,7 +28,7 @@ public record AngebotAbrechnungResponse(
   /** Die Sicht der Oberflaeche auf den Abrechnungsstand. */
   static AngebotAbrechnungResponse of(final Angebotsabrechnung abrechnung) {
     return new AngebotAbrechnungResponse(
-        abrechnung.stand().positionen().stream().map(Positionszeile::of).toList(),
+        abrechnung.positionen().stream().map(Positionszeile::of).toList(),
         abrechnung.rechnungen().stream().map(Rechnungszeile::of).toList());
   }
 
@@ -37,6 +38,11 @@ public record AngebotAbrechnungResponse(
    * <p>{@code offen} ist nie kleiner als 0, und was darueber hinaus abgerechnet wurde, steht als
    * {@code ueberschreitung} daneben (Kriterium 7) — zwei Angaben und nicht eine mit Vorzeichen.
    *
+   * <p>{@code buchbar} und {@code angefallen} kommen aus der Zeiterfassung (Issue #193, Kriterien
+   * 7, 8, 11). Die Oberflaeche zeigt die Spalte „Angefallen" an {@code buchbar}, nicht am Status
+   * des Angebots und nicht daran, ob schon eine Rechnung besteht — sonst verschwaenden die Stunden
+   * genau dann, wenn das Angebot auf „abgerechnet" gesprungen ist.
+   *
    * @param angebotPositionId Kennung der Angebotsposition
    * @param bezeichnung die Leistung, wie das Angebot sie nennt
    * @param einheit Einheit der Mengen
@@ -44,6 +50,8 @@ public record AngebotAbrechnungResponse(
    * @param abgerechnet die Summe aller Rechnungen dieses Angebots zu dieser Position
    * @param offen die noch offene Menge, nie kleiner als 0
    * @param ueberschreitung was ueber die angebotene Menge hinaus abgerechnet wurde, sonst 0
+   * @param buchbar ob auf die Position Arbeitszeit gebucht werden kann
+   * @param angefallen die insgesamt erfassten Stunden, 0 an einer nicht buchbaren Position
    */
   public record Positionszeile(
       long angebotPositionId,
@@ -52,9 +60,12 @@ public record AngebotAbrechnungResponse(
       BigDecimal angeboten,
       BigDecimal abgerechnet,
       BigDecimal offen,
-      BigDecimal ueberschreitung) {
+      BigDecimal ueberschreitung,
+      boolean buchbar,
+      BigDecimal angefallen) {
 
-    static Positionszeile of(final Positionsstand stand) {
+    static Positionszeile of(final Positionsabrechnung zeile) {
+      final Positionsstand stand = zeile.stand();
       final Angebotsposition position = stand.position();
       return new Positionszeile(
           position.requireId(),
@@ -63,7 +74,9 @@ public record AngebotAbrechnungResponse(
           stand.angeboten(),
           stand.abgerechnet(),
           stand.offen(),
-          stand.ueberschreitung());
+          stand.ueberschreitung(),
+          zeile.buchbar(),
+          zeile.angefallen());
     }
   }
 

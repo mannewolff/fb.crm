@@ -21,10 +21,10 @@ import org.mwolff.fbcrm.common.web.GlobalExceptionHandler;
 import org.mwolff.fbcrm.rechnung.application.AbrechnungsstandUseCase;
 import org.mwolff.fbcrm.rechnung.application.AngebotNichtAbrechenbar;
 import org.mwolff.fbcrm.rechnung.application.Angebotsabrechnung;
+import org.mwolff.fbcrm.rechnung.application.Positionsabrechnung;
 import org.mwolff.fbcrm.rechnung.application.RechnungAnlegenUseCase;
 import org.mwolff.fbcrm.rechnung.application.RechnungLesenUseCase;
 import org.mwolff.fbcrm.rechnung.application.RechnungMitBetrag;
-import org.mwolff.fbcrm.rechnung.domain.Abrechnungsstand;
 import org.mwolff.fbcrm.rechnung.domain.Positionsstand;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
@@ -38,6 +38,10 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
  * Angebot, aus dem nichts zu holen ist, 404 an einem unbekannten — und die beiden Listen des
  * Abrechnungsstands. <b>Der Server entscheidet</b>: Die Abweisung kommt aus dem Anwendungsfall und
  * nicht aus einer Vorpruefung im Controller.
+ *
+ * <p>Die Zeile des Abrechnungsstands traegt dabei auch, was aus der Zeiterfassung kommt: {@code
+ * buchbar} und die angefallenen Stunden (Issue #193, Kriterien 7 und 8). Sie gehen unveraendert
+ * durch — was sie bedeuten, entscheidet der Anwendungsfall.
  *
  * <p>Dazu die drei Formen des Rumpfs beim Anlegen (Issue #193, Antwort 7): ganz weggelassen, mit
  * einem Monat und mit {@code null} als Monat. Die erste und die dritte sind dieselbe Anfrage an den
@@ -148,8 +152,11 @@ class AngebotRechnungenControllerTest {
     when(abrechnungsstand.zu(Webdoppel.ANGEBOT))
         .thenReturn(
             new Angebotsabrechnung(
-                new Abrechnungsstand(
-                    List.of(new Positionsstand(Webdoppel.BERATUNG, new BigDecimal("180.00")))),
+                List.of(
+                    new Positionsabrechnung(
+                        new Positionsstand(Webdoppel.BERATUNG, new BigDecimal("180.00")),
+                        true,
+                        new BigDecimal("182.00"))),
                 List.of(
                     new RechnungMitBetrag(Webdoppel.entwurf("80.00"), new BigDecimal("9520.00")),
                     new RechnungMitBetrag(
@@ -168,6 +175,8 @@ class AngebotRechnungenControllerTest {
         .andExpect(jsonPath("$.positionen[0].abgerechnet").value(180.00))
         .andExpect(jsonPath("$.positionen[0].offen").value(0))
         .andExpect(jsonPath("$.positionen[0].ueberschreitung").value(20.00))
+        .andExpect(jsonPath("$.positionen[0].buchbar").value(true))
+        .andExpect(jsonPath("$.positionen[0].angefallen").value(182.00))
         .andExpect(jsonPath("$.rechnungen.length()").value(2))
         .andExpect(jsonPath("$.rechnungen[0].id").value(Webdoppel.RECHNUNG))
         .andExpect(jsonPath("$.rechnungen[0].nummer").doesNotExist())

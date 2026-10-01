@@ -28,6 +28,10 @@ import org.mwolff.fbcrm.arbeitszeit.domain.ZeiteintragRepository;
  * liefe beim ersten Nachziehen auseinander. Zweitens wird die Antwort des Bestands unveraendert
  * weitergegeben; die Auskunft rechnet nichts dazu.
  *
+ * <p>Beides gilt fuer beide Auskuenfte — die Stunden eines Monats fuer den Rechnungsentwurf
+ * (Kriterium 9) und die insgesamt angefallenen fuer die Spalte „Angefallen" am Angebot (Kriterium
+ * 7). Sie unterscheiden sich nur im Zeitraum, und jede fragt ihren eigenen Weg im Bestand.
+ *
  * <p>Dazu die eine Abweisung: Ein Angebot, das es nicht gibt, fragt im Bestand der Zeiten gar nicht
  * nach.
  */
@@ -67,6 +71,38 @@ class ArbeitszeitauskunftTest {
 
     // Then
     assertThat(auskunft).isEqualTo(gemeldet);
+  }
+
+  @Test
+  void angefallen_thenAsksForEveryPositionOfTheAngebotAtOnceAndAnswersWhatTheBestandSays() {
+    // Given — ueber alle Monate und mit allen Kennungen, auch der nicht buchbaren.
+    when(angebote.findById(Zeitdoppel.ANGEBOT)).thenReturn(Optional.of(Zeitdoppel.angebot()));
+    final Map<Long, BigDecimal> gemeldet =
+        Map.of(
+            Long.valueOf(Zeitdoppel.KONZEPTION_ID),
+            new BigDecimal("22.00"),
+            Long.valueOf(Zeitdoppel.WARTUNG_ID),
+            new BigDecimal("0.00"),
+            Long.valueOf(Zeitdoppel.SCHULUNG_ID),
+            new BigDecimal("0.00"));
+    when(zeiten.angefallenJePosition(ALLE_POSITIONEN)).thenReturn(gemeldet);
+
+    // When
+    final Map<Long, BigDecimal> auskunft = auskunft().angefallen(Zeitdoppel.ANGEBOT);
+
+    // Then
+    assertThat(auskunft).isEqualTo(gemeldet);
+  }
+
+  @Test
+  void angefallen_withAnUnknownAngebot_thenTheBestandOfTheZeitenIsNotAsked() {
+    // Given — dieselbe Abweisung wie bei den Stunden eines Monats.
+    when(angebote.findById(Zeitdoppel.ANGEBOT)).thenReturn(Optional.empty());
+
+    // When / Then
+    assertThatThrownBy(() -> auskunft().angefallen(Zeitdoppel.ANGEBOT))
+        .isInstanceOf(AngebotNichtGefunden.class);
+    verifyNoInteractions(zeiten);
   }
 
   @Test

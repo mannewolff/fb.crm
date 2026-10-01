@@ -45,6 +45,11 @@ import org.springframework.jdbc.core.JdbcTemplate;
  * den Entwurf des ersten (E7). In jedem Fall bekommt die Festpreisposition ihre offene Menge und
  * nicht null Stunden (E1).
  *
+ * <p>Daneben steht der Abrechnungsstand desselben Angebots (Kriterien 7 und 8): Er nennt je
+ * Position, ob sie Stunden traegt und wie viele insgesamt angefallen sind. Auch das ist nur hier
+ * pruefbar — die Summe ueber alle Monate entsteht quer ueber beide Module und aus echten
+ * Zeiteintraegen.
+ *
  * <p>Der Ausgangspunkt ist der von {@code ArbeitszeitControllerIT}: ein bestelltes Angebot mit
  * „Konzeption" nach Aufwand in Stunden und daneben einer Pauschale, auf die nicht gebucht werden
  * darf. Die Namen sind die des Beispiels aus #193.
@@ -226,6 +231,48 @@ class AngebotRechnungenControllerIT extends AbstractIntegrationTest {
         .filter(gefunden -> gefunden.angebotPositionId() == angebotPositionId)
         .findFirst()
         .orElseThrow();
+  }
+
+  /** Der Abrechnungsstand des Angebots, wie die Ansicht ihn liest. */
+  private AngebotAbrechnungResponse abrechnung() {
+    final ResponseEntity<AngebotAbrechnungResponse> antwort =
+        ruf(
+            "/api/angebote/" + angebotId + "/abrechnung",
+            HttpMethod.GET,
+            null,
+            AngebotAbrechnungResponse.class);
+    assertThat(antwort.getStatusCode()).isEqualTo(HttpStatus.OK);
+    return Objects.requireNonNull(antwort.getBody());
+  }
+
+  /** Die Zeile des Abrechnungsstands zu einer Angebotsposition. */
+  private static AngebotAbrechnungResponse.Positionszeile positionszeile(
+      final AngebotAbrechnungResponse stand, final long angebotPositionId) {
+    return stand.positionen().stream()
+        .filter(gefunden -> gefunden.angebotPositionId() == angebotPositionId)
+        .findFirst()
+        .orElseThrow();
+  }
+
+  @Test
+  void abrechnung_thenEveryPositionSaysWhetherItIsBuchbarAndHowManyStundenHaveAccrued() {
+    // Given — die 22 Stunden des Beispiels aus #193: 10 im Oktober, 12 im November.
+    erfasse(OKTOBERTAG, "08:00", "18:00");
+    erfasse(NOVEMBERTAG, "08:00", "20:00");
+
+    // When
+    final AngebotAbrechnungResponse stand = abrechnung();
+
+    // Then — die buchbare Position traegt die Summe ueber alle Monate, die Pauschale nichts.
+    assertThat(positionszeile(stand, konzeptionId))
+        .satisfies(
+            zeile -> assertThat(zeile.buchbar()).isTrue(),
+            zeile -> assertThat(zeile.angeboten()).isEqualByComparingTo("20.00"),
+            zeile -> assertThat(zeile.angefallen()).isEqualByComparingTo("22.00"));
+    assertThat(positionszeile(stand, schulungId))
+        .satisfies(
+            zeile -> assertThat(zeile.buchbar()).isFalse(),
+            zeile -> assertThat(zeile.angefallen()).isEqualByComparingTo("0"));
   }
 
   @Test
