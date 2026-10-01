@@ -3,7 +3,8 @@
  *
  * Oberhalb des Fusses stehen die <b>Navigationsbloecke</b>, jeder mit einem Gruppentitel in
  * Satzschreibung (CLAUDE-design.md, „Rahmen"). Dieser Stand traegt zwei Bloecke: „Geschäft" mit der
- * Uebersicht aller Angebote (Issue #127, Kriterium 8) und darunter „Stammdaten". Das Tagesgeschaeft
+ * Uebersicht aller Angebote (Issue #127, Kriterium 8) und der Liste aller Rechnungen
+ * (Issue #184, #160 Kriterium 1), darunter „Stammdaten". Das Tagesgeschaeft
  * steht oben, weil es der haeufigere Weg ist; Angebote entstehen weiterhin an der Firma
  * (Issue #126). Welche Bloecke dazukommen, entsteht mit den Fachplaenen.
  *
@@ -19,6 +20,7 @@
 
 export type Symbolname =
   | 'file-description'
+  | 'file-invoice'
   | 'building-community'
   | 'id'
   | 'settings'
@@ -38,7 +40,12 @@ export interface NavBlock {
 export const NAV_BLOECKE: readonly NavBlock[] = [
   {
     titel: 'Geschäft',
-    eintraege: [{ beschriftung: 'Angebote', ziel: '/angebote', symbol: 'file-description' }],
+    eintraege: [
+      { beschriftung: 'Angebote', ziel: '/angebote', symbol: 'file-description' },
+      // „Rechnungen" steht unter „Angebote": Das ist die Reihenfolge der Kette, und eine Rechnung
+      // entsteht aus einem Angebot (Issue #184).
+      { beschriftung: 'Rechnungen', ziel: '/rechnungen', symbol: 'file-invoice' },
+    ],
   },
   {
     titel: 'Stammdaten',

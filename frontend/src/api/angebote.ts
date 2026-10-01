@@ -149,7 +149,14 @@ function abrechnungsmodus(wert: unknown): Abrechnungsmodus {
   return wert;
 }
 
-function einheit(wert: unknown): Einheit {
+/**
+ * Verengt einen Wert auf eine der drei Einheiten oder scheitert.
+ *
+ * Ausgewiesen, weil die Rechnung dieselbe Einheit traegt (`api/rechnungen.ts`): Sie kommt vom
+ * Angebot und ist an der Rechnung nicht aenderbar. Eine zweite Abschrift derselben drei Werte liefe
+ * beim ersten Nachziehen auseinander, und die Oberflaeche saehe je Modul eine andere Strenge.
+ */
+export function parseEinheit(wert: unknown): Einheit {
   if (wert !== 'STUNDE' && wert !== 'PERSONENTAG' && wert !== 'PAUSCHAL') {
     throw new TypeError(FORMFEHLER);
   }
@@ -164,7 +171,7 @@ function parsePosition(wert: unknown): AngebotPosition {
     bezeichnung: text(position.bezeichnung),
     abrechnungsmodus: abrechnungsmodus(position.abrechnungsmodus),
     mengeInHundertsteln: inHundertsteln(position.menge),
-    einheit: einheit(position.einheit),
+    einheit: parseEinheit(position.einheit),
     einzelpreisInCent: inHundertsteln(position.einzelpreis),
     betragInCent: inHundertsteln(position.betrag),
   };

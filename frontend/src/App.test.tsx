@@ -23,6 +23,26 @@ const ANGEBOT = {
   summe: 0,
 };
 
+/** Eine gestellte Rechnung, wie das Backend sie schreibt (Issue #184). */
+const RECHNUNG = {
+  id: 4,
+  angebotId: 9,
+  firmaId: 5,
+  firmaName: 'Adler AG',
+  rechnungDatum: '2026-10-01',
+  leistungszeitraum: 'Oktober 2026',
+  zustand: 'GESTELLT',
+  nummer: '0001-2026',
+  steuersatz: 19,
+  netto: 9600,
+  steuer: 1824,
+  brutto: 11424,
+  zahlungszielTage: 14,
+  empfaenger: null,
+  absender: null,
+  zeilen: [],
+};
+
 /** Die Firma des Angebots, wie das Backend sie schreibt. */
 const FIRMA = {
   id: 5,
@@ -205,6 +225,56 @@ describe('App', () => {
     expect(screen.getByRole('status')).toHaveTextContent('Sitzung wird geprüft');
     expect(
       await screen.findByRole('heading', { level: 1, name: 'Angebot bearbeiten' }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('navigation', { name: 'Hauptnavigation' })).toBeInTheDocument();
+  });
+
+  it('fuehrt „/rechnungen" ohne Sitzung auf die Anmeldeseite', async () => {
+    ohneSitzung();
+
+    renderApp(['/rechnungen'], 0);
+
+    expect(await screen.findByLabelText(/^E-Mail-Adresse/)).toBeInTheDocument();
+  });
+
+  it('zeigt „/rechnungen" als Liste im Rahmen und nicht als einzelne Rechnung', async () => {
+    fensterbreite(1440);
+    fetchNachPfad({
+      'GET /api/auth/me': json(200, KONTO),
+      'GET /api/instance': json(200, { version: '0.1.3' }),
+      'GET /api/rechnungen': json(200, { rechnungen: [] }),
+    });
+
+    renderApp(['/rechnungen'], 0);
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Rechnungen' }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('navigation', { name: 'Hauptnavigation' })).toBeInTheDocument();
+  });
+
+  it('fuehrt „/rechnungen/4" ohne Sitzung auf die Anmeldeseite', async () => {
+    ohneSitzung();
+
+    renderApp(['/rechnungen/4'], 0);
+
+    expect(await screen.findByLabelText(/^E-Mail-Adresse/)).toBeInTheDocument();
+  });
+
+  it('zeigt „/rechnungen/4" mit Sitzung im Rahmen — nachgeladen', async () => {
+    fensterbreite(1440);
+    fetchNachPfad({
+      'GET /api/auth/me': json(200, KONTO),
+      'GET /api/instance': json(200, { version: '0.1.3' }),
+      'GET /api/rechnungen/4': json(200, RECHNUNG),
+    });
+
+    renderApp(['/rechnungen/4'], 0);
+
+    // Lazy und geschuetzt: Beim ersten Rendern steht erst die Sitzungspruefung da.
+    expect(screen.getByRole('status')).toHaveTextContent('Sitzung wird geprüft');
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Rechnung 0001-2026' }),
     ).toBeInTheDocument();
     expect(screen.getByRole('navigation', { name: 'Hauptnavigation' })).toBeInTheDocument();
   });

@@ -63,11 +63,18 @@ describe('navItems (E15, E18)', () => {
     ]);
   });
 
-  it('fuehrt „Geschäft" mit „Angebote" oberhalb von „Stammdaten" (Issue #127)', () => {
+  it('fuehrt „Geschäft" mit Angeboten und Rechnungen oberhalb von „Stammdaten" (Issue #184)', () => {
     expect(
       NAV_BLOECKE.map((block) => [block.titel, block.eintraege.map((e) => [e.beschriftung, e.ziel])]),
     ).toEqual([
-      ['Geschäft', [['Angebote', '/angebote']]],
+      // „Rechnungen" steht unter „Angebote" — die Reihenfolge der Kette (Issue #184).
+      [
+        'Geschäft',
+        [
+          ['Angebote', '/angebote'],
+          ['Rechnungen', '/rechnungen'],
+        ],
+      ],
       // „Eigene Angaben" ist ein Stammdatum wie die Firma und steht neben ihr — nicht hinter
       // „Administration" und nicht in einem eigenen Block mit einem Eintrag (E14).
       [
@@ -117,10 +124,12 @@ describe('NavRail', () => {
     ]);
     expect(bloecke.getAllByRole('link').map((link) => link.getAttribute('href'))).toEqual([
       '/angebote',
+      '/rechnungen',
       '/firmen',
       '/eigene-angaben',
     ]);
     expect(bloecke.getByRole('link', { name: 'Angebote' })).toBeInTheDocument();
+    expect(bloecke.getByRole('link', { name: 'Rechnungen' })).toBeInTheDocument();
     expect(bloecke.getByRole('link', { name: 'Firmen' })).toBeInTheDocument();
     expect(bloecke.getByRole('link', { name: 'Eigene Angaben' })).toBeInTheDocument();
     // Kein Umschalter in den Bloecken — Tasten stehen an der Marke und im Fuss.
@@ -188,6 +197,9 @@ describe('NavRail', () => {
     ['/angebote', 'Angebote'],
     // Auch die Ansicht eines Angebots laesst „Angebote" aktiv stehen.
     ['/angebote/9', 'Angebote'],
+    ['/rechnungen', 'Rechnungen'],
+    // Und die Ansicht einer Rechnung laesst „Rechnungen" aktiv stehen (Issue #184).
+    ['/rechnungen/4', 'Rechnungen'],
   ])('setzt auf %s aria-current="page" an „%s" und nur dort (K12)', (adresse, beschriftung) => {
     angemeldet();
 

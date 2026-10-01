@@ -18,6 +18,8 @@ const AnsprechpartnerMaske = lazy(async () => import('./pages/AnsprechpartnerMas
 const AngebotMaske = lazy(async () => import('./pages/AngebotMaske'));
 const AngebotePage = lazy(async () => import('./pages/AngebotePage'));
 const AngebotPage = lazy(async () => import('./pages/AngebotPage'));
+const RechnungenPage = lazy(async () => import('./pages/RechnungenPage'));
+const RechnungPage = lazy(async () => import('./pages/RechnungPage'));
 const EigeneAngabenMaske = lazy(async () => import('./pages/EigeneAngabenMaske'));
 const AdministrationPage = lazy(async () => import('./pages/AdministrationPage'));
 
@@ -31,7 +33,9 @@ const AdministrationPage = lazy(async () => import('./pages/AdministrationPage')
  * `/eigene-angaben` und `/administration` tragen die fachlichen Ansichten. Ein Angebot
  * entsteht an der Firma (`/firmen/:id/angebote/neu`) und steht danach unter
  * `/angebote/:angebotId` — es braucht seine Firma nicht in der Adresse, denn es kennt sie
- * selbst (Issue #126).
+ * selbst (Issue #126). Dasselbe gilt fuer die Rechnung: Sie entsteht an ihrem Angebot und steht
+ * danach unter `/rechnungen/:rechnungId`, die Liste aller Rechnungen unter `/rechnungen`
+ * (Issue #184).
  *
  * Die unbekannte Adresse bekommt keine eigene Ansicht: Mit Sitzung fuehrt sie auf die
  * Startadresse, ohne Sitzung uebernimmt {@link ProtectedRoute} und fuehrt auf die
@@ -61,6 +65,8 @@ export default function App() {
             <Route path="/angebote" element={<AngebotePage />} />
             <Route path="/angebote/:angebotId" element={<AngebotPage />} />
             <Route path="/angebote/:angebotId/bearbeiten" element={<AngebotMaske />} />
+            <Route path="/rechnungen" element={<RechnungenPage />} />
+            <Route path="/rechnungen/:rechnungId" element={<RechnungPage />} />
             <Route path="/firmen" element={<FirmenPage />} />
             {/* Statisch vor dynamisch: `/firmen/neu` ist die Maske, nicht die Firma „neu". */}
             <Route path="/firmen/neu" element={<FirmaMaske />} />

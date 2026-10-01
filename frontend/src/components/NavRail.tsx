@@ -4,6 +4,7 @@ import {
   IconBook,
   IconBuildingCommunity,
   IconFileDescription,
+  IconFileInvoice,
   IconId,
   IconLayoutSidebarLeftCollapse,
   IconLayoutSidebarLeftExpand,
@@ -50,6 +51,7 @@ const BREITE_EINGEKLAPPT = 76;
 /** Die Symbole der Vorlage — dieselbe Familie, dieselben Namen (E3). */
 const SYMBOLE: Readonly<Record<Symbolname, TablerIcon>> = {
   'file-description': IconFileDescription,
+  'file-invoice': IconFileInvoice,
   'building-community': IconBuildingCommunity,
   id: IconId,
   settings: IconSettings,
