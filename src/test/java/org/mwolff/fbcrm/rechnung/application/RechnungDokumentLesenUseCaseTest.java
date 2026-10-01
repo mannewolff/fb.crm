@@ -20,6 +20,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.mwolff.fbcrm.rechnung.domain.DokumentSpeicher;
 import org.mwolff.fbcrm.rechnung.domain.Rechnung;
 import org.mwolff.fbcrm.rechnung.domain.RechnungRepository;
+import org.mwolff.fbcrm.rechnung.domain.Rechnungszustand;
 
 /**
  * Das Lesen des archivierten Dokuments einer gestellten Rechnung (#160, Kriterium 24; Plan #169,
@@ -97,6 +98,18 @@ class RechnungDokumentLesenUseCaseTest {
   }
 
   @Test
+  void lese_anEntwurfThatAlreadyCarriesANummerAndASchluessel_thenItIsRejected() {
+    // Given — ein Widerspruch im Bestand: Nummer und Schluessel entstehen erst beim Stellen. Der
+    // Zustand entscheidet darum fuer sich und nicht erst, wenn eines von beiden fehlt — sonst gaebe
+    // dieser Weg einen Beleg heraus, der nicht festgeschrieben ist.
+    when(rechnungen.findById(RECHNUNG)).thenReturn(Optional.of(alsEntwurf(gestellteRechnung())));
+
+    // When / Then
+    assertThatThrownBy(() -> useCase.lese(RECHNUNG)).isInstanceOf(RechnungszustandPasstNicht.class);
+    verify(dokumente, never()).lies(anyString());
+  }
+
+  @Test
   void lese_aGestellteRechnungWithoutASchluessel_thenItIsRejected() {
     // Given — die Waise aus E7: gestellt, aber das Ablegen des Belegs ist gescheitert.
     when(rechnungen.findById(RECHNUNG))
@@ -119,6 +132,25 @@ class RechnungDokumentLesenUseCaseTest {
     // When / Then
     assertThatThrownBy(() -> useCase.lese(RECHNUNG)).isInstanceOf(RechnungszustandPasstNicht.class);
     verify(dokumente, never()).lies(anyString());
+  }
+
+  private static Rechnung alsEntwurf(final Rechnung rechnung) {
+    return new Rechnung(
+        rechnung.id(),
+        rechnung.angebotId(),
+        Rechnungszustand.ENTWURF,
+        rechnung.rechnungDatum(),
+        rechnung.leistungszeitraum(),
+        rechnung.positionen(),
+        rechnung.nummer(),
+        rechnung.steuersatz(),
+        rechnung.zahlungszielTage(),
+        rechnung.gestelltAm(),
+        rechnung.pdfSchluessel(),
+        rechnung.empfaenger(),
+        rechnung.absender(),
+        rechnung.createdAt(),
+        rechnung.updatedAt());
   }
 
   private static Rechnung ohneNummer(final Rechnung rechnung) {

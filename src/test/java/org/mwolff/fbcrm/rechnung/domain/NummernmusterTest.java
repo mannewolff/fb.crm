@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.util.stream.Stream;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -17,6 +18,12 @@ import org.junit.jupiter.params.provider.ValueSource;
  * Tippen. Die gemeinsame Tabelle ist das Band zwischen den beiden Fassungen.
  */
 class NummernmusterTest {
+
+  /**
+   * 50 Zeichen — die Grenze selbst, das Gegenstueck zu „51 Zeichen" unten. Die Laengenpruefung
+   * arbeitet mit einer Grenze, und nur dieses Muster sagt, auf welcher Seite sie liegt.
+   */
+  private static final String GRENZLANGES_MUSTER = "{NNNN}" + "A".repeat(44);
 
   /** Die ungueltigen Muster, jedes mit dem Grund, aus dem es ungueltig ist. */
   private static Stream<String> ungueltigeMuster() {
@@ -59,6 +66,15 @@ class NummernmusterTest {
   void istGueltig_givenAValidPattern_thenTrue(final String muster) {
     // When / Then
     assertThat(Nummernmuster.istGueltig(muster)).isTrue();
+  }
+
+  @Test
+  void istGueltig_givenExactlyMaxLaengeZeichen_thenTrue() {
+    // Given — die Grenze gehoert noch dazu: hoechstens MAX_LAENGE Zeichen, nicht weniger als.
+    assertThat(GRENZLANGES_MUSTER).hasSize(Nummernmuster.MAX_LAENGE);
+
+    // When / Then
+    assertThat(Nummernmuster.istGueltig(GRENZLANGES_MUSTER)).isTrue();
   }
 
   @ParameterizedTest

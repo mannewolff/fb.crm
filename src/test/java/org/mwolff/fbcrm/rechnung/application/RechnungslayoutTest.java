@@ -1,11 +1,16 @@
 package org.mwolff.fbcrm.rechnung.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.tuple;
 
+import java.io.IOException;
+import java.io.InputStream;
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.function.Predicate;
 import java.util.stream.IntStream;
 import org.junit.jupiter.api.Test;
@@ -82,8 +87,43 @@ class RechnungslayoutTest {
         zahlungszielTage);
   }
 
-  private static RechnungDruckdaten vorlage() {
+  static RechnungDruckdaten vorlageDaten() {
     return daten(ABSENDER, EMPFAENGER, POSITIONEN, "19", 10);
+  }
+
+  /** Derselbe Beleg ohne jede freiwillige Angabe: nur die beiden Namen und die Positionen. */
+  static RechnungDruckdaten knappeDaten() {
+    final Belegabsender knapp =
+        new Belegabsender(
+            "Max Mustermann",
+            null,
+            new Anschrift(null, null, null, null),
+            null,
+            null,
+            null,
+            null,
+            null,
+            null);
+    final Belegempfaenger knappeFirma =
+        new Belegempfaenger("Franz Mustermann GmbH", new Anschrift(null, null, null, null), null);
+    return daten(knapp, knappeFirma, POSITIONEN, "19", 10);
+  }
+
+  /** Das Pruefbild aus den Testmitteln; die Datei liegt neben den uebrigen Testressourcen. */
+  private static String pruefbild(final String name) throws IOException {
+    try (InputStream quelle =
+        RechnungslayoutTest.class.getResourceAsStream("/rechnung/" + name + ".txt")) {
+      return new String(
+          Objects.requireNonNull(quelle, "Pruefbild fehlt: " + name).readAllBytes(),
+          StandardCharsets.UTF_8);
+    }
+  }
+
+  private static List<Druckelement.Linie> linien(final List<Druckelement> elemente) {
+    return elemente.stream()
+        .filter(Druckelement.Linie.class::isInstance)
+        .map(Druckelement.Linie.class::cast)
+        .toList();
   }
 
   private static List<Druckelement.Text> texte(final List<Druckelement> elemente) {
@@ -124,9 +164,42 @@ class RechnungslayoutTest {
   }
 
   @Test
+  void setze_givenDieAngabenDerVorlage_thenTheFolgeStimmtMitDemPruefbildUeberein()
+      throws IOException {
+    // Given — das Pruefbild in rechnung/satz-vorlage.txt ist der vollstaendige Vertrag des Satzes:
+    // jedes Element, jedes Mass, jede Farbe, in der Reihenfolge des Satzes. Es steht hier, weil
+    // einzelne Zusicherungen nur benennen koennen, woran jemand gedacht hat — eine verschobene
+    // Grundlinie, eine fehlende Linie oder ein gekehrtes Vorzeichen fallen nur so auf.
+    //
+    // Aendert sich das Layout absichtlich, wird die Datei bewusst nachgezogen; der Unterschied im
+    // Diff ist dann die Liste dessen, was sich bewegt hat, und am Dokument selbst abzunehmen.
+
+    // When
+    final List<Druckelement> elemente = Rechnungslayout.setze(vorlageDaten());
+
+    // Then
+    assertThat(Satzbild.von(elemente)).isEqualTo(pruefbild("satz-vorlage"));
+  }
+
+  @Test
+  void setze_givenKeineEinzigeFreiwilligeAngabe_thenTheFolgeStimmtMitDemPruefbildUeberein()
+      throws IOException {
+    // Given — das zweite Pruefbild: Derselbe Beleg, aber Berufsbezeichnung, Webadresse, Telefon,
+    // E-Mail, Bankverbindung und jede Zeile beider Anschriften fehlen. Es haelt fest, dass eine
+    // fehlende Zeile keine Hoehe verbraucht und dass aus einer leeren Verbindung keine Zeile mit
+    // Trennern entsteht.
+
+    // When
+    final List<Druckelement> elemente = Rechnungslayout.setze(knappeDaten());
+
+    // Then
+    assertThat(Satzbild.von(elemente)).isEqualTo(pruefbild("satz-ohne-freiwillige-angaben"));
+  }
+
+  @Test
   void setze_givenDieAngabenDerVorlage_thenTheBloeckeStehenVonObenNachUnten() {
     // When
-    final List<Druckelement> elemente = Rechnungslayout.setze(vorlage());
+    final List<Druckelement> elemente = Rechnungslayout.setze(vorlageDaten());
 
     // Then — die Folge des Aufbaus, von oben nach unten wie in docs/vorlage-rechnung.pdf.
     assertThat(
@@ -156,7 +229,7 @@ class RechnungslayoutTest {
   @Test
   void setze_givenDieAngabenDerVorlage_thenTheErsteFlaecheIstDerRandstreifen() {
     // When
-    final List<Druckelement> elemente = Rechnungslayout.setze(vorlage());
+    final List<Druckelement> elemente = Rechnungslayout.setze(vorlageDaten());
 
     // Then — der farbige Streifen liegt links, ueber die ganze Hoehe, und wird zuerst gesetzt.
     final Druckelement.Flaeche streifen =
@@ -175,7 +248,7 @@ class RechnungslayoutTest {
   @Test
   void setze_givenDieAngabenDerVorlage_thenTheWortlauteStehenImKlartext() {
     // When
-    final List<Druckelement> elemente = Rechnungslayout.setze(vorlage());
+    final List<Druckelement> elemente = Rechnungslayout.setze(vorlageDaten());
 
     // Then — die festen Saetze der Vorlage, Wort fuer Wort.
     assertThat(inhalte(elemente))
@@ -202,7 +275,7 @@ class RechnungslayoutTest {
   @Test
   void setze_givenPositionenInAllenEinheiten_thenTheEinheitStehtVorDemText() {
     // When
-    final List<Druckelement> elemente = Rechnungslayout.setze(vorlage());
+    final List<Druckelement> elemente = Rechnungslayout.setze(vorlageDaten());
 
     // Then — bei PAUSCHAL steht nur der Text.
     assertThat(inhalte(elemente))
@@ -212,7 +285,7 @@ class RechnungslayoutTest {
   @Test
   void setze_givenMengenUndBetraege_thenTheyAreGeschriebenWieInDerVorlage() {
     // When
-    final List<Druckelement> elemente = Rechnungslayout.setze(vorlage());
+    final List<Druckelement> elemente = Rechnungslayout.setze(vorlageDaten());
 
     // Then — Anzahl ohne Nachnullen, Betraege mit Tausenderpunkt und Eurozeichen.
     assertThat(inhalte(elemente)).contains("3", "2,5", "120,00 €", "1.200,00 €");
@@ -224,7 +297,7 @@ class RechnungslayoutTest {
   @Test
   void setze_givenSteuersatzMitNachkommastelle_thenTheSatzStehtOhneNachnullen() {
     // When
-    final List<Druckelement> ganz = Rechnungslayout.setze(vorlage());
+    final List<Druckelement> ganz = Rechnungslayout.setze(vorlageDaten());
     final List<Druckelement> halb =
         Rechnungslayout.setze(daten(ABSENDER, EMPFAENGER, POSITIONEN, "19.5", 10));
 
@@ -249,7 +322,7 @@ class RechnungslayoutTest {
             ABSENDER.webadresse());
 
     // When
-    final List<Druckelement> mitId = Rechnungslayout.setze(vorlage());
+    final List<Druckelement> mitId = Rechnungslayout.setze(vorlageDaten());
     final List<Druckelement> ohne =
         Rechnungslayout.setze(daten(ohneId, EMPFAENGER, POSITIONEN, "19", 10));
 
@@ -262,24 +335,10 @@ class RechnungslayoutTest {
   @Test
   void setze_givenKeineBerufsbezeichnungUndKeineWebadresse_thenTheirZeilenFallWegOhneLuecke() {
     // Given — nur der Name und die Anschrift; alles Freiwillige fehlt.
-    final Belegabsender knapp =
-        new Belegabsender(
-            "Max Mustermann",
-            null,
-            new Anschrift(null, null, null, null),
-            null,
-            null,
-            null,
-            null,
-            null,
-            null);
-    final Belegempfaenger knappeFirma =
-        new Belegempfaenger("Franz Mustermann GmbH", new Anschrift(null, null, null, null), null);
 
     // When
-    final List<Druckelement> voll = Rechnungslayout.setze(vorlage());
-    final List<Druckelement> elemente =
-        Rechnungslayout.setze(daten(knapp, knappeFirma, POSITIONEN, "19", 10));
+    final List<Druckelement> voll = Rechnungslayout.setze(vorlageDaten());
+    final List<Druckelement> elemente = Rechnungslayout.setze(knappeDaten());
 
     // Then — der Name rueckt an die Stelle der Berufsbezeichnung, keine leere Zeile bleibt.
     assertThat(inhalte(elemente))
@@ -423,6 +482,191 @@ class RechnungslayoutTest {
             });
     assertThat(elemente)
         .allSatisfy(element -> assertThat(element.seite()).isBetween(1, seiten.size()));
+  }
+
+  /**
+   * Die Zeilen der Spalte „Position" in ihrer Reihenfolge, ohne den Spaltenkopf.
+   *
+   * <p>Der Kopf „Position" steht an derselben Spaltenkante wie die Texte darunter; er wird an
+   * seiner Grundlinie erkannt, die er mit den drei uebrigen Koepfen teilt.
+   */
+  private static List<String> positionszeilen(final List<Druckelement> elemente) {
+    final int kopfzeile = text(elemente, "Gesamtpreis").y();
+    return texte(elemente).stream()
+        .filter(gesetzt -> gesetzt.ausrichtung() == Ausrichtung.LINKS)
+        .filter(gesetzt -> gesetzt.x() == 140)
+        .filter(gesetzt -> gesetzt.y() != kopfzeile)
+        .map(Druckelement.Text::text)
+        .toList();
+  }
+
+  /** Der Beleg mit so vielen einzeiligen Positionen, jede mit ihrer Nummer im Text. */
+  private static List<Druckelement> mitPositionen(final int anzahl) {
+    final List<Druckposition> viele =
+        IntStream.rangeClosed(1, anzahl)
+            .mapToObj(
+                nummer -> position("1", Einheit.STUNDE, "Leistung " + nummer, "120.00", "120.00"))
+            .toList();
+    return Rechnungslayout.setze(daten(ABSENDER, EMPFAENGER, viele, "19", 10));
+  }
+
+  /** Die Seite, auf der die Position mit dieser Nummer steht. */
+  private static int seiteDerPosition(final List<Druckelement> elemente, final int nummer) {
+    return text(elemente, "Stunden Leistung " + nummer).seite();
+  }
+
+  @Test
+  void setze_givenSiebzehnPositionen_thenTheyAllStillFitOnTheErsteSeite() {
+    // Given — die Masse sagen genau, wo die Grenze liegt: Die Tabelle beginnt unter ihrer Kopfzeile
+    // auf 449, jede Zeile verbraucht 16, und unter 120 faengt die Tabelle nicht mehr an. Die letzte
+    // Position legt ausserdem die 50 des Summenblocks zurueck, damit er ihr folgen kann. Siebzehn
+    // Positionen sind die letzte Anzahl, die damit auf eine Seite geht.
+
+    // When
+    final List<Druckelement> elemente = mitPositionen(17);
+
+    // Then
+    assertThat(seiteDerPosition(elemente, 17)).isEqualTo(1);
+  }
+
+  @Test
+  void setze_givenAchtzehnPositionen_thenOnlyTheLetzteGoesToTheZweiteSeite() {
+    // Given — eine Position mehr als siebzehn. Sie allein passte noch; mit der Rueckstellung fuer
+    // den Summenblock passt sie nicht. Ohne diese Rueckstellung stuende sie noch auf Seite eins.
+
+    // When
+    final List<Druckelement> elemente = mitPositionen(18);
+
+    // Then
+    assertThat(seiteDerPosition(elemente, 17)).isEqualTo(1);
+    assertThat(seiteDerPosition(elemente, 18)).isEqualTo(2);
+    assertThat(text(elemente, "Gesamtbetrag netto").seite()).isEqualTo(2);
+
+    // Then — der Rahmen der Tabelle wird vor dem Umbruch geschlossen: fuenf Senkrechte von der
+    // letzten Linie der Seite bis zu ihrer obersten. Ohne sie endete die Tabelle auf Seite eins
+    // offen.
+    assertThat(linien(elemente))
+        .filteredOn(linie -> linie.seite() == 1 && linie.vonX() == linie.bisX())
+        .extracting(Druckelement.Linie::vonX, Druckelement.Linie::vonY, Druckelement.Linie::bisY)
+        .containsExactly(
+            tuple(71, 177, 467),
+            tuple(136, 177, 467),
+            tuple(371, 177, 467),
+            tuple(436, 177, 467),
+            tuple(503, 177, 467));
+
+    // Then — und auf der neuen Seite faengt die Tabelle mit ihrer obersten Linie wieder an.
+    assertThat(linien(elemente))
+        .filteredOn(linie -> linie.seite() == 2 && linie.vonY() == linie.bisY())
+        .first()
+        .extracting(Druckelement.Linie::vonX, Druckelement.Linie::bisX, Druckelement.Linie::vonY)
+        .containsExactly(71, 503, 780);
+  }
+
+  @Test
+  void setze_givenZweiundzwanzigPositionen_thenTheUmbruchFaelltVorDieEinundzwanzigste() {
+    // Given — hier ist die einundzwanzigste nicht die letzte und legt darum nichts zurueck. Sie
+    // bricht erst eine Zeile spaeter um als die letzte es taete; faellt die Unterscheidung weg,
+    // wandert der Umbruch an eine andere Position.
+
+    // When
+    final List<Druckelement> elemente = mitPositionen(22);
+
+    // Then
+    assertThat(seiteDerPosition(elemente, 20)).isEqualTo(1);
+    assertThat(seiteDerPosition(elemente, 21)).isEqualTo(2);
+    assertThat(seiteDerPosition(elemente, 22)).isEqualTo(2);
+  }
+
+  @Test
+  void setze_givenZwoelfPositionen_thenTheSchlussStillFitsUnderTheTabelle() {
+    // Given — die Tabelle endet hoch genug: Nach ihr bleiben 40 Punkte Abstand, der Schluss braucht
+    // 58, und unter 100 geht er nicht mehr. Bei zwoelf Positionen reicht es gerade.
+
+    // When
+    final List<Druckelement> elemente = mitPositionen(12);
+
+    // Then
+    assertThat(text(elemente, "Mit freundlichen Grüßen").seite()).isEqualTo(1);
+  }
+
+  @Test
+  void setze_givenDreizehnPositionen_thenTheSchlussGoesToTheNaechsteSeite() {
+    // Given — eine Position mehr, und der Schluss passt nicht mehr unter die Tabelle. Er wandert
+    // ganz auf die naechste Seite und beginnt dort oben; zerrissen wird er nicht.
+
+    // When
+    final List<Druckelement> elemente = mitPositionen(13);
+
+    // Then — die Tabelle steht noch ganz auf Seite eins, der Schluss nicht mehr.
+    assertThat(seiteDerPosition(elemente, 13)).isEqualTo(1);
+    assertThat(text(elemente, "Gesamtbetrag netto").seite()).isEqualTo(1);
+    final Druckelement.Text gruss = text(elemente, "Mit freundlichen Grüßen");
+    assertThat(gruss.seite()).isEqualTo(2);
+    assertThat(text(elemente, "Bitte überweisen Sie den Betrag innerhalb von 10 Tagen").y())
+        .isEqualTo(780);
+  }
+
+  @Test
+  void setze_givenAPositionstextExactlyAsWideAsTheSpalte_thenItStaysOnOneZeile() {
+    // Given — die Spalte traegt 41 Zeichen. Genau 41 passen noch: Die Grenze gehoert zur Zeile.
+    final String randvoll = "A".repeat(20) + " " + "B".repeat(20);
+    assertThat(randvoll).hasSize(41);
+
+    // When
+    final List<Druckelement> elemente =
+        Rechnungslayout.setze(
+            daten(
+                ABSENDER,
+                EMPFAENGER,
+                List.of(position("1", Einheit.PAUSCHAL, randvoll, "200.00", "200.00")),
+                "19",
+                10));
+
+    // Then
+    assertThat(positionszeilen(elemente)).containsExactly(randvoll);
+  }
+
+  @Test
+  void setze_givenAPositionstextOneZeichenTooWide_thenItBrichtNachDemErstenWortUm() {
+    // Given — ein Zeichen mehr als die Spalte traegt. Das Leerzeichen zwischen den Woertern zaehlt
+    // mit; ohne es waere auch dieser Text noch einzeilig.
+    final String zuBreit = "A".repeat(20) + " " + "B".repeat(21);
+    assertThat(zuBreit).hasSize(42);
+
+    // When
+    final List<Druckelement> elemente =
+        Rechnungslayout.setze(
+            daten(
+                ABSENDER,
+                EMPFAENGER,
+                List.of(position("1", Einheit.PAUSCHAL, zuBreit, "200.00", "200.00")),
+                "19",
+                10));
+
+    // Then
+    assertThat(positionszeilen(elemente)).containsExactly("A".repeat(20), "B".repeat(21));
+  }
+
+  @Test
+  void
+      setze_givenASingleWortExactlyAsWideAsTheSpalte_thenItIsNeitherSplitNorPrecededByALeerzeile() {
+    // Given — ein Wort von genau der Spaltenbreite. Es wird nicht hart getrennt, und vor ihm steht
+    // keine leere Zeile: Die erste Zeile faengt nicht mit einem Umbruch an.
+    final String randvoll = "C".repeat(41);
+
+    // When
+    final List<Druckelement> elemente =
+        Rechnungslayout.setze(
+            daten(
+                ABSENDER,
+                EMPFAENGER,
+                List.of(position("1", Einheit.PAUSCHAL, randvoll, "200.00", "200.00")),
+                "19",
+                10));
+
+    // Then — eine Zeile, und keine zweite; eine Pauschale traegt ihre Einheit nicht im Text.
+    assertThat(positionszeilen(elemente)).containsExactly(randvoll);
   }
 
   @Test

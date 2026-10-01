@@ -12,6 +12,13 @@ import java.lang.annotation.Target;
  * es im Namen enthaelt und die mindestens {@code CLASS}-Retention hat. PIT liest dieselbe
  * Annotation ueber das {@code FANN}-Feature im Profil {@code pit}.
  *
+ * <p><b>Im {@code FANN}-Feature steht der einfache Name</b>, nicht der mit Paket (Issue #192): PIT
+ * vergleicht den Deskriptor der Annotation mit {@code endsWith}, und der traegt Schraegstriche. Ein
+ * Eintrag {@code org.mwolff.fbcrm.common.ExcludeFromJacocoGeneratedReport} konnte darum nie passen
+ * — er stand so in der {@code pom.xml}, und die Ausnahmen wirkten still nur fuer JaCoCo, nicht fuer
+ * den Mutationstest. Die {@code CLASS}-Retention ist dagegen richtig: PIT liest die sichtbaren und
+ * die unsichtbaren Annotationen, JaCoCo verlangt mindestens {@code CLASS}.
+ *
  * <p>Einzusetzen ist sie <b>methodengenau</b> und nur dort, wo ein Zweig nachweislich nicht
  * erreichbar ist — nie, um eine Luecke zu verstecken (CLAUDE-java.md §5.4).
  */

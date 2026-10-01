@@ -109,6 +109,32 @@ class KundenangabenUseCaseTest {
   }
 
   @Test
+  void zu_whenTheContactHasNoVornameAtAll_thenNamesOnlyTheNachname() {
+    // Given — der Vorname ist freiwillig und darf fehlen. Das ist nicht derselbe Fall wie ein
+    // leerer Vorname: Dort steht ein Text da, hier steht keiner. Beide Wege muessen hierher
+    // fuehren.
+    firmaLiegtVor();
+    final Ansprechpartner person = Kundendoppel.ansprechpartner();
+    when(personen.findById(Kundendoppel.ANSPRECHPARTNER))
+        .thenReturn(
+            Optional.of(
+                person.geaendert(
+                    null,
+                    person.nachname(),
+                    person.rolle(),
+                    person.email(),
+                    person.telefonFestnetz(),
+                    person.telefonMobil(),
+                    person.updatedAt())));
+
+    // When
+    final Kundenangaben kunde = useCase.zu(Angebotsdoppel.angebot(ANGEBOT));
+
+    // Then
+    assertThat(kunde.ansprechpartnerName()).isEqualTo("Adler");
+  }
+
+  @Test
   void zu_whenTheFirmaIsMissing_thenReports() {
     // Given — ein Widerspruch im Bestand: Firmen werden nie geloescht.
     when(firmen.findById(Kundendoppel.FIRMA)).thenReturn(Optional.empty());

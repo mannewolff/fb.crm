@@ -10,6 +10,7 @@ import java.util.Objects;
 import java.util.regex.Pattern;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.fbcrm.common.Anschrift;
+import org.mwolff.fbcrm.common.ExcludeFromJacocoGeneratedReport;
 import org.mwolff.fbcrm.rechnung.application.RechnungDruckdaten.Druckposition;
 import org.mwolff.fbcrm.rechnung.domain.Belegabsender;
 
@@ -387,7 +388,8 @@ public final class Rechnungslayout {
       final boolean letzte = stelle == positionen.size() - 1;
       final List<String> zeilen = umbrochen(positionstext(positionen.get(stelle)));
       final int reserve = letzte ? SUMMENBLOCK_HOEHE : 0;
-      if (hoehe - zeilen.size() * ZEILENHOEHE - reserve < TABELLE_UNTERGRENZE) {
+      final int benoetigt = zeilen.size() * ZEILENHOEHE + reserve;
+      if (!haeltDieUntergrenze(hoehe - benoetigt, TABELLE_UNTERGRENZE)) {
         senkrechte(rahmenOben, hoehe);
         hoehe = seitenwechsel();
         rahmenOben = hoehe;
@@ -461,7 +463,7 @@ public final class Rechnungslayout {
   /** Zahlungsziel, Gruss und Name; eine Unterschrift steht nicht darunter. */
   private void schluss(final int tabelleUnten) {
     int hoehe = tabelleUnten - ABSTAND_NACH_TABELLE;
-    if (hoehe - SCHLUSS_HOEHE < INHALT_UNTEN) {
+    if (!haeltDieUntergrenze(hoehe - SCHLUSS_HOEHE, INHALT_UNTEN)) {
       hoehe = seitenwechsel();
     }
     links(hoehe, Schrift.NORMAL, GROESSE_TEXT, DUNKEL, zahlungssatz());
@@ -513,6 +515,29 @@ public final class Rechnungslayout {
       return mit("USt-IdNr. ", absender.umsatzsteuerId());
     }
     return mit("Steuernummer ", absender.steuernummer());
+  }
+
+  /*
+   * Ob der Rest der Seite die Untergrenze noch haelt — die eine Frage, die ueber jeden
+   * Seitenwechsel des Satzes entscheidet.
+   *
+   * Eine eigene Methode allein fuer den Vergleich, und methodengenau ausgenommen nach
+   * CLAUDE-java.md §5.4: Ob hier „kleiner" oder „kleiner gleich" steht, ist nicht beobachtbar,
+   * denn Gleichheit kann nicht eintreten. In der Tabelle ist jede Hoehe TABELLE_OBEN -
+   * KOPFZEILE_HOEHE = 449 oder FOLGESEITE_OBEN = 780 minus ein Vielfaches von ZEILENHOEHE, davon
+   * noch SUMMENBLOCK_HOEHE oder nichts abgezogen; modulo ZEILENHOEHE ergibt das 1, 15, 12 oder 10,
+   * TABELLE_UNTERGRENZE dagegen 8. Beim Schluss verlangte Gleichheit eine Hoehe von genau 248, und
+   * 248 liegt modulo ZEILENHOEHE ebenfalls bei 8. Ein Test dafuer waere nicht zu schreiben, ohne
+   * die an der Vorlage abgenommenen Masse zu verbiegen.
+   *
+   * Dass hier entschieden wird, bleibt vollstaendig geprueft: Die Verzweigung traegt der Aufrufer,
+   * und beide Richtungen stehen namentlich in RechnungslayoutTest — fuer die Tabelle
+   * setze_givenSiebzehnPositionen_… gegen setze_givenAchtzehnPositionen_…, fuer den Schluss
+   * setze_givenZwoelfPositionen_… gegen setze_givenDreizehnPositionen_….
+   */
+  @ExcludeFromJacocoGeneratedReport
+  private static boolean haeltDieUntergrenze(final int rest, final int untergrenze) {
+    return rest >= untergrenze;
   }
 
   private int seitenwechsel() {

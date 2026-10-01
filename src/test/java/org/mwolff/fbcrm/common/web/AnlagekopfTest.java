@@ -86,6 +86,20 @@ class AnlagekopfTest {
   }
 
   @Test
+  void contentDisposition_givenTheFirstAttrChar_thenBothFormsCarryItUnchanged() {
+    // Given — „A" ist das erste Zeichen der attr-char-Liste. Es steht hier, weil die Pruefung mit
+    // einer Grenze arbeitet: Nur ein Fund unterhalb von 0 heisst „nicht in der Liste". Faellt die
+    // Grenze um eins, verliert das erste Zeichen seinen Platz und wird prozentkodiert.
+
+    // When
+    final String kopf = Anlagekopf.contentDisposition("Angebot.pdf");
+
+    // Then
+    assertThat(kopf)
+        .isEqualTo("attachment; filename=\"Angebot.pdf\"; filename*=UTF-8''Angebot.pdf");
+  }
+
+  @Test
   void sandkasten_thenNamesTheHeaderAndThePolicyForTheContentRoute() {
     // Given — E5: die letzte Schranke, falls ein Empfaenger den Inhalt doch rendert.
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { istGueltigesMuster, rechnungsnummer } from './nummernmuster';
+import { MAX_LAENGE, istGueltigesMuster, rechnungsnummer } from './nummernmuster';
 
 /**
  * Die Schreibweise der Rechnungsnummer (Plan #161, E5).
@@ -44,6 +44,12 @@ describe('rechnungsnummer', () => {
 describe('istGueltigesMuster', () => {
   it.each(GUELTIG.map(([muster]) => muster))('laesst %s zu', (muster) => {
     expect(istGueltigesMuster(muster)).toBe(true);
+  });
+
+  it('laesst die Laengengrenze selbst zu — das Gegenstueck zu "51 Zeichen"', () => {
+    const grenzlang = `{NNNN}${'A'.repeat(44)}`;
+    expect(grenzlang).toHaveLength(MAX_LAENGE);
+    expect(istGueltigesMuster(grenzlang)).toBe(true);
   });
 
   it.each(UNGUELTIG)('weist ein Muster mit %s ab', (_grund, muster) => {

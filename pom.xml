@@ -632,8 +632,11 @@
                 <mutator>STRONGER</mutator>
               </mutators>
               <features>
-                <!-- Methodengenaue Ausnahmen aus §5.4 gelten auch fuer PIT. -->
-                <feature>+FANN(annotation[org.mwolff.fbcrm.common.ExcludeFromJacocoGeneratedReport])</feature>
+                <!-- Methodengenaue Ausnahmen aus §5.4 gelten auch fuer PIT. Hier steht der
+                     einfache Name und nicht der mit Paket: PIT vergleicht den Deskriptor der
+                     Annotation mit endsWith, und der traegt Schraegstriche — ein Eintrag mit
+                     Punkten passt nie und laesst das Feature wirkungslos (Issue #192). -->
+                <feature>+FANN(annotation[ExcludeFromJacocoGeneratedReport])</feature>
               </features>
               <!-- Eine eigene Schwelle fuer Test Strength bietet pitest-maven nicht; sie wird
                    ueber mutationThreshold=100 miterzwungen (CLAUDE-java.md §5.1). Auf

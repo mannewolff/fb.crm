@@ -115,10 +115,13 @@ public class AngebotAendernUseCase {
       final List<Angebotsposition> vorhanden) {
     final Map<Long, Angebotsposition> jetzt = new HashMap<>();
     for (final Angebotsposition position : eingereicht) {
-      final Long kennung = position.id();
       // Eine Position ohne Kennung ist neu und kann darum keine gebundene fortschreiben.
-      if (kennung != null) {
-        jetzt.put(kennung, position);
+      // requireId() statt der schon gelesenen Kennung: Der Schluessel ist hier ein long, und so
+      // sagt die Zeile selbst, dass sie nur fuer gespeicherte Positionen gilt. Ohne das waere die
+      // Pruefung wirkungslos — eine HashMap nimmt null als Schluessel an, und gelesen wird die
+      // Abbildung allein mit der Kennung einer gespeicherten Position.
+      if (position.id() != null) {
+        jetzt.put(position.requireId(), position);
       }
     }
     for (final Angebotsposition gebunden : vorhanden) {

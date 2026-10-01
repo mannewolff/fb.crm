@@ -145,6 +145,19 @@ class VorschauartTest {
   }
 
   @Test
+  void erkannt_givenTheWebpMarkerWithoutRiff_thenNothing() {
+    // Given — beide Haelften muessen stimmen: Hier steht die Kennung WEBP ab Byte acht, der
+    // RIFF-Vorsatz fehlt aber. Ohne die erste Haelfte der Pruefung reichte die Kennung allein.
+    final byte[] ohneRiff = inhalt('F', 'A', 'K', 'E', 0x24, 0x00, 0x00, 0x00, 'W', 'E', 'B', 'P');
+
+    // When
+    final Optional<Vorschauart> art = Vorschauart.erkannt(ohneRiff);
+
+    // Then
+    assertThat(art).isEmpty();
+  }
+
+  @Test
   void erkannt_givenRiffAndTooFewBytesForTheMarker_thenNothing() {
     // Given — RIFF steht da, die Kennung ab Byte acht fehlt noch.
     final byte[] halb = inhalt('R', 'I', 'F', 'F', 0x24, 0x00, 0x00, 0x00, 'W', 'E');

@@ -1,6 +1,8 @@
 package org.mwolff.fbcrm.rechnung.application;
 
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.catchThrowableOfType;
+import static org.assertj.core.api.Assertions.entry;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -11,6 +13,7 @@ import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -120,9 +123,19 @@ class RechnungseinstellungenPflegenUseCaseTest {
     when(rechnungen.existiertNummer("0001-2026")).thenReturn(true);
 
     // When / Then — die Meldung nennt die Nummer und haengt am Feld der Maske.
-    assertThatThrownBy(() -> useCase(JETZT).pflege(einstellungen("{NNNN}-{JJJJ}"), 1))
-        .isInstanceOf(NaechsteNummerSchonVergeben.class)
-        .hasMessageContaining("0001-2026");
+    final NaechsteNummerSchonVergeben fehler =
+        catchThrowableOfType(
+            NaechsteNummerSchonVergeben.class,
+            () -> useCase(JETZT).pflege(einstellungen("{NNNN}-{JJJJ}"), 1));
+
+    // Then — dieselbe Meldung im Rumpf und am Feld; liefen sie auseinander, lase die Maske zwei
+    // verschiedene Saetze fuer dieselbe Lage.
+    assertThat(fehler).hasMessage(NaechsteNummerSchonVergeben.MELDUNG + "0001-2026");
+    assertThat(fehler.felder())
+        .containsExactly(
+            entry(
+                NaechsteNummerSchonVergeben.FELD,
+                List.of(NaechsteNummerSchonVergeben.MELDUNG + "0001-2026")));
 
     // Then — nichts gespeichert, kein Zaehler gesetzt.
     verify(bestand, never()).speichere(any(), any());
