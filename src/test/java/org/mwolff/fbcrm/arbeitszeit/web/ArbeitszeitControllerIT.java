@@ -2,7 +2,9 @@ package org.mwolff.fbcrm.arbeitszeit.web;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.YearMonth;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -16,6 +18,7 @@ import org.mwolff.fbcrm.auth.domain.Account;
 import org.mwolff.fbcrm.auth.domain.AccountRepository;
 import org.mwolff.fbcrm.auth.domain.PasswordHasher;
 import org.mwolff.fbcrm.auth.domain.Role;
+import org.mwolff.fbcrm.common.Geschaeftszone;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.http.HttpEntity;
@@ -36,6 +39,12 @@ import org.springframework.jdbc.core.JdbcTemplate;
  * 9:10 liegt nicht im Raster, und ein zweiter Eintrag zur selben Zeit nennt den ersten mit Uhrzeit,
  * Position und Firma.
  *
+ * <p>Dazu die beiden Lesewege (Plan #194, A20, A15): Die Monatsliste traegt je Eintrag die
+ * Bezeichnung seiner Position und den Namen der Firma, je Tag eine Summe und fuer den Monat eine
+ * weitere; ohne Parameter antwortet sie fuer den laufenden Monat, und ein Monat, den es nicht gibt,
+ * ist eine fehlerhafte Anfrage. Die buchbaren Positionen nennen nur, was nach Aufwand in Stunden
+ * abrechnet.
+ *
  * <p>Der Ausgangspunkt ist ein bestelltes Angebot mit zwei Positionen: „Konzeption" nach Aufwand in
  * Stunden, auf die gebucht werden darf, und daneben eine Pauschale, auf die nicht gebucht werden
  * darf. Die Namen sind die des Beispiels aus #193.
@@ -48,6 +57,8 @@ class ArbeitszeitControllerIT extends AbstractIntegrationTest {
 
   private static final String FIRMA = "IT Bildungshaus";
   private static final String TAG = "2026-11-12";
+  private static final String SPAETERER_TAG = "2026-11-20";
+  private static final String MONAT = "2026-11";
   private static final String PFAD = "/api/arbeitszeit";
 
   private final TestRestTemplate rest;
@@ -155,9 +166,14 @@ class ArbeitszeitControllerIT extends AbstractIntegrationTest {
 
   private static Map<String, Object> eintrag(
       final long angebotPositionId, final String von, final String bis) {
+    return eintrag(angebotPositionId, TAG, von, bis);
+  }
+
+  private static Map<String, Object> eintrag(
+      final long angebotPositionId, final String tag, final String von, final String bis) {
     final Map<String, Object> rumpf = new LinkedHashMap<>();
     rumpf.put("angebotPositionId", Long.valueOf(angebotPositionId));
-    rumpf.put("tag", TAG);
+    rumpf.put("tag", tag);
     rumpf.put("von", von);
     rumpf.put("bis", bis);
     return rumpf;
@@ -307,5 +323,100 @@ class ArbeitszeitControllerIT extends AbstractIntegrationTest {
     // When / Then
     assertThat(ruf(PFAD + "/999", HttpMethod.DELETE, null, String.class).getStatusCode())
         .isEqualTo(HttpStatus.NOT_FOUND);
+  }
+
+  private ArbeitszeitMonatResponse lieseDenMonat(final String monat) {
+    return Objects.requireNonNull(
+        ruf(PFAD + "?monat=" + monat, HttpMethod.GET, null, ArbeitszeitMonatResponse.class)
+            .getBody());
+  }
+
+  @Test
+  void monat_thenEachEntryCarriesItsPositionWithTheCompanyName() {
+    // Given — A20, Kriterium 5: die Zeile nennt die Position und die Firma, zu der sie gehoert.
+    erfasse("09:00", "10:45", ZeiteintragResponse.class);
+
+    // When
+    final ArbeitszeitMonatResponse gelesen = lieseDenMonat(MONAT);
+
+    // Then
+    final ArbeitszeitMonatResponse.Zeitzeile zeile = gelesen.tage().get(0).eintraege().get(0);
+    assertThat(zeile.position().bezeichnung()).isEqualTo("Konzeption");
+    assertThat(zeile.position().firmaName()).isEqualTo(FIRMA);
+    assertThat(zeile.position().angebotId()).isEqualTo(angebotId);
+    assertThat(zeile.stunden()).isEqualByComparingTo("1.75");
+  }
+
+  @Test
+  void monat_thenCarriesTheSumOfEachDayAndOfTheMonth() {
+    // Given — zwei Tage: 1,75 Std. und 2,00 Std. am 12., 2,00 Std. am 20. November.
+    erfasse("09:00", "10:45", ZeiteintragResponse.class);
+    ruf(PFAD, HttpMethod.POST, eintrag(konzeptionId, "13:00", "15:00"), String.class);
+    ruf(
+        PFAD,
+        HttpMethod.POST,
+        eintrag(konzeptionId, SPAETERER_TAG, "08:00", "10:00"),
+        String.class);
+
+    // When
+    final ArbeitszeitMonatResponse gelesen = lieseDenMonat(MONAT);
+
+    // Then — Tage aufsteigend, je Tag die Summe seiner Zeilen, darueber die des Monats.
+    assertThat(gelesen.monat()).isEqualTo(YearMonth.of(2026, 11));
+    assertThat(gelesen.tage()).hasSize(2);
+    assertThat(gelesen.tage().get(0).stunden()).isEqualByComparingTo("3.75");
+    assertThat(gelesen.tage().get(1).stunden()).isEqualByComparingTo("2.00");
+    assertThat(gelesen.stunden()).isEqualByComparingTo("5.75");
+  }
+
+  @Test
+  void monat_withoutTheParameter_thenAnswersTheCurrentMonthInTheBusinessZone() {
+    // Given — E4: welcher Monat laeuft, entscheidet der Kalender des Freiberuflers.
+    // When
+    final ArbeitszeitMonatResponse gelesen =
+        Objects.requireNonNull(
+            ruf(PFAD, HttpMethod.GET, null, ArbeitszeitMonatResponse.class).getBody());
+
+    // Then
+    assertThat(gelesen.monat()).isEqualTo(YearMonth.now(Geschaeftszone.ZONE));
+    assertThat(gelesen.stunden()).isEqualByComparingTo(BigDecimal.ZERO);
+  }
+
+  @Test
+  void monat_givenAMonthThatIsNoMonth_thenAnswers400() {
+    // Given — 2026-13 gibt es nicht.
+    // When / Then
+    assertThat(ruf(PFAD + "?monat=2026-13", HttpMethod.GET, null, String.class).getStatusCode())
+        .isEqualTo(HttpStatus.BAD_REQUEST);
+  }
+
+  @Test
+  void monat_withoutASession_thenAnswers401() {
+    // Given — auch der Leseweg faellt unter /api/** (E11).
+    sitzung = new HttpHeaders();
+
+    // When / Then
+    assertThat(ruf(PFAD + "?monat=" + MONAT, HttpMethod.GET, null, String.class).getStatusCode())
+        .isEqualTo(HttpStatus.UNAUTHORIZED);
+  }
+
+  @Test
+  void buchbarePositionen_thenOnlyTheEffortPositionInHours() {
+    // Given — A15: der Schulungstag ist eine Pauschale und steht nicht zur Wahl.
+    // When
+    final ResponseEntity<BuchungspositionResponse[]> gelesen =
+        ruf(PFAD + "/buchbare-positionen", HttpMethod.GET, null, BuchungspositionResponse[].class);
+
+    // Then
+    assertThat(gelesen.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(Objects.requireNonNull(gelesen.getBody()))
+        .singleElement()
+        .satisfies(
+            position -> {
+              assertThat(position.id()).isEqualTo(konzeptionId);
+              assertThat(position.bezeichnung()).isEqualTo("Konzeption");
+              assertThat(position.firmaName()).isEqualTo(FIRMA);
+              assertThat(position.angebotId()).isEqualTo(angebotId);
+            });
   }
 }
