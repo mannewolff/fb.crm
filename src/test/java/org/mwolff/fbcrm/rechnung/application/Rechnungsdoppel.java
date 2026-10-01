@@ -24,6 +24,12 @@ import org.mwolff.fbcrm.rechnung.domain.Rechnungszustand;
  * <p>An einer Stelle, weil sechs Testklassen dieselben brauchen: ein bestelltes Angebot mit zwei
  * Positionen — 160 Stunden zu 100,00 € und eine Pauschale zu 1.200,00 € —, dazu Rechnungen darauf.
  * Die Zahlen sind die des Ziels von #160: 160 angeboten, 80 in diesem Monat.
+ *
+ * <p>Daneben stehen zwei Stuecke, die {@link #angebot()} nicht traegt und die nur die Vorbelegung
+ * aus der Arbeitszeit braucht (Issue #199): {@link #WARTUNG} als <b>zweite</b> buchbare Position —
+ * an einer einzigen liesse sich nicht zeigen, dass eine buchbare Position ohne Stunden im Entwurf
+ * fehlt — und {@link #beratungUeber(String)} fuer die 20 angebotenen Stunden des Beispiels aus
+ * Issue #193.
  */
 final class Rechnungsdoppel {
 
@@ -41,6 +47,9 @@ final class Rechnungsdoppel {
 
   /** Die Kennung der zweiten Angebotsposition: eine Pauschale zu 1.200,00 €. */
   static final long PAUSCHALE_ID = 102L;
+
+  /** Die Kennung einer zweiten buchbaren Position — auch sie rechnet nach Aufwand in Stunden. */
+  static final long WARTUNG_ID = 103L;
 
   /** Eine Kennung, die zu keiner Position dieses Angebots gehoert. */
   static final long FREMDE_POSITION = 999L;
@@ -60,6 +69,15 @@ final class Rechnungsdoppel {
           new BigDecimal("160.00"),
           Einheit.STUNDE,
           STUNDENSATZ);
+
+  static final Angebotsposition WARTUNG =
+      new Angebotsposition(
+          Long.valueOf(WARTUNG_ID),
+          "Wartung",
+          Abrechnungsmodus.AUFWAND,
+          new BigDecimal("10.00"),
+          Einheit.STUNDE,
+          new BigDecimal("130.00"));
 
   static final Angebotsposition PAUSCHALE =
       new Angebotsposition(
@@ -184,6 +202,23 @@ final class Rechnungsdoppel {
       final long id, final String nummer, final List<Rechnungsposition> positionen) {
     return entwurf(id, positionen)
         .gestellt(nummer, new BigDecimal("7.00"), 10, EMPFAENGER_KOPIE, ABSENDER_KOPIE, ANGELEGT);
+  }
+
+  /**
+   * Dieselbe Beratung mit frei gewaehlter angebotener Menge.
+   *
+   * <p>Fuer das Beispiel aus Issue #193: dort sind 20 Stunden angeboten und nicht 160.
+   *
+   * @param menge die angebotene Menge
+   */
+  static Angebotsposition beratungUeber(final String menge) {
+    return new Angebotsposition(
+        Long.valueOf(BERATUNG_ID),
+        "Beratung",
+        Abrechnungsmodus.AUFWAND,
+        new BigDecimal(menge),
+        Einheit.STUNDE,
+        STUNDENSATZ);
   }
 
   /** Eine Rechnungsposition zur Beratung ueber die angegebene Menge. */

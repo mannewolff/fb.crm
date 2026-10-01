@@ -8,7 +8,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.math.BigDecimal;
+import java.time.YearMonth;
 import java.util.List;
+import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -24,6 +26,7 @@ import org.mwolff.fbcrm.rechnung.application.RechnungLesenUseCase;
 import org.mwolff.fbcrm.rechnung.application.RechnungMitBetrag;
 import org.mwolff.fbcrm.rechnung.domain.Abrechnungsstand;
 import org.mwolff.fbcrm.rechnung.domain.Positionsstand;
+import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
@@ -35,6 +38,11 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
  * Angebot, aus dem nichts zu holen ist, 404 an einem unbekannten — und die beiden Listen des
  * Abrechnungsstands. <b>Der Server entscheidet</b>: Die Abweisung kommt aus dem Anwendungsfall und
  * nicht aus einer Vorpruefung im Controller.
+ *
+ * <p>Dazu die drei Formen des Rumpfs beim Anlegen (Issue #193, Antwort 7): ganz weggelassen, mit
+ * einem Monat und mit {@code null} als Monat. Die erste und die dritte sind dieselbe Anfrage an den
+ * Anwendungsfall — ein Entwurf ohne Arbeitszeit —, und das ist hier nachgewiesen und nicht nur
+ * beabsichtigt.
  */
 @ExtendWith(MockitoExtension.class)
 class AngebotRechnungenControllerTest {
@@ -58,9 +66,11 @@ class AngebotRechnungenControllerTest {
   }
 
   @Test
-  void anlegen_thenCreatedWithTheFreshEntwurf() throws Exception {
-    // Given — der Entwurf ist mit der offenen Menge vorbelegt.
-    when(anlegen.anlegen(Webdoppel.ANGEBOT)).thenReturn(Webdoppel.entwurf("160.00"));
+  void anlegen_withoutARumpf_thenCreatedWithTheFreshEntwurf() throws Exception {
+    // Given — ohne Rumpf fragt der Controller ohne Monat, und der Entwurf ist mit der offenen
+    // Menge vorbelegt.
+    when(anlegen.anlegen(Webdoppel.ANGEBOT, Optional.empty()))
+        .thenReturn(Webdoppel.entwurf("160.00"));
     when(lesen.lese(Webdoppel.RECHNUNG))
         .thenReturn(Webdoppel.ansicht(Webdoppel.entwurf("160.00"), "0"));
 
@@ -77,9 +87,44 @@ class AngebotRechnungenControllerTest {
   }
 
   @Test
+  void anlegen_withAMonat_thenTheMonatReachesTheUseCase() throws Exception {
+    // Given — der Monat steht als JJJJ-MM im Rumpf (Antwort 7).
+    when(anlegen.anlegen(Webdoppel.ANGEBOT, Optional.of(YearMonth.of(2026, 11))))
+        .thenReturn(Webdoppel.entwurf("12.00"));
+    when(lesen.lese(Webdoppel.RECHNUNG))
+        .thenReturn(Webdoppel.ansicht(Webdoppel.entwurf("12.00"), "10.00"));
+
+    // When / Then
+    mockMvc
+        .perform(
+            post(RECHNUNGEN)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"monat\":\"2026-11\"}"))
+        .andExpect(status().isCreated())
+        .andExpect(jsonPath("$.zeilen[0].menge").value(12.00));
+  }
+
+  @Test
+  void anlegen_withARumpfWithoutAMonat_thenTheUseCaseIsAskedWithoutOne() throws Exception {
+    // Given — „ohne Arbeitszeit" schickt die Oberflaeche als null; das ist dasselbe wie kein Rumpf.
+    when(anlegen.anlegen(Webdoppel.ANGEBOT, Optional.empty()))
+        .thenReturn(Webdoppel.entwurf("160.00"));
+    when(lesen.lese(Webdoppel.RECHNUNG))
+        .thenReturn(Webdoppel.ansicht(Webdoppel.entwurf("160.00"), "0"));
+
+    // When / Then
+    mockMvc
+        .perform(
+            post(RECHNUNGEN).contentType(MediaType.APPLICATION_JSON).content("{\"monat\":null}"))
+        .andExpect(status().isCreated())
+        .andExpect(jsonPath("$.zeilen[0].menge").value(160.00));
+  }
+
+  @Test
   void anlegen_atAnAngebotWithNothingToBill_thenConflict() throws Exception {
     // Given — vor „bestellt" oder ohne Offenes: beides sagt dieselbe Ausnahme.
-    when(anlegen.anlegen(Webdoppel.ANGEBOT)).thenThrow(new AngebotNichtAbrechenbar());
+    when(anlegen.anlegen(Webdoppel.ANGEBOT, Optional.empty()))
+        .thenThrow(new AngebotNichtAbrechenbar());
 
     // When / Then
     mockMvc.perform(post(RECHNUNGEN)).andExpect(status().isConflict());
@@ -89,7 +134,8 @@ class AngebotRechnungenControllerTest {
   @Test
   void anlegen_atAnUnknownAngebot_thenNotFound() throws Exception {
     // Given
-    when(anlegen.anlegen(Webdoppel.ANGEBOT)).thenThrow(new AngebotNichtGefunden());
+    when(anlegen.anlegen(Webdoppel.ANGEBOT, Optional.empty()))
+        .thenThrow(new AngebotNichtGefunden());
 
     // When / Then
     mockMvc.perform(post(RECHNUNGEN)).andExpect(status().isNotFound());
