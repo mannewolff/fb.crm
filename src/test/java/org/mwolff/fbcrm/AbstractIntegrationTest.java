@@ -35,13 +35,17 @@ public abstract class AbstractIntegrationTest {
       new PostgreSQLContainer<>(DockerImageName.parse("postgres:16-alpine"));
 
   /**
-   * Dasselbe Abbild wie {@code docker-compose.yml} Z. 19: {@code minio/minio} gibt es auf Docker
-   * Hub nicht mehr, und {@link MinIOContainer} erwartet genau diesen Namen — daher die
-   * Gleichsetzung.
+   * Dasselbe Abbild wie der Dienst {@code minio} in {@code docker-compose.yml}: {@code minio/minio}
+   * gibt es auf Docker Hub nicht mehr, und quay.io antwortet mit 401 — darum {@code
+   * chainguard/minio} ueber seinen Digest. {@link MinIOContainer} erwartet den Namen {@code
+   * minio/minio} — daher die Gleichsetzung. Wer den Digest in {@code docker-compose.yml} erneuert,
+   * zieht ihn hier nach: Test und Betrieb sollen dieselbe MinIO-Version sehen.
    */
   static final MinIOContainer MINIO =
       new MinIOContainer(
-          DockerImageName.parse("quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z")
+          DockerImageName.parse(
+                  "chainguard/minio@sha256:"
+                      + "4692462f35d97d7e82c30371d82f057703c5d9489bcae726010594c812f2d285")
               .asCompatibleSubstituteFor("minio/minio"));
 
   static {

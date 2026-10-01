@@ -14,15 +14,30 @@ services:
       retries: 10
 
   minio:
-    # quay.io statt Docker Hub: `minio/minio` existiert dort nicht mehr. Fester Tag statt
-    # `latest`, damit ein Deployment nicht erneut an einer bewegten Referenz scheitert.
-    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
+    # Docker Hub statt quay.io: `minio/minio` gibt es auf Docker Hub nicht mehr, und quay.io
+    # beantwortet das dortige MinIO-Repository seit v0.1.6 mit 401 — kein Pull, kein Start (#190).
+    # Erreichbar bleibt `chainguard/minio`: dieselbe MinIO-Software, von Chainguard gepflegt,
+    # frei nur unter dem bewegten Tag `latest`. Darum der Digest: Eine bewegte Referenz
+    # liefert jedem Deployment eine andere Version. Erneuern: auf hub.docker.com/r/chainguard/minio
+    # den aktuellen Digest von `latest` ablesen (oder `docker buildx imagetools inspect
+    # chainguard/minio:latest`) und hier eintragen.
+    #
+    # Das Abbild laeuft als uid 65532, nicht als root. Eine Ablage, die noch vom alten Abbild
+    # stammt, gehoert root — MinIO bricht darauf mit "Unable to initialize backend: file access
+    # denied" ab. Einmalig, bei gestopptem Dienst:
+    #
+    #   docker compose run --rm --user 0:0 --entrypoint /usr/bin/chown minio -R 65532:65532 /data
+    #
+    image: chainguard/minio@sha256:4692462f35d97d7e82c30371d82f057703c5d9489bcae726010594c812f2d285
+    # Der Einstiegspunkt des Abbilds ist /usr/bin/minio — dieselben Argumente gelten weiter.
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-fbcrm}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-fbcrm-minio}
     volumes:
       - minio_data:/data
+    # `mc` liegt auch im Chainguard-Abbild unter /usr/bin — der Healthcheck bleibt unveraendert,
+    # und fbcrm-api darf weiter auf `service_healthy` warten.
     healthcheck:
       test: ["CMD", "mc", "ready", "local"]
       interval: 5s
