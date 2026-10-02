@@ -31,6 +31,14 @@ export const RADIUS_MAL = 26;
  * Angabe gilt — die Vorlage traegt denselben Wert (`.zeit .punkt` Z. 97).
  */
 export const RADIUS_SYMBOL = 12;
+/**
+ * Das Symbolfeld einer Kennzahl-Kachel (48 px).
+ *
+ * Nicht derselbe Wert wie {@link RADIUS_SYMBOL}: Die Radien-Tabelle nennt fuer Symbolfelder die
+ * Spanne „14–16 px (Symbolfelder 36–48 px)", und das groessere Feld traegt das obere Ende — die
+ * Vorlage schreibt es ausdruecklich (`.zahl-karte .ikon` Z. 72).
+ */
+export const RADIUS_SYMBOLFELD = 16;
 /** Navigationseintrag, Zeile, Eingabefeld. */
 export const RADIUS_KLEIN = 14;
 /** Tasten, Chips, Suche, Zaehler — die runde Form. */
@@ -134,6 +142,15 @@ export interface KupferwolkeFarben {
   readonly kupferSchatten: string;
   /** Schrift auf der Kupfertaste. */
   readonly kupferSchrift: string;
+  /**
+   * Halbtransparentes Weiss — der Grund eines Symbolfelds **auf einer Toenung**
+   * (CLAUDE-design.md, „Bausteine": Kennzahl-Kachel).
+   *
+   * Es hellt die Toenung auf, ohne sie zu ersetzen, und traegt deshalb nie Schrift: Welche
+   * Toenung darunter liegt, entscheidet der Aufrufer, und gegen sechs verschiedene Flaechen laesst
+   * sich kein Kontrast zusichern.
+   */
+  readonly schleier: string;
   /** Der Grund der Anwendung: Cremeweiss mit Kupfer-Schimmer links und Flieder-Schimmer rechts. */
   readonly grundVerlauf: string;
   readonly toenung: KupferwolkeToenungen;
@@ -191,6 +208,7 @@ const farben: KupferwolkeFarben = {
   kupferGlanz: KUPFER_GLANZ,
   kupferSchatten: KUPFER_SCHATTEN,
   kupferSchrift: '#FFFFFF',
+  schleier: 'rgba(255,255,255,.7)',
   grundVerlauf: GRUND_VERLAUF,
   toenung: {
     pfirsich: { flaeche: '#FDEBDD', schrift: '#8A4418' },

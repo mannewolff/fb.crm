@@ -13,6 +13,7 @@ import {
   RADIUS_MITTEL,
   RADIUS_RUND,
   RADIUS_SYMBOL,
+  RADIUS_SYMBOLFELD,
   SCHATTEN,
   theme,
 } from './theme';
@@ -75,7 +76,7 @@ describe('Kontrast', () => {
 });
 
 describe('Tokens der Vorlage', () => {
-  it('traegt die Radien 28, 26, 24, 22, 14 und 12 px und die runde Form', () => {
+  it('traegt die Radien 28, 26, 24, 22, 16, 14 und 12 px und die runde Form', () => {
     expect(RADIUS_GROSS).toBe(28);
     expect(RADIUS_MAL).toBe(26);
     expect(RADIUS_KACHEL).toBe(24);
@@ -83,6 +84,8 @@ describe('Tokens der Vorlage', () => {
     expect(RADIUS_KLEIN).toBe(14);
     // Das Symbolfeld der Zeitleiste — die genauere der beiden Angaben der Designquelle.
     expect(RADIUS_SYMBOL).toBe(12);
+    // Das groessere Symbolfeld (48 px) der Kennzahl-Kachel — das obere Ende derselben Spanne.
+    expect(RADIUS_SYMBOLFELD).toBe(16);
     expect(RADIUS_RUND).toBe(999);
     expect(theme.shape.borderRadius).toBe(RADIUS_KLEIN);
   });
