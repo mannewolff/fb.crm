@@ -93,6 +93,21 @@ class ArchitectureTest {
   }
 
   @Test
+  void startseiteModule_thenNothingDependsOnIt() {
+    noClasses()
+        .that()
+        .resideOutsideOfPackage("org.mwolff.fbcrm.startseite..")
+        .should()
+        .dependOnClassesThat()
+        .resideInAPackage("org.mwolff.fbcrm.startseite..")
+        .because(
+            "die Startseite liest aus den Fachmodulen und wird von keinem gelesen; die Richtung"
+                + " ist startseite -> angebot, arbeitszeit, rechnung, common (Plan #208, E1)")
+        .allowEmptyShould(true)
+        .check(CLASSES);
+  }
+
+  @Test
   void modules_thenFreeOfCycles() {
     slices()
         .matching("org.mwolff.fbcrm.(*)..")
