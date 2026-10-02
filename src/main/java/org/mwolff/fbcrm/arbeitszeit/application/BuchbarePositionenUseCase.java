@@ -19,8 +19,9 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * <p>Das ist die Auswahlliste des Dialogs, und sie steht fuer sich: ohne Parameter, weil der Dialog
  * jede buchbare Position aller zugesagten Angebote anbietet. Welche das sind, sagt {@link
- * Buchbarkeit#buchungZulaessig} und nur sie — nach Aufwand, in Stunden, und das Angebot bestellt
- * oder erledigt (Issue #193, Antworten 2, 3 und 5).
+ * Buchbarkeit#buchungZulaessig} und nur sie — am Angebot an einen Kunden nach Aufwand, in Stunden
+ * und bestellt oder erledigt (Issue #193, Antworten 2, 3 und 5), an der internen Arbeit jede
+ * Position, solange sie laeuft (Issue #229, Kriterium 5 von #207).
  *
  * <p><b>Die Reihenfolge ist die der Gruppierung</b> (A15): Firma alphabetisch, darin das neueste
  * Angebot zuerst, darin die Positionen in der Reihenfolge des Angebots. Die Oberflaeche kann die

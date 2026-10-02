@@ -154,10 +154,17 @@ public class ZeiteintragUseCase {
     }
   }
 
+  /*
+   * Welchen Satz die Abweisung traegt, entscheidet die Art des Angebots (E22): Der Satz des
+   * Kundenangebots nennt Aufwand und Stunden, und an der internen Arbeit waere das falsch — dort
+   * traegt jede Position Stunden, und es fehlt allein der Status.
+   */
   private void pruefeBuchungZulaessig(final long angebotPositionId) {
     final Buchungsziel ziel = ziel(angebotPositionId);
     if (!Buchbarkeit.buchungZulaessig(ziel.angebot(), ziel.position())) {
-      throw new PositionNichtBuchbar();
+      throw ziel.angebot().intern()
+          ? PositionNichtBuchbar.anInternerArbeit()
+          : PositionNichtBuchbar.amKundenangebot();
     }
   }
 
@@ -191,8 +198,8 @@ public class ZeiteintragUseCase {
   /*
    * Die Position samt ihrem Angebot. Der Bestand der Angebote kennt keinen Zugriff ueber die
    * Kennung einer Position — er liefert das Angebot als Ganzes (AngebotRepository) —, und genau
-   * das Ganze ist hier gebraucht: Die Regel liest Abrechnungsart und Einheit der Position und den
-   * Status ihres Angebots. Eine unbekannte Kennung ist dieselbe Lage wie eine nicht buchbare
+   * das Ganze ist hier gebraucht: Die Regel liest Abrechnungsart und Einheit der Position und
+   * Kennzeichen und Status ihres Angebots. Eine unbekannte Kennung ist dieselbe Lage wie eine nicht buchbare
    * Position (siehe PositionNichtBuchbar). Auf dem Weg der Ueberschneidung kann sie nicht
    * auftreten: Der Fremdschluessel der Tabelle haelt jede gebuchte Position fest.
    */
@@ -204,7 +211,7 @@ public class ZeiteintragUseCase {
                     .filter(position -> position.requireId() == angebotPositionId)
                     .map(position -> new Buchungsziel(angebot, position)))
         .findFirst()
-        .orElseThrow(PositionNichtBuchbar::new);
+        .orElseThrow(PositionNichtBuchbar::amKundenangebot);
   }
 
   /** Eine Angebotsposition mit dem Angebot, zu dem sie gehoert. */

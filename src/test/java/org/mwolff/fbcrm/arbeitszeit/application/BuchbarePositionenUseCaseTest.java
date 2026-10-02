@@ -157,16 +157,56 @@ class BuchbarePositionenUseCaseTest {
   @ParameterizedTest
   @EnumSource(
       value = Angebotsstatus.class,
-      names = {"BESTELLT", "ERLEDIGT"},
+      names = {"BESTELLT", "ERLEDIGT", "LAEUFT"},
       mode = EnumSource.Mode.EXCLUDE)
   void positionen_givenAnOfferInAnotherStatus_thenNone(final Angebotsstatus status) {
-    // Given — Antwort 2: gebucht wird nur auf bestellte und erledigte Angebote; „abgegeben" und
-    // „abgerechnet" fehlen damit in der Auswahl.
+    // Given — Antwort 2: gebucht wird nur auf bestellte und erledigte Kundenangebote und auf die
+    // laufende interne Arbeit; „abgegeben", „abgerechnet" und „abgeschlossen" fehlen in der Auswahl
+    // (E12, Kriterium 5 von #207).
     imBestandStehen(Zeitdoppel.angebot(status));
 
     // When / Then
     assertThat(useCase.positionen()).isEmpty();
     verifyNoInteractions(firmen);
+  }
+
+  @Test
+  void positionen_givenFinishedInternalWork_thenNone() {
+    // Given — ist die interne Arbeit abgeschlossen, erscheinen ihre Positionen nicht mehr in der
+    // Positionswahl (Kriterium 5 von #207).
+    imBestandStehen(Zeitdoppel.angebot(Angebotsstatus.ABGESCHLOSSEN));
+
+    // When / Then
+    assertThat(useCase.positionen()).isEmpty();
+    verifyNoInteractions(firmen);
+  }
+
+  @Test
+  void positionen_givenRunningInternalWork_thenEveryPositionCarriesTheInternalFlag() {
+    // Given — E11: an der laufenden internen Arbeit traegt jede Position Stunden, auch die
+    // Pauschale „Schulungstag". Kriterium 2 von #207 verlangt das Kennzeichen an der Position, die
+    // die Zeiterfassung nennt.
+    imBestandStehen(Zeitdoppel.angebot(Angebotsstatus.LAEUFT));
+    when(firmen.findAllById(Set.of(Zeitdoppel.FIRMA))).thenReturn(List.of(Zeitdoppel.firma()));
+
+    // When
+    final List<Buchungsposition> gelesen = useCase.positionen();
+
+    // Then
+    assertThat(gelesen)
+        .extracting(Buchungsposition::bezeichnung)
+        .containsExactly("Konzeption", "Wartung", "Schulungstag");
+    assertThat(gelesen).allMatch(Buchungsposition::intern);
+  }
+
+  @Test
+  void positionen_givenACustomerOffer_thenTheyCarryTheInternalFlagUnset() {
+    // Given / When — Kriterium 2 von #207: dasselbe Feld sagt am Kundenangebot „nein".
+    imBestandStehen(Zeitdoppel.angebot());
+    when(firmen.findAllById(Set.of(Zeitdoppel.FIRMA))).thenReturn(List.of(Zeitdoppel.firma()));
+
+    // Then
+    assertThat(useCase.positionen()).noneMatch(Buchungsposition::intern);
   }
 
   @Test

@@ -68,7 +68,7 @@ public class AbrechnungsstandUseCase {
     final Map<Long, BigDecimal> angefallen = arbeitszeit.angefallen(angebotId);
     return new Angebotsabrechnung(
         Abrechnungsstand.fuer(angebot.positionen(), dazu).positionen().stream()
-            .map(stand -> mitArbeitszeit(stand, angefallen))
+            .map(stand -> mitArbeitszeit(angebot, stand, angefallen))
             .toList(),
         dazu.stream()
             .sorted(Rechnungsreihenfolge.NEUESTE_ZUERST)
@@ -84,10 +84,14 @@ public class AbrechnungsstandUseCase {
    * An einer nicht buchbaren Position stehen keine Stunden, auch wenn die Auskunft dort etwas
    * meldet: Sie antwortet zu jeder Position des Angebots, und ob eine Stunden tragen darf, sagt
    * Buchbarkeit. Was die Auskunft nicht nennt, ist 0 — dieselbe Lesart wie im Anlegen des Entwurfs.
+   *
+   * Das Angebot gehoert zur Frage, seit die interne Arbeit jede ihrer Positionen Stunden tragen
+   * laesst (Issue #229, E11). Eine eigene Sperre fuer sie steht hier nicht: Aus der internen Arbeit
+   * entsteht keine Rechnung, aber der Abrechnungsstand ist eine Lesesicht und sperrt nichts.
    */
   private static Positionsabrechnung mitArbeitszeit(
-      final Positionsstand stand, final Map<Long, BigDecimal> angefallen) {
-    final boolean buchbar = Buchbarkeit.buchbar(stand.position());
+      final Angebot angebot, final Positionsstand stand, final Map<Long, BigDecimal> angefallen) {
+    final boolean buchbar = Buchbarkeit.buchbar(angebot, stand.position());
     return new Positionsabrechnung(
         stand,
         buchbar,

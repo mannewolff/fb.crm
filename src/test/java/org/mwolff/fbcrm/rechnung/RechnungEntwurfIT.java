@@ -11,6 +11,7 @@ import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mwolff.fbcrm.AbstractIntegrationTest;
+import org.mwolff.fbcrm.angebot.domain.Angebotsstatus;
 import org.mwolff.fbcrm.angebot.web.AngebotResponse;
 import org.mwolff.fbcrm.auth.domain.Account;
 import org.mwolff.fbcrm.auth.domain.AccountRepository;
@@ -151,6 +152,43 @@ class RechnungEntwurfIT extends AbstractIntegrationTest {
     final long angebotId = angebotMit(menge, STUNDENSATZ);
     ruf("/api/angebote/" + angebotId + "/status/weiter", HttpMethod.POST, null, String.class);
     ruf("/api/angebote/" + angebotId + "/status/weiter", HttpMethod.POST, null, String.class);
+    return angebotId;
+  }
+
+  /*
+   * Ein bestelltes Angebot, nach innen gestellt: Der Status folgt der Art und wird LAEUFT (Issue
+   * #227), die Position behaelt ihre 160 angebotenen Stunden (Kriterium 8 von #207). Damit steht
+   * etwas Offenes daran — nur so sagt die Antwort 409 etwas ueber die Art und nicht ueber die
+   * leere Menge.
+   */
+  private long laufendeInterneArbeit(final String menge) {
+    final long angebotId = bestelltesAngebot(menge);
+    final long positionId =
+        Objects.requireNonNull(
+                ruf("/api/angebote/" + angebotId, HttpMethod.GET, null, AngebotResponse.class)
+                    .getBody())
+            .positionen()
+            .getFirst()
+            .id();
+    final Map<String, Object> position = new LinkedHashMap<>();
+    position.put("id", Long.valueOf(positionId));
+    position.put("bezeichnung", "Beratung");
+    position.put("abrechnungsmodus", "AUFWAND");
+    position.put("menge", menge);
+    position.put("einheit", "STUNDE");
+    position.put("einzelpreis", STUNDENSATZ);
+    final Map<String, Object> rumpf = new LinkedHashMap<>();
+    rumpf.put("angebotDatum", "2026-09-25");
+    rumpf.put("ansprechpartnerId", null);
+    rumpf.put("beschreibung", "Eigene Weiterbildung");
+    rumpf.put("intern", true);
+    rumpf.put("positionen", List.of(position));
+    final AngebotResponse umgestellt =
+        Objects.requireNonNull(
+            ruf("/api/angebote/" + angebotId, HttpMethod.PUT, rumpf, AngebotResponse.class)
+                .getBody());
+    assertThat(umgestellt.intern()).isTrue();
+    assertThat(umgestellt.status()).isEqualTo(Angebotsstatus.LAEUFT);
     return angebotId;
   }
 
@@ -366,6 +404,28 @@ class RechnungEntwurfIT extends AbstractIntegrationTest {
     assertThat(antwort)
         .contains("\"angebotId\":" + offenes)
         .doesNotContain("\"angebotId\":" + erledigtes);
+  }
+
+  @Test
+  void interneArbeit_thenIsNeitherListedNorBillable() {
+    // Given — Kriterium 7 von #207: aus der internen Arbeit entsteht keine Rechnung. Eine eigene
+    // Sperre braucht es dafuer nicht: LAEUFT und ABGESCHLOSSEN stehen nicht in
+    // Abrechenbarkeit.STATUS, und dieser Test haelt das fest, statt die Bedingung zu verdoppeln.
+    final long intern = laufendeInterneArbeit("160.00");
+    final long extern = bestelltesAngebot("160.00");
+
+    // When / Then — die interne Arbeit fehlt in der Auswahlliste.
+    assertThat(
+            ruf("/api/rechnungen/abrechenbare-angebote", HttpMethod.GET, null, String.class)
+                .getBody())
+        .contains("\"angebotId\":" + extern)
+        .doesNotContain("\"angebotId\":" + intern);
+
+    // When / Then — und der Server weist sie ab, auch wenn jemand den Weg direkt geht.
+    assertThat(
+            ruf("/api/angebote/" + intern + "/rechnungen", HttpMethod.POST, null, String.class)
+                .getStatusCode())
+        .isEqualTo(HttpStatus.CONFLICT);
   }
 
   @Test

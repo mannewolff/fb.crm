@@ -109,9 +109,9 @@ public class RechnungAnlegenUseCase {
     final LocalDate heute = LocalDate.now(clock.withZone(Geschaeftszone.ZONE));
     final @Nullable YearMonth gewaehlt = monat.orElse(null);
     if (gewaehlt != null) {
-      final Map<Long, BigDecimal> stunden = gebuchteStunden(angebotId, gewaehlt, stand);
+      final Map<Long, BigDecimal> stunden = gebuchteStunden(angebot, gewaehlt, stand);
       if (!stunden.isEmpty()) {
-        return schreibe(angebotId, heute, gewaehlt, nachArbeitszeit(stand, stunden));
+        return schreibe(angebotId, heute, gewaehlt, nachArbeitszeit(angebot, stand, stunden));
       }
     }
     return schreibe(angebotId, heute, YearMonth.from(heute), nachOffenem(stand));
@@ -122,15 +122,21 @@ public class RechnungAnlegenUseCase {
    * leere Abbildung heisst damit „in diesem Monat ist nichts abzurechnen" und loest die Rueckkehr
    * zur Vorbelegung ohne Monat aus (E7). Gefiltert wird hier und nicht in der Auskunft: Die Regel,
    * was buchbar ist, steht in Buchbarkeit und nur dort.
+   *
+   * Das Angebot gehoert zur Frage, seit die interne Arbeit jede ihrer Positionen Stunden tragen
+   * laesst (Issue #229, E11). Eine eigene Sperre gegen sie steht hier nicht: Die interne Arbeit
+   * kommt nie bis hierher, weil LAEUFT und ABGESCHLOSSEN nicht in Abrechenbarkeit.STATUS stehen und
+   * die Pruefung darauf oben in anlegen(...) steht (Kriterium 7 von #207). Eine zweite Bedingung
+   * waere eine Abschrift derselben Aussage.
    */
   private Map<Long, BigDecimal> gebuchteStunden(
-      final long angebotId, final YearMonth monat, final Abrechnungsstand stand) {
-    final Map<Long, BigDecimal> gemeldet = arbeitszeit.imMonat(angebotId, monat);
+      final Angebot angebot, final YearMonth monat, final Abrechnungsstand stand) {
+    final Map<Long, BigDecimal> gemeldet = arbeitszeit.imMonat(angebot.requireId(), monat);
     final Map<Long, BigDecimal> gebucht = new LinkedHashMap<>();
     for (final Positionsstand positionsstand : stand.positionen()) {
       final long positionId = positionsstand.position().requireId();
       final BigDecimal stunden = gemeldet.getOrDefault(positionId, BigDecimal.ZERO);
-      if (Buchbarkeit.buchbar(positionsstand.position()) && stunden.signum() > 0) {
+      if (Buchbarkeit.buchbar(angebot, positionsstand.position()) && stunden.signum() > 0) {
         gebucht.put(positionId, stunden);
       }
     }
@@ -143,14 +149,14 @@ public class RechnungAnlegenUseCase {
    * Stunden waere eine Rechnung ueber nichts.
    */
   private static List<Rechnungsposition> nachArbeitszeit(
-      final Abrechnungsstand stand, final Map<Long, BigDecimal> stunden) {
+      final Angebot angebot, final Abrechnungsstand stand, final Map<Long, BigDecimal> stunden) {
     final List<Rechnungsposition> positionen = new ArrayList<>();
     for (final Positionsstand positionsstand : stand.positionen()) {
       final Angebotsposition position = positionsstand.position();
       final @Nullable BigDecimal gebucht = stunden.get(position.requireId());
       if (gebucht != null) {
         positionen.add(zeile(position, gebucht));
-      } else if (!Buchbarkeit.buchbar(position) && positionsstand.offenesVorhanden()) {
+      } else if (!Buchbarkeit.buchbar(angebot, position) && positionsstand.offenesVorhanden()) {
         positionen.add(zeile(position, positionsstand.offen()));
       }
     }

@@ -11,6 +11,7 @@ import java.time.Clock;
 import java.time.LocalTime;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -157,11 +158,17 @@ class ZeiteintragUseCaseTest {
     // Antwort nicht: Es ist dieselbe Lage wie eine Position, auf die nicht gebucht werden darf.
     angebotStehtIn(Angebotsstatus.BESTELLT);
 
-    // When / Then
+    // When / Then — die Meldung ist die des Kundenangebots (E22): Die Art eines Angebots, das es
+    // nicht gibt, ist nicht bestimmbar.
     assertThatExceptionOfType(PositionNichtBuchbar.class)
         .isThrownBy(() -> anlegen(Zeitdoppel.FREMDE_POSITION, "09:00", "11:00"))
         .satisfies(
-            fehler -> assertThat(fehler.felder()).containsOnlyKeys(PositionNichtBuchbar.FELD));
+            fehler ->
+                assertThat(fehler.felder())
+                    .isEqualTo(
+                        Map.of(
+                            PositionNichtBuchbar.FELD,
+                            List.of(PositionNichtBuchbar.MELDUNG_EXTERN))));
     verify(zeiten, never()).save(any());
   }
 
@@ -181,10 +188,50 @@ class ZeiteintragUseCaseTest {
     // Given — Antwort 2: vor der Zusage des Kunden gibt es nichts zu buchen.
     angebotStehtIn(Angebotsstatus.ABGEGEBEN);
 
+    // When / Then — die Meldung des Kundenangebots nennt „bestellt oder erledigt" (E22).
+    assertThatExceptionOfType(PositionNichtBuchbar.class)
+        .isThrownBy(() -> anlegen(Zeitdoppel.KONZEPTION_ID, "09:00", "11:00"))
+        .satisfies(
+            fehler ->
+                assertThat(fehler.felder())
+                    .isEqualTo(
+                        Map.of(
+                            PositionNichtBuchbar.FELD,
+                            List.of(PositionNichtBuchbar.MELDUNG_EXTERN))));
+    verify(zeiten, never()).save(any());
+  }
+
+  @Test
+  void anlegen_givenFinishedInternalWork_thenReportsItWithTheInternalMessage() {
+    // Given — Kriterium 5 von #207: gebucht wird nur, solange die interne Arbeit laeuft. Der Satz
+    // des Kundenangebots waere hier falsch, und er erscheint am Feld der Positionswahl (E22).
+    angebotStehtIn(Angebotsstatus.ABGESCHLOSSEN);
+
     // When / Then
     assertThatExceptionOfType(PositionNichtBuchbar.class)
-        .isThrownBy(() -> anlegen(Zeitdoppel.KONZEPTION_ID, "09:00", "11:00"));
+        .isThrownBy(() -> anlegen(Zeitdoppel.KONZEPTION_ID, "09:00", "11:00"))
+        .satisfies(
+            fehler ->
+                assertThat(fehler.felder())
+                    .isEqualTo(
+                        Map.of(
+                            PositionNichtBuchbar.FELD,
+                            List.of(PositionNichtBuchbar.MELDUNG_INTERN))));
     verify(zeiten, never()).save(any());
+  }
+
+  @Test
+  void anlegen_givenAFlatRatePositionOfRunningInternalWork_thenStoresTheEntry() {
+    // Given — E11: an der laufenden internen Arbeit traegt auch die Pauschale Stunden.
+    angebotStehtIn(Angebotsstatus.LAEUFT);
+    keinEintragAmTag();
+    speichernGibtZurueck();
+
+    // When
+    final Zeiteintrag gespeichert = anlegen(Zeitdoppel.SCHULUNG_ID, "09:00", "11:00");
+
+    // Then
+    assertThat(gespeichert.angebotPositionId()).isEqualTo(Zeitdoppel.SCHULUNG_ID);
   }
 
   @Test

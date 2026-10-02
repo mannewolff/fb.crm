@@ -14,10 +14,17 @@ import org.mwolff.fbcrm.arbeitszeit.application.Buchungsposition;
  * @param bezeichnung die Leistung, wie das Angebot sie nennt
  * @param angebotId Kennung des Angebots, zu dem die Position gehoert
  * @param angebotDatum Datum dieses Angebots
+ * @param intern ob das Angebot die eigene interne Arbeit festhaelt (Issue #229, Kriterium 2 von
+ *     #207)
  * @param firmaName Name der Firma, an die das Angebot geht
  */
 public record BuchungspositionResponse(
-    long id, String bezeichnung, long angebotId, LocalDate angebotDatum, String firmaName) {
+    long id,
+    String bezeichnung,
+    long angebotId,
+    LocalDate angebotDatum,
+    boolean intern,
+    String firmaName) {
 
   /** Dieselbe Position in der Sprache der Schnittstelle. */
   static BuchungspositionResponse of(final Buchungsposition position) {
@@ -26,6 +33,7 @@ public record BuchungspositionResponse(
         position.bezeichnung(),
         position.angebotId(),
         position.angebotDatum(),
+        position.intern(),
         position.firmaName());
   }
 }

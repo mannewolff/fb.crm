@@ -184,7 +184,7 @@ class ArbeitszeitControllerTest {
       throws Exception {
     // Given — Antworten 2, 3 und 5.
     when(useCase.anlegen(POSITION, TAG, LocalTime.of(9, 0), LocalTime.of(10, 45)))
-        .thenThrow(new PositionNichtBuchbar());
+        .thenThrow(PositionNichtBuchbar.amKundenangebot());
 
     // When / Then
     mockMvc
@@ -234,7 +234,7 @@ class ArbeitszeitControllerTest {
 
   private static Buchungsposition position() {
     return new Buchungsposition(
-        POSITION, "Konzeption", 11L, LocalDate.of(2026, 11, 1), "IT Bildungshaus");
+        POSITION, "Konzeption", 11L, LocalDate.of(2026, 11, 1), true, "IT Bildungshaus");
   }
 
   private static Arbeitsmonat november() {
@@ -263,6 +263,7 @@ class ArbeitszeitControllerTest {
         .andExpect(jsonPath("$.tage[0].eintraege[0].position.bezeichnung").value("Konzeption"))
         .andExpect(jsonPath("$.tage[0].eintraege[0].position.angebotId").value(11))
         .andExpect(jsonPath("$.tage[0].eintraege[0].position.angebotDatum").exists())
+        .andExpect(jsonPath("$.tage[0].eintraege[0].position.intern").value(true))
         .andExpect(jsonPath("$.tage[0].eintraege[0].position.firmaName").value("IT Bildungshaus"));
   }
 
@@ -297,6 +298,7 @@ class ArbeitszeitControllerTest {
         .andExpect(jsonPath("$[0].bezeichnung").value("Konzeption"))
         .andExpect(jsonPath("$[0].angebotId").value(11))
         .andExpect(jsonPath("$[0].angebotDatum").exists())
+        .andExpect(jsonPath("$[0].intern").value(true))
         .andExpect(jsonPath("$[0].firmaName").value("IT Bildungshaus"));
   }
 }

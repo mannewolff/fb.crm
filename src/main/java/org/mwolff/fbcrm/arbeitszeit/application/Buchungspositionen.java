@@ -92,6 +92,7 @@ final class Buchungspositionen {
         position.bezeichnung(),
         angebot.requireId(),
         angebot.angebotDatum(),
+        angebot.intern(),
         name);
   }
 }
