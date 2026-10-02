@@ -46,9 +46,13 @@ import org.springframework.jdbc.core.JdbcTemplate;
  * nicht null Stunden (E1).
  *
  * <p>Daneben steht der Abrechnungsstand desselben Angebots (Kriterien 7 und 8): Er nennt je
- * Position, ob sie Stunden traegt und wie viele insgesamt angefallen sind. Auch das ist nur hier
- * pruefbar — die Summe ueber alle Monate entsteht quer ueber beide Module und aus echten
- * Zeiteintraegen.
+ * Position, ob sie Stunden traegt und wie viele insgesamt angefallen sind, und darueber die
+ * Gesamtsumme (Issue #231). Auch das ist nur hier pruefbar — die Summe ueber alle Monate entsteht
+ * quer ueber beide Module und aus echten Zeiteintraegen.
+ *
+ * <p>Und am Ende <b>die interne Arbeit</b>: Sie liest denselben Weg, obwohl aus ihr nie eine
+ * Rechnung entsteht — sie liest ihn allein wegen der Stunden (Plan #218, E9). Der Test nagelt das
+ * fest, damit niemand den Weg spaeter mit einer Intern-Sperre „aufraeumt".
  *
  * <p>Der Ausgangspunkt ist der von {@code ArbeitszeitControllerIT}: ein bestelltes Angebot mit
  * „Konzeption" nach Aufwand in Stunden und daneben einer Pauschale, auf die nicht gebucht werden
@@ -85,9 +89,13 @@ class AngebotRechnungenControllerIT extends AbstractIntegrationTest {
   private final JdbcTemplate jdbc;
 
   private HttpHeaders sitzung = new HttpHeaders();
+  private long firmaId;
   private long angebotId;
   private long konzeptionId;
   private long schulungId;
+
+  /** Die Kennungen der Positionen der internen Arbeit, in der Reihenfolge des Angebots. */
+  private List<Long> internePositionen = List.of();
 
   @Autowired
   AngebotRechnungenControllerIT(
@@ -113,7 +121,7 @@ class AngebotRechnungenControllerIT extends AbstractIntegrationTest {
         new Account(null, MAIL, "Manne", hasher.hash(PASSWORT), Role.ADMIN, 0, ANGELEGT, ANGELEGT));
     sitzung = angemeldeterKopf();
     jdbc.update("INSERT INTO firma (name) VALUES (?)", FIRMA);
-    final long firmaId =
+    firmaId =
         Objects.requireNonNull(
                 jdbc.queryForObject("SELECT id FROM firma WHERE name = ?", Long.class, FIRMA))
             .longValue();
@@ -198,8 +206,14 @@ class AngebotRechnungenControllerIT extends AbstractIntegrationTest {
 
   /** Erfasst Arbeitszeit auf „Konzeption" — beide Uhrzeiten liegen im Viertelstundenraster. */
   private void erfasse(final String tag, final String von, final String bis) {
+    erfasseAuf(konzeptionId, tag, von, bis);
+  }
+
+  /** Dasselbe auf eine frei gewaehlte Position — die interne Arbeit hat ihre eigenen. */
+  private void erfasseAuf(
+      final long angebotPositionId, final String tag, final String von, final String bis) {
     final Map<String, Object> rumpf = new LinkedHashMap<>();
-    rumpf.put("angebotPositionId", Long.valueOf(konzeptionId));
+    rumpf.put("angebotPositionId", Long.valueOf(angebotPositionId));
     rumpf.put("tag", tag);
     rumpf.put("von", von);
     rumpf.put("bis", bis);
@@ -235,9 +249,14 @@ class AngebotRechnungenControllerIT extends AbstractIntegrationTest {
 
   /** Der Abrechnungsstand des Angebots, wie die Ansicht ihn liest. */
   private AngebotAbrechnungResponse abrechnung() {
+    return abrechnung(angebotId);
+  }
+
+  /** Derselbe Stand zu einem frei gewaehlten Angebot — die interne Arbeit ist ein zweites. */
+  private AngebotAbrechnungResponse abrechnung(final long id) {
     final ResponseEntity<AngebotAbrechnungResponse> antwort =
         ruf(
-            "/api/angebote/" + angebotId + "/abrechnung",
+            "/api/angebote/" + id + "/abrechnung",
             HttpMethod.GET,
             null,
             AngebotAbrechnungResponse.class);
@@ -273,6 +292,7 @@ class AngebotRechnungenControllerIT extends AbstractIntegrationTest {
         .satisfies(
             zeile -> assertThat(zeile.buchbar()).isFalse(),
             zeile -> assertThat(zeile.angefallen()).isEqualByComparingTo("0"));
+    assertThat(stand.angefallen()).isEqualByComparingTo("22.00");
   }
 
   @Test
@@ -337,5 +357,70 @@ class AngebotRechnungenControllerIT extends AbstractIntegrationTest {
     assertThat(entwurf.leistungszeitraum()).isEqualTo(laufenderMonat());
     assertThat(zeile(entwurf, konzeptionId).menge()).isEqualByComparingTo("20.00");
     assertThat(zeile(entwurf, schulungId).menge()).isEqualByComparingTo("1");
+  }
+
+  /** Die interne Arbeit: angelegt als intern, mit zwei Positionen, und im Status „laeuft". */
+  private long interneArbeit() {
+    final long id =
+        Objects.requireNonNull(
+                ruf(
+                        "/api/firmen/" + firmaId + "/angebote",
+                        HttpMethod.POST,
+                        Map.of("intern", true),
+                        AngebotResponse.class)
+                    .getBody())
+            .id();
+    final Map<String, Object> rumpf = new LinkedHashMap<>();
+    rumpf.put("angebotDatum", "2026-10-01");
+    rumpf.put("ansprechpartnerId", null);
+    rumpf.put("beschreibung", "Eigene Weiterbildung");
+    rumpf.put("intern", true);
+    rumpf.put(
+        "positionen",
+        List.of(interne("Lesen und Lernen"), interne("Werkzeuge in Ordnung bringen")));
+    final AngebotResponse mitPositionen =
+        Objects.requireNonNull(
+            ruf("/api/angebote/" + id, HttpMethod.PUT, rumpf, AngebotResponse.class).getBody());
+    assertThat(mitPositionen.intern()).isTrue();
+    internePositionen =
+        mitPositionen.positionen().stream()
+            .map(AngebotRechnungenControllerIT::kennung)
+            .map(Long::valueOf)
+            .toList();
+    return id;
+  }
+
+  /** Eine Position der internen Arbeit: nur eine Bezeichnung, keine der vier Angaben (#227). */
+  private static Map<String, Object> interne(final String bezeichnung) {
+    final Map<String, Object> felder = new LinkedHashMap<>();
+    felder.put("id", null);
+    felder.put("bezeichnung", bezeichnung);
+    felder.put("abrechnungsmodus", null);
+    felder.put("menge", null);
+    felder.put("einheit", null);
+    felder.put("einzelpreis", null);
+    return felder;
+  }
+
+  @Test
+  void abrechnung_atAnInternesAngebot_thenItAnswersWithTheStundenPerPositionAndTheirSumme() {
+    // Given — die interne Arbeit laeuft, auf beiden Positionen steht Zeit: 10 und 2 Stunden.
+    final long intern = interneArbeit();
+    erfasseAuf(internePositionen.get(0).longValue(), OKTOBERTAG, "08:00", "18:00");
+    erfasseAuf(internePositionen.get(1).longValue(), NOVEMBERTAG, "08:00", "10:00");
+
+    // When — der Weg bleibt fuer die interne Arbeit offen (E9), auch wenn sie nie abgerechnet wird.
+    final AngebotAbrechnungResponse stand = abrechnung(intern);
+
+    // Then — je Position ihre Stunden, und darueber die Summe beider.
+    assertThat(positionszeile(stand, internePositionen.get(0).longValue()))
+        .satisfies(
+            zeile -> assertThat(zeile.buchbar()).isTrue(),
+            zeile -> assertThat(zeile.angefallen()).isEqualByComparingTo("10.00"));
+    assertThat(positionszeile(stand, internePositionen.get(1).longValue()))
+        .satisfies(
+            zeile -> assertThat(zeile.buchbar()).isTrue(),
+            zeile -> assertThat(zeile.angefallen()).isEqualByComparingTo("2.00"));
+    assertThat(stand.angefallen()).isEqualByComparingTo("12.00");
   }
 }

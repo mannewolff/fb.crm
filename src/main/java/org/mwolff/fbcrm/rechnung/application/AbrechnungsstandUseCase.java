@@ -30,6 +30,9 @@ import org.springframework.transaction.annotation.Transactional;
  * Angebots</b>: Das Stellen der letzten Rechnung setzt es selbst auf „abgerechnet", und gerade dann
  * sollen die angefallenen Stunden und die Ueberschreitung stehen bleiben.
  *
+ * <p>Dazu die Gesamtsumme der angefallenen Stunden ueber alle Positionen (Issue #231, Kriterium 6
+ * von #207; Plan #218, E9, E10) — gerechnet aus den Zeilen, die ohnehin entstanden sind.
+ *
  * <p>Drei Zuege in den Bestand und keiner je Position — das Angebot bringt seine Positionen mit,
  * die Rechnungen kommen in einem Aufruf, und die Auskunft nennt die Stunden aller Positionen auf
  * einmal. Die Einstellungen kommen dazu, weil ein Entwurf mit dem Satz von jetzt rechnet ({@link
@@ -66,10 +69,12 @@ public class AbrechnungsstandUseCase {
     final List<Rechnung> dazu = rechnungen.findByAngebot(angebotId);
     final BigDecimal aktuellerSatz = einstellungen.lies().steuersatz();
     final Map<Long, BigDecimal> angefallen = arbeitszeit.angefallen(angebotId);
-    return new Angebotsabrechnung(
+    final List<Positionsabrechnung> zeilen =
         Abrechnungsstand.fuer(angebot.positionen(), dazu).positionen().stream()
             .map(stand -> mitArbeitszeit(angebot, stand, angefallen))
-            .toList(),
+            .toList();
+    return new Angebotsabrechnung(
+        zeilen,
         dazu.stream()
             .sorted(Rechnungsreihenfolge.NEUESTE_ZUERST)
             .map(
@@ -77,7 +82,21 @@ public class AbrechnungsstandUseCase {
                     new RechnungMitBetrag(
                         rechnung,
                         rechnung.brutto(GeltenderSteuersatz.fuer(rechnung, aktuellerSatz))))
-            .toList());
+            .toList(),
+        summeDerStunden(zeilen));
+  }
+
+  /*
+   * Die Summe entsteht aus den schon gebauten Zeilen und nicht aus einem zweiten Zug in den
+   * Bestand oder einer zweiten Auswahlregel (Issue #231, Plan #218, E9): An einer nicht buchbaren
+   * Position steht angefallen ohnehin auf 0, also ist die Summe ueber alle Zeilen dieselbe wie die
+   * ueber die buchbaren — und sie passt zu dem, was die Ansicht in der Spalte darueber addiert
+   * sieht. Ohne Position ist sie 0 und nicht null.
+   */
+  private static BigDecimal summeDerStunden(final List<Positionsabrechnung> zeilen) {
+    return zeilen.stream()
+        .map(Positionsabrechnung::angefallen)
+        .reduce(BigDecimal.ZERO, BigDecimal::add);
   }
 
   /*

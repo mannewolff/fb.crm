@@ -18,18 +18,30 @@ import org.mwolff.fbcrm.rechnung.domain.Rechnungszustand;
  *
  * <p>Zwei Listen: je Position des Angebots, was angeboten, abgerechnet, offen und angefallen ist,
  * und die Rechnungen, aus denen das entstanden ist. Entwuerfe zaehlen dabei mit (Kriterium 6).
+ * Darueber die Gesamtsumme der angefallenen Stunden (Issue #231).
+ *
+ * <p><b>Die interne Arbeit liest diesen Weg allein wegen der Stunden</b> (Plan #218, E9). Aus ihr
+ * entsteht nie eine Rechnung, und so liest ein nie abrechenbares Angebot einen Weg namens
+ * „abrechnung" — ein Namensbruch mit offenen Augen, dem ein eigener Weg nur fuer die Stunden bloss
+ * eine zweite Auskunft ueber dasselbe gegenuebergestellt haette. Der Weg bekommt darum <b>keine
+ * Intern-Sperre</b>; ein Test in {@code AngebotRechnungenControllerIT} haelt das fest, damit
+ * niemand ihn spaeter „aufraeumt".
+ *
+ * <p>Die Summe rechnet der Server und nicht die Ansicht (E10).
  *
  * @param positionen je Angebotsposition eine Zeile, in der Reihenfolge des Angebots
  * @param rechnungen die Rechnungen dieses Angebots, neueste zuerst
+ * @param angefallen die insgesamt erfassten Stunden ueber alle Positionen, sonst 0
  */
 public record AngebotAbrechnungResponse(
-    List<Positionszeile> positionen, List<Rechnungszeile> rechnungen) {
+    List<Positionszeile> positionen, List<Rechnungszeile> rechnungen, BigDecimal angefallen) {
 
   /** Die Sicht der Oberflaeche auf den Abrechnungsstand. */
   static AngebotAbrechnungResponse of(final Angebotsabrechnung abrechnung) {
     return new AngebotAbrechnungResponse(
         abrechnung.positionen().stream().map(Positionszeile::of).toList(),
-        abrechnung.rechnungen().stream().map(Rechnungszeile::of).toList());
+        abrechnung.rechnungen().stream().map(Rechnungszeile::of).toList(),
+        abrechnung.angefallen());
   }
 
   /**

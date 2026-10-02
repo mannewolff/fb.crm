@@ -31,6 +31,10 @@ import org.mwolff.fbcrm.rechnung.domain.RechnungseinstellungenRepository;
  * abgerechnet, offen und Ueberschreitung — Entwuerfe zaehlen dabei mit (Kriterium 6) — und die
  * Rechnungen dieses Angebots mit ihrem Bruttobetrag, neueste zuerst.
  *
+ * <p>Dazu die <b>Gesamtsumme</b> der angefallenen Stunden ueber alle Positionen (Issue #231,
+ * Kriterium 6 von #207; Plan #218, E9, E10): Sie entsteht aus denselben Zeilen und nicht aus einem
+ * zweiten Zug in den Bestand, und sie entsteht im Server und nicht in der Ansicht.
+ *
  * <p>Dazu kommen die beiden Angaben aus der Arbeitszeit (Issue #193, Kriterien 7, 8, 11; Plan #194,
  * A6, A12): ob die Position Stunden traegt und wie viele insgesamt angefallen sind. Die erste
  * haengt <b>nicht am Status des Angebots</b> — der Endstand des Beispiels aus #193 steht an einem
@@ -205,5 +209,71 @@ class AbrechnungsstandUseCaseTest {
         .satisfies(
             zeile -> assertThat(zeile.buchbar()).isFalse(),
             zeile -> assertThat(zeile.angefallen()).isEqualByComparingTo("0"));
+  }
+
+  @Test
+  void zu_atAnInternesAngebot_thenAngefallenIsTheSumOfBothPositionen() {
+    // Given — die interne Arbeit laeuft, und jede ihrer Positionen traegt Stunden (Issue #229).
+    when(angebote.findById(Rechnungsdoppel.ANGEBOT))
+        .thenReturn(Optional.of(Rechnungsdoppel.angebot(Angebotsstatus.LAEUFT)));
+    when(rechnungen.findByAngebot(Rechnungsdoppel.ANGEBOT)).thenReturn(List.of());
+    when(arbeitszeit.angefallen(Rechnungsdoppel.ANGEBOT))
+        .thenReturn(
+            Map.of(
+                Long.valueOf(Rechnungsdoppel.BERATUNG_ID),
+                new BigDecimal("12.50"),
+                Long.valueOf(Rechnungsdoppel.PAUSCHALE_ID),
+                new BigDecimal("3.25")));
+    gegebeneEinstellungen("19.00");
+
+    // When
+    final Angebotsabrechnung abrechnung = useCase.zu(Rechnungsdoppel.ANGEBOT);
+
+    // Then — die Summe beider Zeilen, und je Position weiter ihre eigene Zahl.
+    assertThat(abrechnung.angefallen()).isEqualByComparingTo("15.75");
+    assertThat(abrechnung.positionen())
+        .satisfies(
+            zeilen -> assertThat(zeilen.getFirst().angefallen()).isEqualByComparingTo("12.50"),
+            zeilen -> assertThat(zeilen.get(1).angefallen()).isEqualByComparingTo("3.25"));
+  }
+
+  @Test
+  void zu_atAnExternesAngebot_thenOnlyTheBuchbarePositionCountsTowardsTheSumme() {
+    // Given — die Auskunft meldet auch zur Pauschale eine Zahl; buchbar ist am Kundenangebot nur
+    // die Beratung, und dann zaehlt nur sie.
+    when(angebote.findById(Rechnungsdoppel.ANGEBOT))
+        .thenReturn(Optional.of(Rechnungsdoppel.angebot()));
+    when(rechnungen.findByAngebot(Rechnungsdoppel.ANGEBOT)).thenReturn(List.of());
+    when(arbeitszeit.angefallen(Rechnungsdoppel.ANGEBOT))
+        .thenReturn(
+            Map.of(
+                Long.valueOf(Rechnungsdoppel.BERATUNG_ID),
+                new BigDecimal("8.00"),
+                Long.valueOf(Rechnungsdoppel.PAUSCHALE_ID),
+                new BigDecimal("5.00")));
+    gegebeneEinstellungen("19.00");
+
+    // When
+    final Angebotsabrechnung abrechnung = useCase.zu(Rechnungsdoppel.ANGEBOT);
+
+    // Then — 8,00 und nicht 13,00; die Pauschale steht mit 0 in ihrer Zeile.
+    assertThat(abrechnung.angefallen()).isEqualByComparingTo("8.00");
+    assertThat(abrechnung.positionen().get(1).angefallen()).isEqualByComparingTo("0");
+  }
+
+  @Test
+  void zu_atAnAngebotWithoutPositionen_thenAngefallenIsZero() {
+    // Given
+    when(angebote.findById(Rechnungsdoppel.ANGEBOT))
+        .thenReturn(Optional.of(Rechnungsdoppel.angebot(Angebotsstatus.LAEUFT, List.of())));
+    when(rechnungen.findByAngebot(Rechnungsdoppel.ANGEBOT)).thenReturn(List.of());
+    gegebeneEinstellungen("19.00");
+
+    // When
+    final Angebotsabrechnung abrechnung = useCase.zu(Rechnungsdoppel.ANGEBOT);
+
+    // Then — kein null und keine Ausnahme, sondern 0.
+    assertThat(abrechnung.positionen()).isEmpty();
+    assertThat(abrechnung.angefallen()).isEqualByComparingTo("0");
   }
 }
