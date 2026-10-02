@@ -1,6 +1,9 @@
 package org.mwolff.fbcrm.angebot.application;
 
+import java.math.BigDecimal;
 import java.time.Clock;
+import java.time.Instant;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -10,15 +13,18 @@ import org.jspecify.annotations.Nullable;
 import org.mwolff.fbcrm.angebot.domain.Angebot;
 import org.mwolff.fbcrm.angebot.domain.AngebotRepository;
 import org.mwolff.fbcrm.angebot.domain.Angebotsposition;
+import org.mwolff.fbcrm.common.Abrechnungsmodus;
+import org.mwolff.fbcrm.common.Einheit;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Das Aendern eines Angebots — in jedem Status (Issue #127, Kriterium 5).
  *
- * <p>Geschrieben wird das Angebot als Ganzes: Datum, Ansprechpartner, Beschreibung und die
+ * <p>Geschrieben wird das Angebot als Ganzes: Datum, Ansprechpartner, Beschreibung, die Art und die
  * vollstaendige Positionsliste in der gewuenschten Reihenfolge (E8). Die Plaetze der Positionen
- * vergibt der Bestand daraus lueckenlos neu (E24). Die Firma und der Status bleiben, wie sie sind.
+ * vergibt der Bestand daraus lueckenlos neu (E24). Die Firma bleibt, wie sie ist; der Status folgt
+ * der Art.
  *
  * <p>Der Ansprechpartner geht durch {@link Ansprechpartnerwahl}: Ein neu gewaehlter muss zur Firma
  * gehoeren und aktiv sein, der bisherige bleibt wählbar.
@@ -37,24 +43,47 @@ import org.springframework.transaction.annotation.Transactional;
  * das sind, sagt {@link Positionsverwendung}; das Angebot erfaehrt es ueber den Port und kennt das
  * Modul {@code rechnung} nicht (Plan #169, E1, E12). Geprueft wird wie die Kennungen vor dem
  * Schreiben.
+ *
+ * <p><b>Die Art des Angebots wechselt hier</b> (Issue #227, Kriterium 8 von #207), und zwar nur,
+ * solange aus dem Angebot keine Rechnung entstanden ist — das sagt {@link Rechnungsbindung}, sonst
+ * ist es {@link KennzeichenNichtAenderbar}. Mit der Art wandert der Status in deren Reihe ({@code
+ * Angebot.umgestellt(...)}).
+ *
+ * <p><b>Die Pflicht der vier Angaben haengt an der Zielart</b> (E7, E8). Ein Angebot an einen
+ * Kunden braucht je Position Menge, Einheit, Preis und Abrechnungsart — fehlt eine, ist das {@link
+ * Positionsangaben}. Die interne Arbeit braucht keine davon: Eine vorhandene Position behaelt ihre
+ * gespeicherten Werte, eine neue bekommt {@code AUFWAND}, {@code STUNDE} und zweimal 0. So bleiben
+ * die vier Spalten pflichtig, und ein Wechsel nach innen und zurueck verliert keine Zahl.
+ *
+ * <p><b>Die Reihenfolge der Pruefungen</b> ist Absicht: erst das Angebot, dann der Ansprechpartner,
+ * die Positionskennungen, die Rechnungsbindung beim Artwechsel, die Bindung der berechneten
+ * Positionen und zuletzt die Angaben nach Zielart. Die Sperre aus Kriterium 8 ist die gruendlichere
+ * Aussage — wer bei bestehender Rechnung umstellen will, soll das erfahren und nicht zuerst vier
+ * Feldfehler zu Positionen bekommen, die er gar nicht aendern wollte.
  */
 @Service
 @Transactional
 public class AngebotAendernUseCase {
 
+  /** Menge und Einzelpreis einer neuen Position der internen Arbeit (E8). */
+  private static final BigDecimal OHNE_ZAHL = BigDecimal.ZERO;
+
   private final AngebotRepository angebote;
   private final Ansprechpartnerwahl wahl;
   private final Positionsverwendung verwendung;
+  private final Rechnungsbindung bindung;
   private final Clock clock;
 
   AngebotAendernUseCase(
       final AngebotRepository angebote,
       final Ansprechpartnerwahl wahl,
       final Positionsverwendung verwendung,
+      final Rechnungsbindung bindung,
       final Clock clock) {
     this.angebote = angebote;
     this.wahl = wahl;
     this.verwendung = verwendung;
+    this.bindung = bindung;
     this.clock = clock;
   }
 
@@ -69,20 +98,28 @@ public class AngebotAendernUseCase {
    *     zweimal eingereicht wurde
    * @throws PositionInRechnungVerwendet wenn eine Position, die in einer Rechnung steht, fehlt oder
    *     ihre Einheit oder ihre Abrechnungsart wechselt
+   * @throws KennzeichenNichtAenderbar wenn die Art wechseln soll, obwohl eine Rechnung besteht
+   * @throws Positionsangaben wenn einer Position Angaben fehlen, die ihre Zielart verlangt
    */
   public Angebot aendere(final long angebotId, final AngebotDaten daten) {
     final Angebot angebot = angebote.findById(angebotId).orElseThrow(AngebotNichtGefunden::new);
     wahl.pruefe(angebot.firmaId(), daten.ansprechpartnerId(), angebot.ansprechpartnerId());
     pruefeKennungen(daten.positionen(), angebot.positionen());
+    pruefeArt(angebotId, daten.intern(), angebot.intern());
     pruefeBindung(
         verwendung.verwendeteKennungen(angebotId), daten.positionen(), angebot.positionen());
+    final List<Angebotsposition> positionen =
+        nachZielart(daten.positionen(), angebot.positionen(), daten.intern());
+    final Instant jetzt = clock.instant();
     return angebote.save(
-        angebot.geaendert(
-            daten.angebotDatum(),
-            daten.ansprechpartnerId(),
-            daten.beschreibung(),
-            daten.positionen(),
-            clock.instant()));
+        angebot
+            .umgestellt(daten.intern(), jetzt)
+            .geaendert(
+                daten.angebotDatum(),
+                daten.ansprechpartnerId(),
+                daten.beschreibung(),
+                positionen,
+                jetzt));
   }
 
   /*
@@ -90,17 +127,27 @@ public class AngebotAendernUseCase {
    * bevor irgendetwas geschrieben wird; eine Position ohne Kennung ist neu und geht durch.
    */
   private static void pruefeKennungen(
-      final List<Angebotsposition> eingereicht, final List<Angebotsposition> vorhanden) {
+      final List<Positionsangabe> eingereicht, final List<Angebotsposition> vorhanden) {
     final Set<Long> offen = new HashSet<>();
     for (final Angebotsposition position : vorhanden) {
       offen.add(position.id());
     }
-    for (final Angebotsposition position : eingereicht) {
-      final Long kennung = position.id();
+    for (final Positionsangabe angabe : eingereicht) {
+      final Long kennung = angabe.id();
       // remove statt contains: Eine zweimal eingereichte Kennung faellt beim zweiten Mal durch.
       if (kennung != null && !offen.remove(kennung)) {
         throw new PositionenNichtWaehlbar();
       }
+    }
+  }
+
+  /*
+   * Die Art wechselt nur, solange keine Rechnung besteht (Kriterium 8). Gefragt wird allein beim
+   * Wechsel: Wer nur den Text aendert, soll die Rechnungen seines Angebots nicht lesen lassen.
+   */
+  private void pruefeArt(final long angebotId, final boolean ziel, final boolean bisher) {
+    if (ziel != bisher && bindung.rechnungVorhanden(angebotId)) {
+      throw new KennzeichenNichtAenderbar();
     }
   }
 
@@ -111,17 +158,17 @@ public class AngebotAendernUseCase {
    */
   private static void pruefeBindung(
       final Set<Long> verwendet,
-      final List<Angebotsposition> eingereicht,
+      final List<Positionsangabe> eingereicht,
       final List<Angebotsposition> vorhanden) {
-    final Map<Long, Angebotsposition> jetzt = new HashMap<>();
-    for (final Angebotsposition position : eingereicht) {
-      // Eine Position ohne Kennung ist neu und kann darum keine gebundene fortschreiben.
+    final Map<Long, Positionsangabe> jetzt = new HashMap<>();
+    for (final Positionsangabe angabe : eingereicht) {
+      // Eine Angabe ohne Kennung ist neu und kann darum keine gebundene Position fortschreiben.
       // requireId() statt der schon gelesenen Kennung: Der Schluessel ist hier ein long, und so
       // sagt die Zeile selbst, dass sie nur fuer gespeicherte Positionen gilt. Ohne das waere die
       // Pruefung wirkungslos — eine HashMap nimmt null als Schluessel an, und gelesen wird die
       // Abbildung allein mit der Kennung einer gespeicherten Position.
-      if (position.id() != null) {
-        jetzt.put(position.requireId(), position);
+      if (angabe.id() != null) {
+        jetzt.put(angabe.requireId(), angabe);
       }
     }
     for (final Angebotsposition gebunden : vorhanden) {
@@ -135,11 +182,87 @@ public class AngebotAendernUseCase {
   /*
    * Ob die gebundene Position die Einreichung unbeschadet uebersteht: Sie muss ueberhaupt dabei
    * sein, und Einheit wie Abrechnungsart muessen dieselben bleiben. Alles Uebrige darf sich aendern.
+   * Eine Einreichung, die beide weglaesst, gilt dabei als Wechsel — ein gebundenes Angebot ist
+   * immer eines an einen Kunden (nur dort entsteht eine Rechnung), und dort sind beide Pflicht.
    */
   private static boolean unveraendert(
-      final @Nullable Angebotsposition eingereicht, final Angebotsposition gebunden) {
+      final @Nullable Positionsangabe eingereicht, final Angebotsposition gebunden) {
     return eingereicht != null
         && eingereicht.einheit() == gebunden.einheit()
         && eingereicht.abrechnungsmodus() == gebunden.abrechnungsmodus();
+  }
+
+  /*
+   * Aus jeder Angabe eine vollstaendige Position — nach der Zielart und nach dem Zusammenfuehren mit
+   * der gespeicherten Position (E7, E8). Der Platz in der Liste geht in den Feldnamen der Meldung
+   * ein, darum die Zaehlung und nicht ein Stream.
+   */
+  private static List<Angebotsposition> nachZielart(
+      final List<Positionsangabe> eingereicht,
+      final List<Angebotsposition> vorhanden,
+      final boolean intern) {
+    final Map<Long, Angebotsposition> gespeichert = new HashMap<>();
+    for (final Angebotsposition position : vorhanden) {
+      gespeichert.put(position.id(), position);
+    }
+    final List<Angebotsposition> positionen = new ArrayList<>(eingereicht.size());
+    for (int platz = 0; platz < eingereicht.size(); platz++) {
+      positionen.add(position(eingereicht.get(platz), gespeichert, intern, platz));
+    }
+    return positionen;
+  }
+
+  private static Angebotsposition position(
+      final Positionsangabe angabe,
+      final Map<Long, Angebotsposition> gespeichert,
+      final boolean intern,
+      final int platz) {
+    if (!intern) {
+      return fuerKunden(angabe, platz);
+    }
+    final Angebotsposition bisher = angabe.id() == null ? null : gespeichert.get(angabe.id());
+    return bisher == null ? neueInterne(angabe) : uebernommen(angabe, bisher);
+  }
+
+  /*
+   * Ein Angebot an einen Kunden braucht alle vier Angaben. Die Ausnahme nennt jede fehlende auf
+   * einmal — welche das sind, liest sie selbst aus der Angabe ab.
+   */
+  private static Angebotsposition fuerKunden(final Positionsangabe angabe, final int platz) {
+    final Abrechnungsmodus modus = angabe.abrechnungsmodus();
+    final BigDecimal menge = angabe.menge();
+    final Einheit einheit = angabe.einheit();
+    final BigDecimal einzelpreis = angabe.einzelpreis();
+    if (modus == null || menge == null || einheit == null || einzelpreis == null) {
+      throw Positionsangaben.fehlendeAngaben(platz, angabe);
+    }
+    return new Angebotsposition(
+        angabe.id(), angabe.bezeichnung(), modus, menge, einheit, einzelpreis);
+  }
+
+  /*
+   * Eine neue Position der internen Arbeit: AUFWAND, STUNDE und zweimal 0 (E8). Werte, die nichts
+   * behaupten — die Maske zeigt sie bei interner Arbeit nicht, und die vier Spalten bleiben
+   * pflichtig.
+   */
+  private static Angebotsposition neueInterne(final Positionsangabe angabe) {
+    return new Angebotsposition(
+        null, angabe.bezeichnung(), Abrechnungsmodus.AUFWAND, OHNE_ZAHL, Einheit.STUNDE, OHNE_ZAHL);
+  }
+
+  /*
+   * Eine vorhandene Position der internen Arbeit behaelt ihre gespeicherten vier Werte (Kriterium
+   * 8): Nur so findet ein Angebot, das nach innen und zurueck gestellt wird, seine Zahlen wieder.
+   * Aenderbar bleibt allein die Bezeichnung — mehr zeigt die Maske dort nicht.
+   */
+  private static Angebotsposition uebernommen(
+      final Positionsangabe angabe, final Angebotsposition bisher) {
+    return new Angebotsposition(
+        bisher.id(),
+        angabe.bezeichnung(),
+        bisher.abrechnungsmodus(),
+        bisher.menge(),
+        bisher.einheit(),
+        bisher.einzelpreis());
   }
 }

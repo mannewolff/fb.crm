@@ -3,11 +3,10 @@ package org.mwolff.fbcrm.angebot.web;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import java.math.BigDecimal;
 import org.jspecify.annotations.Nullable;
-import org.mwolff.fbcrm.angebot.domain.Angebotsposition;
+import org.mwolff.fbcrm.angebot.application.Positionsangabe;
 import org.mwolff.fbcrm.common.Abrechnungsmodus;
 import org.mwolff.fbcrm.common.Einheit;
 
@@ -30,26 +29,34 @@ import org.mwolff.fbcrm.common.Einheit;
  * Anwendung auf eine dritte Nachkommastelle mit einem stillen Rundungsfehler oder einem
  * Datenbankfehler.
  *
+ * <p><b>Menge, Einheit, Preis und Abrechnungsart sind hier nicht mehr pflichtig</b> (Issue #227,
+ * E7). Ob sie es sind, haengt an der Art des Angebots — ein Angebot an einen Kunden braucht alle
+ * vier, die interne Arbeit keine davon —, und das ist eine Aussage ueber das Nachbarfeld {@code
+ * intern}, das die Bean-Validation nicht sieht. Die Pflicht entscheidet darum {@code
+ * AngebotAendernUseCase} nach der Zielart und antwortet 422 mit demselben Feldnamen, den die
+ * Bean-Validation verwendet. {@code @DecimalMin} und {@code @Digits} bleiben: Sie gelten fuer einen
+ * <em>vorhandenen</em> Wert und gehen an {@code null} vorbei.
+ *
  * @param id Kennung der Position, die fortgeschrieben werden soll, oder {@code null} fuer eine neue
  * @param bezeichnung die Leistung; nicht leer
- * @param abrechnungsmodus nach Aufwand oder zum Festpreis
- * @param menge Menge in der angegebenen Einheit, nicht negativ
- * @param einheit Einheit der Menge
- * @param einzelpreis Netto-Preis je Einheit, nicht negativ
+ * @param abrechnungsmodus nach Aufwand oder zum Festpreis, oder {@code null}
+ * @param menge Menge in der angegebenen Einheit, nicht negativ, oder {@code null}
+ * @param einheit Einheit der Menge, oder {@code null}
+ * @param einzelpreis Netto-Preis je Einheit, nicht negativ, oder {@code null}
  */
 public record AngebotPositionRequest(
     @Nullable Long id,
     @NotBlank(message = BEZEICHNUNG_FEHLT) @Size(max = 300) String bezeichnung,
-    @NotNull Abrechnungsmodus abrechnungsmodus,
-    @NotNull @DecimalMin("0") @Digits(integer = 10, fraction = 2) BigDecimal menge,
-    @NotNull Einheit einheit,
-    @NotNull @DecimalMin("0") @Digits(integer = 10, fraction = 2) BigDecimal einzelpreis) {
+    @Nullable Abrechnungsmodus abrechnungsmodus,
+    @Nullable @DecimalMin("0") @Digits(integer = 10, fraction = 2) BigDecimal menge,
+    @Nullable Einheit einheit,
+    @Nullable @DecimalMin("0") @Digits(integer = 10, fraction = 2) BigDecimal einzelpreis) {
 
   /** Die Meldung am Feld, wenn die Bezeichnung fehlt oder nur aus Leerzeichen besteht. */
   static final String BEZEICHNUNG_FEHLT = "Jede Position braucht eine Bezeichnung.";
 
-  /** Dieselbe Position in der Sprache der Fachschicht. */
-  Angebotsposition position() {
-    return new Angebotsposition(id, bezeichnung, abrechnungsmodus, menge, einheit, einzelpreis);
+  /** Dieselbe Position als Angabe in der Sprache der Anwendungsschicht. */
+  Positionsangabe angabe() {
+    return new Positionsangabe(id, bezeichnung, abrechnungsmodus, menge, einheit, einzelpreis);
   }
 }

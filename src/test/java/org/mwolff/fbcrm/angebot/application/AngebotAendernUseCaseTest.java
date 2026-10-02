@@ -2,6 +2,9 @@ package org.mwolff.fbcrm.angebot.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.entry;
+import static org.assertj.core.api.Assertions.tuple;
+import static org.junit.jupiter.params.provider.Arguments.arguments;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -13,18 +16,25 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Stream;
 import org.assertj.core.api.InstanceOfAssertFactories;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.EnumSource;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mwolff.fbcrm.angebot.domain.Angebot;
@@ -39,8 +49,9 @@ import org.mwolff.fbcrm.firma.domain.AnsprechpartnerRepository;
 /**
  * Das Aendern eines Angebots (Issue #127, Kriterium 5).
  *
- * <p>Das Angebot wird als Ganzes geschrieben (E8): Datum, Ansprechpartner, Beschreibung und die
- * vollstaendige Positionsliste in der gewuenschten Reihenfolge — in jedem Status.
+ * <p>Das Angebot wird als Ganzes geschrieben (E8): Datum, Ansprechpartner, Beschreibung, das
+ * Kennzeichen seiner Art und die vollstaendige Positionsliste in der gewuenschten Reihenfolge — in
+ * jedem Status.
  *
  * <p>Der zweite Gegenstand sind die Positionskennungen (Plan #169, E2). Eine Position mit Kennung
  * sagt „dieselbe Position wie vorher"; gueltig sind darum nur die Kennungen der Positionen des
@@ -59,6 +70,13 @@ import org.mwolff.fbcrm.firma.domain.AnsprechpartnerRepository;
  * stillgelegt ist — sonst liesse sich ein Angebot nach dem Stilllegen seines Ansprechpartners gar
  * nicht mehr speichern. Eine abgewiesene Wahl schreibt nichts; den Nachweis fuehrt {@code
  * verifyNoMoreInteractions} nach dem einen Lesezugriff.
+ *
+ * <p><b>Der fuenfte Gegenstand ist das Kennzeichen der Art</b> (Issue #227, Kriterium 8 von #207).
+ * Es laesst sich setzen und entfernen, solange aus dem Angebot keine Rechnung entstanden ist; das
+ * sagt der Port {@link Rechnungsbindung}, auf den hier ebenfalls ein Doppel antwortet. Mit dem
+ * Kennzeichen wandert der Status in die Reihe der neuen Art, und die Pflicht von Menge, Einheit und
+ * Preis haengt an der <em>Ziel</em>art: Ein Angebot an einen Kunden braucht alle vier Angaben, die
+ * interne Arbeit keine davon (E7, E8).
  */
 @ExtendWith(MockitoExtension.class)
 class AngebotAendernUseCaseTest {
@@ -69,10 +87,14 @@ class AngebotAendernUseCaseTest {
   private static final LocalDate NEUES_DATUM = LocalDate.of(2026, 9, 25);
   private static final String NEUER_TEXT = "Ueberarbeitete Beschreibung";
 
+  /** Die Bezeichnung, mit der eine neue Position eingereicht wird. */
+  private static final String NEUE_ARBEIT = "Umbau der Ablage";
+
   @Mock private AngebotRepository angebote;
   @Mock private AnsprechpartnerRepository personen;
 
   private final Verwendungsdoppel verwendung = new Verwendungsdoppel();
+  private final Bindungsdoppel bindung = new Bindungsdoppel();
 
   private AngebotAendernUseCase useCase;
 
@@ -83,6 +105,7 @@ class AngebotAendernUseCaseTest {
             angebote,
             new Ansprechpartnerwahl(personen),
             verwendung,
+            bindung,
             Clock.fixed(JETZT, ZoneOffset.UTC));
   }
 
@@ -102,35 +125,81 @@ class AngebotAendernUseCaseTest {
     }
   }
 
+  /*
+   * Dasselbe fuer die Rechnungsbindung, und aus demselben Grund ein Doppel: Gefragt wird nur beim
+   * Artwechsel. Das Doppel merkt sich jede Frage — nur so laesst sich zeigen, dass eine Aenderung
+   * ohne Artwechsel den Port gar nicht bemueht (Issue #227).
+   */
+  private static final class Bindungsdoppel implements Rechnungsbindung {
+
+    private final Set<Long> mitRechnung = new HashSet<>();
+    private final List<Long> gefragt = new ArrayList<>();
+
+    @Override
+    public boolean rechnungVorhanden(final long angebotId) {
+      gefragt.add(Long.valueOf(angebotId));
+      return mitRechnung.contains(Long.valueOf(angebotId));
+    }
+  }
+
   private void inEinerRechnung(final Long... kennungen) {
     verwendung.jeAngebot.put(Long.valueOf(ANGEBOT), Set.of(kennungen));
   }
 
-  private static Angebotsposition mitEinheit(
-      final Angebotsposition position, final Einheit einheit) {
-    return new Angebotsposition(
-        position.id(),
-        position.bezeichnung(),
-        position.abrechnungsmodus(),
-        position.menge(),
-        einheit,
-        position.einzelpreis());
+  private void mitRechnung() {
+    bindung.mitRechnung.add(Long.valueOf(ANGEBOT));
   }
 
-  private static Angebotsposition mitModus(
-      final Angebotsposition position, final Abrechnungsmodus modus) {
-    return new Angebotsposition(
-        position.id(),
-        position.bezeichnung(),
+  private static Positionsangabe mitEinheit(final Positionsangabe angabe, final Einheit einheit) {
+    return new Positionsangabe(
+        angabe.id(),
+        angabe.bezeichnung(),
+        angabe.abrechnungsmodus(),
+        angabe.menge(),
+        einheit,
+        angabe.einzelpreis());
+  }
+
+  private static Positionsangabe mitModus(
+      final Positionsangabe angabe, final Abrechnungsmodus modus) {
+    return new Positionsangabe(
+        angabe.id(),
+        angabe.bezeichnung(),
         modus,
-        position.menge(),
-        position.einheit(),
-        position.einzelpreis());
+        angabe.menge(),
+        angabe.einheit(),
+        angabe.einzelpreis());
+  }
+
+  private static Positionsangabe mitKennung(final Positionsangabe angabe, final @Nullable Long id) {
+    return new Positionsangabe(
+        id,
+        angabe.bezeichnung(),
+        angabe.abrechnungsmodus(),
+        angabe.menge(),
+        angabe.einheit(),
+        angabe.einzelpreis());
+  }
+
+  private static Positionsangabe ohneKennung(final Positionsangabe angabe) {
+    return mitKennung(angabe, null);
+  }
+
+  /** Die gespeicherten Positionen als die Angaben, die die Maske zu ihnen einreicht. */
+  private static List<Positionsangabe> angaben(final Angebotsposition... positionen) {
+    return Arrays.stream(positionen).map(Angebotsdoppel::angabe).toList();
   }
 
   private static AngebotDaten daten(
-      final @Nullable Long ansprechpartnerId, final List<Angebotsposition> positionen) {
-    return new AngebotDaten(NEUES_DATUM, ansprechpartnerId, NEUER_TEXT, positionen);
+      final @Nullable Long ansprechpartnerId, final List<Positionsangabe> positionen) {
+    return daten(ansprechpartnerId, false, positionen);
+  }
+
+  private static AngebotDaten daten(
+      final @Nullable Long ansprechpartnerId,
+      final boolean intern,
+      final List<Positionsangabe> positionen) {
+    return new AngebotDaten(NEUES_DATUM, ansprechpartnerId, NEUER_TEXT, intern, positionen);
   }
 
   private static Ansprechpartner person(final long id, final long firmaId, final boolean aktiv) {
@@ -148,21 +217,6 @@ class AngebotAendernUseCaseTest {
         Angebotsdoppel.ANGELEGT);
   }
 
-  private static Angebotsposition mitKennung(
-      final Angebotsposition position, final @Nullable Long id) {
-    return new Angebotsposition(
-        id,
-        position.bezeichnung(),
-        position.abrechnungsmodus(),
-        position.menge(),
-        position.einheit(),
-        position.einzelpreis());
-  }
-
-  private static Angebotsposition ohneKennung(final Angebotsposition position) {
-    return mitKennung(position, null);
-  }
-
   private void angebotIst(final Angebot angebot) {
     when(angebote.findById(ANGEBOT)).thenReturn(Optional.of(angebot));
   }
@@ -178,13 +232,15 @@ class AngebotAendernUseCaseTest {
     // Given — Kriterium 5: das Angebot bleibt in jedem Status aenderbar.
     angebotIst(Angebotsdoppel.ohneAnsprechpartner(Angebotsdoppel.angebot(ANGEBOT, status)));
 
-    // When
-    final Angebot geaendert = aendere(daten(null, List.of(Angebotsdoppel.KONZEPTION)));
+    // When — dieselbe Art wie bisher: das Kennzeichen wechselt nicht.
+    final Angebot geaendert =
+        aendere(daten(null, status.intern(), angaben(Angebotsdoppel.KONZEPTION)));
 
     // Then
     assertThat(geaendert)
         .satisfies(
             a -> assertThat(a.status()).isEqualTo(status),
+            a -> assertThat(a.intern()).isEqualTo(status.intern()),
             a -> assertThat(a.angebotDatum()).isEqualTo(NEUES_DATUM),
             a -> assertThat(a.beschreibung()).isEqualTo(NEUER_TEXT),
             a -> assertThat(a.ansprechpartnerId()).isNull(),
@@ -199,7 +255,7 @@ class AngebotAendernUseCaseTest {
 
     // When
     final Angebot geaendert =
-        aendere(daten(null, List.of(Angebotsdoppel.SCHULUNG, Angebotsdoppel.KONZEPTION)));
+        aendere(daten(null, angaben(Angebotsdoppel.SCHULUNG, Angebotsdoppel.KONZEPTION)));
 
     // Then
     assertThat(geaendert.positionen())
@@ -317,7 +373,7 @@ class AngebotAendernUseCaseTest {
 
     // When — dieselben Positionen, umgestellt.
     final Angebot geaendert =
-        aendere(daten(null, List.of(Angebotsdoppel.SCHULUNG, Angebotsdoppel.KONZEPTION)));
+        aendere(daten(null, angaben(Angebotsdoppel.SCHULUNG, Angebotsdoppel.KONZEPTION)));
 
     // Then
     assertThat(geaendert.positionen())
@@ -329,21 +385,27 @@ class AngebotAendernUseCaseTest {
   void aendere_withAPositionWithoutAnId_thenTreatsItAsNew() {
     // Given — die Kennung ist freiwillig; ohne sie ist die Position neu.
     angebotIst(Angebotsdoppel.ohneAnsprechpartner(Angebotsdoppel.angebot(ANGEBOT)));
-    final Angebotsposition neue = ohneKennung(Angebotsdoppel.KONZEPTION);
+    final Positionsangabe neue = ohneKennung(Angebotsdoppel.KONZEPTION_ANGABE);
 
     // When
     final Angebot geaendert = aendere(daten(null, List.of(neue)));
 
     // Then
-    assertThat(geaendert.positionen()).containsExactly(neue);
+    assertThat(geaendert.positionen())
+        .singleElement()
+        .satisfies(
+            position -> assertThat(position.id()).isNull(),
+            position ->
+                assertThat(position.bezeichnung())
+                    .isEqualTo(Angebotsdoppel.KONZEPTION.bezeichnung()));
   }
 
   @Test
   void aendere_withAPositionIdOfAnotherAngebot_thenRejectsAndWritesNothing() {
     // Given — eine Kennung, die zu keiner Position dieses Angebots gehoert.
     angebotIst(Angebotsdoppel.ohneAnsprechpartner(Angebotsdoppel.angebot(ANGEBOT)));
-    final Angebotsposition fremde =
-        mitKennung(Angebotsdoppel.KONZEPTION, Angebotsdoppel.FREMDE_POSITION);
+    final Positionsangabe fremde =
+        mitKennung(Angebotsdoppel.KONZEPTION_ANGABE, Angebotsdoppel.FREMDE_POSITION);
 
     final AngebotDaten aenderung = daten(null, List.of(fremde));
 
@@ -358,10 +420,10 @@ class AngebotAendernUseCaseTest {
   void aendere_withTheSamePositionIdTwice_thenRejectsAndWritesNothing() {
     // Given — zwei Positionen koennen nicht dieselbe Zeile fortschreiben.
     angebotIst(Angebotsdoppel.ohneAnsprechpartner(Angebotsdoppel.angebot(ANGEBOT)));
-    final List<Angebotsposition> doppelt =
+    final List<Positionsangabe> doppelt =
         List.of(
-            Angebotsdoppel.KONZEPTION,
-            mitKennung(Angebotsdoppel.SCHULUNG, Angebotsdoppel.KONZEPTION_ID));
+            Angebotsdoppel.KONZEPTION_ANGABE,
+            mitKennung(Angebotsdoppel.SCHULUNG_ANGABE, Angebotsdoppel.KONZEPTION_ID));
 
     final AngebotDaten aenderung = daten(null, doppelt);
 
@@ -378,7 +440,7 @@ class AngebotAendernUseCaseTest {
     angebotIst(Angebotsdoppel.ohneAnsprechpartner(Angebotsdoppel.angebot(ANGEBOT)));
     inEinerRechnung(Angebotsdoppel.KONZEPTION_ID);
 
-    final AngebotDaten aenderung = daten(null, List.of(Angebotsdoppel.SCHULUNG));
+    final AngebotDaten aenderung = daten(null, angaben(Angebotsdoppel.SCHULUNG));
 
     // When / Then
     assertThatThrownBy(() -> useCase.aendere(ANGEBOT, aenderung))
@@ -406,8 +468,10 @@ class AngebotAendernUseCaseTest {
     // Given — die Einheit steht so auf der Rechnung; sie zu wechseln aenderte deren Aussage.
     angebotIst(Angebotsdoppel.ohneAnsprechpartner(Angebotsdoppel.angebot(ANGEBOT)));
     inEinerRechnung(Angebotsdoppel.KONZEPTION_ID);
-    final List<Angebotsposition> umgestellt =
-        List.of(mitEinheit(Angebotsdoppel.KONZEPTION, Einheit.STUNDE), Angebotsdoppel.SCHULUNG);
+    final List<Positionsangabe> umgestellt =
+        List.of(
+            mitEinheit(Angebotsdoppel.KONZEPTION_ANGABE, Einheit.STUNDE),
+            Angebotsdoppel.SCHULUNG_ANGABE);
 
     final AngebotDaten aenderung = daten(null, umgestellt);
 
@@ -424,10 +488,10 @@ class AngebotAendernUseCaseTest {
     // Given — dasselbe fuer die Abrechnungsart: Aufwand und Festpreis sind nicht dasselbe.
     angebotIst(Angebotsdoppel.ohneAnsprechpartner(Angebotsdoppel.angebot(ANGEBOT)));
     inEinerRechnung(Angebotsdoppel.KONZEPTION_ID);
-    final List<Angebotsposition> umgestellt =
+    final List<Positionsangabe> umgestellt =
         List.of(
-            mitModus(Angebotsdoppel.KONZEPTION, Abrechnungsmodus.FESTPREIS),
-            Angebotsdoppel.SCHULUNG);
+            mitModus(Angebotsdoppel.KONZEPTION_ANGABE, Abrechnungsmodus.FESTPREIS),
+            Angebotsdoppel.SCHULUNG_ANGABE);
 
     final AngebotDaten aenderung = daten(null, umgestellt);
 
@@ -444,8 +508,8 @@ class AngebotAendernUseCaseTest {
     // Given — Text, Menge und Preis bleiben frei; die Rechnung haelt ihre eigenen Werte fest.
     angebotIst(Angebotsdoppel.ohneAnsprechpartner(Angebotsdoppel.angebot(ANGEBOT)));
     inEinerRechnung(Angebotsdoppel.KONZEPTION_ID);
-    final Angebotsposition neuGefasst =
-        new Angebotsposition(
+    final Positionsangabe neuGefasst =
+        new Positionsangabe(
             Angebotsdoppel.KONZEPTION_ID,
             "Konzeption und Abstimmung",
             Angebotsdoppel.KONZEPTION.abrechnungsmodus(),
@@ -454,10 +518,15 @@ class AngebotAendernUseCaseTest {
             new BigDecimal("999.00"));
 
     // When — und zugleich umgeordnet: die Reihenfolge ist ebenfalls frei.
-    final Angebot geaendert = aendere(daten(null, List.of(Angebotsdoppel.SCHULUNG, neuGefasst)));
+    final Angebot geaendert =
+        aendere(daten(null, List.of(Angebotsdoppel.SCHULUNG_ANGABE, neuGefasst)));
 
     // Then
-    assertThat(geaendert.positionen()).containsExactly(Angebotsdoppel.SCHULUNG, neuGefasst);
+    assertThat(geaendert.positionen())
+        .extracting(Angebotsposition::bezeichnung, Angebotsposition::einzelpreis)
+        .containsExactly(
+            tuple(Angebotsdoppel.SCHULUNG.bezeichnung(), Angebotsdoppel.SCHULUNG.einzelpreis()),
+            tuple("Konzeption und Abstimmung", new BigDecimal("999.00")));
   }
 
   @Test
@@ -467,7 +536,7 @@ class AngebotAendernUseCaseTest {
     inEinerRechnung(Angebotsdoppel.KONZEPTION_ID);
 
     // When
-    final Angebot geaendert = aendere(daten(null, List.of(Angebotsdoppel.KONZEPTION)));
+    final Angebot geaendert = aendere(daten(null, angaben(Angebotsdoppel.KONZEPTION)));
 
     // Then
     assertThat(geaendert.positionen()).containsExactly(Angebotsdoppel.KONZEPTION);
@@ -485,5 +554,220 @@ class AngebotAendernUseCaseTest {
         .isInstanceOf(AngebotNichtGefunden.class);
     verify(angebote).findById(ANGEBOT);
     verifyNoMoreInteractions(angebote);
+  }
+
+  @ParameterizedTest
+  @CsvSource({
+    "ANGELEGT,LAEUFT",
+    "ABGEGEBEN,LAEUFT",
+    "BESTELLT,LAEUFT",
+    "ERLEDIGT,ABGESCHLOSSEN",
+    "ABGERECHNET,ABGESCHLOSSEN"
+  })
+  void aendere_settingTheInternalFlag_thenMovesTheStatusIntoTheInternalRow(
+      final Angebotsstatus vorher, final Angebotsstatus nachher) {
+    // Given — Issue #227, Kriterium 8 von #207. ABGERECHNET ist dabei erreichbar, ohne dass eine
+    // Rechnung besteht: AngebotStatusUseCase.weiter schaltet dorthin von Hand (Review-Fund 1).
+    angebotIst(Angebotsdoppel.ohneAnsprechpartner(Angebotsdoppel.angebot(ANGEBOT, vorher)));
+
+    // When
+    final Angebot geaendert =
+        aendere(daten(null, true, angaben(Angebotsdoppel.KONZEPTION, Angebotsdoppel.SCHULUNG)));
+
+    // Then
+    assertThat(geaendert.intern()).isTrue();
+    assertThat(geaendert.status()).isEqualTo(nachher);
+  }
+
+  @ParameterizedTest
+  @CsvSource({"LAEUFT,BESTELLT", "ABGESCHLOSSEN,ERLEDIGT"})
+  void aendere_clearingTheInternalFlag_thenMovesTheStatusBackToTheCustomerRow(
+      final Angebotsstatus vorher, final Angebotsstatus nachher) {
+    // Given — der Weg zurueck: die interne Arbeit wird wieder ein Angebot an einen Kunden.
+    angebotIst(Angebotsdoppel.ohneAnsprechpartner(Angebotsdoppel.angebot(ANGEBOT, vorher)));
+
+    // When
+    final Angebot geaendert =
+        aendere(daten(null, false, angaben(Angebotsdoppel.KONZEPTION, Angebotsdoppel.SCHULUNG)));
+
+    // Then
+    assertThat(geaendert.intern()).isFalse();
+    assertThat(geaendert.status()).isEqualTo(nachher);
+  }
+
+  @Test
+  void aendere_settingTheInternalFlag_thenKeepsTheStoredMengeEinheitAndPreis() {
+    // Given — Kriterium 8: Beim Wechsel nach innen bleiben die Werte gespeichert, obwohl die Maske
+    // sie dann nicht mehr zeigt und darum auch nicht mehr sendet.
+    angebotIst(Angebotsdoppel.ohneAnsprechpartner(Angebotsdoppel.angebot(ANGEBOT)));
+    final Positionsangabe nurBezeichnung =
+        new Positionsangabe(Angebotsdoppel.KONZEPTION_ID, "Konzeption", null, null, null, null);
+
+    // When
+    final Angebot geaendert = aendere(daten(null, true, List.of(nurBezeichnung)));
+
+    // Then
+    assertThat(geaendert.positionen()).containsExactly(Angebotsdoppel.KONZEPTION);
+  }
+
+  @Test
+  void aendere_withANewPositionAtAnInternalAngebot_thenPrefillsAufwandStundeAndZero() {
+    // Given — E8: Die vier Spalten bleiben pflichtig; eine neue interne Position bekommt darum
+    // Werte, die nichts behaupten.
+    angebotIst(
+        Angebotsdoppel.ohneAnsprechpartner(Angebotsdoppel.angebot(ANGEBOT, Angebotsstatus.LAEUFT)));
+    final Positionsangabe neue = new Positionsangabe(null, NEUE_ARBEIT, null, null, null, null);
+
+    // When
+    final Angebot geaendert = aendere(daten(null, true, List.of(neue)));
+
+    // Then
+    assertThat(geaendert.positionen())
+        .containsExactly(
+            new Angebotsposition(
+                null,
+                NEUE_ARBEIT,
+                Abrechnungsmodus.AUFWAND,
+                BigDecimal.ZERO,
+                Einheit.STUNDE,
+                BigDecimal.ZERO));
+  }
+
+  @Test
+  void aendere_changingTheArtWhileARechnungExists_thenRejectsAndWritesNothing() {
+    // Given — Kriterium 8: Solange aus dem Angebot eine Rechnung entstanden ist, bleibt die Art,
+    // wie sie ist. Der Entwurf zaehlt dabei wie die gestellte Rechnung; welche Rechnungen das sind,
+    // unterscheidet RechnungsPositionsverwendungTest.
+    angebotIst(Angebotsdoppel.ohneAnsprechpartner(Angebotsdoppel.angebot(ANGEBOT)));
+    mitRechnung();
+
+    final AngebotDaten aenderung = daten(null, true, angaben(Angebotsdoppel.KONZEPTION));
+
+    // When / Then
+    assertThatThrownBy(() -> useCase.aendere(ANGEBOT, aenderung))
+        .isInstanceOf(KennzeichenNichtAenderbar.class)
+        .asInstanceOf(InstanceOfAssertFactories.type(KennzeichenNichtAenderbar.class))
+        .extracting(KennzeichenNichtAenderbar::felder)
+        .satisfies(
+            felder ->
+                assertThat(felder)
+                    .containsExactly(
+                        entry(
+                            KennzeichenNichtAenderbar.FELD,
+                            List.of(KennzeichenNichtAenderbar.MELDUNG))));
+    verify(angebote).findById(ANGEBOT);
+    verifyNoMoreInteractions(angebote);
+  }
+
+  @Test
+  void aendere_withARechnungButWithoutChangingTheArt_thenWritesAndNeverAsksTheBindung() {
+    // Given — gefragt wird nur beim Artwechsel: Wer nur den Text aendert, soll die Rechnungen des
+    // Angebots gar nicht erst lesen lassen.
+    angebotIst(Angebotsdoppel.ohneAnsprechpartner(Angebotsdoppel.angebot(ANGEBOT)));
+    mitRechnung();
+
+    // When
+    final Angebot geaendert = aendere(daten(null, false, angaben(Angebotsdoppel.KONZEPTION)));
+
+    // Then
+    assertThat(geaendert.beschreibung()).isEqualTo(NEUER_TEXT);
+    assertThat(bindung.gefragt).isEmpty();
+  }
+
+  private static Stream<Arguments> fehlendeAngaben() {
+    return Stream.of(
+        arguments(
+            new Positionsangabe(
+                null, NEUE_ARBEIT, Abrechnungsmodus.AUFWAND, null, Einheit.STUNDE, BigDecimal.TEN),
+            "positionen[0].menge"),
+        arguments(
+            new Positionsangabe(
+                null, NEUE_ARBEIT, Abrechnungsmodus.AUFWAND, BigDecimal.ONE, null, BigDecimal.TEN),
+            "positionen[0].einheit"),
+        arguments(
+            new Positionsangabe(
+                null, NEUE_ARBEIT, Abrechnungsmodus.AUFWAND, BigDecimal.ONE, Einheit.STUNDE, null),
+            "positionen[0].einzelpreis"),
+        arguments(
+            new Positionsangabe(
+                null, NEUE_ARBEIT, null, BigDecimal.ONE, Einheit.STUNDE, BigDecimal.TEN),
+            "positionen[0].abrechnungsmodus"));
+  }
+
+  @ParameterizedTest
+  @MethodSource("fehlendeAngaben")
+  void aendere_clearingTheInternalFlagWithAnIncompletePosition_thenRejectsAtThatField(
+      final Positionsangabe angabe, final String feld) {
+    // Given — E7: Ein Angebot an einen Kunden braucht alle vier Angaben, und welche fehlt, sagt die
+    // Antwort am Feld der Position.
+    angebotIst(
+        Angebotsdoppel.ohneAnsprechpartner(Angebotsdoppel.angebot(ANGEBOT, Angebotsstatus.LAEUFT)));
+
+    final AngebotDaten aenderung = daten(null, false, List.of(angabe));
+
+    // When / Then
+    assertThatThrownBy(() -> useCase.aendere(ANGEBOT, aenderung))
+        .isInstanceOf(Positionsangaben.class)
+        .asInstanceOf(InstanceOfAssertFactories.type(Positionsangaben.class))
+        .extracting(Positionsangaben::felder)
+        .satisfies(
+            felder ->
+                assertThat(felder)
+                    .containsOnlyKeys(feld)
+                    .containsEntry(feld, List.of(Positionsangaben.ANGABE_FEHLT)));
+    verify(angebote).findById(ANGEBOT);
+    verifyNoMoreInteractions(angebote);
+  }
+
+  @Test
+  void aendere_withAnIncompletePositionAtAnExternalAngebot_thenNamesEveryMissingField() {
+    // Given — alle fehlenden Angaben auf einmal: Wer vier nachtragen muss, soll es in einem Gang
+    // tun koennen. Die zweite Position zeigt, dass der Platz im Feldnamen steht.
+    angebotIst(Angebotsdoppel.ohneAnsprechpartner(Angebotsdoppel.angebot(ANGEBOT)));
+    final List<Positionsangabe> liste =
+        List.of(
+            Angebotsdoppel.KONZEPTION_ANGABE,
+            new Positionsangabe(null, NEUE_ARBEIT, null, null, null, null));
+
+    final AngebotDaten aenderung = daten(null, false, liste);
+
+    // When / Then
+    assertThatThrownBy(() -> useCase.aendere(ANGEBOT, aenderung))
+        .isInstanceOf(Positionsangaben.class)
+        .asInstanceOf(InstanceOfAssertFactories.type(Positionsangaben.class))
+        .extracting(Positionsangaben::felder)
+        .satisfies(
+            felder ->
+                assertThat(felder)
+                    .containsOnlyKeys(
+                        "positionen[1].menge",
+                        "positionen[1].einheit",
+                        "positionen[1].einzelpreis",
+                        "positionen[1].abrechnungsmodus"));
+  }
+
+  @Test
+  void aendere_atAnInternalAngebotWithoutChangingTheArt_thenKeepsTheStoredValues() {
+    // Given — die Pflicht haengt an der Zielart, nicht am Wechsel: Auch wer ein internes Angebot
+    // nur umbenennt, schickt Menge, Einheit und Preis nicht mit.
+    angebotIst(
+        Angebotsdoppel.ohneAnsprechpartner(Angebotsdoppel.angebot(ANGEBOT, Angebotsstatus.LAEUFT)));
+    final Positionsangabe umbenannt =
+        new Positionsangabe(Angebotsdoppel.KONZEPTION_ID, "Umbau", null, null, null, null);
+
+    // When
+    final Angebot geaendert = aendere(daten(null, true, List.of(umbenannt)));
+
+    // Then
+    assertThat(geaendert.positionen())
+        .singleElement()
+        .satisfies(
+            position -> assertThat(position.bezeichnung()).isEqualTo("Umbau"),
+            position -> assertThat(position.menge()).isEqualTo(Angebotsdoppel.KONZEPTION.menge()),
+            position ->
+                assertThat(position.einheit()).isEqualTo(Angebotsdoppel.KONZEPTION.einheit()),
+            position ->
+                assertThat(position.einzelpreis())
+                    .isEqualTo(Angebotsdoppel.KONZEPTION.einzelpreis()));
   }
 }

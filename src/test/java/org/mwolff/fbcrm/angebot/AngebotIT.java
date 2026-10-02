@@ -156,6 +156,29 @@ class AngebotIT extends AbstractIntegrationTest {
     return felder;
   }
 
+  /** Derselbe Rumpf mit dem Kennzeichen der Art (Issue #227). */
+  private static Map<String, Object> rumpf(
+      final List<Map<String, Object>> positionen, final boolean intern) {
+    final Map<String, Object> felder = rumpf(positionen);
+    felder.put("intern", Boolean.valueOf(intern));
+    return felder;
+  }
+
+  /** Eine Position, die nur ihre Bezeichnung nennt — so sieht die interne Arbeit aus (E7). */
+  private static Map<String, Object> nurBezeichnung(final String bezeichnung) {
+    final Map<String, Object> felder = new LinkedHashMap<>();
+    felder.put("bezeichnung", bezeichnung);
+    return felder;
+  }
+
+  /** Dieselbe Position mit ihrer Kennung: „schreib diese Zeile fort", ohne die vier Angaben. */
+  private static Map<String, Object> positionMitNurBezeichnung(
+      final long id, final String bezeichnung) {
+    final Map<String, Object> felder = nurBezeichnung(bezeichnung);
+    felder.put("id", Long.valueOf(id));
+    return felder;
+  }
+
   private <T> ResponseEntity<T> anlegenMit(final long ansprechpartner, final Class<T> typ) {
     return ruf(
         "/api/firmen/" + firmaId + "/angebote",
@@ -527,5 +550,116 @@ class AngebotIT extends AbstractIntegrationTest {
         .isEqualTo(HttpStatus.UNAUTHORIZED);
     assertThat(ruf("/api/angebote/1", HttpMethod.GET, null, String.class).getStatusCode())
         .isEqualTo(HttpStatus.UNAUTHORIZED);
+  }
+
+  @Test
+  void aendern_settingTheInternalFlag_thenSwitchesTheAngebotAndItsStatusInTheDatabase() {
+    // Given — Issue #227, Kriterium 8 von #207: Aus dem Angebot ist keine Rechnung entstanden, also
+    // laesst sich das Kennzeichen setzen. Die Position traegt nur noch ihre Bezeichnung.
+    final long angebotId = angebot().id();
+    ruf(
+        "/api/angebote/" + angebotId,
+        HttpMethod.PUT,
+        rumpf(List.of(position("Konzeption", "AUFWAND", "2.50", "PERSONENTAG"))),
+        AngebotResponse.class);
+    final long positionId = positionskennungen(angebotId).get(0).longValue();
+
+    // When
+    final ResponseEntity<AngebotResponse> antwort =
+        ruf(
+            "/api/angebote/" + angebotId,
+            HttpMethod.PUT,
+            rumpf(List.of(positionMitNurBezeichnung(positionId, "Konzeption")), true),
+            AngebotResponse.class);
+
+    // Then
+    assertThat(antwort.getStatusCode()).isEqualTo(HttpStatus.OK);
+    final AngebotResponse umgestellt = Objects.requireNonNull(antwort.getBody());
+    assertThat(umgestellt.intern()).isTrue();
+    assertThat(umgestellt.status()).isEqualTo(Angebotsstatus.LAEUFT);
+    // Kriterium 8: Menge, Einheit und Preis stehen weiter in der Spalte, obwohl der Rumpf sie nicht
+    // genannt hat — nur hier pruefbar, weil sie dort und nicht im Speicher stehen.
+    assertThat(jdbc.queryForMap("SELECT intern FROM angebot WHERE id = ?", Long.valueOf(angebotId)))
+        .containsEntry("intern", true);
+    assertThat(
+            jdbc.queryForMap(
+                "SELECT menge, einheit, einzelpreis FROM angebot_position WHERE id = ?",
+                Long.valueOf(positionId)))
+        .containsEntry("menge", new BigDecimal("2.50"))
+        .containsEntry("einheit", "PERSONENTAG")
+        .containsEntry("einzelpreis", new BigDecimal("1000.01"));
+  }
+
+  @Test
+  void aendern_ofAnInternalAngebotWithoutTheInternField_thenSwitchesItBackToACustomerOffer() {
+    // Given — ein fehlendes Feld gilt als extern; das Angebot steht intern.
+    final long angebotId = angebot().id();
+    ruf(
+        "/api/angebote/" + angebotId,
+        HttpMethod.PUT,
+        rumpf(List.of(nurBezeichnung("Umbau der Ablage")), true),
+        AngebotResponse.class);
+
+    // When — derselbe Weg ohne das Feld, dafuer mit allen vier Angaben.
+    final ResponseEntity<AngebotResponse> antwort =
+        ruf(
+            "/api/angebote/" + angebotId,
+            HttpMethod.PUT,
+            rumpf(List.of(position("Umbau der Ablage", "AUFWAND", "3.00", "STUNDE"))),
+            AngebotResponse.class);
+
+    // Then
+    assertThat(antwort.getStatusCode()).isEqualTo(HttpStatus.OK);
+    final AngebotResponse zurueck = Objects.requireNonNull(antwort.getBody());
+    assertThat(zurueck.intern()).isFalse();
+    assertThat(zurueck.status()).isEqualTo(Angebotsstatus.BESTELLT);
+  }
+
+  @Test
+  void aendern_ofACustomerOfferWithoutMenge_thenAnswers422AtThatFieldAndWritesNothing() {
+    // Given — E7: Menge, Einheit und Preis sind keine Pflichtfelder der Bean-Validation mehr; die
+    // Pflicht entscheidet der Anwendungsfall nach der Zielart und antwortet 422 statt 400.
+    final long angebotId = angebot().id();
+
+    // When
+    final ResponseEntity<String> antwort =
+        ruf(
+            "/api/angebote/" + angebotId,
+            HttpMethod.PUT,
+            rumpf(List.of(nurBezeichnung("Konzeption"))),
+            String.class);
+
+    // Then
+    assertThat(antwort.getStatusCode()).isEqualTo(HttpStatus.UNPROCESSABLE_ENTITY);
+    assertThat(antwort.getBody()).contains("positionen[0].menge");
+    assertThat(bezeichnungenNachPlatz(angebotId)).isEmpty();
+  }
+
+  @Test
+  void aendern_ofAnInternalAngebotWithANewPosition_thenPrefillsAufwandStundeAndZero() {
+    // Given — E8: Die vier Spalten bleiben pflichtig, also bekommt eine neue interne Position
+    // Werte,
+    // die nichts behaupten. Nur hier pruefbar: Sie stehen danach so in der Spalte.
+    final long angebotId = angebot().id();
+
+    // When
+    final ResponseEntity<AngebotResponse> antwort =
+        ruf(
+            "/api/angebote/" + angebotId,
+            HttpMethod.PUT,
+            rumpf(List.of(nurBezeichnung("Umbau der Ablage")), true),
+            AngebotResponse.class);
+
+    // Then
+    assertThat(antwort.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(
+            jdbc.queryForMap(
+                "SELECT abrechnungsmodus, menge, einheit, einzelpreis FROM angebot_position"
+                    + " WHERE angebot_id = ?",
+                Long.valueOf(angebotId)))
+        .containsEntry("abrechnungsmodus", "AUFWAND")
+        .containsEntry("menge", new BigDecimal("0.00"))
+        .containsEntry("einheit", "STUNDE")
+        .containsEntry("einzelpreis", new BigDecimal("0.00"));
   }
 }

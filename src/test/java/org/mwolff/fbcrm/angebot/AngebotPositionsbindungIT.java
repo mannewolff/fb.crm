@@ -11,6 +11,7 @@ import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mwolff.fbcrm.AbstractIntegrationTest;
+import org.mwolff.fbcrm.angebot.application.KennzeichenNichtAenderbar;
 import org.mwolff.fbcrm.angebot.web.AngebotPositionResponse;
 import org.mwolff.fbcrm.angebot.web.AngebotResponse;
 import org.mwolff.fbcrm.auth.domain.Account;
@@ -39,6 +40,13 @@ import org.springframework.jdbc.core.JdbcTemplate;
  * <p>Der Ausgangspunkt ist ein bestelltes Angebot mit zwei Positionen, dessen <b>erste</b> in einem
  * Rechnungsentwurf steht — die zweite nimmt der Entwurf nicht auf. Damit stehen beide Seiten der
  * Regel nebeneinander: Die berechnete Position ist gebunden, die andere bleibt frei.
+ *
+ * <p><b>Dieselbe Verdrahtung traegt die Sperre der Art</b> (Issue #227, Kriterium 8 von #207): Aus
+ * dem Angebot ist eine Rechnung entstanden, also laesst sich sein Kennzeichen nicht mehr wechseln.
+ * Geantwortet wird 422 mit der Meldung am Feld {@code intern} (E20), und das Angebot bleibt der von
+ * vorher. Auch das ist nur hier pruefbar: Die Auskunft kommt ueber {@link
+ * org.mwolff.fbcrm.angebot.application.Rechnungsbindung} aus dem Bestand des Moduls {@code
+ * rechnung}.
  */
 class AngebotPositionsbindungIT extends AbstractIntegrationTest {
 
@@ -151,10 +159,18 @@ class AngebotPositionsbindungIT extends AbstractIntegrationTest {
 
   private <T> ResponseEntity<T> aendere(
       final List<Map<String, Object>> positionen, final Class<T> typ) {
+    return aendere(positionen, null, typ);
+  }
+
+  private <T> ResponseEntity<T> aendere(
+      final List<Map<String, Object>> positionen,
+      final @Nullable Boolean intern,
+      final Class<T> typ) {
     final Map<String, Object> rumpf = new LinkedHashMap<>();
     rumpf.put("angebotDatum", "2026-09-25");
     rumpf.put("ansprechpartnerId", null);
     rumpf.put("beschreibung", "Neugestaltung der Website");
+    rumpf.put("intern", intern);
     rumpf.put("positionen", positionen);
     return ruf("/api/angebote/" + angebotId, HttpMethod.PUT, rumpf, typ);
   }
@@ -287,5 +303,35 @@ class AngebotPositionsbindungIT extends AbstractIntegrationTest {
     assertThat(Objects.requireNonNull(antwort.getBody()).positionen())
         .extracting(AngebotPositionResponse::bezeichnung)
         .containsExactly(KONZEPTION);
+  }
+
+  @Test
+  void aendern_switchingToInternalWhileARechnungExists_thenUnprocessableAndUnchanged() {
+    // Given — Kriterium 8: Die interne Arbeit wird nie abgerechnet; ein internes Angebot mit einem
+    // Entwurf darauf waere ein widerspruechlicher Satz.
+    final AngebotResponse vorher = angebot();
+
+    // When
+    final ResponseEntity<String> antwort =
+        aendere(
+            List.of(
+                position(
+                    Long.valueOf(konzeptionId),
+                    KONZEPTION,
+                    "AUFWAND",
+                    "2.50",
+                    "PERSONENTAG",
+                    "1000.00"),
+                position(
+                    Long.valueOf(schulungId), SCHULUNG, "FESTPREIS", "1", "PAUSCHAL", "1200.00")),
+            Boolean.TRUE,
+            String.class);
+
+    // Then
+    assertThat(antwort.getStatusCode()).isEqualTo(HttpStatus.UNPROCESSABLE_ENTITY);
+    assertThat(antwort.getBody())
+        .contains(KennzeichenNichtAenderbar.MELDUNG)
+        .contains(KennzeichenNichtAenderbar.FELD);
+    assertThat(angebot()).isEqualTo(vorher);
   }
 }

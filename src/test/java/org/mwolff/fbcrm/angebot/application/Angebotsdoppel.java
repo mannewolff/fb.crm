@@ -65,7 +65,29 @@ final class Angebotsdoppel {
           Einheit.PAUSCHAL,
           new BigDecimal("1200.00"));
 
+  /** Dieselbe erste Position als Angabe der Maske — alle vier Angaben besetzt. */
+  static final Positionsangabe KONZEPTION_ANGABE = angabe(KONZEPTION);
+
+  /** Dieselbe zweite Position als Angabe der Maske. */
+  static final Positionsangabe SCHULUNG_ANGABE = angabe(SCHULUNG);
+
   private Angebotsdoppel() {}
+
+  /**
+   * Eine gespeicherte Position als die Angabe, die die Maske dazu einreicht (Issue #227, E7).
+   *
+   * <p>Alle vier Angaben besetzt: So sieht die Einreichung zu einem Angebot an einen Kunden aus.
+   * Wer eine fehlende Angabe braucht, baut die {@link Positionsangabe} im Test selbst.
+   */
+  static Positionsangabe angabe(final Angebotsposition position) {
+    return new Positionsangabe(
+        position.id(),
+        position.bezeichnung(),
+        position.abrechnungsmodus(),
+        position.menge(),
+        position.einheit(),
+        position.einzelpreis());
+  }
 
   /** Ein angelegtes Angebot mit Kennung, zwei Positionen und Beschreibung. */
   static Angebot angebot(final long id) {

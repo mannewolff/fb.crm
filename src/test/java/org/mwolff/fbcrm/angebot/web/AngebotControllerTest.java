@@ -29,9 +29,12 @@ import org.mwolff.fbcrm.angebot.application.AngebotLesenUseCase;
 import org.mwolff.fbcrm.angebot.application.AngebotNichtGefunden;
 import org.mwolff.fbcrm.angebot.application.AngebotStatusUseCase;
 import org.mwolff.fbcrm.angebot.application.AnsprechpartnerNichtWaehlbar;
+import org.mwolff.fbcrm.angebot.application.KennzeichenNichtAenderbar;
 import org.mwolff.fbcrm.angebot.application.Kundenangaben;
 import org.mwolff.fbcrm.angebot.application.KundenangabenUseCase;
 import org.mwolff.fbcrm.angebot.application.PositionenNichtWaehlbar;
+import org.mwolff.fbcrm.angebot.application.Positionsangabe;
+import org.mwolff.fbcrm.angebot.application.Positionsangaben;
 import org.mwolff.fbcrm.angebot.application.StatusGrenzeErreicht;
 import org.mwolff.fbcrm.angebot.domain.Angebot;
 import org.mwolff.fbcrm.angebot.domain.Angebotsposition;
@@ -58,6 +61,12 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
  * <p>Dazu die dauerhafte Kennung der Position (Plan #169, E2): Die Antwort traegt sie je Position,
  * die Anfrage darf sie mitschicken oder weglassen, und eine Kennung, die nicht zu diesem Angebot
  * gehoert, ist ebenfalls 422 — mit der Meldung am Feld {@code positionen}.
+ *
+ * <p><b>Und das Kennzeichen der Art</b> (Issue #227): Es reist im Rumpf, ein fehlendes Feld gilt
+ * als extern, und eine bestehende Rechnung macht aus dem Wechsel ein 422 am Feld {@code intern}.
+ * Weil Menge, Einheit und Preis dafuer keine Pflichtfelder der Bean-Validation mehr sind (E7), geht
+ * eine Position ohne Menge jetzt bis in den Anwendungsfall durch und wird dort zu 422 statt zu 400
+ * — der Test dazu haelt gerade diesen Unterschied fest.
  */
 @ExtendWith(MockitoExtension.class)
 class AngebotControllerTest {
@@ -73,6 +82,18 @@ class AngebotControllerTest {
 
   private static final Angebotsposition KONZEPTION =
       new Angebotsposition(
+          POSITION,
+          "Konzeption",
+          Abrechnungsmodus.AUFWAND,
+          new BigDecimal("2.50"),
+          Einheit.PERSONENTAG,
+          new BigDecimal("1000.01"));
+
+  /**
+   * Dieselbe Position, wie die Maske sie einreicht — alle vier Angaben besetzt (Issue #227, E7).
+   */
+  private static final Positionsangabe KONZEPTION_ANGABE =
+      new Positionsangabe(
           POSITION,
           "Konzeption",
           Abrechnungsmodus.AUFWAND,
@@ -263,9 +284,10 @@ class AngebotControllerTest {
     assertThat(uebergeben.angebotDatum()).isEqualTo(LocalDate.of(2026, 9, 25));
     assertThat(uebergeben.ansprechpartnerId()).isEqualTo(9L);
     assertThat(uebergeben.beschreibung()).isEqualTo("Neu");
-    // Die Kennung der Position kommt mit durch: KONZEPTION traegt sie, und der Record vergleicht
-    // sie.
-    assertThat(uebergeben.positionen()).containsExactly(KONZEPTION);
+    assertThat(uebergeben.intern()).isFalse();
+    // Die Kennung der Position kommt mit durch: KONZEPTION_ANGABE traegt sie, und der Record
+    // vergleicht sie.
+    assertThat(uebergeben.positionen()).containsExactly(KONZEPTION_ANGABE);
   }
 
   @Test
@@ -398,5 +420,118 @@ class AngebotControllerTest {
     mockMvc
         .perform(post("/api/angebote/{id}/status/weiter", Long.valueOf(ANGEBOT)))
         .andExpect(status().isNotFound());
+  }
+
+  @Test
+  void aendern_withTheInternFlag_thenPassesItOnAndAnswersWithTheInternalAngebot() throws Exception {
+    // Given — Issue #227, Kriterium 8 von #207: Das Kennzeichen reist im Rumpf des PUT.
+    when(aendern.aendere(eq(ANGEBOT), daten.capture())).thenReturn(angebot(Angebotsstatus.LAEUFT));
+    final String intern =
+        """
+        {"angebotDatum":"2026-09-25","intern":true,"positionen":[{"id":42,
+          "bezeichnung":"Konzeption"}]}
+        """;
+
+    // When / Then
+    mockMvc
+        .perform(
+            put("/api/angebote/{id}", Long.valueOf(ANGEBOT))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(intern))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.intern").value(true))
+        .andExpect(jsonPath("$.status").value("LAEUFT"));
+    assertThat(daten.getValue().intern()).isTrue();
+  }
+
+  @Test
+  void aendern_withoutTheInternField_thenTreatsItAsACustomerOffer() throws Exception {
+    // Given — ein fehlendes Feld gilt als extern, damit der gewoehnliche Fall ohne Zutun gilt.
+    aendernAntwortet();
+    final String ohneArt =
+        """
+        {"angebotDatum":"2026-09-25","positionen":[]}
+        """;
+
+    // When
+    mockMvc
+        .perform(
+            put("/api/angebote/{id}", Long.valueOf(ANGEBOT))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(ohneArt))
+        .andExpect(status().isOk());
+
+    // Then
+    assertThat(daten.getValue().intern()).isFalse();
+  }
+
+  @Test
+  void aendern_withAnExplicitNullInternField_thenTreatsItAsACustomerOffer() throws Exception {
+    // Given — ein {@code null} im Rumpf geht denselben Weg wie ein fehlendes Feld.
+    aendernAntwortet();
+    final String ausdruecklichNull =
+        """
+        {"angebotDatum":"2026-09-25","intern":null,"positionen":[]}
+        """;
+
+    // When
+    mockMvc
+        .perform(
+            put("/api/angebote/{id}", Long.valueOf(ANGEBOT))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(ausdruecklichNull))
+        .andExpect(status().isOk());
+
+    // Then
+    assertThat(daten.getValue().intern()).isFalse();
+  }
+
+  @Test
+  void aendern_whenTheArtCannotChangeBecauseARechnungExists_thenAnswers422AtTheFieldIntern()
+      throws Exception {
+    // Given — E20: Der Wert kommt aus einem Feld der Maske, und die Meldung gehoert an dieses Feld.
+    when(aendern.aendere(eq(ANGEBOT), daten.capture())).thenThrow(new KennzeichenNichtAenderbar());
+
+    // When / Then
+    mockMvc
+        .perform(
+            put("/api/angebote/{id}", Long.valueOf(ANGEBOT))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(RUMPF))
+        .andExpect(status().isUnprocessableEntity())
+        .andExpect(jsonPath("$.fieldErrors.intern[0]").value(KennzeichenNichtAenderbar.MELDUNG));
+  }
+
+  @Test
+  void aendern_withAPositionWithoutMenge_thenAnswers422AndNotAnymore400() throws Exception {
+    // Given — E7: Menge, Einheit und Preis sind keine Pflichtfelder der Bean-Validation mehr; die
+    // Pflicht entscheidet der Anwendungsfall nach der Zielart und antwortet 422 statt 400.
+    when(aendern.aendere(eq(ANGEBOT), daten.capture()))
+        .thenThrow(
+            Positionsangaben.fehlendeAngaben(
+                0,
+                new Positionsangabe(
+                    null,
+                    "Konzeption",
+                    Abrechnungsmodus.AUFWAND,
+                    null,
+                    Einheit.STUNDE,
+                    BigDecimal.TEN)));
+    final String ohneMenge =
+        """
+        {"angebotDatum":"2026-09-25","positionen":[{"bezeichnung":"Konzeption",
+          "abrechnungsmodus":"AUFWAND","einheit":"STUNDE","einzelpreis":"10.00"}]}
+        """;
+
+    // When / Then
+    mockMvc
+        .perform(
+            put("/api/angebote/{id}", Long.valueOf(ANGEBOT))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(ohneMenge))
+        .andExpect(status().isUnprocessableEntity())
+        .andExpect(
+            jsonPath("$.fieldErrors['positionen[0].menge'][0]")
+                .value(Positionsangaben.ANGABE_FEHLT));
   }
 }
