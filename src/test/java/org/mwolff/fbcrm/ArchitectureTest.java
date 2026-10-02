@@ -3,13 +3,16 @@ package org.mwolff.fbcrm;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.classes;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 import static com.tngtech.archunit.library.dependencies.SlicesRuleDefinition.slices;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.tngtech.archunit.core.domain.JavaClasses;
 import com.tngtech.archunit.core.importer.ClassFileImporter;
 import com.tngtech.archunit.core.importer.ImportOption;
+import com.tngtech.archunit.lang.ArchRule;
 import java.security.MessageDigest;
 import java.util.Arrays;
 import org.junit.jupiter.api.Test;
+import org.mwolff.fbcrm.angebot.application.VerbotenerZeitzugriff;
 
 /**
  * Schichtenregeln nach CLAUDE-java.md §6.1.
@@ -90,6 +93,49 @@ class ArchitectureTest {
                 + " Richtung der Abhaengigkeit ist rechnung -> angebot (Plan #169, E1, E12)")
         .allowEmptyShould(true)
         .check(CLASSES);
+  }
+
+  @Test
+  void angebotModule_thenDoesNotReachIntoArbeitszeit() {
+    angebotOhneArbeitszeit().check(CLASSES);
+  }
+
+  /**
+   * Dass die Regel ueberhaupt greift (Issue #228).
+   *
+   * <p>Gelaufen gegen eine Klassenmenge, die den Verstoss <b>enthaelt</b>: {@code
+   * VerbotenerZeitzugriff} liegt im Testbaum, haengt an {@code arbeitszeit} und ist genau das, was
+   * die Regel finden soll. Ohne diesen Lauf saehe eine Regel, die nichts finden <em>kann</em>, aus
+   * wie eine, die nichts findet — {@code allowEmptyShould(true)} laesst beide gruen durch.
+   */
+  @Test
+  void angebotModule_givenAClassThatReachesIntoArbeitszeit_thenTheRuleFails() {
+    final JavaClasses mitVerstoss =
+        new ClassFileImporter().importClasses(VerbotenerZeitzugriff.class);
+
+    assertThatThrownBy(() -> angebotOhneArbeitszeit().check(mitVerstoss))
+        .isInstanceOf(AssertionError.class)
+        .hasMessageContaining(VerbotenerZeitzugriff.class.getName())
+        .hasMessageContaining("arbeitszeit -> angebot")
+        .hasMessageContaining("Zeitbindung");
+  }
+
+  /*
+   * Die Regel als eigene Methode und nicht zweimal geschrieben: Sie laeuft gegen zwei
+   * Klassenmengen — den Produktionscode und den Verstoss —, und zwei Abschriften liefen beim
+   * ersten Nachziehen des Textes auseinander.
+   */
+  private static ArchRule angebotOhneArbeitszeit() {
+    return noClasses()
+        .that()
+        .resideInAPackage("org.mwolff.fbcrm.angebot..")
+        .should()
+        .dependOnClassesThat()
+        .resideInAPackage("org.mwolff.fbcrm.arbeitszeit..")
+        .because(
+            "das Angebot erfaehrt die erfasste Arbeitszeit nur ueber den Port Zeitbindung; die"
+                + " Richtung der Abhaengigkeit ist arbeitszeit -> angebot (Plan #218, E6)")
+        .allowEmptyShould(true);
   }
 
   @Test

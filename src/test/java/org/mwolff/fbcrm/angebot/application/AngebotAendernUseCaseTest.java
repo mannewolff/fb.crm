@@ -77,6 +77,12 @@ import org.mwolff.fbcrm.firma.domain.AnsprechpartnerRepository;
  * Kennzeichen wandert der Status in die Reihe der neuen Art, und die Pflicht von Menge, Einheit und
  * Preis haengt an der <em>Ziel</em>art: Ein Angebot an einen Kunden braucht alle vier Angaben, die
  * interne Arbeit keine davon (E7, E8).
+ *
+ * <p><b>Der sechste Gegenstand ist die erfasste Arbeitszeit</b> (Issue #228). Wird ein internes
+ * Angebot zu einem an einen Kunden, muss eine Position mit erfasster Zeit nach Aufwand in Stunden
+ * abrechnen — sonst stuende die Zeit an einer Position, die sie nach den Regeln der Zeiterfassung
+ * nicht tragen darf. Welche Positionen Zeit tragen, sagt der Port {@link Zeitbindung}, auf den hier
+ * ein drittes Doppel antwortet; gefragt wird allein bei diesem einen Wechsel.
  */
 @ExtendWith(MockitoExtension.class)
 class AngebotAendernUseCaseTest {
@@ -95,6 +101,7 @@ class AngebotAendernUseCaseTest {
 
   private final Verwendungsdoppel verwendung = new Verwendungsdoppel();
   private final Bindungsdoppel bindung = new Bindungsdoppel();
+  private final Zeitbindungsdoppel zeitbindung = new Zeitbindungsdoppel();
 
   private AngebotAendernUseCase useCase;
 
@@ -106,6 +113,7 @@ class AngebotAendernUseCaseTest {
             new Ansprechpartnerwahl(personen),
             verwendung,
             bindung,
+            zeitbindung,
             Clock.fixed(JETZT, ZoneOffset.UTC));
   }
 
@@ -142,12 +150,36 @@ class AngebotAendernUseCaseTest {
     }
   }
 
+  /*
+   * Dasselbe fuer die Zeitbindung (Issue #228), und wieder ein Doppel: Gefragt wird nur beim
+   * Wechsel von der internen Arbeit zum Angebot an einen Kunden. Das Doppel merkt sich jede Frage
+   * samt der Kennungen — nur so laesst sich zeigen, dass die uebrigen Wechsel den Port gar nicht
+   * bemuehen, und dass nach den eingereichten Kennungen gefragt wird.
+   */
+  private static final class Zeitbindungsdoppel implements Zeitbindung {
+
+    private final Set<Long> bebucht = new HashSet<>();
+    private final List<Set<Long>> gefragt = new ArrayList<>();
+
+    @Override
+    public Set<Long> mitZeit(final Set<Long> angebotPositionIds) {
+      gefragt.add(Set.copyOf(angebotPositionIds));
+      final Set<Long> treffer = new HashSet<>(angebotPositionIds);
+      treffer.retainAll(bebucht);
+      return treffer;
+    }
+  }
+
   private void inEinerRechnung(final Long... kennungen) {
     verwendung.jeAngebot.put(Long.valueOf(ANGEBOT), Set.of(kennungen));
   }
 
   private void mitRechnung() {
     bindung.mitRechnung.add(Long.valueOf(ANGEBOT));
+  }
+
+  private void mitErfassterZeit(final Long... kennungen) {
+    zeitbindung.bebucht.addAll(Arrays.asList(kennungen));
   }
 
   private static Positionsangabe mitEinheit(final Positionsangabe angabe, final Einheit einheit) {
@@ -744,6 +776,142 @@ class AngebotAendernUseCaseTest {
                         "positionen[1].einheit",
                         "positionen[1].einzelpreis",
                         "positionen[1].abrechnungsmodus"));
+  }
+
+  @Test
+  void aendere_turningAnInternalAngebotExternalWithABookedPositionAtFestpreis_thenRejects() {
+    // Given — Issue #228, Kriterium 8 von #207: Eine Position mit erfasster Arbeitszeit muss in
+    // einem Angebot an einen Kunden nach Aufwand in Stunden abrechnen. FESTPREIS kennt keine
+    // Stunden; die erfasste Zeit stuende dann an einer Position, die sie nicht tragen darf.
+    angebotIst(
+        Angebotsdoppel.ohneAnsprechpartner(Angebotsdoppel.angebot(ANGEBOT, Angebotsstatus.LAEUFT)));
+    mitErfassterZeit(Angebotsdoppel.KONZEPTION_ID);
+
+    final AngebotDaten aenderung =
+        daten(
+            null,
+            false,
+            List.of(mitModus(Angebotsdoppel.KONZEPTION_ANGABE, Abrechnungsmodus.FESTPREIS)));
+
+    // When / Then — die Meldung nennt die Position beim Namen, und am Feld der Liste steht sie
+    // auch.
+    assertThatThrownBy(() -> useCase.aendere(ANGEBOT, aenderung))
+        .isInstanceOf(Positionsangaben.class)
+        .hasMessage(
+            "Die Position „Konzeption“ trägt erfasste Arbeitszeit: In einem Angebot"
+                + " an einen Kunden muss sie nach Aufwand in Stunden abrechnen.")
+        .asInstanceOf(InstanceOfAssertFactories.type(Positionsangaben.class))
+        .satisfies(
+            fehler ->
+                assertThat(fehler.felder())
+                    .containsExactly(entry(Positionsangaben.FELD, List.of(fehler.getMessage()))));
+    verify(angebote).findById(ANGEBOT);
+    verifyNoMoreInteractions(angebote);
+  }
+
+  @Test
+  void aendere_turningAnInternalAngebotExternalWithABookedPositionInPersonentag_thenRejects() {
+    // Given — AUFWAND allein genuegt nicht: Die erfasste Zeit sind Stunden, und eine Position, die
+    // in Personentagen abrechnet, zeigte sie im Abrechnungsstand mit 0,00 Stunden.
+    angebotIst(
+        Angebotsdoppel.ohneAnsprechpartner(Angebotsdoppel.angebot(ANGEBOT, Angebotsstatus.LAEUFT)));
+    mitErfassterZeit(Angebotsdoppel.KONZEPTION_ID);
+
+    // KONZEPTION_ANGABE traegt AUFWAND in PERSONENTAG — unveraendert eingereicht.
+    final AngebotDaten aenderung = daten(null, false, List.of(Angebotsdoppel.KONZEPTION_ANGABE));
+
+    // When / Then
+    assertThatThrownBy(() -> useCase.aendere(ANGEBOT, aenderung))
+        .isInstanceOf(Positionsangaben.class)
+        .hasMessageContaining("Konzeption");
+    verify(angebote).findById(ANGEBOT);
+    verifyNoMoreInteractions(angebote);
+  }
+
+  @Test
+  void aendere_turningAnInternalAngebotExternalWithABookedPositionInStunden_thenWrites() {
+    // Given — nach Aufwand in Stunden traegt die Position ihre erfasste Zeit; der Wechsel geht
+    // durch. Die zweite, unbebuchte Position rechnet daneben nach Festpreis ab und bleibt frei:
+    // Gesperrt ist allein, was Zeit traegt.
+    angebotIst(
+        Angebotsdoppel.ohneAnsprechpartner(Angebotsdoppel.angebot(ANGEBOT, Angebotsstatus.LAEUFT)));
+    mitErfassterZeit(Angebotsdoppel.KONZEPTION_ID);
+
+    // When
+    final Angebot geaendert =
+        aendere(
+            daten(
+                null,
+                false,
+                List.of(
+                    mitEinheit(Angebotsdoppel.KONZEPTION_ANGABE, Einheit.STUNDE),
+                    Angebotsdoppel.SCHULUNG_ANGABE)));
+
+    // Then — gefragt wurde mit den Kennungen beider eingereichten Positionen.
+    assertThat(geaendert.intern()).isFalse();
+    assertThat(geaendert.positionen())
+        .extracting(Angebotsposition::abrechnungsmodus, Angebotsposition::einheit)
+        .containsExactly(
+            tuple(Abrechnungsmodus.AUFWAND, Einheit.STUNDE),
+            tuple(Abrechnungsmodus.FESTPREIS, Einheit.PAUSCHAL));
+    assertThat(zeitbindung.gefragt)
+        .containsExactly(Set.of(Angebotsdoppel.KONZEPTION_ID, Angebotsdoppel.SCHULUNG_ID));
+  }
+
+  @Test
+  void aendere_turningAnExternalAngebotInternalWithABookedPosition_thenWritesAndNeverAsks() {
+    // Given — nur der Weg nach aussen ist gesperrt (E19): Wer ein Angebot an einen Kunden zur
+    // internen Arbeit macht, nimmt seinen Positionen keine Abrechnung in Stunden weg.
+    angebotIst(Angebotsdoppel.ohneAnsprechpartner(Angebotsdoppel.angebot(ANGEBOT)));
+    mitErfassterZeit(Angebotsdoppel.KONZEPTION_ID);
+
+    // When
+    final Angebot geaendert = aendere(daten(null, true, angaben(Angebotsdoppel.KONZEPTION)));
+
+    // Then
+    assertThat(geaendert.intern()).isTrue();
+    assertThat(zeitbindung.gefragt).isEmpty();
+  }
+
+  @Test
+  void aendere_withoutChangingTheArt_thenNeverAsksTheZeitbindung() {
+    // Given — gefragt wird allein beim Wechsel: Wer nur den Text eines Angebots an einen Kunden
+    // aendert, soll die erfassten Zeiten seiner Positionen gar nicht erst lesen lassen.
+    angebotIst(Angebotsdoppel.ohneAnsprechpartner(Angebotsdoppel.angebot(ANGEBOT)));
+    mitErfassterZeit(Angebotsdoppel.KONZEPTION_ID);
+
+    // When — dieselbe Art wie bisher, und die bebuchte Position rechnet nach Festpreis ab.
+    final Angebot geaendert =
+        aendere(
+            daten(
+                null,
+                false,
+                List.of(mitModus(Angebotsdoppel.KONZEPTION_ANGABE, Abrechnungsmodus.FESTPREIS))));
+
+    // Then
+    assertThat(geaendert.beschreibung()).isEqualTo(NEUER_TEXT);
+    assertThat(zeitbindung.gefragt).isEmpty();
+  }
+
+  @Test
+  void aendere_turningAnInternalAngebotExternalWithANewPosition_thenAsksWithoutThatPosition() {
+    // Given — eine Position ohne Kennung ist neu und kann darum keine Zeit tragen: Sie geht durch,
+    // obwohl sie nach Festpreis abrechnet, und wird gar nicht erst gefragt.
+    angebotIst(
+        Angebotsdoppel.ohneAnsprechpartner(Angebotsdoppel.angebot(ANGEBOT, Angebotsstatus.LAEUFT)));
+    mitErfassterZeit(Angebotsdoppel.KONZEPTION_ID);
+
+    final Positionsangabe neue =
+        ohneKennung(mitModus(Angebotsdoppel.SCHULUNG_ANGABE, Abrechnungsmodus.FESTPREIS));
+
+    // When
+    final Angebot geaendert = aendere(daten(null, false, List.of(neue)));
+
+    // Then
+    assertThat(geaendert.positionen())
+        .singleElement()
+        .satisfies(position -> assertThat(position.id()).isNull());
+    assertThat(zeitbindung.gefragt).containsExactly(Set.of());
   }
 
   @Test

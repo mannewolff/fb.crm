@@ -17,6 +17,13 @@
  * nicht. Der Port auf den Bestand der Zeiten bleibt dabei innen: Wer ihn von aussen aufriefe,
  * muesste die Positionen eines Angebots selbst zusammentragen.
  *
+ * <p><b>Daneben steht eine umgekehrte Richtung und keine dritte Tuer</b> (Issue #228): {@link
+ * org.mwolff.fbcrm.arbeitszeit.application.AngebotZeitbindung} setzt den Port {@code
+ * angebot.application.Zeitbindung} um und sagt dem Angebot, welche seiner Positionen erfasste Zeit
+ * tragen. Gefragt wird dort, gefragt <em>hat</em> aber {@code angebot} — nach draussen fragt dieses
+ * Modul weiter nur ueber {@code Arbeitszeitauskunft}. Der Port haengt im fremden Modul, weil die
+ * Richtung {@code arbeitszeit} → {@code angebot} bleiben muss; umgekehrt zeigten beide aufeinander.
+ *
  * <p><b>Die Meldungen am Feld entstehen hier</b> und nicht in {@code arbeitszeit.domain}: Nur diese
  * Schicht kennt die Feldnamen der Schnittstelle (A19). Das Domaenenmodell prueft dieselben Regeln
  * als Invariante und wirft dafuer eine {@code IllegalArgumentException} — die sieht niemand, weil

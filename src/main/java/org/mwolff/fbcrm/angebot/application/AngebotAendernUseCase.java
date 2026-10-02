@@ -9,6 +9,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.fbcrm.angebot.domain.Angebot;
 import org.mwolff.fbcrm.angebot.domain.AngebotRepository;
@@ -55,12 +56,32 @@ import org.springframework.transaction.annotation.Transactional;
  * gespeicherten Werte, eine neue bekommt {@code AUFWAND}, {@code STUNDE} und zweimal 0. So bleiben
  * die vier Spalten pflichtig, und ein Wechsel nach innen und zurueck verliert keine Zahl.
  *
+ * <p><b>Eine bebuchte Position zwingt beim Wechsel nach aussen zu Stunden</b> (Issue #228). Wird
+ * ein internes Angebot eines an einen Kunden, muss eine Position mit erfasster Arbeitszeit nach
+ * {@code AUFWAND} in {@code STUNDE} abrechnen — sonst stuende die Zeit an einer Position, die sie
+ * nach den Regeln der Zeiterfassung nicht tragen darf, und der Abrechnungsstand zeigte sie mit 0,00
+ * Stunden. Welche Positionen Zeit tragen, sagt {@link Zeitbindung}; das Angebot erfaehrt es ueber
+ * den Port und kennt das Modul {@code arbeitszeit} nicht (Plan #218, E6). Geprueft wird allein der
+ * Wechsel <b>intern → extern</b> (E19): Der Weg nach innen nimmt keiner Position ihre Stunden, und
+ * das Entfernen einer bebuchten Position scheitert weiter am Fremdschluessel.
+ *
  * <p><b>Die Reihenfolge der Pruefungen</b> ist Absicht: erst das Angebot, dann der Ansprechpartner,
  * die Positionskennungen, die Rechnungsbindung beim Artwechsel, die Bindung der berechneten
- * Positionen und zuletzt die Angaben nach Zielart. Die Sperre aus Kriterium 8 ist die gruendlichere
- * Aussage — wer bei bestehender Rechnung umstellen will, soll das erfahren und nicht zuerst vier
- * Feldfehler zu Positionen bekommen, die er gar nicht aendern wollte.
+ * Positionen, die Angaben nach Zielart und zuletzt die erfasste Arbeitszeit. Die Sperre aus
+ * Kriterium 8 ist die gruendlichere Aussage — wer bei bestehender Rechnung umstellen will, soll das
+ * erfahren und nicht zuerst vier Feldfehler zu Positionen bekommen, die er gar nicht aendern
+ * wollte.
  */
+/*
+ * PMD.TooManyMethods: Fuenf Pruefungen und vier Uebersetzer einer Positionsangabe ergeben zusammen
+ * mit dem einen oeffentlichen Weg mehr als die zehn Methoden der Schwelle. Jede Pruefung traegt
+ * hier ihren Namen und ihre Begruendung — sie zusammenzuziehen hiesse, die Reihenfolge der
+ * Abweisungen in einer langen Methode zu verstecken, und sie auf mehrere Klassen zu verteilen
+ * hiesse, denselben geladenen Stand und dieselbe Einreichung durch mehrere Haende zu geben. Beides
+ * waere schlechter zu lesen als die Folge kleiner, benannter Schritte an einer Stelle — dasselbe
+ * Vorgehen wie bei {@code Rechnungslayout}.
+ */
+@SuppressWarnings("PMD.TooManyMethods")
 @Service
 @Transactional
 public class AngebotAendernUseCase {
@@ -72,6 +93,7 @@ public class AngebotAendernUseCase {
   private final Ansprechpartnerwahl wahl;
   private final Positionsverwendung verwendung;
   private final Rechnungsbindung bindung;
+  private final Zeitbindung zeit;
   private final Clock clock;
 
   AngebotAendernUseCase(
@@ -79,11 +101,13 @@ public class AngebotAendernUseCase {
       final Ansprechpartnerwahl wahl,
       final Positionsverwendung verwendung,
       final Rechnungsbindung bindung,
+      final Zeitbindung zeit,
       final Clock clock) {
     this.angebote = angebote;
     this.wahl = wahl;
     this.verwendung = verwendung;
     this.bindung = bindung;
+    this.zeit = zeit;
     this.clock = clock;
   }
 
@@ -99,7 +123,9 @@ public class AngebotAendernUseCase {
    * @throws PositionInRechnungVerwendet wenn eine Position, die in einer Rechnung steht, fehlt oder
    *     ihre Einheit oder ihre Abrechnungsart wechselt
    * @throws KennzeichenNichtAenderbar wenn die Art wechseln soll, obwohl eine Rechnung besteht
-   * @throws Positionsangaben wenn einer Position Angaben fehlen, die ihre Zielart verlangt
+   * @throws Positionsangaben wenn einer Position Angaben fehlen, die ihre Zielart verlangt, oder
+   *     wenn eine Position mit erfasster Arbeitszeit beim Wechsel nach aussen nicht nach Aufwand in
+   *     Stunden abrechnet
    */
   public Angebot aendere(final long angebotId, final AngebotDaten daten) {
     final Angebot angebot = angebote.findById(angebotId).orElseThrow(AngebotNichtGefunden::new);
@@ -110,6 +136,7 @@ public class AngebotAendernUseCase {
         verwendung.verwendeteKennungen(angebotId), daten.positionen(), angebot.positionen());
     final List<Angebotsposition> positionen =
         nachZielart(daten.positionen(), angebot.positionen(), daten.intern());
+    pruefeZeit(daten, angebot.intern());
     final Instant jetzt = clock.instant();
     return angebote.save(
         angebot
@@ -149,6 +176,44 @@ public class AngebotAendernUseCase {
     if (ziel != bisher && bindung.rechnungVorhanden(angebotId)) {
       throw new KennzeichenNichtAenderbar();
     }
+  }
+
+  /*
+   * Eine Position mit erfasster Arbeitszeit muss nach Aufwand in Stunden abrechnen, sobald das
+   * Angebot eines an einen Kunden wird (Kriterium 8, E19). Gefragt wird allein bei diesem einen
+   * Wechsel: Der Weg nach innen nimmt keiner Position ihre Stunden, und wer nichts umstellt, soll
+   * die erfassten Zeiten seiner Positionen gar nicht erst lesen lassen. Eine Position ohne Kennung
+   * ist neu und kann darum keine Zeit tragen.
+   */
+  private void pruefeZeit(final AngebotDaten daten, final boolean bisherIntern) {
+    if (daten.intern() || !bisherIntern) {
+      return;
+    }
+    // Erst die Positionen mit Kennung aussondern: Nur die koennen Zeit tragen, und danach ist die
+    // Kennung ueberall ein long — eine unveraenderliche Menge weist contains(null) ohnehin mit
+    // einer NullPointerException ab.
+    final List<Positionsangabe> gespeicherte =
+        daten.positionen().stream().filter(angabe -> angabe.id() != null).toList();
+    final Set<Long> bebucht =
+        zeit.mitZeit(
+            gespeicherte.stream()
+                .map(Positionsangabe::requireId)
+                .collect(Collectors.toUnmodifiableSet()));
+    for (final Positionsangabe angabe : gespeicherte) {
+      if (bebucht.contains(angabe.requireId()) && !nachAufwandInStunden(angabe)) {
+        throw Positionsangaben.zeitBrauchtAufwandInStunden(angabe.bezeichnung());
+      }
+    }
+  }
+
+  /*
+   * Die erfasste Zeit sind Stunden: AUFWAND allein genuegt nicht, und ein Festpreis kennt sie gar
+   * nicht. Gelesen wird aus der Einreichung, und die ist hier vollstaendig — nachZielart hat die
+   * vier Angaben schon verlangt, weil die Zielart ein Angebot an einen Kunden ist.
+   */
+  private static boolean nachAufwandInStunden(final Positionsangabe angabe) {
+    return angabe.abrechnungsmodus() == Abrechnungsmodus.AUFWAND
+        && angabe.einheit() == Einheit.STUNDE;
   }
 
   /*
