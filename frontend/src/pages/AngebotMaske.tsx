@@ -1,5 +1,9 @@
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
+import Checkbox from '@mui/material/Checkbox';
+import FormControl from '@mui/material/FormControl';
+import FormControlLabel from '@mui/material/FormControlLabel';
+import FormHelperText from '@mui/material/FormHelperText';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { IconPlus } from '@tabler/icons-react';
@@ -61,6 +65,28 @@ import { ZAHLEN_KLASSE } from '../theme';
  * <b>Die Meldung an einer Position</b> kommt vom Server als `positionen[n].bezeichnung` und steht an
  * der n-ten Positionsmaske, nicht oben in einer Sammelmeldung.
  *
+ * <b>Das Kaestchen „Internes Projekt" steht in beiden Schritten</b> (Issue #207, Kriterium 1).
+ * Beim Anlegen, weil der Anfangsstatus daran haengt (`LAEUFT` statt `ANGELEGT`, Issue #226); beim
+ * Bearbeiten, weil das Umstellen dort geschieht. Es haengt an derselben Anbindung wie jedes andere
+ * Feld: Weist der Server einen gesperrten Artwechsel ab, kommt die Meldung als Feldfehler an
+ * `intern` und steht am Kaestchen statt in einer Sammelmeldung (Plan #218, E20) — eine Meldung
+ * gehoert an die Stelle, an der sie gilt. Das Kaestchen bleibt dabei <b>bedienbar</b>: Die Sperre
+ * kennt nur der Server, und sie kann sich wieder loesen (eine Rechnung wird geloescht); ein
+ * gesperrtes Kaestchen ohne Weg zurueck waere eine Sackgasse.
+ *
+ * <b>Der Haken verbirgt, er wirft nicht weg</b> (Kriterien 3, 8). Menge, Einheit, Einzelpreis und
+ * Abrechnungsart bleiben im Zustand der Maske stehen und verschwinden nur aus der Ansicht; wer
+ * zurueckschaltet, findet sie wieder. Das ist die Oberflaeche zu dem, was der Server tut — er
+ * behaelt die vier Angaben ebenfalls. Eine Maske, die beim Haken wegwirft, was der Server behaelt,
+ * widerspraeche ihm. Hinaus gehen die vier am internen Angebot trotzdem nicht; das filtert die
+ * Systemgrenze (`api/angebote.ts`, `rumpf`).
+ *
+ * <b>Am internen Angebot entfaellt die Summenzeile.</b> Sie ist die mitrechnende Summe der Maske
+ * und nicht die Spalte einer Tafel; eine Zeile, die nur noch „–" sagte, waere eine Beschriftung
+ * ohne Inhalt. Damit entfaellt auch der Ort, an dem {@link ZAHLEN_UNKLAR} stuende — und darum haelt
+ * eine unlesbare Zahl in einem verborgenen Feld das Speichern nicht mehr auf (siehe
+ * {@link alsEingaben}).
+ *
  * <b>Der Kopfpfad nennt die Firma beim Namen</b>, sobald sie bekannt ist.
  */
 
@@ -94,14 +120,6 @@ type Stand =
       readonly firmaId: number;
       readonly firmaName: string;
       readonly angebotId: number;
-      /**
-       * Das Kennzeichen des geladenen Angebots (Issue #226).
-       *
-       * Die Maske zeigt es noch nicht und aendert es nicht; sie fuehrt es nur mit, damit das
-       * Speichern es unveraendert zurueckgibt. Ohne das Feld schickte jedes Speichern `false` und
-       * machte aus einem internen Angebot stillschweigend eines an einen Kunden.
-       */
-      readonly intern: boolean;
       /** Die aktiven Ansprechpartner der Firma und der gespeicherte, auch wenn stillgelegt. */
       readonly personen: readonly Ansprechpartner[];
       /**
@@ -202,19 +220,43 @@ function summeIn(positionen: readonly Maskenposition[]): number | null {
 }
 
 /**
+ * Die Zahlen, die eine Zeile des internen Angebots stellvertretend traegt.
+ *
+ * Sie gehen nie hinaus: Die Systemgrenze streicht am internen Angebot alles ausser Kennung und
+ * Bezeichnung (`api/angebote.ts`, `rumpf`). Sie stehen hier nur, weil {@link PositionEingabe} die
+ * Felder verlangt — ein eigener Typ fuer dieselbe Liste waere eine zweite Form desselben Rumpfs.
+ */
+const OHNE_ZAHLEN = {
+  abrechnungsmodus: 'AUFWAND',
+  menge: '0.00',
+  einheit: 'PERSONENTAG',
+  einzelpreis: '0.00',
+} as const;
+
+/**
  * Die ganze Liste als Eingaben — `null`, solange eine Zahl keine ist.
  *
  * Alles oder nichts: Ein Angebot wird als Ganzes geschrieben (E8), und eine Liste, aus der die
  * unlesbaren Zeilen stillschweigend herausfielen, loeschte Positionen, die der Mensch sieht.
+ *
+ * <b>Am internen Angebot haelt eine unlesbare Zahl nichts auf.</b> Menge und Einzelpreis gehen von
+ * dort nicht hinaus, sie sind verborgen, und die Meldung dazu stuende an der Summenzeile, die es
+ * am internen Angebot nicht gibt. Ohne diese Ausnahme wiese die Maske ein Speichern stumm ab —
+ * kein Hinweis, kein Netzweg, nichts.
  */
 function alsEingaben(
   positionen: readonly Maskenposition[],
+  intern: boolean,
 ): readonly PositionEingabe[] | null {
   const eingaben: PositionEingabe[] = [];
   for (const position of positionen) {
     const eingabe = alsEingabe(position);
     if (eingabe === null) {
-      return null;
+      if (!intern) {
+        return null;
+      }
+      eingaben.push({ ...OHNE_ZAHLEN, id: position.id, bezeichnung: position.bezeichnung });
+      continue;
     }
     eingaben.push(eingabe);
   }
@@ -249,6 +291,8 @@ interface Uebernahme {
   readonly stand: Stand;
   readonly texte: Texte;
   readonly positionen: readonly Maskenposition[];
+  /** Das Kennzeichen des gelesenen Angebots — es belegt das Kaestchen (Issue #207, Kriterium 1). */
+  readonly intern: boolean;
 }
 
 /**
@@ -264,12 +308,12 @@ function uebernahme(angebot: Angebot, alle: readonly Ansprechpartner[]): Ueberna
       firmaId: angebot.firmaId,
       firmaName: angebot.firmaName,
       angebotId: angebot.id,
-      intern: angebot.intern,
       personen: waehlbare(alle, angebot.ansprechpartnerId),
       alle,
     },
     texte: alsTexte(angebot),
     positionen: alsZeilen(angebot),
+    intern: angebot.intern,
   };
 }
 
@@ -279,6 +323,45 @@ function waehlbare(
   gespeichert: number | null,
 ): readonly Ansprechpartner[] {
   return personen.filter((person) => person.aktiv || person.id === gespeichert);
+}
+
+/** Die Beschriftung des Kennzeichens — in beiden Schritten dieselbe (Kriterium 1). */
+const INTERN_WORT = 'Internes Projekt';
+
+/**
+ * Das Kaestchen „Internes Projekt" samt Meldung des Servers.
+ *
+ * Ein Baustein und nicht zweimal dasselbe Markup: Beide Schritte zeigen dasselbe Kaestchen, und
+ * zwei Abschriften liefen bei der naechsten Aenderung an der Beschriftung auseinander.
+ */
+function InternKaestchen({
+  wert,
+  setze,
+  meldung,
+}: {
+  readonly wert: boolean;
+  readonly setze: (wert: boolean) => void;
+  readonly meldung: string | undefined;
+}) {
+  // Kein `component="fieldset"`: Das Kaestchen traegt seine Beschriftung selbst, und ein Feldsatz
+  // um ein einzelnes Feld waere eine Gruppe ohne Gruppe — die Positionen dieser Maske sind
+  // Gruppen, und eine weitere ohne Inhalt verwirrte die Ansage des Screenreaders.
+  return (
+    <FormControl error={meldung !== undefined} variant="standard">
+      <FormControlLabel
+        control={
+          <Checkbox
+            checked={wert}
+            onChange={(ereignis) => {
+              setze(ereignis.target.checked);
+            }}
+          />
+        }
+        label={INTERN_WORT}
+      />
+      {meldung === undefined ? null : <FormHelperText>{meldung}</FormHelperText>}
+    </FormControl>
+  );
 }
 
 export default function AngebotMaske() {
@@ -291,6 +374,14 @@ export default function AngebotMaske() {
   const [texte, setzeTexte] = useState<Texte>(LEERE_TEXTE);
   const [positionen, setzePositionen] = useState<readonly Maskenposition[]>([]);
   const [personWahl, setzePersonWahl] = useState(KEINE_PERSON);
+  /**
+   * Das Kennzeichen, wie es im Kaestchen steht — in beiden Schritten derselbe Zustand.
+   *
+   * Nicht im {@link Stand}: Dort stuende es als „das, was der Server zuletzt sagte", und das
+   * Kaestchen braucht „das, was der Mensch gerade will". Zwei Wahrheiten ueber dasselbe Kennzeichen
+   * liefen beim ersten Haken auseinander.
+   */
+  const [intern, setzeIntern] = useState(false);
   const [eigeneFehler, setzeEigeneFehler] = useState<FieldErrors>({});
   const [feldFehler, setzeFeldFehler] = useState<FieldErrors>({});
   const [fehler, setzeFehler] = useState<string | null>(null);
@@ -349,6 +440,7 @@ export default function AngebotMaske() {
         setzeStand(neu.stand);
         setzeTexte(neu.texte);
         setzePositionen(neu.positionen);
+        setzeIntern(neu.intern);
       })
       .catch((ursache: unknown) => {
         setzeStand({
@@ -365,8 +457,7 @@ export default function AngebotMaske() {
       const angebot = await angebotAnlegen(
         firmaId,
         personWahl === KEINE_PERSON ? null : Number(personWahl),
-        // Die Maske legt bisher nur Angebote an Kunden an; das interne kommt mit Issue #233.
-        false,
+        intern,
       );
       navigate(`/angebote/${String(angebot.id)}/bearbeiten`, { replace: true });
     } catch {
@@ -375,13 +466,13 @@ export default function AngebotMaske() {
     }
   };
 
-  const speichern = async (angebot: number, intern: boolean, alle: readonly Ansprechpartner[]) => {
+  const speichern = async (angebot: number, alle: readonly Ansprechpartner[]) => {
     setzeGespeichert(false);
     setzeFehler(null);
     setzeFeldFehler({});
     const fehlendesDatum = texte.angebotDatum === '';
     setzeEigeneFehler(fehlendesDatum ? { angebotDatum: [DATUM_FEHLT] } : {});
-    const eingaben = alsEingaben(positionen);
+    const eingaben = alsEingaben(positionen, intern);
     if (fehlendesDatum || eingaben === null) {
       // Was fehlt, steht am Feld beziehungsweise an der Summe; hinaus geht nichts.
       return;
@@ -402,6 +493,7 @@ export default function AngebotMaske() {
       setzeStand(neu.stand);
       setzeTexte(neu.texte);
       setzePositionen(neu.positionen);
+      setzeIntern(neu.intern);
       setzeGespeichert(true);
     } catch (ursache) {
       const felder = feldMeldungen(ursache);
@@ -488,6 +580,7 @@ export default function AngebotMaske() {
                 </option>
               ))}
             </TextField>
+            <InternKaestchen wert={intern} setze={setzeIntern} meldung={meldung('intern')} />
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, flexWrap: 'wrap' }}>
               <KupferTaste disabled={laeuft}>Anlegen</KupferTaste>
               <WeicheTaste to={`/firmen/${String(firmaId)}`}>Abbrechen</WeicheTaste>
@@ -499,7 +592,6 @@ export default function AngebotMaske() {
   }
 
   const zuAendern = stand.angebotId;
-  const istIntern = stand.intern;
   const personen = stand.personen;
   const allePersonen = stand.alle;
   return (
@@ -508,7 +600,7 @@ export default function AngebotMaske() {
       noValidate
       onSubmit={(ereignis: FormEvent<HTMLFormElement>) => {
         ereignis.preventDefault();
-        void speichern(zuAendern, istIntern, allePersonen);
+        void speichern(zuAendern, allePersonen);
       }}
       sx={spalten}
     >
@@ -575,6 +667,7 @@ export default function AngebotMaske() {
             minRows={3}
             fullWidth
           />
+          <InternKaestchen wert={intern} setze={setzeIntern} meldung={meldung('intern')} />
         </Box>
       </Karte>
       <Karte
@@ -633,9 +726,11 @@ export default function AngebotMaske() {
                 erste={stelle === 0}
                 letzte={stelle === positionen.length - 1}
                 bezeichnungFehler={meldung(`positionen[${String(stelle)}].bezeichnung`)}
+                intern={intern}
               />
             ))
           )}
+          {intern ? null : (
           <Box
             sx={(theme) => ({
               display: 'flex',
@@ -676,6 +771,7 @@ export default function AngebotMaske() {
               </Typography>
             )}
           </Box>
+          )}
         </Box>
       </Karte>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, flexWrap: 'wrap' }}>

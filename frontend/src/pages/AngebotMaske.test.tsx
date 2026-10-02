@@ -762,3 +762,200 @@ describe('AngebotMaske — was nicht geht', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('nicht gespeichert');
   });
 });
+
+/** Dieselbe Position, aber mit Angaben, die keine Zahlen sind — am internen Angebot verborgen. */
+const INTERN_ANGEBOT = { ...ANGEBOT, intern: true, status: 'LAEUFT' };
+
+describe('AngebotMaske — das Kennzeichen „Internes Projekt" (Issue #207, Kriterien 1, 3, 8)', () => {
+  it('schickt beim Anlegen mit gesetztem Kaestchen „intern: true"', async () => {
+    const nutzer = userEvent.setup();
+    const fetchMock = fetchNachPfad({
+      'GET /api/firmen/5': json(200, FIRMA),
+      'POST /api/firmen/5/angebote': json(201, INTERN_ANGEBOT),
+      'GET /api/angebote/9': json(200, INTERN_ANGEBOT),
+    });
+
+    renderMaske('/firmen/5/angebote/neu');
+    await nutzer.click(
+      await screen.findByRole('checkbox', { name: 'Internes Projekt' }),
+    );
+    await nutzer.click(screen.getByRole('button', { name: 'Anlegen' }));
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/firmen/5/angebote',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ ansprechpartnerId: null, intern: true }),
+      }),
+    );
+  });
+
+  it('schickt beim Anlegen ohne Haken „intern: false"', async () => {
+    const nutzer = userEvent.setup();
+    const fetchMock = fetchNachPfad({
+      'GET /api/firmen/5': json(200, FIRMA),
+      'POST /api/firmen/5/angebote': json(201, ANGEBOT),
+      'GET /api/angebote/9': json(200, ANGEBOT),
+    });
+
+    renderMaske('/firmen/5/angebote/neu');
+    expect(await screen.findByRole('checkbox', { name: 'Internes Projekt' })).not.toBeChecked();
+    await nutzer.click(screen.getByRole('button', { name: 'Anlegen' }));
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/firmen/5/angebote',
+      expect.objectContaining({
+        body: JSON.stringify({ ansprechpartnerId: null, intern: false }),
+      }),
+    );
+  });
+
+  it('zeigt das Kaestchen beim Bearbeiten eines internen Angebots gesetzt', async () => {
+    lesen(INTERN_ANGEBOT);
+
+    renderMaske('/angebote/9/bearbeiten');
+    await bereit();
+
+    expect(screen.getByRole('checkbox', { name: 'Internes Projekt' })).toBeChecked();
+  });
+
+  it('zeigt das Kaestchen bei einem externen Angebot nicht gesetzt', async () => {
+    lesen(ANGEBOT);
+
+    renderMaske('/angebote/9/bearbeiten');
+    await bereit();
+
+    expect(screen.getByRole('checkbox', { name: 'Internes Projekt' })).not.toBeChecked();
+  });
+
+  it('verbirgt mit dem Haken die vier Positionsangaben und die Summenzeile sofort', async () => {
+    const nutzer = userEvent.setup();
+    lesen(ANGEBOT);
+
+    renderMaske('/angebote/9/bearbeiten');
+    await bereit();
+    expect(screen.getByTestId('angebot-summe')).toBeInTheDocument();
+
+    await nutzer.click(screen.getByRole('checkbox', { name: 'Internes Projekt' }));
+
+    expect(gruppe(1).queryByRole('combobox', { name: 'Abrechnung' })).not.toBeInTheDocument();
+    expect(gruppe(1).queryByRole('textbox', { name: 'Menge' })).not.toBeInTheDocument();
+    expect(gruppe(1).queryByRole('combobox', { name: 'Einheit' })).not.toBeInTheDocument();
+    expect(gruppe(1).queryByRole('textbox', { name: 'Einzelpreis (netto)' })).not.toBeInTheDocument();
+    expect(screen.queryByTestId('angebot-summe')).not.toBeInTheDocument();
+  });
+
+  it('zeigt die Angaben nach dem Abwaehlen mit denselben Werten erneut', async () => {
+    const nutzer = userEvent.setup();
+    lesen(ANGEBOT);
+
+    renderMaske('/angebote/9/bearbeiten');
+    await bereit();
+    const menge = gruppe(1).getByRole('textbox', { name: 'Menge' });
+    await nutzer.clear(menge);
+    await nutzer.type(menge, '7,25');
+
+    const kaestchen = screen.getByRole('checkbox', { name: 'Internes Projekt' });
+    await nutzer.click(kaestchen);
+    await nutzer.click(kaestchen);
+
+    // Nichts zwischengespeichert: Der Zustand der Maske blieb stehen (Entscheidung zum Issue).
+    expect(gruppe(1).getByRole('textbox', { name: 'Menge' })).toHaveValue('7,25');
+    expect(gruppe(1).getByRole('textbox', { name: 'Einzelpreis (netto)' })).toHaveValue('1000,01');
+    expect(screen.getByTestId('angebot-summe')).toHaveTextContent('7.250,07 €');
+  });
+
+  it('schickt am internen Angebot die vier Positionsangaben nicht mit', async () => {
+    const nutzer = userEvent.setup();
+    const fetchMock = lesen(INTERN_ANGEBOT, {
+      'PUT /api/angebote/9': json(200, INTERN_ANGEBOT),
+    });
+
+    renderMaske('/angebote/9/bearbeiten');
+    await bereit();
+    await nutzer.click(screen.getByRole('button', { name: 'Speichern' }));
+
+    await screen.findByRole('status');
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/angebote/9',
+      expect.objectContaining({
+        body: JSON.stringify({
+          angebotDatum: '2026-09-24',
+          ansprechpartnerId: null,
+          beschreibung: 'Neue Website',
+          intern: true,
+          positionen: [{ id: 3, bezeichnung: 'Konzeption' }],
+        }),
+      }),
+    );
+  });
+
+  it('schickt am externen Angebot die vier Positionsangaben mit', async () => {
+    const nutzer = userEvent.setup();
+    const fetchMock = lesen(ANGEBOT, { 'PUT /api/angebote/9': json(200, ANGEBOT) });
+
+    renderMaske('/angebote/9/bearbeiten');
+    await bereit();
+    await nutzer.click(screen.getByRole('button', { name: 'Speichern' }));
+
+    await screen.findByRole('status');
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/angebote/9',
+      expect.objectContaining({
+        body: JSON.stringify({
+          angebotDatum: '2026-09-24',
+          ansprechpartnerId: null,
+          beschreibung: 'Neue Website',
+          intern: false,
+          positionen: [KONZEPTION_EINGABE],
+        }),
+      }),
+    );
+  });
+
+  it('haelt eine verborgene unlesbare Zahl das Speichern nicht auf', async () => {
+    const nutzer = userEvent.setup();
+    const fetchMock = lesen(ANGEBOT, { 'PUT /api/angebote/9': json(200, INTERN_ANGEBOT) });
+
+    renderMaske('/angebote/9/bearbeiten');
+    await bereit();
+    await nutzer.clear(gruppe(1).getByRole('textbox', { name: 'Menge' }));
+    await nutzer.click(screen.getByRole('checkbox', { name: 'Internes Projekt' }));
+    await nutzer.click(screen.getByRole('button', { name: 'Speichern' }));
+
+    await screen.findByRole('status');
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/angebote/9',
+      expect.objectContaining({
+        body: JSON.stringify({
+          angebotDatum: '2026-09-24',
+          ansprechpartnerId: null,
+          beschreibung: 'Neue Website',
+          intern: true,
+          positionen: [{ id: 3, bezeichnung: 'Konzeption' }],
+        }),
+      }),
+    );
+  });
+
+  it('stellt die Meldung des Servers ans Kaestchen und laesst es bedienbar (E20)', async () => {
+    const nutzer = userEvent.setup();
+    const gesperrt =
+      'Dieses Angebot ist bereits abgerechnet; seine Art lässt sich nicht mehr ändern.';
+    lesen(ANGEBOT, {
+      'PUT /api/angebote/9': problem(422, gesperrt, { intern: [gesperrt] }),
+    });
+
+    renderMaske('/angebote/9/bearbeiten');
+    await bereit();
+    const kaestchen = screen.getByRole('checkbox', { name: 'Internes Projekt' });
+    await nutzer.click(kaestchen);
+    await nutzer.click(screen.getByRole('button', { name: 'Speichern' }));
+
+    expect(await screen.findByText(gesperrt)).toBeInTheDocument();
+    // Keine Sammelmeldung oben, sondern die Meldung am Feld.
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(kaestchen).toBeEnabled();
+    expect(kaestchen).toBeChecked();
+  });
+});

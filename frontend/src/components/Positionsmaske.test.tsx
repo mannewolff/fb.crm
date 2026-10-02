@@ -32,6 +32,7 @@ function Halter({
   erste = false,
   letzte = false,
   bezeichnungFehler,
+  intern = false,
 }: {
   readonly start?: Maskenposition;
   readonly loesche?: () => void;
@@ -40,6 +41,7 @@ function Halter({
   readonly erste?: boolean;
   readonly letzte?: boolean;
   readonly bezeichnungFehler?: string;
+  readonly intern?: boolean;
 }) {
   const [position, setzePosition] = useState(start);
   return (
@@ -53,6 +55,7 @@ function Halter({
       erste={erste}
       letzte={letzte}
       bezeichnungFehler={bezeichnungFehler}
+      intern={intern}
     />
   );
 }
@@ -112,6 +115,7 @@ describe('Positionsmaske — die Kennung wandert mit (Plan #169)', () => {
         nachUnten={vi.fn()}
         erste={false}
         letzte={false}
+        intern={false}
       />,
     );
 
@@ -296,5 +300,44 @@ describe('frischePosition und betragDerPosition', () => {
     expect(betragDerPosition({ ...POSITION, menge: 'x' })).toBeNull();
     expect(betragDerPosition({ ...POSITION, einzelpreis: '' })).toBeNull();
     expect(betragDerPosition(POSITION)).toBe(250003);
+  });
+});
+
+describe('Positionsmaske — das interne Angebot (Issue #207, Kriterium 3)', () => {
+  it('zeigt mit „intern" nur die Bezeichnung und die drei Tasten', () => {
+    renderMitTheme(<Halter intern />);
+
+    expect(gruppe().getByRole('textbox', { name: 'Bezeichnung' })).toHaveValue('Konzeption');
+    expect(gruppe().queryByRole('combobox', { name: 'Abrechnung' })).not.toBeInTheDocument();
+    expect(gruppe().queryByRole('textbox', { name: 'Menge' })).not.toBeInTheDocument();
+    expect(gruppe().queryByRole('combobox', { name: 'Einheit' })).not.toBeInTheDocument();
+    expect(gruppe().queryByRole('textbox', { name: 'Einzelpreis (netto)' })).not.toBeInTheDocument();
+    expect(gruppe().queryByTestId('positions-betrag')).not.toBeInTheDocument();
+    expect(gruppe().queryByText('Betrag')).not.toBeInTheDocument();
+    // Ein einziges Feld, und die drei Griffe bleiben.
+    expect(gruppe().getAllByRole('textbox')).toHaveLength(1);
+    expect(gruppe().getByRole('button', { name: 'Position 1 nach oben' })).toBeInTheDocument();
+    expect(gruppe().getByRole('button', { name: 'Position 1 nach unten' })).toBeInTheDocument();
+    expect(gruppe().getByRole('button', { name: 'Position 1 löschen' })).toBeInTheDocument();
+  });
+
+  it('behaelt die Gruppenbeschriftung mit der Nummer der Position', () => {
+    renderMitTheme(<Halter intern />);
+
+    expect(screen.getByRole('group', { name: 'Position 1' })).toBeInTheDocument();
+  });
+
+  it('zeigt ohne „intern" alle fuenf Felder und den Betrag', () => {
+    renderMitTheme(<Halter />);
+
+    expect(gruppe().getAllByRole('textbox')).toHaveLength(3);
+    expect(gruppe().getAllByRole('combobox')).toHaveLength(2);
+    expect(gruppe().getByTestId('positions-betrag')).toHaveTextContent('2.500,03 €');
+  });
+
+  it('meldet eine unlesbare Menge nicht, solange sie verborgen ist', () => {
+    renderMitTheme(<Halter intern start={{ ...POSITION, menge: 'x', einzelpreis: 'y' }} />);
+
+    expect(gruppe().queryByText(/höchstens zwei Nachkommastellen/)).not.toBeInTheDocument();
   });
 });

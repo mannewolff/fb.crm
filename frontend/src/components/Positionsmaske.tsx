@@ -34,6 +34,11 @@ import { RADIUS_MITTEL, RADIUS_RUND, ZAHLEN_KLASSE } from '../theme';
  * Maskenposition.einheitVonHand} — ohne es waere „hat der Mensch gewaehlt?" aus dem Wert allein
  * nicht zu beantworten.
  *
+ * <b>Am internen Angebot bleibt die Bezeichnung allein</b> (Issue #207, Kriterium 3): „Abrechnung",
+ * „Menge", „Einheit", „Einzelpreis" und die Betragszeile entfallen, die drei Griffe und die Gruppe
+ * mit ihrer Nummer bleiben. Der Zustand wird dabei nicht beschnitten — verborgen ist nicht
+ * geloescht, und wer das Kennzeichen wieder abwaehlt, findet seine Angaben unveraendert vor.
+ *
  * Die Felder liegen in einer Gruppe mit dem Namen „Position <n>". Mehrere Zeilen tragen dieselben
  * Beschriftungen; ohne die Gruppe waere „Menge" auf der Seite mehrfach da, und ein Screenreader
  * saehe fuenf Felder ohne Zugehoerigkeit.
@@ -141,6 +146,15 @@ export interface PositionsmaskeProps {
   readonly letzte: boolean;
   /** Die Meldung des Servers an der Bezeichnung (`positionen[n].bezeichnung`), sofern es eine gibt. */
   readonly bezeichnungFehler?: string;
+  /**
+   * Ob die Zeile zu einem internen Angebot gehoert (Issue #207, Kriterium 3).
+   *
+   * Dann entfallen „Abrechnung", „Menge", „Einheit", „Einzelpreis" und die Betragszeile; die
+   * Bezeichnung und die drei Griffe bleiben. Die {@link Maskenposition} behaelt dabei alle Felder:
+   * Wer das Kennzeichen wieder abwaehlt, findet seine Angaben wieder, und was gespeichert ist,
+   * behaelt auch der Server (Kriterium 8). Verborgen ist nicht geloescht.
+   */
+  readonly intern: boolean;
 }
 
 const SYMBOL = 17;
@@ -155,6 +169,7 @@ export default function Positionsmaske({
   erste,
   letzte,
   bezeichnungFehler,
+  intern,
 }: PositionsmaskeProps) {
   const cent = betragDerPosition(position);
   const mengeFehlt = hundertstel(position.menge) === null;
@@ -197,6 +212,7 @@ export default function Positionsmaske({
           required
           fullWidth
         />
+        {intern ? null : (
         <Box
           sx={{
             display: 'grid',
@@ -275,22 +291,25 @@ export default function Positionsmaske({
             slotProps={{ htmlInput: { inputMode: 'decimal', className: ZAHLEN_KLASSE } }}
           />
         </Box>
+        )}
       </Box>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-        <Box sx={{ minWidth: 110, textAlign: { md: 'right' } }}>
-          <Typography
-            sx={(theme) => ({ fontSize: 12, color: theme.vars.palette.kupferwolke.textSchwach })}
-          >
-            Betrag
-          </Typography>
-          <Typography
-            data-testid="positions-betrag"
-            className={ZAHLEN_KLASSE}
-            sx={{ fontSize: 15, fontWeight: 700 }}
-          >
-            {cent === null ? '—' : euro(cent)}
-          </Typography>
-        </Box>
+        {intern ? null : (
+          <Box sx={{ minWidth: 110, textAlign: { md: 'right' } }}>
+            <Typography
+              sx={(theme) => ({ fontSize: 12, color: theme.vars.palette.kupferwolke.textSchwach })}
+            >
+              Betrag
+            </Typography>
+            <Typography
+              data-testid="positions-betrag"
+              className={ZAHLEN_KLASSE}
+              sx={{ fontSize: 15, fontWeight: 700 }}
+            >
+              {cent === null ? '—' : euro(cent)}
+            </Typography>
+          </Box>
+        )}
         <IconButton
           aria-label={`Position ${String(nummer)} nach oben`}
           onClick={nachOben}
