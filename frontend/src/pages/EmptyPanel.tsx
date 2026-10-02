@@ -8,7 +8,8 @@ import { RADIUS_MITTEL } from '../theme';
 /**
  * Der leere Zustand der Bereiche, in die noch keine Fachlichkeit eingezogen ist.
  *
- * Er dient `/` und `/dokumentation`. **Eine Einladung, keine Entschuldigung**
+ * Er dient nur noch `/dokumentation`: Die Startseite auf `/` zeigt seit Issue #216 den
+ * Geschaeftsstand. **Eine Einladung, keine Entschuldigung**
  * (CLAUDE-design.md, „Zustandsformen"): Symbol auf einer Toenung und ein Satz — keine Meldung ueber
  * fehlende Daten und keine Stoerung, denn es ist keine.
  *

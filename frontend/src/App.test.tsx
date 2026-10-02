@@ -43,6 +43,15 @@ const RECHNUNG = {
   zeilen: [],
 };
 
+/** Der Stand der Startseite, wie das Backend ihn schreibt (Issue #216). */
+const STARTSEITENSTAND = {
+  monat: '2026-10',
+  monate: ['2026-10', '2026-09'],
+  inArbeit: [],
+  nichtAbgerechnet: { netto: 0, erfasstImMonat: 0, angebote: [] },
+  abgerechnet: { netto: 0, brutto: 0, anzahl: 0 },
+};
+
 /** Die Firma des Angebots, wie das Backend sie schreibt. */
 const FIRMA = {
   id: 5,
@@ -346,6 +355,36 @@ describe('App', () => {
     expect(
       await screen.findByRole('heading', { level: 1, name: 'Administration' }),
     ).toBeInTheDocument();
+    expect(screen.getByRole('navigation', { name: 'Hauptnavigation' })).toBeInTheDocument();
+  });
+
+  it('zeigt „/" als Startseite im Rahmen und nicht mehr das leere Panel', async () => {
+    fensterbreite(1440);
+    fetchNachPfad({
+      'GET /api/auth/me': json(200, KONTO),
+      'GET /api/instance': json(200, { version: '0.1.3' }),
+      'GET /api/startseite': json(200, STARTSEITENSTAND),
+    });
+
+    renderApp(['/'], 0);
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Start' }),
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId('leeres-panel')).not.toBeInTheDocument();
+    expect(screen.getByRole('navigation', { name: 'Hauptnavigation' })).toBeInTheDocument();
+  });
+
+  it('zeigt „/dokumentation" weiter das leere Panel', async () => {
+    fensterbreite(1440);
+    fetchNachPfad({
+      'GET /api/auth/me': json(200, KONTO),
+      'GET /api/instance': json(200, { version: '0.1.3' }),
+    });
+
+    renderApp(['/dokumentation'], 0);
+
+    expect(await screen.findByTestId('leeres-panel')).toBeInTheDocument();
     expect(screen.getByRole('navigation', { name: 'Hauptnavigation' })).toBeInTheDocument();
   });
 });

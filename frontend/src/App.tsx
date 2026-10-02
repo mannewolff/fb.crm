@@ -23,6 +23,7 @@ const RechnungenPage = lazy(async () => import('./pages/RechnungenPage'));
 const RechnungPage = lazy(async () => import('./pages/RechnungPage'));
 const EigeneAngabenMaske = lazy(async () => import('./pages/EigeneAngabenMaske'));
 const AdministrationPage = lazy(async () => import('./pages/AdministrationPage'));
+const StartseitePage = lazy(async () => import('./pages/StartseitePage'));
 
 /**
  * Der Routenbaum. Offen sind die Anmeldeseite, die Einrichtung und die beiden Seiten zum
@@ -30,8 +31,9 @@ const AdministrationPage = lazy(async () => import('./pages/AdministrationPage')
  *
  * Die geschuetzten Adressen teilen sich einen Rahmen ({@link AppShell}): Er steht einmal um
  * das `Outlet` und bleibt beim Wechsel zwischen ihnen stehen, statt je Ansicht neu zu entstehen.
- * `/` und `/dokumentation` zeigen in diesem Stand dasselbe leere Panel; `/firmen`,
- * `/eigene-angaben` und `/administration` tragen die fachlichen Ansichten. Ein Angebot
+ * `/` traegt die Startseite mit dem Geschaeftsstand (Issue #216); `/dokumentation` ist der
+ * letzte Weg auf das leere Panel. `/firmen`, `/eigene-angaben` und `/administration` tragen die
+ * fachlichen Ansichten. Ein Angebot
  * entsteht an der Firma (`/firmen/:id/angebote/neu`) und steht danach unter
  * `/angebote/:angebotId` — es braucht seine Firma nicht in der Adresse, denn es kennt sie
  * selbst (Issue #126). Dasselbe gilt fuer die Rechnung: Sie entsteht an ihrem Angebot und steht
@@ -63,7 +65,7 @@ export default function App() {
               </ProtectedRoute>
             }
           >
-            <Route path="/" element={<EmptyPanel />} />
+            <Route path="/" element={<StartseitePage />} />
             <Route path="/angebote" element={<AngebotePage />} />
             <Route path="/angebote/:angebotId" element={<AngebotPage />} />
             <Route path="/angebote/:angebotId/bearbeiten" element={<AngebotMaske />} />
