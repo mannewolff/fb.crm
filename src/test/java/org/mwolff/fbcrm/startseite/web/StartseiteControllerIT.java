@@ -132,6 +132,7 @@ class StartseiteControllerIT extends AbstractIntegrationTest {
     assertThat(stand.nichtAbgerechnet().netto()).isEqualByComparingTo("0.00");
     assertThat(stand.nichtAbgerechnet().erfasstImMonat()).isEqualByComparingTo("0.00");
     assertThat(stand.abgerechnet().anzahl()).isZero();
+    assertThat(stand.interneStundenImMonat()).isEqualByComparingTo("0");
   }
 
   @Test

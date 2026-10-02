@@ -27,18 +27,25 @@ import org.mwolff.fbcrm.startseite.application.Startseitenstand;
  * Wahrheit, und die Ansicht zaehlt sie. Bei {@code abgerechnet} ist die Anzahl dagegen ein Feld:
  * Dort stehen die Rechnungen selbst nicht in der Antwort (Plan #208, E20).
  *
+ * <p><b>Die internen Stunden stehen neben den Kennzahlen</b> und in keiner von ihnen (#207,
+ * Kriterium 9): Sie sind eine Stundenzahl und kein Betrag — interne Arbeit traegt keinen Preis, und
+ * ein Euro-Wert daraus ist Nicht-Ziel von #207. Darum steht das Feld oben in der Antwort und nicht
+ * in {@code nichtAbgerechnet}.
+ *
  * @param monat der Monat, fuer den „Abgerechnet" und die Monatszeile gelten
  * @param monate die zwoelf waehlbaren Monate, neuester zuerst; {@code monat} ist einer von ihnen
  * @param inArbeit die Angebote im Status „bestellt" oder „erledigt", neueste zuerst
  * @param nichtAbgerechnet was aus erfasster Arbeitszeit noch abzurechnen ist
  * @param abgerechnet Netto, Brutto und Anzahl der im Monat gestellten Rechnungen
+ * @param interneStundenImMonat die im gewaehlten Monat auf interne Angebote gebuchten Stunden
  */
 public record StartseiteResponse(
     YearMonth monat,
     List<YearMonth> monate,
     List<Angebotszeile> inArbeit,
     NichtAbgerechnetResponse nichtAbgerechnet,
-    AbgerechnetResponse abgerechnet) {
+    AbgerechnetResponse abgerechnet,
+    BigDecimal interneStundenImMonat) {
 
   /** Derselbe Stand in der Sprache der Schnittstelle. */
   static StartseiteResponse of(final Startseitenstand stand) {
@@ -47,7 +54,8 @@ public record StartseiteResponse(
         stand.monate(),
         stand.inArbeit().stream().map(Angebotszeile::of).toList(),
         NichtAbgerechnetResponse.of(stand.nichtAbgerechnet()),
-        AbgerechnetResponse.of(stand.abgerechnet()));
+        AbgerechnetResponse.of(stand.abgerechnet()),
+        stand.interneStundenImMonat());
   }
 
   /**

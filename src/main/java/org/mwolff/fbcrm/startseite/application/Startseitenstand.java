@@ -1,5 +1,6 @@
 package org.mwolff.fbcrm.startseite.application;
 
+import java.math.BigDecimal;
 import java.time.YearMonth;
 import java.util.List;
 import org.mwolff.fbcrm.angebot.application.AngebotMitFirma;
@@ -20,18 +21,25 @@ import org.mwolff.fbcrm.rechnung.application.Monatsabrechnung;
  * Wahrheit, und die Ansicht zaehlt sie. Bei {@link Monatsabrechnung} ist die Anzahl dagegen ein
  * Feld: Dort stehen die Rechnungen selbst nicht in der Antwort (E20).
  *
+ * <p><b>Die internen Stunden stehen neben den Betraegen und nicht darin</b> (#207, Kriterium 9):
+ * Interne Arbeit geht an keinen Kunden, traegt keinen Preis und wird in Stunden gezaehlt. Ein
+ * Betrag daraus braeuchte einen internen Stundensatz, und den gibt es nicht — er ist ausdruecklich
+ * Nicht-Ziel von #207.
+ *
  * @param monat der Monat, fuer den „Abgerechnet" und die Monatszeile gelten
  * @param monate die zwoelf waehlbaren Monate, neuester zuerst; {@code monat} ist einer von ihnen
  * @param inArbeit die Angebote im Status „bestellt" oder „erledigt", neueste zuerst
  * @param nichtAbgerechnet was aus erfasster Arbeitszeit noch abzurechnen ist
  * @param abgerechnet Netto, Brutto und Anzahl der im Monat gestellten Rechnungen
+ * @param interneStundenImMonat die im gewaehlten Monat auf interne Angebote gebuchten Stunden
  */
 public record Startseitenstand(
     YearMonth monat,
     List<YearMonth> monate,
     List<AngebotMitFirma> inArbeit,
     NichtAbgerechnet nichtAbgerechnet,
-    Monatsabrechnung abgerechnet) {
+    Monatsabrechnung abgerechnet,
+    BigDecimal interneStundenImMonat) {
 
   /** Nimmt die Listen als Kopie: Der Aufrufer darf seine Listen danach weiterverwenden. */
   public Startseitenstand {

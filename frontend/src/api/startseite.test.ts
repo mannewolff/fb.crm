@@ -34,6 +34,7 @@ const STAND = {
     ],
   },
   abgerechnet: { netto: 1800, brutto: 2142, anzahl: 2 },
+  interneStundenImMonat: 12.5,
 };
 
 afterEach(() => {
@@ -67,6 +68,18 @@ describe('parseStartseitenstand', () => {
         nettoInCent: 336825,
       },
     ]);
+  });
+
+  it('liest die internen Stunden des Monats als ganze Hundertstel (Kriterium 9)', () => {
+    const gelesen = parseStartseitenstand(STAND);
+
+    expect(gelesen.interneStundenInHundertsteln).toBe(1250);
+  });
+
+  it('scheitert, wo die internen Stunden keine Zahl sind', () => {
+    expect(() => parseStartseitenstand({ ...STAND, interneStundenImMonat: '12.5' })).toThrow(
+      TypeError,
+    );
   });
 
   it('scheitert, wo der Monat fehlt — eine halb gelesene Antwort geht nicht weiter', () => {

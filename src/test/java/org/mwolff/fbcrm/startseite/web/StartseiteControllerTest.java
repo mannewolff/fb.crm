@@ -115,7 +115,8 @@ class StartseiteControllerTest {
                 new Angebotsanteil(
                     angebot(BESTELLT_ID, Angebotsstatus.BESTELLT, ADLER),
                     new BigDecimal("1200.00")))),
-        new Monatsabrechnung(new BigDecimal("1000.00"), new BigDecimal("1190.00"), 2));
+        new Monatsabrechnung(new BigDecimal("1000.00"), new BigDecimal("1190.00"), 2),
+        new BigDecimal("12.50"));
   }
 
   @Test
@@ -181,6 +182,18 @@ class StartseiteControllerTest {
         .andExpect(jsonPath("$.abgerechnet.netto").value(1000.00))
         .andExpect(jsonPath("$.abgerechnet.brutto").value(1190.00))
         .andExpect(jsonPath("$.abgerechnet.anzahl").value(2));
+  }
+
+  @Test
+  void stand_thenTheInterneStundenOfTheMonthStandBesideTheFigures() throws Exception {
+    // Given — Kriterium 9 von #207: eine Stundenzahl, getrennt von allen Betraegen.
+    when(useCase.stand(Optional.of(OKTOBER))).thenReturn(stand());
+
+    // When / Then
+    mockMvc
+        .perform(get(PFAD).param("monat", "2026-10"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.interneStundenImMonat").value(12.50));
   }
 
   @Test

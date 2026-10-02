@@ -50,6 +50,7 @@ const STAND = {
     ],
   },
   abgerechnet: { netto: 9600, brutto: 11424, anzahl: 3 },
+  interneStundenImMonat: 12.5,
 };
 
 /** Derselbe Monat, aber nichts darin — alle drei Kennzahlen stehen auf null. */
@@ -59,6 +60,7 @@ const LEERER_STAND = {
   inArbeit: [],
   nichtAbgerechnet: { netto: 0, erfasstImMonat: 0, angebote: [] },
   abgerechnet: { netto: 0, brutto: 0, anzahl: 0 },
+  interneStundenImMonat: 0,
 };
 
 /**
@@ -234,6 +236,26 @@ describe('StartseitePage (Issue #216; #206 Kriterien 1, 3 bis 8)', () => {
       'Der Geschäftsstand ist gerade nicht zu erreichen.',
     );
     expect(screen.queryByRole('combobox', { name: 'Monat' })).not.toBeInTheDocument();
+  });
+
+  it('zeigt die internen Stunden des Monats getrennt von allen Betraegen', async () => {
+    mitRouten({ [OHNE_MONAT]: json(200, STAND) });
+
+    renderSeite();
+
+    const zeile = await screen.findByText('Interne Stunden im gewählten Monat: 12,50 Std.');
+    const kacheln = await screen.findAllByTestId('kennzahlkachel');
+    expect(kacheln.some((eine) => eine.contains(zeile))).toBe(false);
+  });
+
+  it('zeigt die internen Stunden auch bei null — als 0,00 Std.', async () => {
+    mitRouten({ [OHNE_MONAT]: json(200, LEERER_STAND) });
+
+    renderSeite();
+
+    expect(
+      await screen.findByText('Interne Stunden im gewählten Monat: 0,00 Std.'),
+    ).toBeInTheDocument();
   });
 
   it('zeigt im leeren Monat Nullen in den Kacheln und je Liste einen Satz', async () => {

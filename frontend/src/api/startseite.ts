@@ -16,6 +16,10 @@ import type { Angebotsstatus } from '../lib/angebotsstatus';
  * ueber die Ziffern, nicht ueber Gleitkomma; dieselben Namen bei gewechselter Einheit waeren die
  * gefaehrlichere Wahl — wer `netto` fuer Euro haelt, rechnet um den Faktor hundert daneben.
  *
+ * <b>Dasselbe gilt fuer die Stunden</b>: `interneStundenInHundertsteln` steht in ganzen Hundertstel-
+ * Stunden, wie `stundenInHundertsteln` in `api/arbeitszeit.ts` — die Antwort schickt eine
+ * Dezimalzahl.
+ *
  * <b>Die Monate stehen als Zeichenkette `JJJJ-MM`</b> — so schreibt Jackson ein `YearMonth`, und so
  * nimmt der Weg ihn auch wieder an. Ein `Date` daraus zu bauen hiesse, einen Tag und eine Zone zu
  * erfinden, die in der Angabe nicht stehen (wie `monat` in `api/arbeitszeit.ts`).
@@ -78,6 +82,14 @@ export interface Startseitenstand {
   readonly inArbeit: readonly StartseiteAngebotszeile[];
   readonly nichtAbgerechnet: NichtAbgerechnet;
   readonly abgerechnet: Abgerechnet;
+  /**
+   * Die im gewaehlten Monat auf interne Angebote gebuchten Stunden, in ganzen Hundertsteln.
+   *
+   * Eine Stundenzahl und kein Betrag (#207, Kriterium 9): Interne Arbeit traegt keinen Preis, und
+   * ein Euro-Wert daraus ist Nicht-Ziel von #207. Darum steht sie neben den Kennzahlen und in
+   * keiner von ihnen.
+   */
+  readonly interneStundenInHundertsteln: number;
 }
 
 function angebotsstatus(wert: unknown): Angebotsstatus {
@@ -135,6 +147,7 @@ export function parseStartseitenstand(wert: unknown): Startseitenstand {
     inArbeit: liste(antwort.inArbeit).map(parseAngebotszeile),
     nichtAbgerechnet: parseNichtAbgerechnet(antwort.nichtAbgerechnet),
     abgerechnet: parseAbgerechnet(antwort.abgerechnet),
+    interneStundenInHundertsteln: inHundertsteln(antwort.interneStundenImMonat),
   };
 }
 

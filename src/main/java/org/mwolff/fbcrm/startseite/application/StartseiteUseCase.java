@@ -46,6 +46,15 @@ import org.springframework.transaction.annotation.Transactional;
  * #nachAufwandInStunden}). Die Richtung {@code startseite} → {@code angebot} genuegt damit; nach
  * drueben geht nur die Frage nach Stunden.
  *
+ * <p><b>Interne Angebote fallen nur an einer Kennzahl heraus</b> (#207, Kriterium 9; Plan #218,
+ * E17). Der Filter steht in {@link #nichtAbgerechnet} und sonst nirgends: Kennzahl 1 schliesst die
+ * interne Arbeit schon ueber ihre Statusmenge aus ({@link #inArbeit} kennt nur {@code BESTELLT} und
+ * {@code ERLEDIGT}), und in Kennzahl 3 kann sie nicht stehen, weil ein internes Angebot nie eine
+ * Rechnung hat. Ein zusaetzliches {@code !intern} waere dort eine Bedingung, die kein Test kippen
+ * kann — und damit ein Loch in der Zweig- und Mutationsabdeckung (CLAUDE-java.md §5). Noetig ist
+ * der Filter allein an Kennzahl 2: Eine nach innen umgestellte Position traegt Menge und Preis
+ * weiter (Kriterium 8) und schluege sonst als Euro-Betrag auf.
+ *
  * <p><b>Gerechnet wird nicht hier</b>, wo es die Regel schon gibt: Was an einer Position noch nicht
  * abgerechnet ist, rechnet {@link Positionsstand} (E6), und jeder Betrag entsteht nach {@link
  * Geldrechnung} — je Position auf den Cent, dann addiert (E23).
@@ -78,7 +87,8 @@ public class StartseiteUseCase {
    *
    * @param gewaehlt der gewuenschte Monat, oder leer fuer den laufenden; ein Monat ausserhalb der
    *     zwoelf waehlbaren wirkt wie ein fehlender
-   * @return die drei Kennzahlen, der geltende Monat und die zwoelf waehlbaren
+   * @return die drei Kennzahlen, die internen Stunden des Monats, der geltende Monat und die zwoelf
+   *     waehlbaren
    */
   public Startseitenstand stand(final Optional<YearMonth> gewaehlt) {
     final YearMonth laufend = YearMonth.now(clock.withZone(Geschaeftszone.ZONE));
@@ -94,7 +104,8 @@ public class StartseiteUseCase {
         monate,
         alle.stream().filter(zeile -> inArbeit(zeile.angebot().status())).toList(),
         nichtAbgerechnet(alle, angefallen, imMonat, gestellte.mengenJePosition()),
-        gestellte.imMonat());
+        gestellte.imMonat(),
+        interneStundenImMonat(alle, imMonat));
   }
 
   /*
@@ -103,9 +114,9 @@ public class StartseiteUseCase {
    * Status eine Entscheidung, statt ihn stillschweigend einzureihen — dieselbe Ueberlegung wie in
    * Angebotsstatus selbst.
    *
-   * <p>Die internen Status stehen vorerst auf false: Die Startseite nimmt die interne Arbeit erst
-   * mit ihrem eigenen Paket auf (#226, Plan #218, E18). Hier stehen sie, weil der erschoepfende
-   * switch sonst nicht uebersetzt.
+   * <p>Die internen Status stehen im false-Zweig, und genau das leistet Kriterium 9 von #207 fuer
+   * diese Kennzahl: Ein internes Angebot erscheint nicht unter „Angebote in Arbeit", ohne dass es
+   * dafuer eine eigene Bedingung braucht (Plan #218, E17).
    */
   private static boolean inArbeit(final Angebotsstatus status) {
     return switch (status) {
@@ -128,6 +139,11 @@ public class StartseiteUseCase {
     final List<Angebotsanteil> anteile = new ArrayList<>();
     final List<BigDecimal> monatswerte = new ArrayList<>();
     for (final AngebotMitFirma zeile : alle) {
+      // Interne Angebote tragen weder zum Hauptbetrag noch zur Monatszeile bei (#207, Kriterium 9;
+      // Plan #218, E17). Dies ist die eine Kennzahl, an der der Filter noetig ist.
+      if (zeile.angebot().intern()) {
+        continue;
+      }
       final List<BigDecimal> betraege = new ArrayList<>();
       for (final Angebotsposition position : zeile.angebot().positionen()) {
         if (nachAufwandInStunden(position)) {
@@ -149,6 +165,30 @@ public class StartseiteUseCase {
         Geldrechnung.summe(anteile.stream().map(Angebotsanteil::betrag)),
         Geldrechnung.summe(monatswerte.stream()),
         anteile);
+  }
+
+  /*
+   * Die internen Stunden des gewaehlten Monats: ueber die Positionen der internen Angebote die
+   * Werte aus imMonat addiert. Die Karte liegt fuer Kennzahl 2 ohnehin schon vor — ein eigener Zug
+   * in die Zeiterfassung waere die Abfragelawine, die diese Tueren vermeiden (Plan #208, E3).
+   *
+   * <p>Gezaehlt wird jede Position und nicht nur eine nach nachAufwandInStunden: An einem internen
+   * Angebot ist jede Position buchbar (Issue #229, E11), und jene Regel ist der Umfang der
+   * Euro-Kennzahl. Hier entsteht eine Stundenzahl, in der ein Teil der erfassten Zeit ohne Grund
+   * fehlte.
+   *
+   * <p>Addiert ohne setScale: Die Werte kommen mit Skala 2 aus der Auskunft
+   * (Zeiteintrag.stundenAus) und behalten sie beim Addieren; ohne eine einzige Buchung im Monat
+   * steht 0 da. Gerundet wird nichts — eine Stundenzahl ist kein Betrag, und Geldrechnung gilt hier
+   * nicht.
+   */
+  private static BigDecimal interneStundenImMonat(
+      final List<AngebotMitFirma> alle, final Map<Long, BigDecimal> imMonat) {
+    return alle.stream()
+        .filter(zeile -> zeile.angebot().intern())
+        .flatMap(zeile -> zeile.angebot().positionen().stream())
+        .map(position -> imMonat.getOrDefault(position.requireId(), BigDecimal.ZERO))
+        .reduce(BigDecimal.ZERO, BigDecimal::add);
   }
 
   /*

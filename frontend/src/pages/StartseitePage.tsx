@@ -19,7 +19,7 @@ import { useKopfPfad } from '../components/KopfPfad';
 import type { PfadVerweis } from '../components/KopfPfad';
 import Tafel from '../components/Tafel';
 import WeicheTaste from '../components/WeicheTaste';
-import { alsMonat, monatWort } from '../lib/arbeitszeit';
+import { alsMonat, monatWort, stundenWort } from '../lib/arbeitszeit';
 import { euro } from '../lib/geld';
 import { tagWort } from '../lib/tag';
 import { RADIUS_RUND, ZAHLEN_KLASSE } from '../theme';
@@ -50,6 +50,10 @@ import { RADIUS_RUND, ZAHLEN_KLASSE } from '../theme';
  * sie entstanden ist. Bei „Abgerechnet" stehen die Rechnungen nicht in der Antwort — dort fuehrt
  * eine weiche Taste auf `/rechnungen`, statt sie hier ein zweites Mal zu holen.
  *
+ * <b>Die internen Stunden stehen unter den Kacheln und nicht darin</b> (#207, Kriterium 9): Die
+ * Kachelreihe traegt Betraege, interne Arbeit traegt keinen Preis. Eine Stundenzahl zwischen drei
+ * Euro-Kacheln laese sich wie eine vierte Kennzahl in Euro.
+ *
  * <b>Der Weg liegt auf dem Datum</b>, nicht auf der Zeile — wie in {@link Angebotsliste}: Ein
  * Angebot hat keine Nummer, und ein `tr` mit `onClick` waere fuer Tastatur und Screenreader kein
  * Weg.
@@ -70,6 +74,9 @@ const AUSFALL = 'Der Geschäftsstand ist gerade nicht zu erreichen. Bitte späte
 const TITEL_IN_ARBEIT = 'Angebote in Arbeit';
 const TITEL_OFFEN = 'Noch nicht abgerechnet';
 const TITEL_ABGERECHNET = 'Abgerechnet';
+
+/** Die Zeile der internen Stunden, getrennt von allen Betraegen (#207, Kriterium 9). */
+const TITEL_INTERNE_STUNDEN = 'Interne Stunden im gewählten Monat';
 
 const LEER_IN_ARBEIT = 'Kein Angebot ist gerade in Arbeit.';
 const LEER_OFFEN = 'Nichts offen — alle erfasste Zeit ist abgerechnet.';
@@ -191,6 +198,23 @@ function Kacheln({ geschaeft }: { readonly geschaeft: Startseitenstand }) {
         zweitzeile={`${euro(geschaeft.abgerechnet.bruttoInCent)} brutto`}
       />
     </Box>
+  );
+}
+
+/**
+ * Die internen Stunden des gewaehlten Monats als eigene Zeile unter der Kachelreihe.
+ *
+ * <b>Hier entsteht keine Zahl.</b> Der Wert kommt vom Server ({@code Startseitenstand}); die
+ * Ansicht setzt nur die Einheit daran ({@link stundenWort}, wie in {@link ArbeitszeitPage}).
+ */
+function InterneStunden({ stundenInHundertsteln }: { readonly stundenInHundertsteln: number }) {
+  return (
+    <Typography
+      className={ZAHLEN_KLASSE}
+      sx={(theme) => ({ fontSize: 12.5, color: theme.vars.palette.kupferwolke.textSchwach })}
+    >
+      {`${TITEL_INTERNE_STUNDEN}: ${stundenWort(stundenInHundertsteln)}`}
+    </Typography>
   );
 }
 
@@ -325,7 +349,12 @@ export default function StartseitePage() {
   } else if (stand.art === 'fehler') {
     kopfinhalt = <Alert severity="error">{AUSFALL}</Alert>;
   } else {
-    kopfinhalt = <Kacheln geschaeft={stand.geschaeft} />;
+    kopfinhalt = (
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+        <Kacheln geschaeft={stand.geschaeft} />
+        <InterneStunden stundenInHundertsteln={stand.geschaeft.interneStundenInHundertsteln} />
+      </Box>
+    );
   }
 
   return (

@@ -43,6 +43,11 @@ import org.mwolff.fbcrm.rechnung.application.Rechnungsauskunft;
  * schon der 1. Oktober — der laufende Monat ist darum Oktober und nicht September. Am Nullmeridian
  * gelesen zeigte die Startseite den Vormonat.
  *
+ * <p><b>Interne Angebote werden an drei Stellen belegt</b> (#207, Kriterium 9): Sie fehlen in den
+ * beiden Betraegen der Kennzahl 2, in „Angebote in Arbeit" und in „Abgerechnet". Nur die erste
+ * Stelle hat im Code eine eigene Bedingung — die anderen beiden leisten die Statusmenge von {@code
+ * inArbeit} und die Rechnungsauskunft, und genau das sagen ihre Testnamen (Plan #218, E17).
+ *
  * <p><b>Nicht buchbar heisst 0,00</b> (Plan #208, E12): Eine Position, auf die einmal gebucht wurde
  * und die inzwischen zum Festpreis oder in Personentagen abrechnet, traegt zu keinem der beiden
  * Betraege bei. Geprueft wird das an zwei Positionen, die je nur eine Haelfte der Regel verletzen.
@@ -89,11 +94,27 @@ class StartseiteUseCaseTest {
   /** Die Position des zweiten beitragenden Angebots: 5 Stunden zu 200,00 €. */
   private static final long ANALYSE_ID = 107L;
 
+  /** Eine Position eines internen Angebots: nach Aufwand in Stunden zu 100,00 € (Kriterium 8). */
+  private static final long EIGENE_ID = 201L;
+
+  /** Eine zweite Position desselben internen Angebots, die zum Festpreis abrechnet. */
+  private static final long EIGENE_FESTPREIS_ID = 202L;
+
   private static final Angebotsposition BERATUNG = stunden(BERATUNG_ID, "20.00", "100.00");
   private static final Angebotsposition WARTUNG = stunden(WARTUNG_ID, "10.00", "130.00");
   private static final Angebotsposition ANALYSE = stunden(ANALYSE_ID, "5.00", "200.00");
   private static final Angebotsposition VIERTEL_A = stunden(VIERTEL_A_ID, "10.00", "99.90");
   private static final Angebotsposition VIERTEL_B = stunden(VIERTEL_B_ID, "10.00", "99.90");
+  private static final Angebotsposition EIGENE = stunden(EIGENE_ID, "40.00", "100.00");
+
+  private static final Angebotsposition EIGENE_FESTPREIS =
+      new Angebotsposition(
+          Long.valueOf(EIGENE_FESTPREIS_ID),
+          "Aufraeumen",
+          Abrechnungsmodus.FESTPREIS,
+          new BigDecimal("5.00"),
+          Einheit.STUNDE,
+          BigDecimal.ZERO);
 
   private static final Angebotsposition GEWANDELT =
       new Angebotsposition(
@@ -493,5 +514,118 @@ class StartseiteUseCaseTest {
     assertThat(stand.nichtAbgerechnet().erfasstImMonat()).isEqualByComparingTo("0.00");
     assertThat(stand.nichtAbgerechnet().anteile()).isEmpty();
     assertThat(stand.abgerechnet().anzahl()).isZero();
+    assertThat(stand.interneStundenImMonat()).isEqualByComparingTo("0");
+  }
+
+  @Test
+  void stand_withAnInternesAngebot_thenItIsMissingFromBothBetraegeOfKennzahl2() {
+    // Given — eine interne Position, die nach Aufwand in Stunden zu 100,00 € abrechnet: der Fall
+    // aus Kriterium 8 von #207, in dem Menge und Preis am umgestellten Angebot stehenbleiben. Sie
+    // ist ueber alle Monate und im gewaehlten Monat bebucht, daneben ein Kundenangebot.
+    gegebenImOktober(
+        List.of(
+            angebot(1L, Angebotsstatus.LAEUFT, List.of(EIGENE)),
+            angebot(2L, Angebotsstatus.BESTELLT, List.of(BERATUNG))),
+        Map.of(EIGENE_ID, new BigDecimal("8.00"), BERATUNG_ID, new BigDecimal("3.00")),
+        Map.of(EIGENE_ID, new BigDecimal("8.00"), BERATUNG_ID, new BigDecimal("3.00")),
+        Map.of());
+
+    // When
+    final Startseitenstand stand = useCase.stand(Optional.empty());
+
+    // Then — nur die drei Stunden des Kundenangebots zu 100,00 € stehen in beiden Betraegen, und
+    // das interne Angebot steht in keiner Zeile darunter.
+    assertThat(stand.nichtAbgerechnet().betrag()).isEqualByComparingTo("300.00");
+    assertThat(stand.nichtAbgerechnet().erfasstImMonat()).isEqualByComparingTo("300.00");
+    assertThat(stand.nichtAbgerechnet().anteile())
+        .extracting(anteil -> anteil.angebot().angebot().requireId())
+        .containsExactly(2L);
+  }
+
+  @Test
+  void stand_withAnInternesAngebot_thenInArbeitExcludesItThroughTheStatusmengeAlone() {
+    // Given — die zwei internen Status neben den zwei, die „in Arbeit" heissen. Der Code hat dafuer
+    // keine eigene Bedingung: LAEUFT und ABGESCHLOSSEN liegen in der Statusmenge von inArbeit seit
+    // Issue #226 im false-Zweig (Review-Fund 4 der Pruefung zu Plan #218, E17).
+    gegebenImOktober(
+        List.of(
+            angebot(1L, Angebotsstatus.LAEUFT, List.of()),
+            angebot(2L, Angebotsstatus.BESTELLT, List.of()),
+            angebot(3L, Angebotsstatus.ABGESCHLOSSEN, List.of()),
+            angebot(4L, Angebotsstatus.ERLEDIGT, List.of())),
+        Map.of(),
+        Map.of(),
+        Map.of());
+
+    // When
+    final Startseitenstand stand = useCase.stand(Optional.empty());
+
+    // Then
+    assertThat(stand.inArbeit())
+        .extracting(zeile -> zeile.angebot().requireId())
+        .containsExactly(2L, 4L);
+  }
+
+  @Test
+  void stand_withAnInternesAngebot_thenAbgerechnetStaysWhatTheAuskunftReports() {
+    // Given — ein bebuchtes internes Angebot. Es kann keine Rechnung haben (#207, Kriterium 7) und
+    // darum in der Rechnungsauskunft nicht vorkommen; Kennzahl 3 entsteht ganz aus ihrer Antwort.
+    // Auch hier braucht der Code keine eigene Bedingung (Review-Fund 4).
+    gegebenImOktober(
+        List.of(angebot(1L, Angebotsstatus.ABGESCHLOSSEN, List.of(EIGENE))),
+        Map.of(EIGENE_ID, new BigDecimal("8.00")),
+        Map.of(EIGENE_ID, new BigDecimal("8.00")),
+        Map.of());
+
+    // When
+    final Startseitenstand stand = useCase.stand(Optional.empty());
+
+    // Then
+    assertThat(stand.abgerechnet()).isEqualTo(OKTOBER_GESTELLT);
+  }
+
+  @Test
+  void stand_thenInterneStundenImMonatSumsOnlyTheHoursOnInterneAngebote() {
+    // Given — zwei Positionen eines internen Angebots, die zweite zum Festpreis: an einem internen
+    // Angebot zaehlt jede Position, weil jede buchbar ist (Entscheidung am Issue #237). Daneben
+    // Kundenzeit im selben Monat, die nicht mitzaehlt.
+    gegebenImOktober(
+        List.of(
+            angebot(1L, Angebotsstatus.LAEUFT, List.of(EIGENE, EIGENE_FESTPREIS)),
+            angebot(2L, Angebotsstatus.BESTELLT, List.of(BERATUNG))),
+        Map.of(),
+        Map.of(
+            EIGENE_ID,
+            new BigDecimal("8.00"),
+            EIGENE_FESTPREIS_ID,
+            new BigDecimal("4.50"),
+            BERATUNG_ID,
+            new BigDecimal("3.00")),
+        Map.of());
+
+    // When
+    final Startseitenstand stand = useCase.stand(Optional.empty());
+
+    // Then — 8,00 + 4,50 Stunden; die drei Kundenstunden fehlen darin.
+    assertThat(stand.interneStundenImMonat()).isEqualByComparingTo("12.50");
+  }
+
+  @Test
+  void stand_withoutAnInterneBuchungInTheMonat_thenInterneStundenImMonatIsZero() {
+    // Given — ein internes Angebot mit Stunden ueber alle Monate, aber keiner im gewaehlten; die
+    // Kundenzeit des Monats bleibt aussen vor.
+    gegebenImOktober(
+        List.of(
+            angebot(1L, Angebotsstatus.LAEUFT, List.of(EIGENE)),
+            angebot(2L, Angebotsstatus.BESTELLT, List.of(BERATUNG))),
+        Map.of(EIGENE_ID, new BigDecimal("8.00")),
+        Map.of(BERATUNG_ID, new BigDecimal("3.00")),
+        Map.of());
+
+    // When
+    final Startseitenstand stand = useCase.stand(Optional.empty());
+
+    // Then
+    assertThat(stand.interneStundenImMonat()).isEqualByComparingTo("0");
   }
 }
