@@ -19,6 +19,7 @@ const ANGEBOT = {
   status: 'ABGEGEBEN',
   angebotDatum: '2026-09-24',
   beschreibung: null,
+  intern: false,
   positionen: [],
   summe: 0,
 };

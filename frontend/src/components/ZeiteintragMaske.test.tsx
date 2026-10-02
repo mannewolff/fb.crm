@@ -28,6 +28,7 @@ const KONZEPTION = {
   bezeichnung: 'Konzeption',
   angebotId: 11,
   angebotDatum: '2026-09-24',
+  intern: false,
   firmaName: 'IT Bildungshaus',
 };
 
@@ -36,6 +37,7 @@ const SCHULUNG = {
   bezeichnung: 'Schulung',
   angebotId: 11,
   angebotDatum: '2026-09-24',
+  intern: false,
   firmaName: 'IT Bildungshaus',
 };
 
@@ -44,6 +46,7 @@ const BETREUUNG = {
   bezeichnung: 'Betreuung',
   angebotId: 21,
   angebotDatum: '2026-09-28',
+  intern: false,
   firmaName: 'Adler AG',
 };
 
@@ -53,6 +56,7 @@ const ALTLAST = {
   bezeichnung: 'Altlast',
   angebotId: 31,
   angebotDatum: '2026-05-04',
+  intern: false,
   firmaName: 'Vergangen GmbH',
 };
 

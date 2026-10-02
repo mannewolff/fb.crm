@@ -53,6 +53,7 @@ interface AngebotRoh {
   readonly id: number;
   readonly angebotDatum: string;
   readonly status: string;
+  readonly intern: boolean;
   readonly summe: number;
 }
 
@@ -60,6 +61,7 @@ const JUENGER: AngebotRoh = {
   id: 32,
   angebotDatum: '2026-09-26',
   status: 'ANGELEGT',
+  intern: false,
   summe: 1200,
 };
 
@@ -67,6 +69,7 @@ const AELTER: AngebotRoh = {
   id: 31,
   angebotDatum: '2026-09-24',
   status: 'BESTELLT',
+  intern: false,
   summe: 2500.03,
 };
 

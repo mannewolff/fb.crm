@@ -18,17 +18,33 @@ import type { ToenungName } from '../theme';
  * Das Symbol kommt als **Komponente** heraus und nicht als Name, aus demselben Grund wie bisher:
  * Ein Name braeuchte bei jedem Leser dieselbe Aufloesung noch einmal.
  *
+ * **Zwei Ketten, nicht eine** (Issue #226, Plan #218): Das Angebot an einen Kunden laeuft
+ * „Angelegt — Abgegeben — Bestellt — Erledigt — Abgerechnet", die eigene interne Arbeit
+ * „Angelegt — Laeuft — Abgeschlossen". Welche gilt, bestimmt das Kennzeichen `intern` am Angebot;
+ * ein Angebot zeigt nie Werte aus beiden Ketten. Dass „Laeuft" dieselbe Toenung traegt wie
+ * „Bestellt" und „Abgeschlossen" dieselbe wie „Abgerechnet", ist darum kein Gleichklang, der sich
+ * verwechseln liesse — das Wort steht daneben und ist je Kette eindeutig.
+ *
  * Die Werte sind das Gegenstueck zu `Angebotsstatus` im Backend, in dessen Reihenfolge.
  */
-export type Angebotsstatus = 'ANGELEGT' | 'ABGEGEBEN' | 'BESTELLT' | 'ERLEDIGT' | 'ABGERECHNET';
+export type Angebotsstatus =
+  | 'ANGELEGT'
+  | 'ABGEGEBEN'
+  | 'BESTELLT'
+  | 'ERLEDIGT'
+  | 'ABGERECHNET'
+  | 'LAEUFT'
+  | 'ABGESCHLOSSEN';
 
-/** Die fuenf Status in ihrer Reihenfolge — fuer Filter und Auswahllisten. */
+/** Die sieben Status in ihrer Reihenfolge — fuer Filter und Auswahllisten. */
 export const ANGEBOTSSTATUS: readonly Angebotsstatus[] = [
   'ANGELEGT',
   'ABGEGEBEN',
   'BESTELLT',
   'ERLEDIGT',
   'ABGERECHNET',
+  'LAEUFT',
+  'ABGESCHLOSSEN',
 ];
 
 /** Wie ein Status erscheint: als Wort, in seiner Toenung, mit seinem stuetzenden Symbol. */
@@ -44,6 +60,8 @@ const BILDER: Readonly<Record<Angebotsstatus, Angebotsstatusbild>> = {
   BESTELLT: { wort: 'Bestellt', toenung: 'pfirsich', symbol: IconTool },
   ERLEDIGT: { wort: 'Erledigt', toenung: 'bernstein', symbol: IconCircleCheck },
   ABGERECHNET: { wort: 'Abgerechnet', toenung: 'salbei', symbol: IconReceipt },
+  LAEUFT: { wort: 'Läuft', toenung: 'pfirsich', symbol: IconTool },
+  ABGESCHLOSSEN: { wort: 'Abgeschlossen', toenung: 'salbei', symbol: IconCircleCheck },
 };
 
 /** Wort, Toenung und Symbol zum Status. */
@@ -51,7 +69,7 @@ export function angebotsstatusBild(status: Angebotsstatus): Angebotsstatusbild {
   return BILDER[status];
 }
 
-/** Verengt einen Wert auf einen der fuenf Status, oder `null`, wenn er keiner ist. */
+/** Verengt einen Wert auf einen der sieben Status, oder `null`, wenn er keiner ist. */
 export function alsAngebotsstatus(wert: unknown): Angebotsstatus | null {
   return ANGEBOTSSTATUS.find((status) => status === wert) ?? null;
 }

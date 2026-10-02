@@ -19,6 +19,7 @@ const POSITION = {
   bezeichnung: 'Konzeption',
   angebotId: 11,
   angebotDatum: '2026-09-24',
+  intern: false,
   firmaName: 'IT Bildungshaus',
 };
 
@@ -50,6 +51,8 @@ const MONAT = {
     },
   ],
   stunden: 3.75,
+  stundenFuerKunden: 1.75,
+  stundenIntern: 2,
 };
 
 /** Ein Eintrag, wie `ZeiteintragResponse` ihn schreibt. */
@@ -79,6 +82,9 @@ describe('parseArbeitsmonat (A20)', () => {
 
     expect(gelesen.monat).toBe('2026-11');
     expect(gelesen.stundenInHundertsteln).toBe(375);
+    // Die Monatssumme ist aufgeteilt in den Teil fuer Kunden und den internen (Issue #230).
+    expect(gelesen.stundenFuerKundenInHundertsteln).toBe(175);
+    expect(gelesen.stundenInternInHundertsteln).toBe(200);
     expect(gelesen.tage).toHaveLength(1);
     expect(gelesen.tage[0].tag).toBe('2026-11-12');
     expect(gelesen.tage[0].stundenInHundertsteln).toBe(375);
@@ -99,6 +105,13 @@ describe('parseArbeitsmonat (A20)', () => {
     );
   });
 
+  it.each([['stundenFuerKunden'], ['stundenIntern']])(
+    'scheitert, wo die Teilsumme %s fehlt',
+    (feld) => {
+      expect(() => parseArbeitsmonat({ ...MONAT, [feld]: undefined })).toThrow(TypeError);
+    },
+  );
+
   it('scheitert, wo die Position einer Zeile nicht die erwartete Form hat', () => {
     const kaputt = {
       ...MONAT,
@@ -112,6 +125,14 @@ describe('parseArbeitsmonat (A20)', () => {
 describe('parseBuchungspositionen (A15)', () => {
   it('verengt die Liste — die Antwort ist ein Feld, kein Objekt um eines herum', () => {
     expect(parseBuchungspositionen([POSITION])).toEqual([POSITION]);
+  });
+
+  it.each([[false], [true]])('liest das Kennzeichen intern=%s der Position', (intern) => {
+    expect(parseBuchungspositionen([{ ...POSITION, intern }])[0].intern).toBe(intern);
+  });
+
+  it('scheitert, wo das Kennzeichen der Position kein Wahrheitswert ist', () => {
+    expect(() => parseBuchungspositionen([{ ...POSITION, intern: 'ja' }])).toThrow(TypeError);
   });
 
   it('scheitert, wo die Antwort keine Liste ist', () => {

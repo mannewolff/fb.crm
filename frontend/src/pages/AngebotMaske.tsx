@@ -94,6 +94,14 @@ type Stand =
       readonly firmaId: number;
       readonly firmaName: string;
       readonly angebotId: number;
+      /**
+       * Das Kennzeichen des geladenen Angebots (Issue #226).
+       *
+       * Die Maske zeigt es noch nicht und aendert es nicht; sie fuehrt es nur mit, damit das
+       * Speichern es unveraendert zurueckgibt. Ohne das Feld schickte jedes Speichern `false` und
+       * machte aus einem internen Angebot stillschweigend eines an einen Kunden.
+       */
+      readonly intern: boolean;
       /** Die aktiven Ansprechpartner der Firma und der gespeicherte, auch wenn stillgelegt. */
       readonly personen: readonly Ansprechpartner[];
       /**
@@ -256,6 +264,7 @@ function uebernahme(angebot: Angebot, alle: readonly Ansprechpartner[]): Ueberna
       firmaId: angebot.firmaId,
       firmaName: angebot.firmaName,
       angebotId: angebot.id,
+      intern: angebot.intern,
       personen: waehlbare(alle, angebot.ansprechpartnerId),
       alle,
     },
@@ -356,6 +365,8 @@ export default function AngebotMaske() {
       const angebot = await angebotAnlegen(
         firmaId,
         personWahl === KEINE_PERSON ? null : Number(personWahl),
+        // Die Maske legt bisher nur Angebote an Kunden an; das interne kommt mit Issue #233.
+        false,
       );
       navigate(`/angebote/${String(angebot.id)}/bearbeiten`, { replace: true });
     } catch {
@@ -364,7 +375,7 @@ export default function AngebotMaske() {
     }
   };
 
-  const speichern = async (angebot: number, alle: readonly Ansprechpartner[]) => {
+  const speichern = async (angebot: number, intern: boolean, alle: readonly Ansprechpartner[]) => {
     setzeGespeichert(false);
     setzeFehler(null);
     setzeFeldFehler({});
@@ -383,6 +394,7 @@ export default function AngebotMaske() {
           ansprechpartnerId:
             texte.ansprechpartner === KEINE_PERSON ? null : Number(texte.ansprechpartner),
           beschreibung: oderNull(texte.beschreibung),
+          intern,
           positionen: eingaben,
         }),
         alle,
@@ -487,6 +499,7 @@ export default function AngebotMaske() {
   }
 
   const zuAendern = stand.angebotId;
+  const istIntern = stand.intern;
   const personen = stand.personen;
   const allePersonen = stand.alle;
   return (
@@ -495,7 +508,7 @@ export default function AngebotMaske() {
       noValidate
       onSubmit={(ereignis: FormEvent<HTMLFormElement>) => {
         ereignis.preventDefault();
-        void speichern(zuAendern, allePersonen);
+        void speichern(zuAendern, istIntern, allePersonen);
       }}
       sx={spalten}
     >

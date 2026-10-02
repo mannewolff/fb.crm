@@ -340,35 +340,45 @@ describe('parseAbrechenbareAngebote', () => {
 describe('parseAngebotsabrechnung', () => {
   it('verengt Positionsstand und Rechnungen des Angebots', () => {
     expect(
-      parseAngebotsabrechnung({ positionen: [STAND_ZEILE], rechnungen: [STAND_RECHNUNG] }),
-    ).toEqual({ positionen: [STAND_ZEILE_VERENGT], rechnungen: [STAND_RECHNUNG_VERENGT] });
+      parseAngebotsabrechnung({
+        positionen: [STAND_ZEILE],
+        rechnungen: [STAND_RECHNUNG],
+        angefallen: 22,
+      }),
+    ).toEqual({
+      positionen: [STAND_ZEILE_VERENGT],
+      rechnungen: [STAND_RECHNUNG_VERENGT],
+      angefallenInHundertsteln: 2200,
+    });
   });
 
   it('verengt den leeren Stand', () => {
-    expect(parseAngebotsabrechnung({ positionen: [], rechnungen: [] })).toEqual({
+    expect(parseAngebotsabrechnung({ positionen: [], rechnungen: [], angefallen: 0 })).toEqual({
       positionen: [],
       rechnungen: [],
+      angefallenInHundertsteln: 0,
     });
   });
 
   it.each([
     ['kein Objekt', 'x'],
-    ['positionen ist kein Array', { positionen: 3, rechnungen: [] }],
-    ['rechnungen ist kein Array', { positionen: [], rechnungen: 3 }],
-    ['Position ohne Kennung', { positionen: [{ ...STAND_ZEILE, angebotPositionId: null }], rechnungen: [] }],
-    ['Position ohne Bezeichnung', { positionen: [{ ...STAND_ZEILE, bezeichnung: 7 }], rechnungen: [] }],
-    ['Position mit unbekannter Einheit', { positionen: [{ ...STAND_ZEILE, einheit: 'TAG' }], rechnungen: [] }],
-    ['Position ohne angeboten', { positionen: [{ ...STAND_ZEILE, angeboten: null }], rechnungen: [] }],
-    ['Position ohne abgerechnet', { positionen: [{ ...STAND_ZEILE, abgerechnet: '0' }], rechnungen: [] }],
-    ['Position ohne offen', { positionen: [{ ...STAND_ZEILE, offen: undefined }], rechnungen: [] }],
-    ['Position ohne Ueberschreitung', { positionen: [{ ...STAND_ZEILE, ueberschreitung: null }], rechnungen: [] }],
-    ['Position mit buchbar als Wort', { positionen: [{ ...STAND_ZEILE, buchbar: 'ja' }], rechnungen: [] }],
-    ['Position ohne angefallen', { positionen: [{ ...STAND_ZEILE, angefallen: null }], rechnungen: [] }],
-    ['Rechnung ohne id', { positionen: [], rechnungen: [{ ...STAND_RECHNUNG, id: '4' }] }],
-    ['Rechnung mit Nummer als Zahl', { positionen: [], rechnungen: [{ ...STAND_RECHNUNG, nummer: 1 }] }],
-    ['Rechnung ohne Datum', { positionen: [], rechnungen: [{ ...STAND_RECHNUNG, rechnungDatum: null }] }],
-    ['Rechnung ohne Brutto', { positionen: [], rechnungen: [{ ...STAND_RECHNUNG, brutto: undefined }] }],
-    ['Rechnung mit unbekanntem Zustand', { positionen: [], rechnungen: [{ ...STAND_RECHNUNG, zustand: 'BEZAHLT' }] }],
+    ['positionen ist kein Array', { positionen: 3, rechnungen: [], angefallen: 0 }],
+    ['rechnungen ist kein Array', { positionen: [], rechnungen: 3, angefallen: 0 }],
+    ['ohne Gesamtsumme der Stunden', { positionen: [], rechnungen: [], angefallen: null }],
+    ['Position ohne Kennung', { positionen: [{ ...STAND_ZEILE, angebotPositionId: null }], rechnungen: [], angefallen: 0 }],
+    ['Position ohne Bezeichnung', { positionen: [{ ...STAND_ZEILE, bezeichnung: 7 }], rechnungen: [], angefallen: 0 }],
+    ['Position mit unbekannter Einheit', { positionen: [{ ...STAND_ZEILE, einheit: 'TAG' }], rechnungen: [], angefallen: 0 }],
+    ['Position ohne angeboten', { positionen: [{ ...STAND_ZEILE, angeboten: null }], rechnungen: [], angefallen: 0 }],
+    ['Position ohne abgerechnet', { positionen: [{ ...STAND_ZEILE, abgerechnet: '0' }], rechnungen: [], angefallen: 0 }],
+    ['Position ohne offen', { positionen: [{ ...STAND_ZEILE, offen: undefined }], rechnungen: [], angefallen: 0 }],
+    ['Position ohne Ueberschreitung', { positionen: [{ ...STAND_ZEILE, ueberschreitung: null }], rechnungen: [], angefallen: 0 }],
+    ['Position mit buchbar als Wort', { positionen: [{ ...STAND_ZEILE, buchbar: 'ja' }], rechnungen: [], angefallen: 0 }],
+    ['Position ohne angefallen', { positionen: [{ ...STAND_ZEILE, angefallen: null }], rechnungen: [], angefallen: 0 }],
+    ['Rechnung ohne id', { positionen: [], angefallen: 0, rechnungen: [{ ...STAND_RECHNUNG, id: '4' }] }],
+    ['Rechnung mit Nummer als Zahl', { positionen: [], angefallen: 0, rechnungen: [{ ...STAND_RECHNUNG, nummer: 1 }] }],
+    ['Rechnung ohne Datum', { positionen: [], angefallen: 0, rechnungen: [{ ...STAND_RECHNUNG, rechnungDatum: null }] }],
+    ['Rechnung ohne Brutto', { positionen: [], angefallen: 0, rechnungen: [{ ...STAND_RECHNUNG, brutto: undefined }] }],
+    ['Rechnung mit unbekanntem Zustand', { positionen: [], angefallen: 0, rechnungen: [{ ...STAND_RECHNUNG, zustand: 'BEZAHLT' }] }],
   ])('weist eine Antwort ab: %s', (_fall, rumpf) => {
     expect(() => parseAngebotsabrechnung(rumpf)).toThrow(TypeError);
   });
@@ -473,6 +483,7 @@ describe('die Wege', () => {
       'GET /api/angebote/9/abrechnung': json(200, {
         positionen: [STAND_ZEILE],
         rechnungen: [STAND_RECHNUNG],
+        angefallen: 22,
       }),
     });
 

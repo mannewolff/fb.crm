@@ -29,6 +29,7 @@ const ANGEBOT = {
   status: 'ANGELEGT',
   angebotDatum: '2026-09-24',
   beschreibung: 'Neue Website',
+  intern: false,
   positionen: [POSITION],
   summe: 2500.03,
 };
@@ -140,7 +141,7 @@ describe('AngebotMaske — Anlegen an einer Firma (Kriterium 2, Issue #126)', ()
     expect(screen.getByTestId('adresse')).toHaveTextContent('/angebote/9/bearbeiten');
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/firmen/5/angebote',
-      expect.objectContaining({ method: 'POST', body: JSON.stringify({ ansprechpartnerId: null }) }),
+      expect.objectContaining({ method: 'POST', body: JSON.stringify({ ansprechpartnerId: null, intern: false }) }),
     );
   });
 
@@ -161,7 +162,9 @@ describe('AngebotMaske — Anlegen an einer Firma (Kriterium 2, Issue #126)', ()
 
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/firmen/5/angebote',
-      expect.objectContaining({ body: JSON.stringify({ ansprechpartnerId: 8 }) }),
+      expect.objectContaining({
+        body: JSON.stringify({ ansprechpartnerId: 8, intern: false }),
+      }),
     );
   });
 
@@ -460,6 +463,7 @@ describe('AngebotMaske — das Angebot bearbeiten (Issue #127, Kriterium 5)', ()
           angebotDatum: '2026-09-25',
           ansprechpartnerId: 8,
           beschreibung: 'Neue Website',
+          intern: false,
           positionen: [
             {
               // Eine hinzugefuegte Position hat noch keine Kennung (Plan #169, E2).
@@ -547,6 +551,7 @@ describe('AngebotMaske — das Angebot bearbeiten (Issue #127, Kriterium 5)', ()
           angebotDatum: '2026-09-24',
           ansprechpartnerId: null,
           beschreibung: null,
+          intern: false,
           positionen: [KONZEPTION_EINGABE],
         }),
       }),

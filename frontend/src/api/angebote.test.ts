@@ -12,7 +12,7 @@ import {
   parseAngeboteUebersicht,
   parseFirmaAngebote,
 } from './angebote';
-import { fetchNachPfad, json } from '../test/fetchNachPfad';
+import { alsJson, fetchNachPfad, json } from '../test/fetchNachPfad';
 
 /** Eine Position, wie Jackson sie schreibt: Menge und Preis als Zahl mit zwei Stellen. */
 const POSITION = {
@@ -34,6 +34,7 @@ const ANGEBOT = {
   status: 'ANGELEGT',
   angebotDatum: '2026-09-24',
   beschreibung: null,
+  intern: false,
   positionen: [POSITION],
   summe: 2500.03,
 };
@@ -58,6 +59,7 @@ const ANGEBOT_VERENGT = {
   status: 'ANGELEGT',
   angebotDatum: '2026-09-24',
   beschreibung: null,
+  intern: false,
   positionen: [POSITION_VERENGT],
   summeInCent: 250003,
 };
@@ -66,6 +68,7 @@ const ZEILE = {
   id: 9,
   angebotDatum: '2026-09-24',
   status: 'BESTELLT',
+  intern: false,
   summe: 2500.03,
 };
 
@@ -73,6 +76,7 @@ const EINGABE = {
   angebotDatum: '2026-09-24',
   ansprechpartnerId: 8,
   beschreibung: 'Neue Website',
+  intern: false,
   positionen: [
     {
       id: 3,
@@ -130,7 +134,19 @@ describe('parseAngebot', () => {
     ).toEqual({ ...ANGEBOT_VERENGT, ansprechpartnerId: null, ansprechpartnerName: null });
   });
 
-  it.each([['ANGELEGT'], ['ABGEGEBEN'], ['BESTELLT'], ['ERLEDIGT'], ['ABGERECHNET']])(
+  it.each([[false], [true]])('liest das Kennzeichen intern=%s', (intern) => {
+    expect(parseAngebot({ ...ANGEBOT, intern }).intern).toBe(intern);
+  });
+
+  it.each([
+    ['ANGELEGT'],
+    ['ABGEGEBEN'],
+    ['BESTELLT'],
+    ['ERLEDIGT'],
+    ['ABGERECHNET'],
+    ['LAEUFT'],
+    ['ABGESCHLOSSEN'],
+  ])(
     'nimmt den Status %s an',
     (status) => {
       expect(parseAngebot({ ...ANGEBOT, status }).status).toBe(status);
@@ -164,6 +180,8 @@ describe('parseAngebot', () => {
     ['ohne Angebotsdatum', { ...ANGEBOT, angebotDatum: null }],
     ['Beschreibung als Zahl', { ...ANGEBOT, beschreibung: 7 }],
     ['Positionen als Objekt', { ...ANGEBOT, positionen: {} }],
+    ['Kennzeichen als Text', { ...ANGEBOT, intern: 'true' }],
+    ['ohne Kennzeichen', { ...ANGEBOT, intern: undefined }],
     ['Summe als Zeichenkette', { ...ANGEBOT, summe: '2500.03' }],
     ['Summe mit drei Nachkommastellen', { ...ANGEBOT, summe: 2500.031 }],
     ['Position ist kein Objekt', { ...ANGEBOT, positionen: ['x'] }],
@@ -193,7 +211,15 @@ describe('parseAngebot', () => {
 describe('parseFirmaAngebote', () => {
   it('verengt die Liste an der Firma', () => {
     expect(parseFirmaAngebote({ angebote: [ZEILE] })).toEqual({
-      angebote: [{ id: 9, angebotDatum: '2026-09-24', status: 'BESTELLT', summeInCent: 250003 }],
+      angebote: [
+        {
+          id: 9,
+          angebotDatum: '2026-09-24',
+          status: 'BESTELLT',
+          intern: false,
+          summeInCent: 250003,
+        },
+      ],
     });
   });
 
@@ -208,6 +234,7 @@ describe('parseFirmaAngebote', () => {
     ['Zeile ohne id', { angebote: [{ ...ZEILE, id: null }] }],
     ['Zeile mit unbekanntem Status', { angebote: [{ ...ZEILE, status: 'OFFEN' }] }],
     ['Zeile ohne Angebotsdatum', { angebote: [{ ...ZEILE, angebotDatum: 7 }] }],
+    ['Zeile ohne Kennzeichen', { angebote: [{ ...ZEILE, intern: null }] }],
     ['Zeile ohne Summe', { angebote: [{ ...ZEILE, summe: null }] }],
   ])('weist eine Antwort ab: %s', (_fall, rumpf) => {
     expect(() => parseFirmaAngebote(rumpf)).toThrow(TypeError);
@@ -220,6 +247,7 @@ const UEBERSICHT_ZEILE = {
   firmaName: 'Adler AG',
   angebotDatum: '2026-09-24',
   status: 'BESTELLT',
+  intern: false,
   summe: 2500.03,
 };
 
@@ -233,6 +261,7 @@ describe('parseAngeboteUebersicht', () => {
           firmaName: 'Adler AG',
           angebotDatum: '2026-09-24',
           status: 'BESTELLT',
+          intern: false,
           summeInCent: 250003,
         },
       ],
@@ -247,6 +276,7 @@ describe('parseAngeboteUebersicht', () => {
     ['Zeile ohne Firmenname', { angebote: [{ ...UEBERSICHT_ZEILE, firmaName: 5 }] }],
     ['Zeile ohne Angebotsdatum', { angebote: [{ ...UEBERSICHT_ZEILE, angebotDatum: null }] }],
     ['Zeile mit unbekanntem Status', { angebote: [{ ...UEBERSICHT_ZEILE, status: 'OFFEN' }] }],
+    ['Zeile ohne Kennzeichen', { angebote: [{ ...UEBERSICHT_ZEILE, intern: 1 }] }],
     ['Zeile ohne Summe', { angebote: [{ ...UEBERSICHT_ZEILE, summe: undefined }] }],
   ])('weist eine Antwort ab: %s', (_fall, rumpf) => {
     expect(() => parseAngeboteUebersicht(rumpf)).toThrow(TypeError);
@@ -295,21 +325,38 @@ describe('die Wege', () => {
   it('legt ein Angebot ohne Ansprechpartner an', async () => {
     const fetchMock = fetchNachPfad({ 'POST /api/firmen/5/angebote': json(201, ANGEBOT) });
 
-    expect(await angebotAnlegen(5, null)).toEqual(ANGEBOT_VERENGT);
+    expect(await angebotAnlegen(5, null, false)).toEqual(ANGEBOT_VERENGT);
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/firmen/5/angebote',
-      expect.objectContaining({ method: 'POST', body: JSON.stringify({ ansprechpartnerId: null }) }),
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ ansprechpartnerId: null, intern: false }),
+      }),
     );
+  });
+
+  it('legt ein internes Angebot an und schickt das Kennzeichen mit', async () => {
+    let rumpf: unknown = null;
+    fetchNachPfad({
+      'POST /api/firmen/1/angebote': (gesendet) => {
+        rumpf = alsJson(gesendet);
+        return json(201, ANGEBOT)();
+      },
+    });
+
+    await angebotAnlegen(1, null, true);
+
+    expect(rumpf).toEqual({ ansprechpartnerId: null, intern: true });
   });
 
   it('legt ein Angebot mit einem Ansprechpartner an', async () => {
     const fetchMock = fetchNachPfad({ 'POST /api/firmen/5/angebote': json(201, ANGEBOT) });
 
-    await angebotAnlegen(5, 8);
+    await angebotAnlegen(5, 8, false);
 
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/firmen/5/angebote',
-      expect.objectContaining({ body: JSON.stringify({ ansprechpartnerId: 8 }) }),
+      expect.objectContaining({ body: JSON.stringify({ ansprechpartnerId: 8, intern: false }) }),
     );
   });
 
@@ -339,6 +386,28 @@ describe('die Wege', () => {
       '/api/angebote/9',
       expect.objectContaining({ body: JSON.stringify(EINGABE_MIT_NEUER_POSITION) }),
     );
+  });
+
+  it('laesst beim internen Angebot die vier Positionsangaben weg', async () => {
+    let rumpf: unknown = null;
+    fetchNachPfad({
+      'PUT /api/angebote/9': (gesendet) => {
+        rumpf = alsJson(gesendet);
+        return json(200, ANGEBOT)();
+      },
+    });
+
+    await angebotAendern(9, { ...EINGABE, intern: true });
+
+    // Die interne Arbeit hat keine Menge, keine Einheit, keinen Preis und keine Abrechnungsart
+    // (Plan #218, E7) — ein mitgeschickter Wert waere eine Angabe, die es nicht gibt.
+    expect(rumpf).toEqual({
+      angebotDatum: '2026-09-24',
+      ansprechpartnerId: 8,
+      beschreibung: 'Neue Website',
+      intern: true,
+      positionen: [{ id: 3, bezeichnung: 'Konzeption' }],
+    });
   });
 
   it.each([

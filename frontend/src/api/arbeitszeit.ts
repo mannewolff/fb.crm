@@ -1,5 +1,5 @@
 import { apiJson, apiOhneInhalt } from './client';
-import { inHundertsteln, liste, objekt, text, zahl } from './verengen';
+import { inHundertsteln, jaNein, liste, objekt, text, zahl } from './verengen';
 
 /**
  * Alle Wege der Arbeitszeit: die Monatsliste, die buchbaren Positionen und die drei Schreibwege
@@ -33,6 +33,8 @@ export interface Buchungsposition {
   readonly angebotId: number;
   /** Tag (`YYYY-MM-DD`), wie das Backend ein `LocalDate` liefert. */
   readonly angebotDatum: string;
+  /** Ob die Position zu einem internen Angebot gehoert (Issue #229). */
+  readonly intern: boolean;
   readonly firmaName: string;
 }
 
@@ -72,6 +74,10 @@ export interface Arbeitsmonat {
   readonly monat: string;
   readonly tage: readonly Arbeitstag[];
   readonly stundenInHundertsteln: number;
+  /** Der Teil der Monatssumme, der auf Angebote an Kunden gebucht ist (Issue #230). */
+  readonly stundenFuerKundenInHundertsteln: number;
+  /** Der Teil der Monatssumme, der auf interne Angebote gebucht ist (Issue #230). */
+  readonly stundenInternInHundertsteln: number;
 }
 
 /** Die Eingaben des Dialogs — beim Erfassen und beim Aendern derselbe Rumpf. */
@@ -102,6 +108,7 @@ function parseBuchungsposition(wert: unknown): Buchungsposition {
     bezeichnung: text(position.bezeichnung),
     angebotId: zahl(position.angebotId),
     angebotDatum: text(position.angebotDatum),
+    intern: jaNein(position.intern),
     firmaName: text(position.firmaName),
   };
 }
@@ -134,6 +141,8 @@ export function parseArbeitsmonat(wert: unknown): Arbeitsmonat {
     monat: text(antwort.monat),
     tage: liste(antwort.tage).map(parseArbeitstag),
     stundenInHundertsteln: inHundertsteln(antwort.stunden),
+    stundenFuerKundenInHundertsteln: inHundertsteln(antwort.stundenFuerKunden),
+    stundenInternInHundertsteln: inHundertsteln(antwort.stundenIntern),
   };
 }
 

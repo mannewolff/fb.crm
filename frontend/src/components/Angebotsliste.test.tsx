@@ -10,6 +10,7 @@ const JUENGER: AngebotZeile = {
   id: 12,
   angebotDatum: '2026-09-26',
   status: 'ANGELEGT',
+  intern: false,
   summeInCent: 120000,
 };
 
@@ -17,6 +18,7 @@ const AELTER: AngebotZeile = {
   id: 9,
   angebotDatum: '2026-09-24',
   status: 'BESTELLT',
+  intern: false,
   summeInCent: 250003,
 };
 

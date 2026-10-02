@@ -2,6 +2,7 @@ import { apiJson } from './client';
 import {
   FORMFEHLER,
   inHundertsteln,
+  jaNein,
   liste,
   objekt,
   text,
@@ -37,6 +38,13 @@ import type { Angebotsstatus } from '../lib/angebotsstatus';
  * Hinaus gehen Menge und Preis als <b>Dezimaltext</b> („2.50"). Jackson liest daraus ein
  * `BigDecimal`; eine Gleitkommazahl im Rumpf waere die eine Umwandlung, die die Rechnung in
  * `lib/geld.ts` vermeidet.
+ *
+ * <b>Das Kennzeichen `intern` sagt, welche Kette gilt</b> (Plan #218, E7). Ein internes Angebot
+ * haelt die eigene Arbeit fest; es hat weder Menge noch Einheit noch Preis noch Abrechnungsart.
+ * Darum gehen die vier Positionsangaben beim Aendern eines internen Angebots <b>nicht</b> hinaus:
+ * Ein mitgeschickter Wert waere eine Angabe, die es fachlich nicht gibt, und das Backend weist sie
+ * mit 422 ab. Herein kommt das Kennzeichen an jedem Angebot und an jeder Zeile — die Listen zeigen
+ * es, und die Maske braucht es, um zu wissen, welche Felder sie zeigt.
  *
  * <b>Jede Position traegt eine Kennung</b> (Plan #169, E2). Sie kommt mit der Antwort herein und
  * geht mit der Eingabe wieder hinaus: Wer sie mitschickt, sagt „dieselbe Position wie vorher"; wer
@@ -79,6 +87,8 @@ export interface Angebot {
   /** Tag (`YYYY-MM-DD`), wie das Backend ein `LocalDate` liefert. */
   readonly angebotDatum: string;
   readonly beschreibung: string | null;
+  /** Ob das Angebot die eigene interne Arbeit festhaelt (Issue #226). */
+  readonly intern: boolean;
   readonly positionen: readonly AngebotPosition[];
   /** Netto-Summe in ganzen Cent, vom Server gerechnet (E5). */
   readonly summeInCent: number;
@@ -89,6 +99,8 @@ export interface AngebotZeile {
   readonly id: number;
   readonly angebotDatum: string;
   readonly status: Angebotsstatus;
+  /** Ob das Angebot die eigene interne Arbeit festhaelt (Issue #226). */
+  readonly intern: boolean;
   readonly summeInCent: number;
 }
 
@@ -99,6 +111,8 @@ export interface AngebotUebersichtZeile {
   readonly firmaName: string;
   readonly angebotDatum: string;
   readonly status: Angebotsstatus;
+  /** Ob das Angebot die eigene interne Arbeit festhaelt (Issue #226). */
+  readonly intern: boolean;
   readonly summeInCent: number;
 }
 
@@ -131,6 +145,8 @@ export interface AngebotEingabe {
   readonly angebotDatum: string;
   readonly ansprechpartnerId: number | null;
   readonly beschreibung: string | null;
+  /** Ob das Angebot die eigene interne Arbeit festhaelt — es bestimmt, was je Position hinausgeht. */
+  readonly intern: boolean;
   readonly positionen: readonly PositionEingabe[];
 }
 
@@ -189,6 +205,7 @@ export function parseAngebot(wert: unknown): Angebot {
     status: angebotsstatus(angebot.status),
     angebotDatum: text(angebot.angebotDatum),
     beschreibung: textOderNull(angebot.beschreibung),
+    intern: jaNein(angebot.intern),
     positionen: liste(angebot.positionen).map(parsePosition),
     summeInCent: inHundertsteln(angebot.summe),
   };
@@ -200,6 +217,7 @@ function parseZeile(wert: unknown): AngebotZeile {
     id: zahl(zeile.id),
     angebotDatum: text(zeile.angebotDatum),
     status: angebotsstatus(zeile.status),
+    intern: jaNein(zeile.intern),
     summeInCent: inHundertsteln(zeile.summe),
   };
 }
@@ -212,6 +230,7 @@ function parseUebersichtZeile(wert: unknown): AngebotUebersichtZeile {
     firmaName: text(zeile.firmaName),
     angebotDatum: text(zeile.angebotDatum),
     status: angebotsstatus(zeile.status),
+    intern: jaNein(zeile.intern),
     summeInCent: inHundertsteln(zeile.summe),
   };
 }
@@ -257,10 +276,11 @@ export function angeboteDerFirma(firmaId: number): Promise<FirmaAngebote> {
 export function angebotAnlegen(
   firmaId: number,
   ansprechpartnerId: number | null,
+  intern: boolean,
 ): Promise<Angebot> {
   return apiJson(
     `/api/firmen/${String(firmaId)}/angebote`,
-    { methode: 'POST', rumpf: { ansprechpartnerId } },
+    { methode: 'POST', rumpf: { ansprechpartnerId, intern } },
     parseAngebot,
   );
 }
@@ -277,7 +297,28 @@ export function angebotLesen(id: number): Promise<Angebot> {
  * zweiten Aufruf.
  */
 export function angebotAendern(id: number, eingabe: AngebotEingabe): Promise<Angebot> {
-  return apiJson(`/api/angebote/${String(id)}`, { methode: 'PUT', rumpf: eingabe }, parseAngebot);
+  return apiJson(`/api/angebote/${String(id)}`, { methode: 'PUT', rumpf: rumpf(eingabe) }, parseAngebot);
+}
+
+/**
+ * Der Rumpf des Aenderungswegs: beim internen Angebot ohne die vier Positionsangaben.
+ *
+ * Gefiltert wird hier und nicht in der Maske: Die Zusage „ein internes Angebot schickt keine Menge,
+ * keine Einheit, keinen Preis und keine Abrechnungsart" gehoert an die Systemgrenze, wo sie fuer
+ * jeden Aufrufer gilt. Die Maske darf die vier Felder weiter fuehren, ohne sie fuer jeden Weg
+ * einzeln zu leeren.
+ */
+function rumpf(eingabe: AngebotEingabe): unknown {
+  if (!eingabe.intern) {
+    return eingabe;
+  }
+  return {
+    ...eingabe,
+    positionen: eingabe.positionen.map((position) => ({
+      id: position.id,
+      bezeichnung: position.bezeichnung,
+    })),
+  };
 }
 
 /** Schaltet den Status eine Stufe weiter; die Antwort traegt das Angebot im neuen Status. */

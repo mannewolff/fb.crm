@@ -13,23 +13,33 @@ describe('angebotsstatusBild', () => {
     ['BESTELLT', 'Bestellt', 'pfirsich', IconTool],
     ['ERLEDIGT', 'Erledigt', 'bernstein', IconCircleCheck],
     ['ABGERECHNET', 'Abgerechnet', 'salbei', IconReceipt],
+    ['LAEUFT', 'Läuft', 'pfirsich', IconTool],
+    ['ABGESCHLOSSEN', 'Abgeschlossen', 'salbei', IconCircleCheck],
   ])('gibt zu %s Wort, Toenung und Symbol', (status, wort, toenung, symbol) => {
     expect(angebotsstatusBild(status)).toEqual({ wort, toenung, symbol });
   });
 });
 
 describe('ANGEBOTSSTATUS', () => {
-  it('nennt die fuenf Status in der Reihenfolge des Backends', () => {
-    expect(ANGEBOTSSTATUS).toEqual(['ANGELEGT', 'ABGEGEBEN', 'BESTELLT', 'ERLEDIGT', 'ABGERECHNET']);
+  it('nennt die sieben Status in der Reihenfolge des Backends', () => {
+    expect(ANGEBOTSSTATUS).toEqual([
+      'ANGELEGT',
+      'ABGEGEBEN',
+      'BESTELLT',
+      'ERLEDIGT',
+      'ABGERECHNET',
+      'LAEUFT',
+      'ABGESCHLOSSEN',
+    ]);
   });
 });
 
 describe('alsAngebotsstatus', () => {
-  it('nimmt einen bekannten Status', () => {
-    expect(alsAngebotsstatus('BESTELLT')).toBe('BESTELLT');
+  it.each([['BESTELLT'], ['LAEUFT'], ['ABGESCHLOSSEN']])('nimmt den bekannten Status %s', (wert) => {
+    expect(alsAngebotsstatus(wert)).toBe(wert);
   });
 
-  it.each([['VERHANDELT'], [''], [null], [3]])('weist %s ab', (wert) => {
+  it.each([['VERHANDELT'], ['XY'], [''], [null], [3]])('weist %s ab', (wert) => {
     expect(alsAngebotsstatus(wert)).toBeNull();
   });
 });

@@ -196,6 +196,14 @@ export interface AngebotRechnungZeile {
 export interface Angebotsabrechnung {
   readonly positionen: readonly Abrechnungsposition[];
   readonly rechnungen: readonly AngebotRechnungZeile[];
+  /**
+   * Die insgesamt erfassten Stunden ueber alle Positionen, in Hundertsteln; 0, wo keine gebucht
+   * sind (Issue #231).
+   *
+   * Sie kommt vom Server und wird nicht aus den Zeilen summiert: Eine zweite Rechnung daneben liefe
+   * beim ersten Filter der Liste auseinander.
+   */
+  readonly angefallenInHundertsteln: number;
 }
 
 /** Eine Angabe der Entwurfsmaske zu genau einer Angebotsposition. */
@@ -363,6 +371,7 @@ export function parseAngebotsabrechnung(wert: unknown): Angebotsabrechnung {
   return {
     positionen: liste(antwort.positionen).map(parseAbrechnungsposition),
     rechnungen: liste(antwort.rechnungen).map(parseAngebotRechnungZeile),
+    angefallenInHundertsteln: inHundertsteln(antwort.angefallen),
   };
 }
 

@@ -23,6 +23,7 @@ const KONZEPTION = {
   bezeichnung: 'Konzeption',
   angebotId: 11,
   angebotDatum: '2026-09-24',
+  intern: false,
   firmaName: 'IT Bildungshaus',
 };
 
@@ -31,6 +32,7 @@ const SCHULUNG = {
   bezeichnung: 'Schulung',
   angebotId: 12,
   angebotDatum: '2026-09-28',
+  intern: false,
   firmaName: 'Adler AG',
 };
 
@@ -76,10 +78,18 @@ const MONATSLISTE = {
     },
   ],
   stunden: 5.75,
+  stundenFuerKunden: 5.75,
+  stundenIntern: 0,
 };
 
 /** Ein Monat ohne einen einzigen Eintrag. */
-const LEERER_MONAT = { monat: '2026-11', tage: [], stunden: 0 };
+const LEERER_MONAT = {
+  monat: '2026-11',
+  tage: [],
+  stunden: 0,
+  stundenFuerKunden: 0,
+  stundenIntern: 0,
+};
 
 /** Die Antwort auf das Erfassen — die Ansicht liest daraus nichts, sie laedt den Monat neu. */
 const ANGELEGT = {

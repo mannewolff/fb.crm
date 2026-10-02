@@ -14,6 +14,7 @@ const JUENGER = {
   firmaName: 'Adler AG',
   angebotDatum: '2026-09-26',
   status: 'BESTELLT',
+  intern: false,
   summe: 1200,
 };
 
@@ -23,6 +24,7 @@ const AELTER = {
   firmaName: 'Biber GmbH',
   angebotDatum: '2026-09-24',
   status: 'ANGELEGT',
+  intern: false,
   summe: 2500.03,
 };
 
@@ -97,7 +99,7 @@ describe('AngebotePage — die Uebersicht (Issue #127, Kriterium 8)', () => {
     );
   });
 
-  it('bietet im Filter „alle" und die fuenf Status an', async () => {
+  it('bietet im Filter „alle" und die sieben Status an', async () => {
     fetchNachPfad({ 'GET /api/angebote': json(200, { angebote: [] }) });
 
     renderSeite();
@@ -111,6 +113,8 @@ describe('AngebotePage — die Uebersicht (Issue #127, Kriterium 8)', () => {
       'Bestellt',
       'Erledigt',
       'Abgerechnet',
+      'Läuft',
+      'Abgeschlossen',
     ]);
   });
 

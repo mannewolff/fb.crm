@@ -27,6 +27,7 @@ const ANGEBOT = {
   status: 'ABGEGEBEN',
   angebotDatum: '2026-09-24',
   beschreibung: 'Neue Website mit Redaktionssystem',
+  intern: false,
   positionen: [POSITION],
   summe: 2500.03,
 };
@@ -36,7 +37,7 @@ const ANLAGEN = 'GET /api/angebote/9/anlagen';
 const ABRECHNUNG = 'GET /api/angebote/9/abrechnung';
 
 /** Ein Angebot, zu dem es noch keine Rechnung gibt (Issue #187). */
-const LEERER_STAND = { positionen: [], rechnungen: [] };
+const LEERER_STAND = { positionen: [], rechnungen: [], angefallen: 0 };
 
 /**
  * Die selbstladenden Bereiche mit leerem Bestand — sie stehen in jeder Tabelle dieser Datei.
@@ -106,7 +107,7 @@ const GESTELLTE = {
 };
 
 /** Der Stand einer Teilabrechnung: eine gestellte Rechnung über die Hälfte der Menge. */
-const STAND_TEIL = { positionen: [STAND_POSITION], rechnungen: [GESTELLTE] };
+const STAND_TEIL = { positionen: [STAND_POSITION], rechnungen: [GESTELLTE], angefallen: 0 };
 
 /** Ein bestelltes Angebot — ab diesem Status lässt sich eine Rechnung schreiben. */
 const BESTELLT = { ...ANGEBOT, status: 'BESTELLT' };
@@ -565,7 +566,7 @@ describe('AngebotPage — der Abrechnungsstand an den Positionen (Issue #187, Kr
     fetchNachPfad({
       ...LEERE_BEREICHE,
       // Rechnungen, aber kein Stand zu dieser Position — die Zellen stehen, sie sagen nichts.
-      [ABRECHNUNG]: json(200, { positionen: [], rechnungen: [GESTELLTE] }),
+      [ABRECHNUNG]: json(200, { positionen: [], rechnungen: [GESTELLTE], angefallen: 0 }),
       'GET /api/angebote/9': json(200, ANGEBOT),
     });
 
@@ -586,6 +587,7 @@ describe('AngebotPage — der Abrechnungsstand an den Positionen (Issue #187, Kr
       [ABRECHNUNG]: json(200, {
         positionen: [{ ...STAND_POSITION, abgerechnet: 200, offen: 0, ueberschreitung: 40 }],
         rechnungen: [GESTELLTE],
+        angefallen: 0,
       }),
       'GET /api/angebote/9': json(200, ANGEBOT),
     });
@@ -603,7 +605,7 @@ describe('AngebotPage — die Spalte „Angefallen" (Issue #193, Kriterien 7, 8,
   it('stellt die Spalte an einer buchbaren Position, auch ohne Rechnung', async () => {
     fetchNachPfad({
       ...LEERE_BEREICHE,
-      [ABRECHNUNG]: json(200, { positionen: [STAND_STUNDEN], rechnungen: [] }),
+      [ABRECHNUNG]: json(200, { positionen: [STAND_STUNDEN], rechnungen: [], angefallen: 8 }),
       'GET /api/angebote/9': json(200, ANGEBOT_MIT_STUNDEN),
     });
 
@@ -628,7 +630,7 @@ describe('AngebotPage — die Spalte „Angefallen" (Issue #193, Kriterien 7, 8,
   it('laesst die Spalte weg, wenn keine Position buchbar ist', async () => {
     fetchNachPfad({
       ...LEERE_BEREICHE,
-      [ABRECHNUNG]: json(200, { positionen: [STAND_POSITION], rechnungen: [] }),
+      [ABRECHNUNG]: json(200, { positionen: [STAND_POSITION], rechnungen: [], angefallen: 0 }),
       'GET /api/angebote/9': json(200, ANGEBOT),
     });
 
@@ -652,6 +654,7 @@ describe('AngebotPage — die Spalte „Angefallen" (Issue #193, Kriterien 7, 8,
       [ABRECHNUNG]: json(200, {
         positionen: [STAND_POSITION, STAND_STUNDEN],
         rechnungen: [],
+        angefallen: 8,
       }),
       'GET /api/angebote/9': json(200, {
         ...ANGEBOT,
@@ -676,6 +679,7 @@ describe('AngebotPage — die Spalte „Angefallen" (Issue #193, Kriterien 7, 8,
       [ABRECHNUNG]: json(200, {
         positionen: [{ ...STAND_STUNDEN, angefallen: 22 }],
         rechnungen: [],
+        angefallen: 22,
       }),
       'GET /api/angebote/9': json(200, ANGEBOT_MIT_STUNDEN),
     });
@@ -694,6 +698,7 @@ describe('AngebotPage — die Spalte „Angefallen" (Issue #193, Kriterien 7, 8,
       [ABRECHNUNG]: json(200, {
         positionen: [{ ...STAND_STUNDEN, abgerechnet: 20, offen: 0, angefallen: 22 }],
         rechnungen: [GESTELLTE],
+        angefallen: 22,
       }),
       'GET /api/angebote/9': json(200, { ...ANGEBOT_MIT_STUNDEN, status: 'ABGERECHNET' }),
     });
@@ -737,6 +742,7 @@ describe('AngebotPage — der Bereich „Rechnungen" (Issue #187, Kriterium 26)'
           GESTELLTE,
           { id: 7, nummer: null, rechnungDatum: '2026-09-30', brutto: 47.6, zustand: 'ENTWURF' },
         ],
+        angefallen: 0,
       }),
       'GET /api/angebote/9': json(200, ANGEBOT),
     });
@@ -822,6 +828,7 @@ describe('AngebotPage — „Rechnung schreiben" (Issue #187, Kriterium 3)', () 
       [ABRECHNUNG]: json(200, {
         positionen: [{ ...STAND_POSITION, abgerechnet: 160, offen: 0 }],
         rechnungen: [GESTELLTE],
+        angefallen: 0,
       }),
       'GET /api/angebote/9': json(200, BESTELLT),
     });
