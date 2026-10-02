@@ -60,6 +60,16 @@ const ALTLAST = {
   firmaName: 'Vergangen GmbH',
 };
 
+/** Eine Position an einem internen Angebot (Issue #236, Kriterium 2). */
+const EIGENE_WEBSEITE = {
+  id: 301,
+  bezeichnung: 'Eigene Webseite',
+  angebotId: 41,
+  angebotDatum: '2026-09-30',
+  intern: true,
+  firmaName: 'Manfred Wolff',
+};
+
 /** Die Zeile der Monatsliste, die geaendert wird. */
 const ZEILE: Zeitzeile = {
   id: 7,
@@ -441,5 +451,61 @@ describe('ZeiteintragMaske — Aendern (Kriterium 6, A15)', () => {
     await screen.findByRole('combobox', { name: 'Position' });
 
     expect(within(positionsFeld()).getAllByRole('option', { name: 'Konzeption' })).toHaveLength(1);
+  });
+});
+
+describe('ZeiteintragMaske — Kennzeichen intern in der Positionswahl (Issue #236, Kriterium 2)', () => {
+  it('haengt „— intern" an den Gruppennamen eines internen Angebots, nicht an den eines externen', async () => {
+    fetchNachPfad({ [POSITIONEN]: json(200, [KONZEPTION, EIGENE_WEBSEITE]) });
+
+    renderMaske();
+    await screen.findByRole('combobox', { name: 'Position' });
+
+    expect(gruppen()[0]).toHaveAttribute('label', 'IT Bildungshaus — Angebot vom 24.09.2026');
+    expect(gruppen()[1]).toHaveAttribute(
+      'label',
+      'Manfred Wolff — Angebot vom 30.09.2026 — intern',
+    );
+  });
+
+  it('bleibt ein natives Select: Gruppen sind `optgroup`, und die Ueberschrift traegt nur Text (E21)', async () => {
+    fetchNachPfad({ [POSITIONEN]: json(200, [EIGENE_WEBSEITE]) });
+
+    renderMaske();
+    await screen.findByRole('combobox', { name: 'Position' });
+
+    const gruppe = gruppen()[0];
+    expect(gruppe.tagName).toBe('OPTGROUP');
+    expect(within(positionsFeld()).getByRole('option', { name: 'Eigene Webseite' }).tagName).toBe(
+      'OPTION',
+    );
+    /*
+     * Ein `optgroup`-Label nimmt nur Text: Das Wort „intern" steht im Attribut, und in der Gruppe
+     * selbst steht nichts als ihre eine Option — kein Symbol, kein Chip, kein Element.
+     */
+    expect(within(gruppe).getAllByRole('option')).toHaveLength(1);
+    expect(gruppe).toHaveTextContent('Eigene Webseite');
+    expect(gruppe).not.toHaveTextContent('intern');
+  });
+
+  it('speichert eine Position beider Arten wie bisher', async () => {
+    const nutzer = userEvent.setup();
+    let rumpf: unknown;
+    fetchNachPfad({
+      [POSITIONEN]: json(200, [KONZEPTION, EIGENE_WEBSEITE]),
+      [ANLEGEN]: (gesendet) => {
+        rumpf = alsJson(gesendet);
+        return json(201, ANGELEGT)();
+      },
+    });
+
+    const { gespeichert } = renderMaske();
+    await nutzer.type(await screen.findByLabelText(/^von/), '09:00');
+    await nutzer.type(bisFeld(), '10:45');
+    await nutzer.selectOptions(positionsFeld(), '301');
+    await nutzer.click(speicherTaste());
+
+    expect(gespeichert).toHaveBeenCalledTimes(1);
+    expect(rumpf).toEqual({ angebotPositionId: 301, tag: HEUTE, von: '09:00', bis: '10:45' });
   });
 });

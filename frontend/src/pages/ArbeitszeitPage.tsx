@@ -9,6 +9,7 @@ import { useSearchParams } from 'react-router-dom';
 import { arbeitszeitMonat, zeiteintragLoeschen } from '../api/arbeitszeit';
 import type { Arbeitsmonat, Arbeitstag, Zeitzeile } from '../api/arbeitszeit';
 import AktionsMenue from '../components/AktionsMenue';
+import InternChip from '../components/InternChip';
 import Karte from '../components/Karte';
 import { useKopfPfad } from '../components/KopfPfad';
 import type { PfadVerweis } from '../components/KopfPfad';
@@ -234,6 +235,33 @@ function Tagesgruppe({ arbeitstag }: { readonly arbeitstag: Arbeitstag }) {
 }
 
 /**
+ * Die Aufteilung der Monatssumme in Kundenzeit und eigene Zeit (Issue #236, Kriterium 10).
+ *
+ * <b>Eine Zeile, nicht zwei weitere Summen</b>: Das Kriterium nennt die Aufteilung als eine Angabe
+ * unter der Summe. Zwei eigene Summenzeilen liessen den Fuss der Tafel nach drei Summen aussehen.
+ *
+ * <b>Hier entsteht keine Zahl.</b> Beide Werte kommen vom Server ({@code Arbeitsmonat}, Issue #230)
+ * — die Ansicht rechnet weder die Teile aus den Zeilen noch den einen Teil aus dem anderen.
+ */
+function Aufteilung({ monatsliste }: { readonly monatsliste: Arbeitsmonat }) {
+  return (
+    <Box component="tr">
+      <Box
+        component="td"
+        colSpan={SPALTEN.length}
+        sx={(theme) => ({
+          ...GRUPPENZELLE,
+          fontWeight: 400,
+          color: theme.vars.palette.kupferwolke.textSchwach,
+        })}
+      >
+        {`davon für Kunden ${stundenWort(monatsliste.stundenFuerKundenInHundertsteln)}, intern ${stundenWort(monatsliste.stundenInternInHundertsteln)}`}
+      </Box>
+    </Box>
+  );
+}
+
+/**
  * Ein Eintrag: Zeitspanne, Dauer, Position mit ihrer Firma, ⋯-Menue (A14).
  *
  * Die Zeitspanne ist eine <b>Textschaltflaeche</b> und kein Link: Sie oeffnet einen Dialog und
@@ -292,6 +320,7 @@ function Zeile({
           })}
         >
           {zeile.position.firmaName}
+          {zeile.position.intern ? <InternChip /> : null}
         </Typography>
       </Box>
       <Box component="td" sx={{ textAlign: 'right' }}>
@@ -380,6 +409,7 @@ function inhaltZu(
         </Fragment>
       ))}
       <Monatssumme monatsliste={stand.monatsliste} />
+      <Aufteilung monatsliste={stand.monatsliste} />
     </Tafel>
   );
 }

@@ -150,12 +150,22 @@ function mitZeilenposition(
   return [zeile.position, ...positionen];
 }
 
+/** Was hinten an den Gruppennamen eines internen Angebots tritt (Issue #236, Kriterium 2). */
+const INTERN_ZUSATZ = ' — intern';
+
 /**
  * Zerlegt die Auswahl in einem Durchgang in Gruppen (A15).
  *
  * Ohne eigenes Sortieren: Der Server liefert Firma alphabetisch, darin das neueste Angebot zuerst
  * — die Positionen eines Angebots stehen also beieinander ({@code BuchbarePositionenUseCase}). Eine
  * zweite Ordnung hier waere eine zweite Wahrheit ueber dieselbe Liste.
+ *
+ * <b>Das Kennzeichen „intern" steht als Wort hinten im Gruppennamen</b> (Issue #236, Kriterium 2;
+ * Plan #218, E21) — und nicht als Symbol oder {@code InternChip} wie an den uebrigen Fundstellen.
+ * Grund: Die Auswahl ist ein natives Select, ihre Gruppen sind {@code optgroup}, und ein
+ * {@code optgroup}-Label nimmt nur Text; ein Element darin gaebe es nicht. Nativ ist die Konvention
+ * dieses Projekts und kein Einzelfall — jedes Select im Frontend ist nativ. Hinten angehaengt,
+ * damit die Gruppe weiter mit dem Namen beginnt, unter dem sie sortiert ist.
  */
 function gruppiert(positionen: readonly Buchungsposition[]): readonly Gruppe[] {
   const gruppen: Gruppe[] = [];
@@ -166,7 +176,9 @@ function gruppiert(positionen: readonly Buchungsposition[]): readonly Gruppe[] {
     } else {
       gruppen.push({
         angebotId: position.angebotId,
-        name: `${position.firmaName} — Angebot vom ${tagWort(position.angebotDatum)}`,
+        name:
+          `${position.firmaName} — Angebot vom ${tagWort(position.angebotDatum)}` +
+          (position.intern ? INTERN_ZUSATZ : ''),
         positionen: [position],
       });
     }

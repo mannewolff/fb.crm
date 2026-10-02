@@ -36,6 +36,16 @@ const SCHULUNG = {
   firmaName: 'Adler AG',
 };
 
+/** Eine Position an einem internen Angebot (Issue #236, Kriterium 2). */
+const EIGENE_WEBSEITE = {
+  id: 301,
+  bezeichnung: 'Eigene Webseite',
+  angebotId: 41,
+  angebotDatum: '2026-09-30',
+  intern: true,
+  firmaName: 'Manfred Wolff',
+};
+
 /** Zwei Tage mit drei Eintraegen: 1,75 + 2,00 Std. am 12., 2,00 Std. am 20. November. */
 const MONATSLISTE = {
   monat: '2026-11',
@@ -389,5 +399,68 @@ describe('ArbeitszeitPage — loeschen (Kriterium 6, Antwort 4)', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'Der Eintrag wurde nicht gelöscht. Bitte später erneut versuchen.',
     );
+  });
+});
+
+describe('ArbeitszeitPage — Kennzeichen intern und die Aufteilung (Issue #236, Kriterien 2 und 10)', () => {
+  /** Derselbe Monat, aber der Eintrag am 20. liegt auf einem internen Angebot. */
+  const GEMISCHT = {
+    ...MONATSLISTE,
+    tage: [
+      MONATSLISTE.tage[0],
+      {
+        ...MONATSLISTE.tage[1],
+        eintraege: [{ ...MONATSLISTE.tage[1].eintraege[0], position: EIGENE_WEBSEITE }],
+      },
+    ],
+    stundenFuerKunden: 3.75,
+    stundenIntern: 2,
+  };
+
+  it('zeigt den Chip „Intern" nur in der Zeile zu einer Position eines internen Angebots', async () => {
+    mitRouten({ [NOVEMBER]: json(200, GEMISCHT) });
+
+    renderSeite('/arbeitszeit?monat=2026-11');
+
+    const tafel = within(await screen.findByRole('table', { name: 'Arbeitszeit November 2026' }));
+    expect(tafel.getAllByText('Intern')).toHaveLength(1);
+    // Der Chip steht in der Zeile der internen Position, nicht in der der externen.
+    const interne = tafel.getByRole('row', { name: /Eigene Webseite/ });
+    expect(within(interne).getByText('Intern')).toBeInTheDocument();
+    const externe = tafel.getAllByRole('row', { name: /Konzeption/ })[0];
+    expect(within(externe).queryByText('Intern')).not.toBeInTheDocument();
+  });
+
+  it('nennt unter der Monatssumme die Aufteilung mit beiden Werten der Antwort', async () => {
+    mitRouten({ [NOVEMBER]: json(200, GEMISCHT) });
+
+    renderSeite('/arbeitszeit?monat=2026-11');
+
+    const tafel = within(await screen.findByRole('table', { name: 'Arbeitszeit November 2026' }));
+    expect(
+      tafel.getByText('davon für Kunden 3,75 Std., intern 2,00 Std.'),
+    ).toBeInTheDocument();
+  });
+
+  it('zeigt die Aufteilung auch in einem Monat mit nur einer Art, mit 0,00 Std. im anderen Teil', async () => {
+    mitRouten({ [NOVEMBER]: json(200, MONATSLISTE) });
+
+    renderSeite('/arbeitszeit?monat=2026-11');
+
+    const tafel = within(await screen.findByRole('table', { name: 'Arbeitszeit November 2026' }));
+    expect(
+      tafel.getByText('davon für Kunden 5,75 Std., intern 0,00 Std.'),
+    ).toBeInTheDocument();
+  });
+
+  it('zeigt im leeren Monat weiter die Leermeldung und keine Aufteilung', async () => {
+    mitRouten({ [NOVEMBER]: json(200, LEERER_MONAT) });
+
+    renderSeite('/arbeitszeit?monat=2026-11');
+
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      'Noch keine Arbeitszeit in diesem Monat.',
+    );
+    expect(screen.queryByText(/davon für Kunden/)).not.toBeInTheDocument();
   });
 });
