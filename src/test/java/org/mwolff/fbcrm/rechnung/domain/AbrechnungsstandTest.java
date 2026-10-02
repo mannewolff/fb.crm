@@ -256,4 +256,67 @@ class AbrechnungsstandTest {
     // When / Then
     assertThat(stand.offenerBetrag()).isEqualByComparingTo("9200.00");
   }
+
+  /** Dieselbe Beratung mit frei gewaehlter angebotener Menge — fuer das Beispiel aus #193. */
+  private static Angebotsposition beratungUeber(final String menge) {
+    return new Angebotsposition(
+        Long.valueOf(KONZEPTION),
+        "Beratung",
+        Abrechnungsmodus.AUFWAND,
+        new BigDecimal(menge),
+        Einheit.STUNDE,
+        BERATUNG.einzelpreis());
+  }
+
+  @Test
+  void nichtAbgerechnet_theBeispielFrom193_thenNothingIsLeft() {
+    // Given — 20 Stunden angeboten, 22 erfasst, 20 abgerechnet (#206, Kriterium 5).
+    final Positionsstand stand =
+        new Positionsstand(beratungUeber("20.00"), new BigDecimal("20.00"));
+
+    // When / Then
+    assertThat(stand.nichtAbgerechneteStunden(new BigDecimal("22.00"))).isEqualByComparingTo("0");
+    assertThat(stand.nichtAbgerechneterBetrag(new BigDecimal("22.00")))
+        .isEqualByComparingTo("0.00");
+  }
+
+  @Test
+  void nichtAbgerechnet_withMoreStundenThanAngeboten_thenTheAngeboteneMengeIsTheCeiling() {
+    // Given — 20 angeboten, 22 erfasst, nichts abgerechnet: der Deckel ist die angebotene Menge.
+    final Positionsstand stand = new Positionsstand(beratungUeber("20.00"), BigDecimal.ZERO);
+
+    // When / Then — 20 und nicht 22 (#206, Antwort 3).
+    assertThat(stand.nichtAbgerechneteStunden(new BigDecimal("22.00"))).isEqualByComparingTo("20");
+    assertThat(stand.nichtAbgerechneterBetrag(new BigDecimal("22.00")))
+        .isEqualByComparingTo("2000.00");
+  }
+
+  @Test
+  void nichtAbgerechnet_withFewerStundenThanAbgerechnet_thenNeverBelowZero() {
+    // Given — 20 angeboten, 5 erfasst, 10 schon abgerechnet.
+    final Positionsstand stand =
+        new Positionsstand(beratungUeber("20.00"), new BigDecimal("10.00"));
+
+    // When / Then — keine negative Menge und kein negativer Betrag (#206, Kriterium 5).
+    assertThat(stand.nichtAbgerechneteStunden(new BigDecimal("5.00"))).isEqualByComparingTo("0");
+    assertThat(stand.nichtAbgerechneterBetrag(new BigDecimal("5.00"))).isEqualByComparingTo("0.00");
+  }
+
+  @Test
+  void nichtAbgerechneterBetrag_thenRoundsToTheCent() {
+    // Given — 2,5 Stunden zu 1.000,01 € ergeben 2.500,025 € (Kriterium 5 aus #160).
+    final Angebotsposition teuer =
+        new Angebotsposition(
+            Long.valueOf(KONZEPTION),
+            "Beratung",
+            Abrechnungsmodus.AUFWAND,
+            new BigDecimal("10.00"),
+            Einheit.STUNDE,
+            new BigDecimal("1000.01"));
+    final Positionsstand stand = new Positionsstand(teuer, BigDecimal.ZERO);
+
+    // When / Then — kaufmaennisch aufgerundet, wie jeder Betrag dieses Projekts.
+    assertThat(stand.nichtAbgerechneterBetrag(new BigDecimal("2.50")))
+        .isEqualByComparingTo("2500.03");
+  }
 }

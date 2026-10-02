@@ -59,4 +59,31 @@ public record Positionsstand(Angebotsposition position, BigDecimal abgerechnet) 
   public BigDecimal offenerBetrag() {
     return Geldrechnung.betrag(offen(), position.einzelpreis());
   }
+
+  /**
+   * Die erfassten, aber noch nicht abgerechneten Stunden (#206, Kriterium 5).
+   *
+   * <p><b>Nicht zu verwechseln mit {@link #offen()}.</b> Dort ist der Ausgangspunkt die angebotene
+   * Menge — was vom Angebot noch abzurechnen waere. Hier ist es die erfasste: was an Arbeit
+   * geleistet und noch nicht in Rechnung gestellt ist. Fuer eine Position, auf die nichts gebucht
+   * wurde, ist das 0, auch wenn am Angebot noch alles offen steht.
+   *
+   * <p>Die angebotene Menge bleibt der Deckel: Stunden darueber hinaus gehen in die Kennzahl nicht
+   * ein, sondern bleiben am Angebot sichtbar (#206, Antwort 3). Und nie unter 0 — wer mehr
+   * abgerechnet hat als erfasst, hat nichts Negatives nachzureichen.
+   *
+   * @param angefallen die zu dieser Position erfassten Stunden
+   */
+  public BigDecimal nichtAbgerechneteStunden(final BigDecimal angefallen) {
+    return BigDecimal.ZERO.max(angefallen.min(angeboten()).subtract(abgerechnet));
+  }
+
+  /**
+   * Der Wert dieser Stunden: Menge mal Einzelpreis des Angebots, auf den Cent gerundet.
+   *
+   * @param angefallen die zu dieser Position erfassten Stunden
+   */
+  public BigDecimal nichtAbgerechneterBetrag(final BigDecimal angefallen) {
+    return Geldrechnung.betrag(nichtAbgerechneteStunden(angefallen), position.einzelpreis());
+  }
 }

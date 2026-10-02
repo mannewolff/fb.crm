@@ -13,6 +13,12 @@
  * <p>Zu normalisieren gibt es nichts, anders als bei {@code eigeneangaben.application}: Die Werte
  * der Einstellungen sind Zahlen, und das Muster ist bereits an der Schnittstelle geprueft.
  *
+ * <p>Hier liegt die eine Tuer dieses Moduls nach draussen: {@code Rechnungsauskunft}. Sie sagt
+ * anderen Modulen, was gestellt wurde — die Summe eines Monats und die abgerechneten Mengen je
+ * Angebotsposition (#206, Kriterien 5 und 7). Sie kennt dabei <b>nur gestellte</b> Rechnungen,
+ * waehrend {@code Abrechnungsstand} Entwuerfe mitzaehlt; welche der beiden Groessen gemeint ist,
+ * entscheidet die Frage: was noch abzurechnen waere oder was schon draussen ist.
+ *
  * <p>Hier liegt auch die Sprache des Belegdrucks: das {@code Druckelement} — Text, Linie, Flaeche —
  * mit {@code Schrift}, {@code Farbe} und {@code Ausrichtung} und der Port {@code Belegdrucker}, der
  * eine Elementfolge als PDF wegschreibt. Sie gehoert in diese Schicht und nicht in {@code domain} —
