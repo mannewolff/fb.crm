@@ -215,16 +215,20 @@ class AnsprechpartnerAnlegenUseCaseTest {
 
   @Test
   void anlegen_givenALastNameOfWhitespaceOnly_thenIsRefused() {
+    final AnsprechpartnerDaten eingabe = daten("   ");
+
     // When / Then — E9: was @NotBlank an der Schnittstelle abweist, weist auch die
     // Transaktionsgrenze ab.
-    assertThatThrownBy(() -> useCase.anlegen(FIRMA, daten("   ")))
+    assertThatThrownBy(() -> useCase.anlegen(FIRMA, eingabe))
         .isInstanceOf(IllegalArgumentException.class);
   }
 
   @Test
   void anlegen_givenALastNameOfWhitespaceOnly_thenTouchesNothing() {
+    final AnsprechpartnerDaten eingabe = daten("   ");
+
     // When — die Normalisierung steht vor jedem Zugriff auf den Bestand.
-    assertThatThrownBy(() -> useCase.anlegen(FIRMA, daten("   ")))
+    assertThatThrownBy(() -> useCase.anlegen(FIRMA, eingabe))
         .isInstanceOf(IllegalArgumentException.class);
 
     // Then
@@ -236,8 +240,10 @@ class AnsprechpartnerAnlegenUseCaseTest {
     // Given
     when(firmen.findById(4711L)).thenReturn(Optional.empty());
 
+    final AnsprechpartnerDaten eingabe = daten("Mueller");
+
     // When / Then
-    assertThatThrownBy(() -> useCase.anlegen(4711L, daten("Mueller")))
+    assertThatThrownBy(() -> useCase.anlegen(4711L, eingabe))
         .isInstanceOf(FirmaNichtGefunden.class);
   }
 
@@ -246,8 +252,10 @@ class AnsprechpartnerAnlegenUseCaseTest {
     // Given
     when(firmen.findById(4711L)).thenReturn(Optional.empty());
 
+    final AnsprechpartnerDaten eingabe = daten("Mueller");
+
     // When
-    assertThatThrownBy(() -> useCase.anlegen(4711L, daten("Mueller")))
+    assertThatThrownBy(() -> useCase.anlegen(4711L, eingabe))
         .isInstanceOf(FirmaNichtGefunden.class);
 
     // Then

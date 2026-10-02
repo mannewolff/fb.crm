@@ -96,8 +96,10 @@ class RechnungAnlegenUseCaseTest {
     // Given
     when(angebote.findById(Rechnungsdoppel.ANGEBOT)).thenReturn(Optional.empty());
 
+    final RechnungAnlegenUseCase useCase = useCase();
+
     // When / Then
-    assertThatThrownBy(() -> useCase().anlegen(Rechnungsdoppel.ANGEBOT, Optional.empty()))
+    assertThatThrownBy(() -> useCase.anlegen(Rechnungsdoppel.ANGEBOT, Optional.empty()))
         .isInstanceOf(AngebotNichtGefunden.class);
     verify(rechnungen, never()).save(any());
   }
@@ -111,8 +113,10 @@ class RechnungAnlegenUseCaseTest {
     when(angebote.findById(Rechnungsdoppel.ANGEBOT))
         .thenReturn(Optional.of(Rechnungsdoppel.angebot(status)));
 
+    final RechnungAnlegenUseCase useCase = useCase();
+
     // When / Then
-    assertThatThrownBy(() -> useCase().anlegen(Rechnungsdoppel.ANGEBOT, Optional.of(NOVEMBER)))
+    assertThatThrownBy(() -> useCase.anlegen(Rechnungsdoppel.ANGEBOT, Optional.of(NOVEMBER)))
         .isInstanceOf(AngebotNichtAbrechenbar.class);
     verify(rechnungen, never()).save(any());
   }
@@ -131,8 +135,10 @@ class RechnungAnlegenUseCaseTest {
                     "R26-0001",
                     List.of(Rechnungsdoppel.beratung("160.00"), Rechnungsdoppel.pauschale("1")))));
 
+    final RechnungAnlegenUseCase useCase = useCase();
+
     // When / Then
-    assertThatThrownBy(() -> useCase().anlegen(Rechnungsdoppel.ANGEBOT, Optional.of(NOVEMBER)))
+    assertThatThrownBy(() -> useCase.anlegen(Rechnungsdoppel.ANGEBOT, Optional.of(NOVEMBER)))
         .isInstanceOf(AngebotNichtAbrechenbar.class);
     verify(rechnungen, never()).save(any());
     verifyNoInteractions(arbeitszeit);

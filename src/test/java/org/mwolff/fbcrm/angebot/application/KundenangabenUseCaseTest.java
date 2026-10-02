@@ -139,8 +139,9 @@ class KundenangabenUseCaseTest {
     // Given — ein Widerspruch im Bestand: Firmen werden nie geloescht.
     when(firmen.findById(Kundendoppel.FIRMA)).thenReturn(Optional.empty());
 
+    final Angebot angebot = Angebotsdoppel.angebot(ANGEBOT);
+
     // When / Then
-    assertThatThrownBy(() -> useCase.zu(Angebotsdoppel.angebot(ANGEBOT)))
-        .isInstanceOf(FirmaNichtGefunden.class);
+    assertThatThrownBy(() -> useCase.zu(angebot)).isInstanceOf(FirmaNichtGefunden.class);
   }
 }

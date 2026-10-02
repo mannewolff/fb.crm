@@ -143,9 +143,10 @@ class FirmaAendernUseCaseTest {
     // Given
     when(firmen.findById(4711L)).thenReturn(Optional.empty());
 
+    final FirmaDaten daten = neueDaten("Adler GmbH");
+
     // When / Then
-    assertThatThrownBy(() -> useCase.aendern(4711L, neueDaten("Adler GmbH")))
-        .isInstanceOf(FirmaNichtGefunden.class);
+    assertThatThrownBy(() -> useCase.aendern(4711L, daten)).isInstanceOf(FirmaNichtGefunden.class);
   }
 
   @Test
@@ -153,9 +154,10 @@ class FirmaAendernUseCaseTest {
     // Given
     when(firmen.findById(4711L)).thenReturn(Optional.empty());
 
+    final FirmaDaten daten = neueDaten("Adler GmbH");
+
     // When
-    assertThatThrownBy(() -> useCase.aendern(4711L, neueDaten("Adler GmbH")))
-        .isInstanceOf(FirmaNichtGefunden.class);
+    assertThatThrownBy(() -> useCase.aendern(4711L, daten)).isInstanceOf(FirmaNichtGefunden.class);
 
     // Then
     verify(firmen, never()).save(any(Firma.class));
@@ -163,8 +165,10 @@ class FirmaAendernUseCaseTest {
 
   @Test
   void aendern_givenANameOfWhitespaceOnly_thenIsRefusedBeforeReadingTheFirma() {
+    final FirmaDaten daten = neueDaten("   ");
+
     // When / Then — E9: die Normalisierung steht vor dem Zugriff auf den Bestand.
-    assertThatThrownBy(() -> useCase.aendern(7L, neueDaten("   ")))
+    assertThatThrownBy(() -> useCase.aendern(7L, daten))
         .isInstanceOf(IllegalArgumentException.class);
   }
 }

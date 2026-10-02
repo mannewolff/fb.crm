@@ -158,8 +158,10 @@ class AnsprechpartnerAendernUseCaseTest {
     // Given
     when(ansprechpartner.findById(ID)).thenReturn(Optional.empty());
 
+    final AnsprechpartnerDaten daten = neueDaten("Maier");
+
     // When / Then
-    assertThatThrownBy(() -> useCase.aendern(FIRMA, ID, neueDaten("Maier")))
+    assertThatThrownBy(() -> useCase.aendern(FIRMA, ID, daten))
         .isInstanceOf(AnsprechpartnerNichtGefunden.class);
   }
 
@@ -168,8 +170,10 @@ class AnsprechpartnerAendernUseCaseTest {
     // Given
     when(ansprechpartner.findById(ID)).thenReturn(Optional.empty());
 
+    final AnsprechpartnerDaten daten = neueDaten("Maier");
+
     // When
-    assertThatThrownBy(() -> useCase.aendern(FIRMA, ID, neueDaten("Maier")))
+    assertThatThrownBy(() -> useCase.aendern(FIRMA, ID, daten))
         .isInstanceOf(AnsprechpartnerNichtGefunden.class);
 
     // Then
@@ -181,8 +185,10 @@ class AnsprechpartnerAendernUseCaseTest {
     // Given — Kriterium 12: unter dieser Firma gibt es diesen Ansprechpartner nicht.
     when(ansprechpartner.findById(ID)).thenReturn(Optional.of(bestand(ANDERE_FIRMA, true)));
 
+    final AnsprechpartnerDaten daten = neueDaten("Maier");
+
     // When / Then
-    assertThatThrownBy(() -> useCase.aendern(FIRMA, ID, neueDaten("Maier")))
+    assertThatThrownBy(() -> useCase.aendern(FIRMA, ID, daten))
         .isInstanceOf(AnsprechpartnerNichtGefunden.class);
   }
 
@@ -191,8 +197,10 @@ class AnsprechpartnerAendernUseCaseTest {
     // Given
     when(ansprechpartner.findById(ID)).thenReturn(Optional.of(bestand(ANDERE_FIRMA, true)));
 
+    final AnsprechpartnerDaten daten = neueDaten("Maier");
+
     // When — E7: es gibt keinen Weg, einen Ansprechpartner umzuhaengen.
-    assertThatThrownBy(() -> useCase.aendern(FIRMA, ID, neueDaten("Maier")))
+    assertThatThrownBy(() -> useCase.aendern(FIRMA, ID, daten))
         .isInstanceOf(AnsprechpartnerNichtGefunden.class);
 
     // Then
@@ -201,8 +209,10 @@ class AnsprechpartnerAendernUseCaseTest {
 
   @Test
   void aendern_givenALastNameOfWhitespaceOnly_thenIsRefusedBeforeReadingTheContact() {
+    final AnsprechpartnerDaten daten = neueDaten("   ");
+
     // When / Then — E9: die Normalisierung steht vor dem Zugriff auf den Bestand.
-    assertThatThrownBy(() -> useCase.aendern(FIRMA, ID, neueDaten("   ")))
+    assertThatThrownBy(() -> useCase.aendern(FIRMA, ID, daten))
         .isInstanceOf(IllegalArgumentException.class);
 
     // Then

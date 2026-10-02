@@ -88,17 +88,20 @@ class RechnungSchemaIT extends AbstractIntegrationTest {
 
   @Test
   void rechnungEntwurf_givenANumberOnADraft_thenRejectedByTheDatabase() {
+    final Long angebot = Long.valueOf(angebotId);
+
     // When / Then — ein Entwurf traegt keine Nummer; erst das Stellen vergibt sie.
-    assertThatThrownBy(() -> jdbc.update(INSERT_ENTWURF, Long.valueOf(angebotId), "R26-0004"))
+    assertThatThrownBy(() -> jdbc.update(INSERT_ENTWURF, angebot, "R26-0004"))
         .isInstanceOf(DataIntegrityViolationException.class)
         .hasMessageContaining("rechnung_entwurf");
   }
 
   @Test
   void rechnungGestellt_givenAnIssuedInvoiceWithoutANumber_thenRejectedByTheDatabase() {
+    final Long angebot = Long.valueOf(angebotId);
+
     // When / Then
-    assertThatThrownBy(
-            () -> jdbc.update(INSERT_GESTELLT, Long.valueOf(angebotId), null, STEUERSATZ))
+    assertThatThrownBy(() -> jdbc.update(INSERT_GESTELLT, angebot, null, STEUERSATZ))
         .isInstanceOf(DataIntegrityViolationException.class)
         .hasMessageContaining("rechnung_gestellt");
   }
@@ -118,9 +121,10 @@ class RechnungSchemaIT extends AbstractIntegrationTest {
     // Given
     jdbc.update(INSERT_GESTELLT, Long.valueOf(angebotId), "R26-0004", STEUERSATZ);
 
+    final Long angebot = Long.valueOf(angebotId);
+
     // When / Then
-    assertThatThrownBy(
-            () -> jdbc.update(INSERT_GESTELLT, Long.valueOf(angebotId), "R26-0004", STEUERSATZ))
+    assertThatThrownBy(() -> jdbc.update(INSERT_GESTELLT, angebot, "R26-0004", STEUERSATZ))
         .isInstanceOf(DataIntegrityViolationException.class)
         .hasMessageContaining("rechnung_nummer_key");
   }
@@ -153,15 +157,13 @@ class RechnungSchemaIT extends AbstractIntegrationTest {
     // Given
     final long rechnungId = rechnungId();
 
+    final Long rechnung = Long.valueOf(rechnungId);
+    final Long unbekanntePosition = Long.valueOf(4711L);
+    final Integer platz = Integer.valueOf(1);
+
     // When / Then
     assertThatThrownBy(
-            () ->
-                jdbc.update(
-                    INSERT_POSITION,
-                    Long.valueOf(rechnungId),
-                    Long.valueOf(4711L),
-                    Integer.valueOf(1),
-                    "3.00"))
+            () -> jdbc.update(INSERT_POSITION, rechnung, unbekanntePosition, platz, "3.00"))
         .isInstanceOf(DataIntegrityViolationException.class);
   }
 

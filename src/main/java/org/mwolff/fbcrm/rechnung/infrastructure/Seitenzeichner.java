@@ -61,16 +61,20 @@ final class Seitenzeichner {
 
   private void zeichneFlaeche(final Druckelement.Flaeche flaeche) throws IOException {
     setzeFuellfarbe(flaeche.farbe());
-    inhalt.addRect(flaeche.x(), flaeche.y(), flaeche.breite(), flaeche.hoehe());
+    inhalt.addRect(
+        (float) flaeche.x(),
+        (float) flaeche.y(),
+        (float) flaeche.breite(),
+        (float) flaeche.hoehe());
     inhalt.fill();
   }
 
   private void zeichneLinie(final Druckelement.Linie linie) throws IOException {
     inhalt.setStrokingColor(
         anteil(linie.farbe().rot()), anteil(linie.farbe().gruen()), anteil(linie.farbe().blau()));
-    inhalt.setLineWidth(linie.staerke());
-    inhalt.moveTo(linie.vonX(), linie.vonY());
-    inhalt.lineTo(linie.bisX(), linie.bisY());
+    inhalt.setLineWidth((float) linie.staerke());
+    inhalt.moveTo((float) linie.vonX(), (float) linie.vonY());
+    inhalt.lineTo((float) linie.bisX(), (float) linie.bisY());
     inhalt.stroke();
   }
 
@@ -79,23 +83,23 @@ final class Seitenzeichner {
     final String darstellbar = WinAnsiText.darstellbar(text.text());
     setzeFuellfarbe(text.farbe());
     inhalt.beginText();
-    inhalt.setFont(schrift, text.groesse());
-    inhalt.newLineAtOffset(linkeKante(text, schrift, darstellbar), text.y());
+    inhalt.setFont(schrift, (float) text.groesse());
+    inhalt.newLineAtOffset(text.x() - versatz(text, schrift, darstellbar), (float) text.y());
     inhalt.showText(darstellbar);
     inhalt.endText();
   }
 
   /**
-   * Das {@code x} eines linksbuendigen Textes ist schon seine linke Kante; bei einem
-   * rechtsbuendigen liegt sie um die gemessene Breite weiter links.
+   * Um wieviel die linke Kante links von {@code x} liegt: beim linksbuendigen Text um nichts, denn
+   * sein {@code x} ist schon die Kante; beim rechtsbuendigen um die gemessene Breite.
    */
-  private static float linkeKante(
+  private static float versatz(
       final Druckelement.Text text, final PDFont schrift, final String darstellbar)
       throws IOException {
     if (text.ausrichtung() == Ausrichtung.LINKS) {
-      return text.x();
+      return 0f;
     }
-    return text.x() - breite(schrift, darstellbar, text.groesse());
+    return breite(schrift, darstellbar, text.groesse());
   }
 
   private void setzeFuellfarbe(final Farbe farbe) throws IOException {

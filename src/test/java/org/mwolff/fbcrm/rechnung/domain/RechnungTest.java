@@ -162,9 +162,10 @@ class RechnungTest {
     // Given
     final Rechnung rechnung = gestellt();
 
+    final List<Rechnungsposition> positionen = List.of(HALBER_CENT);
+
     // When / Then
-    assertThatThrownBy(
-            () -> rechnung.geaendert(RECHNUNGSDATUM, ZEITRAUM, List.of(HALBER_CENT), GESTELLT_AM))
+    assertThatThrownBy(() -> rechnung.geaendert(RECHNUNGSDATUM, ZEITRAUM, positionen, GESTELLT_AM))
         .isInstanceOf(RechnungszustandPasstNicht.class);
   }
 

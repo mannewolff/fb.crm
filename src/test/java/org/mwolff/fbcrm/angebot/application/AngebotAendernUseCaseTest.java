@@ -257,8 +257,10 @@ class AngebotAendernUseCaseTest {
     when(personen.findById(ANDERE_PERSON))
         .thenReturn(Optional.of(person(ANDERE_PERSON, Angebotsdoppel.FIRMA, false)));
 
+    final AngebotDaten aenderung = daten(ANDERE_PERSON, List.of());
+
     // When / Then
-    assertThatThrownBy(() -> useCase.aendere(ANGEBOT, daten(ANDERE_PERSON, List.of())))
+    assertThatThrownBy(() -> useCase.aendere(ANGEBOT, aenderung))
         .isInstanceOf(AnsprechpartnerNichtWaehlbar.class);
     verify(angebote).findById(ANGEBOT);
     verifyNoMoreInteractions(angebote);
@@ -271,8 +273,10 @@ class AngebotAendernUseCaseTest {
     when(personen.findById(ANDERE_PERSON))
         .thenReturn(Optional.of(person(ANDERE_PERSON, Angebotsdoppel.FREMDE_FIRMA, true)));
 
+    final AngebotDaten aenderung = daten(ANDERE_PERSON, List.of());
+
     // When / Then
-    assertThatThrownBy(() -> useCase.aendere(ANGEBOT, daten(ANDERE_PERSON, List.of())))
+    assertThatThrownBy(() -> useCase.aendere(ANGEBOT, aenderung))
         .isInstanceOf(AnsprechpartnerNichtWaehlbar.class);
     verify(angebote).findById(ANGEBOT);
     verifyNoMoreInteractions(angebote);
@@ -286,9 +290,10 @@ class AngebotAendernUseCaseTest {
         .thenReturn(
             Optional.of(person(Angebotsdoppel.ANSPRECHPARTNER, Angebotsdoppel.FREMDE_FIRMA, true)));
 
+    final AngebotDaten aenderung = daten(Angebotsdoppel.ANSPRECHPARTNER, List.of());
+
     // When / Then
-    assertThatThrownBy(
-            () -> useCase.aendere(ANGEBOT, daten(Angebotsdoppel.ANSPRECHPARTNER, List.of())))
+    assertThatThrownBy(() -> useCase.aendere(ANGEBOT, aenderung))
         .isInstanceOf(AnsprechpartnerNichtWaehlbar.class);
   }
 
@@ -298,8 +303,10 @@ class AngebotAendernUseCaseTest {
     angebotIst(Angebotsdoppel.angebot(ANGEBOT));
     when(personen.findById(ANDERE_PERSON)).thenReturn(Optional.empty());
 
+    final AngebotDaten aenderung = daten(ANDERE_PERSON, List.of());
+
     // When / Then
-    assertThatThrownBy(() -> useCase.aendere(ANGEBOT, daten(ANDERE_PERSON, List.of())))
+    assertThatThrownBy(() -> useCase.aendere(ANGEBOT, aenderung))
         .isInstanceOf(AnsprechpartnerNichtWaehlbar.class);
   }
 
@@ -338,8 +345,10 @@ class AngebotAendernUseCaseTest {
     final Angebotsposition fremde =
         mitKennung(Angebotsdoppel.KONZEPTION, Angebotsdoppel.FREMDE_POSITION);
 
+    final AngebotDaten aenderung = daten(null, List.of(fremde));
+
     // When / Then
-    assertThatThrownBy(() -> useCase.aendere(ANGEBOT, daten(null, List.of(fremde))))
+    assertThatThrownBy(() -> useCase.aendere(ANGEBOT, aenderung))
         .isInstanceOf(PositionenNichtWaehlbar.class);
     verify(angebote).findById(ANGEBOT);
     verifyNoMoreInteractions(angebote);
@@ -354,8 +363,10 @@ class AngebotAendernUseCaseTest {
             Angebotsdoppel.KONZEPTION,
             mitKennung(Angebotsdoppel.SCHULUNG, Angebotsdoppel.KONZEPTION_ID));
 
+    final AngebotDaten aenderung = daten(null, doppelt);
+
     // When / Then
-    assertThatThrownBy(() -> useCase.aendere(ANGEBOT, daten(null, doppelt)))
+    assertThatThrownBy(() -> useCase.aendere(ANGEBOT, aenderung))
         .isInstanceOf(PositionenNichtWaehlbar.class);
     verify(angebote).findById(ANGEBOT);
     verifyNoMoreInteractions(angebote);
@@ -367,9 +378,10 @@ class AngebotAendernUseCaseTest {
     angebotIst(Angebotsdoppel.ohneAnsprechpartner(Angebotsdoppel.angebot(ANGEBOT)));
     inEinerRechnung(Angebotsdoppel.KONZEPTION_ID);
 
+    final AngebotDaten aenderung = daten(null, List.of(Angebotsdoppel.SCHULUNG));
+
     // When / Then
-    assertThatThrownBy(
-            () -> useCase.aendere(ANGEBOT, daten(null, List.of(Angebotsdoppel.SCHULUNG))))
+    assertThatThrownBy(() -> useCase.aendere(ANGEBOT, aenderung))
         .isInstanceOf(PositionInRechnungVerwendet.class)
         .hasMessageContaining(Angebotsdoppel.KONZEPTION.bezeichnung())
         .asInstanceOf(InstanceOfAssertFactories.type(PositionInRechnungVerwendet.class))
@@ -397,8 +409,10 @@ class AngebotAendernUseCaseTest {
     final List<Angebotsposition> umgestellt =
         List.of(mitEinheit(Angebotsdoppel.KONZEPTION, Einheit.STUNDE), Angebotsdoppel.SCHULUNG);
 
+    final AngebotDaten aenderung = daten(null, umgestellt);
+
     // When / Then
-    assertThatThrownBy(() -> useCase.aendere(ANGEBOT, daten(null, umgestellt)))
+    assertThatThrownBy(() -> useCase.aendere(ANGEBOT, aenderung))
         .isInstanceOf(PositionInRechnungVerwendet.class)
         .hasMessageContaining(Angebotsdoppel.KONZEPTION.bezeichnung());
     verify(angebote).findById(ANGEBOT);
@@ -415,8 +429,10 @@ class AngebotAendernUseCaseTest {
             mitModus(Angebotsdoppel.KONZEPTION, Abrechnungsmodus.FESTPREIS),
             Angebotsdoppel.SCHULUNG);
 
+    final AngebotDaten aenderung = daten(null, umgestellt);
+
     // When / Then
-    assertThatThrownBy(() -> useCase.aendere(ANGEBOT, daten(null, umgestellt)))
+    assertThatThrownBy(() -> useCase.aendere(ANGEBOT, aenderung))
         .isInstanceOf(PositionInRechnungVerwendet.class)
         .hasMessageContaining(Angebotsdoppel.KONZEPTION.bezeichnung());
     verify(angebote).findById(ANGEBOT);
@@ -462,8 +478,10 @@ class AngebotAendernUseCaseTest {
     // Given
     when(angebote.findById(ANGEBOT)).thenReturn(Optional.empty());
 
+    final AngebotDaten aenderung = daten(null, List.of());
+
     // When / Then
-    assertThatThrownBy(() -> useCase.aendere(ANGEBOT, daten(null, List.of())))
+    assertThatThrownBy(() -> useCase.aendere(ANGEBOT, aenderung))
         .isInstanceOf(AngebotNichtGefunden.class);
     verify(angebote).findById(ANGEBOT);
     verifyNoMoreInteractions(angebote);

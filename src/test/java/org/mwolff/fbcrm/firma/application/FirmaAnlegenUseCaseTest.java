@@ -171,17 +171,19 @@ class FirmaAnlegenUseCaseTest {
 
   @Test
   void anlegen_givenANameOfWhitespaceOnly_thenIsRefused() {
+    final FirmaDaten eingabe = daten("   ");
+
     // When / Then — E9: was @NotBlank an der Schnittstelle abweist, weist auch die
     // Transaktionsgrenze ab.
-    assertThatThrownBy(() -> useCase.anlegen(daten("   ")))
-        .isInstanceOf(IllegalArgumentException.class);
+    assertThatThrownBy(() -> useCase.anlegen(eingabe)).isInstanceOf(IllegalArgumentException.class);
   }
 
   @Test
   void anlegen_givenANameOfWhitespaceOnly_thenStoresNothing() {
+    final FirmaDaten eingabe = daten("   ");
+
     // When
-    assertThatThrownBy(() -> useCase.anlegen(daten("   ")))
-        .isInstanceOf(IllegalArgumentException.class);
+    assertThatThrownBy(() -> useCase.anlegen(eingabe)).isInstanceOf(IllegalArgumentException.class);
 
     // Then
     verifyNoInteractions(firmen);

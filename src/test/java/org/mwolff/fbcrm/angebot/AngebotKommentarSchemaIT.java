@@ -99,8 +99,10 @@ class AngebotKommentarSchemaIT extends AbstractIntegrationTest {
 
   @Test
   void kommentarText_given2001Characters_thenRejectedByTheDatabase() {
+    final String zuLang = zeichen(2001);
+
     // When / Then
-    assertThatThrownBy(() -> kommentar(zeichen(2001)))
+    assertThatThrownBy(() -> kommentar(zuLang))
         .isInstanceOf(DataIntegrityViolationException.class)
         .hasMessageContaining("angebot_kommentar_laenge");
   }

@@ -117,9 +117,11 @@ class JpaAccountRepositoryIT extends AbstractIntegrationTest {
     // Given
     repository.save(neuesKonto("manne@example.org"));
 
+    final Account zweites = neuesKonto("manne@example.org");
+
     // When / Then — es greift der eindeutige Index auf lower(email); weil ADMIN derzeit die
     // einzige Rolle ist, deckt sich sein Urteil mit dem des Einzel-Admin-Index.
-    assertThatThrownBy(() -> repository.save(neuesKonto("manne@example.org")))
+    assertThatThrownBy(() -> repository.save(zweites))
         .isInstanceOf(DataIntegrityViolationException.class);
   }
 

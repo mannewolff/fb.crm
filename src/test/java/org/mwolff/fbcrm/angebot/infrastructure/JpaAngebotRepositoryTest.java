@@ -274,8 +274,10 @@ class JpaAngebotRepositoryTest {
     when(positionen.findByAngebot(11L))
         .thenReturn(List.of(positionszeile((short) 1, mitKennung(KONZEPTION, 71L))));
 
+    final Angebot fremdeKennung = angebot(List.of(mitKennung(SCHULUNG, 4711L)));
+
     // When / Then
-    assertThatThrownBy(() -> repository.save(angebot(List.of(mitKennung(SCHULUNG, 4711L)))))
+    assertThatThrownBy(() -> repository.save(fremdeKennung))
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessageContaining("4711");
     verify(positionen, never()).saveAll(any());

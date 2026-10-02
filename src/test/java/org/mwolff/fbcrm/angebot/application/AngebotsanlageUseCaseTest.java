@@ -235,9 +235,10 @@ class AngebotsanlageUseCaseTest {
     when(speicher.ablegen(eq(ANGEBOT), any(), anyLong()))
         .thenThrow(new AnlageSpeicherAusfall("Der Speicher antwortet nicht.", new IOException()));
 
+    final InputStream quelle = strom(PDF_INHALT);
+
     // When / Then
-    assertThatThrownBy(
-            () -> useCase.ladeHoch(ANGEBOT, "bericht.pdf", strom(PDF_INHALT), PDF_INHALT.length))
+    assertThatThrownBy(() -> useCase.ladeHoch(ANGEBOT, "bericht.pdf", quelle, PDF_INHALT.length))
         .isInstanceOf(AnlageSpeicherAusfall.class);
     verifyNoInteractions(anlagen);
   }
@@ -307,8 +308,10 @@ class AngebotsanlageUseCaseTest {
     // Given — Kriterium 5: eine leere Datei ist keine Anlage.
     angebotGibtEs();
 
+    final InputStream quelle = strom(new byte[0]);
+
     // When / Then
-    assertThatThrownBy(() -> useCase.ladeHoch(ANGEBOT, "leer.txt", strom(new byte[0]), 0L))
+    assertThatThrownBy(() -> useCase.ladeHoch(ANGEBOT, "leer.txt", quelle, 0L))
         .isInstanceOf(AnlageOhneInhalt.class)
         .extracting(fehler -> ((Feldfehler) fehler).felder())
         .isEqualTo(Map.of("datei", List.of(AnlageOhneInhalt.MELDUNG)));
@@ -320,11 +323,11 @@ class AngebotsanlageUseCaseTest {
     // Given — Kriterium 6: der letzte Riegel vor dem Objektspeicher (E8).
     angebotGibtEs();
 
+    final InputStream quelle = strom(PDF_INHALT);
+
     // When / Then
     assertThatThrownBy(
-            () ->
-                useCase.ladeHoch(
-                    ANGEBOT, "gross.bin", strom(PDF_INHALT), Uploadgrenze.MAX_BYTE + 1L))
+            () -> useCase.ladeHoch(ANGEBOT, "gross.bin", quelle, Uploadgrenze.MAX_BYTE + 1L))
         .isInstanceOf(AnlageZuGross.class)
         .extracting(fehler -> ((Feldfehler) fehler).felder())
         .isEqualTo(Map.of("datei", List.of(Uploadgrenze.MELDUNG)));
@@ -351,9 +354,10 @@ class AngebotsanlageUseCaseTest {
     // Given — vom Namen bleibt nach der Saeuberung nichts uebrig (E8).
     angebotGibtEs();
 
+    final InputStream quelle = strom(PDF_INHALT);
+
     // When / Then
-    assertThatThrownBy(
-            () -> useCase.ladeHoch(ANGEBOT, "  \t ", strom(PDF_INHALT), PDF_INHALT.length))
+    assertThatThrownBy(() -> useCase.ladeHoch(ANGEBOT, "  \t ", quelle, PDF_INHALT.length))
         .isInstanceOf(AnlageOhneNamen.class)
         .extracting(fehler -> ((Feldfehler) fehler).felder())
         .isEqualTo(Map.of("datei", List.of(AnlageOhneNamen.MELDUNG)));
@@ -365,9 +369,10 @@ class AngebotsanlageUseCaseTest {
     // Given
     angebotGibtEsNicht();
 
+    final InputStream quelle = strom(PDF_INHALT);
+
     // When / Then
-    assertThatThrownBy(
-            () -> useCase.ladeHoch(ANGEBOT, "bericht.pdf", strom(PDF_INHALT), PDF_INHALT.length))
+    assertThatThrownBy(() -> useCase.ladeHoch(ANGEBOT, "bericht.pdf", quelle, PDF_INHALT.length))
         .isInstanceOf(AngebotNichtGefunden.class);
     verifyNoInteractions(anlagen, speicher);
   }
@@ -378,8 +383,10 @@ class AngebotsanlageUseCaseTest {
     // nicht als stiller Erfolg enden (CLAUDE-java.md §6.5).
     angebotGibtEs();
 
+    final InputStream quelle = new KaputterStrom();
+
     // When / Then
-    assertThatThrownBy(() -> useCase.ladeHoch(ANGEBOT, "bericht.pdf", new KaputterStrom(), 17L))
+    assertThatThrownBy(() -> useCase.ladeHoch(ANGEBOT, "bericht.pdf", quelle, 17L))
         .isInstanceOf(UncheckedIOException.class);
     verifyNoInteractions(anlagen, speicher);
   }

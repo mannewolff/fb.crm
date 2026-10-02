@@ -42,8 +42,9 @@ class AngebotLesenUseCaseTest {
     // Given
     when(angebote.findById(ANGEBOT)).thenReturn(Optional.empty());
 
+    final AngebotLesenUseCase useCase = new AngebotLesenUseCase(angebote);
+
     // When / Then
-    assertThatThrownBy(() -> new AngebotLesenUseCase(angebote).lese(ANGEBOT))
-        .isInstanceOf(AngebotNichtGefunden.class);
+    assertThatThrownBy(() -> useCase.lese(ANGEBOT)).isInstanceOf(AngebotNichtGefunden.class);
   }
 }

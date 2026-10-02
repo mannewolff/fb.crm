@@ -83,8 +83,11 @@ class RechnungAendernUseCaseTest {
     // Given
     when(rechnungen.findById(ENTWURF)).thenReturn(Optional.empty());
 
+    final RechnungAendernUseCase useCase = useCase();
+    final RechnungDaten daten = daten();
+
     // When / Then
-    assertThatThrownBy(() -> useCase().aendere(ENTWURF, daten()))
+    assertThatThrownBy(() -> useCase.aendere(ENTWURF, daten))
         .isInstanceOf(RechnungNichtGefunden.class);
   }
 
@@ -97,9 +100,11 @@ class RechnungAendernUseCaseTest {
                 Rechnungsdoppel.gestellt(
                     ENTWURF, "R26-0001", List.of(Rechnungsdoppel.beratung("80.00")))));
 
+    final RechnungAendernUseCase useCase = useCase();
+    final RechnungDaten daten = daten(angabe(Rechnungsdoppel.BERATUNG_ID, "10.00"));
+
     // When / Then
-    assertThatThrownBy(
-            () -> useCase().aendere(ENTWURF, daten(angabe(Rechnungsdoppel.BERATUNG_ID, "10.00"))))
+    assertThatThrownBy(() -> useCase.aendere(ENTWURF, daten))
         .isInstanceOf(RechnungszustandPasstNicht.class);
     verify(rechnungen, never()).save(any());
   }
@@ -113,9 +118,11 @@ class RechnungAendernUseCaseTest {
                 Rechnungsdoppel.entwurf(ENTWURF, List.of(Rechnungsdoppel.beratung("80.00")))));
     when(angebote.findById(Rechnungsdoppel.ANGEBOT)).thenReturn(Optional.empty());
 
+    final RechnungAendernUseCase useCase = useCase();
+    final RechnungDaten daten = daten(angabe(Rechnungsdoppel.BERATUNG_ID, "10.00"));
+
     // When / Then
-    assertThatThrownBy(
-            () -> useCase().aendere(ENTWURF, daten(angabe(Rechnungsdoppel.BERATUNG_ID, "10.00"))))
+    assertThatThrownBy(() -> useCase.aendere(ENTWURF, daten))
         .isInstanceOf(AngebotNichtGefunden.class);
   }
 
@@ -124,9 +131,11 @@ class RechnungAendernUseCaseTest {
     // Given
     gegebenerEntwurf(List.of(Rechnungsdoppel.beratung("80.00")));
 
+    final RechnungAendernUseCase useCase = useCase();
+    final RechnungDaten daten = daten(angabe(Rechnungsdoppel.BERATUNG_ID, "-1.00"));
+
     // When / Then — die Maske liest die Meldung am Feld der Positionsliste.
-    assertThatThrownBy(
-            () -> useCase().aendere(ENTWURF, daten(angabe(Rechnungsdoppel.BERATUNG_ID, "-1.00"))))
+    assertThatThrownBy(() -> useCase.aendere(ENTWURF, daten))
         .isInstanceOf(AbrechnungsangabenNichtWaehlbar.class)
         .asInstanceOf(InstanceOfAssertFactories.type(AbrechnungsangabenNichtWaehlbar.class))
         .extracting(AbrechnungsangabenNichtWaehlbar::felder)
@@ -142,10 +151,11 @@ class RechnungAendernUseCaseTest {
     // Given
     gegebenerEntwurf(List.of(Rechnungsdoppel.beratung("80.00")));
 
+    final RechnungAendernUseCase useCase = useCase();
+    final RechnungDaten daten = daten(angabe(Rechnungsdoppel.FREMDE_POSITION, "5.00"));
+
     // When / Then
-    assertThatThrownBy(
-            () ->
-                useCase().aendere(ENTWURF, daten(angabe(Rechnungsdoppel.FREMDE_POSITION, "5.00"))))
+    assertThatThrownBy(() -> useCase.aendere(ENTWURF, daten))
         .isInstanceOf(AbrechnungsangabenNichtWaehlbar.class);
     verify(rechnungen, never()).save(any());
   }
