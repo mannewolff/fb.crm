@@ -6,7 +6,13 @@ import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
 import Link from '@mui/material/Link';
 import Typography from '@mui/material/Typography';
-import { IconArrowLeft, IconArrowRight, IconFilePlus, IconPencil } from '@tabler/icons-react';
+import {
+  IconArrowLeft,
+  IconArrowRight,
+  IconCircleCheck,
+  IconFilePlus,
+  IconPencil,
+} from '@tabler/icons-react';
 import { Fragment, useEffect, useId, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom';
@@ -21,6 +27,7 @@ import type {
 } from '../api/rechnungen';
 import AngebotsstatusChip from '../components/AngebotsstatusChip';
 import Anlagen from '../components/Anlagen';
+import InternChip from '../components/InternChip';
 import Karte from '../components/Karte';
 import Kommentare from '../components/Kommentare';
 import { useKopfPfad } from '../components/KopfPfad';
@@ -33,6 +40,7 @@ import Tafel from '../components/Tafel';
 import Ueberschreitungshinweis from '../components/Ueberschreitungshinweis';
 import WeicheTaste from '../components/WeicheTaste';
 import { nichtGefunden, serverMeldung } from '../lib/apifehler';
+import { stundenWort } from '../lib/arbeitszeit';
 import { dezimal, euro } from '../lib/geld';
 import { kennungAus } from '../lib/kennung';
 import { tagWort } from '../lib/tag';
@@ -78,6 +86,24 @@ import { ZAHLEN_KLASSE } from '../theme';
  * der einen Frage, die vorher zu beantworten ist: welchen Monat der Arbeitszeit der Entwurf
  * vorbelegen soll ({@link Monatswahl}, Issue #203). Weist das Anlegen mit 409 ab, steht die Meldung
  * des Servers in diesem Dialog — dort, wo die Wahl steht, die der Betrachter aendern kann.
+ *
+ * <b>Das interne Angebot ist dieselbe Ansicht in einer anderen Zusammenstellung</b> (Issue #235,
+ * Plan #218, E15). Es haelt die eigene Arbeit fest, es geht an keinen Kunden, und darum fehlt ihm
+ * alles, was mit Geld zu tun hat: In der Positionstafel stehen nur „Bezeichnung" und „Angefallen",
+ * in der Fusszeile die Summe der erfassten Stunden statt der Nettosumme, und „Rechnung schreiben"
+ * gibt es nicht. Im Kopf steht neben dem Status das Kennzeichen ({@link InternChip}).
+ *
+ * <b>Abgeschlossen und wieder geoeffnet wird ueber dieselben zwei Wege</b> wie der Statuswechsel
+ * am Kundenangebot (E15): `status/weiter` und `status/zurueck`. Nur die Beschriftung ist eine
+ * andere — „Abschließen" und „Wieder öffnen" —, denn die interne Kette heisst
+ * „Läuft — Abgeschlossen" und kennt kein „weiter" darueber hinaus. Eigene Wege `/abschliessen`
+ * und `/oeffnen` waeren dieselbe Mechanik zweimal.
+ *
+ * <b>„Rechnung schreiben" braucht intern keine eigene Bedingung.</b> Die Taste haengt an
+ * {@link ABRECHENBAR}, und die beiden internen Staende stehen nicht darin — ein zusaetzliches
+ * `!intern` waere eine Bedingung, die kein Test kippen kann (dieselbe Ueberlegung wie E17 im Plan).
+ * Die Aktionsreihe verzweigt stattdessen als Ganzes: intern die zwei Tasten der internen Kette,
+ * extern die bisherigen drei.
  */
 
 const NICHT_GEFUNDEN = 'Dieses Angebot gibt es nicht.';
@@ -125,8 +151,24 @@ interface Zusatzspalten {
   readonly stand: boolean;
 }
 
-/** Die Spalten zu den gewaehlten Zusaetzen. */
-function spaltenZu(zusatz: Zusatzspalten): readonly string[] {
+/**
+ * Die Spalten der internen Positionstafel (Issue #235, Kriterien 3 und 6).
+ *
+ * Intern gibt es weder Menge noch Einheit noch Preis noch Abrechnungsart, und eine Rechnung gibt
+ * es auch nie — es bleiben die Bezeichnung und die erfassten Stunden.
+ */
+const SPALTEN_INTERN: readonly string[] = ['Bezeichnung', 'Angefallen'];
+
+/**
+ * Die Spalten zu den gewaehlten Zusaetzen — intern eine eigene, kurze Reihe.
+ *
+ * Ein Zweig und nicht fuenf verstreute `&& !intern`: So steht die interne Tafel an einer Stelle
+ * und nicht an fuenfen.
+ */
+function spaltenZu(zusatz: Zusatzspalten, intern: boolean): readonly string[] {
+  if (intern) {
+    return SPALTEN_INTERN;
+  }
   return [
     ...SPALTEN_VOR,
     ...(zusatz.angefallen ? ['Angefallen'] : []),
@@ -164,6 +206,66 @@ function ueberschriftZu(angebot: Angebot): string {
   return `Angebot vom ${tagWort(angebot.angebotDatum)}`;
 }
 
+/** Die Beschriftung der Fusszeile — intern benennt sie Stunden, extern Geld (Issue #235). */
+function summenwortZu(intern: boolean): string {
+  return intern ? 'Angefallen' : 'Summe';
+}
+
+/** Was in der Fusszeile steht, solange der Abrechnungsstand fehlt (Halbgeviertstrich). */
+const OHNE_STUNDEN = '–';
+
+/**
+ * Die Zahl der Fusszeile: intern die Summe der erfassten Stunden, sonst die Nettosumme.
+ *
+ * Beide Zahlen kommen vom Server — die Nettosumme mit dem Angebot, die Stundensumme mit dem
+ * Abrechnungsstand (Issue #231). In der Ansicht entsteht keine (E10); faellt der Abrechnungsweg
+ * aus, steht darum der Strich und keine Null.
+ */
+function summeZu(angebot: Angebot, abrechnung: Abrechnungsstand): string {
+  if (!angebot.intern) {
+    return euro(angebot.summeInCent);
+  }
+  return abrechnung.art === 'daten'
+    ? stundenWort(abrechnung.abrechnung.angefallenInHundertsteln)
+    : OHNE_STUNDEN;
+}
+
+/**
+ * Eine Zeile der internen Positionstafel: die Bezeichnung und die erfassten Stunden (Issue #235).
+ *
+ * <b>Kein Ueberschreitungshinweis.</b> Er misst erfasste Zeit gegen ein angebotenes Kontingent, und
+ * intern ist nichts angeboten; die Zahl steht fuer sich (Kriterium 6).
+ *
+ * <b>Die Stunden tragen hier ihre Einheit</b> ({@link stundenWort}) und nicht wie am Kundenangebot
+ * nur die Ziffern: Dort sagt die Spalte „Einheit" daneben, worin gerechnet wird — die gibt es
+ * intern nicht.
+ *
+ * Ohne Stand bleibt die Zelle leer statt bei 0 zu stehen: Der Abrechnungsweg kann fuer sich
+ * ausfallen, und eine erfundene Null waere dann eine Auskunft, die niemand gegeben hat.
+ */
+function InternePositionszeile({
+  position,
+  stand,
+}: {
+  readonly position: AngebotPosition;
+  readonly stand: Abrechnungsposition | undefined;
+}) {
+  return (
+    <Box component="tr">
+      <Box component="td" sx={{ fontWeight: 500 }}>
+        {position.bezeichnung}
+      </Box>
+      <Box
+        component="td"
+        className={ZAHLEN_KLASSE}
+        sx={{ textAlign: 'right', whiteSpace: 'nowrap' }}
+      >
+        {stand === undefined ? null : stundenWort(stand.angefallenInHundertsteln)}
+      </Box>
+    </Box>
+  );
+}
+
 /**
  * Eine Zeile der Positionstafel (Kriterien 4, 5, 26; Issue #193, Kriterien 7, 8, 11).
  *
@@ -177,16 +279,23 @@ function ueberschriftZu(angebot: Angebot): string {
  * <b>Die Zelle „Angefallen" haengt an `buchbar`</b>, nicht an der Zahl: 0 angefallene Stunden an
  * einer buchbaren Position sind eine Auskunft, an einer Festpreisposition dagegen keine — dort
  * bleibt die Zelle leer.
+ *
+ * `intern` schaltet auf die kurze Zeile zu {@link SPALTEN_INTERN} um (Issue #235).
  */
 function Positionszeile({
   position,
   stand,
   zusatz,
+  intern,
 }: {
   readonly position: AngebotPosition;
   readonly stand: Abrechnungsposition | undefined;
   readonly zusatz: Zusatzspalten;
+  readonly intern: boolean;
 }) {
+  if (intern) {
+    return <InternePositionszeile position={position} stand={stand} />;
+  }
   // Was ueber das Kontingent hinaus erfasst wurde (Kriterium 8), oder 0.
   const ueberKontingent =
     stand === undefined || !stand.buchbar
@@ -296,7 +405,17 @@ function Angaben({ angebot }: { readonly angebot: Angebot }) {
       ? []
       : [{ name: 'Ansprechpartner', wert: angebot.ansprechpartnerName }]),
     { name: 'Angebotsdatum', wert: tagWort(angebot.angebotDatum) },
-    { name: 'Status', wert: <AngebotsstatusChip status={angebot.status} /> },
+    {
+      name: 'Status',
+      // Das Kennzeichen steht neben dem Status und nicht in einer eigenen Zeile: Es sagt, welche
+      // der zwei Ketten gilt, und gehoert damit an den Status (Issue #235).
+      wert: (
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+          <AngebotsstatusChip status={angebot.status} />
+          {angebot.intern ? <InternChip /> : null}
+        </Box>
+      ),
+    },
   ];
   return (
     <Box
@@ -554,19 +673,46 @@ export default function AngebotPage() {
     );
   }
 
-  /** Die Aktionen neben der Ueberschrift; an den Enden der Reihe fehlt die jeweilige Taste. */
-  function aktionenZu(angebot: Angebot): ReactNode {
+  /**
+   * Die zwei Tasten der internen Kette (Issue #235, E15).
+   *
+   * Dieselben zwei Wege wie am Kundenangebot, nur anders beschriftet: „Läuft" ist der Anfang der
+   * Kette und traegt darum kein „Wieder öffnen", „Abgeschlossen" ihr Ende und darum kein
+   * „Abschließen" — genau wie dort „Angelegt" und „Abgerechnet".
+   */
+  function interneTastenZu(angebot: Angebot): ReactNode {
     return (
-      <Box
-        data-testid="angebot-aktionen"
-        sx={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}
-      >
-        <WeicheTaste
-          to={`/angebote/${String(angebot.id)}/bearbeiten`}
-          symbol={<IconPencil size={SYMBOL_TASTE} stroke={1.8} />}
-        >
-          Bearbeiten
-        </WeicheTaste>
+      <>
+        {angebot.status === 'LAEUFT' ? null : (
+          <WeicheTaste
+            onClick={() => {
+              void schalten(angebotStatusZurueck, angebot);
+            }}
+            disabled={laeuft}
+            symbol={<IconArrowLeft size={SYMBOL_TASTE} stroke={1.8} />}
+          >
+            Wieder öffnen
+          </WeicheTaste>
+        )}
+        {angebot.status === 'ABGESCHLOSSEN' ? null : (
+          <KupferTaste
+            onClick={() => {
+              void schalten(angebotStatusWeiter, angebot);
+            }}
+            disabled={laeuft}
+            symbol={<IconCircleCheck size={SYMBOL_TASTE} stroke={1.8} />}
+          >
+            Abschließen
+          </KupferTaste>
+        )}
+      </>
+    );
+  }
+
+  /** Die drei Tasten des Kundenangebots: „Rechnung schreiben" und der Weg durch die Statuskette. */
+  function externeTastenZu(angebot: Angebot): ReactNode {
+    return (
+      <>
         {schreibbar(angebot) ? (
           <WeicheTaste
             onClick={() => {
@@ -600,6 +746,29 @@ export default function AngebotPage() {
             Status weiter
           </KupferTaste>
         )}
+      </>
+    );
+  }
+
+  /**
+   * Die Aktionen neben der Ueberschrift; an den Enden der Reihe fehlt die jeweilige Taste.
+   *
+   * „Bearbeiten" steht in jedem Status und bei beiden Arten (Kriterium 5); was daneben steht,
+   * entscheidet das Kennzeichen — die Reihe verzweigt als Ganzes und nicht Taste fuer Taste.
+   */
+  function aktionenZu(angebot: Angebot): ReactNode {
+    return (
+      <Box
+        data-testid="angebot-aktionen"
+        sx={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}
+      >
+        <WeicheTaste
+          to={`/angebote/${String(angebot.id)}/bearbeiten`}
+          symbol={<IconPencil size={SYMBOL_TASTE} stroke={1.8} />}
+        >
+          Bearbeiten
+        </WeicheTaste>
+        {angebot.intern ? interneTastenZu(angebot) : externeTastenZu(angebot)}
       </Box>
     );
   }
@@ -650,7 +819,7 @@ export default function AngebotPage() {
                 {OHNE_POSITION}
               </Typography>
             ) : (
-              <Tafel beschriftung="Positionen" spalten={[...spaltenZu(zusatz)]}>
+              <Tafel beschriftung="Positionen" spalten={[...spaltenZu(zusatz, angebot.intern)]}>
                 {angebot.positionen.map((position) => (
                   // Die Kennung ist der Schluessel: Seit Issue #171 traegt jede Position eine
                   // eigene und bleibt ueber ein Speichern hinweg dieselbe. Die Reihenfolge der
@@ -660,6 +829,7 @@ export default function AngebotPage() {
                     position={position}
                     stand={staende?.get(position.id)}
                     zusatz={zusatz}
+                    intern={angebot.intern}
                   />
                 ))}
               </Tafel>
@@ -674,23 +844,28 @@ export default function AngebotPage() {
                 borderTop: `1px solid ${theme.vars.palette.kupferwolke.linie}`,
               })}
             >
-              <Typography sx={{ fontSize: 13.5, fontWeight: 600 }}>Summe</Typography>
+              <Typography sx={{ fontSize: 13.5, fontWeight: 600 }}>
+                {summenwortZu(angebot.intern)}
+              </Typography>
               <Typography
                 data-testid="angebot-summe"
                 className={ZAHLEN_KLASSE}
                 sx={{ fontSize: 17, fontWeight: 800 }}
               >
-                {euro(angebot.summeInCent)}
+                {summeZu(angebot, abrechnung)}
               </Typography>
-              <Typography
-                sx={(theme) => ({
-                  fontSize: 12.5,
-                  marginLeft: 'auto',
-                  color: theme.vars.palette.kupferwolke.textSchwach,
-                })}
-              >
-                {NETTO}
-              </Typography>
+              {/* Der Hinweis gilt Betraegen; am internen Angebot gibt es keine (Issue #235). */}
+              {angebot.intern ? null : (
+                <Typography
+                  sx={(theme) => ({
+                    fontSize: 12.5,
+                    marginLeft: 'auto',
+                    color: theme.vars.palette.kupferwolke.textSchwach,
+                  })}
+                >
+                  {NETTO}
+                </Typography>
+              )}
             </Box>
           </Box>
         </Karte>

@@ -992,3 +992,225 @@ describe('AngebotPage — „Rechnung schreiben" (Issue #187, Kriterium 3)', () 
     ).not.toBeInTheDocument();
   });
 });
+
+describe('AngebotPage — das interne Angebot (Issue #235, Plan #218, E15)', () => {
+  /** Ein internes Angebot: dieselbe Firma, die Stundenposition, Status „Läuft". */
+  const INTERN = { ...ANGEBOT_MIT_STUNDEN, intern: true, status: 'LAEUFT' };
+
+  /** Sein Abrechnungsstand: 8 Stunden angefallen, keine Rechnung — die gibt es intern nie. */
+  const STAND_INTERN = { positionen: [STAND_STUNDEN], rechnungen: [], angefallen: 8 };
+
+  /** Die Wege eines laufenden internen Angebots. */
+  const INTERNE_WEGE = {
+    ...LEERE_BEREICHE,
+    [ABRECHNUNG]: json(200, STAND_INTERN),
+    'GET /api/angebote/9': json(200, INTERN),
+  };
+
+  it('stellt den Chip „Intern" neben den Status, das Kundenangebot nicht', async () => {
+    fetchNachPfad(INTERNE_WEGE);
+
+    renderSeite();
+    await screen.findByRole('heading', { level: 1, name: UEBERSCHRIFT });
+
+    const angaben = within(screen.getByTestId('angebot-angaben'));
+    expect(angaben.getAllByTestId('chip').map((chip) => chip.textContent)).toEqual([
+      'Läuft',
+      'Intern',
+    ]);
+  });
+
+  it('laesst den Chip „Intern" am Kundenangebot weg', async () => {
+    fetchNachPfad({
+      ...LEERE_BEREICHE,
+      'GET /api/angebote/9': json(200, ANGEBOT),
+    });
+
+    renderSeite();
+    await screen.findByRole('heading', { level: 1, name: UEBERSCHRIFT });
+
+    expect(within(screen.getByTestId('angebot-angaben')).queryByText('Intern')).not.toBeInTheDocument();
+  });
+
+  it('traegt in der Positionstafel nur „Bezeichnung" und „Angefallen" (Kriterien 3, 6)', async () => {
+    fetchNachPfad(INTERNE_WEGE);
+
+    renderSeite();
+    await screen.findByRole('heading', { level: 1, name: UEBERSCHRIFT });
+
+    const tafel = within(await screen.findByRole('table', { name: 'Positionen' }));
+    expect(tafel.getAllByRole('columnheader').map((kopf) => kopf.textContent)).toEqual([
+      'Bezeichnung',
+      'Angefallen',
+    ]);
+    const zeile = within(tafel.getAllByRole('row')[1]);
+    expect(zeile.getByText('Umsetzung')).toBeInTheDocument();
+    expect(zeile.getByText('8,00 Std.')).toBeInTheDocument();
+    // Weder die angebotene Menge noch Einheit, Einzelpreis oder Betrag stehen da.
+    expect(tafel.queryByText('20,00')).not.toBeInTheDocument();
+    expect(tafel.queryByText('Stunde')).not.toBeInTheDocument();
+    expect(tafel.queryByText('120,00 €')).not.toBeInTheDocument();
+    expect(tafel.queryByText('2.400,00 €')).not.toBeInTheDocument();
+  });
+
+  it('laesst die Zelle „Angefallen" leer, solange der Abrechnungsstand fehlt', async () => {
+    fetchNachPfad({
+      ...LEERE_BEREICHE,
+      [ABRECHNUNG]: leer(503),
+      'GET /api/angebote/9': json(200, INTERN),
+    });
+
+    renderSeite();
+    await screen.findByRole('heading', { level: 1, name: UEBERSCHRIFT });
+    await screen.findByText(
+      'Der Abrechnungsstand ist gerade nicht zu erreichen. Bitte später erneut versuchen.',
+    );
+
+    const tafel = within(screen.getByRole('table', { name: 'Positionen' }));
+    expect(within(tafel.getAllByRole('row')[1]).getAllByRole('cell')[1]).toHaveTextContent('');
+    // Erfunden wird nichts: Ohne Stand steht auch in der Fusszeile keine Zahl (E10).
+    expect(screen.getByTestId('angebot-summe')).toHaveTextContent('–');
+  });
+
+  it('weist eine Ueberschreitung des Kontingents nicht aus — intern gibt es keines', async () => {
+    fetchNachPfad({
+      ...LEERE_BEREICHE,
+      [ABRECHNUNG]: json(200, {
+        positionen: [{ ...STAND_STUNDEN, angefallen: 22 }],
+        rechnungen: [],
+        angefallen: 22,
+      }),
+      'GET /api/angebote/9': json(200, INTERN),
+    });
+
+    renderSeite();
+    await screen.findByRole('heading', { level: 1, name: UEBERSCHRIFT });
+
+    const tafel = within(await screen.findByRole('table', { name: 'Positionen' }));
+    expect(tafel.getByText('22,00 Std.')).toBeInTheDocument();
+    expect(screen.queryByTestId('zeile-angefallen-hinweis-4')).not.toBeInTheDocument();
+    expect(screen.queryByText(/überschritten/)).not.toBeInTheDocument();
+  });
+
+  it('nennt in der Fusszeile die Stundensumme statt der Nettosumme', async () => {
+    fetchNachPfad(INTERNE_WEGE);
+
+    renderSeite();
+    await screen.findByRole('heading', { level: 1, name: UEBERSCHRIFT });
+
+    expect(await screen.findByTestId('angebot-summe')).toHaveTextContent('8,00 Std.');
+    expect(screen.getByTestId('angebot-summe')).not.toHaveTextContent('€');
+    // Der Hinweis auf die Umsatzsteuer gilt Betraegen; intern gibt es keine.
+    expect(
+      screen.queryByText('Alle Beträge netto, zzgl. gesetzlicher Umsatzsteuer'),
+    ).not.toBeInTheDocument();
+  });
+
+  it('haelt am Kundenangebot die Nettosumme mit dem Hinweis auf die Umsatzsteuer', async () => {
+    fetchNachPfad({
+      ...LEERE_BEREICHE,
+      [ABRECHNUNG]: json(200, { positionen: [STAND_STUNDEN], rechnungen: [], angefallen: 8 }),
+      'GET /api/angebote/9': json(200, ANGEBOT_MIT_STUNDEN),
+    });
+
+    renderSeite();
+    await screen.findByRole('heading', { level: 1, name: UEBERSCHRIFT });
+
+    expect(screen.getByTestId('angebot-summe')).toHaveTextContent('2.400,00 €');
+    expect(
+      screen.getByText('Alle Beträge netto, zzgl. gesetzlicher Umsatzsteuer'),
+    ).toBeInTheDocument();
+  });
+
+  it('bietet bei „Läuft" die Kupfertaste „Abschließen" und kein „Wieder öffnen"', async () => {
+    const nutzer = userEvent.setup();
+    const fetchMock = fetchNachPfad({
+      ...INTERNE_WEGE,
+      'POST /api/angebote/9/status/weiter': json(200, { ...INTERN, status: 'ABGESCHLOSSEN' }),
+    });
+
+    renderSeite();
+    await screen.findByRole('heading', { level: 1, name: UEBERSCHRIFT });
+
+    expect(kupfertasten().map((taste) => taste.textContent)).toEqual(['Abschließen']);
+    expect(aktionen().queryByRole('button', { name: 'Wieder öffnen' })).not.toBeInTheDocument();
+    expect(aktionen().getByRole('link', { name: 'Bearbeiten' })).toHaveAttribute(
+      'href',
+      '/angebote/9/bearbeiten',
+    );
+
+    await nutzer.click(aktionen().getByRole('button', { name: 'Abschließen' }));
+
+    expect(
+      await within(screen.getByTestId('angebot-angaben')).findByText('Abgeschlossen'),
+    ).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/angebote/9/status/weiter',
+      expect.objectContaining({ method: 'POST' }),
+    );
+  });
+
+  it('bietet bei „Abgeschlossen" „Wieder öffnen" und kein „Abschließen"', async () => {
+    const nutzer = userEvent.setup();
+    const fetchMock = fetchNachPfad({
+      ...LEERE_BEREICHE,
+      [ABRECHNUNG]: json(200, STAND_INTERN),
+      'GET /api/angebote/9': json(200, { ...INTERN, status: 'ABGESCHLOSSEN' }),
+      'POST /api/angebote/9/status/zurueck': json(200, INTERN),
+    });
+
+    renderSeite();
+    await screen.findByRole('heading', { level: 1, name: UEBERSCHRIFT });
+
+    expect(aktionen().queryByRole('button', { name: 'Abschließen' })).not.toBeInTheDocument();
+    expect(kupfertasten()).toEqual([]);
+
+    await nutzer.click(aktionen().getByRole('button', { name: 'Wieder öffnen' }));
+
+    expect(
+      await within(screen.getByTestId('angebot-angaben')).findByText('Läuft'),
+    ).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/angebote/9/status/zurueck',
+      expect.objectContaining({ method: 'POST' }),
+    );
+  });
+
+  it('meldet, wenn das Abschliessen nicht durchgeht, und behaelt den bisherigen Status', async () => {
+    const nutzer = userEvent.setup();
+    fetchNachPfad({
+      ...INTERNE_WEGE,
+      'POST /api/angebote/9/status/weiter': problem(409, 'Geht nicht.'),
+    });
+
+    renderSeite();
+    await screen.findByRole('heading', { level: 1, name: UEBERSCHRIFT });
+    await nutzer.click(aktionen().getByRole('button', { name: 'Abschließen' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('nicht geändert');
+    expect(within(screen.getByTestId('angebot-angaben')).getAllByTestId('chip')[0]).toHaveTextContent(
+      'Läuft',
+    );
+  });
+
+  it.each([['LAEUFT'], ['ABGESCHLOSSEN']])(
+    'kennt in „%s" kein „Rechnung schreiben" — die beiden internen Staende stehen in keiner abrechenbaren Menge',
+    async (status) => {
+      fetchNachPfad({
+        ...LEERE_BEREICHE,
+        // Ein Stand mit Offenem und einer Rechnung: Nur der Status haelt die Taste fern.
+        [ABRECHNUNG]: json(200, STAND_TEIL),
+        'GET /api/angebote/9': json(200, { ...INTERN, status }),
+      });
+
+      renderSeite();
+      await screen.findByRole('heading', { level: 1, name: UEBERSCHRIFT });
+      await screen.findByText('Noch keine Anlage.');
+
+      expect(
+        aktionen().queryByRole('button', { name: 'Rechnung schreiben' }),
+      ).not.toBeInTheDocument();
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    },
+  );
+});
