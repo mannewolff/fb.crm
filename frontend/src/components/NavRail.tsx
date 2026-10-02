@@ -13,7 +13,7 @@ import {
 } from '@tabler/icons-react';
 import type { TablerIcon } from '@tabler/icons-react';
 import { useEffect, useState } from 'react';
-import { NavLink } from 'react-router-dom';
+import { Link as RouterLink, NavLink } from 'react-router-dom';
 
 import { instance } from '../api/instance';
 import { FUSS_EINTRAEGE, NAV_BLOECKE } from '../layout/navItems';
@@ -43,6 +43,12 @@ import UserMenu from './UserMenu';
  *
  * `onWahl` ist der Rueckruf fuer die Betriebsart hinter der Schaltflaeche ({@link AppShell}): Dort
  * liegt die Schiene ueber dem Inhalt und muss sich schliessen, sobald ein Ziel gewaehlt ist.
+ *
+ * Die Marke ist dabei ein Ziel der Schiene wie jedes `NavZiel`: Sie fuehrt auf `/` und schliesst
+ * die Ueberlagerung ebenso (K2, Issue #206). Sie bekommt aber `Link` statt `NavLink` und damit
+ * keine aktive Gestalt (E16) — mit Pfirsich-Hinterlegung auf der Startseite saehe sie wie ein
+ * Navigationseintrag aus, und sie ist keiner. Der Name haengt als `aria-label` am Weg selbst,
+ * nicht am Inhalt: Eingeklappt bleibt nur das Markenmal uebrig, und das traegt `aria-hidden`.
  */
 
 /** Breite ausgeklappt und eingeklappt (CLAUDE-design.md, „Rahmen"). */
@@ -239,7 +245,15 @@ export default function NavRail({ onWahl }: { readonly onWahl?: () => void }) {
           padding: '4px 0 18px',
         }}
       >
-        <BrandMark version={version} kompakt={eingeklappt} />
+        <Box
+          component={RouterLink}
+          to="/"
+          aria-label="Startseite"
+          onClick={onWahl}
+          sx={{ display: 'flex', minWidth: 0, color: 'inherit', textDecoration: 'none' }}
+        >
+          <BrandMark version={version} kompakt={eingeklappt} />
+        </Box>
         <Box sx={{ marginLeft: eingeklappt ? 0 : 'auto' }}>
           <EinklappTaste eingeklappt={eingeklappt} umschalten={umschalten} />
         </Box>

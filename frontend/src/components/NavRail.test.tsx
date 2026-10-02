@@ -113,9 +113,10 @@ describe('NavRail', () => {
 
     renderSchiene();
 
-    // Die Marke bleibt fuer sich: Der Gruppentitel gehoert zum Block, nicht zum Kopf.
+    // Die Marke bleibt fuer sich: Der Gruppentitel gehoert zum Block, nicht zum Kopf. Der eine
+    // Weg im Kopf ist die Marke selbst, die auf die Startseite fuehrt (K2).
     const kopf = within(screen.getByTestId('schiene-kopf'));
-    expect(kopf.queryAllByRole('link')).toHaveLength(0);
+    expect(kopf.getAllByRole('link').map((link) => link.getAttribute('href'))).toEqual(['/']);
     expect(kopf.getByText('fb.crm')).toBeInTheDocument();
 
     const bloecke = within(screen.getByTestId('schiene-bloecke'));
@@ -160,6 +161,35 @@ describe('NavRail', () => {
 
     renderSchiene('/', gewaehlt);
     await nutzer.click(screen.getByRole('link', { name: 'Firmen' }));
+
+    expect(gewaehlt).toHaveBeenCalledTimes(1);
+  });
+
+  it('fuehrt vom Markenzeichen auf die Startseite, ausgeklappt und eingeklappt (K2)', async () => {
+    angemeldet();
+    const nutzer = userEvent.setup();
+
+    renderSchiene('/firmen');
+
+    const ausgeklappt = screen.getByRole('link', { name: 'Startseite' });
+    expect(ausgeklappt).toHaveAttribute('href', '/');
+    expect(within(ausgeklappt).getByTestId('marke-mal')).toBeInTheDocument();
+
+    await nutzer.click(screen.getByRole('button', { name: 'Einklappen' }));
+
+    // Eingeklappt bleibt nur das Mal uebrig, und das traegt `aria-hidden` — der Name muss
+    // darum am Weg selbst haengen, nicht am Inhalt.
+    expect(screen.getByRole('navigation')).toHaveAttribute('data-eingeklappt', 'true');
+    expect(screen.getByRole('link', { name: 'Startseite' })).toHaveAttribute('href', '/');
+  });
+
+  it('ruft beim Waehlen des Markenzeichens den Rueckruf (Schaltflaechen-Schiene)', async () => {
+    angemeldet();
+    const nutzer = userEvent.setup();
+    const gewaehlt = vi.fn();
+
+    renderSchiene('/firmen', gewaehlt);
+    await nutzer.click(screen.getByRole('link', { name: 'Startseite' }));
 
     expect(gewaehlt).toHaveBeenCalledTimes(1);
   });
