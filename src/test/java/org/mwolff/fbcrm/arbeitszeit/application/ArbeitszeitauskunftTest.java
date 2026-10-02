@@ -34,6 +34,10 @@ import org.mwolff.fbcrm.arbeitszeit.domain.ZeiteintragRepository;
  *
  * <p>Dazu die eine Abweisung: Ein Angebot, das es nicht gibt, fragt im Bestand der Zeiten gar nicht
  * nach.
+ *
+ * <p>Die beiden Auskuenfte <b>ueber alle Angebote</b> (Issue #211) stehen daneben: Sie reichen die
+ * Antwort des Bestands durch und ziehen die Angebote gar nicht erst heran — es gibt keine
+ * Positionsmenge zusammenzutragen.
  */
 @ExtendWith(MockitoExtension.class)
 class ArbeitszeitauskunftTest {
@@ -114,5 +118,35 @@ class ArbeitszeitauskunftTest {
     assertThatThrownBy(() -> auskunft().imMonat(Zeitdoppel.ANGEBOT, NOVEMBER))
         .isInstanceOf(AngebotNichtGefunden.class);
     verifyNoInteractions(zeiten);
+  }
+
+  @Test
+  void alleAngefallen_thenAnswersWhatTheBestandSaysWithoutAskingForAnAngebot() {
+    // Given — ueber alle Angebote: Die Kennung eines Angebots kommt hier nicht vor.
+    final Map<Long, BigDecimal> gemeldet =
+        Map.of(Long.valueOf(Zeitdoppel.KONZEPTION_ID), new BigDecimal("22.00"));
+    when(zeiten.alleAngefallenJePosition()).thenReturn(gemeldet);
+
+    // When
+    final Map<Long, BigDecimal> auskunft = auskunft().alleAngefallen();
+
+    // Then
+    assertThat(auskunft).isEqualTo(gemeldet);
+    verifyNoInteractions(angebote);
+  }
+
+  @Test
+  void alleImMonat_thenAnswersWhatTheBestandSaysWithoutAskingForAnAngebot() {
+    // Given — derselbe Weg, nur auf einen Monat begrenzt.
+    final Map<Long, BigDecimal> gemeldet =
+        Map.of(Long.valueOf(Zeitdoppel.KONZEPTION_ID), new BigDecimal("12.00"));
+    when(zeiten.alleStundenJePositionImMonat(NOVEMBER)).thenReturn(gemeldet);
+
+    // When
+    final Map<Long, BigDecimal> auskunft = auskunft().alleImMonat(NOVEMBER);
+
+    // Then
+    assertThat(auskunft).isEqualTo(gemeldet);
+    verifyNoInteractions(angebote);
   }
 }

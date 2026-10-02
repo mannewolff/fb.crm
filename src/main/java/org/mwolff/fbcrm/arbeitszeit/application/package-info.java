@@ -10,11 +10,12 @@
  *
  * <p><b>Nach draussen gibt es genau zwei Tueren</b>, und beide liegen hier: {@link
  * org.mwolff.fbcrm.arbeitszeit.application.Arbeitszeitauskunft} sagt einem fremden Modul die
- * Stunden eines Angebots, und {@code Buchbarkeit} sagt ihm, welche Position sie tragen darf. {@code
- * rechnung} belegt damit seine Entwuerfe vor (Issue #199); die Richtung ist {@code rechnung} →
- * {@code arbeitszeit}, und dieses Modul kennt die Rechnung nicht. Der Port auf den Bestand der
- * Zeiten bleibt dabei innen: Wer ihn von aussen aufriefe, muesste die Positionen eines Angebots
- * selbst zusammentragen.
+ * Stunden — die eines Angebots ({@code angefallen}, {@code imMonat}) und die ueber alle Angebote
+ * ({@code alleAngefallen}, {@code alleImMonat}, Issue #211) —, und {@code Buchbarkeit} sagt ihm,
+ * welche Position sie tragen darf. {@code rechnung} belegt damit seine Entwuerfe vor (Issue #199);
+ * die Richtung ist {@code rechnung} → {@code arbeitszeit}, und dieses Modul kennt die Rechnung
+ * nicht. Der Port auf den Bestand der Zeiten bleibt dabei innen: Wer ihn von aussen aufriefe,
+ * muesste die Positionen eines Angebots selbst zusammentragen.
  *
  * <p><b>Die Meldungen am Feld entstehen hier</b> und nicht in {@code arbeitszeit.domain}: Nur diese
  * Schicht kennt die Feldnamen der Schnittstelle (A19). Das Domaenenmodell prueft dieselben Regeln

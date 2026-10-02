@@ -16,11 +16,25 @@ import java.util.Set;
  * Positionen eines Belegs: Er traegt seine eigene Kennung und wird einzeln angelegt,
  * fortgeschrieben und geloescht (Plan #194, A3).
  *
- * <p><b>Zwei Summen und kein dritter Weg.</b> Beide liefern Stunden je Angebotsposition, und beide
- * nehmen alle Positionen auf einmal entgegen, statt je Zeile einmal zu fragen — dasselbe Muster wie
- * {@code firma.domain.AnsprechpartnerRepository#zaehleAktiveJeFirma}. Sie unterscheiden sich nur im
- * Zeitraum: {@link #angefallenJePosition(Set)} zaehlt alles, {@link #stundenJePositionImMonat(Set,
- * YearMonth)} nur einen Monat.
+ * <p><b>Vier Summen in zwei Paaren und kein fuenfter Weg.</b> Alle vier liefern Stunden je
+ * Angebotsposition, und keine fragt je Zeile einmal — dasselbe Muster wie {@code
+ * firma.domain.AnsprechpartnerRepository#zaehleAktiveJeFirma}. Sie unterscheiden sich in zwei
+ * Richtungen:
+ *
+ * <ul>
+ *   <li><b>Mit Positionsmenge</b> ({@link #angefallenJePosition(Set)}, {@link
+ *       #stundenJePositionImMonat(Set, YearMonth)}): Gefragt wird nach bestimmten Positionen, und
+ *       jede angefragte steht in der Antwort — auch die ohne Eintrag, mit {@code 0.00}. Das ist der
+ *       Weg, wenn der Leser ein Angebot im Blick hat.
+ *   <li><b>Ohne Positionsmenge</b> ({@link #alleAngefallenJePosition()}, {@link
+ *       #alleStundenJePositionImMonat(YearMonth)}): Gefragt wird nach nichts, geantwortet wird mit
+ *       dem ganzen Bestand — darum steht darin <b>nur</b> eine Position, zu der es einen Eintrag
+ *       gibt, und keine mit {@code 0.00}. Das ist der Weg, wenn der Leser alle Angebote meint
+ *       (Issue #211) und ein Aufruf je Angebot die Abfragelawine waere, die dieses Modul vermeidet
+ *       (Plan #208, E3).
+ * </ul>
+ *
+ * <p>Quer dazu steht der Zeitraum: je Paar einmal ueber alle Monate und einmal ueber genau einen.
  */
 public interface ZeiteintragRepository {
 
@@ -84,4 +98,26 @@ public interface ZeiteintragRepository {
    *     mit {@code 0.00} darin, keine fehlt
    */
   Map<Long, BigDecimal> stundenJePositionImMonat(Set<Long> angebotPositionIds, YearMonth monat);
+
+  /**
+   * Die insgesamt erfassten Stunden je Angebotsposition ueber <b>alle</b> Angebote (Issue #211).
+   *
+   * <p>Ohne Positionsmenge: Der Leser meint alle Angebote, und ein Aufruf je Angebot waere die
+   * Abfragelawine, die dieses Modul vermeidet (Plan #208, E3).
+   *
+   * @return je Position mit mindestens einem Eintrag ihre Stunden; eine Position ohne Eintrag
+   *     <b>fehlt</b> — anders als bei {@link #angefallenJePosition(Set)}, wo sie mit {@code 0.00}
+   *     darin steht, weil dort nach ihr gefragt wurde
+   */
+  Map<Long, BigDecimal> alleAngefallenJePosition();
+
+  /**
+   * Dasselbe, aber nur fuer einen Monat (Issue #211).
+   *
+   * @param monat der Monat, dessen Eintraege zaehlen
+   * @return je Position mit mindestens einem Eintrag in diesem Monat ihre Stunden; eine Position
+   *     ohne Eintrag <b>fehlt</b> — anders als bei {@link #stundenJePositionImMonat(Set,
+   *     YearMonth)}, wo sie mit {@code 0.00} darin steht, weil dort nach ihr gefragt wurde
+   */
+  Map<Long, BigDecimal> alleStundenJePositionImMonat(YearMonth monat);
 }

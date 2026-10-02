@@ -26,13 +26,17 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.mwolff.fbcrm.arbeitszeit.domain.Zeiteintrag;
 
 /**
- * Die Uebersetzung zwischen Zeiteintrag und Zeile — in beide Richtungen, und die beiden Summen.
+ * Die Uebersetzung zwischen Zeiteintrag und Zeile — in beide Richtungen, und die vier Summen.
  *
  * <p>Der Adapter steht hier gegen eine gemockte Spring-Data-Schnittstelle, damit die Abbildung
  * selbst geprueft ist und nicht nur ihr Zusammenspiel mit der Datenbank ({@code
  * JpaZeiteintragRepositoryIT}). Gegenstand ist vor allem: Die Summen entstehen aus den Minuten der
  * Zeilen und werden erst danach in Stunden umgerechnet (Plan #194, E5), jede angefragte Position
  * steht im Ergebnis — auch die ohne Eintrag —, und der Monat wird zu seinem ersten und letzten Tag.
+ *
+ * <p>Die beiden Summen <b>ohne</b> Positionsmenge (Issue #211) stehen daneben und zeigen genau den
+ * Unterschied: Sie fragen nach nichts und liefern nur die Positionen, zu denen es einen Eintrag
+ * gibt — eine Position ohne Zeit fehlt darin, statt mit {@code 0.00} darin zu stehen.
  */
 @ExtendWith(MockitoExtension.class)
 class JpaZeiteintragRepositoryTest {
@@ -250,5 +254,91 @@ class JpaZeiteintragRepositoryTest {
 
     // Then
     assertThat(stunden.get(KONZEPTION)).isEqualByComparingTo("12.00");
+  }
+
+  @Test
+  void alleAngefallenJePosition_thenSumsTheMinutesOfEveryRowInTheBestand() {
+    // Given — 1:45 und 2:00 an derselben Position ergeben 3,75 Stunden, ohne Positionsmenge.
+    when(zeilen.findAll())
+        .thenReturn(
+            List.of(
+                zeile(KONZEPTION, "2026-10-05", "09:00", "10:45"),
+                zeile(KONZEPTION, "2026-11-12", "13:00", "15:00"),
+                zeile(BERATUNG, "2026-11-13", "09:00", "10:00")));
+
+    // When
+    final Map<Long, BigDecimal> alle = repository.alleAngefallenJePosition();
+
+    // Then
+    assertThat(alle.get(KONZEPTION)).isEqualByComparingTo("3.75");
+  }
+
+  @Test
+  void alleAngefallenJePosition_givenAPositionWithoutEntries_thenItIsMissing() {
+    // Given — anders als bei den Summen mit Positionsmenge wird hier nach nichts gefragt.
+    when(zeilen.findAll()).thenReturn(List.of(zeile(KONZEPTION, "2026-11-12", "09:00", "10:45")));
+
+    // When
+    final Map<Long, BigDecimal> alle = repository.alleAngefallenJePosition();
+
+    // Then
+    assertThat(alle).containsOnlyKeys(Long.valueOf(KONZEPTION));
+  }
+
+  @Test
+  void alleAngefallenJePosition_givenAnEmptyBestand_thenAnEmptyResult() {
+    // Given
+    when(zeilen.findAll()).thenReturn(List.of());
+
+    // When
+    final Map<Long, BigDecimal> alle = repository.alleAngefallenJePosition();
+
+    // Then
+    assertThat(alle).isEmpty();
+  }
+
+  @Test
+  void alleStundenJePositionImMonat_thenAsksForTheFirstAndTheLastDayOfTheMonth() {
+    // Given
+    when(zeilen.findImZeitraum(any(LocalDate.class), any(LocalDate.class))).thenReturn(List.of());
+
+    // When
+    repository.alleStundenJePositionImMonat(NOVEMBER);
+
+    // Then
+    verify(zeilen).findImZeitraum(vonTag.capture(), bisTag.capture());
+    assertThat(List.of(vonTag.getValue(), bisTag.getValue()))
+        .containsExactly(LocalDate.of(2026, 11, 1), LocalDate.of(2026, 11, 30));
+  }
+
+  @Test
+  void alleStundenJePositionImMonat_thenSumsTheRowsOfThatMonthAcrossPositions() {
+    // Given
+    when(zeilen.findImZeitraum(LocalDate.of(2026, 11, 1), LocalDate.of(2026, 11, 30)))
+        .thenReturn(
+            List.of(
+                zeile(KONZEPTION, "2026-11-12", "09:00", "17:00"),
+                zeile(KONZEPTION, "2026-11-13", "09:00", "13:00"),
+                zeile(BERATUNG, "2026-11-13", "09:00", "10:45")));
+
+    // When
+    final Map<Long, BigDecimal> november = repository.alleStundenJePositionImMonat(NOVEMBER);
+
+    // Then
+    assertThat(november.get(KONZEPTION)).isEqualByComparingTo("12.00");
+    assertThat(november.get(BERATUNG)).isEqualByComparingTo("1.75");
+  }
+
+  @Test
+  void alleStundenJePositionImMonat_givenAMonthWithoutAnyEntry_thenAnEmptyResult() {
+    // Given — keine Position wird vorbelegt, also steht auch keine mit 0,00 darin.
+    when(zeilen.findImZeitraum(LocalDate.of(2026, 11, 1), LocalDate.of(2026, 11, 30)))
+        .thenReturn(List.of());
+
+    // When
+    final Map<Long, BigDecimal> november = repository.alleStundenJePositionImMonat(NOVEMBER);
+
+    // Then
+    assertThat(november).isEmpty();
   }
 }

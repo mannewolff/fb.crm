@@ -30,6 +30,11 @@ import org.springframework.transaction.annotation.Transactional;
  * gebucht werden konnte, steht ohnehin mit {@code 0.00} in der Antwort: Der Bestand liefert jede
  * angefragte Kennung.
  *
+ * <p><b>Ueber alle Angebote fragt niemand nach einem Angebot.</b> Die Startseite (#206) will die
+ * Stunden des ganzen Bestands, nicht die eines Belegs; {@link #alleAngefallen()} und {@link
+ * #alleImMonat(YearMonth)} reichen darum die Antwort des Bestands durch, ohne Angebotskennung und
+ * ohne Positionsmenge. Was sie zurueckgeben, nennt nur Positionen mit Eintrag.
+ *
  * <p><b>Ein Zug in die Angebote und einer in die Zeiten</b>, nie einer je Position: Der Bestand
  * nimmt alle Kennungen auf einmal entgegen. Die Kennung des Angebots und nicht die Liste seiner
  * Positionen ist der Parameter, damit der Aufrufer die Positionen nicht erst zusammentragen muss.
@@ -75,6 +80,35 @@ public class Arbeitszeitauskunft {
    */
   public Map<Long, BigDecimal> angefallen(final long angebotId) {
     return zeiten.angefallenJePosition(positionen(angebotId));
+  }
+
+  /**
+   * Die insgesamt erfassten Stunden je Position ueber <b>alle</b> Angebote (Issue #211).
+   *
+   * <p>Hier wird keine Angebotskennung gefragt, weil der Leser alle Angebote meint: Die Startseite
+   * (#206) braucht eine Kennzahl ueber den ganzen Bestand, und ein Aufruf je Angebot waere die
+   * Abfragelawine, die dieses Modul vermeidet (Plan #208, E3). Darum faellt auch der Zug in die
+   * Angebote weg — ohne Angebot gibt es keine Positionsmenge zusammenzutragen.
+   *
+   * @return je Position mit mindestens einem Eintrag ihre Stunden; eine Position ohne Eintrag
+   *     fehlt, anders als bei {@link #angefallen(long)}
+   */
+  public Map<Long, BigDecimal> alleAngefallen() {
+    return zeiten.alleAngefallenJePosition();
+  }
+
+  /**
+   * Dasselbe, aber nur fuer einen Monat (Issue #211) — die Monatszeile der Startseite.
+   *
+   * <p>Auch hier wird keine Angebotskennung gefragt, aus demselben Grund wie bei {@link
+   * #alleAngefallen()}.
+   *
+   * @param monat der Monat, dessen Eintraege zaehlen
+   * @return je Position mit mindestens einem Eintrag in diesem Monat ihre Stunden; eine Position
+   *     ohne Eintrag fehlt, anders als bei {@link #imMonat(long, YearMonth)}
+   */
+  public Map<Long, BigDecimal> alleImMonat(final YearMonth monat) {
+    return zeiten.alleStundenJePositionImMonat(monat);
   }
 
   private Set<Long> positionen(final long angebotId) {

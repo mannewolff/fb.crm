@@ -30,7 +30,20 @@ import org.springframework.stereotype.Repository;
  * wie {@code JpaAnsprechpartnerRepository.zaehleAktiveJeFirma}. Ein Waechter fuer die leere Anfrage
  * steht hier nicht: Hibernate uebersetzt eine leere {@code in}-Liste in eine Bedingung, die keine
  * Zeile trifft, und das Ergebnis ist die leere Abbildung.
+ *
+ * <p>Die beiden Summen ueber <b>alle</b> Angebote (Issue #211) gehen durch denselben Summierer, nur
+ * mit leerer Vorbelegung: Es gibt keine angefragte Position, also steht am Ende genau die darin, zu
+ * der eine Zeile gefunden wurde. Sie brauchen auch keine eigene Abfrage — die Zeilen liefern {@code
+ * findAll} beziehungsweise das vorhandene {@code findImZeitraum}, das schon die Monatsliste der
+ * Ansicht bedient.
  */
+/*
+ * Acht Methoden des Ports und drei private Helfer ergeben elf. Sie weiter aufzuteilen verschoebe
+ * die Zahl, ohne etwas zu klaeren: Die Breite kommt vom Port — vier Summen in zwei Paaren —, und
+ * der Adapter ist die eine Stelle, an der Zeiteintrag und Zeile ineinander uebergehen. Dasselbe
+ * Vorgehen wie bei {@code JpaRechnungRepository}.
+ */
+@SuppressWarnings("PMD.TooManyMethods")
 @Repository
 class JpaZeiteintragRepository implements ZeiteintragRepository {
 
@@ -75,6 +88,16 @@ class JpaZeiteintragRepository implements ZeiteintragRepository {
         angebotPositionIds,
         zeilen.findByPositionenImZeitraum(
             List.copyOf(angebotPositionIds), monat.atDay(1), monat.atEndOfMonth()));
+  }
+
+  @Override
+  public Map<Long, BigDecimal> alleAngefallenJePosition() {
+    return stundenJePosition(Set.of(), zeilen.findAll());
+  }
+
+  @Override
+  public Map<Long, BigDecimal> alleStundenJePositionImMonat(final YearMonth monat) {
+    return stundenJePosition(Set.of(), zeilen.findImZeitraum(monat.atDay(1), monat.atEndOfMonth()));
   }
 
   /*

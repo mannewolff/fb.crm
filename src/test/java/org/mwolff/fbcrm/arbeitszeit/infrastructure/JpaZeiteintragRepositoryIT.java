@@ -1,6 +1,7 @@
 package org.mwolff.fbcrm.arbeitszeit.infrastructure;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.entry;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -23,7 +24,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
  *
  * <p>Gegenstand ist, was nur mit Datenbank geprueft werden kann: der Zeitraum mit beiden
  * eingeschlossenen Grenzen und die beiden Summen ueber echte Zeilen — einmal ueber alle Monate,
- * einmal ueber genau einen.
+ * einmal ueber genau einen — je mit und ohne Positionsmenge.
  */
 class JpaZeiteintragRepositoryIT extends AbstractIntegrationTest {
 
@@ -224,5 +225,50 @@ class JpaZeiteintragRepositoryIT extends AbstractIntegrationTest {
 
     // Then
     assertThat(dezember).containsEntry(konzeption, new BigDecimal("0.00"));
+  }
+
+  @Test
+  void alleAngefallenJePosition_thenSumsEveryMonthAndOmitsPositionsWithoutTime() {
+    // Given — nur die Konzeption traegt Zeit, die Beratung nicht.
+    gesichert(konzeption, "2026-10-05", "09:00", "17:00");
+    gesichert(konzeption, "2026-11-13", "09:00", "13:00");
+
+    // When
+    final Map<Long, BigDecimal> alle = repository.alleAngefallenJePosition();
+
+    // Then — ohne Positionsmenge fehlt die Beratung, statt mit 0,00 darin zu stehen.
+    assertThat(alle).containsExactly(entry(Long.valueOf(konzeption), new BigDecimal("12.00")));
+  }
+
+  @Test
+  void alleStundenJePositionImMonat_thenIncludesTheFirstAndTheLastDayOfTheMonth() {
+    // Given — die Monatsgrenzen zaehlen mit, der Tag davor und danach nicht.
+    gesichert(konzeption, "2026-10-31", "09:00", "17:00");
+    gesichert(konzeption, "2026-11-01", "09:00", "10:00");
+    gesichert(beratung, "2026-11-30", "09:00", "10:45");
+    gesichert(konzeption, "2026-12-01", "09:00", "17:00");
+
+    // When
+    final Map<Long, BigDecimal> november =
+        repository.alleStundenJePositionImMonat(YearMonth.of(2026, 11));
+
+    // Then
+    assertThat(november)
+        .hasSize(2)
+        .containsEntry(konzeption, new BigDecimal("1.00"))
+        .containsEntry(beratung, new BigDecimal("1.75"));
+  }
+
+  @Test
+  void alleStundenJePositionImMonat_givenAMonthWithoutAnyEntry_thenAnEmptyResult() {
+    // Given
+    gesichert(konzeption, "2026-11-12", "09:00", "17:00");
+
+    // When
+    final Map<Long, BigDecimal> dezember =
+        repository.alleStundenJePositionImMonat(YearMonth.of(2026, 12));
+
+    // Then — kein Eintrag, keine Zeile: ohne Positionsmenge bleibt die Abbildung leer.
+    assertThat(dezember).isEmpty();
   }
 }
