@@ -9,6 +9,7 @@ import { Link as RouterLink, useSearchParams } from 'react-router-dom';
 import { angeboteUebersicht } from '../api/angebote';
 import type { AngeboteUebersicht, AngebotUebersichtZeile } from '../api/angebote';
 import AngebotsstatusChip from '../components/AngebotsstatusChip';
+import InternChip from '../components/InternChip';
 import Karte from '../components/Karte';
 import { useKopfPfad } from '../components/KopfPfad';
 import type { PfadVerweis } from '../components/KopfPfad';
@@ -31,6 +32,11 @@ import { RADIUS_RUND, ZAHLEN_KLASSE } from '../theme';
  *       erhalten. Ein unbekannter Wert dort gilt als „alle", statt die Seite scheitern zu lassen.</li>
  *   <li><b>Sortiert und gefiltert wird am Server</b> — die Zeilen stehen in der Reihenfolge der
  *       Antwort, neueste zuerst.</li>
+ *   <li><b>Das Kennzeichen „Intern" steht hinter dem Datum</b> (Issue #233), in der Spalte, die
+ *       das Angebot benennt — keine eigene Spalte, die bei 768 px der Summe den Platz nimmt. In
+ *       „Summe" steht dann ein Strich, und der haengt am Kennzeichen und nicht an einer 0 vom
+ *       Server (Plan #218, E16): Menge und Preis bleiben beim Wechsel extern -> intern erhalten,
+ *       eine 0 behauptete, es gaebe sie nicht.</li>
  *   <li><b>Veraltete Antworten fallen weg</b>: Wer schnell zwischen zwei Filtern wechselt, sieht
  *       die Antwort des letzten, auch wenn die des vorigen spaeter eintrifft.</li>
  * </ul>
@@ -47,6 +53,9 @@ const LEER_ALLE = 'Es gibt noch kein Angebot. Angebote entstehen auf der Seite i
 const LEER_GEFILTERT = 'In diesem Status gibt es kein Angebot.';
 
 const SPALTEN: readonly string[] = ['Datum', 'Firma', 'Status', 'Summe'];
+
+/** Was in „Summe" steht, wenn es keinen Betrag gibt (Halbgeviertstrich). */
+const OHNE_BETRAG = '\u2013';
 
 /** Was die Ansicht gerade weiss. */
 type Stand =
@@ -71,7 +80,16 @@ function Zeile({ angebot }: { readonly angebot: AngebotUebersichtZeile }) {
   } as const;
   return (
     <Box component="tr">
-      <Box component="td" sx={{ fontWeight: 500, whiteSpace: 'nowrap' }}>
+      <Box
+        component="td"
+        sx={{
+          fontWeight: 500,
+          whiteSpace: 'nowrap',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+        }}
+      >
         <Box
           component={RouterLink}
           to={`/angebote/${String(angebot.id)}`}
@@ -83,6 +101,7 @@ function Zeile({ angebot }: { readonly angebot: AngebotUebersichtZeile }) {
         >
           {tagWort(angebot.angebotDatum)}
         </Box>
+        {angebot.intern ? <InternChip /> : null}
       </Box>
       <Box component="td">
         <Box
@@ -104,7 +123,7 @@ function Zeile({ angebot }: { readonly angebot: AngebotUebersichtZeile }) {
         className={ZAHLEN_KLASSE}
         sx={{ fontWeight: 600, whiteSpace: 'nowrap', textAlign: 'right' }}
       >
-        {euro(angebot.summeInCent)}
+        {angebot.intern ? OHNE_BETRAG : euro(angebot.summeInCent)}
       </Box>
     </Box>
   );

@@ -22,6 +22,14 @@ const AELTER: AngebotZeile = {
   summeInCent: 250003,
 };
 
+const INTERN: AngebotZeile = {
+  id: 14,
+  angebotDatum: '2026-09-28',
+  status: 'LAEUFT',
+  intern: true,
+  summeInCent: 0,
+};
+
 function renderListe(angebote: readonly AngebotZeile[]) {
   return renderMitTheme(
     <MemoryRouter>
@@ -78,5 +86,34 @@ describe('Angebotsliste (Kriterium 7)', () => {
 
     expect(screen.getByRole('status')).toHaveTextContent('Noch kein Angebot');
     expect(screen.queryByRole('table')).not.toBeInTheDocument();
+  });
+});
+
+describe('Angebotsliste — Kennzeichen intern und Strich in der Summe (Issue #233)', () => {
+  it('zeigt am internen Angebot den Chip „Intern" und in der Spalte „Summe" den Strich', () => {
+    renderListe([INTERN]);
+
+    const zeile = within(screen.getAllByRole('row')[1]);
+    expect(zeile.getByText('Intern')).toBeInTheDocument();
+    expect(zeile.getByText('\u2013')).toBeInTheDocument();
+    expect(zeile.queryByText(/€/)).not.toBeInTheDocument();
+  });
+
+  it('zeigt am externen Angebot keinen Chip „Intern", sondern seinen Betrag', () => {
+    renderListe([AELTER]);
+
+    const zeile = within(screen.getAllByRole('row')[1]);
+    expect(zeile.queryByText('Intern')).not.toBeInTheDocument();
+    expect(zeile.getByText('2.500,03 €')).toBeInTheDocument();
+  });
+
+  it('zeigt den Strich auch bei gespeicherter Summe ueber 0 (E16)', () => {
+    // Menge und Preis bleiben beim Wechsel extern -> intern erhalten; der Strich haengt am
+    // Kennzeichen, nicht an einer 0 vom Server.
+    renderListe([{ ...INTERN, summeInCent: 450000 }]);
+
+    const zeile = within(screen.getAllByRole('row')[1]);
+    expect(zeile.getByText('\u2013')).toBeInTheDocument();
+    expect(zeile.queryByText('4.500,00 €')).not.toBeInTheDocument();
   });
 });

@@ -7,6 +7,7 @@ import { euro } from '../lib/geld';
 import { tagWort } from '../lib/tag';
 import { ZAHLEN_KLASSE } from '../theme';
 import AngebotsstatusChip from './AngebotsstatusChip';
+import InternChip from './InternChip';
 import Tafel from './Tafel';
 
 /**
@@ -18,15 +19,36 @@ import Tafel from './Tafel';
  * <b>Der Weg liegt auf dem Datum, nicht auf der Zeile.</b> Eine ganze Tabellenzeile klickbar zu
  * machen hiesse, ein `tr` mit `onClick` zu versehen — kein Ziel des Tabulators und fuer den
  * Screenreader kein Weg. Ein Angebot hat keine Nummer; das Datum ist, was es in der Liste benennt.
+ *
+ * <b>Das Kennzeichen „Intern" steht hinter dem Datum</b> (Issue #233) — in der Spalte, die das
+ * Angebot benennt, und nicht in einer sechsten Spalte, die bei 768 px der Summe den Platz nimmt.
+ *
+ * <b>Der Strich in „Summe" haengt am Kennzeichen, nicht an einer 0 vom Server</b> (Plan #218, E16).
+ * Menge und Preis bleiben beim Wechsel extern -> intern erhalten, der Server liefert die
+ * gespeicherte Summe weiter; eine 0 zu zeigen behauptete, es gaebe sie nicht. Der Halbgeviertstrich
+ * steht in derselben Zelle mit denselben Formatangaben wie der Betrag: Eine leere Zelle liest sich
+ * fuer den Screenreader wie eine fehlende Angabe, der Strich sagt „hier gibt es keinen Betrag".
  */
 
 const SPALTEN = ['Datum', 'Status', 'Summe'] as const;
 const LEER = 'Noch kein Angebot an diese Firma.';
 
+/** Was in „Summe" steht, wenn es keinen Betrag gibt (Halbgeviertstrich). */
+const OHNE_BETRAG = '\u2013';
+
 function Zeile({ angebot }: { readonly angebot: AngebotZeile }) {
   return (
     <Box component="tr">
-      <Box component="td" sx={{ fontWeight: 500, whiteSpace: 'nowrap' }}>
+      <Box
+        component="td"
+        sx={{
+          fontWeight: 500,
+          whiteSpace: 'nowrap',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+        }}
+      >
         <Box
           component={RouterLink}
           to={`/angebote/${String(angebot.id)}`}
@@ -39,6 +61,7 @@ function Zeile({ angebot }: { readonly angebot: AngebotZeile }) {
         >
           {tagWort(angebot.angebotDatum)}
         </Box>
+        {angebot.intern ? <InternChip /> : null}
       </Box>
       <Box component="td">
         <AngebotsstatusChip status={angebot.status} />
@@ -48,7 +71,7 @@ function Zeile({ angebot }: { readonly angebot: AngebotZeile }) {
         className={ZAHLEN_KLASSE}
         sx={{ fontWeight: 600, whiteSpace: 'nowrap', textAlign: 'right' }}
       >
-        {euro(angebot.summeInCent)}
+        {angebot.intern ? OHNE_BETRAG : euro(angebot.summeInCent)}
       </Box>
     </Box>
   );

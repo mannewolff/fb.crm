@@ -28,6 +28,16 @@ const AELTER = {
   summe: 2500.03,
 };
 
+const INTERN = {
+  id: 14,
+  firmaId: 7,
+  firmaName: 'Caesar KG',
+  angebotDatum: '2026-09-28',
+  status: 'LAEUFT',
+  intern: true,
+  summe: 0,
+};
+
 /** Die Adresse samt Suchteil — dort steht der Filter. */
 function Adresse() {
   const ort = useLocation();
@@ -222,5 +232,65 @@ describe('AngebotePage — leer, Ausfall, Laden', () => {
     renderSeite();
 
     expect(screen.getByText('Angebote werden geladen …')).toBeInTheDocument();
+  });
+});
+
+describe('AngebotePage — Kennzeichen intern und Strich in der Summe (Issue #233)', () => {
+  it('zeigt am internen Angebot den Chip „Intern" und in der Spalte „Summe" den Strich', async () => {
+    fetchNachPfad({ 'GET /api/angebote': json(200, { angebote: [INTERN] }) });
+
+    renderSeite();
+
+    const tafel = within(await screen.findByRole('table', { name: 'Angebote' }));
+    const zeile = within(tafel.getAllByRole('row')[1]);
+    expect(zeile.getByText('Intern')).toBeInTheDocument();
+    expect(zeile.getByText('\u2013')).toBeInTheDocument();
+    expect(zeile.queryByText(/€/)).not.toBeInTheDocument();
+  });
+
+  it('zeigt am externen Angebot keinen Chip „Intern", sondern seinen Betrag', async () => {
+    fetchNachPfad({ 'GET /api/angebote': json(200, { angebote: [JUENGER] }) });
+
+    renderSeite();
+
+    const tafel = within(await screen.findByRole('table', { name: 'Angebote' }));
+    const zeile = within(tafel.getAllByRole('row')[1]);
+    expect(zeile.queryByText('Intern')).not.toBeInTheDocument();
+    expect(zeile.getByText('1.200,00 €')).toBeInTheDocument();
+  });
+
+  it('zeigt den Strich auch bei gespeicherter Summe ueber 0 (E16)', async () => {
+    // Menge und Preis bleiben beim Wechsel extern -> intern erhalten; der Strich haengt am
+    // Kennzeichen, nicht an einer 0 vom Server.
+    fetchNachPfad({ 'GET /api/angebote': json(200, { angebote: [{ ...INTERN, summe: 4500 }] }) });
+
+    renderSeite();
+
+    const tafel = within(await screen.findByRole('table', { name: 'Angebote' }));
+    const zeile = within(tafel.getAllByRole('row')[1]);
+    expect(zeile.getByText('\u2013')).toBeInTheDocument();
+    expect(zeile.queryByText('4.500,00 €')).not.toBeInTheDocument();
+  });
+
+  it('ruft mit dem Filter „Laeuft" nur die laufenden ab und haelt ihn in der Adresse', async () => {
+    const nutzer = userEvent.setup();
+    const fetchMock = fetchNachPfad({
+      'GET /api/angebote': json(200, { angebote: [JUENGER, INTERN] }),
+      'GET /api/angebote?status=LAEUFT': json(200, { angebote: [INTERN] }),
+    });
+
+    renderSeite();
+    await screen.findByRole('link', { name: '26.09.2026' });
+    await nutzer.selectOptions(screen.getByRole('combobox', { name: 'Status' }), 'LAEUFT');
+
+    expect(await screen.findByTestId('adresse')).toHaveTextContent('/angebote?status=LAEUFT');
+    await vi.waitFor(() => {
+      expect(screen.queryByRole('link', { name: '26.09.2026' })).not.toBeInTheDocument();
+    });
+    expect(screen.getByRole('link', { name: '28.09.2026' })).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/angebote?status=LAEUFT',
+      expect.objectContaining({ method: 'GET' }),
+    );
   });
 });
