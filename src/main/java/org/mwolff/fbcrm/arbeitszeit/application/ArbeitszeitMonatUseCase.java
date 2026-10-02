@@ -60,6 +60,10 @@ public class ArbeitszeitMonatUseCase {
   /**
    * Die Eintraege eines Monats nach Tagen, jeder mit seiner Summe, dazu die des Monats.
    *
+   * <p>Die Monatssumme kommt zusaetzlich aufgeteilt in den Teil fuer Kunden und den internen (Issue
+   * #230, Kriterium 10 von #207). Beide entstehen wie die Gesamtsumme aus addierten Minuten; die
+   * Tagessummen bleiben ungeteilt.
+   *
    * @param gewaehlt der gesuchte Monat, oder leer fuer den laufenden
    * @throws AngebotNichtGefunden wenn ein gebuchtes Angebot im Bestand fehlt
    * @throws FirmaNichtGefunden wenn die Firma eines beteiligten Angebots fehlt
@@ -69,12 +73,40 @@ public class ArbeitszeitMonatUseCase {
         gewaehlt.orElseGet(() -> YearMonth.now(clock.withZone(Geschaeftszone.ZONE)));
     final List<Zeiteintrag> eintraege = zeiten.findImZeitraum(monat.atDay(1), monat.atEndOfMonth());
     if (eintraege.isEmpty()) {
-      return new Arbeitsmonat(monat, List.of(), Zeiteintrag.stundenAus(0L));
+      final BigDecimal nichts = Zeiteintrag.stundenAus(0L);
+      return new Arbeitsmonat(monat, List.of(), nichts, nichts, nichts);
     }
     final Map<Long, Buchungsposition> positionen =
         Buchungspositionen.beschreibe(
             angebote.findAlle(Optional.empty()), kennungen(eintraege), firmen);
-    return new Arbeitsmonat(monat, tage(eintraege, positionen), summe(eintraege));
+    return new Arbeitsmonat(
+        monat,
+        tage(eintraege, positionen),
+        summe(eintraege),
+        summeDerArt(eintraege, positionen, false),
+        summeDerArt(eintraege, positionen, true));
+  }
+
+  /*
+   * Je Teil ein eigener Durchlauf und nicht eine Aufteilung in zwei Listen: Das Ergebnis ist
+   * dasselbe, und die Summe bleibt die eine Rechnung aus summe(...) ohne Zwischenstand, der leer
+   * sein koennte.
+   */
+  private static BigDecimal summeDerArt(
+      final List<Zeiteintrag> eintraege,
+      final Map<Long, Buchungsposition> positionen,
+      final boolean intern) {
+    return summe(
+        eintraege.stream().filter(eintrag -> istIntern(eintrag, positionen) == intern).toList());
+  }
+
+  /*
+   * Dieselbe Zusage wie in buchungen(): Buchungspositionen.beschreibe liefert jede angefragte
+   * Kennung oder wirft, und requireNonNull schreibt das an der Nahtstelle hin.
+   */
+  private static boolean istIntern(
+      final Zeiteintrag eintrag, final Map<Long, Buchungsposition> positionen) {
+    return Objects.requireNonNull(positionen.get(eintrag.angebotPositionId())).intern();
   }
 
   private static Set<Long> kennungen(final List<Zeiteintrag> eintraege) {

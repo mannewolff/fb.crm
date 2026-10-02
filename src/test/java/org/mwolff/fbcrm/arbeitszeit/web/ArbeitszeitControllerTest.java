@@ -243,7 +243,9 @@ class ArbeitszeitControllerTest {
         List.of(
             new Arbeitstag(
                 TAG, List.of(new Zeitbuchung(eintrag(), position())), new BigDecimal("1.75"))),
-        new BigDecimal("1.75"));
+        new BigDecimal("1.75"),
+        new BigDecimal("1.00"),
+        new BigDecimal("0.75"));
   }
 
   @Test
@@ -256,6 +258,8 @@ class ArbeitszeitControllerTest {
         .perform(get(PFAD).param("monat", "2026-11"))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.stunden").value(1.75))
+        .andExpect(jsonPath("$.stundenFuerKunden").value(1.00))
+        .andExpect(jsonPath("$.stundenIntern").value(0.75))
         .andExpect(jsonPath("$.tage[0].stunden").value(1.75))
         .andExpect(jsonPath("$.tage[0].eintraege[0].id").value(Long.valueOf(EINTRAG)))
         .andExpect(jsonPath("$.tage[0].eintraege[0].stunden").value(1.75))

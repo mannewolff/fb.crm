@@ -22,6 +22,10 @@ import org.mwolff.fbcrm.arbeitszeit.domain.Zeiteintrag;
  * laufenden bekommt (E4) — ohne diese Angabe muesste die Ansicht die Geschaeftszone selbst
  * nachrechnen.
  *
+ * <p><b>Die Monatssumme kommt aufgeteilt mit</b> (Issue #230, Kriterium 10 von #207): {@code
+ * stunden} ist die Summe der zwei Teile, und die Ansicht zeigt sie darunter. Die Tage teilen nicht
+ * auf.
+ *
  * <p><b>Die Zeile traegt ihren Tag ein zweites Mal</b>, obwohl sie unter ihm steht. Das ist
  * Absicht: Der Dialog zum Aendern bekommt die Zeile allein uebergeben und braucht den Tag als
  * Vorbelegung.
@@ -29,13 +33,24 @@ import org.mwolff.fbcrm.arbeitszeit.domain.Zeiteintrag;
  * @param monat der Monat, den diese Liste zeigt
  * @param tage die Tage mit Eintraegen, aufsteigend; ein Tag ohne Eintrag fehlt
  * @param stunden die Summe des Monats
+ * @param stundenFuerKunden der Teil davon, der auf Angebote an Kunden gebucht ist
+ * @param stundenIntern der Teil davon, der auf interne Angebote gebucht ist
  */
-public record ArbeitszeitMonatResponse(YearMonth monat, List<Tageszeile> tage, BigDecimal stunden) {
+public record ArbeitszeitMonatResponse(
+    YearMonth monat,
+    List<Tageszeile> tage,
+    BigDecimal stunden,
+    BigDecimal stundenFuerKunden,
+    BigDecimal stundenIntern) {
 
   /** Derselbe Monat in der Sprache der Schnittstelle. */
   static ArbeitszeitMonatResponse of(final Arbeitsmonat gelesen) {
     return new ArbeitszeitMonatResponse(
-        gelesen.monat(), gelesen.tage().stream().map(Tageszeile::of).toList(), gelesen.stunden());
+        gelesen.monat(),
+        gelesen.tage().stream().map(Tageszeile::of).toList(),
+        gelesen.stunden(),
+        gelesen.stundenFuerKunden(),
+        gelesen.stundenIntern());
   }
 
   /**

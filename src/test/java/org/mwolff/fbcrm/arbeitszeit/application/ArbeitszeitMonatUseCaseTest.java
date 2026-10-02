@@ -60,6 +60,11 @@ class ArbeitszeitMonatUseCaseTest {
 
   private static final long FREMDE_POSITION = 201L;
 
+  /** Ein internes Angebot derselben Firma, samt seiner Position. */
+  private static final long INTERNES_ANGEBOT = 13L;
+
+  private static final long INTERNE_POSITION = 301L;
+
   @Mock private ZeiteintragRepository zeiten;
   @Mock private AngebotRepository angebote;
   @Mock private FirmaRepository firmen;
@@ -119,6 +124,38 @@ class ArbeitszeitMonatUseCaseTest {
         Zeitdoppel.FRUEHER);
   }
 
+  /** Ein internes Angebot derselben Firma mit einer buchbaren Position (Issue #229). */
+  private static Angebot internesAngebot() {
+    return new Angebot(
+        Long.valueOf(INTERNES_ANGEBOT),
+        Zeitdoppel.FIRMA,
+        null,
+        true,
+        Angebotsstatus.LAEUFT,
+        ERSTER,
+        "Eigene Werkzeuge",
+        List.of(
+            new Angebotsposition(
+                Long.valueOf(INTERNE_POSITION),
+                "Werkzeugbau",
+                Abrechnungsmodus.AUFWAND,
+                new BigDecimal("8.00"),
+                Einheit.STUNDE,
+                BigDecimal.ZERO)),
+        Zeitdoppel.FRUEHER,
+        Zeitdoppel.FRUEHER);
+  }
+
+  /** Ein Eintrag auf der internen Position, am Tag des Beispiels. */
+  private static Zeiteintrag intern(final long id, final String von, final String bis) {
+    return Zeitdoppel.zeiteintrag(id, INTERNE_POSITION, von, bis);
+  }
+
+  private void beideAngeboteGibtEs() {
+    when(angebote.findAlle(Optional.empty()))
+        .thenReturn(List.of(Zeitdoppel.angebot(), internesAngebot()));
+  }
+
   private Arbeitsmonat november() {
     return useCase.monat(Optional.of(NOVEMBER));
   }
@@ -135,6 +172,8 @@ class ArbeitszeitMonatUseCaseTest {
     assertThat(gelesen.monat()).isEqualTo(NOVEMBER);
     assertThat(gelesen.tage()).isEmpty();
     assertThat(gelesen.stunden()).isEqualByComparingTo("0.00");
+    assertThat(gelesen.stundenFuerKunden()).isEqualByComparingTo("0.00");
+    assertThat(gelesen.stundenIntern()).isEqualByComparingTo("0.00");
     verifyNoInteractions(angebote, firmen);
   }
 
@@ -270,6 +309,62 @@ class ArbeitszeitMonatUseCaseTest {
     // Then
     assertThat(gelesen.tage()).hasSize(1);
     verify(firmen).findAllById(Set.of(Zeitdoppel.FIRMA));
+  }
+
+  @Test
+  void monat_whenBothKindsAreBooked_thenTheMonthSumSplitsIntoCustomerAndInternal() {
+    // Given — Kriterium 10 von #207: 1,75 Std. fuer einen Kunden und 1,00 Std. intern, an
+    // demselben Tag. Der Tag teilt nicht auf, der Monat schon.
+    imNovemberLiegen(
+        Zeitdoppel.zeiteintrag(7L, Zeitdoppel.KONZEPTION_ID, "09:00", "10:45"),
+        intern(10L, "11:00", "12:00"));
+    beideAngeboteGibtEs();
+    dieFirmaGibtEs();
+
+    // When
+    final Arbeitsmonat gelesen = november();
+
+    // Then
+    assertThat(gelesen.stunden()).isEqualByComparingTo("2.75");
+    assertThat(gelesen.stundenFuerKunden()).isEqualByComparingTo("1.75");
+    assertThat(gelesen.stundenIntern()).isEqualByComparingTo("1.00");
+    assertThat(gelesen.stunden())
+        .isEqualByComparingTo(gelesen.stundenFuerKunden().add(gelesen.stundenIntern()));
+    // Und die Tagessumme bleibt die ungeteilte des Tages mit beiden Arten.
+    assertThat(gelesen.tage()).hasSize(1);
+    assertThat(gelesen.tage().get(0).stunden()).isEqualByComparingTo("2.75");
+  }
+
+  @Test
+  void monat_whenOnlyInternalWorkIsBooked_thenTheCustomerShareIsZero() {
+    // Given
+    imNovemberLiegen(intern(10L, "11:00", "12:00"));
+    beideAngeboteGibtEs();
+    dieFirmaGibtEs();
+
+    // When
+    final Arbeitsmonat gelesen = november();
+
+    // Then
+    assertThat(gelesen.stundenFuerKunden()).isEqualByComparingTo("0.00");
+    assertThat(gelesen.stundenIntern()).isEqualByComparingTo(gelesen.stunden());
+    assertThat(gelesen.stunden()).isEqualByComparingTo("1.00");
+  }
+
+  @Test
+  void monat_whenOnlyCustomerWorkIsBooked_thenTheInternalShareIsZero() {
+    // Given
+    imNovemberLiegen(Zeitdoppel.zeiteintrag(7L, Zeitdoppel.KONZEPTION_ID, "09:00", "10:45"));
+    dasAngebotGibtEs();
+    dieFirmaGibtEs();
+
+    // When
+    final Arbeitsmonat gelesen = november();
+
+    // Then
+    assertThat(gelesen.stundenIntern()).isEqualByComparingTo("0.00");
+    assertThat(gelesen.stundenFuerKunden()).isEqualByComparingTo(gelesen.stunden());
+    assertThat(gelesen.stunden()).isEqualByComparingTo("1.75");
   }
 
   @Test

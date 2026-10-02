@@ -367,6 +367,10 @@ class ArbeitszeitControllerIT extends AbstractIntegrationTest {
     assertThat(gelesen.tage().get(0).stunden()).isEqualByComparingTo("3.75");
     assertThat(gelesen.tage().get(1).stunden()).isEqualByComparingTo("2.00");
     assertThat(gelesen.stunden()).isEqualByComparingTo("5.75");
+    // Und die Aufteilung der Monatssumme (Issue #230): hier ist alles auf ein Kundenangebot
+    // gebucht, also traegt der Kundenteil die ganze Summe und der interne nichts.
+    assertThat(gelesen.stundenFuerKunden()).isEqualByComparingTo("5.75");
+    assertThat(gelesen.stundenIntern()).isEqualByComparingTo("0.00");
   }
 
   @Test
@@ -380,6 +384,8 @@ class ArbeitszeitControllerIT extends AbstractIntegrationTest {
     // Then
     assertThat(gelesen.monat()).isEqualTo(YearMonth.now(Geschaeftszone.ZONE));
     assertThat(gelesen.stunden()).isEqualByComparingTo(BigDecimal.ZERO);
+    assertThat(gelesen.stundenFuerKunden()).isEqualByComparingTo(BigDecimal.ZERO);
+    assertThat(gelesen.stundenIntern()).isEqualByComparingTo(BigDecimal.ZERO);
   }
 
   @Test
