@@ -44,6 +44,6 @@ class AnsprechpartnerEmailConstraintTest {
   @Test
   void message_thenNamesTheExpectedForm() {
     // When / Then — K6: die Antwort soll sagen, woran es lag, nicht nur dass es lag.
-    assertThat(AnsprechpartnerEmailConstraint.MESSAGE).contains("@");
+    assertThat(AnsprechpartnerEmailConstraint.MELDUNG).contains("@");
   }
 }

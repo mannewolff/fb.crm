@@ -2,6 +2,7 @@ package org.mwolff.fbcrm.auth.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
+import static org.assertj.core.api.Assertions.assertThatNoException;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -230,7 +231,7 @@ class ConfirmPasswordResetUseCaseTest {
     gueltigerToken();
 
     // When / Then — kein Wurf heisst: die Seite darf ein Formular zeigen.
-    einloesung.ensureRedeemable(TOKEN);
+    assertThatNoException().isThrownBy(() -> einloesung.ensureRedeemable(TOKEN));
   }
 
   @Test

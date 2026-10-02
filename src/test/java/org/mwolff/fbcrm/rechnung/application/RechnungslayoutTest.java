@@ -437,8 +437,9 @@ class RechnungslayoutTest {
             .filter(zeile -> !"Einzelpreis".equals(zeile))
             .filter(zeile -> !"Gesamtpreis".equals(zeile))
             .toList();
-    assertThat(zeilen).hasSizeGreaterThan(3);
-    assertThat(zeilen).allSatisfy(zeile -> assertThat(zeile.length()).isLessThanOrEqualTo(41));
+    assertThat(zeilen)
+        .hasSizeGreaterThan(3)
+        .allSatisfy(zeile -> assertThat(zeile.length()).isLessThanOrEqualTo(41));
     assertThat(String.join("", zeilen).replace(" ", ""))
         .isEqualTo(lang.get(0).text().replace(" ", ""));
   }

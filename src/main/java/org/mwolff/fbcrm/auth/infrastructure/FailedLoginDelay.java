@@ -3,6 +3,7 @@ package org.mwolff.fbcrm.auth.infrastructure;
 import java.security.SecureRandom;
 import java.time.Duration;
 import java.util.Random;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 /**
@@ -23,7 +24,8 @@ public class FailedLoginDelay {
 
   private final Random random;
 
-  /** Nutzt die Zufallsquelle der Plattform. */
+  /** Nutzt die Zufallsquelle der Plattform; dies ist der Konstruktor fuer den Container. */
+  @Autowired
   public FailedLoginDelay() {
     this(new SecureRandom());
   }
@@ -47,8 +49,8 @@ public class FailedLoginDelay {
   @SuppressWarnings("PMD.DoNotUseThreads")
   public void apply() {
     try {
-      Thread.sleep(Duration.ofMillis(MIN_MS + random.nextInt(SPANNE)));
-    } catch (final InterruptedException unterbrochen) {
+      Thread.sleep(Duration.ofMillis((long) MIN_MS + random.nextInt(SPANNE)));
+    } catch (InterruptedException _) {
       Thread.currentThread().interrupt();
     }
   }

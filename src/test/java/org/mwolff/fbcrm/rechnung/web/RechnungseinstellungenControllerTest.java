@@ -232,6 +232,6 @@ class RechnungseinstellungenControllerTest {
   void message_thenNamesThePlaceholders() {
     // When / Then — die Meldung soll sagen, woran es lag; ohne die Platzhalter muesste der
     // Benutzer raten.
-    assertThat(NummernmusterConstraint.MESSAGE).contains("{NNNN}");
+    assertThat(NummernmusterConstraint.MELDUNG).contains("{NNNN}");
   }
 }

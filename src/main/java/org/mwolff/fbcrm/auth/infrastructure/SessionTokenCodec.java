@@ -90,7 +90,7 @@ public final class SessionTokenCodec implements SessionTokens {
     try {
       payload = DECODER.decode(teile[0]);
       signature = DECODER.decode(teile[1]);
-    } catch (final IllegalArgumentException unlesbar) {
+    } catch (IllegalArgumentException _) {
       return new SessionTokenDecoding.Malformed();
     }
     if (payload.length != PAYLOAD_BYTES) {

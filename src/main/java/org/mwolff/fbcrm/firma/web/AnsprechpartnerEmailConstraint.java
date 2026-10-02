@@ -33,10 +33,10 @@ import org.jspecify.annotations.Nullable;
 public @interface AnsprechpartnerEmailConstraint {
 
   /** Der Text, den eine Eingabe ohne diese Form zurueckbekommt — er nennt die erwartete Gestalt. */
-  String MESSAGE = "muss die Form name@beispiel.de haben";
+  String MELDUNG = "muss die Form name@beispiel.de haben";
 
   /** Die Meldung der Verletzung. */
-  String message() default MESSAGE;
+  String message() default MELDUNG;
 
   /** Validierungsgruppen; von Bean Validation verlangt. */
   Class<?>[] groups() default {};

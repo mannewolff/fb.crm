@@ -88,13 +88,9 @@ class AngebotsanlageUseCaseTest {
   private @Nullable Level vorherigeStufe;
 
   @BeforeEach
-  void baueDenAnwendungsfall() {
+  void richteDenTestEin() {
     useCase =
         new AngebotsanlageUseCase(angebote, anlagen, speicher, Clock.fixed(JETZT, ZoneOffset.UTC));
-  }
-
-  @BeforeEach
-  void haengeDichAnDasProtokoll() {
     protokoll =
         ((LoggerContext) LoggerFactory.getILoggerFactory())
             .getLogger(AngebotsanlageUseCase.class.getName());
@@ -109,20 +105,16 @@ class AngebotsanlageUseCaseTest {
    * Die Stufe wird zurueckgesetzt, nicht nur der Appender abgehaengt: Ein Logger gehoert der ganzen
    * JVM, und ein zurueckgelassenes TRACE flutete jeden folgenden Test der Suite (Muster
    * OutboxDispatcherTest).
+   *
+   * <p>Danach die Synchronisation: Sie liegt in einem ThreadLocal und ueberlebte den Test, den sie
+   * eroeffnet hat. Die Abfrage davor ist Aufraeumen und keine Logik um eine Behauptung: Nur ein
+   * Test eroeffnet sie.
    */
   @AfterEach
-  void loeseDichWiederAb() {
+  void raeumeDenTestAuf() {
     protokoll.setLevel(vorherigeStufe);
     protokoll.detachAppender(mitgeschrieben);
     mitgeschrieben.stop();
-  }
-
-  /*
-   * Die Synchronisation liegt in einem ThreadLocal und ueberlebte den Test, den sie eroeffnet hat.
-   * Die Abfrage davor ist Aufraeumen und keine Logik um eine Behauptung: Nur ein Test eroeffnet sie.
-   */
-  @AfterEach
-  void schliesseDieTransaktion() {
     if (TransactionSynchronizationManager.isSynchronizationActive()) {
       TransactionSynchronizationManager.clearSynchronization();
     }

@@ -70,7 +70,7 @@ class S3AnlageSpeicher implements AnlageSpeicher {
     try {
       return Optional.of(
           s3.getObject(GetObjectRequest.builder().bucket(bucket).key(objektSchluessel).build()));
-    } catch (final NoSuchKeyException unbekannt) {
+    } catch (NoSuchKeyException _) {
       return Optional.empty();
     } catch (final SdkException ausfall) {
       throw new AnlageSpeicherAusfall("Der Objektspeicher gab die Anlage nicht heraus.", ausfall);

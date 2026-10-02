@@ -56,7 +56,7 @@ class EmailRepeatConstraintTest {
   private static List<String> wiederholungsFehler(final SetupRequest anfrage) {
     return validator.validate(anfrage).stream()
         .map(ConstraintViolation::getMessage)
-        .filter(EmailRepeatConstraint.MESSAGE::equals)
+        .filter(EmailRepeatConstraint.MELDUNG::equals)
         .toList();
   }
 
@@ -84,7 +84,7 @@ class EmailRepeatConstraintTest {
   void validate_givenADifferentRepeat_thenTheMessageNamesWhatIsExpected() {
     // When / Then
     assertThat(wiederholungsFehler(anfrage(MAIL, "vertippt@example.org")))
-        .containsExactly(EmailRepeatConstraint.MESSAGE);
+        .containsExactly(EmailRepeatConstraint.MELDUNG);
   }
 
   @Test

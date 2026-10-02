@@ -212,7 +212,7 @@ class SetupControllerIT extends AbstractIntegrationTest {
         richteEin(rest, rumpf(MAIL, MAIL, "1234567", SCHLUESSEL));
 
     // Then
-    assertThat(antwort.getBody()).contains(PasswordConstraint.MESSAGE);
+    assertThat(antwort.getBody()).contains(PasswordConstraint.MELDUNG);
   }
 
   @Test

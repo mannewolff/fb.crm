@@ -24,7 +24,7 @@ class GeschaeftszoneTest {
   @Test
   void zone_thenEuropeBerlin() {
     // When / Then
-    assertThat(Geschaeftszone.ZONE).isEqualTo(ZoneId.of("Europe/Berlin"));
+    assertThat(ZoneId.of("Europe/Berlin")).isEqualTo(Geschaeftszone.ZONE);
   }
 
   @Test

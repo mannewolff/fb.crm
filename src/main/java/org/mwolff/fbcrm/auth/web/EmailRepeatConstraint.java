@@ -37,10 +37,10 @@ public @interface EmailRepeatConstraint {
   String FIELD = "emailRepeat";
 
   /** Der Text, den eine abweichende Wiederholung zurueckbekommt. */
-  String MESSAGE = "muss der E-Mail-Adresse entsprechen";
+  String MELDUNG = "muss der E-Mail-Adresse entsprechen";
 
   /** Die Meldung der Verletzung. */
-  String message() default MESSAGE;
+  String message() default MELDUNG;
 
   /** Validierungsgruppen; von Bean Validation verlangt. */
   Class<?>[] groups() default {};

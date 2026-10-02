@@ -33,10 +33,10 @@ public @interface PasswordConstraint {
   int MIN_LENGTH = 8;
 
   /** Der Text, den eine zu kurze Eingabe zurueckbekommt — er nennt die Mindestlaenge. */
-  String MESSAGE = "muss mindestens " + MIN_LENGTH + " Zeichen lang sein";
+  String MELDUNG = "muss mindestens " + MIN_LENGTH + " Zeichen lang sein";
 
   /** Die Meldung der Verletzung. */
-  String message() default MESSAGE;
+  String message() default MELDUNG;
 
   /** Validierungsgruppen; von Bean Validation verlangt. */
   Class<?>[] groups() default {};

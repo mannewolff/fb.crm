@@ -35,12 +35,12 @@ import org.mwolff.fbcrm.rechnung.domain.Nummernmuster;
 public @interface NummernmusterConstraint {
 
   /** Der Text, den eine Eingabe ohne diese Form zurueckbekommt — er nennt die Platzhalter. */
-  String MESSAGE =
+  String MELDUNG =
       "muss genau einen Platzhalter fuer die Nummer enthalten, etwa {NNNN}-{JJJJ}, und hoechstens"
           + " einen fuer das Jahr ({JJJJ} oder {JJ})";
 
   /** Die Meldung der Verletzung. */
-  String message() default MESSAGE;
+  String message() default MELDUNG;
 
   /** Validierungsgruppen; von Bean Validation verlangt. */
   Class<?>[] groups() default {};

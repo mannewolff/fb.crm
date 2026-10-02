@@ -363,8 +363,9 @@ class RechnungEntwurfIT extends AbstractIntegrationTest {
         ruf("/api/rechnungen/abrechenbare-angebote", HttpMethod.GET, null, String.class).getBody();
 
     // Then
-    assertThat(antwort).contains("\"angebotId\":" + offenes);
-    assertThat(antwort).doesNotContain("\"angebotId\":" + erledigtes);
+    assertThat(antwort)
+        .contains("\"angebotId\":" + offenes)
+        .doesNotContain("\"angebotId\":" + erledigtes);
   }
 
   @Test

@@ -42,6 +42,9 @@ class PasswordConstraintTest {
   @Test
   void message_thenNamesTheMinimumLength() {
     // When / Then — K6: die Antwort soll sagen, woran es lag, nicht nur dass es lag.
-    assertThat(PasswordConstraint.MESSAGE).contains(String.valueOf(PasswordConstraint.MIN_LENGTH));
+    // Die Meldung liegt im lokalen Wert: Als Konstante in assertThat liest Sonar sie als den
+    // erwarteten Wert (java:S3415), dabei ist sie das Gepruefte. Verketten geht hier nicht.
+    final String meldung = PasswordConstraint.MELDUNG;
+    assertThat(meldung).contains(String.valueOf(PasswordConstraint.MIN_LENGTH));
   }
 }
