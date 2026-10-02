@@ -112,6 +112,7 @@ final class Rechnungsdoppel {
         Long.valueOf(id),
         FIRMA,
         null,
+        status.intern(),
         status,
         ANGEBOTSDATUM,
         "Neugestaltung der Website",

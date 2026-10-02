@@ -163,6 +163,7 @@ class StartseiteUseCaseTest {
             Long.valueOf(id),
             FIRMA,
             null,
+            status.intern(),
             status,
             ANGEBOTSDATUM,
             "Neugestaltung der Website",

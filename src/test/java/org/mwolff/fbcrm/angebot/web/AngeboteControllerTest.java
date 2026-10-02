@@ -55,6 +55,7 @@ class AngeboteControllerTest {
             Long.valueOf(id),
             3L,
             null,
+            status.intern(),
             status,
             LocalDate.of(2026, 9, 20),
             null,
@@ -87,9 +88,24 @@ class AngeboteControllerTest {
         .andExpect(jsonPath("$.angebote[0].firmaId").value(3))
         .andExpect(jsonPath("$.angebote[0].firmaName").value("Adler AG"))
         .andExpect(jsonPath("$.angebote[0].status").value("BESTELLT"))
+        .andExpect(jsonPath("$.angebote[0].intern").value(false))
         .andExpect(jsonPath("$.angebote[0].summe").value(2500.03))
         .andExpect(jsonPath("$.angebote[1].id").value(11))
         .andExpect(jsonPath("$.angebote[1].status").value("ANGELEGT"));
+  }
+
+  @Test
+  void angebote_givenInternalWork_thenTheRowCarriesTheFlag() throws Exception {
+    // Given — Issue #226, Kriterium 2: die Uebersicht nennt die Art jeder Zeile.
+    when(uebersicht.angebote(Optional.empty()))
+        .thenReturn(List.of(zeile(12L, Angebotsstatus.LAEUFT)));
+
+    // When / Then
+    mockMvc
+        .perform(get("/api/angebote"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.angebote[0].intern").value(true))
+        .andExpect(jsonPath("$.angebote[0].status").value("LAEUFT"));
   }
 
   @Test

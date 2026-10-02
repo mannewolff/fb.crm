@@ -22,6 +22,9 @@ import org.mwolff.fbcrm.common.Einheit;
  * <p>Die Summe ist die Summe der <b>gerundeten</b> Positionsbetraege und nicht die gerundete Summe
  * der ungerundeten — deshalb stehen unten zwei Positionen, deren Einzelrundungen sich zu einem
  * anderen Wert addieren als die Rundung ihrer Summe.
+ *
+ * <p><b>Dazu die Art des Angebots</b> (Issue #226): Das Kennzeichen {@code intern} und der Status
+ * sagen dasselbe oder das Angebot entsteht nicht (E3), und {@code umgestellt} setzt beide zusammen.
  */
 class AngebotTest {
 
@@ -62,16 +65,37 @@ class AngebotTest {
     return angebot(status, List.of(KONZEPTION));
   }
 
+  /**
+   * Das Angebot zu einem Status — das Kennzeichen kommt aus dem Status.
+   *
+   * <p>Es ist nicht frei waehlbar: Die Invariante bindet beides aneinander, und ein Testdoppel, das
+   * sich daran nicht haelt, wirft schon beim Bauen. Wer die Abweisung prueft, baut darum von Hand.
+   */
   private static Angebot angebot(
       final Angebotsstatus status, final List<Angebotsposition> positionen) {
     return new Angebot(
         7L,
         3L,
         8L,
+        status.intern(),
         status,
         ANGEBOTSDATUM,
         "Neugestaltung der Website",
         positionen,
+        ANGELEGT,
+        ANGELEGT);
+  }
+
+  private static Angebot angebot(final boolean intern, final Angebotsstatus status) {
+    return new Angebot(
+        7L,
+        3L,
+        8L,
+        intern,
+        status,
+        ANGEBOTSDATUM,
+        "Neugestaltung der Website",
+        List.of(KONZEPTION),
         ANGELEGT,
         ANGELEGT);
   }
@@ -186,10 +210,14 @@ class AngebotTest {
   }
 
   @ParameterizedTest
-  @EnumSource(value = Angebotsstatus.class, mode = EnumSource.Mode.EXCLUDE, names = "ABGERECHNET")
+  @EnumSource(
+      value = Angebotsstatus.class,
+      mode = EnumSource.Mode.EXCLUDE,
+      names = {"ABGERECHNET", "LAEUFT", "ABGESCHLOSSEN"})
   void abgerechnet_givenAnyOtherStatus_thenJumpsStraightToAbgerechnet(final Angebotsstatus status) {
     // Given — #160, Kriterium 27: abgerechnet wird aus jedem Status erreicht, nicht Stufe fuer
-    // Stufe.
+    // Stufe. Die internen Status stehen hier nicht: Interne Arbeit wird nicht abgerechnet, und die
+    // Invariante weist den Sprung ab (#226).
 
     // When
     final Angebot abgerechnet = angebot(status).abgerechnet(JETZT);
@@ -219,6 +247,128 @@ class AngebotTest {
 
     // Then
     assertThat(nochmal).isEqualTo(angebot);
+  }
+
+  @Test
+  void konstruktor_givenInternWithAStatusOfTheCustomerOffer_thenRejected() {
+    // Given — E3: Das Kennzeichen und der Status sagen dasselbe, oder das Angebot entsteht nicht.
+
+    // When / Then
+    assertThatThrownBy(() -> angebot(true, Angebotsstatus.BESTELLT))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("BESTELLT");
+  }
+
+  @Test
+  void konstruktor_givenNotInternWithAStatusOfTheInternalWork_thenRejected() {
+    // When / Then — und dieselbe Abweisung in die andere Richtung.
+    assertThatThrownBy(() -> angebot(false, Angebotsstatus.LAEUFT))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("LAEUFT");
+  }
+
+  @Test
+  void umgestellt_towardsInternal_thenSetsTheFlagAndTheStatusTogether() {
+    // Given — Kriterium 1 von #207: ein abgegebenes Angebot wird zur internen Arbeit.
+    final Angebot angebot = angebot(Angebotsstatus.ABGEGEBEN);
+
+    // When
+    final Angebot umgestellt = angebot.umgestellt(true, JETZT);
+
+    // Then
+    assertThat(umgestellt)
+        .satisfies(
+            a -> assertThat(a.intern()).isTrue(),
+            a -> assertThat(a.status()).isEqualTo(Angebotsstatus.LAEUFT),
+            a -> assertThat(a.updatedAt()).isEqualTo(JETZT),
+            a -> assertThat(a.createdAt()).isEqualTo(ANGELEGT),
+            a -> assertThat(a.id()).isEqualTo(7L),
+            a -> assertThat(a.firmaId()).isEqualTo(3L),
+            a -> assertThat(a.ansprechpartnerId()).isEqualTo(8L),
+            a -> assertThat(a.angebotDatum()).isEqualTo(ANGEBOTSDATUM),
+            a -> assertThat(a.beschreibung()).isEqualTo("Neugestaltung der Website"),
+            a -> assertThat(a.positionen()).containsExactly(KONZEPTION));
+  }
+
+  @Test
+  void umgestellt_givenABilledOffer_thenEndsUpInTheClosedInternalStatus() {
+    // Given — von Hand auf abgerechnet gestellt; nach innen ist das die getane Arbeit.
+    final Angebot angebot = angebot(Angebotsstatus.ABGERECHNET);
+
+    // When
+    final Angebot umgestellt = angebot.umgestellt(true, JETZT);
+
+    // Then
+    assertThat(umgestellt.status()).isEqualTo(Angebotsstatus.ABGESCHLOSSEN);
+    assertThat(umgestellt.intern()).isTrue();
+  }
+
+  @Test
+  void umgestellt_backTowardsTheCustomerOffer_thenSetsTheFlagAndTheStatusTogether() {
+    // Given — Kriterium 8 von #207 baut darauf auf: der Weg zurueck nach aussen.
+    final Angebot angebot = angebot(Angebotsstatus.ABGESCHLOSSEN);
+
+    // When
+    final Angebot umgestellt = angebot.umgestellt(false, JETZT);
+
+    // Then
+    assertThat(umgestellt.intern()).isFalse();
+    assertThat(umgestellt.status()).isEqualTo(Angebotsstatus.ERLEDIGT);
+    assertThat(umgestellt.updatedAt()).isEqualTo(JETZT);
+  }
+
+  @ParameterizedTest
+  @EnumSource(Angebotsstatus.class)
+  void geaendert_givenAnyStatus_thenCarriesTheArtOnUnchanged(final Angebotsstatus status) {
+    // Given — Aendern sagt nichts ueber die Art des Angebots.
+
+    // When
+    final Angebot geaendert =
+        angebot(status).geaendert(ANGEBOTSDATUM, 9L, "Betreuung", List.of(PAUSCHALE), JETZT);
+
+    // Then
+    assertThat(geaendert.intern()).isEqualTo(status.intern());
+    assertThat(geaendert.status()).isEqualTo(status);
+  }
+
+  @Test
+  void statusWeiter_givenRunningInternalWork_thenReachesTheClosedInternalStatus() {
+    // Given — die interne Reihe hat ihre eigenen zwei Stufen.
+
+    // When
+    final Angebot weiter = angebot(Angebotsstatus.LAEUFT).statusWeiter(JETZT);
+
+    // Then
+    assertThat(weiter.status()).isEqualTo(Angebotsstatus.ABGESCHLOSSEN);
+    assertThat(weiter.intern()).isTrue();
+  }
+
+  @Test
+  void statusZurueck_givenClosedInternalWork_thenReachesTheRunningInternalStatus() {
+    // When
+    final Angebot zurueck = angebot(Angebotsstatus.ABGESCHLOSSEN).statusZurueck(JETZT);
+
+    // Then
+    assertThat(zurueck.status()).isEqualTo(Angebotsstatus.LAEUFT);
+    assertThat(zurueck.intern()).isTrue();
+  }
+
+  @Test
+  void statusWeiter_givenClosedInternalWork_thenRejected() {
+    // Given — am Ende der internen Reihe geht es nicht weiter; nach ABGERECHNET fuehrt kein Weg.
+    final Angebot angebot = angebot(Angebotsstatus.ABGESCHLOSSEN);
+
+    // When / Then
+    assertThatThrownBy(() -> angebot.statusWeiter(JETZT)).isInstanceOf(StatusGrenzeErreicht.class);
+  }
+
+  @Test
+  void statusZurueck_givenRunningInternalWork_thenRejected() {
+    // Given
+    final Angebot angebot = angebot(Angebotsstatus.LAEUFT);
+
+    // When / Then
+    assertThatThrownBy(() -> angebot.statusZurueck(JETZT)).isInstanceOf(StatusGrenzeErreicht.class);
   }
 
   @Test

@@ -7,7 +7,7 @@ import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.ValueSource;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.mwolff.fbcrm.AbstractIntegrationTest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -15,10 +15,11 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.support.TransactionTemplate;
 
 /**
- * Prueft das Schema des Angebots nach {@code V11__angebot_ohne_beleg.sql} gegen eine echte
+ * Prueft das Schema des Angebots nach {@code V20__angebot_intern.sql} gegen eine echte
  * PostgreSQL-Instanz.
  *
- * <p>Gegenstand sind die Zusagen, die allein die Datenbank haelt: die fuenf Status als CHECK, die
+ * <p>Gegenstand sind die Zusagen, die allein die Datenbank haelt: die sieben Status als CHECK, die
+ * Bindung von {@code intern} an den Status ({@code angebot_art_status}, Issue #226), die
  * Wertebereiche der Positionen und die Reihenfolge als Schluessel. Gearbeitet wird mit {@link
  * JdbcTemplate} und direkten Anweisungen — der Weg ueber die Entities kaeme an einigen dieser
  * Faelle gar nicht vorbei.
@@ -34,6 +35,10 @@ class AngebotSchemaIT extends AbstractIntegrationTest {
 
   private static final String INSERT_ANGEBOT =
       "INSERT INTO angebot (firma_id, status, angebot_datum) VALUES (?, ?, DATE '2026-09-20')";
+
+  private static final String INSERT_ANGEBOT_MIT_ART =
+      "INSERT INTO angebot (firma_id, status, intern, angebot_datum)"
+          + " VALUES (?, ?, ?, DATE '2026-09-20')";
 
   private static final String INSERT_POSITION =
       "INSERT INTO angebot_position"
@@ -69,6 +74,10 @@ class AngebotSchemaIT extends AbstractIntegrationTest {
     return jdbc.update(INSERT_ANGEBOT, firmaId, status);
   }
 
+  private int angebot(final String status, final @Nullable Boolean intern) {
+    return jdbc.update(INSERT_ANGEBOT_MIT_ART, firmaId, status, intern);
+  }
+
   private Long angebotId() {
     angebot("ANGELEGT");
     return jdbc.queryForObject("SELECT id FROM angebot LIMIT 1", Long.class);
@@ -101,13 +110,55 @@ class AngebotSchemaIT extends AbstractIntegrationTest {
   }
 
   @ParameterizedTest
-  @ValueSource(strings = {"ANGELEGT", "ABGEGEBEN", "BESTELLT", "ERLEDIGT", "ABGERECHNET"})
-  void angebot_givenEachOfTheFiveStatus_thenAccepted(final String status) {
-    // When
-    final int betroffen = angebot(status);
+  @CsvSource({
+    "ANGELEGT, false",
+    "ABGEGEBEN, false",
+    "BESTELLT, false",
+    "ERLEDIGT, false",
+    "ABGERECHNET, false",
+    "LAEUFT, true",
+    "ABGESCHLOSSEN, true"
+  })
+  void angebot_givenEachOfTheSevenStatusWithItsArt_thenAccepted(
+      final String status, final boolean intern) {
+    // When — Issue #226: der CHECK kennt seit V20 sieben Werte.
+    final int betroffen = angebot(status, Boolean.valueOf(intern));
 
     // Then
     assertThat(betroffen).isEqualTo(1);
+  }
+
+  @Test
+  void angebotArtStatus_givenInternWithAStatusOfTheCustomerOffer_thenRejectedByTheDatabase() {
+    // When / Then — E3: Die Datenbank haelt dieselbe Zusage wie der Konstruktor von Angebot.
+    assertThatThrownBy(() -> angebot("BESTELLT", Boolean.TRUE))
+        .isInstanceOf(DataIntegrityViolationException.class)
+        .hasMessageContaining("angebot_art_status");
+  }
+
+  @Test
+  void angebotArtStatus_givenNotInternWithAStatusOfTheInternalWork_thenRejectedByTheDatabase() {
+    // When / Then
+    assertThatThrownBy(() -> angebot("LAEUFT", Boolean.FALSE))
+        .isInstanceOf(DataIntegrityViolationException.class)
+        .hasMessageContaining("angebot_art_status");
+  }
+
+  @Test
+  void angebotIntern_givenNoArt_thenRejectedByTheDatabase() {
+    // When / Then — die Spalte ist NOT NULL; das Weglassen greift auf das DEFAULT zurueck, ein
+    // ausdruecklicher NULL nicht.
+    assertThatThrownBy(() -> angebot("ANGELEGT", null))
+        .isInstanceOf(DataIntegrityViolationException.class);
+  }
+
+  @Test
+  void angebotIntern_whenTheColumnIsOmitted_thenTheRowIsACustomerOffer() {
+    // Given — bestehende Zeilen und jeder Weg ohne Angabe fuehren nach aussen (V20, DEFAULT false).
+    angebot("ANGELEGT");
+
+    // When / Then
+    assertThat(jdbc.queryForObject("SELECT intern FROM angebot LIMIT 1", Boolean.class)).isFalse();
   }
 
   @Test

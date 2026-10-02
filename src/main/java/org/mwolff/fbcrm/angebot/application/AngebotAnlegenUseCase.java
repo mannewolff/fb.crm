@@ -20,8 +20,9 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * <p><b>Die Vorbelegung.</b> Das Angebotsdatum ist der heutige Tag in der Geschaeftszone und nicht
  * in UTC (E12) — zwischen 22:00 UTC und Mitternacht deutscher Zeit unterscheiden sich beide
- * Antworten um einen Tag. Der Status ist {@link Angebotsstatus#ANGELEGT}; Beschreibung und
- * Positionen bekommt das Angebot danach ueber das Aendern.
+ * Antworten um einen Tag. Der Status ist {@link Angebotsstatus#ANGELEGT}, bei interner Arbeit
+ * {@link Angebotsstatus#LAEUFT} (Issue #226); Beschreibung und Positionen bekommt das Angebot
+ * danach ueber das Aendern.
  *
  * <p><b>Die Wahl des Kunden.</b> Die Firma muss es geben und sie darf nicht stillgelegt sein — an
  * eine stillgelegte Firma geht kein neues Angebot. Der Ansprechpartner ist optional und geht durch
@@ -53,11 +54,13 @@ public class AngebotAnlegenUseCase {
    *
    * @param firmaId Kennung der Firma, an die das Angebot geht
    * @param ansprechpartnerId Kennung des Ansprechpartners bei dieser Firma, oder {@code null}
+   * @param intern ob das Angebot die eigene interne Arbeit festhaelt
    * @throws FirmaNichtGefunden wenn es die Firma nicht gibt
    * @throws FirmaStillgelegt wenn die Firma stillgelegt ist
    * @throws AnsprechpartnerNichtWaehlbar wenn der Ansprechpartner nicht zur Wahl steht
    */
-  public Angebot anlegen(final long firmaId, final @Nullable Long ansprechpartnerId) {
+  public Angebot anlegen(
+      final long firmaId, final @Nullable Long ansprechpartnerId, final boolean intern) {
     final Firma firma = firmen.findById(firmaId).orElseThrow(FirmaNichtGefunden::new);
     if (!firma.aktiv()) {
       throw new FirmaStillgelegt();
@@ -70,7 +73,8 @@ public class AngebotAnlegenUseCase {
             null,
             firmaId,
             ansprechpartnerId,
-            Angebotsstatus.ANGELEGT,
+            intern,
+            intern ? Angebotsstatus.LAEUFT : Angebotsstatus.ANGELEGT,
             heute,
             null,
             List.of(),

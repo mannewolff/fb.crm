@@ -17,6 +17,11 @@ import org.mwolff.fbcrm.common.Identifiable;
  * Nummer, kein Dokument, keine Gueltigkeit. In jedem Status laesst es sich aendern; nur die Firma
  * bleibt die, bei der es angelegt wurde.
  *
+ * <p><b>Zwei Arten, eine Mappe</b> (Issue #226, Kriterium 1 von #207): Dasselbe Objekt haelt auch
+ * die eigene interne Arbeit fest. Das Kennzeichen {@link #intern} sagt, welche von beiden, und es
+ * geht mit dem Status Hand in Hand — siehe den Konstruktor und {@link #umgestellt(boolean,
+ * Instant)}.
+ *
  * <p><b>Nichts Gerechnetes wird gespeichert.</b> {@link #summe()} ist die Summe der gerundeten
  * Positionsbetraege (E5).
  *
@@ -28,6 +33,7 @@ import org.mwolff.fbcrm.common.Identifiable;
  * @param id technische Id — {@code null}, solange das Angebot nicht gespeichert ist
  * @param firmaId Kennung der Firma, an die das Angebot geht
  * @param ansprechpartnerId Kennung des Ansprechpartners bei dieser Firma, oder {@code null}
+ * @param intern ob das Angebot die eigene interne Arbeit festhaelt und nicht an einen Kunden geht
  * @param status wie weit das Angebot gediehen ist
  * @param angebotDatum Datum des Angebots; beim Anlegen der Tag der Anlage, danach aenderbar
  * @param beschreibung der Text des Angebots, oder {@code null}
@@ -39,6 +45,7 @@ public record Angebot(
     @Nullable Long id,
     long firmaId,
     @Nullable Long ansprechpartnerId,
+    boolean intern,
     Angebotsstatus status,
     LocalDate angebotDatum,
     @Nullable String beschreibung,
@@ -47,8 +54,21 @@ public record Angebot(
     Instant updatedAt)
     implements Identifiable {
 
-  /** Nimmt die Positionen als Kopie: Der Aufrufer darf seine Liste danach weiterverwenden. */
+  /**
+   * Nimmt die Positionen als Kopie: Der Aufrufer darf seine Liste danach weiterverwenden.
+   *
+   * <p><b>Kennzeichen und Status sagen dasselbe</b> (Issue #226, E3): {@code intern} ist genau dann
+   * gesetzt, wenn der Status zur internen Arbeit gehoert. Geprueft wird hier und nicht erst im
+   * Anwendungsfall, damit kein Weg an der Regel vorbeifuehrt; die Datenbank haelt dieselbe Zusage
+   * als CHECK {@code angebot_art_status}.
+   *
+   * @throws IllegalArgumentException wenn Kennzeichen und Status nicht zueinander passen
+   */
   public Angebot {
+    if (intern != status.intern()) {
+      throw new IllegalArgumentException(
+          "Kennzeichen intern=" + intern + " passt nicht zum Status " + status);
+    }
     positionen = List.copyOf(positionen);
   }
 
@@ -76,6 +96,7 @@ public record Angebot(
         id,
         firmaId,
         neuerAnsprechpartnerId,
+        intern,
         status,
         neuesDatum,
         neueBeschreibung,
@@ -122,11 +143,36 @@ public record Angebot(
         : mitStatus(Angebotsstatus.ABGERECHNET, zeitpunkt);
   }
 
+  /**
+   * Das Angebot auf die andere Art gestellt — Kennzeichen und Status zusammen (Issue #226).
+   *
+   * <p>Der eine Weg, auf dem {@code intern} sich aendert. Den Status waehlt nicht der Aufrufer: Er
+   * kommt aus {@link Angebotsstatus#fuerArt(boolean)} und ist damit immer der, der zum neuen
+   * Kennzeichen passt — die Invariante des Konstruktors laesst gar nichts anderes zu.
+   *
+   * @param neuIntern ob das Angebot danach die interne Arbeit festhaelt
+   * @param zeitpunkt Zeitpunkt der Umstellung
+   */
+  public Angebot umgestellt(final boolean neuIntern, final Instant zeitpunkt) {
+    return new Angebot(
+        id,
+        firmaId,
+        ansprechpartnerId,
+        neuIntern,
+        status.fuerArt(neuIntern),
+        angebotDatum,
+        beschreibung,
+        positionen,
+        createdAt,
+        zeitpunkt);
+  }
+
   private Angebot mitStatus(final Angebotsstatus ziel, final Instant zeitpunkt) {
     return new Angebot(
         id,
         firmaId,
         ansprechpartnerId,
+        intern,
         ziel,
         angebotDatum,
         beschreibung,

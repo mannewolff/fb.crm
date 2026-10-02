@@ -14,7 +14,7 @@ import org.jspecify.annotations.Nullable;
 import org.mwolff.fbcrm.angebot.domain.Angebotsstatus;
 
 /**
- * Die Zeile der Tabelle {@code angebot} nach {@code V11__angebot_ohne_beleg.sql}.
+ * Die Zeile der Tabelle {@code angebot} nach {@code V20__angebot_intern.sql}.
  *
  * <p>Firma und Ansprechpartner stehen als blosse Kennungen und nicht als Beziehung: Angebot und
  * Firma sind eigene Wurzeln mit eigenem Lebenszyklus, und eine Beziehung laedt das eine mit dem
@@ -25,6 +25,10 @@ import org.mwolff.fbcrm.angebot.domain.Angebotsstatus;
  * Ordnungszahl: Der CHECK der Migration nennt die Werte im Klartext, und ein neuer Status darf die
  * Bedeutung der bestehenden Zeilen nicht verschieben. Die Spalte der Beschreibung heisst aus der
  * Geschichte des Schemas {@code leistungsbeschreibung}.
+ *
+ * <p>{@code intern} steht als eigene Spalte neben dem Status und wird nicht aus ihm gelesen (Issue
+ * #226, E1): Eine Abfrage nach der Art des Angebots soll ohne Aufzaehlung von Statuswerten gehen.
+ * Dass beide dasselbe sagen, haelt der CHECK {@code angebot_art_status}.
  */
 @Entity
 @Table(name = "angebot")
@@ -39,6 +43,9 @@ class AngebotEntity {
 
   @Column(name = "ansprechpartner_id")
   private @Nullable Long ansprechpartnerId;
+
+  @Column(name = "intern", nullable = false)
+  private boolean intern;
 
   @Enumerated(EnumType.STRING)
   @Column(name = "status", nullable = false, length = 20)
@@ -69,6 +76,7 @@ class AngebotEntity {
       final @Nullable Long id,
       final long firmaId,
       final @Nullable Long ansprechpartnerId,
+      final boolean intern,
       final Angebotsstatus status,
       final LocalDate angebotDatum,
       final @Nullable String beschreibung,
@@ -77,6 +85,7 @@ class AngebotEntity {
     this.id = id;
     this.firmaId = firmaId;
     this.ansprechpartnerId = ansprechpartnerId;
+    this.intern = intern;
     this.status = status;
     this.angebotDatum = angebotDatum;
     this.beschreibung = beschreibung;
@@ -94,6 +103,10 @@ class AngebotEntity {
 
   @Nullable Long getAnsprechpartnerId() {
     return ansprechpartnerId;
+  }
+
+  boolean isIntern() {
+    return intern;
   }
 
   Angebotsstatus getStatus() {

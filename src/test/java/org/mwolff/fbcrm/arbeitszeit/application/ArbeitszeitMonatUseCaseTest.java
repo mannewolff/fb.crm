@@ -103,6 +103,7 @@ class ArbeitszeitMonatUseCaseTest {
         Long.valueOf(FREMDES_ANGEBOT),
         FREMDE_FIRMA,
         null,
+        false,
         Angebotsstatus.BESTELLT,
         ERSTER,
         "Wartungsvertrag",

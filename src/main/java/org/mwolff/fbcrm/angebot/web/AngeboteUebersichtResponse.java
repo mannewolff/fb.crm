@@ -29,6 +29,7 @@ public record AngeboteUebersichtResponse(List<Zeile> angebote) {
    * @param firmaId Kennung der Firma
    * @param firmaName Name der Firma
    * @param angebotDatum Datum des Angebots
+   * @param intern ob das Angebot die eigene interne Arbeit festhaelt (Issue #226)
    * @param status Status des Angebots
    * @param summe Netto-Summe, gerechnet und nicht gespeichert (E5)
    */
@@ -37,6 +38,7 @@ public record AngeboteUebersichtResponse(List<Zeile> angebote) {
       long firmaId,
       String firmaName,
       LocalDate angebotDatum,
+      boolean intern,
       Angebotsstatus status,
       BigDecimal summe) {
 
@@ -47,6 +49,7 @@ public record AngeboteUebersichtResponse(List<Zeile> angebote) {
           angebot.firmaId(),
           zeile.firmaName(),
           angebot.angebotDatum(),
+          angebot.intern(),
           angebot.status(),
           angebot.summe());
     }

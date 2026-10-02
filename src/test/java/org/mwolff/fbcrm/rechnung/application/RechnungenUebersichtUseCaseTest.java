@@ -126,6 +126,7 @@ class RechnungenUebersichtUseCaseTest {
                     Long.valueOf(ZWEITES_ANGEBOT),
                     ZWEITE_FIRMA,
                     null,
+                    false,
                     Angebotsstatus.BESTELLT,
                     Rechnungsdoppel.ANGEBOTSDATUM,
                     null,

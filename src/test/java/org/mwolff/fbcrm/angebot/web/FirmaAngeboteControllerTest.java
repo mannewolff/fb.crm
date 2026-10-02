@@ -48,6 +48,9 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
  *
  * <p>Der Rumpf des {@code POST} darf fehlen: Ein Angebot ohne Ansprechpartner ist erlaubt, und ein
  * leerer Pflichtrumpf waere eine Formalie ohne Aussage.
+ *
+ * <p><b>Dazu das Kennzeichen {@code intern}</b> (Issue #226): Steht es im Rumpf, entsteht die
+ * interne Arbeit; fehlt es oder steht es auf {@code null}, entsteht das Angebot an einen Kunden.
  */
 @ExtendWith(MockitoExtension.class)
 class FirmaAngeboteControllerTest {
@@ -58,6 +61,8 @@ class FirmaAngeboteControllerTest {
   private static final LocalDate ANGEBOTSDATUM = LocalDate.of(2026, 9, 20);
   private static final Instant ANGELEGT = Instant.parse("2026-09-20T08:00:00Z");
   private static final String MIT_PERSON = "{\"ansprechpartnerId\":8}";
+  private static final String INTERN = "{\"intern\":true}";
+  private static final String INTERN_NULL = "{\"intern\":null}";
 
   @Mock private AngeboteDerFirmaUseCase liste;
   @Mock private AngebotAnlegenUseCase anlegen;
@@ -79,6 +84,7 @@ class FirmaAngeboteControllerTest {
         Long.valueOf(id),
         FIRMA,
         ansprechpartnerId,
+        status.intern(),
         status,
         ANGEBOTSDATUM,
         null,
@@ -111,6 +117,7 @@ class FirmaAngeboteControllerTest {
         .andExpect(jsonPath("$.angebote.length()").value(2))
         .andExpect(jsonPath("$.angebote[0].id").value(Long.valueOf(ANGEBOT)))
         .andExpect(jsonPath("$.angebote[0].status").value("ANGELEGT"))
+        .andExpect(jsonPath("$.angebote[0].intern").value(false))
         .andExpect(jsonPath("$.angebote[0].summe").value(2500.03))
         .andExpect(jsonPath("$.angebote[1].id").value(9))
         .andExpect(jsonPath("$.angebote[1].status").value("BESTELLT"));
@@ -120,7 +127,7 @@ class FirmaAngeboteControllerTest {
   @Test
   void anlegen_withoutABody_thenCreatesAnAngebotWithoutAContact() throws Exception {
     // Given
-    when(anlegen.anlegen(FIRMA, null)).thenReturn(angelegt(null));
+    when(anlegen.anlegen(FIRMA, null, false)).thenReturn(angelegt(null));
     when(kunden.zu(any())).thenReturn(new Kundenangaben("Adler AG", null));
 
     // When / Then
@@ -132,14 +139,15 @@ class FirmaAngeboteControllerTest {
         .andExpect(jsonPath("$.firmaId").value(Long.valueOf(FIRMA)))
         .andExpect(jsonPath("$.firmaName").value("Adler AG"))
         .andExpect(jsonPath("$.ansprechpartnerId").doesNotExist())
-        .andExpect(jsonPath("$.ansprechpartnerName").doesNotExist());
-    verify(anlegen).anlegen(FIRMA, null);
+        .andExpect(jsonPath("$.ansprechpartnerName").doesNotExist())
+        .andExpect(jsonPath("$.intern").value(false));
+    verify(anlegen).anlegen(FIRMA, null, false);
   }
 
   @Test
   void anlegen_withAContact_thenPassesItOnAndNamesIt() throws Exception {
     // Given
-    when(anlegen.anlegen(FIRMA, PERSON)).thenReturn(angelegt(PERSON));
+    when(anlegen.anlegen(FIRMA, PERSON, false)).thenReturn(angelegt(PERSON));
     when(kunden.zu(any())).thenReturn(new Kundenangaben("Adler AG", "Eva Adler"));
 
     // When / Then
@@ -151,13 +159,51 @@ class FirmaAngeboteControllerTest {
         .andExpect(status().isCreated())
         .andExpect(jsonPath("$.ansprechpartnerId").value(PERSON))
         .andExpect(jsonPath("$.ansprechpartnerName").value("Eva Adler"));
-    verify(anlegen).anlegen(FIRMA, PERSON);
+    verify(anlegen).anlegen(FIRMA, PERSON, false);
+  }
+
+  @Test
+  void anlegen_withTheInternalFlag_thenPassesItOnAndAnswersWithTheInternalStatus()
+      throws Exception {
+    // Given — Issue #226, Kriterien 1 und 2: die interne Arbeit beginnt in LAEUFT.
+    when(anlegen.anlegen(FIRMA, null, true))
+        .thenReturn(angebot(ANGEBOT, null, Angebotsstatus.LAEUFT));
+    when(kunden.zu(any())).thenReturn(new Kundenangaben("Adler AG", null));
+
+    // When / Then
+    mockMvc
+        .perform(
+            post("/api/firmen/{firmaId}/angebote", Long.valueOf(FIRMA))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(INTERN))
+        .andExpect(status().isCreated())
+        .andExpect(jsonPath("$.intern").value(true))
+        .andExpect(jsonPath("$.status").value("LAEUFT"));
+    verify(anlegen).anlegen(FIRMA, null, true);
+  }
+
+  @Test
+  void anlegen_withAnExplicitNullFlag_thenCreatesACustomerOffer() throws Exception {
+    // Given — ein {@code null} geht denselben Weg wie ein fehlendes Feld.
+    when(anlegen.anlegen(FIRMA, null, false)).thenReturn(angelegt(null));
+    when(kunden.zu(any())).thenReturn(new Kundenangaben("Adler AG", null));
+
+    // When / Then
+    mockMvc
+        .perform(
+            post("/api/firmen/{firmaId}/angebote", Long.valueOf(FIRMA))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(INTERN_NULL))
+        .andExpect(status().isCreated())
+        .andExpect(jsonPath("$.intern").value(false))
+        .andExpect(jsonPath("$.status").value("ANGELEGT"));
+    verify(anlegen).anlegen(FIRMA, null, false);
   }
 
   @Test
   void anlegen_atAnUnknownFirma_thenAnswers404() throws Exception {
     // Given
-    when(anlegen.anlegen(eq(FIRMA), isNull())).thenThrow(new FirmaNichtGefunden());
+    when(anlegen.anlegen(eq(FIRMA), isNull(), eq(false))).thenThrow(new FirmaNichtGefunden());
 
     // When / Then
     mockMvc
@@ -168,7 +214,7 @@ class FirmaAngeboteControllerTest {
   @Test
   void anlegen_atAStillgelegteFirma_thenAnswers409() throws Exception {
     // Given
-    when(anlegen.anlegen(eq(FIRMA), isNull())).thenThrow(new FirmaStillgelegt());
+    when(anlegen.anlegen(eq(FIRMA), isNull(), eq(false))).thenThrow(new FirmaStillgelegt());
 
     // When / Then
     mockMvc
@@ -179,7 +225,7 @@ class FirmaAngeboteControllerTest {
   @Test
   void anlegen_withAContactThatIsNotAvailable_thenAnswers422() throws Exception {
     // Given
-    when(anlegen.anlegen(FIRMA, PERSON)).thenThrow(new AnsprechpartnerNichtWaehlbar());
+    when(anlegen.anlegen(FIRMA, PERSON, false)).thenThrow(new AnsprechpartnerNichtWaehlbar());
 
     // When / Then
     mockMvc

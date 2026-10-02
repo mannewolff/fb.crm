@@ -12,15 +12,20 @@ import org.mwolff.fbcrm.angebot.domain.Angebotsstatus;
  *
  * @param id technische Id
  * @param angebotDatum Datum des Angebots
+ * @param intern ob das Angebot die eigene interne Arbeit festhaelt (Issue #226)
  * @param status wie weit das Angebot gediehen ist
  * @param summe die Netto-Summe, gerechnet
  */
 public record AngebotZeileResponse(
-    long id, LocalDate angebotDatum, Angebotsstatus status, BigDecimal summe) {
+    long id, LocalDate angebotDatum, boolean intern, Angebotsstatus status, BigDecimal summe) {
 
   /** Die Sicht der Liste auf ein Angebot. */
   static AngebotZeileResponse of(final Angebot angebot) {
     return new AngebotZeileResponse(
-        angebot.requireId(), angebot.angebotDatum(), angebot.status(), angebot.summe());
+        angebot.requireId(),
+        angebot.angebotDatum(),
+        angebot.intern(),
+        angebot.status(),
+        angebot.summe());
   }
 }

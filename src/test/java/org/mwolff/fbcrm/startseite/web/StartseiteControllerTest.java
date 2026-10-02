@@ -84,6 +84,7 @@ class StartseiteControllerTest {
             Long.valueOf(id),
             5L,
             null,
+            status.intern(),
             status,
             ANGEBOTSDATUM,
             "Neugestaltung der Website",

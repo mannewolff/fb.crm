@@ -93,6 +93,7 @@ class BuchbarePositionenUseCaseTest {
         Long.valueOf(id),
         firmaId,
         null,
+        status.intern(),
         status,
         datum,
         "Wartungsvertrag",

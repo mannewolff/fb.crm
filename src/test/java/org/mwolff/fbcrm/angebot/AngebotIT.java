@@ -185,6 +185,51 @@ class AngebotIT extends AbstractIntegrationTest {
   }
 
   @Test
+  void anlegen_withTheInternalFlag_thenCreatesInternalWorkInTheDatabase() {
+    // Given — Issue #226, Kriterien 1 und 2: ein Angebot fuer die eigene interne Arbeit.
+
+    // When
+    final ResponseEntity<AngebotResponse> antwort =
+        ruf(
+            "/api/firmen/" + firmaId + "/angebote",
+            HttpMethod.POST,
+            Map.of("intern", Boolean.TRUE),
+            AngebotResponse.class);
+
+    // Then
+    assertThat(antwort.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+    final AngebotResponse angelegt = Objects.requireNonNull(antwort.getBody());
+    assertThat(angelegt.intern()).isTrue();
+    assertThat(angelegt.status()).isEqualTo(Angebotsstatus.LAEUFT);
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT intern FROM angebot WHERE id = ?",
+                Boolean.class,
+                Long.valueOf(angelegt.id())))
+        .isTrue();
+  }
+
+  @Test
+  void anlegen_withAnExplicitNullFlag_thenCreatesACustomerOffer() {
+    // Given — ein {@code null} im Rumpf geht denselben Weg wie ein fehlendes Feld.
+    final Map<String, Object> ohneArt = new LinkedHashMap<>();
+    ohneArt.put("intern", null);
+
+    // When
+    final ResponseEntity<AngebotResponse> antwort =
+        ruf(
+            "/api/firmen/" + firmaId + "/angebote",
+            HttpMethod.POST,
+            ohneArt,
+            AngebotResponse.class);
+
+    // Then
+    final AngebotResponse angelegt = Objects.requireNonNull(antwort.getBody());
+    assertThat(angelegt.intern()).isFalse();
+    assertThat(angelegt.status()).isEqualTo(Angebotsstatus.ANGELEGT);
+  }
+
+  @Test
   void anlegen_thenAnswersCreatedWithThePrefilledAngebot() {
     // Given — Angebotsdatum heute in der Geschaeftszone, Status ANGELEGT.
     final LocalDate heute = LocalDate.now(clock.withZone(Geschaeftszone.ZONE));
@@ -197,6 +242,7 @@ class AngebotIT extends AbstractIntegrationTest {
     assertThat(antwort.getStatusCode()).isEqualTo(HttpStatus.CREATED);
     final AngebotResponse angelegt = Objects.requireNonNull(antwort.getBody());
     assertThat(angelegt.status()).isEqualTo(Angebotsstatus.ANGELEGT);
+    assertThat(angelegt.intern()).isFalse();
     assertThat(angelegt.angebotDatum()).isEqualTo(heute);
     assertThat(angelegt.beschreibung()).isNull();
     assertThat(angelegt.positionen()).isEmpty();

@@ -102,11 +102,15 @@ public class StartseiteUseCase {
    * ueber die Ordnungszahl von Angebotsstatus bestimmt: Der Compiler verlangt bei einem neuen
    * Status eine Entscheidung, statt ihn stillschweigend einzureihen — dieselbe Ueberlegung wie in
    * Angebotsstatus selbst.
+   *
+   * <p>Die internen Status stehen vorerst auf false: Die Startseite nimmt die interne Arbeit erst
+   * mit ihrem eigenen Paket auf (#226, Plan #218, E18). Hier stehen sie, weil der erschoepfende
+   * switch sonst nicht uebersetzt.
    */
   private static boolean inArbeit(final Angebotsstatus status) {
     return switch (status) {
       case BESTELLT, ERLEDIGT -> true;
-      case ANGELEGT, ABGEGEBEN, ABGERECHNET -> false;
+      case ANGELEGT, ABGEGEBEN, ABGERECHNET, LAEUFT, ABGESCHLOSSEN -> false;
     };
   }
 

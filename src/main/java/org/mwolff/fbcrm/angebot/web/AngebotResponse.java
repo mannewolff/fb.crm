@@ -19,6 +19,7 @@ import org.mwolff.fbcrm.angebot.domain.Angebotsstatus;
  * @param firmaName Name der Firma
  * @param ansprechpartnerId Kennung des Ansprechpartners, oder {@code null}
  * @param ansprechpartnerName Name des Ansprechpartners, oder {@code null}
+ * @param intern ob das Angebot die eigene interne Arbeit festhaelt (Issue #226)
  * @param status wie weit das Angebot gediehen ist
  * @param angebotDatum Datum des Angebots
  * @param beschreibung der Text des Angebots, oder {@code null}
@@ -31,6 +32,7 @@ public record AngebotResponse(
     String firmaName,
     @Nullable Long ansprechpartnerId,
     @Nullable String ansprechpartnerName,
+    boolean intern,
     Angebotsstatus status,
     LocalDate angebotDatum,
     @Nullable String beschreibung,
@@ -45,6 +47,7 @@ public record AngebotResponse(
         kunde.firmaName(),
         angebot.ansprechpartnerId(),
         kunde.ansprechpartnerName(),
+        angebot.intern(),
         angebot.status(),
         angebot.angebotDatum(),
         angebot.beschreibung(),

@@ -57,7 +57,8 @@ public class FirmaAngeboteController {
    * Legt an die Firma ein Angebot an (Kriterium 2).
    *
    * @param firmaId Kennung der Firma
-   * @param anfrage der Rumpf mit dem optionalen Ansprechpartner; er darf ganz fehlen
+   * @param anfrage der Rumpf mit dem optionalen Ansprechpartner und dem Kennzeichen; er darf ganz
+   *     fehlen, und ein fehlendes Kennzeichen heisst „an einen Kunden" (Issue #226)
    */
   @PostMapping
   @ResponseStatus(HttpStatus.CREATED)
@@ -65,7 +66,10 @@ public class FirmaAngeboteController {
       @PathVariable final long firmaId,
       @Valid @RequestBody(required = false) final @Nullable AngebotAnlegenRequest anfrage) {
     final Angebot angebot =
-        anlegenUseCase.anlegen(firmaId, anfrage == null ? null : anfrage.ansprechpartnerId());
+        anlegenUseCase.anlegen(
+            firmaId,
+            anfrage == null ? null : anfrage.ansprechpartnerId(),
+            anfrage != null && Boolean.TRUE.equals(anfrage.intern()));
     return AngebotResponse.of(angebot, kundenUseCase.zu(angebot));
   }
 }

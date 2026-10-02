@@ -92,11 +92,17 @@ class JpaAngebotRepositoryTest {
   @InjectMocks private JpaAngebotRepository repository;
 
   private static Angebot angebot(final List<Angebotsposition> positionen) {
+    return angebot(positionen, Angebotsstatus.BESTELLT);
+  }
+
+  private static Angebot angebot(
+      final List<Angebotsposition> positionen, final Angebotsstatus status) {
     return new Angebot(
         11L,
         3L,
         8L,
-        Angebotsstatus.BESTELLT,
+        status.intern(),
+        status,
         ANGEBOTSDATUM,
         BESCHREIBUNG,
         positionen,
@@ -120,11 +126,16 @@ class JpaAngebotRepositoryTest {
   }
 
   private static AngebotEntity zeile(final long id) {
+    return zeile(id, Angebotsstatus.BESTELLT);
+  }
+
+  private static AngebotEntity zeile(final long id, final Angebotsstatus status) {
     return new AngebotEntity(
         Long.valueOf(id),
         3L,
         8L,
-        Angebotsstatus.BESTELLT,
+        status.intern(),
+        status,
         ANGEBOTSDATUM,
         BESCHREIBUNG,
         ANGELEGT,
@@ -182,6 +193,7 @@ class JpaAngebotRepositoryTest {
             zeile -> assertThat(zeile.getId()).isEqualTo(11L),
             zeile -> assertThat(zeile.getFirmaId()).isEqualTo(3L),
             zeile -> assertThat(zeile.getAnsprechpartnerId()).isEqualTo(8L),
+            zeile -> assertThat(zeile.isIntern()).isFalse(),
             zeile -> assertThat(zeile.getStatus()).isEqualTo(Angebotsstatus.BESTELLT),
             zeile -> assertThat(zeile.getAngebotDatum()).isEqualTo(ANGEBOTSDATUM),
             zeile -> assertThat(zeile.getBeschreibung()).isEqualTo(BESCHREIBUNG),
@@ -327,6 +339,53 @@ class JpaAngebotRepositoryTest {
 
     // Then — die Kennung der Zeile steht danach an der Position (Plan #169, E2).
     assertThat(gefunden).contains(angebot(List.of(mitKennung(KONZEPTION, 71L))));
+  }
+
+  @Test
+  void save_givenAnInternalAngebot_thenWritesTheFlagAndTheInternalStatus() {
+    // Given — Issue #226: die Art geht als eigene Spalte in die Zeile.
+    erwarteSchreibenDerZeile(zeile(11L, Angebotsstatus.LAEUFT));
+
+    // When
+    repository.save(angebot(List.of(KONZEPTION), Angebotsstatus.LAEUFT));
+
+    // Then
+    verify(angebote).save(gespeicherte.capture());
+    assertThat(gespeicherte.getValue())
+        .satisfies(
+            zeile -> assertThat(zeile.isIntern()).isTrue(),
+            zeile -> assertThat(zeile.getStatus()).isEqualTo(Angebotsstatus.LAEUFT));
+  }
+
+  @Test
+  void findById_givenAnInternalRow_thenTranslatesTheFlagAndTheStatusBack() {
+    // Given
+    when(angebote.findById(11L)).thenReturn(Optional.of(zeile(11L, Angebotsstatus.LAEUFT)));
+    when(positionen.findByAngebot(11L)).thenReturn(List.of());
+
+    // When
+    final Optional<Angebot> gefunden = repository.findById(11L);
+
+    // Then
+    assertThat(gefunden)
+        .hasValueSatisfying(
+            angebot -> {
+              assertThat(angebot.intern()).isTrue();
+              assertThat(angebot.status()).isEqualTo(Angebotsstatus.LAEUFT);
+            });
+  }
+
+  @Test
+  void findById_givenARowOfACustomerOffer_thenTheFlagStaysUnset() {
+    // Given
+    when(angebote.findById(11L)).thenReturn(Optional.of(zeile()));
+    when(positionen.findByAngebot(11L)).thenReturn(List.of());
+
+    // When
+    final Optional<Angebot> gefunden = repository.findById(11L);
+
+    // Then
+    assertThat(gefunden).hasValueSatisfying(angebot -> assertThat(angebot.intern()).isFalse());
   }
 
   @Test

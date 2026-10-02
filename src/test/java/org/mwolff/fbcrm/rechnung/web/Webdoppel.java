@@ -105,6 +105,7 @@ final class Webdoppel {
         Long.valueOf(ANGEBOT),
         FIRMA,
         null,
+        false,
         Angebotsstatus.BESTELLT,
         ANGEBOTSDATUM,
         "Neugestaltung der Website",

@@ -104,11 +104,16 @@ class AngebotPersistenceIT extends AbstractIntegrationTest {
   }
 
   private Angebot angebot(final List<Angebotsposition> positionen) {
+    return angebot(positionen, Angebotsstatus.ANGELEGT);
+  }
+
+  private Angebot angebot(final List<Angebotsposition> positionen, final Angebotsstatus status) {
     return new Angebot(
         null,
         firmaId,
         ansprechpartnerId,
-        Angebotsstatus.ANGELEGT,
+        status.intern(),
+        status,
         ANGEBOTSDATUM,
         BESCHREIBUNG,
         positionen,
@@ -160,6 +165,7 @@ class AngebotPersistenceIT extends AbstractIntegrationTest {
               assertThat(angebot.id()).isEqualTo(gespeichert.requireId());
               assertThat(angebot.firmaId()).isEqualTo(firmaId);
               assertThat(angebot.ansprechpartnerId()).isEqualTo(ansprechpartnerId);
+              assertThat(angebot.intern()).isFalse();
               assertThat(angebot.status()).isEqualTo(Angebotsstatus.ANGELEGT);
               assertThat(angebot.angebotDatum()).isEqualTo(ANGEBOTSDATUM);
               assertThat(angebot.beschreibung()).isEqualTo(BESCHREIBUNG);
@@ -169,6 +175,29 @@ class AngebotPersistenceIT extends AbstractIntegrationTest {
                   .usingRecursiveFieldByFieldElementComparatorIgnoringFields("id")
                   .containsExactly(KONZEPTION, SCHULUNG);
             });
+  }
+
+  @Test
+  void save_givenInternalWork_thenReadsBackTheFlagAndTheInternalStatus() {
+    // Given — Issue #226: die Art geht in ihre eigene Spalte und kommt von dort zurueck.
+    final Angebot gespeichert = geschrieben(angebot(List.of(KONZEPTION), Angebotsstatus.LAEUFT));
+
+    // When
+    final Optional<Angebot> gelesen = gelesen(gespeichert.requireId());
+
+    // Then
+    assertThat(gelesen)
+        .hasValueSatisfying(
+            angebot -> {
+              assertThat(angebot.intern()).isTrue();
+              assertThat(angebot.status()).isEqualTo(Angebotsstatus.LAEUFT);
+            });
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT intern FROM angebot WHERE id = ?",
+                Boolean.class,
+                Long.valueOf(gespeichert.requireId())))
+        .isTrue();
   }
 
   @Test

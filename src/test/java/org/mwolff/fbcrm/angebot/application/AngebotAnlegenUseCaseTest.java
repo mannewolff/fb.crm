@@ -106,8 +106,12 @@ class AngebotAnlegenUseCaseTest {
   }
 
   private Angebot legeAn(final @Nullable Long ansprechpartnerId) {
+    return legeAn(ansprechpartnerId, false);
+  }
+
+  private Angebot legeAn(final @Nullable Long ansprechpartnerId, final boolean intern) {
     when(angebote.save(any())).thenAnswer(aufruf -> aufruf.getArgument(0));
-    return useCase.anlegen(Angebotsdoppel.FIRMA, ansprechpartnerId);
+    return useCase.anlegen(Angebotsdoppel.FIRMA, ansprechpartnerId, intern);
   }
 
   @Test
@@ -127,6 +131,31 @@ class AngebotAnlegenUseCaseTest {
     assertThat(angelegt.createdAt()).isEqualTo(JETZT);
     assertThat(angelegt.updatedAt()).isEqualTo(JETZT);
     verifyNoInteractions(personen);
+  }
+
+  @Test
+  void anlegen_thenStartsAsACustomerOfferAndNotAsInternalWork() {
+    // Given — Issue #226: ohne Kennzeichen entsteht das Angebot an einen Kunden.
+    firmaIstAktiv();
+
+    // When
+    final Angebot angelegt = legeAn(null);
+
+    // Then
+    assertThat(angelegt.intern()).isFalse();
+  }
+
+  @Test
+  void anlegen_asInternalWork_thenStartsAsRunningInternalWork() {
+    // Given — Kriterium 1 von #207: die interne Arbeit beginnt in LAEUFT, nicht in ANGELEGT.
+    firmaIstAktiv();
+
+    // When
+    final Angebot angelegt = legeAn(null, true);
+
+    // Then
+    assertThat(angelegt.intern()).isTrue();
+    assertThat(angelegt.status()).isEqualTo(Angebotsstatus.LAEUFT);
   }
 
   @Test
@@ -173,7 +202,7 @@ class AngebotAnlegenUseCaseTest {
     when(firmen.findById(Angebotsdoppel.FIRMA)).thenReturn(Optional.empty());
 
     // When / Then
-    assertThatThrownBy(() -> useCase.anlegen(Angebotsdoppel.FIRMA, null))
+    assertThatThrownBy(() -> useCase.anlegen(Angebotsdoppel.FIRMA, null, false))
         .isInstanceOf(FirmaNichtGefunden.class);
     verify(angebote, never()).save(any());
   }
@@ -184,7 +213,7 @@ class AngebotAnlegenUseCaseTest {
     when(firmen.findById(Angebotsdoppel.FIRMA)).thenReturn(Optional.of(firma(false)));
 
     // When / Then
-    assertThatThrownBy(() -> useCase.anlegen(Angebotsdoppel.FIRMA, null))
+    assertThatThrownBy(() -> useCase.anlegen(Angebotsdoppel.FIRMA, null, false))
         .isInstanceOf(FirmaStillgelegt.class);
     verify(angebote, never()).save(any());
   }
@@ -196,7 +225,7 @@ class AngebotAnlegenUseCaseTest {
     when(personen.findById(PERSON)).thenReturn(Optional.empty());
 
     // When / Then
-    assertThatThrownBy(() -> useCase.anlegen(Angebotsdoppel.FIRMA, PERSON))
+    assertThatThrownBy(() -> useCase.anlegen(Angebotsdoppel.FIRMA, PERSON, false))
         .isInstanceOf(AnsprechpartnerNichtWaehlbar.class);
     verify(angebote, never()).save(any());
   }
@@ -209,7 +238,7 @@ class AngebotAnlegenUseCaseTest {
         .thenReturn(Optional.of(person(Angebotsdoppel.FREMDE_FIRMA, true)));
 
     // When / Then
-    assertThatThrownBy(() -> useCase.anlegen(Angebotsdoppel.FIRMA, PERSON))
+    assertThatThrownBy(() -> useCase.anlegen(Angebotsdoppel.FIRMA, PERSON, false))
         .isInstanceOf(AnsprechpartnerNichtWaehlbar.class);
     verify(angebote, never()).save(any());
   }
@@ -221,7 +250,7 @@ class AngebotAnlegenUseCaseTest {
     when(personen.findById(PERSON)).thenReturn(Optional.of(person(Angebotsdoppel.FIRMA, false)));
 
     // When / Then
-    assertThatThrownBy(() -> useCase.anlegen(Angebotsdoppel.FIRMA, PERSON))
+    assertThatThrownBy(() -> useCase.anlegen(Angebotsdoppel.FIRMA, PERSON, false))
         .isInstanceOf(AnsprechpartnerNichtWaehlbar.class);
     verify(angebote, never()).save(any());
   }

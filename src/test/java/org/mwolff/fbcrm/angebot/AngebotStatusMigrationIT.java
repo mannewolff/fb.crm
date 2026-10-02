@@ -186,6 +186,7 @@ class AngebotStatusMigrationIT extends AbstractIntegrationTest {
             "created_at",
             "firma_id",
             "id",
+            "intern",
             "leistungsbeschreibung",
             "status",
             "updated_at");

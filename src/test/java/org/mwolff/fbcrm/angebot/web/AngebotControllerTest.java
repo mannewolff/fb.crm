@@ -113,6 +113,7 @@ class AngebotControllerTest {
         Long.valueOf(ANGEBOT),
         3L,
         8L,
+        status.intern(),
         status,
         ANGEBOTSDATUM,
         "Neugestaltung",
@@ -138,6 +139,7 @@ class AngebotControllerTest {
         .andExpect(jsonPath("$.id").value(Long.valueOf(ANGEBOT)))
         .andExpect(jsonPath("$.firmaId").value(3))
         .andExpect(jsonPath("$.firmaName").value("Adler AG"))
+        .andExpect(jsonPath("$.intern").value(false))
         .andExpect(jsonPath("$.ansprechpartnerId").value(8))
         .andExpect(jsonPath("$.ansprechpartnerName").value("Eva Adler"))
         .andExpect(jsonPath("$.status").value("BESTELLT"))
@@ -146,6 +148,19 @@ class AngebotControllerTest {
         .andExpect(jsonPath("$.positionen[0].betrag").value(2500.03))
         .andExpect(jsonPath("$.positionen[0].einheit").value("PERSONENTAG"))
         .andExpect(jsonPath("$.nummer").doesNotExist());
+  }
+
+  @Test
+  void lesen_givenInternalWork_thenAnswersWithTheFlagSet() throws Exception {
+    // Given — Issue #226, Kriterium 2: die Detailansicht nennt die Art des Angebots.
+    when(lesen.lese(ANGEBOT)).thenReturn(angebot(Angebotsstatus.LAEUFT));
+
+    // When / Then
+    mockMvc
+        .perform(get("/api/angebote/{id}", Long.valueOf(ANGEBOT)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.intern").value(true))
+        .andExpect(jsonPath("$.status").value("LAEUFT"));
   }
 
   @Test
@@ -336,7 +351,8 @@ class AngebotControllerTest {
         .perform(post("/api/angebote/{id}/status/weiter", Long.valueOf(ANGEBOT)))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.status").value("ERLEDIGT"))
-        .andExpect(jsonPath("$.firmaName").value("Adler AG"));
+        .andExpect(jsonPath("$.firmaName").value("Adler AG"))
+        .andExpect(jsonPath("$.intern").value(false));
   }
 
   @Test
