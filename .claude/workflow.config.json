@@ -62,7 +62,8 @@
       ".mvn/**",
       "src/**",
       "config/**",
-      "sonar-project.properties"
+      "sonar-project.properties",
+      ".github/**"
     ],
     "frontend": [
       "frontend/**"
