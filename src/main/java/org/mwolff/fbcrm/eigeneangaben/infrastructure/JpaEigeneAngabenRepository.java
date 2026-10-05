@@ -2,7 +2,6 @@ package org.mwolff.fbcrm.eigeneangaben.infrastructure;
 
 import java.time.Instant;
 import java.util.NoSuchElementException;
-import org.mwolff.fbcrm.common.Anschrift;
 import org.mwolff.fbcrm.eigeneangaben.domain.EigeneAngaben;
 import org.mwolff.fbcrm.eigeneangaben.domain.EigeneAngabenRepository;
 import org.springframework.stereotype.Repository;
@@ -30,38 +29,19 @@ class JpaEigeneAngabenRepository implements EigeneAngabenRepository {
 
   @Override
   public void speichere(final EigeneAngaben angaben, final Instant geaendertAm) {
-    jpa.save(toEntity(angaben, geaendertAm));
+    jpa.save(EigeneAngabenEntity.aus(angaben, geaendertAm));
   }
 
   private static EigeneAngaben toDomain(final EigeneAngabenEntity zeile) {
     return new EigeneAngaben(
         zeile.getName(),
         zeile.getBerufsbezeichnung(),
-        new Anschrift(zeile.getStrasse(), zeile.getPlz(), zeile.getOrt(), zeile.getLand()),
+        zeile.getAnschrift(),
         zeile.getEmail(),
         zeile.getTelefon(),
         zeile.getWebadresse(),
         zeile.getSteuernummer(),
         zeile.getUmsatzsteuerId(),
         zeile.getBankverbindung());
-  }
-
-  private static EigeneAngabenEntity toEntity(
-      final EigeneAngaben angaben, final Instant geaendertAm) {
-    final Anschrift anschrift = angaben.anschrift();
-    return new EigeneAngabenEntity(
-        angaben.name(),
-        angaben.berufsbezeichnung(),
-        anschrift.strasse(),
-        anschrift.plz(),
-        anschrift.ort(),
-        anschrift.land(),
-        angaben.email(),
-        angaben.telefon(),
-        angaben.webadresse(),
-        angaben.steuernummer(),
-        angaben.umsatzsteuerId(),
-        angaben.bankverbindung(),
-        geaendertAm);
   }
 }

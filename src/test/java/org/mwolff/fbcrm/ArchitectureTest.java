@@ -168,18 +168,12 @@ class ArchitectureTest {
    *
    * <p>Die Liste ist der Rest der Umstellung aus Plan #238, A5: Jede Entity bildet sich ueber eine
    * Fabrik {@code aus(...)} aus ihrem Domaenenobjekt, statt jedes Feld einzeln zu nehmen. Issue
-   * #241 hat das fuer {@code rechnung} und {@code angebot} getan; #242 nimmt {@code firma} und
-   * {@code eigeneangaben} aus der Liste, #243 den Rest — und mit dem letzten Namen entfallen die
-   * Liste und der Lauf ohne sie ({@link
-   * #entities_givenNoExceptionList_thenTheRuleNamesTheKnownOffenders}).
+   * #241 hat das fuer {@code rechnung} und {@code angebot} getan, #242 fuer {@code firma} und
+   * {@code eigeneangaben}; #243 nimmt den Rest — und mit dem letzten Namen entfallen die Liste und
+   * der Lauf ohne sie ({@link #entities_givenNoExceptionList_thenTheRuleNamesTheKnownOffenders}).
    */
   private static final Set<String> ENTITIES_MIT_LANGER_PARAMETERLISTE =
-      Set.of(
-          "FirmaEntity",
-          "AnsprechpartnerEntity",
-          "EigeneAngabenEntity",
-          "OutboxMessageEntity",
-          "AccountEntity");
+      Set.of("OutboxMessageEntity", "AccountEntity");
 
   private static final int HOECHSTENS_PARAMETER = 7;
 

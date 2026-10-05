@@ -1,11 +1,15 @@
 package org.mwolff.fbcrm.eigeneangaben.infrastructure;
 
 import jakarta.persistence.Column;
+import jakarta.persistence.Embedded;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.Instant;
 import org.jspecify.annotations.Nullable;
+import org.mwolff.fbcrm.common.Anschrift;
+import org.mwolff.fbcrm.common.infrastructure.AnschriftSpalten;
+import org.mwolff.fbcrm.eigeneangaben.domain.EigeneAngaben;
 
 /**
  * Die eine Zeile der Tabelle {@code eigene_angaben} aus {@code V5__eigene_angaben.sql}.
@@ -31,17 +35,12 @@ class EigeneAngabenEntity {
   @Column(name = "berufsbezeichnung", length = 200)
   private @Nullable String berufsbezeichnung;
 
-  @Column(name = "strasse", length = 200)
-  private @Nullable String strasse;
-
-  @Column(name = "plz", length = 20)
-  private @Nullable String plz;
-
-  @Column(name = "ort", length = 200)
-  private @Nullable String ort;
-
-  @Column(name = "land", length = 100)
-  private @Nullable String land;
+  /*
+   * Dieselben vier Spalten wie an der Firma, in derselben Laenge; ein @AttributeOverride braucht
+   * es darum nicht. Hibernate laesst das eingebettete Objekt weg, solange jede seiner Spalten NULL
+   * ist — der Stand der Zeile direkt nach der Migration.
+   */
+  @Embedded private @Nullable AnschriftSpalten anschrift;
 
   @Column(name = "email", length = 320)
   private @Nullable String email;
@@ -73,41 +72,33 @@ class EigeneAngabenEntity {
     // Von Hibernate benutzt.
   }
 
-  /*
-   * PMD.ExcessiveParameterList: Dreizehn Spalten ergeben dreizehn Parameter. Ein Zwischenobjekt zu
-   * bauen, nur um die Liste zu kuerzen, verschoebe die Zahl, ohne etwas zu klaeren: Die Zeile ist
-   * die Zeile der Tabelle, und genau die uebersetzt JpaEigeneAngabenRepository in beide
-   * Richtungen. Die Kennung steht nicht in der Liste — sie ist fest.
+  /**
+   * Die eine Zeile zu den eigenen Angaben — jedes Feld kommt aus dem Fachobjekt (Plan #238, A5).
+   *
+   * <p>Die Kennung steht nicht in der Liste; sie ist fest ({@link #ZEILE}). Der Zeitpunkt der
+   * Aenderung steht nicht an den Angaben selbst und kommt darum als zweiter Parameter dazu — wie
+   * der Fremdschluessel an den Positionszeilen aus Issue #241.
+   *
+   * @param angaben die eigenen Angaben, deren Stand die Zeile tragen soll
+   * @param geaendertAm Zeitpunkt der Aenderung
+   * @return die eine Zeile
    */
-  @SuppressWarnings("PMD.ExcessiveParameterList")
-  EigeneAngabenEntity(
-      final @Nullable String name,
-      final @Nullable String berufsbezeichnung,
-      final @Nullable String strasse,
-      final @Nullable String plz,
-      final @Nullable String ort,
-      final @Nullable String land,
-      final @Nullable String email,
-      final @Nullable String telefon,
-      final @Nullable String webadresse,
-      final @Nullable String steuernummer,
-      final @Nullable String umsatzsteuerId,
-      final @Nullable String bankverbindung,
-      final Instant updatedAt) {
+  static EigeneAngabenEntity aus(final EigeneAngaben angaben, final Instant geaendertAm) {
+    return new EigeneAngabenEntity(angaben, geaendertAm);
+  }
+
+  private EigeneAngabenEntity(final EigeneAngaben angaben, final Instant geaendertAm) {
     this.id = ZEILE;
-    this.name = name;
-    this.berufsbezeichnung = berufsbezeichnung;
-    this.strasse = strasse;
-    this.plz = plz;
-    this.ort = ort;
-    this.land = land;
-    this.email = email;
-    this.telefon = telefon;
-    this.webadresse = webadresse;
-    this.steuernummer = steuernummer;
-    this.umsatzsteuerId = umsatzsteuerId;
-    this.bankverbindung = bankverbindung;
-    this.updatedAt = updatedAt;
+    this.name = angaben.name();
+    this.berufsbezeichnung = angaben.berufsbezeichnung();
+    this.anschrift = AnschriftSpalten.aus(angaben.anschrift());
+    this.email = angaben.email();
+    this.telefon = angaben.telefon();
+    this.webadresse = angaben.webadresse();
+    this.steuernummer = angaben.steuernummer();
+    this.umsatzsteuerId = angaben.umsatzsteuerId();
+    this.bankverbindung = angaben.bankverbindung();
+    this.updatedAt = geaendertAm;
   }
 
   Short getId() {
@@ -122,20 +113,8 @@ class EigeneAngabenEntity {
     return berufsbezeichnung;
   }
 
-  @Nullable String getStrasse() {
-    return strasse;
-  }
-
-  @Nullable String getPlz() {
-    return plz;
-  }
-
-  @Nullable String getOrt() {
-    return ort;
-  }
-
-  @Nullable String getLand() {
-    return land;
+  Anschrift getAnschrift() {
+    return AnschriftSpalten.anschriftAus(anschrift);
   }
 
   @Nullable String getEmail() {

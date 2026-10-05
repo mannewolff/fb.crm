@@ -8,6 +8,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.Instant;
 import org.jspecify.annotations.Nullable;
+import org.mwolff.fbcrm.firma.domain.Ansprechpartner;
 
 /**
  * Die Zeile der Tabelle {@code ansprechpartner} aus {@code V2__firma_und_ansprechpartner.sql}.
@@ -63,34 +64,33 @@ class AnsprechpartnerEntity {
     // Von Hibernate benutzt.
   }
 
-  /*
-   * Elf Spalten ergeben elf Parameter — dieselbe Begruendung wie bei FirmaEntity: Die Zeile ist
-   * die Zeile der Tabelle, und ein Zwischenobjekt verschoebe die Zahl nur.
+  /**
+   * Die Zeile zu einem Ansprechpartner — jedes Feld kommt aus dem Fachobjekt (Plan #238, A5).
+   *
+   * <p>Dieselbe Form wie bei {@link FirmaEntity}: Die Zeile holt sich ihren Stand selbst, statt ihn
+   * als Liste von elf Parametern zu bekommen. Die Firma steht am Ansprechpartner selbst und kommt
+   * darum nicht als eigener Parameter dazu.
+   *
+   * @param ansprechpartner der Ansprechpartner, dessen Stand die Zeile tragen soll
+   * @return die Zeile; ihre Kennung ist die des Ansprechpartners und damit {@code null}, solange er
+   *     noch nicht geschrieben wurde
    */
-  @SuppressWarnings("PMD.ExcessiveParameterList")
-  AnsprechpartnerEntity(
-      final @Nullable Long id,
-      final long firmaId,
-      final @Nullable String vorname,
-      final String nachname,
-      final @Nullable String rolle,
-      final @Nullable String email,
-      final @Nullable String telefonFestnetz,
-      final @Nullable String telefonMobil,
-      final boolean aktiv,
-      final Instant createdAt,
-      final Instant updatedAt) {
-    this.id = id;
-    this.firmaId = firmaId;
-    this.vorname = vorname;
-    this.nachname = nachname;
-    this.rolle = rolle;
-    this.email = email;
-    this.telefonFestnetz = telefonFestnetz;
-    this.telefonMobil = telefonMobil;
-    this.aktiv = aktiv;
-    this.createdAt = createdAt;
-    this.updatedAt = updatedAt;
+  static AnsprechpartnerEntity aus(final Ansprechpartner ansprechpartner) {
+    return new AnsprechpartnerEntity(ansprechpartner);
+  }
+
+  private AnsprechpartnerEntity(final Ansprechpartner ansprechpartner) {
+    this.id = ansprechpartner.id();
+    this.firmaId = ansprechpartner.firmaId();
+    this.vorname = ansprechpartner.vorname();
+    this.nachname = ansprechpartner.nachname();
+    this.rolle = ansprechpartner.rolle();
+    this.email = ansprechpartner.email();
+    this.telefonFestnetz = ansprechpartner.telefonFestnetz();
+    this.telefonMobil = ansprechpartner.telefonMobil();
+    this.aktiv = ansprechpartner.aktiv();
+    this.createdAt = ansprechpartner.createdAt();
+    this.updatedAt = ansprechpartner.updatedAt();
   }
 
   @Nullable Long getId() {

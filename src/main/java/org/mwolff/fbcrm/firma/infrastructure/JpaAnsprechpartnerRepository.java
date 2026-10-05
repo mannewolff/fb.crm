@@ -28,7 +28,7 @@ class JpaAnsprechpartnerRepository implements AnsprechpartnerRepository {
 
   @Override
   public Ansprechpartner save(final Ansprechpartner ansprechpartner) {
-    return toDomain(jpa.save(toEntity(ansprechpartner)));
+    return toDomain(jpa.save(AnsprechpartnerEntity.aus(ansprechpartner)));
   }
 
   @Override
@@ -62,20 +62,5 @@ class JpaAnsprechpartnerRepository implements AnsprechpartnerRepository {
         zeile.isAktiv(),
         zeile.getCreatedAt(),
         zeile.getUpdatedAt());
-  }
-
-  private static AnsprechpartnerEntity toEntity(final Ansprechpartner ansprechpartner) {
-    return new AnsprechpartnerEntity(
-        ansprechpartner.id(),
-        ansprechpartner.firmaId(),
-        ansprechpartner.vorname(),
-        ansprechpartner.nachname(),
-        ansprechpartner.rolle(),
-        ansprechpartner.email(),
-        ansprechpartner.telefonFestnetz(),
-        ansprechpartner.telefonMobil(),
-        ansprechpartner.aktiv(),
-        ansprechpartner.createdAt(),
-        ansprechpartner.updatedAt());
   }
 }

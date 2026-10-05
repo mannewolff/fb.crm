@@ -57,18 +57,7 @@ class JpaAnsprechpartnerRepositoryTest {
   @InjectMocks private JpaAnsprechpartnerRepository repository;
 
   private static AnsprechpartnerEntity zeile(final Long id) {
-    return new AnsprechpartnerEntity(
-        id,
-        7L,
-        "Max",
-        "Mustermann",
-        "Einkauf",
-        "max@firma.de",
-        "0421 123456",
-        "0170 123456",
-        true,
-        ANGELEGT,
-        GEAENDERT);
+    return AnsprechpartnerEntity.aus(ansprechpartner(id));
   }
 
   private static Ansprechpartner ansprechpartner(final Long id) {

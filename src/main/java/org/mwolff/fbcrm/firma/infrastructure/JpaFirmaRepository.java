@@ -3,7 +3,6 @@ package org.mwolff.fbcrm.firma.infrastructure;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
-import org.mwolff.fbcrm.common.Anschrift;
 import org.mwolff.fbcrm.firma.domain.Firma;
 import org.mwolff.fbcrm.firma.domain.FirmaRepository;
 import org.springframework.stereotype.Repository;
@@ -40,7 +39,7 @@ class JpaFirmaRepository implements FirmaRepository {
 
   @Override
   public Firma save(final Firma firma) {
-    return toDomain(jpa.save(toEntity(firma)));
+    return toDomain(jpa.save(FirmaEntity.aus(firma)));
   }
 
   @Override
@@ -52,27 +51,11 @@ class JpaFirmaRepository implements FirmaRepository {
     return new Firma(
         zeile.getId(),
         zeile.getName(),
-        new Anschrift(zeile.getStrasse(), zeile.getPlz(), zeile.getOrt(), zeile.getLand()),
+        zeile.getAnschrift(),
         zeile.getSteuernummer(),
         zeile.getUmsatzsteuerId(),
         zeile.isAktiv(),
         zeile.getCreatedAt(),
         zeile.getUpdatedAt());
-  }
-
-  private static FirmaEntity toEntity(final Firma firma) {
-    final Anschrift anschrift = firma.anschrift();
-    return new FirmaEntity(
-        firma.id(),
-        firma.name(),
-        anschrift.strasse(),
-        anschrift.plz(),
-        anschrift.ort(),
-        anschrift.land(),
-        firma.steuernummer(),
-        firma.umsatzsteuerId(),
-        firma.aktiv(),
-        firma.createdAt(),
-        firma.updatedAt());
   }
 }

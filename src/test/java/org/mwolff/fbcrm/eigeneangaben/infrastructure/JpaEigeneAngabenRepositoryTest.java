@@ -35,20 +35,7 @@ class JpaEigeneAngabenRepositoryTest {
   @InjectMocks private JpaEigeneAngabenRepository repository;
 
   private static EigeneAngabenEntity zeile() {
-    return new EigeneAngabenEntity(
-        "Manfred Wolff",
-        "Freiberuflicher Softwareentwickler",
-        "Am Wall 1",
-        "28195",
-        "Bremen",
-        "Deutschland",
-        "manne@example.org",
-        "0421 1234",
-        "https://mwolff.org",
-        "75/123/45678",
-        "DE123456789",
-        "DE02120300000000202051",
-        GEAENDERT);
+    return EigeneAngabenEntity.aus(angaben(), GEAENDERT);
   }
 
   private static EigeneAngaben angaben() {
@@ -83,10 +70,9 @@ class JpaEigeneAngabenRepositoryTest {
 
   @Test
   void lies_givenTheFreshRow_thenEveryValueIsAbsent() {
-    // Given — nach der Migration steht die eine Zeile mit lauter NULL da.
-    final EigeneAngabenEntity frisch =
-        new EigeneAngabenEntity(
-            null, null, null, null, null, null, null, null, null, null, null, null, GEAENDERT);
+    // Given — nach der Migration steht die eine Zeile mit lauter NULL da. Dass Hibernate die
+    // eingebetteten Anschriftenspalten dann gar nicht erst anlegt, steht in AnschriftSpaltenTest.
+    final EigeneAngabenEntity frisch = EigeneAngabenEntity.aus(leer(), GEAENDERT);
     when(jpa.findById(EigeneAngabenEntity.ZEILE)).thenReturn(Optional.of(frisch));
 
     // When
@@ -110,10 +96,9 @@ class JpaEigeneAngabenRepositoryTest {
             zeile ->
                 assertThat(zeile.getBerufsbezeichnung())
                     .isEqualTo("Freiberuflicher Softwareentwickler"),
-            zeile -> assertThat(zeile.getStrasse()).isEqualTo("Am Wall 1"),
-            zeile -> assertThat(zeile.getPlz()).isEqualTo("28195"),
-            zeile -> assertThat(zeile.getOrt()).isEqualTo("Bremen"),
-            zeile -> assertThat(zeile.getLand()).isEqualTo("Deutschland"),
+            zeile ->
+                assertThat(zeile.getAnschrift())
+                    .isEqualTo(new Anschrift("Am Wall 1", "28195", "Bremen", "Deutschland")),
             zeile -> assertThat(zeile.getEmail()).isEqualTo("manne@example.org"),
             zeile -> assertThat(zeile.getTelefon()).isEqualTo("0421 1234"),
             zeile -> assertThat(zeile.getWebadresse()).isEqualTo("https://mwolff.org"),
@@ -134,10 +119,8 @@ class JpaEigeneAngabenRepositoryTest {
         .satisfies(
             zeile -> assertThat(zeile.getName()).isNull(),
             zeile -> assertThat(zeile.getBerufsbezeichnung()).isNull(),
-            zeile -> assertThat(zeile.getStrasse()).isNull(),
-            zeile -> assertThat(zeile.getPlz()).isNull(),
-            zeile -> assertThat(zeile.getOrt()).isNull(),
-            zeile -> assertThat(zeile.getLand()).isNull(),
+            zeile ->
+                assertThat(zeile.getAnschrift()).isEqualTo(new Anschrift(null, null, null, null)),
             zeile -> assertThat(zeile.getEmail()).isNull(),
             zeile -> assertThat(zeile.getTelefon()).isNull(),
             zeile -> assertThat(zeile.getWebadresse()).isNull(),

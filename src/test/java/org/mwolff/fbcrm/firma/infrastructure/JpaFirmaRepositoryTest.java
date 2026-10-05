@@ -38,18 +38,7 @@ class JpaFirmaRepositoryTest {
   @InjectMocks private JpaFirmaRepository repository;
 
   private static FirmaEntity zeile(final Long id) {
-    return new FirmaEntity(
-        id,
-        "Adler AG",
-        "Am Wall 1",
-        "28195",
-        "Bremen",
-        "Deutschland",
-        "75/123/45678",
-        "DE123456789",
-        true,
-        ANGELEGT,
-        GEAENDERT);
+    return FirmaEntity.aus(firma(id));
   }
 
   private static Firma firma(final Long id) {
@@ -78,10 +67,9 @@ class JpaFirmaRepositoryTest {
         .satisfies(
             zeile -> assertThat(zeile.getId()).isNull(),
             zeile -> assertThat(zeile.getName()).isEqualTo("Adler AG"),
-            zeile -> assertThat(zeile.getStrasse()).isEqualTo("Am Wall 1"),
-            zeile -> assertThat(zeile.getPlz()).isEqualTo("28195"),
-            zeile -> assertThat(zeile.getOrt()).isEqualTo("Bremen"),
-            zeile -> assertThat(zeile.getLand()).isEqualTo("Deutschland"),
+            zeile ->
+                assertThat(zeile.getAnschrift())
+                    .isEqualTo(new Anschrift("Am Wall 1", "28195", "Bremen", "Deutschland")),
             zeile -> assertThat(zeile.getSteuernummer()).isEqualTo("75/123/45678"),
             zeile -> assertThat(zeile.getUmsatzsteuerId()).isEqualTo("DE123456789"),
             zeile -> assertThat(zeile.isAktiv()).isTrue(),
@@ -111,10 +99,8 @@ class JpaFirmaRepositoryTest {
     verify(jpa).save(gespeicherte.capture());
     assertThat(gespeicherte.getValue())
         .satisfies(
-            zeile -> assertThat(zeile.getStrasse()).isNull(),
-            zeile -> assertThat(zeile.getPlz()).isNull(),
-            zeile -> assertThat(zeile.getOrt()).isNull(),
-            zeile -> assertThat(zeile.getLand()).isNull(),
+            zeile ->
+                assertThat(zeile.getAnschrift()).isEqualTo(new Anschrift(null, null, null, null)),
             zeile -> assertThat(zeile.getSteuernummer()).isNull(),
             zeile -> assertThat(zeile.getUmsatzsteuerId()).isNull(),
             zeile -> assertThat(zeile.isAktiv()).isFalse());
