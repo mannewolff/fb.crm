@@ -78,7 +78,7 @@
       ".gitignore",
       "install.mjs",
       ".sonarcloud.properties",
-    "Caddyfile",
+      "Caddyfile",
       "Dockerfile",
       "docker-compose*.yml",
       ".env.example"
