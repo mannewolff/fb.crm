@@ -36,8 +36,7 @@ class JpaAccountRepositoryTest {
   @InjectMocks private JpaAccountRepository repository;
 
   private static AccountEntity zeile(final Long id) {
-    return new AccountEntity(
-        id, "manne@example.org", "Manne", "hash", Role.ADMIN, 2, ANGELEGT, GEAENDERT);
+    return AccountEntity.aus(konto(id));
   }
 
   private static Account konto(final Long id) {

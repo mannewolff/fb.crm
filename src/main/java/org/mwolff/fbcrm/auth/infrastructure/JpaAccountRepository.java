@@ -33,7 +33,7 @@ class JpaAccountRepository implements AccountRepository {
 
   @Override
   public Account save(final Account account) {
-    return toDomain(jpa.save(toEntity(account)));
+    return toDomain(jpa.save(AccountEntity.aus(account)));
   }
 
   private static Account toDomain(final AccountEntity zeile) {
@@ -46,17 +46,5 @@ class JpaAccountRepository implements AccountRepository {
         zeile.getSessionGeneration(),
         zeile.getCreatedAt(),
         zeile.getUpdatedAt());
-  }
-
-  private static AccountEntity toEntity(final Account account) {
-    return new AccountEntity(
-        account.id(),
-        account.email(),
-        account.displayName(),
-        account.passwordHash(),
-        account.role(),
-        account.sessionGeneration(),
-        account.createdAt(),
-        account.updatedAt());
   }
 }

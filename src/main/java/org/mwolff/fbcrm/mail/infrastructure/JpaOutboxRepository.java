@@ -19,7 +19,7 @@ class JpaOutboxRepository implements OutboxRepository {
 
   @Override
   public OutboxMessage save(final OutboxMessage nachricht) {
-    return toDomain(jpa.save(toEntity(nachricht)));
+    return toDomain(jpa.save(OutboxMessageEntity.aus(nachricht)));
   }
 
   @Override
@@ -44,17 +44,5 @@ class JpaOutboxRepository implements OutboxRepository {
         zeile.getNextAttemptAt(),
         zeile.getSentAt(),
         zeile.getCreatedAt());
-  }
-
-  private static OutboxMessageEntity toEntity(final OutboxMessage nachricht) {
-    return new OutboxMessageEntity(
-        nachricht.id(),
-        nachricht.recipient(),
-        nachricht.subject(),
-        nachricht.body(),
-        nachricht.attempts(),
-        nachricht.nextAttemptAt(),
-        nachricht.sentAt(),
-        nachricht.createdAt());
   }
 }

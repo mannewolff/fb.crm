@@ -38,8 +38,7 @@ class JpaOutboxRepositoryTest {
   @InjectMocks private JpaOutboxRepository repository;
 
   private static OutboxMessageEntity zeile(final Long id) {
-    return new OutboxMessageEntity(
-        id, "manne@example.org", "Betreff", "Rumpf", 2, ANGELEGT, ZUGESTELLT, ANGELEGT);
+    return OutboxMessageEntity.aus(auftrag(id));
   }
 
   private static OutboxMessage auftrag(final Long id) {

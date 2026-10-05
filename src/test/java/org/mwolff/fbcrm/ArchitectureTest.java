@@ -3,11 +3,8 @@ package org.mwolff.fbcrm;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.classes;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 import static com.tngtech.archunit.library.dependencies.SlicesRuleDefinition.slices;
-import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.assertj.core.api.Assertions.catchThrowable;
 
-import com.tngtech.archunit.base.DescribedPredicate;
 import com.tngtech.archunit.core.domain.JavaClass;
 import com.tngtech.archunit.core.domain.JavaClasses;
 import com.tngtech.archunit.core.domain.JavaConstructor;
@@ -20,7 +17,6 @@ import com.tngtech.archunit.lang.SimpleConditionEvent;
 import jakarta.persistence.Entity;
 import java.security.MessageDigest;
 import java.util.Arrays;
-import java.util.Set;
 import org.junit.jupiter.api.Test;
 import org.mwolff.fbcrm.angebot.application.VerbotenerZeitzugriff;
 
@@ -163,66 +159,26 @@ class ArchitectureTest {
         .check(CLASSES);
   }
 
-  /**
-   * Die Entities, deren Konstruktor noch mehr als sieben Parameter hat.
-   *
-   * <p>Die Liste ist der Rest der Umstellung aus Plan #238, A5: Jede Entity bildet sich ueber eine
-   * Fabrik {@code aus(...)} aus ihrem Domaenenobjekt, statt jedes Feld einzeln zu nehmen. Issue
-   * #241 hat das fuer {@code rechnung} und {@code angebot} getan, #242 fuer {@code firma} und
-   * {@code eigeneangaben}; #243 nimmt den Rest — und mit dem letzten Namen entfallen die Liste und
-   * der Lauf ohne sie ({@link #entities_givenNoExceptionList_thenTheRuleNamesTheKnownOffenders}).
-   */
-  private static final Set<String> ENTITIES_MIT_LANGER_PARAMETERLISTE =
-      Set.of("OutboxMessageEntity", "AccountEntity");
-
   private static final int HOECHSTENS_PARAMETER = 7;
 
+  /**
+   * Keine Entity nimmt jedes Feld einzeln (Plan #238, A5; SonarCloud S107).
+   *
+   * <p>Die Regel gilt ohne Ausnahme: Issue #241 hat {@code rechnung} und {@code angebot}
+   * umgestellt, #242 {@code firma} und {@code eigeneangaben}, #243 {@code mail} und {@code auth} —
+   * mit dem letzten Namen entfiel die Ausnahmeliste, die die Regel bis dahin trug, und mit ihr der
+   * Lauf, der sie gegen die leere Liste prueft.
+   */
   @Test
   void entities_thenNoConstructorTakesMoreThanSevenParameters() {
-    hoechstensSiebenParameter(ENTITIES_MIT_LANGER_PARAMETERLISTE).check(CLASSES);
-  }
-
-  /**
-   * Dass die Regel ueberhaupt greift (wie bei Issue #228).
-   *
-   * <p>Gelaufen ohne Ausnahmeliste gegen dieselbe Klassenmenge: Dann muss die Regel genau die
-   * Entities nennen, die noch auf der Liste stehen. Ohne diesen Lauf saehe eine Regel, die nichts
-   * finden <em>kann</em>, aus wie eine, die nichts findet — und eine Ausnahmeliste, die laengst
-   * ueberfluessig ist, faende niemand mehr.
-   */
-  @Test
-  void entities_givenNoExceptionList_thenTheRuleNamesTheKnownOffenders() {
-    final Throwable fehler =
-        catchThrowable(() -> hoechstensSiebenParameter(Set.of()).check(CLASSES));
-
-    assertThat(fehler)
-        .isInstanceOf(AssertionError.class)
-        .hasMessageContainingAll(ENTITIES_MIT_LANGER_PARAMETERLISTE.toArray(String[]::new));
-  }
-
-  /*
-   * Die Regel als eigene Methode, aus demselben Grund wie bei angebotOhneArbeitszeit(): Sie laeuft
-   * gegen zwei Ausnahmelisten — die wirkliche und die leere —, und zwei Abschriften liefen beim
-   * ersten Nachziehen auseinander.
-   */
-  private static ArchRule hoechstensSiebenParameter(final Set<String> ausnahmen) {
-    return classes()
+    classes()
         .that()
         .areAnnotatedWith(Entity.class)
-        .and(DescribedPredicate.not(mitNamenAus(ausnahmen)))
         .should(konstruktorenMitHoechstensSiebenParametern())
         .because(
             "eine Entity bildet sich aus ihrem Domaenenobjekt und nimmt nicht jedes Feld einzeln"
-                + " (Plan #238, A5; SonarCloud S107)");
-  }
-
-  private static DescribedPredicate<JavaClass> mitNamenAus(final Set<String> namen) {
-    return new DescribedPredicate<>("in der Ausnahmeliste " + namen) {
-      @Override
-      public boolean test(final JavaClass klasse) {
-        return namen.contains(klasse.getSimpleName());
-      }
-    };
+                + " (Plan #238, A5; SonarCloud S107)")
+        .check(CLASSES);
   }
 
   private static ArchCondition<JavaClass> konstruktorenMitHoechstensSiebenParametern() {

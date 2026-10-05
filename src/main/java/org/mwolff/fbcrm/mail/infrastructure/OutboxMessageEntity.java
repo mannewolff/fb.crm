@@ -8,6 +8,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.Instant;
 import org.jspecify.annotations.Nullable;
+import org.mwolff.fbcrm.mail.domain.OutboxMessage;
 
 /** Die Zeile der Tabelle {@code outbox_message} aus {@code V1__baseline.sql}. */
 @Entity
@@ -48,23 +49,30 @@ class OutboxMessageEntity {
     // Von Hibernate benutzt.
   }
 
-  OutboxMessageEntity(
-      final @Nullable Long id,
-      final String recipient,
-      final String subject,
-      final String body,
-      final int attempts,
-      final Instant nextAttemptAt,
-      final @Nullable Instant sentAt,
-      final Instant createdAt) {
-    this.id = id;
-    this.recipient = recipient;
-    this.subject = subject;
-    this.body = body;
-    this.attempts = attempts;
-    this.nextAttemptAt = nextAttemptAt;
-    this.sentAt = sentAt;
-    this.createdAt = createdAt;
+  /**
+   * Die Zeile zu einem Zustellauftrag — jedes Feld kommt aus dem Fachobjekt (Plan #238, A5).
+   *
+   * <p>Die Zeile holt sich ihren Stand selbst, statt ihn als Liste von acht Parametern zu bekommen:
+   * Der Adapter nennt dann am Aufruf nur noch, <i>was</i> abgebildet wird, und ein neues Feld des
+   * Auftrags landet hier und nicht zusaetzlich in jeder Aufrufstelle.
+   *
+   * @param nachricht der Zustellauftrag, dessen Stand die Zeile tragen soll
+   * @return die Zeile; ihre Kennung ist die des Auftrags und damit {@code null}, solange der
+   *     Auftrag noch nicht geschrieben wurde
+   */
+  static OutboxMessageEntity aus(final OutboxMessage nachricht) {
+    return new OutboxMessageEntity(nachricht);
+  }
+
+  private OutboxMessageEntity(final OutboxMessage nachricht) {
+    this.id = nachricht.id();
+    this.recipient = nachricht.recipient();
+    this.subject = nachricht.subject();
+    this.body = nachricht.body();
+    this.attempts = nachricht.attempts();
+    this.nextAttemptAt = nachricht.nextAttemptAt();
+    this.sentAt = nachricht.sentAt();
+    this.createdAt = nachricht.createdAt();
   }
 
   @Nullable Long getId() {
