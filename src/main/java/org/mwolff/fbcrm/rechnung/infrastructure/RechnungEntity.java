@@ -15,6 +15,7 @@ import org.jspecify.annotations.Nullable;
 import org.mwolff.fbcrm.common.Anschrift;
 import org.mwolff.fbcrm.rechnung.domain.Belegabsender;
 import org.mwolff.fbcrm.rechnung.domain.Belegempfaenger;
+import org.mwolff.fbcrm.rechnung.domain.Rechnung;
 import org.mwolff.fbcrm.rechnung.domain.Rechnungszustand;
 
 /**
@@ -30,13 +31,13 @@ import org.mwolff.fbcrm.rechnung.domain.Rechnungszustand;
  * Ordnungszahl: Der CHECK der Migration nennt die Werte im Klartext, und ein neuer Zustand darf die
  * Bedeutung der bestehenden Zeilen nicht verschieben.
  *
- * <p><b>Die beiden Kopien stehen in Einzelspalten, wandern aber als Ganzes.</b> Konstruktor und
- * Getter nehmen und liefern {@link Belegempfaenger} und {@link Belegabsender}; die Zerlegung auf
- * {@code empfaenger_*} und {@code absender_*} findet nur hier statt. Das ist dasselbe, was ein
- * {@code @Embeddable} taete — von Hand, weil zwei Anschriften mit verschiedenen Spaltenpraefixen
- * sonst eine Kette von {@code @AttributeOverride} braeuchten. Fehlt die Pflichtangabe der Kopie
- * (Firmenname beim Empfaenger, Name beim Absender), gibt es die Kopie nicht — genau das ist der
- * Entwurf, und genau das haelt auch der CHECK {@code rechnung_entwurf} fest.
+ * <p><b>Die beiden Kopien stehen in Einzelspalten, wandern aber als Ganzes.</b> Die Fabrik {@link
+ * #aus} und die Getter nehmen und liefern {@link Belegempfaenger} und {@link Belegabsender}; die
+ * Zerlegung auf {@code empfaenger_*} und {@code absender_*} findet nur hier statt. Das ist
+ * dasselbe, was ein {@code @Embeddable} taete — von Hand, weil zwei Anschriften mit verschiedenen
+ * Spaltenpraefixen sonst eine Kette von {@code @AttributeOverride} braeuchten. Fehlt die
+ * Pflichtangabe der Kopie (Firmenname beim Empfaenger, Name beim Absender), gibt es die Kopie nicht
+ * — genau das ist der Entwurf, und genau das haelt auch der CHECK {@code rechnung_entwurf} fest.
  *
  * <p>Einen Ansprechpartner fuehrt die Kopie des Empfaengers nicht (siehe Belegempfaenger und die
  * Spaltenliste in V18); beim Lesen steht dort {@code null}.
@@ -150,42 +151,36 @@ class RechnungEntity {
     // Von Hibernate benutzt.
   }
 
-  /*
-   * Vierzehn Angaben ergeben vierzehn Parameter — die beiden Kopien zaehlen dabei als je eine,
-   * obwohl sie sechzehn Spalten fuellen. Ein weiteres Zwischenobjekt zu bauen, nur um die Liste zu
-   * kuerzen, verschoebe die Zahl, ohne etwas zu klaeren: Die Zeile ist die Zeile der Tabelle, und
-   * genau die uebersetzt JpaRechnungRepository in beide Richtungen.
+  /**
+   * Die Zeile zu einer Rechnung — jedes Feld kommt aus dem Fachobjekt (Plan #238, A5).
+   *
+   * <p>Die Zeile holt sich ihren Stand selbst, statt ihn als Liste von vierzehn Parametern zu
+   * bekommen: Der Adapter nennt dann am Aufruf nur noch, <i>was</i> abgebildet wird, und ein neues
+   * Feld der Rechnung landet hier und nicht zusaetzlich in jeder Aufrufstelle.
+   *
+   * @param rechnung die Rechnung, deren Stand die Zeile tragen soll
+   * @return die Zeile; ihre Kennung ist die der Rechnung und damit {@code null}, solange die
+   *     Rechnung noch nicht geschrieben wurde
    */
-  @SuppressWarnings("PMD.ExcessiveParameterList")
-  RechnungEntity(
-      final @Nullable Long id,
-      final long angebotId,
-      final Rechnungszustand zustand,
-      final LocalDate rechnungDatum,
-      final @Nullable String leistungszeitraum,
-      final @Nullable String nummer,
-      final @Nullable BigDecimal steuersatz,
-      final @Nullable Integer zahlungszielTage,
-      final @Nullable Instant gestelltAm,
-      final @Nullable String pdfSchluessel,
-      final @Nullable Belegempfaenger empfaenger,
-      final @Nullable Belegabsender absender,
-      final Instant createdAt,
-      final Instant updatedAt) {
-    this.id = id;
-    this.angebotId = angebotId;
-    this.zustand = zustand;
-    this.rechnungDatum = rechnungDatum;
-    this.leistungszeitraum = leistungszeitraum;
-    this.nummer = nummer;
-    this.steuersatz = steuersatz;
-    this.zahlungszielTage = zahlungszielTage;
-    this.gestelltAm = gestelltAm;
-    this.pdfSchluessel = pdfSchluessel;
-    uebernehmeEmpfaenger(empfaenger);
-    uebernehmeAbsender(absender);
-    this.createdAt = createdAt;
-    this.updatedAt = updatedAt;
+  static RechnungEntity aus(final Rechnung rechnung) {
+    return new RechnungEntity(rechnung);
+  }
+
+  private RechnungEntity(final Rechnung rechnung) {
+    this.id = rechnung.id();
+    this.angebotId = rechnung.angebotId();
+    this.zustand = rechnung.zustand();
+    this.rechnungDatum = rechnung.rechnungDatum();
+    this.leistungszeitraum = rechnung.leistungszeitraum();
+    this.nummer = rechnung.nummer();
+    this.steuersatz = rechnung.steuersatz();
+    this.zahlungszielTage = rechnung.zahlungszielTage();
+    this.gestelltAm = rechnung.gestelltAm();
+    this.pdfSchluessel = rechnung.pdfSchluessel();
+    uebernehmeEmpfaenger(rechnung.empfaenger());
+    uebernehmeAbsender(rechnung.absender());
+    this.createdAt = rechnung.createdAt();
+    this.updatedAt = rechnung.updatedAt();
   }
 
   private void uebernehmeEmpfaenger(final @Nullable Belegempfaenger empfaenger) {

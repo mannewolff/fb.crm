@@ -37,7 +37,7 @@ import org.springframework.stereotype.Repository;
  * der Anwendungsfall fest.
  */
 /*
- * Neun Methoden des Ports und sechs private Uebersetzer ergeben fuenfzehn. Sie weiter aufzuteilen
+ * Neun Methoden des Ports und fuenf private Uebersetzer ergeben vierzehn. Sie weiter aufzuteilen
  * verschoebe die Zahl, ohne etwas zu klaeren: Der Adapter ist die eine Stelle, an der Rechnung und
  * Zeile ineinander uebergehen, und genau darum stehen beide Richtungen hier beieinander.
  */
@@ -104,12 +104,12 @@ class JpaRechnungRepository implements RechnungRepository {
 
   @Override
   public Rechnung save(final Rechnung rechnung) {
-    return mitZeilen(rechnungen.save(toEntity(rechnung)), rechnung.positionen());
+    return mitZeilen(rechnungen.save(RechnungEntity.aus(rechnung)), rechnung.positionen());
   }
 
   @Override
   public Rechnung saveAndFlush(final Rechnung rechnung) {
-    return mitZeilen(rechnungen.saveAndFlush(toEntity(rechnung)), rechnung.positionen());
+    return mitZeilen(rechnungen.saveAndFlush(RechnungEntity.aus(rechnung)), rechnung.positionen());
   }
 
   /*
@@ -168,15 +168,7 @@ class JpaRechnungRepository implements RechnungRepository {
       final Map<Long, RechnungPositionEntity> vorhanden) {
     final RechnungPositionEntity zeile = vorhanden.remove(position.angebotPositionId());
     if (zeile == null) {
-      return new RechnungPositionEntity(
-          null,
-          rechnungId,
-          position.angebotPositionId(),
-          platz,
-          position.bezeichnung(),
-          position.menge(),
-          position.einheit(),
-          position.einzelpreis());
+      return RechnungPositionEntity.aus(position, rechnungId, platz);
     }
     zeile.uebernehme(
         platz,
@@ -214,23 +206,5 @@ class JpaRechnungRepository implements RechnungRepository {
         zeile.getMenge(),
         zeile.getEinheit(),
         zeile.getEinzelpreis());
-  }
-
-  private static RechnungEntity toEntity(final Rechnung rechnung) {
-    return new RechnungEntity(
-        rechnung.id(),
-        rechnung.angebotId(),
-        rechnung.zustand(),
-        rechnung.rechnungDatum(),
-        rechnung.leistungszeitraum(),
-        rechnung.nummer(),
-        rechnung.steuersatz(),
-        rechnung.zahlungszielTage(),
-        rechnung.gestelltAm(),
-        rechnung.pdfSchluessel(),
-        rechnung.empfaenger(),
-        rechnung.absender(),
-        rechnung.createdAt(),
-        rechnung.updatedAt());
   }
 }

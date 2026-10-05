@@ -89,8 +89,12 @@ class JpaRechnungRepositoryTest {
   @InjectMocks private JpaRechnungRepository repository;
 
   private static Rechnung entwurf(final List<Rechnungsposition> positionen) {
+    return entwurf(RECHNUNG_ID, positionen);
+  }
+
+  private static Rechnung entwurf(final long id, final List<Rechnungsposition> positionen) {
     return new Rechnung(
-        RECHNUNG_ID,
+        id,
         ANGEBOT_ID,
         Rechnungszustand.ENTWURF,
         RECHNUNGSDATUM,
@@ -114,21 +118,12 @@ class JpaRechnungRepositoryTest {
   }
 
   private static RechnungEntity entwurfszeile() {
-    return new RechnungEntity(
-        RECHNUNG_ID,
-        ANGEBOT_ID,
-        Rechnungszustand.ENTWURF,
-        RECHNUNGSDATUM,
-        ZEITRAUM,
-        null,
-        null,
-        null,
-        null,
-        null,
-        null,
-        null,
-        ANGELEGT,
-        ANGELEGT);
+    return entwurfszeile(RECHNUNG_ID);
+  }
+
+  /* Die Positionen gehoeren nicht zur Zeile; sie liegen in eigenen Zeilen. */
+  private static RechnungEntity entwurfszeile(final long id) {
+    return RechnungEntity.aus(entwurf(id, List.of()));
   }
 
   private static RechnungPositionEntity positionszeile(
@@ -138,15 +133,7 @@ class JpaRechnungRepositoryTest {
 
   private static RechnungPositionEntity positionszeile(
       final long rechnungId, final short platz, final Rechnungsposition position) {
-    return new RechnungPositionEntity(
-        null,
-        rechnungId,
-        position.angebotPositionId(),
-        platz,
-        position.bezeichnung(),
-        position.menge(),
-        position.einheit(),
-        position.einzelpreis());
+    return RechnungPositionEntity.aus(position, rechnungId, platz);
   }
 
   /**
@@ -326,22 +313,7 @@ class JpaRechnungRepositoryTest {
   @Test
   void findById_givenAnIssuedRow_thenReadsBothCopiesBack() {
     // Given
-    final RechnungEntity zeile =
-        new RechnungEntity(
-            RECHNUNG_ID,
-            ANGEBOT_ID,
-            Rechnungszustand.GESTELLT,
-            RECHNUNGSDATUM,
-            ZEITRAUM,
-            "R26-0004",
-            NEUNZEHN,
-            10,
-            GEAENDERT,
-            "rechnung/11/abc.pdf",
-            EMPFAENGER,
-            ABSENDER,
-            ANGELEGT,
-            GEAENDERT);
+    final RechnungEntity zeile = RechnungEntity.aus(gestellt(List.of()));
     when(rechnungen.findById(RECHNUNG_ID)).thenReturn(Optional.of(zeile));
     when(positionen.findByRechnung(RECHNUNG_ID))
         .thenReturn(List.of(positionszeile((short) 1, BERATUNG)));
@@ -451,22 +423,7 @@ class JpaRechnungRepositoryTest {
   @Test
   void findByAngebot_thenAssignsThePositionsToTheirRechnung() {
     // Given — die Positionen aller Rechnungen kommen in EINER zweiten Abfrage.
-    final RechnungEntity zweite =
-        new RechnungEntity(
-            12L,
-            ANGEBOT_ID,
-            Rechnungszustand.ENTWURF,
-            RECHNUNGSDATUM,
-            ZEITRAUM,
-            null,
-            null,
-            null,
-            null,
-            null,
-            null,
-            null,
-            ANGELEGT,
-            ANGELEGT);
+    final RechnungEntity zweite = entwurfszeile(12L);
     when(rechnungen.findByAngebot(ANGEBOT_ID)).thenReturn(List.of(entwurfszeile(), zweite));
     when(positionen.findByRechnungen(List.of(RECHNUNG_ID, 12L)))
         .thenReturn(
@@ -541,5 +498,61 @@ class JpaRechnungRepositoryTest {
 
     // When / Then
     assertThat(repository.existiertNummer("R26-0004")).isEqualTo(vergeben);
+  }
+
+  /**
+   * Jedes Feld der Rechnung kommt ueber {@link RechnungEntity#aus} an seiner Spalte an (Issue
+   * #241).
+   *
+   * <p>Gegenstand ist die Abbildung selbst und nicht der Weg durch den Adapter: Seit die Zeile sich
+   * aus dem Fachobjekt bildet, waere eine vertauschte oder vergessene Zuweisung nur hier zu sehen.
+   * Gelaufen gegen eine <b>gestellte</b> Rechnung, damit kein Feld leer bleibt.
+   */
+  @Test
+  void rechnungszeile_thenCarriesEveryFieldOfTheRechnung() {
+    // Given
+    final Rechnung rechnung = gestellt(List.of(BERATUNG));
+
+    // When
+    final RechnungEntity zeile = RechnungEntity.aus(rechnung);
+
+    // Then
+    assertThat(zeile)
+        .satisfies(
+            gelesen -> assertThat(gelesen.getId()).isEqualTo(RECHNUNG_ID),
+            gelesen -> assertThat(gelesen.getAngebotId()).isEqualTo(ANGEBOT_ID),
+            gelesen -> assertThat(gelesen.getZustand()).isEqualTo(Rechnungszustand.GESTELLT),
+            gelesen -> assertThat(gelesen.getRechnungDatum()).isEqualTo(RECHNUNGSDATUM),
+            gelesen -> assertThat(gelesen.getLeistungszeitraum()).isEqualTo(ZEITRAUM),
+            gelesen -> assertThat(gelesen.getNummer()).isEqualTo("R26-0004"),
+            gelesen -> assertThat(gelesen.getSteuersatz()).isEqualByComparingTo(NEUNZEHN),
+            gelesen -> assertThat(gelesen.getZahlungszielTage()).isEqualTo(10),
+            gelesen -> assertThat(gelesen.getGestelltAm()).isEqualTo(GEAENDERT),
+            gelesen -> assertThat(gelesen.getPdfSchluessel()).isEqualTo("rechnung/11/abc.pdf"),
+            gelesen -> assertThat(gelesen.getEmpfaenger()).isEqualTo(EMPFAENGER),
+            gelesen -> assertThat(gelesen.getAbsender()).isEqualTo(ABSENDER),
+            gelesen -> assertThat(gelesen.getCreatedAt()).isEqualTo(ANGELEGT),
+            gelesen -> assertThat(gelesen.getUpdatedAt()).isEqualTo(GEAENDERT));
+  }
+
+  /** Dasselbe fuer die Positionszeile — samt Rechnung und Platz, die nicht am Fachobjekt stehen. */
+  @Test
+  void positionszeile_thenCarriesEveryFieldOfThePosition() {
+    // When
+    final RechnungPositionEntity zeile =
+        RechnungPositionEntity.aus(BERATUNG, RECHNUNG_ID, (short) 4);
+
+    // Then
+    assertThat(zeile)
+        .satisfies(
+            gelesen -> assertThat(gelesen.getRechnungId()).isEqualTo(RECHNUNG_ID),
+            gelesen ->
+                assertThat(gelesen.getAngebotPositionId()).isEqualTo(BERATUNG.angebotPositionId()),
+            gelesen -> assertThat(gelesen.getPosition()).isEqualTo((short) 4),
+            gelesen -> assertThat(gelesen.getBezeichnung()).isEqualTo(BERATUNG.bezeichnung()),
+            gelesen -> assertThat(gelesen.getMenge()).isEqualByComparingTo(BERATUNG.menge()),
+            gelesen -> assertThat(gelesen.getEinheit()).isEqualTo(BERATUNG.einheit()),
+            gelesen ->
+                assertThat(gelesen.getEinzelpreis()).isEqualByComparingTo(BERATUNG.einzelpreis()));
   }
 }

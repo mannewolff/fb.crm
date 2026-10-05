@@ -11,6 +11,7 @@ import jakarta.persistence.Table;
 import java.math.BigDecimal;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.fbcrm.common.Einheit;
+import org.mwolff.fbcrm.rechnung.domain.Rechnungsposition;
 
 /**
  * Die Zeile der Tabelle {@code rechnung_position} aus {@code V18__rechnung.sql}.
@@ -69,23 +70,33 @@ class RechnungPositionEntity {
     // Von Hibernate benutzt.
   }
 
-  RechnungPositionEntity(
-      final @Nullable Long id,
-      final long rechnungId,
-      final long angebotPositionId,
-      final short position,
-      final String bezeichnung,
-      final BigDecimal menge,
-      final Einheit einheit,
-      final BigDecimal einzelpreis) {
-    this.id = id;
+  /**
+   * Eine neue Zeile zu einer Rechnungsposition (Plan #238, A5).
+   *
+   * <p>Rechnung und Platz stehen nicht am Fachobjekt und kommen darum dazu: Die Rechnung ist der
+   * Fremdschluessel der Zeile, und der Platz entsteht aus der Reihenfolge der Liste (E24). Die
+   * Kennung bleibt leer — eine bekannte Zeile wird fortgeschrieben ({@link #uebernehme}) und nicht
+   * neu gebaut.
+   *
+   * @param position die abzurechnende Position
+   * @param rechnungId die Rechnung, zu der die Zeile gehoert
+   * @param platz der Platz in der Reihenfolge, lueckenlos ab 1
+   * @return die neue Zeile
+   */
+  static RechnungPositionEntity aus(
+      final Rechnungsposition position, final long rechnungId, final short platz) {
+    return new RechnungPositionEntity(position, rechnungId, platz);
+  }
+
+  private RechnungPositionEntity(
+      final Rechnungsposition position, final long rechnungId, final short platz) {
     this.rechnungId = rechnungId;
-    this.angebotPositionId = angebotPositionId;
-    this.position = position;
-    this.bezeichnung = bezeichnung;
-    this.menge = menge;
-    this.einheit = einheit;
-    this.einzelpreis = einzelpreis;
+    this.angebotPositionId = position.angebotPositionId();
+    this.position = platz;
+    this.bezeichnung = position.bezeichnung();
+    this.menge = position.menge();
+    this.einheit = position.einheit();
+    this.einzelpreis = position.einzelpreis();
   }
 
   /**

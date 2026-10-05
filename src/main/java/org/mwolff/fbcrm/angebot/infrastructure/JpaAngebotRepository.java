@@ -95,7 +95,7 @@ class JpaAngebotRepository implements AngebotRepository {
 
   @Override
   public Angebot save(final Angebot angebot) {
-    final AngebotEntity zeile = angebote.save(toEntity(angebot));
+    final AngebotEntity zeile = angebote.save(AngebotEntity.aus(angebot));
     final long angebotId = Objects.requireNonNull(zeile.getId());
     return toDomain(zeile, fortgeschrieben(angebotId, angebot.positionen()));
   }
@@ -133,15 +133,7 @@ class JpaAngebotRepository implements AngebotRepository {
       final Map<Long, AngebotPositionEntity> vorhanden) {
     final Long kennung = position.id();
     if (kennung == null) {
-      return new AngebotPositionEntity(
-          null,
-          angebotId,
-          platz,
-          position.bezeichnung(),
-          position.abrechnungsmodus(),
-          position.menge(),
-          position.einheit(),
-          position.einzelpreis());
+      return AngebotPositionEntity.aus(position, angebotId, platz);
     }
     final AngebotPositionEntity zeile = vorhanden.remove(kennung);
     if (zeile == null) {
@@ -181,18 +173,5 @@ class JpaAngebotRepository implements AngebotRepository {
         zeile.getMenge(),
         zeile.getEinheit(),
         zeile.getEinzelpreis());
-  }
-
-  private static AngebotEntity toEntity(final Angebot angebot) {
-    return new AngebotEntity(
-        angebot.id(),
-        angebot.firmaId(),
-        angebot.ansprechpartnerId(),
-        angebot.intern(),
-        angebot.status(),
-        angebot.angebotDatum(),
-        angebot.beschreibung(),
-        angebot.createdAt(),
-        angebot.updatedAt());
   }
 }

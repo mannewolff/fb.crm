@@ -11,6 +11,7 @@ import jakarta.persistence.Table;
 import java.time.Instant;
 import java.time.LocalDate;
 import org.jspecify.annotations.Nullable;
+import org.mwolff.fbcrm.angebot.domain.Angebot;
 import org.mwolff.fbcrm.angebot.domain.Angebotsstatus;
 
 /**
@@ -72,25 +73,32 @@ class AngebotEntity {
     // Von Hibernate benutzt.
   }
 
-  AngebotEntity(
-      final @Nullable Long id,
-      final long firmaId,
-      final @Nullable Long ansprechpartnerId,
-      final boolean intern,
-      final Angebotsstatus status,
-      final LocalDate angebotDatum,
-      final @Nullable String beschreibung,
-      final Instant createdAt,
-      final Instant updatedAt) {
-    this.id = id;
-    this.firmaId = firmaId;
-    this.ansprechpartnerId = ansprechpartnerId;
-    this.intern = intern;
-    this.status = status;
-    this.angebotDatum = angebotDatum;
-    this.beschreibung = beschreibung;
-    this.createdAt = createdAt;
-    this.updatedAt = updatedAt;
+  /**
+   * Die Zeile zu einem Angebot — jedes Feld kommt aus dem Fachobjekt (Plan #238, A5).
+   *
+   * <p>Die Zeile holt sich ihren Stand selbst, statt ihn als Liste von neun Parametern zu bekommen:
+   * Der Adapter nennt dann am Aufruf nur noch, <i>was</i> abgebildet wird, und ein neues Feld des
+   * Angebots landet hier und nicht zusaetzlich in jeder Aufrufstelle. Die Positionen gehoeren nicht
+   * dazu — sie liegen in eigenen Zeilen.
+   *
+   * @param angebot das Angebot, dessen Stand die Zeile tragen soll
+   * @return die Zeile; ihre Kennung ist die des Angebots und damit {@code null}, solange das
+   *     Angebot noch nicht geschrieben wurde
+   */
+  static AngebotEntity aus(final Angebot angebot) {
+    return new AngebotEntity(angebot);
+  }
+
+  private AngebotEntity(final Angebot angebot) {
+    this.id = angebot.id();
+    this.firmaId = angebot.firmaId();
+    this.ansprechpartnerId = angebot.ansprechpartnerId();
+    this.intern = angebot.intern();
+    this.status = angebot.status();
+    this.angebotDatum = angebot.angebotDatum();
+    this.beschreibung = angebot.beschreibung();
+    this.createdAt = angebot.createdAt();
+    this.updatedAt = angebot.updatedAt();
   }
 
   @Nullable Long getId() {

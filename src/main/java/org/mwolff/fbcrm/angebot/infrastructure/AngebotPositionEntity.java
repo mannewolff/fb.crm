@@ -10,6 +10,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.math.BigDecimal;
 import org.jspecify.annotations.Nullable;
+import org.mwolff.fbcrm.angebot.domain.Angebotsposition;
 import org.mwolff.fbcrm.common.Abrechnungsmodus;
 import org.mwolff.fbcrm.common.Einheit;
 
@@ -66,23 +67,34 @@ class AngebotPositionEntity {
     // Von Hibernate benutzt.
   }
 
-  AngebotPositionEntity(
-      final @Nullable Long id,
-      final long angebotId,
-      final short position,
-      final String bezeichnung,
-      final Abrechnungsmodus abrechnungsmodus,
-      final BigDecimal menge,
-      final Einheit einheit,
-      final BigDecimal einzelpreis) {
-    this.id = id;
+  /**
+   * Die Zeile zu einer Angebotsposition (Plan #238, A5).
+   *
+   * <p>Angebot und Platz stehen nicht am Fachobjekt und kommen darum dazu: Das Angebot ist der
+   * Fremdschluessel der Zeile, und der Platz entsteht aus der Reihenfolge der Liste (E24). Die
+   * Kennung ist die der Position und damit {@code null}, solange die Position neu ist; eine
+   * bekannte Zeile wird fortgeschrieben ({@link #uebernehme}) und nicht neu gebaut.
+   *
+   * @param position die Position
+   * @param angebotId das Angebot, zu dem die Zeile gehoert
+   * @param platz der Platz in der Reihenfolge, lueckenlos ab 1
+   * @return die Zeile
+   */
+  static AngebotPositionEntity aus(
+      final Angebotsposition position, final long angebotId, final short platz) {
+    return new AngebotPositionEntity(position, angebotId, platz);
+  }
+
+  private AngebotPositionEntity(
+      final Angebotsposition position, final long angebotId, final short platz) {
+    this.id = position.id();
     this.angebotId = angebotId;
-    this.position = position;
-    this.bezeichnung = bezeichnung;
-    this.abrechnungsmodus = abrechnungsmodus;
-    this.menge = menge;
-    this.einheit = einheit;
-    this.einzelpreis = einzelpreis;
+    this.position = platz;
+    this.bezeichnung = position.bezeichnung();
+    this.abrechnungsmodus = position.abrechnungsmodus();
+    this.menge = position.menge();
+    this.einheit = position.einheit();
+    this.einzelpreis = position.einzelpreis();
   }
 
   /**

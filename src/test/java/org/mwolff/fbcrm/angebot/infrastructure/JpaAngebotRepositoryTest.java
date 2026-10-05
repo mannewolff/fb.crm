@@ -97,8 +97,13 @@ class JpaAngebotRepositoryTest {
 
   private static Angebot angebot(
       final List<Angebotsposition> positionen, final Angebotsstatus status) {
+    return angebot(11L, positionen, status);
+  }
+
+  private static Angebot angebot(
+      final long id, final List<Angebotsposition> positionen, final Angebotsstatus status) {
     return new Angebot(
-        11L,
+        id,
         3L,
         8L,
         status.intern(),
@@ -129,17 +134,9 @@ class JpaAngebotRepositoryTest {
     return zeile(id, Angebotsstatus.BESTELLT);
   }
 
+  /* Die Positionen gehoeren nicht zur Zeile; sie liegen in eigenen Zeilen. */
   private static AngebotEntity zeile(final long id, final Angebotsstatus status) {
-    return new AngebotEntity(
-        Long.valueOf(id),
-        3L,
-        8L,
-        status.intern(),
-        status,
-        ANGEBOTSDATUM,
-        BESCHREIBUNG,
-        ANGELEGT,
-        GEAENDERT);
+    return AngebotEntity.aus(angebot(id, List.of(), status));
   }
 
   private static AngebotPositionEntity positionszeile(
@@ -149,15 +146,7 @@ class JpaAngebotRepositoryTest {
 
   private static AngebotPositionEntity positionszeile(
       final long angebotId, final short platz, final Angebotsposition position) {
-    return new AngebotPositionEntity(
-        position.id(),
-        angebotId,
-        platz,
-        position.bezeichnung(),
-        position.abrechnungsmodus(),
-        position.menge(),
-        position.einheit(),
-        position.einzelpreis());
+    return AngebotPositionEntity.aus(position, angebotId, platz);
   }
 
   /**
@@ -499,5 +488,57 @@ class JpaAngebotRepositoryTest {
     // Then
     assertThat(gefunden).extracting(Angebot::id).containsExactly(11L);
     verify(angebote, never()).findAll();
+  }
+
+  /**
+   * Jedes Feld des Angebots kommt ueber {@link AngebotEntity#aus} an seiner Spalte an (Issue #241).
+   *
+   * <p>Gegenstand ist die Abbildung selbst und nicht der Weg durch den Adapter: Seit die Zeile sich
+   * aus dem Fachobjekt bildet, waere eine vertauschte oder vergessene Zuweisung nur hier zu sehen.
+   */
+  @Test
+  void angebotszeile_thenCarriesEveryFieldOfTheAngebot() {
+    // Given
+    final Angebot angebot = angebot(List.of(KONZEPTION));
+
+    // When
+    final AngebotEntity zeile = AngebotEntity.aus(angebot);
+
+    // Then
+    assertThat(zeile)
+        .satisfies(
+            gelesen -> assertThat(gelesen.getId()).isEqualTo(11L),
+            gelesen -> assertThat(gelesen.getFirmaId()).isEqualTo(3L),
+            gelesen -> assertThat(gelesen.getAnsprechpartnerId()).isEqualTo(8L),
+            gelesen -> assertThat(gelesen.isIntern()).isEqualTo(Angebotsstatus.BESTELLT.intern()),
+            gelesen -> assertThat(gelesen.getStatus()).isEqualTo(Angebotsstatus.BESTELLT),
+            gelesen -> assertThat(gelesen.getAngebotDatum()).isEqualTo(ANGEBOTSDATUM),
+            gelesen -> assertThat(gelesen.getBeschreibung()).isEqualTo(BESCHREIBUNG),
+            gelesen -> assertThat(gelesen.getCreatedAt()).isEqualTo(ANGELEGT),
+            gelesen -> assertThat(gelesen.getUpdatedAt()).isEqualTo(GEAENDERT));
+  }
+
+  /** Dasselbe fuer die Positionszeile — samt Angebot und Platz, die nicht am Fachobjekt stehen. */
+  @Test
+  void positionszeile_thenCarriesEveryFieldOfThePosition() {
+    // Given — eine Position mit Kennung: Sie wandert mit, damit Hibernate die Zeile wiedererkennt.
+    final Angebotsposition position = mitKennung(KONZEPTION, 42L);
+
+    // When
+    final AngebotPositionEntity zeile = AngebotPositionEntity.aus(position, 11L, (short) 4);
+
+    // Then
+    assertThat(zeile)
+        .satisfies(
+            gelesen -> assertThat(gelesen.getId()).isEqualTo(42L),
+            gelesen -> assertThat(gelesen.getAngebotId()).isEqualTo(11L),
+            gelesen -> assertThat(gelesen.getPosition()).isEqualTo((short) 4),
+            gelesen -> assertThat(gelesen.getBezeichnung()).isEqualTo(position.bezeichnung()),
+            gelesen ->
+                assertThat(gelesen.getAbrechnungsmodus()).isEqualTo(position.abrechnungsmodus()),
+            gelesen -> assertThat(gelesen.getMenge()).isEqualByComparingTo(position.menge()),
+            gelesen -> assertThat(gelesen.getEinheit()).isEqualTo(position.einheit()),
+            gelesen ->
+                assertThat(gelesen.getEinzelpreis()).isEqualByComparingTo(position.einzelpreis()));
   }
 }
