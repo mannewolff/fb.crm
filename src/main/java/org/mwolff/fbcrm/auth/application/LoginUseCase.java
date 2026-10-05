@@ -9,6 +9,7 @@ import org.mwolff.fbcrm.auth.domain.PasswordHasher;
 import org.mwolff.fbcrm.auth.domain.SessionTokens;
 import org.mwolff.fbcrm.auth.infrastructure.FailedLoginDelay;
 import org.mwolff.fbcrm.auth.infrastructure.LoginAttemptLimiter;
+import org.mwolff.fbcrm.common.SecureTokens;
 import org.springframework.stereotype.Service;
 
 /**
@@ -27,14 +28,6 @@ import org.springframework.stereotype.Service;
 @Service
 public class LoginUseCase {
 
-  /**
-   * Gegen diesen Hash wird geprueft, wenn es die Adresse nicht gibt.
-   *
-   * <p>Das Passwort dahinter ist bedeutungslos und nirgends gueltig; gebraucht wird allein die
-   * Rechenzeit des Verfahrens. Er entsteht einmal beim Hochfahren.
-   */
-  private static final String DUMMY_PASSWORD = "kein-konto-zu-dieser-adresse";
-
   private final AccountRepository accounts;
   private final PasswordHasher hasher;
   private final SessionTokens tokens;
@@ -42,6 +35,15 @@ public class LoginUseCase {
   private final FailedLoginDelay delay;
   private final AuthProperties properties;
   private final Clock clock;
+
+  /**
+   * Gegen diesen Hash wird geprueft, wenn es die Adresse nicht gibt.
+   *
+   * <p>Er entsteht einmal beim Hochfahren aus einem frischen Zufallswert. Was dahintersteckt, ist
+   * bedeutungslos und nirgends gueltig — gebraucht wird allein die Rechenzeit des Verfahrens. Darum
+   * steht hier auch kein fester Wert: Der waere ein Passwort im Quellcode, und dieselbe Rechenzeit
+   * kostet ein zufaelliger genauso.
+   */
   private final String dummyHash;
 
   public LoginUseCase(
@@ -59,7 +61,7 @@ public class LoginUseCase {
     this.delay = delay;
     this.properties = properties;
     this.clock = clock;
-    this.dummyHash = hasher.hash(DUMMY_PASSWORD);
+    this.dummyHash = hasher.hash(new SecureTokens().newToken());
   }
 
   /**

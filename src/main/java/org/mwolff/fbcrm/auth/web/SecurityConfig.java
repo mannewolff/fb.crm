@@ -57,10 +57,10 @@ public class SecurityConfig {
 
   /*
    * PMD.SignatureDeclareThrowsException: HttpSecurity deklariert durchgaengig "throws Exception"
-   * — build(), csrf(), authorizeHttpRequests(). Einen engeren Typ gibt es nicht, und ein
-   * Umwandeln im Bean waere ein catch (Exception) und damit ein Verstoss gegen Checkstyle
-   * IllegalCatch (CLAUDE-java.md §6.5). Die Ausnahme steht methodengenau, die Regel bleibt im
-   * Regelsatz scharf.
+   * — so bei build, csrf und authorizeHttpRequests. Einen engeren Typ gibt es nicht, und ein
+   * Umwandeln im Bean hiesse, Exception aufzufangen, und waere damit ein Verstoss gegen
+   * Checkstyle IllegalCatch (CLAUDE-java.md §6.5). Die Ausnahme steht methodengenau, die Regel
+   * bleibt im Regelsatz scharf.
    */
   @SuppressWarnings("PMD.SignatureDeclareThrowsException")
   @Bean

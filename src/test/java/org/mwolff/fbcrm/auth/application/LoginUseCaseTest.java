@@ -8,6 +8,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -19,6 +20,7 @@ import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.mwolff.fbcrm.auth.AuthProperties;
 import org.mwolff.fbcrm.auth.domain.Account;
 import org.mwolff.fbcrm.auth.domain.AccountRepository;
@@ -95,6 +97,38 @@ class LoginUseCaseTest {
 
   private void kontoUnbekannt() {
     when(accounts.findByEmail(MAIL)).thenReturn(Optional.empty());
+  }
+
+  private LoginUseCase nochEinAnwendungsfall() {
+    return new LoginUseCase(
+        accounts, hasher, tokens, limiter, delay, schalter(), Clock.fixed(JETZT, ZoneOffset.UTC));
+  }
+
+  @Test
+  void construction_givenTheUseCase_thenHashesOneNonEmptyValueExactlyOnce() {
+    // Given — der Anwendungsfall ist in baueDenAnwendungsfall() schon entstanden.
+    final ArgumentCaptor<String> gehasht = ArgumentCaptor.forClass(String.class);
+
+    // When / Then — ein Argon2-Durchlauf beim Hochfahren, nicht einer je Anmeldung. Welcher Wert
+    // es ist, steht nirgends: Er ist bedeutungslos, gebraucht wird allein die Rechenzeit.
+    verify(hasher).hash(gehasht.capture());
+    assertThat(gehasht.getValue()).isNotBlank();
+  }
+
+  @Test
+  void construction_givenASecondUseCase_thenItsDummyHashRestsOnItsOwnRandomValue() {
+    // Given
+    final ArgumentCaptor<String> gehasht = ArgumentCaptor.forClass(String.class);
+
+    // When
+    nochEinAnwendungsfall();
+
+    // Then — zwei Instanzen, zwei verschiedene Werte. Eine Konstante im Quellcode waere hier
+    // zweimal derselbe Wert und stuende als Passwort in einem oeffentlichen Repository.
+    verify(hasher, times(2)).hash(gehasht.capture());
+    assertThat(gehasht.getAllValues())
+        .doesNotHaveDuplicates()
+        .allSatisfy(wert -> assertThat(wert).isNotBlank());
   }
 
   @Test
