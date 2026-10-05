@@ -155,10 +155,8 @@ public class AngebotAendernUseCase {
    */
   private static void pruefeKennungen(
       final List<Positionsangabe> eingereicht, final List<Angebotsposition> vorhanden) {
-    final Set<Long> offen = new HashSet<>();
-    for (final Angebotsposition position : vorhanden) {
-      offen.add(position.id());
-    }
+    final Set<Long> offen =
+        vorhanden.stream().map(Angebotsposition::id).collect(Collectors.toCollection(HashSet::new));
     for (final Positionsangabe angabe : eingereicht) {
       final Long kennung = angabe.id();
       // remove statt contains: Eine zweimal eingereichte Kennung faellt beim zweiten Mal durch.

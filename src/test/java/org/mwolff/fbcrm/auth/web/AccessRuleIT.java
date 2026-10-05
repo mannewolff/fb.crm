@@ -5,6 +5,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.util.List;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.mwolff.fbcrm.AbstractIntegrationTest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -86,22 +88,26 @@ class AccessRuleIT extends AbstractIntegrationTest {
             });
   }
 
-  @Test
-  void loginEndpoint_withoutASession_thenIsReachable() {
-    // When — ohne offenen Anmeldepfad koennte sich niemand jemals anmelden.
-    final HttpStatus antwort = status("/api/auth/login", HttpMethod.POST);
+  /**
+   * Die offenen Pfade, die ohne Sitzung erreichbar sein muessen.
+   *
+   * <p>Der Grund steht je Zeile dabei: ohne offenen Anmeldepfad koennte sich niemand jemals
+   * anmelden, ohne offenen Einrichtungspfad waere eine frische Instanz nie einzurichten, und wer
+   * sein Passwort vergessen hat, kann keine Sitzung vorweisen (K7).
+   */
+  @ParameterizedTest(name = "POST {0} ohne Sitzung ist erreichbar — {1}")
+  @CsvSource({
+    "/api/auth/login, ohne diesen Pfad koennte sich niemand jemals anmelden",
+    "/api/setup, ohne diesen Pfad waere eine frische Instanz nie einzurichten",
+    "/api/auth/password-reset, wer sein Passwort vergessen hat, hat keine Sitzung (K7)",
+    "/api/auth/password-reset/confirm, der Reset selbst kommt vor jeder Anmeldung (K7)"
+  })
+  void anOpenEndpoint_withoutASession_thenIsReachable(final String pfad, final String grund) {
+    // When
+    final HttpStatus antwort = status(pfad, HttpMethod.POST);
 
     // Then
-    assertThat(antwort).isNotEqualTo(HttpStatus.UNAUTHORIZED);
-  }
-
-  @Test
-  void setupEndpoint_withoutASession_thenIsReachable() {
-    // When — ohne offenen Einrichtungspfad koennte eine frische Instanz nie eingerichtet werden.
-    final HttpStatus antwort = status("/api/setup", HttpMethod.POST);
-
-    // Then
-    assertThat(antwort).isNotEqualTo(HttpStatus.UNAUTHORIZED);
+    assertThat(antwort).as(grund).isNotEqualTo(HttpStatus.UNAUTHORIZED);
   }
 
   @Test
@@ -114,15 +120,6 @@ class AccessRuleIT extends AbstractIntegrationTest {
   }
 
   @Test
-  void passwordResetRequest_withoutASession_thenIsReachable() {
-    // When — K7: wer sein Passwort vergessen hat, kann keine Sitzung vorweisen.
-    final HttpStatus antwort = status("/api/auth/password-reset", HttpMethod.POST);
-
-    // Then
-    assertThat(antwort).isNotEqualTo(HttpStatus.UNAUTHORIZED);
-  }
-
-  @Test
   void passwordResetCheck_withoutASession_thenIsReachable() {
     // When — die Voranfrage entscheidet, ob ein Formular erscheint (E24); sie kommt vor jeder
     // Anmeldung.
@@ -131,15 +128,6 @@ class AccessRuleIT extends AbstractIntegrationTest {
 
     // Then
     assertThat(antwort).isEqualTo(HttpStatus.GONE);
-  }
-
-  @Test
-  void passwordResetConfirm_withoutASession_thenIsReachable() {
-    // When
-    final HttpStatus antwort = status("/api/auth/password-reset/confirm", HttpMethod.POST);
-
-    // Then
-    assertThat(antwort).isNotEqualTo(HttpStatus.UNAUTHORIZED);
   }
 
   @Test
@@ -179,69 +167,30 @@ class AccessRuleIT extends AbstractIntegrationTest {
   }
 
   /**
-   * Die Wege der Firma mit einer Kennung im Pfad.
+   * Die Wege mit einer Kennung im Pfad.
    *
    * <p>Der generische Nachweis oben laesst jeden Pfad mit {@code {} } aus — eine Vorlage laesst
    * sich nicht aufrufen. Genau diese Wege blieben damit ungeprueft, obwohl sie die fachlichen Daten
-   * tragen. Deshalb stehen sie hier ausgeschrieben; {@code GET} und {@code POST} auf {@code
-   * /api/firmen} deckt der generische Fall ab.
-   */
-  @Test
-  void firmaDetail_withoutASession_thenAnswersUnauthorized() {
-    // When
-    final HttpStatus antwort = status("/api/firmen/1", HttpMethod.GET);
-
-    // Then
-    assertThat(antwort).isEqualTo(HttpStatus.UNAUTHORIZED);
-  }
-
-  @Test
-  void firmaAendern_withoutASession_thenAnswersUnauthorized() {
-    // When
-    final HttpStatus antwort = status("/api/firmen/1", HttpMethod.PUT);
-
-    // Then
-    assertThat(antwort).isEqualTo(HttpStatus.UNAUTHORIZED);
-  }
-
-  @Test
-  void firmaStilllegen_withoutASession_thenAnswersUnauthorized() {
-    // When
-    final HttpStatus antwort = status("/api/firmen/1/stilllegen", HttpMethod.POST);
-
-    // Then
-    assertThat(antwort).isEqualTo(HttpStatus.UNAUTHORIZED);
-  }
-
-  @Test
-  void firmaAktivieren_withoutASession_thenAnswersUnauthorized() {
-    // When
-    final HttpStatus antwort = status("/api/firmen/1/aktivieren", HttpMethod.POST);
-
-    // Then
-    assertThat(antwort).isEqualTo(HttpStatus.UNAUTHORIZED);
-  }
-
-  /**
-   * Die Wege des Ansprechpartners liegen vollstaendig hinter einer Kennung im Pfad.
+   * tragen. Deshalb stehen sie hier als Zeilen ausgeschrieben; {@code GET} und {@code POST} auf
+   * {@code /api/firmen} deckt der generische Fall ab.
    *
-   * <p>Damit laesst der generische Nachweis oben sie restlos aus — selbst {@code POST
-   * /api/firmen/{firmaId}/ansprechpartner} traegt eine Vorlage. Ohne diese beiden Faelle waere die
-   * Zugangsregel fuer das ganze Paket ungeprueft.
+   * <p>Die Wege des Ansprechpartners liegen <b>vollstaendig</b> hinter einer Kennung — selbst das
+   * Anlegen unter {@code /api/firmen} traegt die Kennung der Firma als Vorlage. Ohne diese Zeilen
+   * waere die Zugangsregel fuer das ganze Paket ungeprueft.
    */
-  @Test
-  void ansprechpartnerAnlegen_withoutASession_thenAnswersUnauthorized() {
-    // When
-    final HttpStatus antwort = status("/api/firmen/1/ansprechpartner", HttpMethod.POST);
-
-    // Then
-    assertThat(antwort).isEqualTo(HttpStatus.UNAUTHORIZED);
-  }
-
-  @Test
-  void ansprechpartnerAendern_withoutASession_thenAnswersUnauthorized() {
-    // When
-    final HttpStatus antwort = status("/api/firmen/1/ansprechpartner/1", HttpMethod.PUT);
+  @ParameterizedTest(name = "{1} {0} ohne Sitzung antwortet 401")
+  @CsvSource({
+    "/api/firmen/1, GET",
+    "/api/firmen/1, PUT",
+    "/api/firmen/1/stilllegen, POST",
+    "/api/firmen/1/aktivieren, POST",
+    "/api/firmen/1/ansprechpartner, POST",
+    "/api/firmen/1/ansprechpartner/1, PUT"
+  })
+  void aPathWithAnId_withoutASession_thenAnswersUnauthorized(
+      final String pfad, final String methode) {
+    // When — die Methode wird hier umgewandelt und nicht von JUnit: HttpMethod ist kein Enum.
+    final HttpStatus antwort = status(pfad, HttpMethod.valueOf(methode));
 
     // Then
     assertThat(antwort).isEqualTo(HttpStatus.UNAUTHORIZED);

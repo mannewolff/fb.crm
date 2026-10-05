@@ -42,22 +42,26 @@ class SpaForwardingTest {
     assertThat(aufgeloest).isNotNull().isNotEqualTo(INDEX);
   }
 
+  /**
+   * Die Pfade, die nie zur Oberflaeche werden.
+   *
+   * <p>Die beiden Zeilen mit fuehrendem Schraegstrich sind ein eigener Fall und keine Doppelung: Je
+   * nach Spring-Fassung kommt der Pfad mit oder ohne ihn an, und beide Formen muessen ins Nichts
+   * laufen.
+   */
   @ParameterizedTest
-  @ValueSource(strings = {"api", "api/unknown", "actuator", "actuator/unknown"})
+  @ValueSource(
+      strings = {
+        "api",
+        "api/unknown",
+        "actuator",
+        "actuator/unknown",
+        "/api/unknown",
+        "/actuator/unknown"
+      })
   void getResource_givenAnApiOrActuatorPath_thenResolvesToNothing(final String pfad)
       throws IOException {
     // When
-    final Resource aufgeloest = resolver.getResource(pfad, ORT);
-
-    // Then
-    assertThat(aufgeloest).isNull();
-  }
-
-  @ParameterizedTest
-  @ValueSource(strings = {"/api/unknown", "/actuator/unknown"})
-  void getResource_givenALeadingSlash_thenStillResolvesToNothing(final String pfad)
-      throws IOException {
-    // When — je nach Spring-Fassung kommt der Pfad mit oder ohne fuehrenden Schraegstrich an.
     final Resource aufgeloest = resolver.getResource(pfad, ORT);
 
     // Then

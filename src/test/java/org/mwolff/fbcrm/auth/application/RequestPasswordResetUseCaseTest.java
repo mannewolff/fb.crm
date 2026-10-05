@@ -19,6 +19,8 @@ import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.Mock;
@@ -150,8 +152,20 @@ class RequestPasswordResetUseCaseTest {
     verify(postausgang, times(1)).enqueue(eq(MAIL), anyString(), anyString());
   }
 
-  @Test
-  void request_givenAKnownAddress_thenTheMailCarriesTheResetLink() {
+  /**
+   * Was in der Mail stehen muss.
+   *
+   * <p>Der Link fuehrt den Empfaenger zum Formular, die Lebensdauer gehoert nach K7 in die
+   * Nachricht — sonst raet der Empfaenger —, und die Anrede zeigt, dass die Mail zum Konto gehoert.
+   */
+  @ParameterizedTest(name = "die Mail enthaelt {1}")
+  @CsvSource({
+    "https://crm.example.org/passwort-neu?token=, den Link zum Formular",
+    "60 Minuten, die Lebensdauer des Links (K7)",
+    "Manne, die Anrede des Kontoinhabers"
+  })
+  void request_givenAKnownAddress_thenTheMailCarriesTheExpectedText(
+      final String erwartet, final String was) {
     // Given
     bekannteAdresse();
 
@@ -159,7 +173,7 @@ class RequestPasswordResetUseCaseTest {
     anforderung.request(MAIL);
 
     // Then
-    assertThat(versandterText()).contains("https://crm.example.org/passwort-neu?token=");
+    assertThat(versandterText()).as(was).contains(erwartet);
   }
 
   @Test
@@ -172,30 +186,6 @@ class RequestPasswordResetUseCaseTest {
 
     // Then
     assertThat(versandterText()).doesNotContain(ausgestellterToken().tokenHash());
-  }
-
-  @Test
-  void request_givenAKnownAddress_thenTheMailNamesTheLifetimeOfTheLink() {
-    // Given — K7: „nur begrenzte Zeit" gehoert in die Nachricht, sonst raet der Empfaenger.
-    bekannteAdresse();
-
-    // When
-    anforderung.request(MAIL);
-
-    // Then
-    assertThat(versandterText()).contains("60 Minuten");
-  }
-
-  @Test
-  void request_givenAKnownAddress_thenTheMailGreetsTheAccountHolder() {
-    // Given
-    bekannteAdresse();
-
-    // When
-    anforderung.request(MAIL);
-
-    // Then
-    assertThat(versandterText()).contains("Manne");
   }
 
   @Test
