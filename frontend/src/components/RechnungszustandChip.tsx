@@ -18,12 +18,12 @@ export interface RechnungszustandChipProps {
 
 export default function RechnungszustandChip({ zustand }: RechnungszustandChipProps) {
   const bild = rechnungszustandBild(zustand);
-  const Symbol = bild.symbol;
+  const Zeichen = bild.symbol;
   return (
     <ZustandsChip
       wort={bild.wort}
       toenung={bild.toenung}
-      symbol={<Symbol size={SYMBOL_CHIP} stroke={1.8} />}
+      symbol={<Zeichen size={SYMBOL_CHIP} stroke={1.8} />}
     />
   );
 }

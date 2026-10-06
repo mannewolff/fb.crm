@@ -15,12 +15,12 @@ export interface AngebotsstatusChipProps {
 
 export default function AngebotsstatusChip({ status }: AngebotsstatusChipProps) {
   const bild = angebotsstatusBild(status);
-  const Symbol = bild.symbol;
+  const Zeichen = bild.symbol;
   return (
     <ZustandsChip
       wort={bild.wort}
       toenung={bild.toenung}
-      symbol={<Symbol size={SYMBOL_CHIP} stroke={1.8} />}
+      symbol={<Zeichen size={SYMBOL_CHIP} stroke={1.8} />}
     />
   );
 }

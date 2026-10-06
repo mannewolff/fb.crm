@@ -59,6 +59,14 @@ describe('euro', () => {
     [99, '0,99 €'],
     [100, '1,00 €'],
     [1234567890, '12.345.678,90 €'],
+    // Die Grenzen der Dreiergruppe und eine sehr lange Ziffernfolge (Issue #249).
+    [99999, '999,99 €'],
+    [100000, '1.000,00 €'],
+    [123456700, '1.234.567,00 €'],
+    [123456789012345, '1.234.567.890.123,45 €'],
+    // Das Vorzeichen bekommt keinen Tausenderpunkt hinter sich.
+    [-12345, '-123,45 €'],
+    [-123456789, '-1.234.567,89 €'],
   ])('schreibt %i Cent als %s', (cent, text) => {
     expect(euro(cent)).toBe(text);
   });

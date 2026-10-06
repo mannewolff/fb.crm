@@ -26,8 +26,24 @@
 /** Eine Dezimalzahl mit hoechstens zwei Nachkommastellen, Punkt oder Komma als Trenner. */
 const DEZIMAL = /^(\d+)(?:[.,](\d{1,2}))?$/u;
 
-/** Setzt den Tausenderpunkt vor jede volle Dreiergruppe, die noch Ziffern hinter sich hat. */
-const TAUSENDER = /\B(?=(\d{3})+(?!\d))/gu;
+/**
+ * Setzt den Tausenderpunkt vor jede volle Dreiergruppe, die noch Ziffern vor sich hat.
+ *
+ * Von rechts in Dreiergruppen statt ueber einen regulaeren Ausdruck: Der Lookahead mit
+ * wiederholter Gruppe lief bei langen Ziffernfolgen super-linear (Sonar `typescript:S8786`).
+ * Ein Vorzeichen bleibt vorne stehen und bekommt keinen Punkt hinter sich.
+ */
+function mitTausenderpunkt(ganze: string): string {
+  const vorzeichen = ganze.startsWith('-') ? '-' : '';
+  let rest = ganze.slice(vorzeichen.length);
+  const gruppen: string[] = [];
+  while (rest.length > 3) {
+    gruppen.unshift(rest.slice(-3));
+    rest = rest.slice(0, -3);
+  }
+  gruppen.unshift(rest);
+  return vorzeichen + gruppen.join('.');
+}
 
 /**
  * Eine Dezimalangabe als ganze Hundertstel — `null`, wenn sie keine ist.
@@ -72,7 +88,7 @@ export function betrag(mengeInHundertsteln: number, preisInCent: number): number
 export function euro(cent: number): string {
   // Mindestens drei Ziffern, damit „5" zu „0,05" wird und nicht zu „,5".
   const ziffern = String(cent).padStart(3, '0');
-  const ganze = ziffern.slice(0, -2).replace(TAUSENDER, '.');
+  const ganze = mitTausenderpunkt(ziffern.slice(0, -2));
   return `${ganze},${ziffern.slice(-2)} €`;
 }
 

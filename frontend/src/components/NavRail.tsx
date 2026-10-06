@@ -68,9 +68,9 @@ const SYMBOLE: Readonly<Record<Symbolname, TablerIcon>> = {
 
 /** 20 px, Strich in `currentColor` — die Farbe kommt damit vom Eintrag (Vorlage `.nav a i`). */
 function NavSymbol({ name }: { readonly name: Symbolname }) {
-  const Symbol = SYMBOLE[name];
+  const Zeichen = SYMBOLE[name];
   return (
-    <Symbol
+    <Zeichen
       size={20}
       stroke={1.6}
       aria-hidden
@@ -156,7 +156,7 @@ function EinklappTaste({
   readonly eingeklappt: boolean;
   readonly umschalten: () => void;
 }) {
-  const Symbol = eingeklappt ? IconLayoutSidebarLeftExpand : IconLayoutSidebarLeftCollapse;
+  const Zeichen = eingeklappt ? IconLayoutSidebarLeftExpand : IconLayoutSidebarLeftCollapse;
   return (
     <Box
       component="button"
@@ -184,7 +184,7 @@ function EinklappTaste({
         },
       })}
     >
-      <Symbol size={20} stroke={1.7} aria-hidden />
+      <Zeichen size={20} stroke={1.7} aria-hidden />
     </Box>
   );
 }
