@@ -1,6 +1,9 @@
 {
   "codeHost": "github",
   "issueTracker": "toolbox",
+  "befunde": {
+    "schwelle": 15
+  },
   "buildChecks": [
     {
       "cmd": "mvn verify -DskipITs -Dskip.frontend=true -Djacoco.skip=true",
@@ -87,13 +90,16 @@
   },
   "stufen": {
     "schwer": {
-      "modell": "claude-opus-5.5"
+      "modell": "claude-opus-5-5",
+      "effort": "high"
     },
     "mittel": {
-      "modell": "claude-sonnet-5"
+      "modell": "claude-opus-5-5",
+      "effort": "medium"
     },
     "leicht": {
-      "modell": "claude-sonnet-5"
+      "modell": "claude-opus-5-5",
+      "effort": "low"
     }
   },
   "reviewCommand": "codex exec --model gpt-6-astra -c model_reasoning_effort=\"high\"",
@@ -134,20 +140,21 @@
       "korrekturrunden": 2
     },
     "modelle": [
-      "claude-opus-5",
+      "claude-opus-5-5",
       "claude-sonnet-5",
       "claude-fable-5-1"
     ],
     "stufen": {
       "schwer": {
-        "modell": "claude-opus-5"
+        "modell": "claude-opus-5-5",
+        "effort": "high"
       },
       "mittel": {
-        "modell": "claude-opus-5",
+        "modell": "claude-opus-5-5",
         "effort": "medium"
       },
       "leicht": {
-        "modell": "claude-opus-5",
+        "modell": "claude-opus-5-5",
         "effort": "low"
       }
     }
@@ -164,7 +171,7 @@
       {
         "name": "opus",
         "kind": "claude",
-        "model": "claude-opus-5"
+        "model": "claude-opus-5-5"
       },
       {
         "name": "sonnet",
