@@ -13,7 +13,7 @@ import {
   IconPhone,
   IconUserPlus,
 } from '@tabler/icons-react';
-import { Fragment, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 
@@ -31,6 +31,7 @@ import AktionsMenue from '../components/AktionsMenue';
 import Angebotsliste from '../components/Angebotsliste';
 import type { AktionsEintrag } from '../components/AktionsMenue';
 import Innenkarte, { HinzufuegenKachel, InnenkartenRaster } from '../components/Innenkarte';
+import Angabenliste from '../components/Angabenliste';
 import Karte from '../components/Karte';
 import Kopfkarte from '../components/Kopfkarte';
 import { useKopfPfad } from '../components/KopfPfad';
@@ -353,30 +354,7 @@ function Stammdatenkarte({ firma }: { readonly firma: Firma }) {
   }
   return (
     <Karte titel="Stammdaten">
-      <Box
-        component="dl"
-        sx={{
-          display: 'grid',
-          gridTemplateColumns: { xs: 'minmax(0, 1fr)', sm: 'auto minmax(0, 1fr)' },
-          gap: '10px 20px',
-          margin: 0,
-          fontSize: 13.5,
-        }}
-      >
-        {zeilen.map((zeile) => (
-          <Fragment key={zeile.name}>
-            <Box
-              component="dt"
-              sx={(theme) => ({ color: theme.vars.palette.kupferwolke.textSchwach })}
-            >
-              {zeile.name}
-            </Box>
-            <Box component="dd" sx={{ margin: 0, fontWeight: 500 }}>
-              {zeile.wert}
-            </Box>
-          </Fragment>
-        ))}
-      </Box>
+      <Angabenliste zeilen={zeilen} />
     </Karte>
   );
 }

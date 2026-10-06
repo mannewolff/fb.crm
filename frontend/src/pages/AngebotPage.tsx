@@ -13,7 +13,7 @@ import {
   IconFilePlus,
   IconPencil,
 } from '@tabler/icons-react';
-import { Fragment, useEffect, useId, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom';
 
@@ -28,6 +28,7 @@ import type {
 import AngebotsstatusChip from '../components/AngebotsstatusChip';
 import Anlagen from '../components/Anlagen';
 import InternChip from '../components/InternChip';
+import Angabenliste from '../components/Angabenliste';
 import Karte from '../components/Karte';
 import Kommentare from '../components/Kommentare';
 import { useKopfPfad } from '../components/KopfPfad';
@@ -426,34 +427,7 @@ function Angaben({ angebot }: { readonly angebot: Angebot }) {
       ),
     },
   ];
-  return (
-    <Box
-      component="dl"
-      data-testid="angebot-angaben"
-      sx={{
-        display: 'grid',
-        gridTemplateColumns: { xs: 'minmax(0, 1fr)', sm: 'auto minmax(0, 1fr)' },
-        alignItems: 'center',
-        gap: '10px 20px',
-        margin: 0,
-        fontSize: 13.5,
-      }}
-    >
-      {zeilen.map((zeile) => (
-        <Fragment key={zeile.name}>
-          <Box
-            component="dt"
-            sx={(theme) => ({ color: theme.vars.palette.kupferwolke.textSchwach })}
-          >
-            {zeile.name}
-          </Box>
-          <Box component="dd" sx={{ margin: 0, fontWeight: 500 }}>
-            {zeile.wert}
-          </Box>
-        </Fragment>
-      ))}
-    </Box>
-  );
+  return <Angabenliste zeilen={zeilen} mittig testId="angebot-angaben" />;
 }
 
 /**

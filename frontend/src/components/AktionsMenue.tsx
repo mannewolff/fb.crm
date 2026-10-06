@@ -12,6 +12,7 @@ import type { ReactNode } from 'react';
 import { useEffect, useId, useState } from 'react';
 
 import { RADIUS_RUND } from '../theme';
+import { rundeIcontaste } from './rundeIcontaste';
 import TastenSymbol from './TastenSymbol';
 import WeicheTaste from './WeicheTaste';
 
@@ -66,7 +67,6 @@ interface OffeneRueckfrage {
 }
 
 /** Kantenlaenge der Icontaste (CLAUDE-design.md, „Tasten": Kreis 40 px). */
-const ICONTASTE = 40;
 
 /**
  * Die Rueckfrage vor einer folgenreichen Aktion.
@@ -162,23 +162,7 @@ export default function AktionsMenue({ name, objekt, eintraege }: AktionsMenuePr
           setAnker(ereignis.currentTarget);
           setOffen(true);
         }}
-        sx={(theme) => ({
-          width: ICONTASTE,
-          height: ICONTASTE,
-          flex: 'none',
-          borderRadius: `${RADIUS_RUND}px`,
-          border: 0,
-          cursor: 'pointer',
-          display: 'grid',
-          placeItems: 'center',
-          color: theme.vars.palette.kupferwolke.textMatt,
-          background: theme.vars.palette.kupferwolke.flaecheWeich,
-          transition: 'background .15s ease, color .15s ease',
-          '&:hover': {
-            background: theme.vars.palette.kupferwolke.toenung.pfirsich.flaeche,
-            color: theme.vars.palette.kupferwolke.toenung.pfirsich.schrift,
-          },
-        })}
+        sx={rundeIcontaste}
       >
         <IconDots size={18} stroke={1.8} aria-hidden />
       </Box>

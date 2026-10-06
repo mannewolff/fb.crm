@@ -15,6 +15,7 @@ import { useKopfPfad } from '../components/KopfPfad';
 import type { PfadVerweis } from '../components/KopfPfad';
 import KupferTaste from '../components/KupferTaste';
 import Tafel from '../components/Tafel';
+import { rundeIcontaste } from '../components/rundeIcontaste';
 import ZeiteintragMaske from '../components/ZeiteintragMaske';
 import {
   alsMonat,
@@ -25,7 +26,7 @@ import {
   zeitspanneWort,
 } from '../lib/arbeitszeit';
 import { tagWort } from '../lib/tag';
-import { RADIUS_RUND, ZAHLEN_KLASSE } from '../theme';
+import { ZAHLEN_KLASSE } from '../theme';
 
 /**
  * Die Ansicht „Arbeitszeit": die Eintraege eines Monats nach Tagen, mit Summen (Issue #193,
@@ -77,7 +78,6 @@ const SPALTEN: readonly string[] = ['Zeit', 'Dauer', 'Position', 'Aktionen'];
 const SYMBOL_TASTE = 16;
 
 /** Kantenlaenge der Icontaste (CLAUDE-design.md, „Tasten": Kreis 40 px). */
-const ICONTASTE = 40;
 
 /** Die Symbolgroesse in den Menueeintraegen (wie in {@link Kommentare}). */
 const SYMBOL_MENUE = 17;
@@ -138,23 +138,7 @@ function Monatstaste({
       type="button"
       aria-label={name}
       onClick={onKlick}
-      sx={(theme) => ({
-        width: ICONTASTE,
-        height: ICONTASTE,
-        flex: 'none',
-        borderRadius: `${RADIUS_RUND}px`,
-        border: 0,
-        cursor: 'pointer',
-        display: 'grid',
-        placeItems: 'center',
-        color: theme.vars.palette.kupferwolke.textMatt,
-        background: theme.vars.palette.kupferwolke.flaecheWeich,
-        transition: 'background .15s ease, color .15s ease',
-        '&:hover': {
-          background: theme.vars.palette.kupferwolke.toenung.pfirsich.flaeche,
-          color: theme.vars.palette.kupferwolke.toenung.pfirsich.schrift,
-        },
-      })}
+      sx={rundeIcontaste}
     >
       {symbol}
     </Box>
