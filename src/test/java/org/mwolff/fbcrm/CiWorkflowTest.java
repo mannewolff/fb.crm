@@ -27,10 +27,11 @@ import org.yaml.snakeyaml.constructor.SafeConstructor;
  * auseinander. Welcher Schritt ein Gate ist, sagt seine {@code id} ({@code gate-…}); alles andere
  * im Workflow ist Vorbereitung.
  *
- * <p>Die Zuordnung zu den Jobs folgt den Bereichen aus {@code buildChecks}: {@code backend} laeuft
- * in {@code verify}, {@code frontend} in {@code frontend}, die Mutationstests in {@code pit}. Ein
- * neuer Bereich in der Config bricht diesen Test — genau dann muss jemand entscheiden, wo er in CI
- * laeuft.
+ * <p>Die Zuordnung zu den Jobs folgt den Bereichen aus {@code buildChecks}: {@code betrieb} und
+ * {@code backend} laufen in {@code verify}, {@code betrieb} zuerst, weil es nur die Workflow-Config
+ * liest und vor dem langen Maven-Lauf scheitern soll; {@code frontend} laeuft in {@code frontend},
+ * die Mutationstests in {@code pit}. Ein neuer Bereich in der Config bricht diesen Test — genau
+ * dann muss jemand entscheiden, wo er in CI laeuft.
  */
 class CiWorkflowTest {
 
@@ -171,9 +172,13 @@ class CiWorkflowTest {
   }
 
   @Test
-  void verify_givenTheConfig_thenRunsExactlyTheBackendChecks() throws IOException {
+  void verify_givenTheConfig_thenRunsExactlyTheBetriebAndBackendChecks() throws IOException {
+    // Given — erst betrieb, dann backend, jeweils in der Reihenfolge der Config
+    final List<String> erwartet = new ArrayList<>(buildChecks("betrieb"));
+    erwartet.addAll(buildChecks("backend"));
+
     // When / Then
-    assertThat(gates("verify")).isNotEmpty().isEqualTo(buildChecks("backend"));
+    assertThat(gates("verify")).isNotEmpty().isEqualTo(erwartet);
   }
 
   @Test

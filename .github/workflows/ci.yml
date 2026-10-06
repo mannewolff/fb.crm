@@ -40,6 +40,10 @@ jobs:
           printf '#!/bin/sh\nexec "%s/mvnw" "$@"\n' "$GITHUB_WORKSPACE" > "$RUNNER_TEMP/bin/mvn"
           chmod +x "$RUNNER_TEMP/bin/mvn"
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+      # Bereich betrieb: Die Workflow-Config muss gueltiges JSON sein. Er steht vor dem langen
+      # Maven-Lauf, damit eine kaputte Config in Sekunden scheitert.
+      - id: gate-betrieb-json
+        run: node -e "JSON.parse(require('fs').readFileSync('.claude/workflow.config.json','utf8'))"
       # Docker ist auf dem Runner vorhanden — die Testcontainers-ITs laufen mit. Der volle Lauf
       # baut das Frontend mit (frontend-maven-plugin), das AccessRuleIT als index.html braucht.
       - id: gate-mvn-verify
