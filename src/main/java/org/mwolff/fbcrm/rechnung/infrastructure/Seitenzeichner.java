@@ -61,20 +61,16 @@ final class Seitenzeichner {
 
   private void zeichneFlaeche(final Druckelement.Flaeche flaeche) throws IOException {
     setzeFuellfarbe(flaeche.farbe());
-    inhalt.addRect(
-        (float) flaeche.x(),
-        (float) flaeche.y(),
-        (float) flaeche.breite(),
-        (float) flaeche.hoehe());
+    inhalt.addRect(flaeche.x(), flaeche.y(), flaeche.breite(), flaeche.hoehe());
     inhalt.fill();
   }
 
   private void zeichneLinie(final Druckelement.Linie linie) throws IOException {
     inhalt.setStrokingColor(
         anteil(linie.farbe().rot()), anteil(linie.farbe().gruen()), anteil(linie.farbe().blau()));
-    inhalt.setLineWidth((float) linie.staerke());
-    inhalt.moveTo((float) linie.vonX(), (float) linie.vonY());
-    inhalt.lineTo((float) linie.bisX(), (float) linie.bisY());
+    inhalt.setLineWidth(linie.staerke());
+    inhalt.moveTo(linie.vonX(), linie.vonY());
+    inhalt.lineTo(linie.bisX(), linie.bisY());
     inhalt.stroke();
   }
 
@@ -83,8 +79,8 @@ final class Seitenzeichner {
     final String darstellbar = WinAnsiText.darstellbar(text.text());
     setzeFuellfarbe(text.farbe());
     inhalt.beginText();
-    inhalt.setFont(schrift, (float) text.groesse());
-    inhalt.newLineAtOffset(text.x() - versatz(text, schrift, darstellbar), (float) text.y());
+    inhalt.setFont(schrift, text.groesse());
+    inhalt.newLineAtOffset(text.x() - versatz(text, schrift, darstellbar), text.y());
     inhalt.showText(darstellbar);
     inhalt.endText();
   }
