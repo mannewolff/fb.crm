@@ -44,6 +44,25 @@ const RECHNUNG = {
   zeilen: [],
 };
 
+/** Eine nachgetragene Rechnung, wie das Backend sie schreibt (Issue #270). */
+const NACHTRAG = {
+  id: 7,
+  firmaId: 5,
+  firmaName: 'Adler AG',
+  nummer: 'RE-2026-014',
+  rechnungDatum: '2026-03-12',
+  netto: 1000,
+  brutto: 1190,
+  zustand: 'GESTELLT',
+  dokument: false,
+};
+
+/** Die Firmenwahl der Nachtrags-Maske: alle Firmen, auch stillgelegte. */
+const FIRMENWAHL = {
+  firmen: [{ id: 5, name: 'Adler AG', ort: null, aktiveAnsprechpartner: 0, aktiv: true }],
+  gesamt: 1,
+};
+
 /** Der Stand der Startseite, wie das Backend ihn schreibt (Issue #216). */
 const STARTSEITENSTAND = {
   monat: '2026-10',
@@ -126,6 +145,11 @@ describe('App', () => {
     ['fuehrt „/angebote/9/bearbeiten" ohne Sitzung auf die Anmeldeseite', '/angebote/9/bearbeiten'],
     ['fuehrt „/rechnungen" ohne Sitzung auf die Anmeldeseite', '/rechnungen'],
     ['fuehrt „/rechnungen/4" ohne Sitzung auf die Anmeldeseite', '/rechnungen/4'],
+    ['fuehrt „/rechnungen/nachtragen" ohne Sitzung auf die Anmeldeseite', '/rechnungen/nachtragen'],
+    [
+      'fuehrt „/rechnungen/nachgetragen/7/bearbeiten" ohne Sitzung auf die Anmeldeseite',
+      '/rechnungen/nachgetragen/7/bearbeiten',
+    ],
     ['fuehrt „/eigene-angaben" ohne Sitzung auf die Anmeldeseite', '/eigene-angaben'],
     ['fuehrt „/administration“ ohne Sitzung auf die Anmeldeseite', '/administration'],
   ])('%s', async (_name, pfad) => {
@@ -250,6 +274,41 @@ describe('App', () => {
       await screen.findByRole('heading', { level: 1, name: 'Rechnung 0001-2026' }),
     ).toBeInTheDocument();
     expect(screen.getByRole('navigation', { name: 'Hauptnavigation' })).toBeInTheDocument();
+  });
+
+  it('zeigt „/rechnungen/nachtragen" als Maske und nicht als Rechnung „nachtragen"', async () => {
+    fensterbreite(1440);
+    fetchNachPfad({
+      'GET /api/auth/me': json(200, KONTO),
+      'GET /api/instance': json(200, { version: '0.1.3' }),
+      'GET /api/firmen?suche=&auchStillgelegte=true': json(200, FIRMENWAHL),
+    });
+
+    renderApp(['/rechnungen/nachtragen'], 0);
+
+    // Statisch vor dynamisch (E21): `nachtragen` ist der Weg zur Maske, keine Kennung.
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Rechnung nachtragen' }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('navigation', { name: 'Hauptnavigation' })).toBeInTheDocument();
+  });
+
+  it('zeigt „/rechnungen/nachgetragen/7/bearbeiten" als Maske der nachgetragenen Rechnung', async () => {
+    fensterbreite(1440);
+    fetchNachPfad({
+      'GET /api/auth/me': json(200, KONTO),
+      'GET /api/instance': json(200, { version: '0.1.3' }),
+      'GET /api/firmen?suche=&auchStillgelegte=true': json(200, FIRMENWAHL),
+      'GET /api/nachgetragene-rechnungen/7': json(200, NACHTRAG),
+    });
+
+    renderApp(['/rechnungen/nachgetragen/7/bearbeiten'], 0);
+
+    expect(screen.getByRole('status')).toHaveTextContent('Sitzung wird geprüft');
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Nachgetragene Rechnung bearbeiten' }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Rechnungsnummer' })).toHaveValue('RE-2026-014');
   });
 
   it('zeigt „/eigene-angaben" mit Sitzung im Rahmen — nachgeladen, nicht im ersten Rutsch', async () => {

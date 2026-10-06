@@ -21,6 +21,7 @@ const AngebotPage = lazy(async () => import('./pages/AngebotPage'));
 const ArbeitszeitPage = lazy(async () => import('./pages/ArbeitszeitPage'));
 const RechnungenPage = lazy(async () => import('./pages/RechnungenPage'));
 const RechnungPage = lazy(async () => import('./pages/RechnungPage'));
+const NachtragMaske = lazy(async () => import('./pages/NachtragMaske'));
 const EigeneAngabenMaske = lazy(async () => import('./pages/EigeneAngabenMaske'));
 const AdministrationPage = lazy(async () => import('./pages/AdministrationPage'));
 const StartseitePage = lazy(async () => import('./pages/StartseitePage'));
@@ -73,7 +74,15 @@ export default function App() {
                 Er filtert eine Ansicht, er benennt kein eigenes Objekt (Plan #194, A13). */}
             <Route path="/arbeitszeit" element={<ArbeitszeitPage />} />
             <Route path="/rechnungen" element={<RechnungenPage />} />
+            {/* Statisch vor dynamisch (Plan #259, E21): `nachtragen` ist die Maske der
+                nachgetragenen Rechnung, nicht die Rechnung „nachtragen". Die nachgetragene
+                Rechnung hat ihren eigenen Kennungsraum unter `/rechnungen/nachgetragen/`. */}
+            <Route path="/rechnungen/nachtragen" element={<NachtragMaske />} />
             <Route path="/rechnungen/:rechnungId" element={<RechnungPage />} />
+            <Route
+              path="/rechnungen/nachgetragen/:id/bearbeiten"
+              element={<NachtragMaske />}
+            />
             <Route path="/firmen" element={<FirmenPage />} />
             {/* Statisch vor dynamisch: `/firmen/neu` ist die Maske, nicht die Firma „neu". */}
             <Route path="/firmen/neu" element={<FirmaMaske />} />
