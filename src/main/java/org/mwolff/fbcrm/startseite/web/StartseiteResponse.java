@@ -7,23 +7,25 @@ import java.util.List;
 import org.mwolff.fbcrm.angebot.application.AngebotMitFirma;
 import org.mwolff.fbcrm.angebot.domain.Angebotsstatus;
 import org.mwolff.fbcrm.rechnung.application.Monatsabrechnung;
+import org.mwolff.fbcrm.startseite.application.Abgerechnet;
+import org.mwolff.fbcrm.startseite.application.Abrechnungsmonat;
 import org.mwolff.fbcrm.startseite.application.Angebotsanteil;
 import org.mwolff.fbcrm.startseite.application.NichtAbgerechnet;
 import org.mwolff.fbcrm.startseite.application.Startseitenstand;
+import org.mwolff.fbcrm.startseite.application.WaehlbareZeitraeume;
 import org.mwolff.fbcrm.startseite.application.Zeitraum;
 
 /**
- * Der Stand der Startseite, wie die Ansicht ihn zeigt (#206, Kriterien 3 bis 8; Issue #214).
+ * Der Stand der Startseite, wie die Ansicht ihn zeigt (#206, Kriterien 3 bis 8; #273; Issue #214).
  *
  * <p>Die Antwort traegt fertig, was die Ansicht darstellt, und nichts darueber hinaus: je Kennzahl
- * ihre Betraege und die Zeilen darunter, dazu den geltenden Monat und die waehlbaren. Die
+ * ihre Betraege und die Zeilen darunter, dazu den geltenden Zeitraum und die waehlbaren. Die
  * Oberflaeche rechnet damit nichts und fragt nichts nach.
  *
- * <p><b>Der Vertrag ist noch der des Monats</b> (Plan #274): Der Stand darunter haengt schon an
- * einem {@link Zeitraum}, die Antwort schreibt aber weiter die bisherigen Felder — den Monat, die
- * waehlbaren Monate ohne die Jahre und „Abgerechnet" ohne Monatszeilen. Der Controller fragt nur
- * nach Monaten, darum ist der geltende Zeitraum hier immer ein Monat. Die neue Antwort ist ein
- * eigenes Paket.
+ * <p><b>Der Zeitraum steht als Art und Wert darin</b> (Plan #274, E10): Die Ansicht schaltet an der
+ * Art Beschriftungen und den Inhalt einer Karte um und muss sie nicht aus der Laenge des Werts
+ * schliessen. Wert und waehlbare Jahre sind Text — genau das, was die Ansicht in die Adresse und in
+ * {@code option value} setzt; ein {@code Year} schriebe Jackson als Zahl.
  *
  * <p><b>Von den Angeboten kommen vier Angaben mit, nicht das ganze Angebot.</b> Die Zeile zeigt
  * Firma und Datum, und die Kennung ist der Weg zum Angebot — Positionen, Beschreibung und
@@ -39,30 +41,64 @@ import org.mwolff.fbcrm.startseite.application.Zeitraum;
  * ein Euro-Wert daraus ist Nicht-Ziel von #207. Darum steht das Feld oben in der Antwort und nicht
  * in {@code nichtAbgerechnet}.
  *
- * @param monat der Monat, fuer den „Abgerechnet" und die Monatszeile gelten
- * @param monate die waehlbaren Monate, neuester zuerst; {@code monat} ist einer von ihnen
+ * @param zeitraum der Zeitraum, fuer den „Abgerechnet" und die zweite Zeile von „Noch nicht
+ *     abgerechnet" gelten; immer einer der waehlbaren
+ * @param waehlbar die waehlbaren Jahre und Monate
  * @param inArbeit die Angebote im Status „bestellt" oder „erledigt", neueste zuerst
  * @param nichtAbgerechnet was aus erfasster Arbeitszeit noch abzurechnen ist
- * @param abgerechnet Netto, Brutto und Anzahl der im Monat gestellten Rechnungen
- * @param interneStundenImMonat die im gewaehlten Monat auf interne Angebote gebuchten Stunden
+ * @param abgerechnet Netto, Brutto und Anzahl der im Zeitraum gestellten Rechnungen, bei einem Jahr
+ *     samt seinen Monaten
+ * @param interneStundenImZeitraum die im gewaehlten Zeitraum auf interne Angebote gebuchten Stunden
  */
 public record StartseiteResponse(
-    YearMonth monat,
-    List<YearMonth> monate,
+    ZeitraumResponse zeitraum,
+    WaehlbarResponse waehlbar,
     List<Angebotszeile> inArbeit,
     NichtAbgerechnetResponse nichtAbgerechnet,
     AbgerechnetResponse abgerechnet,
-    BigDecimal interneStundenImMonat) {
+    BigDecimal interneStundenImZeitraum) {
 
   /** Derselbe Stand in der Sprache der Schnittstelle. */
   static StartseiteResponse of(final Startseitenstand stand) {
     return new StartseiteResponse(
-        YearMonth.from(stand.zeitraum().von()),
-        stand.waehlbar().monate(),
+        ZeitraumResponse.of(stand.zeitraum()),
+        WaehlbarResponse.of(stand.waehlbar()),
         stand.inArbeit().stream().map(Angebotszeile::of).toList(),
         NichtAbgerechnetResponse.of(stand.nichtAbgerechnet()),
-        AbgerechnetResponse.of(stand.abgerechnet().summe()),
+        AbgerechnetResponse.of(stand.abgerechnet()),
         stand.interneStundenImZeitraum());
+  }
+
+  /**
+   * Der geltende Zeitraum (#273, Kriterien 1 und 2; Plan #274, E10).
+   *
+   * @param art {@code "MONAT"} oder {@code "JAHR"}
+   * @param wert {@code "2026-10"} oder {@code "2026"} — der Wert des Adressparameters
+   */
+  public record ZeitraumResponse(String art, String wert) {
+
+    static ZeitraumResponse of(final Zeitraum zeitraum) {
+      final String art =
+          switch (zeitraum) {
+            case Zeitraum.Monat _ -> "MONAT";
+            case Zeitraum.Jahr _ -> "JAHR";
+          };
+      return new ZeitraumResponse(art, zeitraum.wert());
+    }
+  }
+
+  /**
+   * Die waehlbaren Zeitraeume (#273, Kriterien 1 und 2).
+   *
+   * @param jahre die waehlbaren Jahre als Text {@code JJJJ}, neuestes zuerst (E10)
+   * @param monate die waehlbaren Monate, neuester zuerst
+   */
+  public record WaehlbarResponse(List<String> jahre, List<YearMonth> monate) {
+
+    static WaehlbarResponse of(final WaehlbareZeitraeume waehlbar) {
+      return new WaehlbarResponse(
+          waehlbar.jahre().stream().map(String::valueOf).toList(), waehlbar.monate());
+    }
   }
 
   /**
@@ -90,14 +126,14 @@ public record StartseiteResponse(
    *
    * <p>Die beiden Betraege haben verschiedene Zeitraeume, und das ist Absicht — die Begruendung
    * steht bei {@link NichtAbgerechnet}: {@code netto} ist der Stand von heute ueber alle Monate,
-   * {@code erfasstImMonat} haengt am gewaehlten Monat.
+   * {@code erfasstImZeitraum} haengt am gewaehlten Zeitraum.
    *
    * @param netto der Betrag netto, Stand von heute ueber alle Monate
-   * @param erfasstImMonat der Wert der im gewaehlten Monat erfassten Stunden, netto
+   * @param erfasstImZeitraum der Wert der im gewaehlten Zeitraum erfassten Stunden, netto
    * @param angebote je beitragendem Angebot sein Anteil am {@code netto}, neueste zuerst
    */
   public record NichtAbgerechnetResponse(
-      BigDecimal netto, BigDecimal erfasstImMonat, List<Anteilszeile> angebote) {
+      BigDecimal netto, BigDecimal erfasstImZeitraum, List<Anteilszeile> angebote) {
 
     static NichtAbgerechnetResponse of(final NichtAbgerechnet gerechnet) {
       return new NichtAbgerechnetResponse(
@@ -132,16 +168,45 @@ public record StartseiteResponse(
   }
 
   /**
-   * Die Kennzahl „Abgerechnet" fuer den gewaehlten Monat (#206, Kriterium 7).
+   * Die Kennzahl „Abgerechnet" fuer den gewaehlten Zeitraum (#206, Kriterium 7; #273, Kriterien 4
+   * und 7).
    *
-   * @param netto die Summe der Netto-Betraege der im Monat gestellten Rechnungen
+   * <p>Die Monatszeilen stehen in der Kennzahl, weil sie ihre Herkunft sind (Plan #274, E11). Bei
+   * Monatswahl ist die Liste leer und nicht {@code null}.
+   *
+   * @param netto die Summe der Netto-Betraege der im Zeitraum gestellten Rechnungen
    * @param brutto die Summe ihrer Brutto-Betraege, jeder mit dem Satz seiner Rechnung
    * @param anzahl die Zahl dieser Rechnungen
+   * @param monate bei Jahreswahl je Monat mit mindestens einer gestellten Rechnung eine Zeile,
+   *     aeltester zuerst; bei Monatswahl leer
    */
-  public record AbgerechnetResponse(BigDecimal netto, BigDecimal brutto, int anzahl) {
+  public record AbgerechnetResponse(
+      BigDecimal netto, BigDecimal brutto, int anzahl, List<Monatszeile> monate) {
 
-    static AbgerechnetResponse of(final Monatsabrechnung gestellt) {
-      return new AbgerechnetResponse(gestellt.netto(), gestellt.brutto(), gestellt.anzahl());
+    static AbgerechnetResponse of(final Abgerechnet abgerechnet) {
+      final Monatsabrechnung summe = abgerechnet.summe();
+      return new AbgerechnetResponse(
+          summe.netto(),
+          summe.brutto(),
+          summe.anzahl(),
+          abgerechnet.monate().stream().map(Monatszeile::of).toList());
+    }
+  }
+
+  /**
+   * Ein Monat der Liste unter „Abgerechnet" bei Jahreswahl (#273, Kriterium 7).
+   *
+   * @param monat der Monat des Rechnungsdatums
+   * @param anzahl die Zahl der in ihm gestellten Rechnungen
+   * @param netto die Summe ihrer Netto-Betraege
+   * @param brutto die Summe ihrer Brutto-Betraege
+   */
+  public record Monatszeile(YearMonth monat, int anzahl, BigDecimal netto, BigDecimal brutto) {
+
+    static Monatszeile of(final Abrechnungsmonat zeile) {
+      final Monatsabrechnung abrechnung = zeile.abrechnung();
+      return new Monatszeile(
+          zeile.monat(), abrechnung.anzahl(), abrechnung.netto(), abrechnung.brutto());
     }
   }
 }
