@@ -3,7 +3,7 @@ import Box from '@mui/material/Box';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { useEffect, useState } from 'react';
-import type { Dispatch, FormEvent, SetStateAction } from 'react';
+import type { Dispatch, FormEvent, ReactNode, SetStateAction } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 
 import { ansprechpartnerAendern, ansprechpartnerAnlegen, firmaLesen } from '../api/firmen';
@@ -126,6 +126,20 @@ function Eingabe({
 
 /** Ueber jeder Firmen-Ansicht steht die Uebersicht (E6). */
 const ZU_FIRMEN: readonly PfadVerweis[] = [{ titel: 'Firmen', ziel: '/firmen' }];
+
+/** Was die Karte zeigt, solange das Formular nicht bereitsteht: Ladehinweis oder Meldung. */
+function nichtBereit(stand: Exclude<Stand, { readonly art: 'bereit' }>): ReactNode {
+  if (stand.art === 'laedt') {
+    return (
+      <Typography
+        sx={(theme) => ({ fontSize: 12.5, color: theme.vars.palette.kupferwolke.textSchwach })}
+      >
+        Der Ansprechpartner wird geladen …
+      </Typography>
+    );
+  }
+  return <Alert severity="error">{stand.meldung}</Alert>;
+}
 
 export default function AnsprechpartnerMaske() {
   const { id, ansprechpartnerId } = useParams();
@@ -306,14 +320,8 @@ export default function AnsprechpartnerMaske() {
               <WeicheTaste to={`/firmen/${String(stand.firmaId)}`}>Abbrechen</WeicheTaste>
             </Box>
           </Box>
-        ) : stand.art === 'laedt' ? (
-          <Typography
-            sx={(theme) => ({ fontSize: 12.5, color: theme.vars.palette.kupferwolke.textSchwach })}
-          >
-            Der Ansprechpartner wird geladen …
-          </Typography>
         ) : (
-          <Alert severity="error">{stand.meldung}</Alert>
+          nichtBereit(stand)
         )}
       </Karte>
     </Box>

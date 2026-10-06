@@ -3,7 +3,7 @@ import Box from '@mui/material/Box';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { useEffect, useState } from 'react';
-import type { Dispatch, FormEvent, SetStateAction } from 'react';
+import type { Dispatch, FormEvent, ReactNode, SetStateAction } from 'react';
 
 import { eigeneAngabenLesen, eigeneAngabenPflegen } from '../api/eigeneAngaben';
 import type { EigeneAngaben } from '../api/eigeneAngaben';
@@ -158,6 +158,20 @@ function Eingabe({ label, feld, werte, setzeWerte, meldung }: EingabeProps) {
 const KEIN_WEG: readonly PfadVerweis[] = [];
 
 const TITEL = 'Eigene Angaben';
+
+/** Was die Karte zeigt, solange das Formular nicht bereitsteht: Ladehinweis oder Meldung. */
+function nichtBereit(stand: Exclude<Stand, 'bereit'>): ReactNode {
+  if (stand === 'laedt') {
+    return (
+      <Typography
+        sx={(theme) => ({ fontSize: 12.5, color: theme.vars.palette.kupferwolke.textSchwach })}
+      >
+        Die eigenen Angaben werden geladen …
+      </Typography>
+    );
+  }
+  return <Alert severity="error">{AUSFALL_LESEN}</Alert>;
+}
 
 export default function EigeneAngabenMaske() {
   const [stand, setzeStand] = useState<Stand>('laedt');
@@ -331,14 +345,8 @@ export default function EigeneAngabenMaske() {
               <WeicheTaste onClick={zuruecknehmen}>Abbrechen</WeicheTaste>
             </Box>
           </Box>
-        ) : stand === 'laedt' ? (
-          <Typography
-            sx={(theme) => ({ fontSize: 12.5, color: theme.vars.palette.kupferwolke.textSchwach })}
-          >
-            Die eigenen Angaben werden geladen …
-          </Typography>
         ) : (
-          <Alert severity="error">{AUSFALL_LESEN}</Alert>
+          nichtBereit(stand)
         )}
       </Karte>
     </Box>

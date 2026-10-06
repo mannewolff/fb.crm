@@ -3,7 +3,7 @@ import Box from '@mui/material/Box';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { useEffect, useState } from 'react';
-import type { FormEvent } from 'react';
+import type { FormEvent, ReactNode } from 'react';
 
 import type { FieldErrors } from '../api/client';
 import {
@@ -175,6 +175,20 @@ function vorschauZu(muster: string, nummerText: string, jahr: number): string | 
 const KEIN_WEG: readonly PfadVerweis[] = [];
 
 const TITEL = 'Administration';
+
+/** Was die Karte zeigt, solange das Formular nicht bereitsteht: Ladehinweis oder Meldung. */
+function nichtBereit(stand: Exclude<Stand, 'bereit'>): ReactNode {
+  if (stand === 'laedt') {
+    return (
+      <Typography
+        sx={(theme) => ({ fontSize: 12.5, color: theme.vars.palette.kupferwolke.textSchwach })}
+      >
+        Die Einstellungen werden geladen …
+      </Typography>
+    );
+  }
+  return <Alert severity="error">{AUSFALL_LESEN}</Alert>;
+}
 
 export default function AdministrationPage() {
   const [stand, setzeStand] = useState<Stand>('laedt');
@@ -348,14 +362,8 @@ export default function AdministrationPage() {
               <WeicheTaste onClick={zuruecknehmen}>Abbrechen</WeicheTaste>
             </Box>
           </Box>
-        ) : stand === 'laedt' ? (
-          <Typography
-            sx={(theme) => ({ fontSize: 12.5, color: theme.vars.palette.kupferwolke.textSchwach })}
-          >
-            Die Einstellungen werden geladen …
-          </Typography>
         ) : (
-          <Alert severity="error">{AUSFALL_LESEN}</Alert>
+          nichtBereit(stand)
         )}
       </Karte>
     </Box>

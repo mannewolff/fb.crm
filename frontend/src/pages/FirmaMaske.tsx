@@ -3,7 +3,7 @@ import Box from '@mui/material/Box';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { useEffect, useState } from 'react';
-import type { Dispatch, FormEvent, SetStateAction } from 'react';
+import type { Dispatch, FormEvent, ReactNode, SetStateAction } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 
 import { firmaAendern, firmaAnlegen, firmaLesen } from '../api/firmen';
@@ -113,6 +113,20 @@ function Eingabe({ label, feld, werte, setzeWerte, meldung, pflicht = false }: E
 
 /** Ueber jeder Firmen-Ansicht steht die Uebersicht (E6). */
 const ZU_FIRMEN: readonly PfadVerweis[] = [{ titel: 'Firmen', ziel: '/firmen' }];
+
+/** Was die Karte zeigt, solange das Formular nicht bereitsteht: Ladehinweis oder Meldung. */
+function nichtBereit(stand: Exclude<Stand, 'bereit'>): ReactNode {
+  if (stand === 'laedt') {
+    return (
+      <Typography
+        sx={(theme) => ({ fontSize: 12.5, color: theme.vars.palette.kupferwolke.textSchwach })}
+      >
+        Die Firma wird geladen …
+      </Typography>
+    );
+  }
+  return <Alert severity="error">{stand === 'unbekannt' ? NICHT_GEFUNDEN : AUSFALL_LESEN}</Alert>;
+}
 
 export default function FirmaMaske() {
   const { id } = useParams();
@@ -272,14 +286,8 @@ export default function FirmaMaske() {
               <WeicheTaste to={zurueck}>Abbrechen</WeicheTaste>
             </Box>
           </Box>
-        ) : stand === 'laedt' ? (
-          <Typography
-            sx={(theme) => ({ fontSize: 12.5, color: theme.vars.palette.kupferwolke.textSchwach })}
-          >
-            Die Firma wird geladen …
-          </Typography>
         ) : (
-          <Alert severity="error">{stand === 'unbekannt' ? NICHT_GEFUNDEN : AUSFALL_LESEN}</Alert>
+          nichtBereit(stand)
         )}
       </Karte>
     </Box>

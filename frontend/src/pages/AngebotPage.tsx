@@ -267,6 +267,40 @@ function InternePositionszeile({
 }
 
 /**
+ * Die Zelle „Angefallen" einer Positionszeile (Issue #193, Kriterien 7, 8).
+ *
+ * Leer, solange die Position keinen buchbaren Stand hat. Sonst die erfassten Stunden und, wo sie
+ * das Kontingent sprengen, der Hinweis mit der Menge darueber (Kriterium 8).
+ */
+function AngefallenZelle({ stand }: { readonly stand: Abrechnungsposition | undefined }) {
+  if (!stand?.buchbar) {
+    return <Box component="td" sx={{ textAlign: 'right' }} />;
+  }
+  // Was ueber das Kontingent hinaus erfasst wurde (Kriterium 8), oder 0.
+  const ueberKontingent = Math.max(
+    0,
+    stand.angefallenInHundertsteln - stand.angebotenInHundertsteln,
+  );
+  return (
+    <Box component="td" sx={{ textAlign: 'right' }}>
+      <Box className={ZAHLEN_KLASSE} sx={{ whiteSpace: 'nowrap' }}>
+        {dezimal(stand.angefallenInHundertsteln, ',')}
+      </Box>
+      {ueberKontingent > 0 ? (
+        // Der Hinweis steht an der Zahl, die das Kontingent sprengt (Kriterium 8).
+        <Box sx={{ fontSize: 12.5 }}>
+          <Ueberschreitungshinweis
+            mengeInHundertsteln={ueberKontingent}
+            angebotPositionId={stand.angebotPositionId}
+            art="angefallen"
+          />
+        </Box>
+      ) : null}
+    </Box>
+  );
+}
+
+/**
  * Eine Zeile der Positionstafel (Kriterien 4, 5, 26; Issue #193, Kriterien 7, 8, 11).
  *
  * `stand` ist der Abrechnungsstand dieser Position, oder `undefined` — dann bleiben die Zellen der
@@ -296,11 +330,6 @@ function Positionszeile({
   if (intern) {
     return <InternePositionszeile position={position} stand={stand} />;
   }
-  // Was ueber das Kontingent hinaus erfasst wurde (Kriterium 8), oder 0.
-  const ueberKontingent =
-    !stand?.buchbar
-      ? 0
-      : Math.max(0, stand.angefallenInHundertsteln - stand.angebotenInHundertsteln);
   return (
     <Box component="tr">
       <Box component="td" sx={{ fontWeight: 500 }}>
@@ -314,27 +343,7 @@ function Positionszeile({
       >
         {dezimal(position.mengeInHundertsteln, ',')}
       </Box>
-      {!zusatz.angefallen ? null : (
-        <Box component="td" sx={{ textAlign: 'right' }}>
-          {!stand?.buchbar ? null : (
-            <>
-              <Box className={ZAHLEN_KLASSE} sx={{ whiteSpace: 'nowrap' }}>
-                {dezimal(stand.angefallenInHundertsteln, ',')}
-              </Box>
-              {ueberKontingent > 0 ? (
-                // Der Hinweis steht an der Zahl, die das Kontingent sprengt (Kriterium 8).
-                <Box sx={{ fontSize: 12.5 }}>
-                  <Ueberschreitungshinweis
-                    mengeInHundertsteln={ueberKontingent}
-                    angebotPositionId={stand.angebotPositionId}
-                    art="angefallen"
-                  />
-                </Box>
-              ) : null}
-            </>
-          )}
-        </Box>
-      )}
+      {!zusatz.angefallen ? null : <AngefallenZelle stand={stand} />}
       {!zusatz.stand ? null : (
         <>
           <Box
