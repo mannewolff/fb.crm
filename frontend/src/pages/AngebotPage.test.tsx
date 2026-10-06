@@ -733,6 +733,31 @@ describe('AngebotPage — der Bereich „Rechnungen" (Issue #187, Kriterium 26)'
     expect(await screen.findByText('Noch keine Rechnung.')).toBeInTheDocument();
   });
 
+  it('zeigt den Ladehinweis, solange der Abrechnungsstand aussteht (Issue #246)', async () => {
+    // Die Antwort wird zurueckgehalten statt verzoegert: Der Ladezustand ist dann ohne jedes
+    // Timing zu sehen und haengt nicht davon ab, wie schnell die Attrappe antwortet.
+    let liefere!: (antwort: Response) => void;
+    const spaeter = new Promise<Response>((aufloesen) => {
+      liefere = aufloesen;
+    });
+    fetchNachPfad({
+      ...LEERE_BEREICHE,
+      [ABRECHNUNG]: () => spaeter,
+      'GET /api/angebote/9': json(200, ANGEBOT),
+    });
+
+    renderSeite();
+    await screen.findByRole('heading', { level: 1, name: UEBERSCHRIFT });
+
+    expect(screen.getByText('Der Abrechnungsstand wird geladen …')).toBeInTheDocument();
+    expect(screen.queryByText('Noch keine Rechnung.')).not.toBeInTheDocument();
+
+    liefere(json(200, LEERER_STAND)());
+
+    expect(await screen.findByText('Noch keine Rechnung.')).toBeInTheDocument();
+    expect(screen.queryByText('Der Abrechnungsstand wird geladen …')).not.toBeInTheDocument();
+  });
+
   it('listet den Entwurf als „Entwurf" und die gestellte Rechnung mit ihrer Nummer', async () => {
     fetchNachPfad({
       ...LEERE_BEREICHE,
