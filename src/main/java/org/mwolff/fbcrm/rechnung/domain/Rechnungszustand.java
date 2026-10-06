@@ -45,4 +45,26 @@ public enum Rechnungszustand {
   public boolean istGestellt() {
     return this != ENTWURF;
   }
+
+  /**
+   * Ob der Wechsel des Ausgangs von {@code von} nach {@code nach} erlaubt ist (Issue #253).
+   *
+   * <p>Die eine Stelle fuer beide Aggregate — die Rechnung und die nachgetragene Rechnung fragen
+   * hier (Plan #259, E4). Zwei Abschriften derselben Regel liefen beim ersten Nachziehen
+   * auseinander.
+   *
+   * <p>Drei Kanten und keine vierte: von {@code GESTELLT} zu einem der beiden Ausgaenge und von
+   * jedem Ausgang zurueck auf {@code GESTELLT}. Beide Seiten muessen gestellt sein — der Entwurf
+   * liegt davor, und ihn stellt {@code Rechnung.gestellt} mit Nummer und Kopien —, und genau eine
+   * der beiden muss {@code GESTELLT} sein. Diese zweite Bedingung schliesst zugleich den Stillstand
+   * aus und den direkten Weg zwischen den Ausgaengen: Ein Wechsel von bezahlt auf abgeschrieben
+   * fuehrt ueber „gestellt".
+   *
+   * @param von der heutige Zustand
+   * @param nach der verlangte Zustand
+   */
+  public static boolean ausgangswechselErlaubt(
+      final Rechnungszustand von, final Rechnungszustand nach) {
+    return von.istGestellt() && nach.istGestellt() && (von == GESTELLT) != (nach == GESTELLT);
+  }
 }

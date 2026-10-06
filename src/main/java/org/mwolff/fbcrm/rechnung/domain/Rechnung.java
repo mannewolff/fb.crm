@@ -243,17 +243,9 @@ public record Rechnung(
         jetzt);
   }
 
-  /*
-   * Drei Kanten und keine vierte: von GESTELLT zu einem der beiden Ausgaenge und von jedem Ausgang
-   * zurueck auf GESTELLT. Beide Seiten muessen gestellt sein — der Entwurf liegt davor, und ihn
-   * stellt `gestellt` mit Nummer und Kopien —, und genau eine der beiden muss GESTELLT sein. Diese
-   * zweite Bedingung schliesst zugleich den Stillstand aus und den direkten Weg zwischen den
-   * Ausgaengen: Ein Wechsel von bezahlt auf abgeschrieben fuehrt ueber „gestellt".
-   */
+  /* Die Kantenregel steht im Aufzaehlungstyp; die nachgetragene Rechnung fragt dort dieselbe (E4). */
   private boolean erlaubt(final Rechnungszustand ziel) {
-    return zustand.istGestellt()
-        && ziel.istGestellt()
-        && (zustand == Rechnungszustand.GESTELLT) != (ziel == Rechnungszustand.GESTELLT);
+    return Rechnungszustand.ausgangswechselErlaubt(zustand, ziel);
   }
 
   private void nurEntwurf() {
