@@ -3,13 +3,12 @@ package org.mwolff.fbcrm.startseite.application;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.LocalDate;
+import java.time.Year;
 import java.time.YearMonth;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.stream.IntStream;
-import java.util.stream.Stream;
 import org.mwolff.fbcrm.angebot.application.AngebotMitFirma;
 import org.mwolff.fbcrm.angebot.application.AngeboteUebersichtUseCase;
 import org.mwolff.fbcrm.angebot.domain.Angebotsposition;
@@ -20,7 +19,6 @@ import org.mwolff.fbcrm.common.Einheit;
 import org.mwolff.fbcrm.common.Geldrechnung;
 import org.mwolff.fbcrm.common.Geschaeftszone;
 import org.mwolff.fbcrm.rechnung.application.Gestellte;
-import org.mwolff.fbcrm.rechnung.application.Monatsabrechnung;
 import org.mwolff.fbcrm.rechnung.application.Rechnungsauskunft;
 import org.mwolff.fbcrm.rechnung.domain.Positionsstand;
 import org.springframework.stereotype.Service;
@@ -31,16 +29,20 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * <p><b>Vier Auskuenfte und keine je Angebot.</b> Die Angebote mit den Namen ihrer Firmen kommen in
  * einem Zug ({@link AngeboteUebersichtUseCase#angebote(Optional)}, E2) — mit allen Status, weil
- * Kennzahl 2 sie alle braucht und Kennzahl 1 daraus filtert. Die Stunden kommen in zwei Zuegen
- * ueber alle Angebote ({@link Arbeitszeitauskunft#alleAngefallen()} und {@link
- * Arbeitszeitauskunft#alleImZeitraum(LocalDate, LocalDate)}, E3), die gestellten Rechnungen in
- * einem ({@link Rechnungsauskunft#gestellte()}, E5). Je Angebot zu fragen waere die Abfragelawine,
- * die diese Tueren gerade vermeiden.
+ * Kennzahl 2 sie alle braucht und Kennzahl 1 daraus filtert. Aus der Zeiterfassung kommen drei
+ * Zuege ueber alle Angebote ({@link Arbeitszeitauskunft#alleAngefallen()}, {@link
+ * Arbeitszeitauskunft#alleImZeitraum(LocalDate, LocalDate)} und {@link
+ * Arbeitszeitauskunft#monateMitEintragImZeitraum(LocalDate, LocalDate)}; Plan #208, E3; Plan #274,
+ * E7), die gestellten Rechnungen je Monat in einem ({@link Rechnungsauskunft#gestellte()}, Plan
+ * #274, E4). Je Angebot zu fragen waere die Abfragelawine, die diese Tueren gerade vermeiden.
  *
- * <p><b>Welcher Monat gilt, entscheidet der Server</b> an der injizierten {@link Clock} in der
+ * <p><b>Welcher Zeitraum gilt, entscheidet der Server</b> an der injizierten {@link Clock} in der
  * {@link Geschaeftszone} (E8): Am 1. des Monats um 00:30 Ortszeit ist am Nullmeridian noch der
- * Vormonat. Wer keinen Monat nennt oder einen ausserhalb der zwoelf waehlbaren, bekommt den
- * laufenden — ein unbekannter Monat ist kein Fehler, sondern ein fehlender (E18).
+ * Vormonat. Welche Jahre und Monate zur Wahl stehen, entsteht aus dem Bestand ({@link
+ * WaehlbareZeitraeume}, #273, Kriterien 1 und 2). Wer keinen Zeitraum nennt oder einen, der nicht
+ * zur Wahl steht, bekommt den laufenden Monat — ein unbekannter Zeitraum ist kein Fehler, sondern
+ * ein fehlender (E18). Die Verdichtung der Rechnungen zu „Abgerechnet" steht daneben in {@link
+ * Abrechnungsblick} (Plan #274, E16).
  *
  * <p><b>Was „in Arbeit" heisst, steht hier</b> und wird nicht mit der Zeiterfassung geteilt (E22):
  * „bestellt" oder „erledigt" ist die fachliche Kennzeichnung eines Angebots aus #206, „auf diese
@@ -66,9 +68,6 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional(readOnly = true)
 public class StartseiteUseCase {
 
-  /** Die Zahl der waehlbaren Monate: der laufende und die elf davor (#206, Kriterium 3). */
-  private static final int WAEHLBARE_MONATE = 12;
-
   private final AngeboteUebersichtUseCase angebote;
   private final Arbeitszeitauskunft arbeitszeit;
   private final Rechnungsauskunft rechnungen;
@@ -86,38 +85,37 @@ public class StartseiteUseCase {
   }
 
   /**
-   * Der Stand der Startseite fuer einen Monat.
+   * Der Stand der Startseite fuer einen Zeitraum.
    *
-   * @param gewaehlt der gewuenschte Monat, oder leer fuer den laufenden; ein Monat ausserhalb der
-   *     zwoelf waehlbaren wirkt wie ein fehlender
-   * @return die drei Kennzahlen, die internen Stunden des Monats, der geltende Monat und die zwoelf
+   * @param gewaehlt der gewuenschte Monat oder das gewuenschte Jahr, oder leer fuer den laufenden
+   *     Monat; ein Zeitraum, der nicht zur Wahl steht, wirkt wie ein fehlender
+   * @return die drei Kennzahlen, die internen Stunden des Zeitraums, der geltende Zeitraum und die
    *     waehlbaren
    */
-  public Startseitenstand stand(final Optional<YearMonth> gewaehlt) {
+  public Startseitenstand stand(final Optional<Zeitraum> gewaehlt) {
     final YearMonth laufend = YearMonth.now(clock.withZone(Geschaeftszone.ZONE));
-    final List<YearMonth> monate =
-        IntStream.range(0, WAEHLBARE_MONATE).mapToObj(laufend::minusMonths).toList();
-    final YearMonth monat = gewaehlt.filter(monate::contains).orElse(laufend);
+    final Year diesesJahr = Year.from(laufend);
+    final Gestellte gestellte = rechnungen.gestellte();
+    final WaehlbareZeitraeume waehlbar =
+        WaehlbareZeitraeume.herleiten(
+            laufend,
+            gestellte.jeMonat().keySet(),
+            arbeitszeit.monateMitEintragImZeitraum(
+                new Zeitraum.Jahr(diesesJahr.minusYears(1)).von(),
+                new Zeitraum.Jahr(diesesJahr).bis()));
+    final Zeitraum zeitraum =
+        gewaehlt.filter(waehlbar::enthaelt).orElse(new Zeitraum.Monat(laufend));
     final List<AngebotMitFirma> alle = angebote.angebote(Optional.empty());
     final Map<Long, BigDecimal> angefallen = arbeitszeit.alleAngefallen();
-    final Map<Long, BigDecimal> imMonat =
-        arbeitszeit.alleImZeitraum(monat.atDay(1), monat.atEndOfMonth());
-    final Gestellte gestellte = rechnungen.gestellte();
+    final Map<Long, BigDecimal> imZeitraum =
+        arbeitszeit.alleImZeitraum(zeitraum.von(), zeitraum.bis());
     return new Startseitenstand(
-        monat,
-        monate,
+        zeitraum,
+        waehlbar,
         alle.stream().filter(zeile -> inArbeit(zeile.angebot().status())).toList(),
-        nichtAbgerechnet(alle, angefallen, imMonat, gestellte.mengenJePosition()),
-        abgerechnetIm(monat, gestellte),
-        interneStundenImMonat(alle, imMonat));
-  }
-
-  /*
-   * Die Abrechnung des geltenden Monats aus der Karte aller Monate (Plan #274, E4). Ein Monat ohne
-   * gestellte Rechnung fehlt in der Karte und ergibt die Summe ueber keinen — 0,00 und Anzahl 0.
-   */
-  private static Monatsabrechnung abgerechnetIm(final YearMonth monat, final Gestellte gestellte) {
-    return Monatsabrechnung.summe(Stream.ofNullable(gestellte.jeMonat().get(monat)));
+        nichtAbgerechnet(alle, angefallen, imZeitraum, gestellte.mengenJePosition()),
+        Abrechnungsblick.fuer(gestellte.jeMonat(), zeitraum),
+        interneStundenImZeitraum(alle, imZeitraum));
   }
 
   /*
@@ -139,19 +137,20 @@ public class StartseiteUseCase {
 
   /*
    * Ein Durchlauf durch die Angebote, zwei Summen daraus: der Hauptbetrag je Angebot (und nur
-   * aufgenommen, wenn er ueber 0 liegt, E11) und der Wert der im Monat erfassten Stunden ueber
-   * alle. Beide entstehen je Position gerundet und werden danach addiert (E23); fuer die
-   * Monatszeile gilt dabei kein Deckel und kein Abzug (#206, Kriterium 6).
+   * aufgenommen, wenn er ueber 0 liegt, E11) und der Wert der im Zeitraum erfassten Stunden ueber
+   * alle. Beide entstehen je Position gerundet und werden danach addiert (E23); fuer die zweite
+   * Zeile gilt dabei kein Deckel und kein Abzug (#206, Kriterium 6).
    */
   private static NichtAbgerechnet nichtAbgerechnet(
       final List<AngebotMitFirma> alle,
       final Map<Long, BigDecimal> angefallen,
-      final Map<Long, BigDecimal> imMonat,
+      final Map<Long, BigDecimal> imZeitraum,
       final Map<Long, BigDecimal> gestellteMengen) {
     final List<Angebotsanteil> anteile = new ArrayList<>();
-    final List<BigDecimal> monatswerte = new ArrayList<>();
+    final List<BigDecimal> zeitraumwerte = new ArrayList<>();
     for (final AngebotMitFirma zeile : alle) {
-      // Interne Angebote tragen weder zum Hauptbetrag noch zur Monatszeile bei (#207, Kriterium 9;
+      // Interne Angebote tragen weder zum Hauptbetrag noch zur zweiten Zeile bei (#207, Kriterium
+      // 9;
       // Plan #218, E17). Dies ist die eine Kennzahl, an der der Filter noetig ist.
       if (zeile.angebot().intern()) {
         continue;
@@ -163,9 +162,9 @@ public class StartseiteUseCase {
           betraege.add(
               new Positionsstand(position, gestellteMengen.getOrDefault(id, BigDecimal.ZERO))
                   .nichtAbgerechneterBetrag(angefallen.getOrDefault(id, BigDecimal.ZERO)));
-          monatswerte.add(
+          zeitraumwerte.add(
               Geldrechnung.betrag(
-                  imMonat.getOrDefault(id, BigDecimal.ZERO), position.einzelpreis()));
+                  imZeitraum.getOrDefault(id, BigDecimal.ZERO), position.einzelpreis()));
         }
       }
       final BigDecimal anteil = Geldrechnung.summe(betraege.stream());
@@ -175,13 +174,13 @@ public class StartseiteUseCase {
     }
     return new NichtAbgerechnet(
         Geldrechnung.summe(anteile.stream().map(Angebotsanteil::betrag)),
-        Geldrechnung.summe(monatswerte.stream()),
+        Geldrechnung.summe(zeitraumwerte.stream()),
         anteile);
   }
 
   /*
-   * Die internen Stunden des gewaehlten Monats: ueber die Positionen der internen Angebote die
-   * Werte aus imMonat addiert. Die Karte liegt fuer Kennzahl 2 ohnehin schon vor — ein eigener Zug
+   * Die internen Stunden des gewaehlten Zeitraums: ueber die Positionen der internen Angebote die
+   * Werte aus imZeitraum addiert. Die Karte liegt fuer Kennzahl 2 ohnehin schon vor — ein eigener Zug
    * in die Zeiterfassung waere die Abfragelawine, die diese Tueren vermeiden (Plan #208, E3).
    *
    * <p>Gezaehlt wird jede Position und nicht nur eine nach nachAufwandInStunden: An einem internen
@@ -190,16 +189,16 @@ public class StartseiteUseCase {
    * fehlte.
    *
    * <p>Addiert ohne setScale: Die Werte kommen mit Skala 2 aus der Auskunft
-   * (Zeiteintrag.stundenAus) und behalten sie beim Addieren; ohne eine einzige Buchung im Monat
+   * (Zeiteintrag.stundenAus) und behalten sie beim Addieren; ohne eine einzige Buchung im Zeitraum
    * steht 0 da. Gerundet wird nichts — eine Stundenzahl ist kein Betrag, und Geldrechnung gilt hier
    * nicht.
    */
-  private static BigDecimal interneStundenImMonat(
-      final List<AngebotMitFirma> alle, final Map<Long, BigDecimal> imMonat) {
+  private static BigDecimal interneStundenImZeitraum(
+      final List<AngebotMitFirma> alle, final Map<Long, BigDecimal> imZeitraum) {
     return alle.stream()
         .filter(zeile -> zeile.angebot().intern())
         .flatMap(zeile -> zeile.angebot().positionen().stream())
-        .map(position -> imMonat.getOrDefault(position.requireId(), BigDecimal.ZERO))
+        .map(position -> imZeitraum.getOrDefault(position.requireId(), BigDecimal.ZERO))
         .reduce(BigDecimal.ZERO, BigDecimal::add);
   }
 

@@ -10,13 +10,20 @@ import org.mwolff.fbcrm.rechnung.application.Monatsabrechnung;
 import org.mwolff.fbcrm.startseite.application.Angebotsanteil;
 import org.mwolff.fbcrm.startseite.application.NichtAbgerechnet;
 import org.mwolff.fbcrm.startseite.application.Startseitenstand;
+import org.mwolff.fbcrm.startseite.application.Zeitraum;
 
 /**
  * Der Stand der Startseite, wie die Ansicht ihn zeigt (#206, Kriterien 3 bis 8; Issue #214).
  *
  * <p>Die Antwort traegt fertig, was die Ansicht darstellt, und nichts darueber hinaus: je Kennzahl
- * ihre Betraege und die Zeilen darunter, dazu den geltenden Monat und die zwoelf waehlbaren. Die
+ * ihre Betraege und die Zeilen darunter, dazu den geltenden Monat und die waehlbaren. Die
  * Oberflaeche rechnet damit nichts und fragt nichts nach.
+ *
+ * <p><b>Der Vertrag ist noch der des Monats</b> (Plan #274): Der Stand darunter haengt schon an
+ * einem {@link Zeitraum}, die Antwort schreibt aber weiter die bisherigen Felder — den Monat, die
+ * waehlbaren Monate ohne die Jahre und „Abgerechnet" ohne Monatszeilen. Der Controller fragt nur
+ * nach Monaten, darum ist der geltende Zeitraum hier immer ein Monat. Die neue Antwort ist ein
+ * eigenes Paket.
  *
  * <p><b>Von den Angeboten kommen vier Angaben mit, nicht das ganze Angebot.</b> Die Zeile zeigt
  * Firma und Datum, und die Kennung ist der Weg zum Angebot — Positionen, Beschreibung und
@@ -33,7 +40,7 @@ import org.mwolff.fbcrm.startseite.application.Startseitenstand;
  * in {@code nichtAbgerechnet}.
  *
  * @param monat der Monat, fuer den „Abgerechnet" und die Monatszeile gelten
- * @param monate die zwoelf waehlbaren Monate, neuester zuerst; {@code monat} ist einer von ihnen
+ * @param monate die waehlbaren Monate, neuester zuerst; {@code monat} ist einer von ihnen
  * @param inArbeit die Angebote im Status „bestellt" oder „erledigt", neueste zuerst
  * @param nichtAbgerechnet was aus erfasster Arbeitszeit noch abzurechnen ist
  * @param abgerechnet Netto, Brutto und Anzahl der im Monat gestellten Rechnungen
@@ -50,12 +57,12 @@ public record StartseiteResponse(
   /** Derselbe Stand in der Sprache der Schnittstelle. */
   static StartseiteResponse of(final Startseitenstand stand) {
     return new StartseiteResponse(
-        stand.monat(),
-        stand.monate(),
+        YearMonth.from(stand.zeitraum().von()),
+        stand.waehlbar().monate(),
         stand.inArbeit().stream().map(Angebotszeile::of).toList(),
         NichtAbgerechnetResponse.of(stand.nichtAbgerechnet()),
-        AbgerechnetResponse.of(stand.abgerechnet()),
-        stand.interneStundenImMonat());
+        AbgerechnetResponse.of(stand.abgerechnet().summe()),
+        stand.interneStundenImZeitraum());
   }
 
   /**
@@ -95,7 +102,7 @@ public record StartseiteResponse(
     static NichtAbgerechnetResponse of(final NichtAbgerechnet gerechnet) {
       return new NichtAbgerechnetResponse(
           gerechnet.betrag(),
-          gerechnet.erfasstImMonat(),
+          gerechnet.erfasstImZeitraum(),
           gerechnet.anteile().stream().map(Anteilszeile::of).toList());
     }
   }

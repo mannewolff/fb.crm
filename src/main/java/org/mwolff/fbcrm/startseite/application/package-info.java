@@ -1,6 +1,6 @@
 /**
- * Die Anwendungsschicht der Startseite: die drei Kennzahlen und der Monat, fuer den sie gelten
- * (#206; Plan #208, E1).
+ * Die Anwendungsschicht der Startseite: die drei Kennzahlen und der Zeitraum, Monat oder Jahr, fuer
+ * den sie gelten (#206, #273; Plan #208, E1; Plan #274, E17).
  *
  * <p><b>Dieses Modul hat keinen eigenen Bestand.</b> Es gibt kein {@code domain} und kein {@code
  * infrastructure}, keine Entitaet und keine Migration — die Startseite ist eine Ansicht auf das,
@@ -18,8 +18,8 @@
  * <p><b>Die Regeln bleiben, wo sie herkommen.</b> Was an einer Position noch nicht abgerechnet ist,
  * rechnet {@code rechnung.domain.Positionsstand}, und jeder Geldbetrag entsteht nach {@code
  * common.Geldrechnung} — je Position auf den Cent, dann addiert. Hier steht nur, was allein die
- * Startseite behauptet: welche Angebote „in Arbeit" sind, welche Positionen in Kennzahl 2 eingehen
- * und welcher Monat gilt (Plan #208, E22, E12, E8).
+ * Startseite behauptet: welche Angebote „in Arbeit" sind, welche Positionen in Kennzahl 2 eingehen,
+ * welche Zeitraeume zur Wahl stehen und welcher gilt (Plan #208, E22, E12, E8; Plan #274, E8, E9).
  */
 @NullMarked
 package org.mwolff.fbcrm.startseite.application;

@@ -10,10 +10,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.Year;
 import java.time.YearMonth;
 import java.util.List;
 import java.util.Optional;
-import java.util.stream.IntStream;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -27,10 +27,13 @@ import org.mwolff.fbcrm.common.Abrechnungsmodus;
 import org.mwolff.fbcrm.common.Einheit;
 import org.mwolff.fbcrm.common.web.GlobalExceptionHandler;
 import org.mwolff.fbcrm.rechnung.application.Monatsabrechnung;
+import org.mwolff.fbcrm.startseite.application.Abgerechnet;
 import org.mwolff.fbcrm.startseite.application.Angebotsanteil;
 import org.mwolff.fbcrm.startseite.application.NichtAbgerechnet;
 import org.mwolff.fbcrm.startseite.application.StartseiteUseCase;
 import org.mwolff.fbcrm.startseite.application.Startseitenstand;
+import org.mwolff.fbcrm.startseite.application.WaehlbareZeitraeume;
+import org.mwolff.fbcrm.startseite.application.Zeitraum;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
@@ -42,9 +45,11 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
  * wird und nicht als Serverfehler.
  *
  * <p>Gegenstand ist die Abbildung jedes Feldes des {@link Startseitenstand} auf die Antwort — die
- * drei Kennzahlen mit ihren Zeilen, der geltende Monat und die zwoelf waehlbaren — sowie der Monat
- * als Parameter und sein Weglassen: Fehlt er, geht {@code Optional.empty()} an den Anwendungsfall,
- * und welcher Monat laeuft, entscheidet dieser an seiner Uhr (Plan #208, E8).
+ * drei Kennzahlen mit ihren Zeilen, der geltende Monat und die waehlbaren — sowie der Monat als
+ * Parameter und sein Weglassen: Fehlt er, geht {@code Optional.empty()} an den Anwendungsfall, und
+ * welcher Monat laeuft, entscheidet dieser an seiner Uhr (Plan #208, E8). Die Feldnamen sind die
+ * bisherigen, obwohl der Stand darunter an einem Zeitraum haengt (Plan #274): Der neue Vertrag ist
+ * ein eigenes Paket.
  *
  * <p><b>Welche Felder</b> die Antwort traegt, entscheidet dieser Layer; <b>wie</b> Monat und Datum
  * geschrieben werden, entscheidet der von Spring Boot gebaute ObjectMapper, den {@code
@@ -57,6 +62,7 @@ class StartseiteControllerTest {
   private static final String PFAD = "/api/startseite";
 
   private static final YearMonth OKTOBER = YearMonth.of(2026, 10);
+  private static final Zeitraum.Monat IM_OKTOBER = new Zeitraum.Monat(OKTOBER);
   private static final LocalDate ANGEBOTSDATUM = LocalDate.of(2026, 9, 20);
   private static final Instant ANGELEGT = Instant.parse("2026-09-20T08:00:00Z");
 
@@ -103,8 +109,10 @@ class StartseiteControllerTest {
 
   private static Startseitenstand stand() {
     return new Startseitenstand(
-        OKTOBER,
-        IntStream.range(0, 12).mapToObj(OKTOBER::minusMonths).toList(),
+        IM_OKTOBER,
+        new WaehlbareZeitraeume(
+            List.of(Year.of(2026), Year.of(2025)),
+            List.of(OKTOBER, YearMonth.of(2026, 8), YearMonth.of(2025, 12))),
         List.of(
             angebot(BESTELLT_ID, Angebotsstatus.BESTELLT, ADLER),
             angebot(ERLEDIGT_ID, Angebotsstatus.ERLEDIGT, BUCHE)),
@@ -115,27 +123,32 @@ class StartseiteControllerTest {
                 new Angebotsanteil(
                     angebot(BESTELLT_ID, Angebotsstatus.BESTELLT, ADLER),
                     new BigDecimal("1200.00")))),
-        new Monatsabrechnung(new BigDecimal("1000.00"), new BigDecimal("1190.00"), 2),
+        new Abgerechnet(
+            new Monatsabrechnung(new BigDecimal("1000.00"), new BigDecimal("1190.00"), 2),
+            List.of()),
         new BigDecimal("12.50"));
   }
 
   @Test
-  void stand_thenAnswers200WithTheMonthAndTheTwelveSelectableOnes() throws Exception {
+  void stand_thenAnswers200WithTheMonthAndTheSelectableMonthsWithoutTheYears() throws Exception {
     // Given — E17: die Ansicht rendert genau diese Liste, und der gezeigte Monat ist einer davon.
-    when(useCase.stand(Optional.of(OKTOBER))).thenReturn(stand());
+    // Die waehlbaren Jahre stehen im Stand, aber noch nicht in dieser Antwort (Plan #274).
+    when(useCase.stand(Optional.of(IM_OKTOBER))).thenReturn(stand());
 
     // When / Then
     mockMvc
         .perform(get(PFAD).param("monat", "2026-10"))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.monat").exists())
-        .andExpect(jsonPath("$.monate.length()").value(12));
+        .andExpect(jsonPath("$.monate.length()").value(3))
+        .andExpect(jsonPath("$.jahre").doesNotExist())
+        .andExpect(jsonPath("$.zeitraum").doesNotExist());
   }
 
   @Test
   void stand_thenEachOfferInProgressCarriesCompanyDateAndStatus() throws Exception {
     // Given — Kennzahl 1: die Liste ist die Wahrheit, die Ansicht zaehlt sie (E20).
-    when(useCase.stand(Optional.of(OKTOBER))).thenReturn(stand());
+    when(useCase.stand(Optional.of(IM_OKTOBER))).thenReturn(stand());
 
     // When / Then
     mockMvc
@@ -154,7 +167,7 @@ class StartseiteControllerTest {
   @Test
   void stand_thenTheSecondFigureCarriesBothAmountsAndItsOffers() throws Exception {
     // Given — Kriterien 5 und 6: der Stand von heute und die Monatszeile daneben.
-    when(useCase.stand(Optional.of(OKTOBER))).thenReturn(stand());
+    when(useCase.stand(Optional.of(IM_OKTOBER))).thenReturn(stand());
 
     // When / Then
     mockMvc
@@ -162,6 +175,7 @@ class StartseiteControllerTest {
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.nichtAbgerechnet.netto").value(1200.00))
         .andExpect(jsonPath("$.nichtAbgerechnet.erfasstImMonat").value(400.00))
+        .andExpect(jsonPath("$.nichtAbgerechnet.erfasstImZeitraum").doesNotExist())
         .andExpect(jsonPath("$.nichtAbgerechnet.angebote.length()").value(1))
         .andExpect(
             jsonPath("$.nichtAbgerechnet.angebote[0].angebotId").value(Long.valueOf(BESTELLT_ID)))
@@ -173,7 +187,7 @@ class StartseiteControllerTest {
   @Test
   void stand_thenTheThirdFigureCarriesNetGrossAndCount() throws Exception {
     // Given — Kriterium 7: Netto fuehrt, Brutto steht daneben, die Anzahl ist ein eigenes Feld.
-    when(useCase.stand(Optional.of(OKTOBER))).thenReturn(stand());
+    when(useCase.stand(Optional.of(IM_OKTOBER))).thenReturn(stand());
 
     // When / Then
     mockMvc
@@ -181,19 +195,21 @@ class StartseiteControllerTest {
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.abgerechnet.netto").value(1000.00))
         .andExpect(jsonPath("$.abgerechnet.brutto").value(1190.00))
-        .andExpect(jsonPath("$.abgerechnet.anzahl").value(2));
+        .andExpect(jsonPath("$.abgerechnet.anzahl").value(2))
+        .andExpect(jsonPath("$.abgerechnet.monate").doesNotExist());
   }
 
   @Test
   void stand_thenTheInterneStundenOfTheMonthStandBesideTheFigures() throws Exception {
     // Given — Kriterium 9 von #207: eine Stundenzahl, getrennt von allen Betraegen.
-    when(useCase.stand(Optional.of(OKTOBER))).thenReturn(stand());
+    when(useCase.stand(Optional.of(IM_OKTOBER))).thenReturn(stand());
 
     // When / Then
     mockMvc
         .perform(get(PFAD).param("monat", "2026-10"))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.interneStundenImMonat").value(12.50));
+        .andExpect(jsonPath("$.interneStundenImMonat").value(12.50))
+        .andExpect(jsonPath("$.interneStundenImZeitraum").doesNotExist());
   }
 
   @Test
