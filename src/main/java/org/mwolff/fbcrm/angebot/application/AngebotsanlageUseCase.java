@@ -14,13 +14,12 @@ import org.mwolff.fbcrm.angebot.domain.AnlageSpeicher;
 import org.mwolff.fbcrm.angebot.domain.AnlageSpeicherAusfall;
 import org.mwolff.fbcrm.angebot.domain.Dateiname;
 import org.mwolff.fbcrm.angebot.domain.Vorschauart;
+import org.mwolff.fbcrm.common.NachDemCommit;
 import org.mwolff.fbcrm.common.Uploadgrenze;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 /**
  * Die Anwendungsfaelle der Anlagen am Angebot: auflisten, hochladen, Inhalt lesen, loeschen (Issue
@@ -164,7 +163,7 @@ public class AngebotsanlageUseCase {
   public void loesche(final long angebotId, final long anlageId) {
     final Angebotsanlage anlage = lies(angebotId, anlageId);
     anlagen.deleteById(anlage.requireId());
-    nachDemCommit(() -> entferneObjekt(anlage.objektSchluessel()));
+    NachDemCommit.fuehreAus(() -> entferneObjekt(anlage.objektSchluessel()));
   }
 
   private void pruefeAngebot(final long angebotId) {
@@ -181,26 +180,6 @@ public class AngebotsanlageUseCase {
       throw new AngebotsanlageNichtGefunden();
     }
     return vorhandene;
-  }
-
-  /*
-   * Fuehrt den Schritt nach dem Commit der laufenden Transaktion aus. Laeuft keine — ein Aufruf
-   * ohne Transaktionsgrenze, etwa im Unit-Test —, gibt es keinen Commit, auf den zu warten waere;
-   * dann geschieht er sofort. TransactionSynchronization ist kein funktionales Interface (alle
-   * Methoden haben eine Vorgabe), daher die anonyme Klasse statt eines Lambdas.
-   */
-  private static void nachDemCommit(final Runnable schritt) {
-    if (!TransactionSynchronizationManager.isSynchronizationActive()) {
-      schritt.run();
-      return;
-    }
-    TransactionSynchronizationManager.registerSynchronization(
-        new TransactionSynchronization() {
-          @Override
-          public void afterCommit() {
-            schritt.run();
-          }
-        });
   }
 
   /*
