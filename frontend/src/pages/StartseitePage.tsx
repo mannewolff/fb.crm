@@ -19,7 +19,8 @@ import { useKopfPfad } from '../components/KopfPfad';
 import type { PfadVerweis } from '../components/KopfPfad';
 import Tafel from '../components/Tafel';
 import WeicheTaste from '../components/WeicheTaste';
-import { alsMonat, monatWort, stundenWort } from '../lib/arbeitszeit';
+import { monatWort, stundenWort } from '../lib/arbeitszeit';
+import { alsZeitraum } from '../lib/zeitraum';
 import { euro } from '../lib/geld';
 import { tagWort } from '../lib/tag';
 import { RADIUS_RUND, ZAHLEN_KLASSE } from '../theme';
@@ -62,8 +63,8 @@ import { RADIUS_RUND, ZAHLEN_KLASSE } from '../theme';
 /** Die Ansicht ist die erste Stufe des Pfades — ueber ihr steht nichts. */
 const KEIN_WEG: readonly PfadVerweis[] = [];
 
-/** Der Name des Parameters, unter dem der Monat in der Adresse steht (E18). */
-const PARAM_MONAT = 'monat';
+/** Der Name des Parameters, unter dem der Zeitraum in der Adresse steht (E18; Plan #274, E1). */
+const PARAM_ZEITRAUM = 'zeitraum';
 
 /** Der zugaengliche Name der Monatswahl. Sie steht in einer Werkzeugleiste und ohne Etikett. */
 const MONAT_NAME = 'Monat';
@@ -188,7 +189,7 @@ function Kacheln({ geschaeft }: { readonly geschaeft: Startseitenstand }) {
         symbol={<IconClock size={SYMBOL_KACHEL} stroke={1.8} aria-hidden />}
         beschriftung={TITEL_OFFEN}
         zahl={euro(geschaeft.nichtAbgerechnet.nettoInCent)}
-        zweitzeile={`Im Monat erfasst: ${euro(geschaeft.nichtAbgerechnet.erfasstImMonatInCent)}`}
+        zweitzeile={`Im Monat erfasst: ${euro(geschaeft.nichtAbgerechnet.erfasstImZeitraumInCent)}`}
       />
       <Kennzahlkachel
         toenung="salbei"
@@ -320,7 +321,7 @@ function Listen({ geschaeft }: { readonly geschaeft: Startseitenstand }) {
 export default function StartseitePage() {
   useKopfPfad(KEIN_WEG, 'Start');
   const [parameter, setzeParameter] = useSearchParams();
-  const monat = alsMonat(parameter.get(PARAM_MONAT));
+  const monat = alsZeitraum(parameter.get(PARAM_ZEITRAUM));
   const [stand, setzeStand] = useState<Stand>({ art: 'laedt' });
 
   useEffect(() => {
@@ -365,12 +366,12 @@ export default function StartseitePage() {
         werkzeug={
           stand.art === 'daten' ? (
             <Monatsliste
-              monat={stand.geschaeft.monat}
-              monate={stand.geschaeft.monate}
+              monat={stand.geschaeft.zeitraum.wert}
+              monate={stand.geschaeft.waehlbar.monate}
               waehlen={(neu) => {
                 // Geschoben statt ersetzt: Der Monatswechsel ist eine Handlung, die „zurueck"
                 // zuruecknehmen koennen soll.
-                setzeParameter({ [PARAM_MONAT]: neu });
+                setzeParameter({ [PARAM_ZEITRAUM]: neu });
               }}
             />
           ) : undefined

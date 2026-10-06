@@ -10,7 +10,7 @@ import type { Routen } from '../test/fetchNachPfad';
 import { renderMitTheme } from '../test/render';
 
 const OHNE_MONAT = 'GET /api/startseite';
-const WEG_SEPTEMBER = '/api/startseite?monat=2026-09';
+const WEG_SEPTEMBER = '/api/startseite?zeitraum=2026-09';
 const SEPTEMBER = `GET ${WEG_SEPTEMBER}`;
 
 /** Die zwoelf waehlbaren Monate, wie der Server sie schickt — neuester zuerst. */
@@ -31,8 +31,8 @@ const MONATE: readonly string[] = [
 
 /** Ein Stand mit allen drei Kennzahlen gefuellt, wie das Backend ihn schreibt. */
 const STAND = {
-  monat: '2026-10',
-  monate: MONATE,
+  zeitraum: { art: 'MONAT', wert: '2026-10' },
+  waehlbar: { jahre: ['2026', '2025'], monate: MONATE },
   inArbeit: [
     {
       angebotId: 11,
@@ -44,23 +44,23 @@ const STAND = {
   ],
   nichtAbgerechnet: {
     netto: 1800,
-    erfasstImMonat: 600,
+    erfasstImZeitraum: 600,
     angebote: [
       { angebotId: 11, firmaName: 'IT Bildungshaus', angebotDatum: '2026-09-24', netto: 1800 },
     ],
   },
-  abgerechnet: { netto: 9600, brutto: 11424, anzahl: 3 },
-  interneStundenImMonat: 12.5,
+  abgerechnet: { netto: 9600, brutto: 11424, anzahl: 3, monate: [] },
+  interneStundenImZeitraum: 12.5,
 };
 
 /** Derselbe Monat, aber nichts darin — alle drei Kennzahlen stehen auf null. */
 const LEERER_STAND = {
-  monat: '2026-10',
-  monate: MONATE,
+  zeitraum: { art: 'MONAT', wert: '2026-10' },
+  waehlbar: { jahre: ['2026', '2025'], monate: MONATE },
   inArbeit: [],
-  nichtAbgerechnet: { netto: 0, erfasstImMonat: 0, angebote: [] },
-  abgerechnet: { netto: 0, brutto: 0, anzahl: 0 },
-  interneStundenImMonat: 0,
+  nichtAbgerechnet: { netto: 0, erfasstImZeitraum: 0, angebote: [] },
+  abgerechnet: { netto: 0, brutto: 0, anzahl: 0, monate: [] },
+  interneStundenImZeitraum: 0,
 };
 
 /**
@@ -71,11 +71,11 @@ const LEERER_STAND = {
  */
 const FERNER_STAND = {
   ...LEERER_STAND,
-  monat: '2031-03',
-  monate: ['2031-03', '2031-02', '2031-01'],
+  zeitraum: { art: 'MONAT', wert: '2031-03' },
+  waehlbar: { jahre: ['2031'], monate: ['2031-03', '2031-02', '2031-01'] },
 };
 
-/** Die Adresse — daran haengt, was der Monatswechsel in `?monat=` geschrieben hat. */
+/** Die Adresse — daran haengt, was der Monatswechsel in `?zeitraum=` geschrieben hat. */
 function Adresse() {
   const ort = useLocation();
   return <p data-testid="adresse">{`${ort.pathname}${ort.search}`}</p>;
@@ -190,7 +190,7 @@ describe('StartseitePage (Issue #216; #206 Kriterien 1, 3 bis 8)', () => {
       within(wahl)
         .getAllByRole('option')
         .map((option) => (option as HTMLOptionElement).value),
-    ).toEqual(FERNER_STAND.monate);
+    ).toEqual(FERNER_STAND.waehlbar.monate);
     expect(wahl).toHaveValue('2031-03');
     expect(screen.getByRole('option', { name: 'März 2031' })).toBeInTheDocument();
   });
@@ -199,20 +199,20 @@ describe('StartseitePage (Issue #216; #206 Kriterien 1, 3 bis 8)', () => {
     const nutzer = userEvent.setup();
     mitRouten({
       [OHNE_MONAT]: json(200, STAND),
-      [SEPTEMBER]: json(200, { ...LEERER_STAND, monat: '2026-09' }),
+      [SEPTEMBER]: json(200, { ...LEERER_STAND, zeitraum: { art: 'MONAT', wert: '2026-09' } }),
     });
 
     renderSeite();
     await nutzer.selectOptions(await screen.findByRole('combobox', { name: 'Monat' }), '2026-09');
 
-    expect(screen.getByTestId('adresse')).toHaveTextContent('/?monat=2026-09');
+    expect(screen.getByTestId('adresse')).toHaveTextContent('/?zeitraum=2026-09');
     expect(await screen.findByText('Keine Rechnung in diesem Monat.')).toBeInTheDocument();
   });
 
   it('gibt den Monat aus der Adresse in den Abruf', async () => {
-    const aufruf = mitRouten({ [SEPTEMBER]: json(200, { ...STAND, monat: '2026-09' }) });
+    const aufruf = mitRouten({ [SEPTEMBER]: json(200, { ...STAND, zeitraum: { art: 'MONAT', wert: '2026-09' } }) });
 
-    renderSeite('/?monat=2026-09');
+    renderSeite('/?zeitraum=2026-09');
 
     await screen.findByRole('table', { name: 'Angebote in Arbeit' });
     expect(aufruf.mock.calls.map(([ziel]) => ziel)).toEqual([WEG_SEPTEMBER]);
@@ -221,7 +221,7 @@ describe('StartseitePage (Issue #216; #206 Kriterien 1, 3 bis 8)', () => {
   it('fragt ohne Parameter, wenn in der Adresse kein Monat steht', async () => {
     const aufruf = mitRouten({ [OHNE_MONAT]: json(200, STAND) });
 
-    renderSeite('/?monat=uebermorgen');
+    renderSeite('/?zeitraum=uebermorgen');
 
     await screen.findByRole('table', { name: 'Angebote in Arbeit' });
     expect(aufruf.mock.calls.map(([ziel]) => ziel)).toEqual(['/api/startseite']);
