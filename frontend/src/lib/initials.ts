@@ -14,8 +14,8 @@ export function initialen(anzeigename: string): string {
   if (belegt.length === 0) {
     return '?';
   }
-  const erster = belegt[0];
-  const letzter = belegt[belegt.length - 1];
-  const buchstaben = belegt.length === 1 ? [erster] : [erster, letzter];
+  const [erster, ...weitere] = belegt;
+  const letzter = weitere.at(-1);
+  const buchstaben = letzter === undefined ? [erster] : [erster, letzter];
   return buchstaben.map((wort) => Array.from(wort)[0].toLocaleUpperCase('de')).join('');
 }

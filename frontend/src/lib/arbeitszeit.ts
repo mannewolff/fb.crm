@@ -61,8 +61,8 @@ function geteilt(uhrzeit: string): { readonly stunde: number; readonly minute: n
   if (treffer === null) {
     return null;
   }
-  const stunde = parseInt(treffer[1], 10);
-  const minute = parseInt(treffer[2], 10);
+  const stunde = Number.parseInt(treffer[1], 10);
+  const minute = Number.parseInt(treffer[2], 10);
   // Die Sekunde gehoert nicht zur Uhrzeit dieser Anwendung, sie darf aber dastehen: Jackson
   // schreibt ein `LocalTime` als „09:00:00". Eine Sekunde ungleich null ist keine Uhrzeit des
   // Rasters — das entscheidet {@link imRaster} und nicht diese Zerlegung.
@@ -127,10 +127,10 @@ export function imRaster(uhrzeit: string): boolean {
     return false;
   }
   const sekunde = treffer[3];
-  if (sekunde !== undefined && parseInt(sekunde, 10) !== 0) {
+  if (sekunde !== undefined && Number.parseInt(sekunde, 10) !== 0) {
     return false;
   }
-  return parseInt(treffer[2], 10) % VIERTELSTUNDE === 0;
+  return Number.parseInt(treffer[2], 10) % VIERTELSTUNDE === 0;
 }
 
 /**
@@ -181,7 +181,7 @@ export function alsMonat(wert: string | null): string | null {
   if (treffer === null) {
     return null;
   }
-  const monat = parseInt(treffer[2], 10);
+  const monat = Number.parseInt(treffer[2], 10);
   return monat >= 1 && monat <= MONATE_JE_JAHR ? wert : null;
 }
 
@@ -213,8 +213,8 @@ export function vormonat(monat: string): string {
   if (treffer === null) {
     return monat;
   }
-  const jahr = parseInt(treffer[1], 10);
-  const nummer = parseInt(treffer[2], 10);
+  const jahr = Number.parseInt(treffer[1], 10);
+  const nummer = Number.parseInt(treffer[2], 10);
   return nummer === 1 ? alsText(jahr - 1, MONATE_JE_JAHR) : alsText(jahr, nummer - 1);
 }
 
@@ -224,8 +224,8 @@ export function folgemonat(monat: string): string {
   if (treffer === null) {
     return monat;
   }
-  const jahr = parseInt(treffer[1], 10);
-  const nummer = parseInt(treffer[2], 10);
+  const jahr = Number.parseInt(treffer[1], 10);
+  const nummer = Number.parseInt(treffer[2], 10);
   return nummer === MONATE_JE_JAHR ? alsText(jahr + 1, 1) : alsText(jahr, nummer + 1);
 }
 
@@ -235,6 +235,6 @@ export function monatWort(monat: string): string {
   if (treffer === null) {
     return monat;
   }
-  const name = MONATSNAMEN[parseInt(treffer[2], 10) - 1];
+  const name = MONATSNAMEN[Number.parseInt(treffer[2], 10) - 1];
   return name === undefined ? monat : `${name} ${treffer[1]}`;
 }

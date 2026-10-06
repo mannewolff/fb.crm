@@ -117,10 +117,21 @@ afterEach(() => {
 });
 
 describe('App', () => {
-  it('zeigt ohne Sitzung die Anmeldeseite', async () => {
+  // Ohne Sitzung fuehrt jede geschuetzte Adresse auf die Anmeldeseite — derselbe Ablauf je Pfad.
+  it.each([
+    ['zeigt ohne Sitzung die Anmeldeseite', '/anmelden'],
+    ['fuehrt „/firmen/5/angebote/neu" ohne Sitzung auf die Anmeldeseite', '/firmen/5/angebote/neu'],
+    ['fuehrt „/angebote" ohne Sitzung auf die Anmeldeseite', '/angebote'],
+    ['fuehrt „/angebote/9" ohne Sitzung auf die Anmeldeseite', '/angebote/9'],
+    ['fuehrt „/angebote/9/bearbeiten" ohne Sitzung auf die Anmeldeseite', '/angebote/9/bearbeiten'],
+    ['fuehrt „/rechnungen" ohne Sitzung auf die Anmeldeseite', '/rechnungen'],
+    ['fuehrt „/rechnungen/4" ohne Sitzung auf die Anmeldeseite', '/rechnungen/4'],
+    ['fuehrt „/eigene-angaben" ohne Sitzung auf die Anmeldeseite', '/eigene-angaben'],
+    ['fuehrt „/administration“ ohne Sitzung auf die Anmeldeseite', '/administration'],
+  ])('%s', async (_name, pfad) => {
     ohneSitzung();
 
-    renderApp(['/anmelden'], 0);
+    renderApp([pfad], 0);
 
     expect(await screen.findByLabelText(/^E-Mail-Adresse/)).toBeInTheDocument();
   });
@@ -138,14 +149,6 @@ describe('App', () => {
 
     expect(await screen.findByLabelText(/^E-Mail-Adresse/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Anmelden' })).toBeInTheDocument();
-  });
-
-  it('fuehrt „/firmen/5/angebote/neu" ohne Sitzung auf die Anmeldeseite', async () => {
-    ohneSitzung();
-
-    renderApp(['/firmen/5/angebote/neu'], 0);
-
-    expect(await screen.findByLabelText(/^E-Mail-Adresse/)).toBeInTheDocument();
   });
 
   it('zeigt „/firmen/5/angebote/neu" als Maske im Rahmen — nachgeladen', async () => {
@@ -166,14 +169,6 @@ describe('App', () => {
     expect(screen.getByRole('navigation', { name: 'Hauptnavigation' })).toBeInTheDocument();
   });
 
-  it('fuehrt „/angebote" ohne Sitzung auf die Anmeldeseite', async () => {
-    ohneSitzung();
-
-    renderApp(['/angebote'], 0);
-
-    expect(await screen.findByLabelText(/^E-Mail-Adresse/)).toBeInTheDocument();
-  });
-
   it('zeigt „/angebote" als Uebersicht im Rahmen und nicht als einzelnes Angebot', async () => {
     fensterbreite(1440);
     fetchNachPfad({
@@ -186,14 +181,6 @@ describe('App', () => {
 
     expect(await screen.findByRole('heading', { level: 1, name: 'Angebote' })).toBeInTheDocument();
     expect(screen.getByRole('navigation', { name: 'Hauptnavigation' })).toBeInTheDocument();
-  });
-
-  it('fuehrt „/angebote/9" ohne Sitzung auf die Anmeldeseite', async () => {
-    ohneSitzung();
-
-    renderApp(['/angebote/9'], 0);
-
-    expect(await screen.findByLabelText(/^E-Mail-Adresse/)).toBeInTheDocument();
   });
 
   it('zeigt „/angebote/9" mit Sitzung im Rahmen', async () => {
@@ -211,14 +198,6 @@ describe('App', () => {
       await screen.findByRole('heading', { level: 1, name: 'Angebot vom 24.09.2026' }),
     ).toBeInTheDocument();
     expect(screen.getByRole('navigation', { name: 'Hauptnavigation' })).toBeInTheDocument();
-  });
-
-  it('fuehrt „/angebote/9/bearbeiten" ohne Sitzung auf die Anmeldeseite', async () => {
-    ohneSitzung();
-
-    renderApp(['/angebote/9/bearbeiten'], 0);
-
-    expect(await screen.findByLabelText(/^E-Mail-Adresse/)).toBeInTheDocument();
   });
 
   it('zeigt „/angebote/9/bearbeiten" als Maske des Angebots', async () => {
@@ -239,14 +218,6 @@ describe('App', () => {
     expect(screen.getByRole('navigation', { name: 'Hauptnavigation' })).toBeInTheDocument();
   });
 
-  it('fuehrt „/rechnungen" ohne Sitzung auf die Anmeldeseite', async () => {
-    ohneSitzung();
-
-    renderApp(['/rechnungen'], 0);
-
-    expect(await screen.findByLabelText(/^E-Mail-Adresse/)).toBeInTheDocument();
-  });
-
   it('zeigt „/rechnungen" als Liste im Rahmen und nicht als einzelne Rechnung', async () => {
     fensterbreite(1440);
     fetchNachPfad({
@@ -261,14 +232,6 @@ describe('App', () => {
       await screen.findByRole('heading', { level: 1, name: 'Rechnungen' }),
     ).toBeInTheDocument();
     expect(screen.getByRole('navigation', { name: 'Hauptnavigation' })).toBeInTheDocument();
-  });
-
-  it('fuehrt „/rechnungen/4" ohne Sitzung auf die Anmeldeseite', async () => {
-    ohneSitzung();
-
-    renderApp(['/rechnungen/4'], 0);
-
-    expect(await screen.findByLabelText(/^E-Mail-Adresse/)).toBeInTheDocument();
   });
 
   it('zeigt „/rechnungen/4" mit Sitzung im Rahmen — nachgeladen', async () => {
@@ -287,14 +250,6 @@ describe('App', () => {
       await screen.findByRole('heading', { level: 1, name: 'Rechnung 0001-2026' }),
     ).toBeInTheDocument();
     expect(screen.getByRole('navigation', { name: 'Hauptnavigation' })).toBeInTheDocument();
-  });
-
-  it('fuehrt „/eigene-angaben" ohne Sitzung auf die Anmeldeseite', async () => {
-    ohneSitzung();
-
-    renderApp(['/eigene-angaben'], 0);
-
-    expect(await screen.findByLabelText(/^E-Mail-Adresse/)).toBeInTheDocument();
   });
 
   it('zeigt „/eigene-angaben" mit Sitzung im Rahmen — nachgeladen, nicht im ersten Rutsch', async () => {
@@ -326,14 +281,6 @@ describe('App', () => {
       await screen.findByRole('heading', { level: 1, name: 'Eigene Angaben' }),
     ).toBeInTheDocument();
     expect(screen.getByRole('navigation', { name: 'Hauptnavigation' })).toBeInTheDocument();
-  });
-
-  it('fuehrt „/administration“ ohne Sitzung auf die Anmeldeseite', async () => {
-    ohneSitzung();
-
-    renderApp(['/administration'], 0);
-
-    expect(await screen.findByLabelText(/^E-Mail-Adresse/)).toBeInTheDocument();
   });
 
   it('zeigt „/administration“ mit Sitzung im Rahmen — nachgeladen, nicht im ersten Rutsch', async () => {

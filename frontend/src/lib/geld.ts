@@ -48,7 +48,7 @@ export function hundertstel(wert: string | number): number | null {
   }
   // `padEnd` und nicht `padStart`: „2,5" sind fuenfzig Hundertstel, nicht fuenf.
   const nachkomma = (treffer[2] ?? '').padEnd(2, '0');
-  return parseInt(treffer[1], 10) * 100 + parseInt(nachkomma, 10);
+  return Number.parseInt(treffer[1], 10) * 100 + Number.parseInt(nachkomma, 10);
 }
 
 /**

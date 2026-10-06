@@ -181,7 +181,7 @@ function spaltenZu(zusatz: Zusatzspalten, intern: boolean): readonly string[] {
 const SPALTEN_RECHNUNGEN: readonly string[] = ['Nummer', 'Rechnungsdatum', 'Betrag', 'Zustand'];
 
 /** Ab diesen Staenden laesst sich zu einem Angebot eine Rechnung schreiben (Kriterium 3). */
-const ABRECHENBAR: readonly Angebot['status'][] = ['BESTELLT', 'ERLEDIGT', 'ABGERECHNET'];
+const ABRECHENBAR: ReadonlySet<Angebot['status']> = new Set(['BESTELLT', 'ERLEDIGT', 'ABGERECHNET']);
 
 /** Was die Ansicht gerade weiss. */
 type Stand =
@@ -298,7 +298,7 @@ function Positionszeile({
   }
   // Was ueber das Kontingent hinaus erfasst wurde (Kriterium 8), oder 0.
   const ueberKontingent =
-    stand === undefined || !stand.buchbar
+    !stand?.buchbar
       ? 0
       : Math.max(0, stand.angefallenInHundertsteln - stand.angebotenInHundertsteln);
   return (
@@ -316,7 +316,7 @@ function Positionszeile({
       </Box>
       {!zusatz.angefallen ? null : (
         <Box component="td" sx={{ textAlign: 'right' }}>
-          {stand === undefined || !stand.buchbar ? null : (
+          {!stand?.buchbar ? null : (
             <>
               <Box className={ZAHLEN_KLASSE} sx={{ whiteSpace: 'nowrap' }}>
                 {dezimal(stand.angefallenInHundertsteln, ',')}
@@ -667,7 +667,7 @@ export default function AngebotPage() {
    */
   function schreibbar(angebot: Angebot): boolean {
     return (
-      ABRECHENBAR.includes(angebot.status) &&
+      ABRECHENBAR.has(angebot.status) &&
       abrechnung.art === 'daten' &&
       abrechnung.abrechnung.positionen.some((position) => position.offenInHundertsteln > 0)
     );

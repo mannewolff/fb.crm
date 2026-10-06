@@ -171,7 +171,7 @@ function gruppiert(positionen: readonly Buchungsposition[]): readonly Gruppe[] {
   const gruppen: Gruppe[] = [];
   for (const position of positionen) {
     const letzte = gruppen.at(-1);
-    if (letzte !== undefined && letzte.angebotId === position.angebotId) {
+    if (letzte?.angebotId === position.angebotId) {
       letzte.positionen.push(position);
     } else {
       gruppen.push({
