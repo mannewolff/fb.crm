@@ -134,6 +134,8 @@ const UEBERSICHT_ZEILE = {
   rechnungDatum: '2026-10-01',
   brutto: 11424,
   zustand: 'GESTELLT',
+  nachgetragen: false,
+  dokument: true,
 };
 
 const UEBERSICHT_ZEILE_VERENGT = {
@@ -144,6 +146,8 @@ const UEBERSICHT_ZEILE_VERENGT = {
   rechnungDatum: '2026-10-01',
   bruttoInCent: 1142400,
   zustand: 'GESTELLT',
+  nachgetragen: false,
+  dokument: true,
 };
 
 /** Eine Zeile der Wahl „Neue Rechnung". */
@@ -294,6 +298,14 @@ describe('parseRechnungenUebersicht', () => {
     ).toEqual({ ...UEBERSICHT_ZEILE_VERENGT, nummer: null, zustand: 'ENTWURF' });
   });
 
+  it('verengt eine nachgetragene Rechnung ohne Dokument (Plan #259, E18)', () => {
+    expect(
+      parseRechnungenUebersicht({
+        rechnungen: [{ ...UEBERSICHT_ZEILE, nachgetragen: true, dokument: false }],
+      }).rechnungen[0],
+    ).toEqual({ ...UEBERSICHT_ZEILE_VERENGT, nachgetragen: true, dokument: false });
+  });
+
   it('verengt die leere Liste', () => {
     expect(parseRechnungenUebersicht({ rechnungen: [] })).toEqual({ rechnungen: [] });
   });
@@ -309,6 +321,10 @@ describe('parseRechnungenUebersicht', () => {
     ['Zeile ohne Rechnungsdatum', { rechnungen: [{ ...UEBERSICHT_ZEILE, rechnungDatum: 7 }] }],
     ['Zeile ohne Brutto', { rechnungen: [{ ...UEBERSICHT_ZEILE, brutto: null }] }],
     ['Zeile mit unbekanntem Zustand', { rechnungen: [{ ...UEBERSICHT_ZEILE, zustand: 'MAHNUNG' }] }],
+    ['Zeile ohne nachgetragen', { rechnungen: [{ ...UEBERSICHT_ZEILE, nachgetragen: undefined }] }],
+    ['Zeile mit nachgetragen als Text', { rechnungen: [{ ...UEBERSICHT_ZEILE, nachgetragen: 'ja' }] }],
+    ['Zeile ohne dokument', { rechnungen: [{ ...UEBERSICHT_ZEILE, dokument: undefined }] }],
+    ['Zeile mit dokument als Zahl', { rechnungen: [{ ...UEBERSICHT_ZEILE, dokument: 1 }] }],
   ])('weist eine Antwort ab: %s', (_fall, rumpf) => {
     expect(() => parseRechnungenUebersicht(rumpf)).toThrow(TypeError);
   });

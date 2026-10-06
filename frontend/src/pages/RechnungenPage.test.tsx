@@ -21,6 +21,8 @@ const GESTELLT = {
   rechnungDatum: '2026-10-01',
   brutto: 11424,
   zustand: 'GESTELLT',
+  nachgetragen: false,
+  dokument: true,
 };
 
 /** Ein Entwurf — ohne Nummer, denn sie entsteht erst mit dem Stellen. */
@@ -32,6 +34,25 @@ const ENTWURF = {
   rechnungDatum: '2026-09-28',
   brutto: 2500.03,
   zustand: 'ENTWURF',
+  nachgetragen: false,
+  dokument: false,
+};
+
+/**
+ * Eine nachgetragene Rechnung mit hinterlegtem Original — mit **derselben** Kennung wie
+ * {@link GESTELLT}: Die beiden Kennungsraeume sind getrennt (Plan #259, E21), und erst dieser Fall
+ * laesst den Test zum Zeilenschluessel scheitern.
+ */
+const NACHGETRAGEN = {
+  id: 4,
+  nummer: 'RE-2026-017',
+  firmaId: 6,
+  firmaName: 'Biber GmbH',
+  rechnungDatum: '2026-09-15',
+  brutto: 595,
+  zustand: 'GESTELLT',
+  nachgetragen: true,
+  dokument: true,
 };
 
 /** Ein abrechenbares Angebot der Wahl „Neue Rechnung". */
@@ -75,6 +96,7 @@ function renderSeite() {
       <KopfPfadProvider>
         <Routes>
           <Route path="/rechnungen" element={<RechnungenPage />} />
+          <Route path="/rechnungen/nachtragen" element={<p>Die Nachtragsmaske</p>} />
           <Route path="/rechnungen/:rechnungId" element={<p>Die Rechnung</p>} />
         </Routes>
         <Adresse />
@@ -199,7 +221,8 @@ describe('RechnungenPage — die Liste (#160, Kriterien 1, 2, 24)', () => {
     renderSeite();
 
     expect(await screen.findByRole('status')).toHaveTextContent(
-      'Noch keine Rechnung. Schreiben Sie die erste über „Neue Rechnung".',
+      'Noch keine Rechnung. Schreiben Sie die erste über „Neue Rechnung" oder tragen Sie eine ' +
+        'frühere über „Rechnung nachtragen" nach.',
     );
     expect(screen.queryByRole('table')).not.toBeInTheDocument();
   });
@@ -224,6 +247,106 @@ describe('RechnungenPage — die Liste (#160, Kriterien 1, 2, 24)', () => {
     // sie nicht von der weichen: „Herunterladen" ist ein Weg, „Neue Rechnung" eine Handlung.
     expect(kupfertasten().map((taste) => taste.textContent)).toEqual(['Neue Rechnung']);
   });
+});
+
+describe('RechnungenPage — nachgetragene Rechnungen (#254, Kriterien 1, 6, 7; Plan #259)', () => {
+  it('fuehrt „Rechnung nachtragen" als weiche Taste vor der Kupfertaste (E25)', async () => {
+    fetchNachPfad({ [WEG_LISTE]: json(200, { rechnungen: [GESTELLT] }) });
+
+    renderSeite();
+
+    await screen.findByRole('table', { name: 'Rechnungen' });
+    const nachtragen = screen.getByRole('link', { name: 'Rechnung nachtragen' });
+    const neu = screen.getByRole('button', { name: 'Neue Rechnung' });
+    expect(nachtragen).toHaveAttribute('href', '/rechnungen/nachtragen');
+    // Links daneben: im Dokument vor der Kupfertaste.
+    expect(
+      nachtragen.compareDocumentPosition(neu) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(kupfertasten()).toEqual([neu]);
+  });
+
+  it('fuehrt „Rechnung nachtragen" auf die Maske', async () => {
+    const nutzer = userEvent.setup({ advanceTimers: vi.advanceTimersByTime.bind(vi) });
+    fetchNachPfad({ [WEG_LISTE]: json(200, { rechnungen: [] }) });
+
+    renderSeite();
+
+    await nutzer.click(await screen.findByRole('link', { name: 'Rechnung nachtragen' }));
+
+    expect(await screen.findByText('Die Nachtragsmaske')).toBeInTheDocument();
+    expect(screen.getByTestId('adresse')).toHaveTextContent('/rechnungen/nachtragen');
+  });
+
+  it('zeigt beide Zeilen bei gleicher Kennung in beiden Arten, ohne doppelten Schluessel (E21)', async () => {
+    const warnung = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    fetchNachPfad({ [WEG_LISTE]: json(200, { rechnungen: [GESTELLT, NACHGETRAGEN] }) });
+
+    renderSeite();
+
+    const tafel = within(await screen.findByRole('table', { name: 'Rechnungen' }));
+    const zeilen = tafel.getAllByRole('row').slice(1);
+    expect(zeilen.map((zeile) => within(zeile).getAllByRole('cell')[0].textContent)).toEqual([
+      '0001-2026',
+      'RE-2026-017',
+    ]);
+    expect(
+      warnung.mock.calls.filter((aufruf) => String(aufruf[0]).includes('same key')),
+    ).toEqual([]);
+  });
+
+  it('kennzeichnet die nachgetragene Zeile und fuehrt je Art auf ihren Weg (E21, E22)', async () => {
+    fetchNachPfad({ [WEG_LISTE]: json(200, { rechnungen: [GESTELLT, NACHGETRAGEN] }) });
+
+    renderSeite();
+
+    const zeilen = (await screen.findAllByRole('row')).slice(1);
+    const geschrieben = within(zeilen[0]);
+    const nachgetragen = within(zeilen[1]);
+    expect(geschrieben.getByRole('link', { name: '0001-2026' })).toHaveAttribute(
+      'href',
+      '/rechnungen/4',
+    );
+    expect(geschrieben.queryByText('nachgetragen')).not.toBeInTheDocument();
+    expect(nachgetragen.getByRole('link', { name: 'RE-2026-017' })).toHaveAttribute(
+      'href',
+      '/rechnungen/nachgetragen/4',
+    );
+    // Neben dem Zustand, nicht an seiner Stelle (Kriterium 6).
+    const zustand = nachgetragen.getAllByRole('cell')[4];
+    expect(within(zustand).getByText('Gestellt')).toBeInTheDocument();
+    expect(within(zustand).getByText('nachgetragen')).toBeInTheDocument();
+  });
+
+  it('bietet das Dokument je Art auf seinem Weg an (E18)', async () => {
+    fetchNachPfad({ [WEG_LISTE]: json(200, { rechnungen: [GESTELLT, NACHGETRAGEN] }) });
+
+    renderSeite();
+
+    const zeilen = (await screen.findAllByRole('row')).slice(1);
+    const geschrieben = within(zeilen[0]).getByRole('link', { name: 'Herunterladen' });
+    const nachgetragen = within(zeilen[1]).getByRole('link', { name: 'Herunterladen' });
+    expect(geschrieben).toHaveAttribute('href', '/api/rechnungen/4/dokument');
+    expect(geschrieben).toHaveAttribute('download');
+    expect(nachgetragen).toHaveAttribute('href', '/api/nachgetragene-rechnungen/4/dokument');
+    expect(nachgetragen).toHaveAttribute('download');
+  });
+
+  it.each([
+    ['nachgetragen', { ...NACHGETRAGEN, dokument: false }],
+    ['von fb.crm geschrieben', { ...GESTELLT, dokument: false }],
+  ])(
+    'laesst die Spalte „Dokument" ohne Dokument leer, auch gestellt (%s, Kriterium 7)',
+    async (_art, rechnung) => {
+      fetchNachPfad({ [WEG_LISTE]: json(200, { rechnungen: [rechnung] }) });
+
+      renderSeite();
+
+      const zeile = within((await screen.findAllByRole('row'))[1]);
+      expect(zeile.getByText('Gestellt')).toBeInTheDocument();
+      expect(zeile.getAllByRole('cell')[5]).toBeEmptyDOMElement();
+    },
+  );
 });
 
 describe('RechnungenPage — die Wahl „Neue Rechnung" (#160, Kriterium 2)', () => {

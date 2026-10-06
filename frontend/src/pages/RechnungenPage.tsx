@@ -6,12 +6,13 @@ import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
 import Typography from '@mui/material/Typography';
-import { IconDownload, IconFilePlus } from '@tabler/icons-react';
+import { IconDownload, IconFileImport, IconFilePlus } from '@tabler/icons-react';
 import { useEffect, useId, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Link as RouterLink, useNavigate } from 'react-router-dom';
 
 import { ALLGEMEINE_MELDUNG, ApiError } from '../api/client';
+import { nachtragDokumentPfad } from '../api/nachtraege';
 import {
   abrechenbareAngebote,
   rechnungAnlegen,
@@ -29,6 +30,7 @@ import { useKopfPfad } from '../components/KopfPfad';
 import type { PfadVerweis } from '../components/KopfPfad';
 import KupferTaste from '../components/KupferTaste';
 import Monatswahl, { monatOderKeiner, monatswahlWert } from '../components/Monatswahl';
+import NachgetragenChip from '../components/NachgetragenChip';
 import RechnungszustandChip from '../components/RechnungszustandChip';
 import Tafel from '../components/Tafel';
 import TastenSymbol from '../components/TastenSymbol';
@@ -50,12 +52,20 @@ import { RADIUS_KLEIN, ZAHLEN_KLASSE } from '../theme';
  * einem gestreckten Anker bauen, den die uebrigen Tafeln dieser Anwendung nicht kennen. Die Zeile
  * hebt sich im Hover als Flaeche — das macht die {@link Tafel} selbst.
  *
- * <b>Nur die gestellte Rechnung traegt „Herunterladen"</b>, und zwar als `<a download>` auf den Weg
- * des Dokuments: Der antwortet mit `Content-Disposition: attachment`, und genau das verlangt ein
- * solcher Verweis. Ein Entwurf hat kein Dokument — der Weg antwortete dort mit 409, und eine Taste,
- * die in einen Fehler fuehrt, ist keine Taste.
+ * <b>Die Liste traegt zwei Arten</b> (#254, Plan #259): die von fb.crm geschriebene Rechnung und
+ * die nachgetragene, die nur ihre Eckdaten kennt. Diese traegt neben dem Zustand den
+ * {@link NachgetragenChip} (E22) und fuehrt auf `/rechnungen/nachgetragen/:id` (E21). Die beiden
+ * Arten haben getrennte Kennungsraeume — der Zeilenschluessel setzt sich darum aus Art und Kennung
+ * zusammen.
  *
- * <b>„Neue Rechnung" ist die eine Kupfertaste.</b> Sie oeffnet die Wahl unter den abrechenbaren
+ * <b>„Herunterladen" steht genau dort, wo die Zeile `dokument` traegt</b> (E18), und zwar als
+ * `<a download>` auf den Weg des Dokuments ihrer Art: Der antwortet mit
+ * `Content-Disposition: attachment`, und genau das verlangt ein solcher Verweis. Am Zustand
+ * entscheidet es sich nicht — eine nachgetragene Rechnung ist gestellt und hat doch nicht immer ein
+ * PDF, und eine Taste, die in einen Fehler fuehrt, ist keine Taste.
+ *
+ * <b>„Neue Rechnung" ist die eine Kupfertaste</b>, „Rechnung nachtragen" steht als weiche Taste
+ * links daneben (E25): Die Vorlage laesst genau eine Hauptsache je Ansicht zu. Sie oeffnet die Wahl unter den abrechenbaren
  * Angeboten; die Wahl legt den Entwurf an und fuehrt auf ihn. <b>Die Liste fuehrt, der Server
  * entscheidet</b>: Dass ein Angebot in der Wahl steht, ist eine Auskunft und keine Zusage — weist
  * das Anlegen mit 409 ab, steht die Meldung des Servers in der Wahl.
@@ -70,7 +80,9 @@ const KEIN_WEG: readonly PfadVerweis[] = [];
 
 const LAEDT = 'Rechnungen werden geladen …';
 const AUSFALL = 'Die Rechnungen sind gerade nicht zu erreichen. Bitte später erneut versuchen.';
-const LEER = 'Noch keine Rechnung. Schreiben Sie die erste über „Neue Rechnung".';
+const LEER =
+  'Noch keine Rechnung. Schreiben Sie die erste über „Neue Rechnung" oder tragen Sie eine ' +
+  'frühere über „Rechnung nachtragen" nach.';
 
 const WAHL_LAEDT = 'Die abrechenbaren Angebote werden geladen …';
 const WAHL_AUSFALL =
@@ -123,15 +135,32 @@ async function wahlLaden(): Promise<Wahlstand> {
   }
 }
 
+/** Der Schluessel einer Zeile: Die Kennung allein ist ueber beide Arten nicht eindeutig (E21). */
+function schluessel(rechnung: RechnungZeile): string {
+  return `${rechnung.nachgetragen ? 'nachgetragen' : 'rechnung'}-${String(rechnung.id)}`;
+}
+
+/** Der Weg zur Einzelansicht, je Art (E21). */
+function wegZu(rechnung: RechnungZeile): string {
+  const kennung = String(rechnung.id);
+  return rechnung.nachgetragen ? `/rechnungen/nachgetragen/${kennung}` : `/rechnungen/${kennung}`;
+}
+
+/** Der Weg zum Dokument, je Art (E18). */
+function dokumentPfad(rechnung: RechnungZeile): string {
+  return rechnung.nachgetragen
+    ? nachtragDokumentPfad(rechnung.id)
+    : rechnungDokumentPfad(rechnung.id);
+}
+
 /** Eine Zeile der Tafel; die Nummernspalte traegt den Weg zur Rechnung. */
 function Zeile({ rechnung }: { readonly rechnung: RechnungZeile }) {
-  const kennung = String(rechnung.id);
   return (
     <Box component="tr">
       <Box component="td" sx={{ fontWeight: 500, whiteSpace: 'nowrap' }}>
         <Box
           component={RouterLink}
-          to={`/rechnungen/${kennung}`}
+          to={wegZu(rechnung)}
           className={ZAHLEN_KLASSE}
           sx={(theme) => ({
             color: 'inherit',
@@ -154,13 +183,16 @@ function Zeile({ rechnung }: { readonly rechnung: RechnungZeile }) {
         {euro(rechnung.bruttoInCent)}
       </Box>
       <Box component="td">
-        <RechnungszustandChip zustand={rechnung.zustand} />
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+          <RechnungszustandChip zustand={rechnung.zustand} />
+          {rechnung.nachgetragen ? <NachgetragenChip /> : null}
+        </Box>
       </Box>
       <Box component="td" sx={{ textAlign: 'right' }}>
-        {rechnung.zustand === 'ENTWURF' ? null : (
+        {rechnung.dokument ? (
           <Button
             component="a"
-            href={rechnungDokumentPfad(rechnung.id)}
+            href={dokumentPfad(rechnung)}
             download
             aria-label="Herunterladen"
             sx={weichSx}
@@ -169,7 +201,7 @@ function Zeile({ rechnung }: { readonly rechnung: RechnungZeile }) {
               <IconDownload size={SYMBOL_TASTE} stroke={1.8} />
             </TastenSymbol>
           </Button>
-        )}
+        ) : null}
       </Box>
     </Box>
   );
@@ -258,7 +290,7 @@ function inhaltZu(stand: Stand): ReactNode {
   return (
     <Tafel beschriftung="Rechnungen" spalten={SPALTEN}>
       {stand.uebersicht.rechnungen.map((rechnung) => (
-        <Zeile key={rechnung.id} rechnung={rechnung} />
+        <Zeile key={schluessel(rechnung)} rechnung={rechnung} />
       ))}
     </Tafel>
   );
@@ -366,15 +398,23 @@ export default function RechnungenPage() {
         titel="Rechnungen"
         titelEbene={1}
         werkzeug={
-          <KupferTaste
-            onClick={() => {
-              setzeWahlOffen(true);
-            }}
-            disabled={laeuft}
-            symbol={<IconFilePlus size={SYMBOL_TASTE} stroke={1.8} />}
-          >
-            Neue Rechnung
-          </KupferTaste>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+            <WeicheTaste
+              to="/rechnungen/nachtragen"
+              symbol={<IconFileImport size={SYMBOL_TASTE} stroke={1.8} />}
+            >
+              Rechnung nachtragen
+            </WeicheTaste>
+            <KupferTaste
+              onClick={() => {
+                setzeWahlOffen(true);
+              }}
+              disabled={laeuft}
+              symbol={<IconFilePlus size={SYMBOL_TASTE} stroke={1.8} />}
+            >
+              Neue Rechnung
+            </KupferTaste>
+          </Box>
         }
       >
         {inhaltZu(stand)}

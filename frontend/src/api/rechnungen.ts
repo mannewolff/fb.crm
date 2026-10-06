@@ -60,6 +60,14 @@ export interface RechnungZeile {
   /** Bruttobetrag in ganzen Cent, vom Server gerechnet. */
   readonly bruttoInCent: number;
   readonly zustand: Rechnungszustand;
+  /**
+   * Die Art: `true` fuer eine nachgetragene Rechnung, die fb.crm nur mit ihren Eckdaten kennt
+   * (#254). Sie hat einen eigenen Kennungsraum — `id` allein unterscheidet die Zeilen nicht mehr
+   * (Plan #259, E21).
+   */
+  readonly nachgetragen: boolean;
+  /** Ob ein Dokument herunterzuladen ist — fuer beide Arten genau dann, wenn eines hinterlegt ist (E18). */
+  readonly dokument: boolean;
 }
 
 /** Alle Rechnungen, neueste zuerst — das Gegenstueck zu `RechnungenUebersichtResponse`. */
@@ -313,6 +321,8 @@ function parseUebersichtZeile(wert: unknown): RechnungZeile {
     rechnungDatum: text(zeile.rechnungDatum),
     bruttoInCent: inHundertsteln(zeile.brutto),
     zustand: rechnungszustand(zeile.zustand),
+    nachgetragen: jaNein(zeile.nachgetragen),
+    dokument: jaNein(zeile.dokument),
   };
 }
 
