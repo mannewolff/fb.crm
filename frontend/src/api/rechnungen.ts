@@ -446,6 +446,17 @@ export function rechnungStellen(id: number): Promise<Rechnung> {
 }
 
 /**
+ * Stellt die gestellte Rechnung auf bezahlt, abgeschrieben oder zurueck auf gestellt (Issue #253).
+ *
+ * Ein Weg fuer alle drei Ziele, wie im Backend: Das Ziel geht im Rumpf hinaus, und die Antwort traegt
+ * die Rechnung mit ihrem neuen Zustand — die Seite zeigt ihn ohne zweiten Aufruf. Ein unzulaessiger
+ * Uebergang kommt als 409 zurueck; welcher zulaessig ist, entscheidet der Server, nicht diese Datei.
+ */
+export function setzeRechnungszustand(id: number, zustand: Rechnungszustand): Promise<Rechnung> {
+  return apiJson(`${pfad(id)}/zustand`, { methode: 'PUT', rumpf: { zustand } }, parseRechnung);
+}
+
+/**
  * Der Weg zum archivierten Dokument einer gestellten Rechnung (Kriterium 24).
  *
  * Nur der Weg und kein Abruf: Die Antwort geht mit `Content-Disposition: attachment` hinaus, und

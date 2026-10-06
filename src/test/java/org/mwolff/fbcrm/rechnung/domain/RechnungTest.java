@@ -13,7 +13,7 @@ import org.mwolff.fbcrm.common.Einheit;
 import org.mwolff.fbcrm.rechnung.application.RechnungszustandPasstNicht;
 
 /**
- * Die Rechnung als Fachobjekt: ihre Betraege und ihre beiden Zustaende.
+ * Die Rechnung als Fachobjekt: ihre Betraege und ihre vier Zustaende.
  *
  * <p>Nichts Gerechnetes wird gespeichert (E5 am Angebot, E3 des Plans #169). {@link
  * Rechnung#netto()} ist die Summe der gerundeten Positionsbetraege, die Steuer entsteht aus dieser
@@ -21,8 +21,14 @@ import org.mwolff.fbcrm.rechnung.application.RechnungszustandPasstNicht;
  *
  * <p>Unveraenderlich: Jeder Uebergang liefert eine neue Rechnung, und der Zeitpunkt kommt von
  * aussen (CLAUDE-java.md §6.2). Aendern geht nur im Entwurf, gestellt wird nur ein Entwurf, und
- * einen Dokumentschluessel traegt nur eine gestellte Rechnung — dieselbe Grenze, die der CHECK der
+ * einen Dokumentschluessel traegt jede gestellte Rechnung — dieselbe Grenze, die der CHECK der
  * Migration in der Datenbank zieht.
+ *
+ * <p>Nach dem Stellen kommt der Ausgang der Forderung dazu (Issue #253): {@link
+ * Rechnung#mitZustand(Rechnungszustand, java.time.Instant)} kennt genau drei Kanten — von {@code
+ * GESTELLT} nach {@code BEZAHLT} oder {@code ABGESCHRIEBEN} und von beiden zurueck. Alles andere
+ * wird abgewiesen, und <b>nichts Festgeschriebenes</b> aendert sich dabei: Nummer, Steuersatz,
+ * Zahlungsziel, Zeitpunkt des Stellens, Dokument, Kopien und Positionen bleiben, wie sie sind.
  */
 class RechnungTest {
 
@@ -265,5 +271,143 @@ class RechnungTest {
 
     // Then
     assertThat(rechnung.positionen()).containsExactly(BERATUNG);
+  }
+
+  @Test
+  void mitZustand_givenAGestellteRechnung_thenBecomesBezahltAndKeepsEverythingFixed() {
+    // Given
+    final Rechnung rechnung = gestellt().mitDokument("rechnung/11/abc.pdf");
+    final Instant bezahltAm = Instant.parse("2026-10-20T07:00:00Z");
+
+    // When
+    final Rechnung bezahlt = rechnung.mitZustand(Rechnungszustand.BEZAHLT, bezahltAm);
+
+    // Then — der Zustand sagt nur, wie die Forderung ausgegangen ist.
+    assertThat(bezahlt)
+        .satisfies(
+            r -> assertThat(r.zustand()).isEqualTo(Rechnungszustand.BEZAHLT),
+            r -> assertThat(r.nummer()).isEqualTo("R26-0004"),
+            r -> assertThat(r.steuersatz()).isEqualByComparingTo(NEUNZEHN),
+            r -> assertThat(r.zahlungszielTage()).isEqualTo(10),
+            r -> assertThat(r.gestelltAm()).isEqualTo(GESTELLT_AM),
+            r -> assertThat(r.pdfSchluessel()).isEqualTo("rechnung/11/abc.pdf"),
+            r -> assertThat(r.empfaenger()).isEqualTo(EMPFAENGER),
+            r -> assertThat(r.absender()).isEqualTo(ABSENDER),
+            r -> assertThat(r.positionen()).containsExactly(BERATUNG),
+            r -> assertThat(r.rechnungDatum()).isEqualTo(RECHNUNGSDATUM),
+            r -> assertThat(r.leistungszeitraum()).isEqualTo(ZEITRAUM),
+            r -> assertThat(r.id()).isEqualTo(11L),
+            r -> assertThat(r.createdAt()).isEqualTo(ANGELEGT),
+            r -> assertThat(r.updatedAt()).isEqualTo(bezahltAm));
+  }
+
+  @Test
+  void mitZustand_givenAGestellteRechnung_thenBecomesAbgeschrieben() {
+    // Given — Insolvenz ist der Grund, nicht ein eigener Zustand (Issue #253).
+    final Rechnung rechnung = gestellt();
+
+    // When
+    final Rechnung abgeschrieben = rechnung.mitZustand(Rechnungszustand.ABGESCHRIEBEN, GESTELLT_AM);
+
+    // Then
+    assertThat(abgeschrieben.zustand()).isEqualTo(Rechnungszustand.ABGESCHRIEBEN);
+  }
+
+  @Test
+  void mitZustand_givenABezahlteRechnung_thenBackToGestellt() {
+    // Given — ein Fehlklick darf nicht dauerhaft falsch stehen bleiben.
+    final Rechnung rechnung = gestellt().mitZustand(Rechnungszustand.BEZAHLT, GESTELLT_AM);
+
+    // When
+    final Rechnung zurueck = rechnung.mitZustand(Rechnungszustand.GESTELLT, GESTELLT_AM);
+
+    // Then
+    assertThat(zurueck.zustand()).isEqualTo(Rechnungszustand.GESTELLT);
+  }
+
+  @Test
+  void mitZustand_givenAnAbgeschriebeneRechnung_thenBackToGestellt() {
+    // Given
+    final Rechnung rechnung = gestellt().mitZustand(Rechnungszustand.ABGESCHRIEBEN, GESTELLT_AM);
+
+    // When
+    final Rechnung zurueck = rechnung.mitZustand(Rechnungszustand.GESTELLT, GESTELLT_AM);
+
+    // Then
+    assertThat(zurueck.zustand()).isEqualTo(Rechnungszustand.GESTELLT);
+  }
+
+  @Test
+  void mitZustand_fromBezahltToAbgeschrieben_thenRejected() {
+    // Given — der Weg zwischen den Ausgaengen fuehrt ueber „Gestellt"; so bleibt die Regel bei
+    // drei Kanten.
+    final Rechnung rechnung = gestellt().mitZustand(Rechnungszustand.BEZAHLT, GESTELLT_AM);
+
+    // When / Then
+    assertThatThrownBy(() -> rechnung.mitZustand(Rechnungszustand.ABGESCHRIEBEN, GESTELLT_AM))
+        .isInstanceOf(RechnungszustandPasstNicht.class);
+  }
+
+  @Test
+  void mitZustand_fromAbgeschriebenToBezahlt_thenRejected() {
+    // Given
+    final Rechnung rechnung = gestellt().mitZustand(Rechnungszustand.ABGESCHRIEBEN, GESTELLT_AM);
+
+    // When / Then
+    assertThatThrownBy(() -> rechnung.mitZustand(Rechnungszustand.BEZAHLT, GESTELLT_AM))
+        .isInstanceOf(RechnungszustandPasstNicht.class);
+  }
+
+  @Test
+  void mitZustand_fromGestelltToGestellt_thenRejected() {
+    // Given — ein Stillstand ist keine der drei Kanten.
+    final Rechnung rechnung = gestellt();
+
+    // When / Then
+    assertThatThrownBy(() -> rechnung.mitZustand(Rechnungszustand.GESTELLT, GESTELLT_AM))
+        .isInstanceOf(RechnungszustandPasstNicht.class);
+  }
+
+  @Test
+  void mitZustand_givenADraft_thenRejected() {
+    // Given — von ENTWURF aus fuehrt kein Weg; gestellt wird ueber `gestellt`, mit Nummer.
+    final Rechnung rechnung = entwurf(List.of(BERATUNG));
+
+    // When / Then
+    assertThatThrownBy(() -> rechnung.mitZustand(Rechnungszustand.BEZAHLT, GESTELLT_AM))
+        .isInstanceOf(RechnungszustandPasstNicht.class);
+  }
+
+  @Test
+  void mitZustand_towardsEntwurf_thenRejected() {
+    // Given — nach ENTWURF fuehrt kein Weg: Die Festschreibung wird nicht zurueckgenommen.
+    final Rechnung rechnung = gestellt();
+
+    // When / Then
+    assertThatThrownBy(() -> rechnung.mitZustand(Rechnungszustand.ENTWURF, GESTELLT_AM))
+        .isInstanceOf(RechnungszustandPasstNicht.class);
+  }
+
+  @Test
+  void mitDokument_givenABezahlteRechnung_thenAccepted() {
+    // Given — eine bezahlte Rechnung ist weiterhin gestellt (istGestellt).
+    final Rechnung rechnung = gestellt().mitZustand(Rechnungszustand.BEZAHLT, GESTELLT_AM);
+
+    // When
+    final Rechnung mitPdf = rechnung.mitDokument("rechnung/11/abc.pdf");
+
+    // Then
+    assertThat(mitPdf.pdfSchluessel()).isEqualTo("rechnung/11/abc.pdf");
+  }
+
+  @Test
+  void geaendert_givenABezahlteRechnung_thenRejected() {
+    // Given — bezahlt heisst festgeschrieben wie gestellt.
+    final Rechnung rechnung = gestellt().mitZustand(Rechnungszustand.BEZAHLT, GESTELLT_AM);
+    final List<Rechnungsposition> positionen = List.of(HALBER_CENT);
+
+    // When / Then
+    assertThatThrownBy(() -> rechnung.geaendert(RECHNUNGSDATUM, ZEITRAUM, positionen, GESTELLT_AM))
+        .isInstanceOf(RechnungszustandPasstNicht.class);
   }
 }

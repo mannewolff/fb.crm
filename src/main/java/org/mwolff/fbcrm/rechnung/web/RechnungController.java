@@ -7,6 +7,7 @@ import org.mwolff.fbcrm.rechnung.application.RechnungDokumentLesenUseCase;
 import org.mwolff.fbcrm.rechnung.application.RechnungLesenUseCase;
 import org.mwolff.fbcrm.rechnung.application.RechnungLoeschenUseCase;
 import org.mwolff.fbcrm.rechnung.application.RechnungStellenUseCase;
+import org.mwolff.fbcrm.rechnung.application.RechnungZustandSetzenUseCase;
 import org.mwolff.fbcrm.rechnung.application.Rechnungsdokument;
 import org.springframework.core.io.InputStreamResource;
 import org.springframework.core.io.Resource;
@@ -25,8 +26,8 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Die Wege an der einzelnen Rechnung: lesen, aendern, loeschen, stellen, Dokument (Plan #169, E7,
- * E11).
+ * Die Wege an der einzelnen Rechnung: lesen, aendern, loeschen, stellen, Zustand, Dokument (Plan
+ * #169, E7, E11; Issue #253).
  *
  * <p>Der Controller entscheidet nichts (CLAUDE-java.md §6.3). Was der Zustand zulaesst, entscheidet
  * die Domaene: Eine gestellte Rechnung laesst sich weder aendern noch loeschen noch ein zweites Mal
@@ -46,6 +47,7 @@ public class RechnungController {
   private final RechnungAendernUseCase aendernUseCase;
   private final RechnungLoeschenUseCase loeschenUseCase;
   private final RechnungStellenUseCase stellenUseCase;
+  private final RechnungZustandSetzenUseCase zustandUseCase;
   private final RechnungDokumentLesenUseCase dokumentUseCase;
 
   public RechnungController(
@@ -53,11 +55,13 @@ public class RechnungController {
       final RechnungAendernUseCase aendernUseCase,
       final RechnungLoeschenUseCase loeschenUseCase,
       final RechnungStellenUseCase stellenUseCase,
+      final RechnungZustandSetzenUseCase zustandUseCase,
       final RechnungDokumentLesenUseCase dokumentUseCase) {
     this.lesenUseCase = lesenUseCase;
     this.aendernUseCase = aendernUseCase;
     this.loeschenUseCase = loeschenUseCase;
     this.stellenUseCase = stellenUseCase;
+    this.zustandUseCase = zustandUseCase;
     this.dokumentUseCase = dokumentUseCase;
   }
 
@@ -85,6 +89,28 @@ public class RechnungController {
   @PostMapping("/stellen")
   public RechnungResponse stellen(@PathVariable final long id) {
     stellenUseCase.stelle(id);
+    return RechnungResponse.of(lesenUseCase.lese(id));
+  }
+
+  /**
+   * Stellt die gestellte Rechnung auf bezahlt, abgeschrieben oder zurueck auf gestellt (#253).
+   *
+   * <p><b>Ein Weg fuer alle drei Ziele</b> und nicht je Ziel ein eigener Pfad nach dem Muster von
+   * {@code /stellen}: Das Ziel steht im Rumpf, und Controller wie Client bleiben schmal. {@code
+   * /stellen} bleibt trotzdem eigen — es zieht eine Nummer und erzeugt ein Dokument, waehrend hier
+   * nur ein Zustand wechselt.
+   *
+   * <p>{@code PUT} und nicht {@code POST}: Der Aufruf setzt den Zustand auf den genannten Wert, und
+   * ein zweiter Aufruf mit demselben Rumpf aendert nichts mehr daran — er faellt dann als
+   * unzulaessiger Uebergang mit 409 heraus, weil keine der drei Kanten im Kreis fuehrt.
+   *
+   * <p>Gelesen wird danach derselbe Weg wie beim {@code GET}, wie beim Stellen und aus demselben
+   * Grund: Zwei Abbildungen auf dieselbe Ansicht liefen auseinander.
+   */
+  @PutMapping("/zustand")
+  public RechnungResponse zustand(
+      @PathVariable final long id, @Valid @RequestBody final RechnungZustandRequest anfrage) {
+    zustandUseCase.setze(id, anfrage.zustand());
     return RechnungResponse.of(lesenUseCase.lese(id));
   }
 

@@ -10,9 +10,12 @@ import Link from '@mui/material/Link';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import {
+  IconCircleCheck,
+  IconCircleX,
   IconDeviceFloppy,
   IconDownload,
   IconFileInvoice,
+  IconRotate2,
   IconTrash,
 } from '@tabler/icons-react';
 import { Fragment, useEffect, useId, useState } from 'react';
@@ -27,6 +30,7 @@ import {
   rechnungLesen,
   rechnungLoeschen,
   rechnungStellen,
+  setzeRechnungszustand,
 } from '../api/rechnungen';
 import type { AbrechnungsangabeEingabe, Rechnung, Rechnungsmaskenzeile } from '../api/rechnungen';
 import AktionsMenue from '../components/AktionsMenue';
@@ -46,6 +50,8 @@ import { feldMeldungen, nichtGefunden, serverMeldung } from '../lib/apifehler';
 import { meldungAm } from '../lib/feldmeldung';
 import { betrag, dezimal, euro, hundertstel } from '../lib/geld';
 import { kennungAus } from '../lib/kennung';
+import { istGestellt } from '../lib/rechnungszustand';
+import type { Rechnungszustand } from '../lib/rechnungszustand';
 import { KEIN_ZEITRAUM, tagWort } from '../lib/tag';
 import { RADIUS_RUND, ZAHLEN_KLASSE } from '../theme';
 
@@ -55,8 +61,15 @@ import { RADIUS_RUND, ZAHLEN_KLASSE } from '../theme';
  *
  * Oben die Kopfkarte mit Ueberschrift, Angaben und Aktionen; darunter im Entwurf die Angaben zur
  * Rechnung und die Positionstafel mit „jetzt abrechnen" und den drei Summen. Die <b>gestellte</b>
- * Rechnung zeigt dieselben Bereiche als Leseansicht — Stammdaten, Positionen, Summen — und als
- * einzige Aktion „Herunterladen".
+ * Rechnung zeigt dieselben Bereiche als Leseansicht — Stammdaten, Positionen, Summen — mit
+ * „Herunterladen" als Hauptaktion und dem Ausgang der Forderung daneben.
+ *
+ * <b>Die Leseansicht gilt fuer jeden gestellten Zustand</b> (Issue #253): Bezahlt und Abgeschrieben
+ * sind gestellte Rechnungen und zeigen denselben Beleg mit derselben Nummer und demselben Dokument.
+ * Gefragt wird darum `istGestellt` und nicht `=== 'GESTELLT'`. Umgestellt wird hier und nicht in der
+ * Listenzeile: Die Liste traegt bisher keine Aktion ausser dem Download, und der kleinste Eingriff
+ * liegt dort, wo die gestellte Rechnung schon ihre Werkzeuge hat. Ein unzulaessiger Uebergang kommt
+ * als 409 mit der Meldung des Servers und erscheint ueber der Ansicht — die Seite bleibt stehen.
  *
  * <b>Die Maske zeigt jede Position des Angebots</b>, auch eine, die dieser Entwurf nicht abrechnet
  * (Plan #169, E5). So sieht der Freiberufler beim Wiederoeffnen, was er beim ersten Mal weggelassen
@@ -119,6 +132,12 @@ const OHNE_MENGE =
   'Ohne eine Position mit einer Menge über 0 lässt sich die Rechnung nicht stellen.';
 const PFLICHTANGABEN = 'Für das Stellen fehlen noch Angaben:';
 const KEIN_ZIEL = 'nicht festgelegt';
+const BEZAHLT = 'Als bezahlt markieren';
+const ABSCHREIBEN = 'Abschreiben';
+const ZURUECK = 'Zurück auf gestellt';
+const ABSCHREIBEN_FRAGE =
+  'Die Forderung gilt damit als uneinbringlich. Die Rechnung bleibt mit Nummer und Dokument bestehen, und der Schritt lässt sich zurücknehmen.';
+const AUSFALL_ZUSTAND = 'Der Zustand wurde nicht geändert. Bitte später erneut versuchen.';
 
 /** Die Grenzen der Felder — dieselben wie in `RechnungRequest` und `RechnungPositionRequest`. */
 const ZEITRAUM_LAENGE = 100;
@@ -612,33 +631,38 @@ function Positionszeile({
 }
 
 /**
- * Die Rueckfrage vor dem Stellen (Kriterium 13).
+ * Die Rueckfrage vor einem folgenreichen Schritt: vor dem Stellen (Kriterium 13) und vor dem
+ * Abschreiben (Issue #253).
  *
  * Ein <b>eigener Dialog</b> und nicht das `confirm` des Browsers, aus denselben Gruenden wie in
  * {@link AktionsMenue} (E8). Die bestaetigende Taste traegt die Rose-Toenung der folgenreichen
  * Aktion und nicht den Kupferverlauf: Die eine Kupfertaste der Ansicht steht in der Kopfkarte, und
  * eine zweite im Dialog machte aus einer Hauptaktion zwei.
  *
+ * <b>Ein Dialog fuer beide Rueckfragen</b> und nicht zwei: Titel, Satz und Aufschrift der
+ * bestaetigenden Taste kommen von aussen, der Rest ist derselbe. Zwei Abschriften derselben Gestalt
+ * liefen beim naechsten Nachziehen der Vorlage auseinander.
+ *
  * <b>Den Fokus gibt MUI selbst zurueck</b> — anders als dort braucht es kein `disableRestoreFocus`:
  * Die Taste, von der die Rueckfrage ausgeht, bleibt stehen, waehrend der Dialog offen ist.
  */
-function Stellfrage({
-  bruttoInCent,
-  onStellen,
+function Rueckfrage({
+  titel,
+  frage,
+  onJa,
   onEnde,
 }: {
-  readonly bruttoInCent: number;
-  readonly onStellen: () => void;
+  readonly titel: string;
+  readonly frage: string;
+  readonly onJa: () => void;
   readonly onEnde: () => void;
 }) {
   const titelId = useId();
   return (
     <Dialog open onClose={onEnde} aria-labelledby={titelId}>
-      <DialogTitle id={titelId}>{STELLEN}</DialogTitle>
+      <DialogTitle id={titelId}>{titel}</DialogTitle>
       <DialogContent>
-        <DialogContentText>
-          {`Die Rechnung über ${euro(bruttoInCent)} geht so hinaus. Das lässt sich nicht zurücknehmen: Danach kann sie weder geändert noch gelöscht werden.`}
-        </DialogContentText>
+        <DialogContentText>{frage}</DialogContentText>
       </DialogContent>
       <DialogActions sx={{ padding: '4px 24px 20px', gap: '10px' }}>
         <WeicheTaste onClick={onEnde}>Abbrechen</WeicheTaste>
@@ -646,7 +670,7 @@ function Stellfrage({
           type="button"
           onClick={() => {
             onEnde();
-            onStellen();
+            onJa();
           }}
           sx={(theme) => ({
             borderRadius: `${RADIUS_RUND}px`,
@@ -660,11 +684,16 @@ function Stellfrage({
             '&:active': { transform: 'none' },
           })}
         >
-          {STELLEN}
+          {titel}
         </Button>
       </DialogActions>
     </Dialog>
   );
+}
+
+/** Der Satz der Rueckfrage vor dem Stellen — er nennt den Bruttobetrag der Antwort. */
+function stellfrage(bruttoInCent: number): string {
+  return `Die Rechnung über ${euro(bruttoInCent)} geht so hinaus. Das lässt sich nicht zurücknehmen: Danach kann sie weder geändert noch gelöscht werden.`;
 }
 
 /**
@@ -727,6 +756,8 @@ export default function RechnungPage() {
   const [ungespeichert, setzeUngespeichert] = useState(false);
   // Der Bruttobetrag, ueber den die Rueckfrage gerade fragt; `null`, solange sie nicht offen ist.
   const [frage, setzeFrage] = useState<number | null>(null);
+  // Ob die Rueckfrage vor dem Abschreiben offen ist (Issue #253).
+  const [abschreibfrage, setzeAbschreibfrage] = useState(false);
   useKopfPfad(
     [ZU_RECHNUNGEN],
     stand.art === 'daten' ? ueberschriftZu(stand.rechnung) : 'Rechnung',
@@ -853,6 +884,25 @@ export default function RechnungPage() {
     }
   };
 
+  /**
+   * Stellt die gestellte Rechnung auf bezahlt, abgeschrieben oder zurueck auf gestellt (#253).
+   *
+   * Ein unzulaessiger Uebergang kommt als 409 mit der Meldung des Servers zurueck und erscheint als
+   * Meldung ueber der Ansicht — die Seite bleibt stehen. Welcher Uebergang zulaessig ist, entscheidet
+   * der Server; die Tasten zeigen nur, was im jeweiligen Zustand gemeint ist.
+   */
+  const umstellen = async (rechnung: Rechnung, ziel: Rechnungszustand) => {
+    setzeFehler(null);
+    setzeLaeuft(true);
+    try {
+      uebernimm(await setzeRechnungszustand(rechnung.id, ziel));
+    } catch (ursache) {
+      setzeFehler(serverMeldung(ursache, AUSFALL_ZUSTAND));
+    } finally {
+      setzeLaeuft(false);
+    }
+  };
+
   const loeschen = async (rechnung: Rechnung) => {
     setzeFehler(null);
     setzeLaeuft(true);
@@ -920,6 +970,66 @@ export default function RechnungPage() {
         >
           {STELLEN}
         </KupferTaste>
+      </Box>
+    );
+  }
+
+  /**
+   * Die Aktionen der gestellten Rechnung: „Herunterladen" als die eine Kupfertaste, der Ausgang der
+   * Forderung weich daneben (Issue #253).
+   *
+   * Welche Tasten dastehen, haengt am Zustand: Eine gestellte Rechnung bietet die beiden Ausgaenge
+   * an, eine bezahlte oder abgeschriebene den Weg zurueck. Zwischen den Ausgaengen geht es nicht
+   * unmittelbar — das waere eine vierte Kante, die der Server nicht kennt.
+   *
+   * „Abschreiben" fragt vorher nach, „Als bezahlt markieren" nicht: Das eine sagt, dass Geld nicht
+   * mehr kommt, das andere, dass es da ist, und beide sind zurueckzunehmen. Die Rueckfrage steht am
+   * folgenreicheren der beiden (CLAUDE-design.md, „Tasten").
+   */
+  function belegaktionen(rechnung: Rechnung): ReactNode {
+    return (
+      <Box
+        data-testid="rechnung-aktionen"
+        sx={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}
+      >
+        {rechnung.zustand === 'GESTELLT' ? (
+          <>
+            <WeicheTaste
+              onClick={() => {
+                void umstellen(rechnung, 'BEZAHLT');
+              }}
+              disabled={laeuft}
+              symbol={<IconCircleCheck size={SYMBOL_TASTE} stroke={1.8} />}
+            >
+              {BEZAHLT}
+            </WeicheTaste>
+            <WeicheTaste
+              onClick={() => {
+                setzeAbschreibfrage(true);
+              }}
+              disabled={laeuft}
+              symbol={<IconCircleX size={SYMBOL_TASTE} stroke={1.8} />}
+            >
+              {ABSCHREIBEN}
+            </WeicheTaste>
+          </>
+        ) : (
+          <WeicheTaste
+            onClick={() => {
+              void umstellen(rechnung, 'GESTELLT');
+            }}
+            disabled={laeuft}
+            symbol={<IconRotate2 size={SYMBOL_TASTE} stroke={1.8} />}
+          >
+            {ZURUECK}
+          </WeicheTaste>
+        )}
+        <Button component="a" href={rechnungDokumentPfad(rechnung.id)} download sx={kupferSx}>
+          <TastenSymbol>
+            <IconDownload size={SYMBOL_TASTE} stroke={1.8} />
+          </TastenSymbol>
+          Herunterladen
+        </Button>
       </Box>
     );
   }
@@ -1028,26 +1138,17 @@ export default function RechnungPage() {
 
   const { rechnung } = stand;
 
-  if (rechnung.zustand === 'GESTELLT') {
+  // Die Leseansicht gilt fuer jeden gestellten Zustand: Bezahlt und Abgeschrieben sind gestellte
+  // Rechnungen und zeigen denselben Beleg (Issue #253).
+  if (istGestellt(rechnung.zustand)) {
     const belegte = belegzeilen(rechnung);
     return (
       <Box sx={spalten}>
+        {fehler === null ? null : <Alert severity="error">{fehler}</Alert>}
         <Karte
           titel={ueberschriftZu(rechnung)}
           titelEbene={1}
-          werkzeug={
-            <Button
-              component="a"
-              href={rechnungDokumentPfad(rechnung.id)}
-              download
-              sx={kupferSx}
-            >
-              <TastenSymbol>
-                <IconDownload size={SYMBOL_TASTE} stroke={1.8} />
-              </TastenSymbol>
-              Herunterladen
-            </Button>
-          }
+          werkzeug={belegaktionen(rechnung)}
         >
           <Angaben rechnung={rechnung} />
         </Karte>
@@ -1079,6 +1180,18 @@ export default function RechnungPage() {
             />
           </Box>
         </Karte>
+        {abschreibfrage ? (
+          <Rueckfrage
+            titel={ABSCHREIBEN}
+            frage={ABSCHREIBEN_FRAGE}
+            onJa={() => {
+              void umstellen(rechnung, 'ABGESCHRIEBEN');
+            }}
+            onEnde={() => {
+              setzeAbschreibfrage(false);
+            }}
+          />
+        ) : null}
       </Box>
     );
   }
@@ -1097,9 +1210,10 @@ export default function RechnungPage() {
       </Karte>
       {entwurfZu(rechnung, gerechnet)}
       {frage === null ? null : (
-        <Stellfrage
-          bruttoInCent={frage}
-          onStellen={() => {
+        <Rueckfrage
+          titel={STELLEN}
+          frage={stellfrage(frage)}
+          onJa={() => {
             void stellen(rechnung);
           }}
           onEnde={() => {

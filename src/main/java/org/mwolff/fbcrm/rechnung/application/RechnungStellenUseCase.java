@@ -48,7 +48,8 @@ import org.springframework.transaction.annotation.Transactional;
  *       Speicher — eine Waise, die niemanden stoert (siehe {@code V18__rechnung.sql}).
  *   <li><b>Der Sprung des Angebots zum Schluss</b>, gerechnet allein mit den <b>gestellten</b>
  *       Rechnungen: „Abgerechnet" heisst, dass die Rechnungen gestellt sind; ein Entwurf kann noch
- *       geloescht werden (Manne, 2026-09-30; Kriterium 27).
+ *       geloescht werden (Manne, 2026-09-30; Kriterium 27). Gestellt heisst dabei jeder Zustand
+ *       ausser Entwurf — eine bezahlte Rechnung gibt ihre Mengen nicht wieder frei (Issue #253).
  * </ol>
  *
  * <p>Scheitert ein Schritt, rollt die Transaktion zurueck — der Zaehler gibt seine Nummer wieder
@@ -174,7 +175,7 @@ public class RechnungStellenUseCase {
   private void schliesseAngebotAbWennNichtsOffenIst(final Angebot angebot) {
     final List<Rechnung> gestellte =
         rechnungen.findByAngebot(angebot.requireId()).stream()
-            .filter(rechnung -> rechnung.zustand() == Rechnungszustand.GESTELLT)
+            .filter(rechnung -> rechnung.zustand().istGestellt())
             .toList();
     if (!Abrechnungsstand.fuer(angebot.positionen(), gestellte).etwasOffen()) {
       angebote.save(angebot.abgerechnet(clock.instant()));

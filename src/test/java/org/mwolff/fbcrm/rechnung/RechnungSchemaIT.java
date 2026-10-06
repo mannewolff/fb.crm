@@ -11,8 +11,8 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 /**
- * Prueft das Schema der Rechnung nach {@code V18__rechnung.sql} gegen eine echte
- * PostgreSQL-Instanz.
+ * Prueft das Schema der Rechnung nach {@code V18__rechnung.sql} und {@code
+ * V21__rechnung_zustand_erledigt.sql} gegen eine echte PostgreSQL-Instanz.
  *
  * <p>Gegenstand sind die Zusagen, die allein die Datenbank haelt: die beiden gegenlaeufigen CHECKs
  * um den Zustand, die Eindeutigkeit der Nummer, die Wertebereiche der Positionen und die
@@ -30,6 +30,19 @@ class RechnungSchemaIT extends AbstractIntegrationTest {
           + " (angebot_id, zustand, rechnung_datum, nummer, steuersatz, zahlungsziel_tage,"
           + " gestellt_am, empfaenger_firma, absender_name)"
           + " VALUES (?, 'GESTELLT', DATE '2026-09-30', ?, CAST(? AS numeric), 10, now(),"
+          + " 'Adler AG', 'Manfred Wolff')";
+
+  /**
+   * Dieselbe gestellte Rechnung in einem frei gewaehlten Zustand (Issue #253).
+   *
+   * <p>Der Zustand geht als Parameter hinein und nicht als Textbaustein: Was die Datenbank an einer
+   * bezahlten Rechnung verlangt, soll sich an derselben Anweisung zeigen wie bei einer gestellten.
+   */
+  private static final String INSERT_MIT_ZUSTAND =
+      "INSERT INTO rechnung"
+          + " (angebot_id, zustand, rechnung_datum, nummer, steuersatz, zahlungsziel_tage,"
+          + " gestellt_am, empfaenger_firma, absender_name)"
+          + " VALUES (?, ?, DATE '2026-09-30', ?, CAST(? AS numeric), 10, now(),"
           + " 'Adler AG', 'Manfred Wolff')";
 
   private static final String INSERT_POSITION =
@@ -192,5 +205,40 @@ class RechnungSchemaIT extends AbstractIntegrationTest {
 
     // Then
     assertThat(spalten).isZero();
+  }
+
+  @Test
+  void rechnungZustand_givenBezahltAndAbgeschrieben_thenAccepted() {
+    // When — V21: beide Ausgaenge sind zugelassen (Issue #253).
+    final int bezahlt =
+        jdbc.update(INSERT_MIT_ZUSTAND, Long.valueOf(angebotId), "BEZAHLT", "R26-0004", STEUERSATZ);
+    final int abgeschrieben =
+        jdbc.update(
+            INSERT_MIT_ZUSTAND, Long.valueOf(angebotId), "ABGESCHRIEBEN", "R26-0005", STEUERSATZ);
+
+    // Then
+    assertThat(bezahlt).isEqualTo(1);
+    assertThat(abgeschrieben).isEqualTo(1);
+  }
+
+  @Test
+  void rechnungGestellt_givenABezahlteRechnungWithoutANumber_thenRejectedByTheDatabase() {
+    final Long angebot = Long.valueOf(angebotId);
+
+    // When / Then — eine bezahlte Rechnung ist eine gestellte: Die Pflichtfelder gelten auch hier.
+    assertThatThrownBy(() -> jdbc.update(INSERT_MIT_ZUSTAND, angebot, "BEZAHLT", null, STEUERSATZ))
+        .isInstanceOf(DataIntegrityViolationException.class)
+        .hasMessageContaining("rechnung_gestellt");
+  }
+
+  @Test
+  void rechnungZustand_givenAnUnknownState_thenRejectedByTheDatabase() {
+    final Long angebot = Long.valueOf(angebotId);
+
+    // When / Then — ein fuenfter Zustand faellt durch beide gegenlaeufigen CHECKs.
+    assertThatThrownBy(
+            () -> jdbc.update(INSERT_MIT_ZUSTAND, angebot, "MAHNUNG", "R26-0006", STEUERSATZ))
+        .isInstanceOf(DataIntegrityViolationException.class)
+        .hasMessageContaining("rechnung_zustand");
   }
 }

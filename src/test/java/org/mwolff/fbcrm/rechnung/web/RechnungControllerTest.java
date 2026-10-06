@@ -33,7 +33,9 @@ import org.mwolff.fbcrm.rechnung.application.RechnungLoeschenUseCase;
 import org.mwolff.fbcrm.rechnung.application.RechnungNichtGefunden;
 import org.mwolff.fbcrm.rechnung.application.RechnungOhnePosition;
 import org.mwolff.fbcrm.rechnung.application.RechnungStellenUseCase;
+import org.mwolff.fbcrm.rechnung.application.RechnungZustandSetzenUseCase;
 import org.mwolff.fbcrm.rechnung.application.RechnungszustandPasstNicht;
+import org.mwolff.fbcrm.rechnung.domain.Rechnungszustand;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
@@ -66,6 +68,7 @@ class RechnungControllerTest {
   @Mock private RechnungAendernUseCase aendern;
   @Mock private RechnungLoeschenUseCase loeschen;
   @Mock private RechnungStellenUseCase stellen;
+  @Mock private RechnungZustandSetzenUseCase zustand;
   @Mock private RechnungDokumentLesenUseCase dokument;
 
   @Captor private ArgumentCaptor<RechnungDaten> daten;
@@ -76,7 +79,7 @@ class RechnungControllerTest {
   void baueDenController() {
     mockMvc =
         MockMvcBuilders.standaloneSetup(
-                new RechnungController(lesen, aendern, loeschen, stellen, dokument))
+                new RechnungController(lesen, aendern, loeschen, stellen, zustand, dokument))
             .setControllerAdvice(new GlobalExceptionHandler())
             .build();
   }
@@ -538,5 +541,99 @@ class RechnungControllerTest {
 
     // When / Then
     mockMvc.perform(get(PFAD + "/dokument")).andExpect(status().isNotFound());
+  }
+
+  @Test
+  void zustand_toBezahlt_thenTheUseCaseSeesTheTargetAndTheAnswerCarriesTheNewStand()
+      throws Exception {
+    // Given — gelesen wird derselbe Weg wie beim GET, damit beide dasselbe zeigen.
+    when(lesen.lese(Webdoppel.RECHNUNG))
+        .thenReturn(Webdoppel.ansicht(Webdoppel.bezahlt("0001-2026", "80.00"), "0"));
+
+    // When / Then
+    mockMvc
+        .perform(
+            put(PFAD + "/zustand")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"zustand\":\"BEZAHLT\"}"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.zustand").value("BEZAHLT"))
+        .andExpect(jsonPath("$.nummer").value("0001-2026"));
+    verify(zustand).setze(Webdoppel.RECHNUNG, Rechnungszustand.BEZAHLT);
+  }
+
+  @Test
+  void zustand_withAnUnknownValue_thenBadRequest() throws Exception {
+    // Given — was kein Zustand ist, laesst sich nicht wandeln; der Rumpf ist fehlerhaft.
+    mockMvc
+        .perform(
+            put(PFAD + "/zustand")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"zustand\":\"MAHNUNG\"}"))
+        .andExpect(status().isBadRequest());
+
+    // Then
+    verifyNoInteractions(zustand, lesen);
+  }
+
+  @Test
+  void zustand_withoutAZustand_thenTheFieldIsNamed() throws Exception {
+    // Given — ohne Ziel gibt es keinen Uebergang.
+    mockMvc
+        .perform(put(PFAD + "/zustand").contentType(MediaType.APPLICATION_JSON).content("{}"))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.fieldErrors.zustand").isArray());
+
+    // Then
+    verifyNoInteractions(zustand, lesen);
+  }
+
+  @Test
+  void zustand_atAnEntwurf_thenConflict() throws Exception {
+    // Given — von ENTWURF aus fuehrt kein Weg; das entscheidet die Domaene.
+    when(zustand.setze(Webdoppel.RECHNUNG, Rechnungszustand.BEZAHLT))
+        .thenThrow(new RechnungszustandPasstNicht());
+
+    // When / Then
+    mockMvc
+        .perform(
+            put(PFAD + "/zustand")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"zustand\":\"BEZAHLT\"}"))
+        .andExpect(status().isConflict())
+        .andExpect(jsonPath("$.detail").value(RechnungszustandPasstNicht.MELDUNG));
+    verifyNoInteractions(lesen);
+  }
+
+  @Test
+  void zustand_towardsEntwurf_thenConflict() throws Exception {
+    // Given — die Festschreibung wird nicht zurueckgenommen; kein Formfehler, ein Zustandsfehler.
+    when(zustand.setze(Webdoppel.RECHNUNG, Rechnungszustand.ENTWURF))
+        .thenThrow(new RechnungszustandPasstNicht());
+
+    // When / Then
+    mockMvc
+        .perform(
+            put(PFAD + "/zustand")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"zustand\":\"ENTWURF\"}"))
+        .andExpect(status().isConflict());
+    verifyNoInteractions(lesen);
+  }
+
+  @Test
+  void zustand_withAnUnknownRechnung_thenNotFound() throws Exception {
+    // Given
+    when(zustand.setze(Webdoppel.RECHNUNG, Rechnungszustand.ABGESCHRIEBEN))
+        .thenThrow(new RechnungNichtGefunden());
+
+    // When / Then
+    mockMvc
+        .perform(
+            put(PFAD + "/zustand")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"zustand\":\"ABGESCHRIEBEN\"}"))
+        .andExpect(status().isNotFound());
+    verifyNoInteractions(lesen);
   }
 }

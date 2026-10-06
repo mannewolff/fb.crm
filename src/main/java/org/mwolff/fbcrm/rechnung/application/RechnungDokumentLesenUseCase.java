@@ -5,7 +5,6 @@ import org.jspecify.annotations.Nullable;
 import org.mwolff.fbcrm.rechnung.domain.DokumentSpeicher;
 import org.mwolff.fbcrm.rechnung.domain.Rechnung;
 import org.mwolff.fbcrm.rechnung.domain.RechnungRepository;
-import org.mwolff.fbcrm.rechnung.domain.Rechnungszustand;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -52,7 +51,7 @@ public class RechnungDokumentLesenUseCase {
         rechnungen.findById(rechnungId).orElseThrow(RechnungNichtGefunden::new);
     final @Nullable String schluessel = rechnung.pdfSchluessel();
     final @Nullable String nummer = rechnung.nummer();
-    if (rechnung.zustand() != Rechnungszustand.GESTELLT || schluessel == null || nummer == null) {
+    if (!rechnung.zustand().istGestellt() || schluessel == null || nummer == null) {
       throw new RechnungszustandPasstNicht();
     }
     final byte[] inhalt = dokumente.lies(schluessel);

@@ -75,6 +75,27 @@ class RechnungDokumentLesenUseCaseTest {
   }
 
   @Test
+  void lese_aBezahlteRechnung_thenItStillCarriesItsDokument() throws IOException {
+    // Given — eine bezahlte Rechnung ist weiterhin gestellt und verliert ihr Dokument nicht
+    // (Issue #253).
+    when(rechnungen.findById(RECHNUNG))
+        .thenReturn(
+            Optional.of(
+                gestellteRechnung()
+                    .mitZustand(Rechnungszustand.BEZAHLT, Rechnungsdoppel.ANGELEGT)));
+    when(dokumente.lies(SCHLUESSEL)).thenReturn(INHALT.clone());
+
+    // When
+    final Rechnungsdokument dokument = useCase.lese(RECHNUNG);
+
+    // Then
+    assertThat(dokument.nummer()).isEqualTo(NUMMER);
+    try (InputStream strom = dokument.inhalt()) {
+      assertThat(strom.readAllBytes()).isEqualTo(INHALT);
+    }
+  }
+
+  @Test
   void lese_withAnUnknownRechnung_thenNotFound() {
     // Given
     when(rechnungen.findById(RECHNUNG)).thenReturn(Optional.empty());

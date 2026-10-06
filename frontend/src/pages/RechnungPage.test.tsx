@@ -24,6 +24,7 @@ const WEG = 'GET /api/rechnungen/4';
 const WEG_AENDERN = 'PUT /api/rechnungen/4';
 const WEG_LOESCHEN = 'DELETE /api/rechnungen/4';
 const WEG_STELLEN = 'POST /api/rechnungen/4/stellen';
+const WEG_ZUSTAND = 'PUT /api/rechnungen/4/zustand';
 
 /** Eine Position mit 160 angebotenen Stunden zu 120,00, noch nichts abgerechnet. */
 const ZEILE_STUNDEN = {
@@ -85,6 +86,10 @@ const GESTELLT = {
   nummer: '0001-2026',
   zahlungszielTage: 14,
 };
+
+/** Dieselbe Rechnung, bezahlt beziehungsweise abgeschrieben (Issue #253). */
+const BEZAHLT = { ...GESTELLT, zustand: 'BEZAHLT' };
+const ABGESCHRIEBEN = { ...GESTELLT, zustand: 'ABGESCHRIEBEN' };
 
 /** Die Adresse — daran haengt, ob das Loeschen zur Liste gefuehrt hat. */
 function Adresse() {
@@ -835,5 +840,143 @@ describe('RechnungPage — die gestellte Rechnung (Kriterien 14, 15 und 24)', ()
 
     expect(stammdaten).toHaveTextContent('nicht angegeben');
     expect(stammdaten).toHaveTextContent('nicht festgelegt');
+  });
+});
+
+describe('RechnungPage — der Ausgang der Forderung (Issue #253)', () => {
+  /** Die Tasten der Kopfkarte in ihrer Reihenfolge. */
+  function aktionen(): readonly (string | null)[] {
+    return within(screen.getByTestId('rechnung-aktionen'))
+      .getAllByRole('button')
+      .map((taste) => taste.textContent);
+  }
+
+  it('bietet an der gestellten Rechnung „Als bezahlt markieren" und „Abschreiben"', async () => {
+    fetchNachPfad({ [WEG]: json(200, GESTELLT) });
+
+    renderSeite();
+    await screen.findByRole('table', { name: 'Positionen' });
+
+    expect(aktionen()).toEqual(['Als bezahlt markieren', 'Abschreiben']);
+    expect(screen.queryByRole('button', { name: 'Zurück auf gestellt' })).not.toBeInTheDocument();
+  });
+
+  it('setzt sie ohne Rueckfrage auf bezahlt und zeigt danach den neuen Zustand', async () => {
+    const fetchMock = fetchNachPfad({ [WEG]: json(200, GESTELLT), [WEG_ZUSTAND]: json(200, BEZAHLT) });
+    const nutzer = userEvent.setup();
+
+    renderSeite();
+    await screen.findByRole('table', { name: 'Positionen' });
+    await nutzer.click(screen.getByRole('button', { name: 'Als bezahlt markieren' }));
+
+    expect(await screen.findByText('Bezahlt')).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/rechnungen/4/zustand',
+      expect.objectContaining({ method: 'PUT', body: JSON.stringify({ zustand: 'BEZAHLT' }) }),
+    );
+  });
+
+  it('fragt vor dem Abschreiben nach und schickt erst nach der Bestaetigung', async () => {
+    const fetchMock = fetchNachPfad({
+      [WEG]: json(200, GESTELLT),
+      [WEG_ZUSTAND]: json(200, ABGESCHRIEBEN),
+    });
+    const nutzer = userEvent.setup();
+
+    renderSeite();
+    await screen.findByRole('table', { name: 'Positionen' });
+    await nutzer.click(screen.getByRole('button', { name: 'Abschreiben' }));
+    const frage = await screen.findByRole('dialog');
+
+    // Solange die Rueckfrage offen ist, ging nichts hinaus.
+    expect(fetchMock).not.toHaveBeenCalledWith('/api/rechnungen/4/zustand', expect.anything());
+
+    await nutzer.click(within(frage).getByRole('button', { name: 'Abschreiben' }));
+
+    expect(await screen.findByText('Abgeschrieben')).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/rechnungen/4/zustand',
+      expect.objectContaining({ body: JSON.stringify({ zustand: 'ABGESCHRIEBEN' }) }),
+    );
+  });
+
+  it('schickt nichts, wenn die Rueckfrage vor dem Abschreiben abgebrochen wird', async () => {
+    const fetchMock = fetchNachPfad({ [WEG]: json(200, GESTELLT) });
+    const nutzer = userEvent.setup();
+
+    renderSeite();
+    await screen.findByRole('table', { name: 'Positionen' });
+    await nutzer.click(screen.getByRole('button', { name: 'Abschreiben' }));
+    const frage = await screen.findByRole('dialog');
+    await nutzer.click(within(frage).getByRole('button', { name: 'Abbrechen' }));
+
+    expect(fetchMock).not.toHaveBeenCalledWith('/api/rechnungen/4/zustand', expect.anything());
+  });
+
+  it.each([
+    ['BEZAHLT', BEZAHLT],
+    ['ABGESCHRIEBEN', ABGESCHRIEBEN],
+  ])('bietet an einer %s-Rechnung „Zurück auf gestellt"', async (_zustand, antwort) => {
+    const fetchMock = fetchNachPfad({ [WEG]: json(200, antwort), [WEG_ZUSTAND]: json(200, GESTELLT) });
+    const nutzer = userEvent.setup();
+
+    renderSeite();
+    await screen.findByRole('table', { name: 'Positionen' });
+
+    expect(aktionen()).toEqual(['Zurück auf gestellt']);
+
+    await nutzer.click(screen.getByRole('button', { name: 'Zurück auf gestellt' }));
+
+    expect(await screen.findByText('Gestellt')).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/rechnungen/4/zustand',
+      expect.objectContaining({ body: JSON.stringify({ zustand: 'GESTELLT' }) }),
+    );
+  });
+
+  it('zeigt die Leseansicht samt Download auch an einer bezahlten Rechnung', async () => {
+    fetchNachPfad({ [WEG]: json(200, BEZAHLT) });
+
+    renderSeite();
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Rechnung 0001-2026' }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Herunterladen' })).toHaveAttribute(
+      'href',
+      '/api/rechnungen/4/dokument',
+    );
+    expect(screen.queryAllByRole('textbox')).toEqual([]);
+  });
+
+  it('zeigt einen abgewiesenen Uebergang als Meldung und bleibt stehen', async () => {
+    fetchNachPfad({
+      [WEG]: json(200, BEZAHLT),
+      [WEG_ZUSTAND]: problem(409, 'Der Zustand der Rechnung laesst diesen Schritt nicht zu.'),
+    });
+    const nutzer = userEvent.setup();
+
+    renderSeite();
+    await screen.findByRole('table', { name: 'Positionen' });
+    await nutzer.click(screen.getByRole('button', { name: 'Zurück auf gestellt' }));
+
+    expect(
+      await screen.findByText('Der Zustand der Rechnung laesst diesen Schritt nicht zu.'),
+    ).toBeInTheDocument();
+    // Die Seite steht weiter, der Zustand ist unveraendert.
+    expect(screen.getByText('Bezahlt')).toBeInTheDocument();
+  });
+
+  it('meldet einen Ausfall beim Umstellen mit eigenem Satz', async () => {
+    fetchNachPfad({ [WEG]: json(200, GESTELLT), [WEG_ZUSTAND]: () => Promise.reject(new Error('weg')) });
+    const nutzer = userEvent.setup();
+
+    renderSeite();
+    await screen.findByRole('table', { name: 'Positionen' });
+    await nutzer.click(screen.getByRole('button', { name: 'Als bezahlt markieren' }));
+
+    expect(
+      await screen.findByText('Der Zustand wurde nicht geändert. Bitte später erneut versuchen.'),
+    ).toBeInTheDocument();
   });
 });

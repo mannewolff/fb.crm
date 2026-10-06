@@ -12,6 +12,8 @@ import org.springframework.beans.TypeMismatchException;
 import org.springframework.core.MethodParameter;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
+import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.mock.http.MockHttpInputMessage;
 import org.springframework.validation.BeanPropertyBindingResult;
 import org.springframework.validation.BindingResult;
 import org.springframework.validation.FieldError;
@@ -118,6 +120,22 @@ class GlobalExceptionHandlerTest {
     // Then
     assertThat(problem.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST.value());
     assertThat(problem.getDetail()).isEqualTo(GlobalExceptionHandler.UNGUELTIGER_PARAMETER);
+  }
+
+  @Test
+  void handleUnreadableBody_thenAnswers400WithoutEchoingJacksonsMessage() {
+    // Given — fehlerhaftes JSON oder ein Wert, der nicht in sein Feld passt (Issue #253).
+    final HttpMessageNotReadableException exception =
+        new HttpMessageNotReadableException(
+            "JSON parse error: not one of the values accepted for Enum class",
+            new MockHttpInputMessage(new byte[0]));
+
+    // When
+    final ProblemDetail problem = handler.handleUnreadableBody(exception);
+
+    // Then — 400 und nicht 500, und die Meldung von Jackson bleibt drinnen.
+    assertThat(problem.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST.value());
+    assertThat(problem.getDetail()).isEqualTo(GlobalExceptionHandler.UNLESBARER_RUMPF);
   }
 
   @Test

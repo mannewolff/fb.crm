@@ -13,6 +13,7 @@ import org.springframework.beans.TypeMismatchException;
 import org.springframework.core.annotation.AnnotatedElementUtils;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.ErrorResponse;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -40,6 +41,9 @@ public class GlobalExceptionHandler {
 
   /** Antworttext, wenn ein Parameter der Anfrage sich nicht in seinen Typ wandeln laesst. */
   public static final String UNGUELTIGER_PARAMETER = "Ein Parameter der Anfrage ist ungueltig.";
+
+  /** Antworttext, wenn der Rumpf der Anfrage sich nicht lesen laesst. */
+  public static final String UNLESBARER_RUMPF = "Der Rumpf der Anfrage ist ungueltig.";
 
   private static final Logger LOG = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
@@ -95,6 +99,25 @@ public class GlobalExceptionHandler {
   @ExceptionHandler(TypeMismatchException.class)
   public ProblemDetail handleTypeMismatch(final TypeMismatchException exception) {
     return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, UNGUELTIGER_PARAMETER);
+  }
+
+  /**
+   * Der Rumpf einer Anfrage laesst sich nicht lesen — fehlerhaftes JSON oder ein Wert, der nicht in
+   * sein Feld passt, etwa ein unbekannter Zustand in {@code RechnungZustandRequest} (Issue #253).
+   *
+   * <p>Das Gegenstueck zu {@link #handleTypeMismatch} fuer den Rumpf statt fuer die Parameter, und
+   * aus demselben Grund: Das ist eine fehlerhafte Anfrage (400) und kein Serverfehler. Ohne diesen
+   * Zweig fiele die Ausnahme in {@link #handleUnexpected} und kaeme als 500 zurueck — anders als
+   * bei {@code TypeMismatchException} traegt {@code HttpMessageNotReadableException} keine {@code
+   * ErrorResponse}, und die Lage sieht darum von dort aus unerwartet aus.
+   *
+   * <p>Die Meldung von Jackson geht <b>nicht</b> in die Antwort: Sie nennt Klassennamen und den
+   * eingereichten Wert und sagt dem Aufrufer nichts, was er nicht selbst geschickt hat
+   * (CLAUDE-security.md).
+   */
+  @ExceptionHandler(HttpMessageNotReadableException.class)
+  public ProblemDetail handleUnreadableBody(final HttpMessageNotReadableException exception) {
+    return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, UNLESBARER_RUMPF);
   }
 
   /**

@@ -21,6 +21,7 @@ import org.mwolff.fbcrm.rechnung.domain.Nummernmuster;
 import org.mwolff.fbcrm.rechnung.domain.RechnungRepository;
 import org.mwolff.fbcrm.rechnung.domain.Rechnungseinstellungen;
 import org.mwolff.fbcrm.rechnung.domain.RechnungseinstellungenRepository;
+import org.mwolff.fbcrm.rechnung.domain.Rechnungszustand;
 
 /**
  * Was die Rechnung anderen Modulen ueber ihre gestellten Rechnungen sagt (Plan #208, E5).
@@ -28,7 +29,8 @@ import org.mwolff.fbcrm.rechnung.domain.RechnungseinstellungenRepository;
  * <p>Gegenstand sind zwei Auskuenfte aus <b>einem</b> Durchlauf: die Monatsabrechnung aus Netto,
  * Brutto und Anzahl der im Monat gestellten Rechnungen (#206, Kriterium 7) und die abgerechneten
  * Mengen je Angebotsposition ueber alle Monate (Kriterium 5). Ein Entwurf zaehlt in keine von
- * beiden (Kriterium 6 der fachlichen Quelle, Antwort 6).
+ * beiden (Kriterium 6 der fachlichen Quelle, Antwort 6) — eine <b>bezahlte oder abgeschriebene</b>
+ * dagegen in beide: Sie ist draussen, und ihr Ausgang aendert daran nichts (Issue #253).
  *
  * <p>Ueber den Monat entscheidet allein das Rechnungsdatum und nicht der Zeitpunkt des Stellens
  * (Antwort 4), und Brutto entsteht je Rechnung mit ihrem festgeschriebenen Satz — auf denselben
@@ -308,5 +310,40 @@ class RechnungsauskunftTest {
     assertThat(gestellte.mengenJePosition()).hasSize(1);
     assertThatThrownBy(() -> gestellte.mengenJePosition().clear())
         .isInstanceOf(UnsupportedOperationException.class);
+  }
+
+  @Test
+  void gestellte_withABezahlteAndAnAbgeschriebeneRechnung_thenBothStillCount() {
+    // Given — eine bezahlte und eine abgeschriebene Rechnung, beide im Monat (Issue #253).
+    gegebenerAktuellerSatz("19.00");
+    when(rechnungen.findAlle())
+        .thenReturn(
+            List.of(
+                Rechnungsdoppel.gestellt(
+                        1L,
+                        Rechnungsdoppel.ANGEBOT,
+                        "R26-0001",
+                        List.of(Rechnungsdoppel.beratung("80.00")),
+                        LETZTER_SEPTEMBER)
+                    .mitZustand(Rechnungszustand.BEZAHLT, Rechnungsdoppel.ANGELEGT),
+                Rechnungsdoppel.gestellt(
+                        2L,
+                        Rechnungsdoppel.ANGEBOT,
+                        "R26-0002",
+                        List.of(Rechnungsdoppel.pauschale("1")),
+                        ERSTER_SEPTEMBER)
+                    .mitZustand(Rechnungszustand.ABGESCHRIEBEN, Rechnungsdoppel.ANGELEGT)));
+
+    // When
+    final Gestellte gestellte = auskunft.gestellte(SEPTEMBER);
+
+    // Then — beide zaehlen in der Monatsabrechnung und behalten ihre Positionsmengen: 8.000,00 aus
+    // 80 Stunden zu 100,00 und 1.200,00 aus der Pauschale.
+    assertThat(gestellte.imMonat().netto()).isEqualByComparingTo("9200.00");
+    assertThat(gestellte.imMonat().anzahl()).isEqualTo(2);
+    assertThat(gestellte.mengenJePosition())
+        .containsOnly(
+            Map.entry(Long.valueOf(Rechnungsdoppel.BERATUNG_ID), new BigDecimal("80.00")),
+            Map.entry(Long.valueOf(Rechnungsdoppel.PAUSCHALE_ID), new BigDecimal("1")));
   }
 }

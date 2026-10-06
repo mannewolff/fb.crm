@@ -165,6 +165,23 @@ describe('RechnungenPage — die Liste (#160, Kriterien 1, 2, 24)', () => {
     expect(download).toHaveAttribute('download');
   });
 
+  it.each([
+    ['BEZAHLT', 'Bezahlt'],
+    ['ABGESCHRIEBEN', 'Abgeschrieben'],
+  ])('zeigt zu %s den Chip „%s" und weiter das Dokument', async (zustand, wort) => {
+    fetchNachPfad({ [WEG_LISTE]: json(200, { rechnungen: [{ ...GESTELLT, zustand }] }) });
+
+    renderSeite();
+
+    const zeile = within((await screen.findAllByRole('row'))[1]);
+    expect(zeile.getByText(wort)).toBeInTheDocument();
+    // Eine bezahlte Rechnung behaelt ihr Dokument (Issue #253).
+    expect(zeile.getByRole('link', { name: 'Herunterladen' })).toHaveAttribute(
+      'href',
+      '/api/rechnungen/4/dokument',
+    );
+  });
+
   it('stellt den Entwurf ohne Nummer und ohne „Herunterladen" dar', async () => {
     fetchNachPfad({ [WEG_LISTE]: json(200, { rechnungen: [ENTWURF] }) });
 

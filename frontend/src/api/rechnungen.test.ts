@@ -14,6 +14,7 @@ import {
   rechnungLoeschen,
   rechnungStellen,
   rechnungenUebersicht,
+  setzeRechnungszustand,
 } from './rechnungen';
 import { fetchNachPfad, json, leer } from '../test/fetchNachPfad';
 
@@ -250,7 +251,7 @@ describe('parseRechnung', () => {
     ['ohne Rechnungsdatum', { ...ENTWURF, rechnungDatum: null }],
     ['Leistungszeitraum als Zahl', { ...ENTWURF, leistungszeitraum: 10 }],
     // Ein Zustand, den die Oberflaeche nicht kennt, ist ein Formfehler und kein Ersatzwert.
-    ['unbekannter Zustand', { ...ENTWURF, zustand: 'BEZAHLT' }],
+    ['unbekannter Zustand', { ...ENTWURF, zustand: 'MAHNUNG' }],
     ['ohne Zustand', { ...ENTWURF, zustand: undefined }],
     ['Nummer als Zahl', { ...GESTELLT, nummer: 1 }],
     ['Steuersatz als Text', { ...ENTWURF, steuersatz: '19' }],
@@ -307,7 +308,7 @@ describe('parseRechnungenUebersicht', () => {
     ['Zeile ohne Firmenname', { rechnungen: [{ ...UEBERSICHT_ZEILE, firmaName: 5 }] }],
     ['Zeile ohne Rechnungsdatum', { rechnungen: [{ ...UEBERSICHT_ZEILE, rechnungDatum: 7 }] }],
     ['Zeile ohne Brutto', { rechnungen: [{ ...UEBERSICHT_ZEILE, brutto: null }] }],
-    ['Zeile mit unbekanntem Zustand', { rechnungen: [{ ...UEBERSICHT_ZEILE, zustand: 'BEZAHLT' }] }],
+    ['Zeile mit unbekanntem Zustand', { rechnungen: [{ ...UEBERSICHT_ZEILE, zustand: 'MAHNUNG' }] }],
   ])('weist eine Antwort ab: %s', (_fall, rumpf) => {
     expect(() => parseRechnungenUebersicht(rumpf)).toThrow(TypeError);
   });
@@ -378,7 +379,7 @@ describe('parseAngebotsabrechnung', () => {
     ['Rechnung mit Nummer als Zahl', { positionen: [], angefallen: 0, rechnungen: [{ ...STAND_RECHNUNG, nummer: 1 }] }],
     ['Rechnung ohne Datum', { positionen: [], angefallen: 0, rechnungen: [{ ...STAND_RECHNUNG, rechnungDatum: null }] }],
     ['Rechnung ohne Brutto', { positionen: [], angefallen: 0, rechnungen: [{ ...STAND_RECHNUNG, brutto: undefined }] }],
-    ['Rechnung mit unbekanntem Zustand', { positionen: [], angefallen: 0, rechnungen: [{ ...STAND_RECHNUNG, zustand: 'BEZAHLT' }] }],
+    ['Rechnung mit unbekanntem Zustand', { positionen: [], angefallen: 0, rechnungen: [{ ...STAND_RECHNUNG, zustand: 'MAHNUNG' }] }],
   ])('weist eine Antwort ab: %s', (_fall, rumpf) => {
     expect(() => parseAngebotsabrechnung(rumpf)).toThrow(TypeError);
   });
@@ -475,6 +476,31 @@ describe('die Wege', () => {
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/rechnungen/4/stellen',
       expect.objectContaining({ method: 'POST' }),
+    );
+  });
+
+  it('stellt die Rechnung auf bezahlt und nimmt den neuen Zustand aus der Antwort', async () => {
+    const fetchMock = fetchNachPfad({
+      'PUT /api/rechnungen/4/zustand': json(200, { ...GESTELLT, zustand: 'BEZAHLT' }),
+    });
+
+    expect(await setzeRechnungszustand(4, 'BEZAHLT')).toEqual({
+      ...GESTELLT_VERENGT,
+      zustand: 'BEZAHLT',
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/rechnungen/4/zustand',
+      expect.objectContaining({ method: 'PUT', body: JSON.stringify({ zustand: 'BEZAHLT' }) }),
+    );
+  });
+
+  it('stellt die Rechnung zurueck auf gestellt', async () => {
+    const fetchMock = fetchNachPfad({ 'PUT /api/rechnungen/4/zustand': json(200, GESTELLT) });
+
+    expect(await setzeRechnungszustand(4, 'GESTELLT')).toEqual(GESTELLT_VERENGT);
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/rechnungen/4/zustand',
+      expect.objectContaining({ body: JSON.stringify({ zustand: 'GESTELLT' }) }),
     );
   });
 

@@ -12,7 +12,6 @@ import org.mwolff.fbcrm.rechnung.domain.Rechnung;
 import org.mwolff.fbcrm.rechnung.domain.RechnungRepository;
 import org.mwolff.fbcrm.rechnung.domain.RechnungseinstellungenRepository;
 import org.mwolff.fbcrm.rechnung.domain.Rechnungsposition;
-import org.mwolff.fbcrm.rechnung.domain.Rechnungszustand;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -28,7 +27,11 @@ import org.springframework.transaction.annotation.Transactional;
  * <p><b>Nur gestellte Rechnungen</b> — anders als {@link Abrechnungsstand}, der Entwuerfe
  * mitzaehlt, damit ein zweiter Entwurf dieselbe Menge nicht noch einmal als offen zeigt (#160,
  * Kriterium 6). Hier geht es um das Gegenteil: Was abgerechnet <b>ist</b>, ist das, was draussen
- * ist (#206, Antwort 6).
+ * ist (#206, Antwort 6). Gefragt wird dafuer {@link
+ * org.mwolff.fbcrm.rechnung.domain.Rechnungszustand#istGestellt()}: Eine bezahlte oder
+ * abgeschriebene Rechnung ist draussen und bleibt in beiden Antworten (Issue #253) — sie aus der
+ * Monatsabrechnung fallen zu lassen hiesse, den Umsatz des Monats mit dem Zahlungseingang zu
+ * verwechseln, und ihre Mengen freizugeben zeigte abgerechnete Leistung wieder als offen.
  *
  * <p><b>Ein Durchlauf, zwei Antworten.</b> {@link #gestellte(YearMonth)} liest {@link
  * RechnungRepository#findAlle()} genau einmal und rechnet beides daraus; zwei Methoden waeren zwei
@@ -68,7 +71,7 @@ public class Rechnungsauskunft {
     final List<BigDecimal> bruttoWerte = new ArrayList<>();
     final Map<Long, BigDecimal> mengen = new HashMap<>();
     for (final Rechnung rechnung : bestand.findAlle()) {
-      if (rechnung.zustand() != Rechnungszustand.GESTELLT) {
+      if (!rechnung.zustand().istGestellt()) {
         continue;
       }
       if (monat.equals(YearMonth.from(rechnung.rechnungDatum()))) {

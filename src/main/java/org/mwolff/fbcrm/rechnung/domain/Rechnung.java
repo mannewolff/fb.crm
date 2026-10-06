@@ -24,6 +24,12 @@ import org.mwolff.fbcrm.rechnung.application.RechnungszustandPasstNicht;
  * hinein statt aus dem Feld zu kommen: Ein Entwurf hat noch keinen, und Liste und Maske rechnen ihn
  * dort mit dem Satz der aktuellen Einstellungen.
  *
+ * <p>Nach dem Stellen kommt der <b>Ausgang der Forderung</b> dazu (Issue #253): {@link
+ * #mitZustand(Rechnungszustand, Instant)} fuehrt von {@code GESTELLT} nach {@code BEZAHLT} oder
+ * {@code ABGESCHRIEBEN} und von beiden zurueck. Festgeschrieben bleibt dabei alles — der Zustand
+ * sagt nur, wie es ausgegangen ist, und {@code BEZAHLT} wie {@code ABGESCHRIEBEN} sind weiterhin
+ * gestellte Rechnungen ({@link Rechnungszustand#istGestellt()}).
+ *
  * <p>Unveraenderlich: Jeder Uebergang liefert eine neue Rechnung. Der Zeitpunkt kommt von aussen,
  * weil die Domaene keine Uhr kennt (CLAUDE-java.md §6.2). Ein Schritt, der nicht zum Zustand passt,
  * wirft {@link RechnungszustandPasstNicht} — hier und nicht erst im Anwendungsfall, damit kein Weg
@@ -31,7 +37,7 @@ import org.mwolff.fbcrm.rechnung.application.RechnungszustandPasstNicht;
  *
  * @param id technische Kennung — {@code null}, solange die Rechnung nicht gespeichert ist
  * @param angebotId Kennung des Angebots, das abgerechnet wird
- * @param zustand Entwurf oder gestellt
+ * @param zustand Entwurf, gestellt, bezahlt oder abgeschrieben
  * @param rechnungDatum Datum der Rechnung; im Entwurf frei aenderbar
  * @param leistungszeitraum Zeitraum der Leistung als Text, oder {@code null}
  * @param positionen die Positionen in ihrer Reihenfolge; die Liste ist die Reihenfolge (E24)
@@ -182,7 +188,7 @@ public record Rechnung(
    * @throws RechnungszustandPasstNicht wenn die Rechnung noch Entwurf ist
    */
   public Rechnung mitDokument(final String schluessel) {
-    if (zustand != Rechnungszustand.GESTELLT) {
+    if (!zustand.istGestellt()) {
       throw new RechnungszustandPasstNicht();
     }
     return new Rechnung(
@@ -201,6 +207,53 @@ public record Rechnung(
         absender,
         createdAt,
         updatedAt);
+  }
+
+  /**
+   * Die gestellte Rechnung mit dem Ausgang ihrer Forderung (Issue #253).
+   *
+   * <p><b>Nichts Festgeschriebenes aendert sich dabei</b>: Nummer, Steuersatz, Zahlungsziel, der
+   * Zeitpunkt des Stellens, das Dokument, die beiden Kopien und die Positionen bleiben, wie sie
+   * sind — der neue Zustand sagt allein, wie die Forderung ausgegangen ist. Nur {@link
+   * #updatedAt()} rueckt vor.
+   *
+   * @param ziel der neue Zustand
+   * @param jetzt Zeitpunkt der Umstellung
+   * @throws RechnungszustandPasstNicht wenn der Uebergang keine der drei Kanten ist
+   */
+  public Rechnung mitZustand(final Rechnungszustand ziel, final Instant jetzt) {
+    if (!erlaubt(ziel)) {
+      throw new RechnungszustandPasstNicht();
+    }
+    return new Rechnung(
+        id,
+        angebotId,
+        ziel,
+        rechnungDatum,
+        leistungszeitraum,
+        positionen,
+        nummer,
+        steuersatz,
+        zahlungszielTage,
+        gestelltAm,
+        pdfSchluessel,
+        empfaenger,
+        absender,
+        createdAt,
+        jetzt);
+  }
+
+  /*
+   * Drei Kanten und keine vierte: von GESTELLT zu einem der beiden Ausgaenge und von jedem Ausgang
+   * zurueck auf GESTELLT. Beide Seiten muessen gestellt sein — der Entwurf liegt davor, und ihn
+   * stellt `gestellt` mit Nummer und Kopien —, und genau eine der beiden muss GESTELLT sein. Diese
+   * zweite Bedingung schliesst zugleich den Stillstand aus und den direkten Weg zwischen den
+   * Ausgaengen: Ein Wechsel von bezahlt auf abgeschrieben fuehrt ueber „gestellt".
+   */
+  private boolean erlaubt(final Rechnungszustand ziel) {
+    return zustand.istGestellt()
+        && ziel.istGestellt()
+        && (zustand == Rechnungszustand.GESTELLT) != (ziel == Rechnungszustand.GESTELLT);
   }
 
   private void nurEntwurf() {

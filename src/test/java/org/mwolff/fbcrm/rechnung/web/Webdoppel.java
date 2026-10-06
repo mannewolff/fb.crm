@@ -154,6 +154,11 @@ final class Webdoppel {
         ANGELEGT);
   }
 
+  /** Dieselbe Rechnung, bezahlt — weiterhin gestellt, nur mit anderem Ausgang (Issue #253). */
+  static Rechnung bezahlt(final String nummer, final String menge) {
+    return gestelltMitKopien(nummer, menge).mitZustand(Rechnungszustand.BEZAHLT, ANGELEGT);
+  }
+
   /** Dieselbe gestellte Rechnung, festgeschrieben mit den Kopien von Empfaenger und Absender. */
   static Rechnung gestelltMitKopien(final String nummer, final String menge) {
     return entwurf(menge)
