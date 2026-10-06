@@ -1,6 +1,7 @@
 package org.mwolff.fbcrm.arbeitszeit.application;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.Map;
 import java.util.Set;
@@ -31,9 +32,11 @@ import org.springframework.transaction.annotation.Transactional;
  * angefragte Kennung.
  *
  * <p><b>Ueber alle Angebote fragt niemand nach einem Angebot.</b> Die Startseite (#206) will die
- * Stunden des ganzen Bestands, nicht die eines Belegs; {@link #alleAngefallen()} und {@link
- * #alleImMonat(YearMonth)} reichen darum die Antwort des Bestands durch, ohne Angebotskennung und
- * ohne Positionsmenge. Was sie zurueckgeben, nennt nur Positionen mit Eintrag.
+ * Stunden des ganzen Bestands, nicht die eines Belegs — insgesamt und in einem Zeitraum; {@link
+ * #alleAngefallen()} und {@link #alleImZeitraum(LocalDate, LocalDate)} reichen darum die Antwort
+ * des Bestands durch, ohne Angebotskennung und ohne Positionsmenge. Was sie zurueckgeben, nennt nur
+ * Positionen mit Eintrag. Ebenso {@link #monateMitEintragImZeitraum(LocalDate, LocalDate)}, das
+ * keine Stunden nennt, sondern die Monate, in denen ueberhaupt Zeit erfasst ist.
  *
  * <p><b>Ein Zug in die Angebote und einer in die Zeiten</b>, nie einer je Position: Der Bestand
  * nimmt alle Kennungen auf einmal entgegen. Die Kennung des Angebots und nicht die Liste seiner
@@ -98,17 +101,31 @@ public class Arbeitszeitauskunft {
   }
 
   /**
-   * Dasselbe, aber nur fuer einen Monat (Issue #211) — die Monatszeile der Startseite.
+   * Dasselbe, aber nur fuer einen Zeitraum, beide Grenzen eingeschlossen (Issue #211; Plan #274,
+   * E6) — die Monats- oder Jahreszeile der Startseite.
    *
    * <p>Auch hier wird keine Angebotskennung gefragt, aus demselben Grund wie bei {@link
    * #alleAngefallen()}.
    *
-   * @param monat der Monat, dessen Eintraege zaehlen
-   * @return je Position mit mindestens einem Eintrag in diesem Monat ihre Stunden; eine Position
-   *     ohne Eintrag fehlt, anders als bei {@link #imMonat(long, YearMonth)}
+   * @param von erster Tag des Zeitraums
+   * @param bis letzter Tag des Zeitraums
+   * @return je Position mit mindestens einem Eintrag im Zeitraum ihre Stunden; eine Position ohne
+   *     Eintrag fehlt, anders als bei {@link #imMonat(long, YearMonth)}
    */
-  public Map<Long, BigDecimal> alleImMonat(final YearMonth monat) {
-    return zeiten.alleStundenJePositionImMonat(monat);
+  public Map<Long, BigDecimal> alleImZeitraum(final LocalDate von, final LocalDate bis) {
+    return zeiten.alleStundenJePositionImZeitraum(von, bis);
+  }
+
+  /**
+   * Die Monate eines Zeitraums, in denen ueber alle Angebote mindestens ein Zeiteintrag liegt,
+   * beide Grenzen eingeschlossen (Issue #273, Kriterium 2) — die Monatswahl der Startseite.
+   *
+   * @param von erster Tag des Zeitraums
+   * @param bis letzter Tag des Zeitraums
+   * @return jeder Monat mit mindestens einem Eintrag im Zeitraum, je einmal
+   */
+  public Set<YearMonth> monateMitEintragImZeitraum(final LocalDate von, final LocalDate bis) {
+    return zeiten.monateMitEintragImZeitraum(von, bis);
   }
 
   private Set<Long> positionen(final long angebotId) {

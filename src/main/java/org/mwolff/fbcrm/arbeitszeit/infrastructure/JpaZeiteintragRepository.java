@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 import org.mwolff.fbcrm.arbeitszeit.domain.Zeiteintrag;
 import org.mwolff.fbcrm.arbeitszeit.domain.ZeiteintragRepository;
 import org.springframework.stereotype.Repository;
@@ -35,13 +36,16 @@ import org.springframework.stereotype.Repository;
  * mit leerer Vorbelegung: Es gibt keine angefragte Position, also steht am Ende genau die darin, zu
  * der eine Zeile gefunden wurde. Sie brauchen auch keine eigene Abfrage — die Zeilen liefern {@code
  * findAll} beziehungsweise das vorhandene {@code findImZeitraum}, das schon die Monatsliste der
- * Ansicht bedient.
+ * Ansicht bedient; dessen Grenzen gehen unveraendert durch.
+ *
+ * <p>Die Monate mit Eintrag (Plan #274, E6) lesen dieselben Zeilen ueber {@code findImZeitraum} und
+ * behalten von jeder nur ihren Monat — auch dafuer keine eigene Abfrage.
  */
 /*
- * Acht Methoden des Ports und drei private Helfer ergeben elf. Sie weiter aufzuteilen verschoebe
- * die Zahl, ohne etwas zu klaeren: Die Breite kommt vom Port — vier Summen in zwei Paaren —, und
- * der Adapter ist die eine Stelle, an der Zeiteintrag und Zeile ineinander uebergehen. Dasselbe
- * Vorgehen wie bei {@code JpaRechnungRepository}.
+ * Neun Methoden des Ports und drei private Helfer ergeben zwoelf. Sie weiter aufzuteilen
+ * verschoebe die Zahl, ohne etwas zu klaeren: Die Breite kommt vom Port — vier Summen in zwei
+ * Paaren und die Monate mit Eintrag —, und der Adapter ist die eine Stelle, an der Zeiteintrag und
+ * Zeile ineinander uebergehen. Dasselbe Vorgehen wie bei {@code JpaRechnungRepository}.
  */
 @SuppressWarnings("PMD.TooManyMethods")
 @Repository
@@ -96,8 +100,16 @@ class JpaZeiteintragRepository implements ZeiteintragRepository {
   }
 
   @Override
-  public Map<Long, BigDecimal> alleStundenJePositionImMonat(final YearMonth monat) {
-    return stundenJePosition(Set.of(), zeilen.findImZeitraum(monat.atDay(1), monat.atEndOfMonth()));
+  public Map<Long, BigDecimal> alleStundenJePositionImZeitraum(
+      final LocalDate von, final LocalDate bis) {
+    return stundenJePosition(Set.of(), zeilen.findImZeitraum(von, bis));
+  }
+
+  @Override
+  public Set<YearMonth> monateMitEintragImZeitraum(final LocalDate von, final LocalDate bis) {
+    return zeilen.findImZeitraum(von, bis).stream()
+        .map(zeile -> YearMonth.from(zeile.getTag()))
+        .collect(Collectors.toSet());
   }
 
   /*

@@ -6,6 +6,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.Map;
 import java.util.Optional;
@@ -35,9 +36,9 @@ import org.mwolff.fbcrm.arbeitszeit.domain.ZeiteintragRepository;
  * <p>Dazu die eine Abweisung: Ein Angebot, das es nicht gibt, fragt im Bestand der Zeiten gar nicht
  * nach.
  *
- * <p>Die beiden Auskuenfte <b>ueber alle Angebote</b> (Issue #211) stehen daneben: Sie reichen die
- * Antwort des Bestands durch und ziehen die Angebote gar nicht erst heran — es gibt keine
- * Positionsmenge zusammenzutragen.
+ * <p>Die Auskuenfte <b>ueber alle Angebote</b> (Issue #211) stehen daneben: Sie reichen die Antwort
+ * des Bestands durch und ziehen die Angebote gar nicht erst heran — es gibt keine Positionsmenge
+ * zusammenzutragen.
  */
 @ExtendWith(MockitoExtension.class)
 class ArbeitszeitauskunftTest {
@@ -136,14 +137,32 @@ class ArbeitszeitauskunftTest {
   }
 
   @Test
-  void alleImMonat_thenAnswersWhatTheBestandSaysWithoutAskingForAnAngebot() {
-    // Given — derselbe Weg, nur auf einen Monat begrenzt.
+  void alleImZeitraum_thenAnswersWhatTheBestandSaysWithoutAskingForAnAngebot() {
+    // Given — derselbe Weg, nur auf einen Zeitraum begrenzt.
     final Map<Long, BigDecimal> gemeldet =
         Map.of(Long.valueOf(Zeitdoppel.KONZEPTION_ID), new BigDecimal("12.00"));
-    when(zeiten.alleStundenJePositionImMonat(NOVEMBER)).thenReturn(gemeldet);
+    when(zeiten.alleStundenJePositionImZeitraum(NOVEMBER.atDay(1), NOVEMBER.atEndOfMonth()))
+        .thenReturn(gemeldet);
 
     // When
-    final Map<Long, BigDecimal> auskunft = auskunft().alleImMonat(NOVEMBER);
+    final Map<Long, BigDecimal> auskunft =
+        auskunft().alleImZeitraum(NOVEMBER.atDay(1), NOVEMBER.atEndOfMonth());
+
+    // Then
+    assertThat(auskunft).isEqualTo(gemeldet);
+    verifyNoInteractions(angebote);
+  }
+
+  @Test
+  void monateMitEintragImZeitraum_thenAnswersWhatTheBestandSaysIncludingBothBounds() {
+    // Given — Eintraege genau auf dem ersten und dem letzten Tag des Jahres.
+    final LocalDate von = LocalDate.of(2026, 1, 1);
+    final LocalDate bis = LocalDate.of(2026, 12, 31);
+    final Set<YearMonth> gemeldet = Set.of(YearMonth.from(von), NOVEMBER, YearMonth.from(bis));
+    when(zeiten.monateMitEintragImZeitraum(von, bis)).thenReturn(gemeldet);
+
+    // When
+    final Set<YearMonth> auskunft = auskunft().monateMitEintragImZeitraum(von, bis);
 
     // Then
     assertThat(auskunft).isEqualTo(gemeldet);

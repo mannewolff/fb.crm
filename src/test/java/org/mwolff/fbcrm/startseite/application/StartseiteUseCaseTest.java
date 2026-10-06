@@ -203,7 +203,7 @@ class StartseiteUseCaseTest {
       final Map<Long, BigDecimal> gestellteMengen) {
     when(uebersicht.angebote(Optional.empty())).thenReturn(angebote);
     when(arbeitszeit.alleAngefallen()).thenReturn(angefallen);
-    when(arbeitszeit.alleImMonat(OKTOBER)).thenReturn(imMonat);
+    when(arbeitszeit.alleImZeitraum(OKTOBER.atDay(1), OKTOBER.atEndOfMonth())).thenReturn(imMonat);
     when(rechnungen.gestellte())
         .thenReturn(new Gestellte(Map.of(OKTOBER, OKTOBER_GESTELLT), gestellteMengen));
   }
@@ -287,7 +287,7 @@ class StartseiteUseCaseTest {
     when(uebersicht.angebote(Optional.empty()))
         .thenReturn(List.of(angebot(1L, Angebotsstatus.BESTELLT, List.of(BERATUNG))));
     when(arbeitszeit.alleAngefallen()).thenReturn(Map.of(BERATUNG_ID, new BigDecimal("20.00")));
-    when(arbeitszeit.alleImMonat(OKTOBER)).thenReturn(Map.of());
+    when(arbeitszeit.alleImZeitraum(OKTOBER.atDay(1), OKTOBER.atEndOfMonth())).thenReturn(Map.of());
     when(rechnungen.gestellte())
         .thenReturn(
             new Gestellte(Map.of(OKTOBER, OKTOBER_GESTELLT), Map.of()),
@@ -394,8 +394,10 @@ class StartseiteUseCaseTest {
     when(uebersicht.angebote(Optional.empty()))
         .thenReturn(List.of(angebot(1L, Angebotsstatus.BESTELLT, List.of(BERATUNG))));
     when(arbeitszeit.alleAngefallen()).thenReturn(Map.of(BERATUNG_ID, new BigDecimal("12.00")));
-    when(arbeitszeit.alleImMonat(OKTOBER)).thenReturn(Map.of(BERATUNG_ID, new BigDecimal("2.00")));
-    when(arbeitszeit.alleImMonat(AUGUST)).thenReturn(Map.of(BERATUNG_ID, new BigDecimal("5.00")));
+    when(arbeitszeit.alleImZeitraum(OKTOBER.atDay(1), OKTOBER.atEndOfMonth()))
+        .thenReturn(Map.of(BERATUNG_ID, new BigDecimal("2.00")));
+    when(arbeitszeit.alleImZeitraum(AUGUST.atDay(1), AUGUST.atEndOfMonth()))
+        .thenReturn(Map.of(BERATUNG_ID, new BigDecimal("5.00")));
     final Map<Long, BigDecimal> gestellteMengen = Map.of(BERATUNG_ID, new BigDecimal("5.00"));
     when(rechnungen.gestellte())
         .thenReturn(
@@ -440,7 +442,7 @@ class StartseiteUseCaseTest {
     // Given — gefragt wird allein der August; der laufende Monat kommt nicht vor.
     when(uebersicht.angebote(Optional.empty())).thenReturn(List.of());
     when(arbeitszeit.alleAngefallen()).thenReturn(Map.of());
-    when(arbeitszeit.alleImMonat(AUGUST)).thenReturn(Map.of());
+    when(arbeitszeit.alleImZeitraum(AUGUST.atDay(1), AUGUST.atEndOfMonth())).thenReturn(Map.of());
     when(rechnungen.gestellte())
         .thenReturn(new Gestellte(Map.of(AUGUST, AUGUST_GESTELLT), Map.of()));
 
@@ -506,7 +508,7 @@ class StartseiteUseCaseTest {
     // Given
     when(uebersicht.angebote(Optional.empty())).thenReturn(List.of());
     when(arbeitszeit.alleAngefallen()).thenReturn(Map.of());
-    when(arbeitszeit.alleImMonat(OKTOBER)).thenReturn(Map.of());
+    when(arbeitszeit.alleImZeitraum(OKTOBER.atDay(1), OKTOBER.atEndOfMonth())).thenReturn(Map.of());
     when(rechnungen.gestellte()).thenReturn(new Gestellte(Map.of(), Map.of()));
 
     // When

@@ -32,11 +32,13 @@ import org.mwolff.fbcrm.arbeitszeit.domain.Zeiteintrag;
  * selbst geprueft ist und nicht nur ihr Zusammenspiel mit der Datenbank ({@code
  * JpaZeiteintragRepositoryIT}). Gegenstand ist vor allem: Die Summen entstehen aus den Minuten der
  * Zeilen und werden erst danach in Stunden umgerechnet (Plan #194, E5), jede angefragte Position
- * steht im Ergebnis — auch die ohne Eintrag —, und der Monat wird zu seinem ersten und letzten Tag.
+ * steht im Ergebnis — auch die ohne Eintrag —, der Monat wird zu seinem ersten und letzten Tag, und
+ * ein Zeitraum geht mit seinen Grenzen unveraendert in die Abfrage.
  *
  * <p>Die beiden Summen <b>ohne</b> Positionsmenge (Issue #211) stehen daneben und zeigen genau den
  * Unterschied: Sie fragen nach nichts und liefern nur die Positionen, zu denen es einen Eintrag
- * gibt — eine Position ohne Zeit fehlt darin, statt mit {@code 0.00} darin zu stehen.
+ * gibt — eine Position ohne Zeit fehlt darin, statt mit {@code 0.00} darin zu stehen. Die Monate
+ * mit Eintrag gehen ueber dieselben Zeilen und liefern statt Stunden nur den Monat jeder Zeile.
  */
 @ExtendWith(MockitoExtension.class)
 class JpaZeiteintragRepositoryTest {
@@ -48,6 +50,8 @@ class JpaZeiteintragRepositoryTest {
   private static final Instant ANGELEGT = Instant.parse("2026-11-12T08:00:00Z");
   private static final Instant GEAENDERT = Instant.parse("2026-11-13T09:15:00Z");
   private static final YearMonth NOVEMBER = YearMonth.of(2026, 11);
+  private static final LocalDate JAHRESANFANG = LocalDate.of(2026, 1, 1);
+  private static final LocalDate JAHRESENDE = LocalDate.of(2026, 12, 31);
 
   /** Zwei Positionen in fester Reihenfolge — damit die gebundene Liste vorhersagbar bleibt. */
   private static final Set<Long> BEIDE_POSITIONEN =
@@ -298,23 +302,23 @@ class JpaZeiteintragRepositoryTest {
   }
 
   @Test
-  void alleStundenJePositionImMonat_thenAsksForTheFirstAndTheLastDayOfTheMonth() {
-    // Given
+  void alleStundenJePositionImZeitraum_thenAsksForExactlyTheGivenBounds() {
+    // Given — ein ganzes Jahr: Der Adapter reicht die Grenzen durch, statt sie zu bilden.
     when(zeilen.findImZeitraum(any(LocalDate.class), any(LocalDate.class))).thenReturn(List.of());
 
     // When
-    repository.alleStundenJePositionImMonat(NOVEMBER);
+    repository.alleStundenJePositionImZeitraum(JAHRESANFANG, JAHRESENDE);
 
     // Then
     verify(zeilen).findImZeitraum(vonTag.capture(), bisTag.capture());
     assertThat(List.of(vonTag.getValue(), bisTag.getValue()))
-        .containsExactly(LocalDate.of(2026, 11, 1), LocalDate.of(2026, 11, 30));
+        .containsExactly(JAHRESANFANG, JAHRESENDE);
   }
 
   @Test
-  void alleStundenJePositionImMonat_thenSumsTheRowsOfThatMonthAcrossPositions() {
+  void alleStundenJePositionImZeitraum_givenAMonth_thenSumsTheRowsOfThatMonthAcrossPositions() {
     // Given
-    when(zeilen.findImZeitraum(LocalDate.of(2026, 11, 1), LocalDate.of(2026, 11, 30)))
+    when(zeilen.findImZeitraum(NOVEMBER.atDay(1), NOVEMBER.atEndOfMonth()))
         .thenReturn(
             List.of(
                 zeile(KONZEPTION, "2026-11-12", "09:00", "17:00"),
@@ -322,7 +326,8 @@ class JpaZeiteintragRepositoryTest {
                 zeile(BERATUNG, "2026-11-13", "09:00", "10:45")));
 
     // When
-    final Map<Long, BigDecimal> november = repository.alleStundenJePositionImMonat(NOVEMBER);
+    final Map<Long, BigDecimal> november =
+        repository.alleStundenJePositionImZeitraum(NOVEMBER.atDay(1), NOVEMBER.atEndOfMonth());
 
     // Then
     assertThat(november.get(KONZEPTION)).isEqualByComparingTo("12.00");
@@ -330,15 +335,81 @@ class JpaZeiteintragRepositoryTest {
   }
 
   @Test
-  void alleStundenJePositionImMonat_givenAMonthWithoutAnyEntry_thenAnEmptyResult() {
-    // Given — keine Position wird vorbelegt, also steht auch keine mit 0,00 darin.
-    when(zeilen.findImZeitraum(LocalDate.of(2026, 11, 1), LocalDate.of(2026, 11, 30)))
-        .thenReturn(List.of());
+  void alleStundenJePositionImZeitraum_givenAYear_thenSumsTheRowsOnBothBoundsAlike() {
+    // Given — dieselbe Summe, nur ueber zwoelf Monate; die Zeilen auf beiden Grenzen zaehlen mit.
+    when(zeilen.findImZeitraum(JAHRESANFANG, JAHRESENDE))
+        .thenReturn(
+            List.of(
+                zeile(KONZEPTION, "2026-01-01", "09:00", "10:00"),
+                zeile(KONZEPTION, "2026-06-15", "09:00", "17:00"),
+                zeile(BERATUNG, "2026-12-31", "09:00", "10:45")));
 
     // When
-    final Map<Long, BigDecimal> november = repository.alleStundenJePositionImMonat(NOVEMBER);
+    final Map<Long, BigDecimal> jahr =
+        repository.alleStundenJePositionImZeitraum(JAHRESANFANG, JAHRESENDE);
+
+    // Then
+    assertThat(jahr.get(KONZEPTION)).isEqualByComparingTo("9.00");
+    assertThat(jahr.get(BERATUNG)).isEqualByComparingTo("1.75");
+  }
+
+  @Test
+  void alleStundenJePositionImZeitraum_givenAPeriodWithoutAnyEntry_thenAnEmptyResult() {
+    // Given — keine Position wird vorbelegt, also steht auch keine mit 0,00 darin.
+    when(zeilen.findImZeitraum(NOVEMBER.atDay(1), NOVEMBER.atEndOfMonth())).thenReturn(List.of());
+
+    // When
+    final Map<Long, BigDecimal> november =
+        repository.alleStundenJePositionImZeitraum(NOVEMBER.atDay(1), NOVEMBER.atEndOfMonth());
 
     // Then
     assertThat(november).isEmpty();
+  }
+
+  @Test
+  void monateMitEintragImZeitraum_thenAsksForExactlyTheGivenBounds() {
+    // Given
+    when(zeilen.findImZeitraum(any(LocalDate.class), any(LocalDate.class))).thenReturn(List.of());
+
+    // When
+    repository.monateMitEintragImZeitraum(JAHRESANFANG, JAHRESENDE);
+
+    // Then
+    verify(zeilen).findImZeitraum(vonTag.capture(), bisTag.capture());
+    assertThat(List.of(vonTag.getValue(), bisTag.getValue()))
+        .containsExactly(JAHRESANFANG, JAHRESENDE);
+  }
+
+  @Test
+  void monateMitEintragImZeitraum_thenNamesEachMonthWithARowOnceAndNoOther() {
+    // Given — zwei Zeilen im Maerz, eine auf dem ersten und eine auf dem letzten Tag des
+    // Zeitraums; Februar und die Monate dazwischen tragen keine.
+    when(zeilen.findImZeitraum(JAHRESANFANG, JAHRESENDE))
+        .thenReturn(
+            List.of(
+                zeile(KONZEPTION, "2026-01-01", "09:00", "10:00"),
+                zeile(KONZEPTION, "2026-03-04", "09:00", "17:00"),
+                zeile(BERATUNG, "2026-03-20", "09:00", "10:45"),
+                zeile(BERATUNG, "2026-12-31", "09:00", "10:00")));
+
+    // When
+    final Set<YearMonth> monate = repository.monateMitEintragImZeitraum(JAHRESANFANG, JAHRESENDE);
+
+    // Then
+    assertThat(monate)
+        .containsExactlyInAnyOrder(
+            YearMonth.of(2026, 1), YearMonth.of(2026, 3), YearMonth.of(2026, 12));
+  }
+
+  @Test
+  void monateMitEintragImZeitraum_givenAPeriodWithoutAnyEntry_thenAnEmptySet() {
+    // Given
+    when(zeilen.findImZeitraum(JAHRESANFANG, JAHRESENDE)).thenReturn(List.of());
+
+    // When
+    final Set<YearMonth> monate = repository.monateMitEintragImZeitraum(JAHRESANFANG, JAHRESENDE);
+
+    // Then
+    assertThat(monate).isEmpty();
   }
 }

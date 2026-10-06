@@ -24,7 +24,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
  *
  * <p>Gegenstand ist, was nur mit Datenbank geprueft werden kann: der Zeitraum mit beiden
  * eingeschlossenen Grenzen und die beiden Summen ueber echte Zeilen — einmal ueber alle Monate,
- * einmal ueber genau einen — je mit und ohne Positionsmenge.
+ * einmal ueber einen Monat beziehungsweise Zeitraum — je mit und ohne Positionsmenge, dazu die
+ * Monate mit Eintrag.
  */
 class JpaZeiteintragRepositoryIT extends AbstractIntegrationTest {
 
@@ -241,8 +242,8 @@ class JpaZeiteintragRepositoryIT extends AbstractIntegrationTest {
   }
 
   @Test
-  void alleStundenJePositionImMonat_thenIncludesTheFirstAndTheLastDayOfTheMonth() {
-    // Given — die Monatsgrenzen zaehlen mit, der Tag davor und danach nicht.
+  void alleStundenJePositionImZeitraum_givenAMonth_thenIncludesTheFirstAndTheLastDay() {
+    // Given — die Grenzen zaehlen mit, der Tag davor und danach nicht.
     gesichert(konzeption, "2026-10-31", "09:00", "17:00");
     gesichert(konzeption, "2026-11-01", "09:00", "10:00");
     gesichert(beratung, "2026-11-30", "09:00", "10:45");
@@ -250,7 +251,8 @@ class JpaZeiteintragRepositoryIT extends AbstractIntegrationTest {
 
     // When
     final Map<Long, BigDecimal> november =
-        repository.alleStundenJePositionImMonat(YearMonth.of(2026, 11));
+        repository.alleStundenJePositionImZeitraum(
+            LocalDate.of(2026, 11, 1), LocalDate.of(2026, 11, 30));
 
     // Then
     assertThat(november)
@@ -260,15 +262,71 @@ class JpaZeiteintragRepositoryIT extends AbstractIntegrationTest {
   }
 
   @Test
-  void alleStundenJePositionImMonat_givenAMonthWithoutAnyEntry_thenAnEmptyResult() {
+  void alleStundenJePositionImZeitraum_givenAYear_thenIncludesTheFirstAndTheLastDay() {
+    // Given — derselbe Weg ueber ein ganzes Jahr: Silvester davor und Neujahr danach zaehlen nicht.
+    gesichert(konzeption, "2025-12-31", "09:00", "17:00");
+    gesichert(konzeption, "2026-01-01", "09:00", "10:00");
+    gesichert(konzeption, "2026-06-15", "09:00", "17:00");
+    gesichert(beratung, "2026-12-31", "09:00", "10:45");
+    gesichert(konzeption, "2027-01-01", "09:00", "17:00");
+
+    // When
+    final Map<Long, BigDecimal> jahr =
+        repository.alleStundenJePositionImZeitraum(
+            LocalDate.of(2026, 1, 1), LocalDate.of(2026, 12, 31));
+
+    // Then
+    assertThat(jahr)
+        .hasSize(2)
+        .containsEntry(konzeption, new BigDecimal("9.00"))
+        .containsEntry(beratung, new BigDecimal("1.75"));
+  }
+
+  @Test
+  void alleStundenJePositionImZeitraum_givenAPeriodWithoutAnyEntry_thenAnEmptyResult() {
     // Given
     gesichert(konzeption, "2026-11-12", "09:00", "17:00");
 
     // When
     final Map<Long, BigDecimal> dezember =
-        repository.alleStundenJePositionImMonat(YearMonth.of(2026, 12));
+        repository.alleStundenJePositionImZeitraum(
+            LocalDate.of(2026, 12, 1), LocalDate.of(2026, 12, 31));
 
     // Then — kein Eintrag, keine Zeile: ohne Positionsmenge bleibt die Abbildung leer.
     assertThat(dezember).isEmpty();
+  }
+
+  @Test
+  void monateMitEintragImZeitraum_thenNamesTheMonthsWithAnEntryIncludingBothBounds() {
+    // Given — Eintraege genau auf dem ersten und dem letzten Tag, zwei im Maerz, keiner im Februar;
+    // die Tage direkt vor und nach dem Zeitraum zaehlen nicht.
+    gesichert(konzeption, "2025-12-31", "09:00", "17:00");
+    gesichert(konzeption, "2026-01-01", "09:00", "10:00");
+    gesichert(konzeption, "2026-03-04", "09:00", "17:00");
+    gesichert(beratung, "2026-03-20", "09:00", "10:45");
+    gesichert(beratung, "2026-12-31", "09:00", "10:00");
+    gesichert(konzeption, "2027-01-01", "09:00", "17:00");
+
+    // When
+    final Set<YearMonth> monate =
+        repository.monateMitEintragImZeitraum(LocalDate.of(2026, 1, 1), LocalDate.of(2026, 12, 31));
+
+    // Then
+    assertThat(monate)
+        .containsExactlyInAnyOrder(
+            YearMonth.of(2026, 1), YearMonth.of(2026, 3), YearMonth.of(2026, 12));
+  }
+
+  @Test
+  void monateMitEintragImZeitraum_givenAPeriodWithoutAnyEntry_thenAnEmptySet() {
+    // Given
+    gesichert(konzeption, "2026-11-12", "09:00", "17:00");
+
+    // When
+    final Set<YearMonth> monate =
+        repository.monateMitEintragImZeitraum(LocalDate.of(2027, 1, 1), LocalDate.of(2027, 12, 31));
+
+    // Then
+    assertThat(monate).isEmpty();
   }
 }

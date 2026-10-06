@@ -16,8 +16,8 @@ import java.util.Set;
  * Positionen eines Belegs: Er traegt seine eigene Kennung und wird einzeln angelegt,
  * fortgeschrieben und geloescht (Plan #194, A3).
  *
- * <p><b>Vier Summen in zwei Paaren und kein fuenfter Weg.</b> Alle vier liefern Stunden je
- * Angebotsposition, und keine fragt je Zeile einmal — dasselbe Muster wie {@code
+ * <p><b>Vier Summen in zwei Paaren und ein fuenfter Weg ohne Stunden.</b> Die vier Summen liefern
+ * Stunden je Angebotsposition, und keine fragt je Zeile einmal — dasselbe Muster wie {@code
  * firma.domain.AnsprechpartnerRepository#zaehleAktiveJeFirma}. Sie unterscheiden sich in zwei
  * Richtungen:
  *
@@ -27,14 +27,20 @@ import java.util.Set;
  *       jede angefragte steht in der Antwort — auch die ohne Eintrag, mit {@code 0.00}. Das ist der
  *       Weg, wenn der Leser ein Angebot im Blick hat.
  *   <li><b>Ohne Positionsmenge</b> ({@link #alleAngefallenJePosition()}, {@link
- *       #alleStundenJePositionImMonat(YearMonth)}): Gefragt wird nach nichts, geantwortet wird mit
- *       dem ganzen Bestand — darum steht darin <b>nur</b> eine Position, zu der es einen Eintrag
- *       gibt, und keine mit {@code 0.00}. Das ist der Weg, wenn der Leser alle Angebote meint
- *       (Issue #211) und ein Aufruf je Angebot die Abfragelawine waere, die dieses Modul vermeidet
- *       (Plan #208, E3).
+ *       #alleStundenJePositionImZeitraum(LocalDate, LocalDate)}): Gefragt wird nach nichts,
+ *       geantwortet wird mit dem ganzen Bestand — darum steht darin <b>nur</b> eine Position, zu
+ *       der es einen Eintrag gibt, und keine mit {@code 0.00}. Das ist der Weg, wenn der Leser alle
+ *       Angebote meint (Issue #211) und ein Aufruf je Angebot die Abfragelawine waere, die dieses
+ *       Modul vermeidet (Plan #208, E3).
  * </ul>
  *
- * <p>Quer dazu steht der Zeitraum: je Paar einmal ueber alle Monate und einmal ueber genau einen.
+ * <p>Quer dazu steht der Zeitraum: je Paar einmal ueber alle Monate und einmal ueber einen
+ * begrenzten — mit Positionsmenge genau ein Monat, ohne sie zwei Datumsgrenzen, die einen Monat
+ * ebenso fassen wie ein Jahr (Plan #274, E6).
+ *
+ * <p>Der fuenfte Weg, {@link #monateMitEintragImZeitraum(LocalDate, LocalDate)}, ist der eine, der
+ * keine Stunden liefert: Er sagt nur, in welchen Monaten eines Zeitraums ueberhaupt Zeit erfasst
+ * ist.
  */
 public interface ZeiteintragRepository {
 
@@ -112,12 +118,31 @@ public interface ZeiteintragRepository {
   Map<Long, BigDecimal> alleAngefallenJePosition();
 
   /**
-   * Dasselbe, aber nur fuer einen Monat (Issue #211).
+   * Dasselbe, aber nur fuer einen Zeitraum, beide Grenzen eingeschlossen (Issue #211; Plan #274,
+   * E6).
    *
-   * @param monat der Monat, dessen Eintraege zaehlen
-   * @return je Position mit mindestens einem Eintrag in diesem Monat ihre Stunden; eine Position
-   *     ohne Eintrag <b>fehlt</b> — anders als bei {@link #stundenJePositionImMonat(Set,
-   *     YearMonth)}, wo sie mit {@code 0.00} darin steht, weil dort nach ihr gefragt wurde
+   * <p>Zwei Datumsgrenzen statt eines Monats: So fasst derselbe Weg einen Monat wie ein ganzes
+   * Jahr, und dieses Modul lernt keinen Begriff seines Lesers.
+   *
+   * @param von erster Tag des Zeitraums
+   * @param bis letzter Tag des Zeitraums
+   * @return je Position mit mindestens einem Eintrag im Zeitraum ihre Stunden; eine Position ohne
+   *     Eintrag <b>fehlt</b> — anders als bei {@link #stundenJePositionImMonat(Set, YearMonth)}, wo
+   *     sie mit {@code 0.00} darin steht, weil dort nach ihr gefragt wurde
    */
-  Map<Long, BigDecimal> alleStundenJePositionImMonat(YearMonth monat);
+  Map<Long, BigDecimal> alleStundenJePositionImZeitraum(LocalDate von, LocalDate bis);
+
+  /**
+   * Die Monate eines Zeitraums, in denen mindestens ein Zeiteintrag liegt, beide Grenzen
+   * eingeschlossen (Issue #273, Kriterium 2).
+   *
+   * <p>Der eine Weg, der keine Stunden liefert: Gefragt wird nur, ob in einem Monat Zeit erfasst
+   * ist, nicht wie viel.
+   *
+   * @param von erster Tag des Zeitraums
+   * @param bis letzter Tag des Zeitraums
+   * @return jeder Monat mit mindestens einem Eintrag im Zeitraum, je einmal; ein Monat ohne Eintrag
+   *     fehlt
+   */
+  Set<YearMonth> monateMitEintragImZeitraum(LocalDate von, LocalDate bis);
 }

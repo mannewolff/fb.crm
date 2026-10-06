@@ -2,6 +2,7 @@ package org.mwolff.fbcrm.startseite.application;
 
 import java.math.BigDecimal;
 import java.time.Clock;
+import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.ArrayList;
 import java.util.List;
@@ -32,9 +33,9 @@ import org.springframework.transaction.annotation.Transactional;
  * einem Zug ({@link AngeboteUebersichtUseCase#angebote(Optional)}, E2) — mit allen Status, weil
  * Kennzahl 2 sie alle braucht und Kennzahl 1 daraus filtert. Die Stunden kommen in zwei Zuegen
  * ueber alle Angebote ({@link Arbeitszeitauskunft#alleAngefallen()} und {@link
- * Arbeitszeitauskunft#alleImMonat(YearMonth)}, E3), die gestellten Rechnungen in einem ({@link
- * Rechnungsauskunft#gestellte()}, E5). Je Angebot zu fragen waere die Abfragelawine, die diese
- * Tueren gerade vermeiden.
+ * Arbeitszeitauskunft#alleImZeitraum(LocalDate, LocalDate)}, E3), die gestellten Rechnungen in
+ * einem ({@link Rechnungsauskunft#gestellte()}, E5). Je Angebot zu fragen waere die Abfragelawine,
+ * die diese Tueren gerade vermeiden.
  *
  * <p><b>Welcher Monat gilt, entscheidet der Server</b> an der injizierten {@link Clock} in der
  * {@link Geschaeftszone} (E8): Am 1. des Monats um 00:30 Ortszeit ist am Nullmeridian noch der
@@ -99,7 +100,8 @@ public class StartseiteUseCase {
     final YearMonth monat = gewaehlt.filter(monate::contains).orElse(laufend);
     final List<AngebotMitFirma> alle = angebote.angebote(Optional.empty());
     final Map<Long, BigDecimal> angefallen = arbeitszeit.alleAngefallen();
-    final Map<Long, BigDecimal> imMonat = arbeitszeit.alleImMonat(monat);
+    final Map<Long, BigDecimal> imMonat =
+        arbeitszeit.alleImZeitraum(monat.atDay(1), monat.atEndOfMonth());
     final Gestellte gestellte = rechnungen.gestellte();
     return new Startseitenstand(
         monat,

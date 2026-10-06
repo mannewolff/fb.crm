@@ -11,11 +11,12 @@
  * <p><b>Nach draussen gibt es genau zwei Tueren</b>, und beide liegen hier: {@link
  * org.mwolff.fbcrm.arbeitszeit.application.Arbeitszeitauskunft} sagt einem fremden Modul die
  * Stunden — die eines Angebots ({@code angefallen}, {@code imMonat}) und die ueber alle Angebote
- * ({@code alleAngefallen}, {@code alleImMonat}, Issue #211) —, und {@code Buchbarkeit} sagt ihm,
- * welche Position sie tragen darf. {@code rechnung} belegt damit seine Entwuerfe vor (Issue #199);
- * die Richtung ist {@code rechnung} → {@code arbeitszeit}, und dieses Modul kennt die Rechnung
- * nicht. Der Port auf den Bestand der Zeiten bleibt dabei innen: Wer ihn von aussen aufriefe,
- * muesste die Positionen eines Angebots selbst zusammentragen.
+ * ({@code alleAngefallen}, {@code alleImZeitraum}, Issue #211) samt den Monaten, in denen
+ * ueberhaupt Zeit erfasst ist ({@code monateMitEintragImZeitraum}, Plan #274, E6) —, und {@code
+ * Buchbarkeit} sagt ihm, welche Position sie tragen darf. {@code rechnung} belegt damit seine
+ * Entwuerfe vor (Issue #199); die Richtung ist {@code rechnung} → {@code arbeitszeit}, und dieses
+ * Modul kennt die Rechnung nicht. Der Port auf den Bestand der Zeiten bleibt dabei innen: Wer ihn
+ * von aussen aufriefe, muesste die Positionen eines Angebots selbst zusammentragen.
  *
  * <p><b>Daneben steht eine umgekehrte Richtung und keine dritte Tuer</b> (Issue #228): {@link
  * org.mwolff.fbcrm.arbeitszeit.application.AngebotZeitbindung} setzt den Port {@code
