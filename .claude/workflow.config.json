@@ -36,6 +36,12 @@
       "areas": [
         "frontend"
       ]
+    },
+    {
+      "cmd": "node -e \"JSON.parse(require('fs').readFileSync('.claude/workflow.config.json','utf8'))\"",
+      "areas": [
+        "betrieb"
+      ]
     }
   ],
   "mutationCommand": "mvn -Ppit -Dskip.frontend=true test",
