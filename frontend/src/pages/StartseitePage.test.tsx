@@ -75,6 +75,44 @@ const FERNER_STAND = {
   waehlbar: { jahre: ['2031'], monate: ['2031-03', '2031-02', '2031-01'] },
 };
 
+/**
+ * Dasselbe Geschaeft bei Jahreswahl (#273, Kriterien 4, 5 und 7).
+ *
+ * „Angebote in Arbeit" und die grosse Zahl von „Noch nicht abgerechnet" stehen wie in
+ * {@link STAND}: Sie haben keinen Zeitraum (Kriterium 6). Die Monatszeilen ergeben zusammen die
+ * Kennzahl, wie der Server sie schreibt.
+ */
+const JAHRES_STAND = {
+  ...STAND,
+  zeitraum: { art: 'JAHR', wert: '2026' },
+  nichtAbgerechnet: { ...STAND.nichtAbgerechnet, erfasstImZeitraum: 7200 },
+  abgerechnet: {
+    netto: 9600,
+    brutto: 11424,
+    anzahl: 3,
+    monate: [
+      { monat: '2026-03', anzahl: 1, netto: 3600, brutto: 4284 },
+      { monat: '2026-09', anzahl: 2, netto: 6000, brutto: 7140 },
+    ],
+  },
+  interneStundenImZeitraum: 80,
+};
+
+/** Ein Jahr ganz ohne gestellte Rechnung. */
+const LEERES_JAHR = {
+  ...LEERER_STAND,
+  zeitraum: { art: 'JAHR', wert: '2026' },
+};
+
+const JAHR_2026 = 'GET /api/startseite?zeitraum=2026';
+
+/** Die Werte der Eintraege in einer Gruppe der Wahl, in ihrer Reihenfolge. */
+function werteIn(gruppe: HTMLElement): string[] {
+  return within(gruppe)
+    .getAllByRole('option')
+    .map((option) => (option as HTMLOptionElement).value);
+}
+
 /** Die Adresse — daran haengt, was der Monatswechsel in `?zeitraum=` geschrieben hat. */
 function Adresse() {
   const ort = useLocation();
@@ -185,12 +223,10 @@ describe('StartseitePage (Issue #216; #206 Kriterien 1, 3 bis 8)', () => {
 
     renderSeite();
 
-    const wahl = await screen.findByRole('combobox', { name: 'Monat' });
-    expect(
-      within(wahl)
-        .getAllByRole('option')
-        .map((option) => (option as HTMLOptionElement).value),
-    ).toEqual(FERNER_STAND.waehlbar.monate);
+    const wahl = await screen.findByRole('combobox', { name: 'Zeitraum' });
+    expect(werteIn(within(wahl).getByRole('group', { name: 'Monate' }))).toEqual(
+      FERNER_STAND.waehlbar.monate,
+    );
     expect(wahl).toHaveValue('2031-03');
     expect(screen.getByRole('option', { name: 'März 2031' })).toBeInTheDocument();
   });
@@ -203,7 +239,7 @@ describe('StartseitePage (Issue #216; #206 Kriterien 1, 3 bis 8)', () => {
     });
 
     renderSeite();
-    await nutzer.selectOptions(await screen.findByRole('combobox', { name: 'Monat' }), '2026-09');
+    await nutzer.selectOptions(await screen.findByRole('combobox', { name: 'Zeitraum' }), '2026-09');
 
     expect(screen.getByTestId('adresse')).toHaveTextContent('/?zeitraum=2026-09');
     expect(await screen.findByText('Keine Rechnung in diesem Monat.')).toBeInTheDocument();
@@ -235,7 +271,7 @@ describe('StartseitePage (Issue #216; #206 Kriterien 1, 3 bis 8)', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'Der Geschäftsstand ist gerade nicht zu erreichen.',
     );
-    expect(screen.queryByRole('combobox', { name: 'Monat' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('combobox', { name: 'Zeitraum' })).not.toBeInTheDocument();
   });
 
   it('zeigt die internen Stunden des Monats getrennt von allen Betraegen', async () => {
@@ -272,5 +308,158 @@ describe('StartseitePage (Issue #216; #206 Kriterien 1, 3 bis 8)', () => {
     ).toBeInTheDocument();
     expect(screen.getByText('Keine Rechnung in diesem Monat.')).toBeInTheDocument();
     expect(screen.queryByRole('table')).not.toBeInTheDocument();
+  });
+});
+
+describe('StartseitePage: Zeitraumwahl (Issue #281; #273 Kriterien 1, 2, 5 bis 9)', () => {
+  it('ordnet die Wahl in die Gruppen „Jahre" und „Monate"', async () => {
+    mitRouten({ [OHNE_MONAT]: json(200, STAND) });
+
+    renderSeite();
+
+    const wahl = await screen.findByRole('combobox', { name: 'Zeitraum' });
+    expect(werteIn(within(wahl).getByRole('group', { name: 'Jahre' }))).toEqual(['2026', '2025']);
+    expect(werteIn(within(wahl).getByRole('group', { name: 'Monate' }))).toEqual(MONATE);
+    expect(within(wahl).getByRole('option', { name: '2025' })).toBeInTheDocument();
+    expect(within(wahl).getByRole('option', { name: 'Oktober 2026' })).toBeInTheDocument();
+  });
+
+  it('schreibt das gewaehlte Jahr in die Adresse und laedt es', async () => {
+    const nutzer = userEvent.setup();
+    mitRouten({ [OHNE_MONAT]: json(200, STAND), [JAHR_2026]: json(200, JAHRES_STAND) });
+
+    renderSeite();
+    await nutzer.selectOptions(await screen.findByRole('combobox', { name: 'Zeitraum' }), '2026');
+
+    expect(screen.getByTestId('adresse')).toHaveTextContent('/?zeitraum=2026');
+    expect(await screen.findByRole('table', { name: 'Abgerechnet' })).toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: 'Zeitraum' })).toHaveValue('2026');
+  });
+
+  it('nennt bei Jahreswahl das Jahr in der Kachel und bei den internen Stunden', async () => {
+    mitRouten({ [JAHR_2026]: json(200, JAHRES_STAND) });
+
+    renderSeite('/?zeitraum=2026');
+
+    expect(await kachel(OFFEN)).toHaveTextContent('Im Jahr erfasst: 7.200,00 €');
+    expect(
+      screen.getByText('Interne Stunden im gewählten Jahr: 80,00 Std.'),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Im Monat erfasst/u)).not.toBeInTheDocument();
+  });
+
+  it('nennt bei Monatswahl den Monat in der Kachel und bei den internen Stunden', async () => {
+    mitRouten({ [OHNE_MONAT]: json(200, STAND) });
+
+    renderSeite();
+
+    expect(await kachel(OFFEN)).toHaveTextContent('Im Monat erfasst: 600,00 €');
+    expect(
+      screen.getByText('Interne Stunden im gewählten Monat: 12,50 Std.'),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Im Jahr erfasst/u)).not.toBeInTheDocument();
+  });
+
+  it('zeigt bei Jahreswahl je Monat eine Zeile und darunter die Summe des Jahres', async () => {
+    mitRouten({ [JAHR_2026]: json(200, JAHRES_STAND) });
+
+    renderSeite('/?zeitraum=2026');
+
+    const tafel = await screen.findByRole('table', { name: 'Abgerechnet' });
+    expect(
+      within(tafel)
+        .getAllByRole('columnheader')
+        .map((kopf) => kopf.textContent),
+    ).toEqual(['Monat', 'Rechnungen', 'Netto', 'Brutto']);
+    const zeilen = within(tafel).getAllByRole('row').slice(1);
+    expect(zeilen.map((zeile) => zeile.textContent)).toEqual([
+      'März 202613.600,00 €4.284,00 €',
+      'September 202626.000,00 €7.140,00 €',
+      'Summe 202639.600,00 €11.424,00 €',
+    ]);
+    expect(within(tafel).getByRole('rowheader', { name: 'Summe 2026' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Zu den Rechnungen' })).toHaveAttribute(
+      'href',
+      '/rechnungen',
+    );
+  });
+
+  it('fuehrt vom Monatsnamen auf genau diesen Monat', async () => {
+    const nutzer = userEvent.setup();
+    mitRouten({
+      [JAHR_2026]: json(200, JAHRES_STAND),
+      [SEPTEMBER]: json(200, { ...STAND, zeitraum: { art: 'MONAT', wert: '2026-09' } }),
+    });
+
+    renderSeite('/?zeitraum=2026');
+
+    const tafel = await screen.findByRole('table', { name: 'Abgerechnet' });
+    const weg = within(tafel).getByRole('link', { name: 'September 2026' });
+    expect(weg).toHaveAttribute('href', '/?zeitraum=2026-09');
+    await nutzer.click(weg);
+
+    expect(screen.getByTestId('adresse')).toHaveTextContent('/?zeitraum=2026-09');
+    expect(await screen.findByRole('combobox', { name: 'Zeitraum' })).toHaveValue('2026-09');
+  });
+
+  it('sagt im Jahr ohne Rechnung „Keine Rechnung in diesem Jahr."', async () => {
+    mitRouten({ [JAHR_2026]: json(200, LEERES_JAHR) });
+
+    renderSeite('/?zeitraum=2026');
+
+    expect(await screen.findByText('Keine Rechnung in diesem Jahr.')).toBeInTheDocument();
+    expect(screen.queryByText('Keine Rechnung in diesem Monat.')).not.toBeInTheDocument();
+    expect(screen.queryByRole('table', { name: 'Abgerechnet' })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Zu den Rechnungen' })).toBeInTheDocument();
+  });
+
+  it('laesst die Karte bei Monatswahl, wie sie ist — ohne Tafel und mit ihrem Satz', async () => {
+    mitRouten({ [OHNE_MONAT]: json(200, LEERER_STAND) });
+
+    renderSeite();
+
+    expect(await screen.findByText('Keine Rechnung in diesem Monat.')).toBeInTheDocument();
+    expect(screen.queryByText('Keine Rechnung in diesem Jahr.')).not.toBeInTheDocument();
+    expect(screen.queryByRole('table', { name: 'Abgerechnet' })).not.toBeInTheDocument();
+  });
+
+  it('zeigt bei Monatswahl mit Rechnungen keine Monatsliste', async () => {
+    mitRouten({ [OHNE_MONAT]: json(200, STAND) });
+
+    renderSeite();
+
+    await screen.findByRole('table', { name: 'Angebote in Arbeit' });
+    expect(screen.queryByRole('table', { name: 'Abgerechnet' })).not.toBeInTheDocument();
+    expect(screen.queryByText(/Keine Rechnung/u)).not.toBeInTheDocument();
+  });
+
+  it('fragt ohne Parameter, wenn die Adresse keinen traegt', async () => {
+    const aufruf = mitRouten({ [OHNE_MONAT]: json(200, STAND) });
+
+    renderSeite('/');
+
+    await screen.findByRole('table', { name: 'Angebote in Arbeit' });
+    expect(aufruf.mock.calls.map(([ziel]) => ziel)).toEqual(['/api/startseite']);
+  });
+
+  it('laesst „Angebote in Arbeit" und den offenen Stand beim Wechsel aufs Jahr stehen', async () => {
+    const nutzer = userEvent.setup();
+    mitRouten({ [OHNE_MONAT]: json(200, STAND), [JAHR_2026]: json(200, JAHRES_STAND) });
+
+    renderSeite();
+    const imMonat = {
+      inArbeit: (await kachel(IN_ARBEIT)).textContent,
+      offen: within(await kachel(OFFEN)).getByText('1.800,00 €').textContent,
+      tafel: within(screen.getByRole('table', { name: 'Angebote in Arbeit' })).getAllByRole('row')
+        .length,
+    };
+    await nutzer.selectOptions(screen.getByRole('combobox', { name: 'Zeitraum' }), '2026');
+    await screen.findByRole('table', { name: 'Abgerechnet' });
+
+    expect((await kachel(IN_ARBEIT)).textContent).toBe(imMonat.inArbeit);
+    expect(within(await kachel(OFFEN)).getByText('1.800,00 €').textContent).toBe(imMonat.offen);
+    expect(
+      within(screen.getByRole('table', { name: 'Angebote in Arbeit' })).getAllByRole('row').length,
+    ).toBe(imMonat.tafel);
   });
 });
