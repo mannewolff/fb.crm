@@ -65,17 +65,21 @@ public class RechnungStellenUseCase {
   private final EigeneAngabenRepository eigeneAngaben;
   private final RechnungseinstellungenRepository einstellungen;
   private final Nummernkreis nummernkreis;
+  private final Rechnungsnummern rechnungsnummern;
   private final Belegdrucker drucker;
   private final DokumentSpeicher dokumente;
   private final Clock clock;
 
   /*
-   * Neun Mitspieler, und keiner davon ist zu entbehren: der Bestand der Rechnungen, das Angebot und
-   * seine Firma fuer die Kopie des Empfaengers, die eigenen Angaben fuer die des Absenders, die
-   * Einstellungen und der Nummernkreis fuer die Nummer, Drucker und Speicher fuer das Dokument und
-   * die Uhr fuer den Zeitpunkt. Sie zu Gruppen zusammenzufassen verschoebe die Zahl, ohne etwas zu
-   * klaeren: Das Stellen ist der Schritt, an dem alle Angaben eines Belegs zusammenkommen.
+   * PMD.ExcessiveParameterList: Zehn Mitspieler, und keiner davon ist zu entbehren: der Bestand der
+   * Rechnungen, das Angebot und seine Firma fuer die Kopie des Empfaengers, die eigenen Angaben fuer
+   * die des Absenders, die Einstellungen, der Nummernkreis und die Rechnungsnummern fuer die Nummer
+   * (#254, Kriterium 5), Drucker und Speicher fuer das Dokument und die Uhr fuer den Zeitpunkt. Sie
+   * zu Gruppen zusammenzufassen verschoebe die Zahl, ohne etwas zu klaeren: Das Stellen ist der
+   * Schritt, an dem alle Angaben eines Belegs zusammenkommen. Die Ausnahme steht am Konstruktor,
+   * die Regel bleibt im Regelsatz scharf.
    */
+  @SuppressWarnings("PMD.ExcessiveParameterList")
   RechnungStellenUseCase(
       final RechnungRepository rechnungen,
       final AngebotRepository angebote,
@@ -83,6 +87,7 @@ public class RechnungStellenUseCase {
       final EigeneAngabenRepository eigeneAngaben,
       final RechnungseinstellungenRepository einstellungen,
       final Nummernkreis nummernkreis,
+      final Rechnungsnummern rechnungsnummern,
       final Belegdrucker drucker,
       final DokumentSpeicher dokumente,
       final Clock clock) {
@@ -92,6 +97,7 @@ public class RechnungStellenUseCase {
     this.eigeneAngaben = eigeneAngaben;
     this.einstellungen = einstellungen;
     this.nummernkreis = nummernkreis;
+    this.rechnungsnummern = rechnungsnummern;
     this.drucker = drucker;
     this.dokumente = dokumente;
     this.clock = clock;
@@ -107,7 +113,8 @@ public class RechnungStellenUseCase {
    * @throws AngebotNichtGefunden wenn es das Angebot der Rechnung nicht gibt
    * @throws FirmaNichtGefunden wenn es die Firma des Angebots nicht gibt
    * @throws PflichtangabenFehlen wenn eine Angabe fehlt, die auf einem Beleg stehen muss
-   * @throws RechnungsnummerSchonVergeben wenn die gezogene Nummer schon eine Rechnung traegt
+   * @throws RechnungsnummerSchonVergeben wenn die gezogene Nummer schon eine Rechnung traegt, auch
+   *     eine nachgetragene
    */
   public Rechnung stelle(final long rechnungId) {
     final Rechnung entwurf =
@@ -131,9 +138,10 @@ public class RechnungStellenUseCase {
   }
 
   /*
-   * Die Nummer wird gezogen, gegen den Bestand geprueft und mit allem Festzuschreibenden in einem
-   * Zug geschrieben. Das Schreiben geht sofort in die Datenbank, damit eine Verletzung von UNIQUE
-   * hier auffaellt und nicht erst beim Commit — dort waere sie ein Serverfehler und kein 409.
+   * Die Nummer wird gezogen, gegen beide Bestaende geprueft (#254, Kriterium 5) und mit allem
+   * Festzuschreibenden in einem Zug geschrieben. Das Schreiben geht sofort in die Datenbank, damit
+   * eine Verletzung von UNIQUE hier auffaellt und nicht erst beim Commit — dort waere sie ein
+   * Serverfehler und kein 409.
    */
   private Rechnung schreibeFest(
       final Rechnung entwurf, final EigeneAngaben eigene, final Firma firma) {
@@ -142,7 +150,7 @@ public class RechnungStellenUseCase {
     final int jahr = entwurf.rechnungDatum().getYear();
     final String nummer =
         muster.rechnungsnummer(nummernkreis.ziehe(muster.zaehlerjahr(jahr)), jahr);
-    if (rechnungen.existiertNummer(nummer)) {
+    if (rechnungsnummern.vergeben(nummer)) {
       throw new RechnungsnummerSchonVergeben(nummer);
     }
     final Instant jetzt = clock.instant();

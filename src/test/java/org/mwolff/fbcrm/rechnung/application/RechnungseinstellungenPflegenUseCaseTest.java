@@ -1,6 +1,7 @@
 package org.mwolff.fbcrm.rechnung.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.catchThrowableOfType;
 import static org.assertj.core.api.Assertions.entry;
 import static org.mockito.ArgumentMatchers.any;
@@ -20,7 +21,6 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mwolff.fbcrm.rechnung.domain.Nummernkreis;
 import org.mwolff.fbcrm.rechnung.domain.Nummernmuster;
-import org.mwolff.fbcrm.rechnung.domain.RechnungRepository;
 import org.mwolff.fbcrm.rechnung.domain.Rechnungseinstellungen;
 import org.mwolff.fbcrm.rechnung.domain.RechnungseinstellungenRepository;
 
@@ -48,11 +48,11 @@ class RechnungseinstellungenPflegenUseCaseTest {
 
   @Mock private RechnungseinstellungenRepository bestand;
   @Mock private Nummernkreis nummernkreis;
-  @Mock private RechnungRepository rechnungen;
+  @Mock private Rechnungsnummern rechnungsnummern;
 
   private RechnungseinstellungenPflegenUseCase useCase(final Instant jetzt) {
     return new RechnungseinstellungenPflegenUseCase(
-        bestand, nummernkreis, rechnungen, Clock.fixed(jetzt, ZoneOffset.UTC));
+        bestand, nummernkreis, rechnungsnummern, Clock.fixed(jetzt, ZoneOffset.UTC));
   }
 
   private static Rechnungseinstellungen einstellungen(final String muster) {
@@ -105,7 +105,7 @@ class RechnungseinstellungenPflegenUseCaseTest {
     useCase(JETZT).pflege(einstellungen("R{JJ}-{NNNN}"), 4);
 
     // Then
-    verify(rechnungen).existiertNummer("R26-0004");
+    verify(rechnungsnummern).vergeben("R26-0004");
   }
 
   @Test
@@ -114,13 +114,13 @@ class RechnungseinstellungenPflegenUseCaseTest {
     useCase(JETZT).pflege(einstellungen("{NNNN}"), 7);
 
     // Then
-    verify(rechnungen).existiertNummer("0007");
+    verify(rechnungsnummern).vergeben("0007");
   }
 
   @Test
   void pflege_givenANummerAnExistingRechnungAlreadyCarries_thenRefusesAndWritesNothing() {
     // Given — Kriterium 19: die 1 des laufenden Jahres steht schon auf einem Beleg.
-    when(rechnungen.existiertNummer("0001-2026")).thenReturn(true);
+    when(rechnungsnummern.vergeben("0001-2026")).thenReturn(true);
 
     // When / Then — die Meldung nennt die Nummer und haengt am Feld der Maske.
     final NaechsteNummerSchonVergeben fehler =
@@ -136,6 +136,22 @@ class RechnungseinstellungenPflegenUseCaseTest {
             entry(
                 NaechsteNummerSchonVergeben.FELD,
                 List.of(NaechsteNummerSchonVergeben.MELDUNG + "0001-2026")));
+
+    // Then — nichts gespeichert, kein Zaehler gesetzt.
+    verify(bestand, never()).speichere(any(), any());
+    verifyNoInteractions(nummernkreis);
+  }
+
+  @Test
+  void pflege_givenANummerOnlyANachgetrageneRechnungCarries_thenRefusesAndWritesNothing() {
+    // Given — #254, Kriterium 5: die 4 des laufenden Jahres traegt allein eine nachgetragene
+    // Rechnung; die Frage geht ueber beide Bestaende.
+    when(rechnungsnummern.vergeben("R26-0004")).thenReturn(true);
+
+    // When / Then
+    assertThatThrownBy(() -> useCase(JETZT).pflege(einstellungen("R{JJ}-{NNNN}"), 4))
+        .isInstanceOf(NaechsteNummerSchonVergeben.class)
+        .hasMessage(NaechsteNummerSchonVergeben.MELDUNG + "R26-0004");
 
     // Then — nichts gespeichert, kein Zaehler gesetzt.
     verify(bestand, never()).speichere(any(), any());

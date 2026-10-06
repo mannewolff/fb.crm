@@ -91,6 +91,7 @@ class RechnungStellenUseCaseTest {
   @Mock private EigeneAngabenRepository eigeneAngaben;
   @Mock private RechnungseinstellungenRepository einstellungen;
   @Mock private Nummernkreis nummernkreis;
+  @Mock private Rechnungsnummern rechnungsnummern;
   @Mock private Belegdrucker drucker;
   @Mock private DokumentSpeicher dokumente;
 
@@ -109,6 +110,7 @@ class RechnungStellenUseCaseTest {
             eigeneAngaben,
             einstellungen,
             nummernkreis,
+            rechnungsnummern,
             drucker,
             dokumente,
             Clock.fixed(JETZT, ZoneOffset.UTC));
@@ -364,7 +366,7 @@ class RechnungStellenUseCaseTest {
     entwurfLiegt(entwurfUeber("80.00"));
     angabenSind(Rechnungsdoppel.firma(), Rechnungsdoppel.eigeneAngaben());
     nummerWirdGezogen(MUSTER_MIT_JAHR, 1);
-    when(rechnungen.existiertNummer(NUMMER)).thenReturn(true);
+    when(rechnungsnummern.vergeben(NUMMER)).thenReturn(true);
 
     // When / Then — kein Dokument, keine Waise im Speicher.
     assertThatThrownBy(() -> useCase.stelle(ENTWURF))
@@ -372,6 +374,27 @@ class RechnungStellenUseCaseTest {
         .hasMessageContaining(NUMMER);
     verifyNoInteractions(drucker, dokumente);
     verify(rechnungen, never()).saveAndFlush(any());
+  }
+
+  @Test
+  void stelle_whenOnlyANachgetrageneRechnungCarriesTheNummer_thenConflictWithoutWriting() {
+    // Given — #254, Kriterium 5: die gezogene Nummer traegt allein eine nachgetragene Rechnung.
+    // Gefragt wird ueber beide Bestaende; still uebergangen wird sie nicht.
+    entwurfLiegt(entwurfUeber("80.00"));
+    angabenSind(Rechnungsdoppel.firma(), Rechnungsdoppel.eigeneAngaben());
+    nummerWirdGezogen(MUSTER_MIT_JAHR, 1);
+    when(rechnungsnummern.vergeben(NUMMER)).thenReturn(true);
+
+    // When / Then — dieselbe Meldung wie heute, und der Zaehler wird kein zweites Mal gezogen.
+    assertThatThrownBy(() -> useCase.stelle(ENTWURF))
+        .isInstanceOf(RechnungsnummerSchonVergeben.class)
+        .hasMessageContaining(NUMMER);
+    verify(nummernkreis).ziehe(anyInt());
+    verify(rechnungen, never()).saveAndFlush(any());
+    verifyNoInteractions(drucker, dokumente);
+
+    // Then — die Frage stellt allein der Dienst, nicht mehr das Repository der Rechnungen.
+    verify(rechnungen, never()).existiertNummer(any());
   }
 
   @Test
