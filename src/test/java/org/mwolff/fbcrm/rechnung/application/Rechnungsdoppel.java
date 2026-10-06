@@ -4,6 +4,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
+import org.jspecify.annotations.Nullable;
 import org.mwolff.fbcrm.angebot.domain.Angebot;
 import org.mwolff.fbcrm.angebot.domain.Angebotsposition;
 import org.mwolff.fbcrm.angebot.domain.Angebotsstatus;
@@ -14,6 +15,7 @@ import org.mwolff.fbcrm.eigeneangaben.domain.EigeneAngaben;
 import org.mwolff.fbcrm.firma.domain.Firma;
 import org.mwolff.fbcrm.rechnung.domain.Belegabsender;
 import org.mwolff.fbcrm.rechnung.domain.Belegempfaenger;
+import org.mwolff.fbcrm.rechnung.domain.NachgetrageneRechnung;
 import org.mwolff.fbcrm.rechnung.domain.Rechnung;
 import org.mwolff.fbcrm.rechnung.domain.Rechnungsposition;
 import org.mwolff.fbcrm.rechnung.domain.Rechnungszustand;
@@ -237,6 +239,36 @@ final class Rechnungsdoppel {
   static Rechnungsposition pauschale(final String menge) {
     return new Rechnungsposition(
         PAUSCHALE_ID, "Schulungstag", new BigDecimal(menge), Einheit.PAUSCHAL, PAUSCHALPREIS);
+  }
+
+  /**
+   * Eine nachgetragene Rechnung an {@link #FIRMA} mit frei gewaehlten Eckdaten (#254).
+   *
+   * @param id Kennung im Raum der nachgetragenen Rechnungen
+   * @param nummer die frei erfasste Nummer
+   * @param rechnungDatum Datum der Rechnung
+   * @param netto der Nettobetrag, wie erfasst
+   * @param brutto der Bruttobetrag, wie erfasst
+   * @param pdfSchluessel Schluessel des Originals, oder {@code null} ohne Original
+   */
+  static NachgetrageneRechnung nachgetragen(
+      final long id,
+      final String nummer,
+      final LocalDate rechnungDatum,
+      final String netto,
+      final String brutto,
+      final @Nullable String pdfSchluessel) {
+    return new NachgetrageneRechnung(
+        Long.valueOf(id),
+        FIRMA,
+        nummer,
+        rechnungDatum,
+        new BigDecimal(netto),
+        new BigDecimal(brutto),
+        Rechnungszustand.GESTELLT,
+        pdfSchluessel,
+        ANGELEGT,
+        ANGELEGT);
   }
 
   /** Die Firma, an die das Angebot geht — mit vollstaendiger Anschrift. */

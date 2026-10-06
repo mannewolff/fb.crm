@@ -4,8 +4,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 import org.jspecify.annotations.Nullable;
-import org.mwolff.fbcrm.rechnung.application.RechnungMitFirma;
-import org.mwolff.fbcrm.rechnung.domain.Rechnung;
+import org.mwolff.fbcrm.rechnung.application.Rechnungslistenzeile;
 import org.mwolff.fbcrm.rechnung.domain.Rechnungszustand;
 
 /**
@@ -19,7 +18,7 @@ import org.mwolff.fbcrm.rechnung.domain.Rechnungszustand;
 public record RechnungenUebersichtResponse(List<Zeile> rechnungen) {
 
   /** Die Sicht der Oberflaeche auf die Liste. */
-  static RechnungenUebersichtResponse of(final List<RechnungMitFirma> zeilen) {
+  static RechnungenUebersichtResponse of(final List<Rechnungslistenzeile> zeilen) {
     return new RechnungenUebersichtResponse(zeilen.stream().map(Zeile::of).toList());
   }
 
@@ -28,15 +27,21 @@ public record RechnungenUebersichtResponse(List<Zeile> rechnungen) {
    *
    * <p>Die {@code nummer} fehlt beim Entwurf: Sie entsteht erst mit dem Stellen (Kriterium 15). Der
    * {@code brutto} kommt gerechnet und steht in keiner Spalte — mit dem Steuersatz, der fuer diese
-   * Rechnung gilt (Kriterium 14).
+   * Rechnung gilt (Kriterium 14); bei einer nachgetragenen ist er der erfasste.
    *
-   * @param id Kennung der Rechnung
+   * <p>{@code nachgetragen} sagt die Art und damit, in welchem Kennungsraum {@code id} steht;
+   * {@code dokument}, ob etwas herunterzuladen ist — die Oberflaeche schliesst das nicht mehr aus
+   * dem Zustand (Plan #259, E18).
+   *
+   * @param id Kennung der Rechnung im Raum ihrer Art
    * @param nummer die Rechnungsnummer, oder {@code null} im Entwurf
    * @param firmaId Kennung der Firma, an die die Rechnung geht
    * @param firmaName Name dieser Firma
    * @param rechnungDatum Datum der Rechnung
    * @param brutto der Bruttobetrag, gerechnet
-   * @param zustand Entwurf oder gestellt
+   * @param zustand der Zustand der Rechnung
+   * @param nachgetragen ob die Rechnung nachgetragen und nicht von fb.crm geschrieben ist
+   * @param dokument ob ein Dokument hinterlegt ist
    */
   public record Zeile(
       long id,
@@ -45,18 +50,21 @@ public record RechnungenUebersichtResponse(List<Zeile> rechnungen) {
       String firmaName,
       LocalDate rechnungDatum,
       BigDecimal brutto,
-      Rechnungszustand zustand) {
+      Rechnungszustand zustand,
+      boolean nachgetragen,
+      boolean dokument) {
 
-    static Zeile of(final RechnungMitFirma zeile) {
-      final Rechnung rechnung = zeile.rechnung();
+    static Zeile of(final Rechnungslistenzeile zeile) {
       return new Zeile(
-          rechnung.requireId(),
-          rechnung.nummer(),
+          zeile.id(),
+          zeile.nummer(),
           zeile.firmaId(),
           zeile.firmaName(),
-          rechnung.rechnungDatum(),
+          zeile.rechnungDatum(),
           zeile.brutto(),
-          rechnung.zustand());
+          zeile.zustand(),
+          zeile.nachgetragen(),
+          zeile.hatDokument());
     }
   }
 }

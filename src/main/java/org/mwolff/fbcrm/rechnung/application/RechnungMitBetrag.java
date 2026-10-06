@@ -10,7 +10,7 @@ import org.mwolff.fbcrm.rechnung.domain.Rechnung;
  * er nicht an der Rechnung haengt, sondern am Steuersatz, der fuer sie gilt ({@link
  * GeltenderSteuersatz}).
  *
- * <p>Ohne Firmennamen, anders als {@link RechnungMitFirma}: Am Angebot ist die Firma bereits
+ * <p>Ohne Firmennamen, anders als {@link Rechnungslistenzeile}: Am Angebot ist die Firma bereits
  * bekannt, und sie je Zeile zu wiederholen hiesse, dieselbe Angabe mehrfach zu nennen.
  *
  * @param rechnung die Rechnung

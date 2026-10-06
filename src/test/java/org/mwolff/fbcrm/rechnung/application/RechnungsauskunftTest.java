@@ -17,6 +17,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.mwolff.fbcrm.rechnung.domain.NachgetrageneRechnungRepository;
 import org.mwolff.fbcrm.rechnung.domain.Nummernmuster;
 import org.mwolff.fbcrm.rechnung.domain.RechnungRepository;
 import org.mwolff.fbcrm.rechnung.domain.Rechnungseinstellungen;
@@ -35,6 +36,10 @@ import org.mwolff.fbcrm.rechnung.domain.Rechnungszustand;
  * <p>Ueber den Monat entscheidet allein das Rechnungsdatum und nicht der Zeitpunkt des Stellens
  * (Antwort 4), und Brutto entsteht je Rechnung mit ihrem festgeschriebenen Satz — auf denselben
  * Cent wie in der Rechnungsliste (Kriterium 9).
+ *
+ * <p>Eine <b>nachgetragene</b> Rechnung zaehlt in die Monatsabrechnung ihres Rechnungsdatums mit
+ * Netto und Brutto wie erfasst; die Mengen je Angebotsposition beruehrt sie nicht, denn sie gehoert
+ * zu keinem Angebot (Plan #259, E20; #254, Kriterien 9 und 11).
  */
 @ExtendWith(MockitoExtension.class)
 class RechnungsauskunftTest {
@@ -46,13 +51,14 @@ class RechnungsauskunftTest {
   private static final LocalDate ERSTER_OKTOBER = LocalDate.of(2026, 10, 1);
 
   @Mock private RechnungRepository rechnungen;
+  @Mock private NachgetrageneRechnungRepository nachtraege;
   @Mock private RechnungseinstellungenRepository einstellungen;
 
   private Rechnungsauskunft auskunft;
 
   @BeforeEach
   void baueDieAuskunft() {
-    auskunft = new Rechnungsauskunft(rechnungen, einstellungen);
+    auskunft = new Rechnungsauskunft(rechnungen, nachtraege, einstellungen);
   }
 
   /** Der Satz der aktuellen Einstellungen — er gilt nur, wo eine Rechnung keinen eigenen traegt. */
@@ -345,5 +351,60 @@ class RechnungsauskunftTest {
         .containsOnly(
             Map.entry(Long.valueOf(Rechnungsdoppel.BERATUNG_ID), new BigDecimal("80.00")),
             Map.entry(Long.valueOf(Rechnungsdoppel.PAUSCHALE_ID), new BigDecimal("1")));
+  }
+
+  @Test
+  void gestellte_withANachgetrageneInTheMonth_thenItAddsItsBetraegeAndOneButNoMengen() {
+    // Given — eine geschriebene Rechnung und zwei nachgetragene, eine davon im Oktober.
+    gegebenerAktuellerSatz("19.00");
+    when(rechnungen.findAlle())
+        .thenReturn(
+            List.of(
+                Rechnungsdoppel.gestellt(
+                    1L,
+                    Rechnungsdoppel.ANGEBOT,
+                    "R26-0001",
+                    List.of(Rechnungsdoppel.beratung("80.00")),
+                    LETZTER_SEPTEMBER)));
+    when(nachtraege.findAlle())
+        .thenReturn(
+            List.of(
+                Rechnungsdoppel.nachgetragen(
+                        1L, "AR-1", ERSTER_SEPTEMBER, "1000.00", "1190.01", null)
+                    .mitZustand(Rechnungszustand.BEZAHLT, Rechnungsdoppel.ANGELEGT),
+                Rechnungsdoppel.nachgetragen(
+                    2L, "AR-2", ERSTER_OKTOBER, "500.00", "595.00", null)));
+
+    // When
+    final Gestellte gestellte = auskunft.gestellte(SEPTEMBER);
+
+    // Then — 8.000,00 + 1.000,00 netto, 8.560,00 + 1.190,01 brutto wie erfasst, zwei Rechnungen;
+    // die Mengen bleiben die der geschriebenen Rechnung.
+    assertThat(gestellte.imMonat())
+        .isEqualTo(new Monatsabrechnung(new BigDecimal("9000.00"), new BigDecimal("9750.01"), 2));
+    assertThat(gestellte.mengenJePosition())
+        .containsOnly(
+            Map.entry(Long.valueOf(Rechnungsdoppel.BERATUNG_ID), new BigDecimal("80.00")));
+    verify(nachtraege, times(1)).findAlle();
+  }
+
+  @Test
+  void gestellte_withANachgetrageneInAnotherMonth_thenItDoesNotCount() {
+    // Given — nur eine nachgetragene Rechnung, und die im Oktober.
+    gegebenerAktuellerSatz("19.00");
+    when(rechnungen.findAlle()).thenReturn(List.of());
+    when(nachtraege.findAlle())
+        .thenReturn(
+            List.of(
+                Rechnungsdoppel.nachgetragen(
+                    2L, "AR-2", ERSTER_OKTOBER, "500.00", "595.00", null)));
+
+    // When
+    final Gestellte gestellte = auskunft.gestellte(SEPTEMBER);
+
+    // Then
+    assertThat(gestellte.imMonat())
+        .isEqualTo(new Monatsabrechnung(new BigDecimal("0.00"), new BigDecimal("0.00"), 0));
+    assertThat(gestellte.mengenJePosition()).isEmpty();
   }
 }

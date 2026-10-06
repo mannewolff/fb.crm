@@ -8,6 +8,8 @@ import java.util.List;
 import java.util.Map;
 import org.mwolff.fbcrm.common.Geldrechnung;
 import org.mwolff.fbcrm.rechnung.domain.Abrechnungsstand;
+import org.mwolff.fbcrm.rechnung.domain.NachgetrageneRechnung;
+import org.mwolff.fbcrm.rechnung.domain.NachgetrageneRechnungRepository;
 import org.mwolff.fbcrm.rechnung.domain.Rechnung;
 import org.mwolff.fbcrm.rechnung.domain.RechnungRepository;
 import org.mwolff.fbcrm.rechnung.domain.RechnungseinstellungenRepository;
@@ -33,6 +35,11 @@ import org.springframework.transaction.annotation.Transactional;
  * Monatsabrechnung fallen zu lassen hiesse, den Umsatz des Monats mit dem Zahlungseingang zu
  * verwechseln, und ihre Mengen freizugeben zeigte abgerechnete Leistung wieder als offen.
  *
+ * <p><b>Nachgetragene Rechnungen zaehlen in den Monat</b> ihres Rechnungsdatums, mit Netto und
+ * Brutto wie erfasst und jede als eine Rechnung (Plan #259, E20; #254, Kriterium 9). Jeder Zustand
+ * zaehlt, denn eine nachgetragene Rechnung ist nie Entwurf. Die Mengen je Angebotsposition beruehrt
+ * sie nicht: Sie gehoert zu keinem Angebot (Kriterium 11).
+ *
  * <p><b>Ein Durchlauf, zwei Antworten.</b> {@link #gestellte(YearMonth)} liest {@link
  * RechnungRepository#findAlle()} genau einmal und rechnet beides daraus; zwei Methoden waeren zwei
  * Zuege durch dieselben Daten (Plan #208, E5).
@@ -46,16 +53,22 @@ import org.springframework.transaction.annotation.Transactional;
 public class Rechnungsauskunft {
 
   private final RechnungRepository bestand;
+  private final NachgetrageneRechnungRepository nachtraege;
   private final RechnungseinstellungenRepository einstellungen;
 
   Rechnungsauskunft(
-      final RechnungRepository rechnungen, final RechnungseinstellungenRepository einstellungen) {
+      final RechnungRepository rechnungen,
+      final NachgetrageneRechnungRepository nachtraege,
+      final RechnungseinstellungenRepository einstellungen) {
     this.bestand = rechnungen;
+    this.nachtraege = nachtraege;
     this.einstellungen = einstellungen;
   }
 
   /**
    * Die gestellten Rechnungen: die Abrechnung des Monats und die Mengen je Angebotsposition.
+   *
+   * <p>Die nachgetragenen Rechnungen gehen nur in die Abrechnung des Monats ein.
    *
    * <p>Brutto entsteht je Rechnung mit dem Satz, der fuer sie gilt ({@link GeltenderSteuersatz}) —
    * demselben, mit dem die Rechnungsliste rechnet. Darum wird der Satz der aktuellen Einstellungen
@@ -80,6 +93,12 @@ public class Rechnungsauskunft {
       }
       for (final Rechnungsposition position : rechnung.positionen()) {
         mengen.merge(position.angebotPositionId(), position.menge(), BigDecimal::add);
+      }
+    }
+    for (final NachgetrageneRechnung rechnung : nachtraege.findAlle()) {
+      if (monat.equals(YearMonth.from(rechnung.rechnungDatum()))) {
+        nettoWerte.add(rechnung.netto());
+        bruttoWerte.add(rechnung.brutto());
       }
     }
     return new Gestellte(
