@@ -142,6 +142,7 @@ class StartseiteUseCaseTest {
   private static final Monatsabrechnung AUGUST_GESTELLT =
       new Monatsabrechnung(new BigDecimal("2000.00"), new BigDecimal("2140.00"), 2);
 
+  /** Was ein Monat ohne gestellte Rechnung ergibt — er fehlt in der Karte der Auskunft. */
   private static final Monatsabrechnung NICHTS_GESTELLT =
       new Monatsabrechnung(new BigDecimal("0.00"), new BigDecimal("0.00"), 0);
 
@@ -203,8 +204,8 @@ class StartseiteUseCaseTest {
     when(uebersicht.angebote(Optional.empty())).thenReturn(angebote);
     when(arbeitszeit.alleAngefallen()).thenReturn(angefallen);
     when(arbeitszeit.alleImMonat(OKTOBER)).thenReturn(imMonat);
-    when(rechnungen.gestellte(OKTOBER))
-        .thenReturn(new Gestellte(OKTOBER_GESTELLT, gestellteMengen));
+    when(rechnungen.gestellte())
+        .thenReturn(new Gestellte(Map.of(OKTOBER, OKTOBER_GESTELLT), gestellteMengen));
   }
 
   @Test
@@ -287,10 +288,11 @@ class StartseiteUseCaseTest {
         .thenReturn(List.of(angebot(1L, Angebotsstatus.BESTELLT, List.of(BERATUNG))));
     when(arbeitszeit.alleAngefallen()).thenReturn(Map.of(BERATUNG_ID, new BigDecimal("20.00")));
     when(arbeitszeit.alleImMonat(OKTOBER)).thenReturn(Map.of());
-    when(rechnungen.gestellte(OKTOBER))
+    when(rechnungen.gestellte())
         .thenReturn(
-            new Gestellte(OKTOBER_GESTELLT, Map.of()),
-            new Gestellte(OKTOBER_GESTELLT, Map.of(BERATUNG_ID, new BigDecimal("20.00"))));
+            new Gestellte(Map.of(OKTOBER, OKTOBER_GESTELLT), Map.of()),
+            new Gestellte(
+                Map.of(OKTOBER, OKTOBER_GESTELLT), Map.of(BERATUNG_ID, new BigDecimal("20.00"))));
 
     // When
     final BigDecimal mitEntwurf = useCase.stand(Optional.empty()).nichtAbgerechnet().betrag();
@@ -395,9 +397,10 @@ class StartseiteUseCaseTest {
     when(arbeitszeit.alleImMonat(OKTOBER)).thenReturn(Map.of(BERATUNG_ID, new BigDecimal("2.00")));
     when(arbeitszeit.alleImMonat(AUGUST)).thenReturn(Map.of(BERATUNG_ID, new BigDecimal("5.00")));
     final Map<Long, BigDecimal> gestellteMengen = Map.of(BERATUNG_ID, new BigDecimal("5.00"));
-    when(rechnungen.gestellte(OKTOBER))
-        .thenReturn(new Gestellte(OKTOBER_GESTELLT, gestellteMengen));
-    when(rechnungen.gestellte(AUGUST)).thenReturn(new Gestellte(AUGUST_GESTELLT, gestellteMengen));
+    when(rechnungen.gestellte())
+        .thenReturn(
+            new Gestellte(
+                Map.of(OKTOBER, OKTOBER_GESTELLT, AUGUST, AUGUST_GESTELLT), gestellteMengen));
   }
 
   @Test
@@ -438,7 +441,8 @@ class StartseiteUseCaseTest {
     when(uebersicht.angebote(Optional.empty())).thenReturn(List.of());
     when(arbeitszeit.alleAngefallen()).thenReturn(Map.of());
     when(arbeitszeit.alleImMonat(AUGUST)).thenReturn(Map.of());
-    when(rechnungen.gestellte(AUGUST)).thenReturn(new Gestellte(AUGUST_GESTELLT, Map.of()));
+    when(rechnungen.gestellte())
+        .thenReturn(new Gestellte(Map.of(AUGUST, AUGUST_GESTELLT), Map.of()));
 
     // When
     final Startseitenstand stand = useCase.stand(Optional.of(AUGUST));
@@ -503,7 +507,7 @@ class StartseiteUseCaseTest {
     when(uebersicht.angebote(Optional.empty())).thenReturn(List.of());
     when(arbeitszeit.alleAngefallen()).thenReturn(Map.of());
     when(arbeitszeit.alleImMonat(OKTOBER)).thenReturn(Map.of());
-    when(rechnungen.gestellte(OKTOBER)).thenReturn(new Gestellte(NICHTS_GESTELLT, Map.of()));
+    when(rechnungen.gestellte()).thenReturn(new Gestellte(Map.of(), Map.of()));
 
     // When
     final Startseitenstand stand = useCase.stand(Optional.empty());
@@ -513,7 +517,7 @@ class StartseiteUseCaseTest {
     assertThat(stand.nichtAbgerechnet().betrag()).isEqualByComparingTo("0.00");
     assertThat(stand.nichtAbgerechnet().erfasstImMonat()).isEqualByComparingTo("0.00");
     assertThat(stand.nichtAbgerechnet().anteile()).isEmpty();
-    assertThat(stand.abgerechnet().anzahl()).isZero();
+    assertThat(stand.abgerechnet()).isEqualTo(NICHTS_GESTELLT);
     assertThat(stand.interneStundenImMonat()).isEqualByComparingTo("0");
   }
 

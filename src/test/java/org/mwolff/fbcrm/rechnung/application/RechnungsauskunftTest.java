@@ -27,24 +27,26 @@ import org.mwolff.fbcrm.rechnung.domain.Rechnungszustand;
 /**
  * Was die Rechnung anderen Modulen ueber ihre gestellten Rechnungen sagt (Plan #208, E5).
  *
- * <p>Gegenstand sind zwei Auskuenfte aus <b>einem</b> Durchlauf: die Monatsabrechnung aus Netto,
- * Brutto und Anzahl der im Monat gestellten Rechnungen (#206, Kriterium 7) und die abgerechneten
- * Mengen je Angebotsposition ueber alle Monate (Kriterium 5). Ein Entwurf zaehlt in keine von
- * beiden (Kriterium 6 der fachlichen Quelle, Antwort 6) — eine <b>bezahlte oder abgeschriebene</b>
- * dagegen in beide: Sie ist draussen, und ihr Ausgang aendert daran nichts (Issue #253).
+ * <p>Gegenstand sind zwei Auskuenfte aus <b>einem</b> Durchlauf: je Monat die Abrechnung aus Netto,
+ * Brutto und Anzahl der in ihm gestellten Rechnungen (#206, Kriterium 7; Plan #274, E4) und die
+ * abgerechneten Mengen je Angebotsposition ueber alle Monate (Kriterium 5). Ein Monat ohne
+ * gestellte Rechnung steht nicht in der Karte. Ein Entwurf zaehlt in keine von beiden (Kriterium 6
+ * der fachlichen Quelle, Antwort 6) — eine <b>bezahlte oder abgeschriebene</b> dagegen in beide:
+ * Sie ist draussen, und ihr Ausgang aendert daran nichts (Issue #253).
  *
  * <p>Ueber den Monat entscheidet allein das Rechnungsdatum und nicht der Zeitpunkt des Stellens
  * (Antwort 4), und Brutto entsteht je Rechnung mit ihrem festgeschriebenen Satz — auf denselben
  * Cent wie in der Rechnungsliste (Kriterium 9).
  *
- * <p>Eine <b>nachgetragene</b> Rechnung zaehlt in die Monatsabrechnung ihres Rechnungsdatums mit
- * Netto und Brutto wie erfasst; die Mengen je Angebotsposition beruehrt sie nicht, denn sie gehoert
- * zu keinem Angebot (Plan #259, E20; #254, Kriterien 9 und 11).
+ * <p>Eine <b>nachgetragene</b> Rechnung zaehlt in die Abrechnung des Monats ihres Rechnungsdatums
+ * mit Netto und Brutto wie erfasst; die Mengen je Angebotsposition beruehrt sie nicht, denn sie
+ * gehoert zu keinem Angebot (Plan #259, E20; #254, Kriterien 9 und 11).
  */
 @ExtendWith(MockitoExtension.class)
 class RechnungsauskunftTest {
 
   private static final YearMonth SEPTEMBER = YearMonth.of(2026, 9);
+  private static final YearMonth OKTOBER = YearMonth.of(2026, 10);
 
   private static final LocalDate ERSTER_SEPTEMBER = LocalDate.of(2026, 9, 1);
   private static final LocalDate LETZTER_SEPTEMBER = LocalDate.of(2026, 9, 30);
@@ -90,7 +92,7 @@ class RechnungsauskunftTest {
                     ERSTER_SEPTEMBER)));
 
     // When
-    auskunft.gestellte(SEPTEMBER);
+    auskunft.gestellte();
 
     // Then — ein Durchlauf durch dieselben Daten, nicht zwei (Plan #208, E5).
     verify(rechnungen, times(1)).findAlle();
@@ -123,15 +125,18 @@ class RechnungsauskunftTest {
                     ERSTER_OKTOBER)));
 
     // When
-    final Monatsabrechnung imMonat = auskunft.gestellte(SEPTEMBER).imMonat();
+    final Map<YearMonth, Monatsabrechnung> jeMonat = auskunft.gestellte().jeMonat();
 
-    // Then — 30 Stunden zu 100,00 €, zwei Rechnungen; der Oktober bleibt draussen.
-    assertThat(imMonat.netto()).isEqualByComparingTo("3000.00");
-    assertThat(imMonat.anzahl()).isEqualTo(2);
+    // Then — im September 30 Stunden zu 100,00 €, zwei Rechnungen; der Oktober steht fuer sich.
+    assertThat(jeMonat).containsOnlyKeys(SEPTEMBER, OKTOBER);
+    assertThat(jeMonat.get(SEPTEMBER).netto()).isEqualByComparingTo("3000.00");
+    assertThat(jeMonat.get(SEPTEMBER).anzahl()).isEqualTo(2);
+    assertThat(jeMonat.get(OKTOBER).netto()).isEqualByComparingTo("4000.00");
+    assertThat(jeMonat.get(OKTOBER).anzahl()).isEqualTo(1);
   }
 
   @Test
-  void gestellte_withARechnungOutsideTheMonth_thenItsMengenStillCount() {
+  void gestellte_withRechnungenInTwoMonate_thenTheMengenCountOverBoth() {
     // Given — eine Rechnung im September, eine im Oktober, beide auf dieselbe Position.
     gegebenerAktuellerSatz("19.00");
     when(rechnungen.findAlle())
@@ -151,11 +156,13 @@ class RechnungsauskunftTest {
                     ERSTER_OKTOBER)));
 
     // When
-    final Gestellte gestellte = auskunft.gestellte(SEPTEMBER);
+    final Gestellte gestellte = auskunft.gestellte();
 
-    // Then — die Monatsabrechnung kennt nur den September, die Mengen alle Monate.
-    assertThat(gestellte.imMonat().netto()).isEqualByComparingTo("8000.00");
-    assertThat(gestellte.imMonat().anzahl()).isEqualTo(1);
+    // Then — jeder Monat traegt seine Rechnung, die Mengen zaehlen ueber beide.
+    assertThat(gestellte.jeMonat().get(SEPTEMBER).netto()).isEqualByComparingTo("8000.00");
+    assertThat(gestellte.jeMonat().get(SEPTEMBER).anzahl()).isEqualTo(1);
+    assertThat(gestellte.jeMonat().get(OKTOBER).netto()).isEqualByComparingTo("3000.00");
+    assertThat(gestellte.jeMonat().get(OKTOBER).anzahl()).isEqualTo(1);
     assertThat(gestellte.mengenJePosition())
         .containsOnly(
             Map.entry(Long.valueOf(Rechnungsdoppel.BERATUNG_ID), new BigDecimal("110.00")));
@@ -182,7 +189,7 @@ class RechnungsauskunftTest {
                     LETZTER_SEPTEMBER)));
 
     // When
-    final Map<Long, BigDecimal> mengen = auskunft.gestellte(SEPTEMBER).mengenJePosition();
+    final Map<Long, BigDecimal> mengen = auskunft.gestellte().mengenJePosition();
 
     // Then
     assertThat(mengen.get(Long.valueOf(Rechnungsdoppel.BERATUNG_ID)))
@@ -206,11 +213,12 @@ class RechnungsauskunftTest {
                 Rechnungsdoppel.entwurf(2L, List.of(Rechnungsdoppel.beratung("50.00")))));
 
     // When
-    final Gestellte gestellte = auskunft.gestellte(SEPTEMBER);
+    final Gestellte gestellte = auskunft.gestellte();
 
     // Then — der Entwurf zaehlt nirgends mit (#206, Antwort 6).
-    assertThat(gestellte.imMonat().netto()).isEqualByComparingTo("8000.00");
-    assertThat(gestellte.imMonat().anzahl()).isEqualTo(1);
+    assertThat(gestellte.jeMonat()).containsOnlyKeys(SEPTEMBER);
+    assertThat(gestellte.jeMonat().get(SEPTEMBER).netto()).isEqualByComparingTo("8000.00");
+    assertThat(gestellte.jeMonat().get(SEPTEMBER).anzahl()).isEqualTo(1);
     assertThat(gestellte.mengenJePosition())
         .containsOnly(
             Map.entry(Long.valueOf(Rechnungsdoppel.BERATUNG_ID), new BigDecimal("80.00")));
@@ -230,9 +238,12 @@ class RechnungsauskunftTest {
                     List.of(Rechnungsdoppel.beratung("80.00")),
                     ERSTER_OKTOBER)));
 
-    // When / Then — im September zaehlt sie nicht, im Oktober schon.
-    assertThat(auskunft.gestellte(SEPTEMBER).imMonat().anzahl()).isZero();
-    assertThat(auskunft.gestellte(YearMonth.of(2026, 10)).imMonat().anzahl()).isEqualTo(1);
+    // When
+    final Map<YearMonth, Monatsabrechnung> jeMonat = auskunft.gestellte().jeMonat();
+
+    // Then — sie steht im Oktober und nicht im September.
+    assertThat(jeMonat).containsOnlyKeys(OKTOBER);
+    assertThat(jeMonat.get(OKTOBER).anzahl()).isEqualTo(1);
   }
 
   @Test
@@ -250,7 +261,7 @@ class RechnungsauskunftTest {
                     LETZTER_SEPTEMBER)));
 
     // When
-    final Monatsabrechnung imMonat = auskunft.gestellte(SEPTEMBER).imMonat();
+    final Monatsabrechnung imMonat = auskunft.gestellte().jeMonat().get(SEPTEMBER);
 
     // Then — 8.000,00 € zu 7 % ergeben 8.560,00 € und nicht 9.520,00 € (#206, Kriterium 9).
     assertThat(imMonat.netto()).isEqualByComparingTo("8000.00");
@@ -278,7 +289,7 @@ class RechnungsauskunftTest {
                     LETZTER_SEPTEMBER)));
 
     // When
-    final Monatsabrechnung imMonat = auskunft.gestellte(SEPTEMBER).imMonat();
+    final Monatsabrechnung imMonat = auskunft.gestellte().jeMonat().get(SEPTEMBER);
 
     // Then — je Rechnung 0,54 €, zusammen 1,08 €; aus 1,00 € netto gerechnet waeren es 1,07 €.
     assertThat(imMonat.netto()).isEqualByComparingTo("1.00");
@@ -292,28 +303,47 @@ class RechnungsauskunftTest {
     when(rechnungen.findAlle()).thenReturn(List.of());
 
     // When
-    final Gestellte gestellte = auskunft.gestellte(SEPTEMBER);
+    final Gestellte gestellte = auskunft.gestellte();
 
     // Then
-    assertThat(gestellte.imMonat())
-        .isEqualTo(new Monatsabrechnung(new BigDecimal("0.00"), new BigDecimal("0.00"), 0));
+    assertThat(gestellte.jeMonat()).isEmpty();
     assertThat(gestellte.mengenJePosition()).isEmpty();
   }
 
   @Test
-  void gestellte_thenTheMapIsACopyAndTheCallerCannotChangeIt() {
-    // Given — die Abbildung aus dem kompakten Konstruktor.
+  void gestellte_withOnlyAnEntwurf_thenItsMonatIsInNoKey() {
+    // Given — ein einziger Entwurf mit Rechnungsdatum 30. September (#273, Kriterium 3).
+    gegebenerAktuellerSatz("19.00");
+    when(rechnungen.findAlle())
+        .thenReturn(
+            List.of(Rechnungsdoppel.entwurf(1L, List.of(Rechnungsdoppel.beratung("50.00")))));
+
+    // When
+    final Gestellte gestellte = auskunft.gestellte();
+
+    // Then — kein Monatsschluessel, auch nicht der September seines Rechnungsdatums.
+    assertThat(gestellte.jeMonat()).isEmpty();
+    assertThat(gestellte.mengenJePosition()).isEmpty();
+  }
+
+  @Test
+  void gestellte_thenTheMapsAreCopiesAndTheCallerCannotChangeThem() {
+    // Given — die Abbildungen aus dem kompakten Konstruktor.
+    final Map<YearMonth, Monatsabrechnung> monate = new HashMap<>();
+    monate.put(SEPTEMBER, new Monatsabrechnung(new BigDecimal("0.00"), new BigDecimal("0.00"), 0));
     final Map<Long, BigDecimal> eigene = new HashMap<>();
     eigene.put(Long.valueOf(Rechnungsdoppel.BERATUNG_ID), new BigDecimal("80.00"));
-    final Gestellte gestellte =
-        new Gestellte(
-            new Monatsabrechnung(new BigDecimal("0.00"), new BigDecimal("0.00"), 0), eigene);
+    final Gestellte gestellte = new Gestellte(monate, eigene);
 
-    // When — der Aufrufer veraendert seine Liste weiter.
+    // When — der Aufrufer veraendert seine Abbildungen weiter.
+    monate.put(OKTOBER, new Monatsabrechnung(BigDecimal.ONE, BigDecimal.ONE, 1));
     eigene.put(Long.valueOf(Rechnungsdoppel.PAUSCHALE_ID), BigDecimal.ONE);
 
     // Then
+    assertThat(gestellte.jeMonat()).containsOnlyKeys(SEPTEMBER);
     assertThat(gestellte.mengenJePosition()).hasSize(1);
+    assertThatThrownBy(() -> gestellte.jeMonat().clear())
+        .isInstanceOf(UnsupportedOperationException.class);
     assertThatThrownBy(() -> gestellte.mengenJePosition().clear())
         .isInstanceOf(UnsupportedOperationException.class);
   }
@@ -341,12 +371,12 @@ class RechnungsauskunftTest {
                     .mitZustand(Rechnungszustand.ABGESCHRIEBEN, Rechnungsdoppel.ANGELEGT)));
 
     // When
-    final Gestellte gestellte = auskunft.gestellte(SEPTEMBER);
+    final Gestellte gestellte = auskunft.gestellte();
 
-    // Then — beide zaehlen in der Monatsabrechnung und behalten ihre Positionsmengen: 8.000,00 aus
-    // 80 Stunden zu 100,00 und 1.200,00 aus der Pauschale.
-    assertThat(gestellte.imMonat().netto()).isEqualByComparingTo("9200.00");
-    assertThat(gestellte.imMonat().anzahl()).isEqualTo(2);
+    // Then — beide zaehlen in der Abrechnung des Monats und behalten ihre Positionsmengen: 8.000,00
+    // aus 80 Stunden zu 100,00 und 1.200,00 aus der Pauschale.
+    assertThat(gestellte.jeMonat().get(SEPTEMBER).netto()).isEqualByComparingTo("9200.00");
+    assertThat(gestellte.jeMonat().get(SEPTEMBER).anzahl()).isEqualTo(2);
     assertThat(gestellte.mengenJePosition())
         .containsOnly(
             Map.entry(Long.valueOf(Rechnungsdoppel.BERATUNG_ID), new BigDecimal("80.00")),
@@ -354,7 +384,7 @@ class RechnungsauskunftTest {
   }
 
   @Test
-  void gestellte_withANachgetrageneInTheMonth_thenItAddsItsBetraegeAndOneButNoMengen() {
+  void gestellte_withNachgetragene_thenEachAddsItsBetraegeAndOneToItsMonatButNoMengen() {
     // Given — eine geschriebene Rechnung und zwei nachgetragene, eine davon im Oktober.
     gegebenerAktuellerSatz("19.00");
     when(rechnungen.findAlle())
@@ -376,12 +406,19 @@ class RechnungsauskunftTest {
                     2L, "AR-2", ERSTER_OKTOBER, "500.00", "595.00", null)));
 
     // When
-    final Gestellte gestellte = auskunft.gestellte(SEPTEMBER);
+    final Gestellte gestellte = auskunft.gestellte();
 
-    // Then — 8.000,00 + 1.000,00 netto, 8.560,00 + 1.190,01 brutto wie erfasst, zwei Rechnungen;
-    // die Mengen bleiben die der geschriebenen Rechnung.
-    assertThat(gestellte.imMonat())
-        .isEqualTo(new Monatsabrechnung(new BigDecimal("9000.00"), new BigDecimal("9750.01"), 2));
+    // Then — im September 8.000,00 + 1.000,00 netto, 8.560,00 + 1.190,01 brutto wie erfasst, zwei
+    // Rechnungen; der Nachtrag vom Oktober steht im Oktober. Die Mengen bleiben die der
+    // geschriebenen Rechnung.
+    assertThat(gestellte.jeMonat())
+        .containsOnly(
+            Map.entry(
+                SEPTEMBER,
+                new Monatsabrechnung(new BigDecimal("9000.00"), new BigDecimal("9750.01"), 2)),
+            Map.entry(
+                OKTOBER,
+                new Monatsabrechnung(new BigDecimal("500.00"), new BigDecimal("595.00"), 1)));
     assertThat(gestellte.mengenJePosition())
         .containsOnly(
             Map.entry(Long.valueOf(Rechnungsdoppel.BERATUNG_ID), new BigDecimal("80.00")));
@@ -389,7 +426,7 @@ class RechnungsauskunftTest {
   }
 
   @Test
-  void gestellte_withANachgetrageneInAnotherMonth_thenItDoesNotCount() {
+  void gestellte_withOnlyANachgetragene_thenItsMonatIsTheOnlyKey() {
     // Given — nur eine nachgetragene Rechnung, und die im Oktober.
     gegebenerAktuellerSatz("19.00");
     when(rechnungen.findAlle()).thenReturn(List.of());
@@ -400,11 +437,14 @@ class RechnungsauskunftTest {
                     2L, "AR-2", ERSTER_OKTOBER, "500.00", "595.00", null)));
 
     // When
-    final Gestellte gestellte = auskunft.gestellte(SEPTEMBER);
+    final Gestellte gestellte = auskunft.gestellte();
 
     // Then
-    assertThat(gestellte.imMonat())
-        .isEqualTo(new Monatsabrechnung(new BigDecimal("0.00"), new BigDecimal("0.00"), 0));
+    assertThat(gestellte.jeMonat())
+        .containsOnly(
+            Map.entry(
+                OKTOBER,
+                new Monatsabrechnung(new BigDecimal("500.00"), new BigDecimal("595.00"), 1)));
     assertThat(gestellte.mengenJePosition()).isEmpty();
   }
 }

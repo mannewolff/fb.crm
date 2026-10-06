@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.stream.IntStream;
+import java.util.stream.Stream;
 import org.mwolff.fbcrm.angebot.application.AngebotMitFirma;
 import org.mwolff.fbcrm.angebot.application.AngeboteUebersichtUseCase;
 import org.mwolff.fbcrm.angebot.domain.Angebotsposition;
@@ -18,6 +19,7 @@ import org.mwolff.fbcrm.common.Einheit;
 import org.mwolff.fbcrm.common.Geldrechnung;
 import org.mwolff.fbcrm.common.Geschaeftszone;
 import org.mwolff.fbcrm.rechnung.application.Gestellte;
+import org.mwolff.fbcrm.rechnung.application.Monatsabrechnung;
 import org.mwolff.fbcrm.rechnung.application.Rechnungsauskunft;
 import org.mwolff.fbcrm.rechnung.domain.Positionsstand;
 import org.springframework.stereotype.Service;
@@ -31,8 +33,8 @@ import org.springframework.transaction.annotation.Transactional;
  * Kennzahl 2 sie alle braucht und Kennzahl 1 daraus filtert. Die Stunden kommen in zwei Zuegen
  * ueber alle Angebote ({@link Arbeitszeitauskunft#alleAngefallen()} und {@link
  * Arbeitszeitauskunft#alleImMonat(YearMonth)}, E3), die gestellten Rechnungen in einem ({@link
- * Rechnungsauskunft#gestellte(YearMonth)}, E5). Je Angebot zu fragen waere die Abfragelawine, die
- * diese Tueren gerade vermeiden.
+ * Rechnungsauskunft#gestellte()}, E5). Je Angebot zu fragen waere die Abfragelawine, die diese
+ * Tueren gerade vermeiden.
  *
  * <p><b>Welcher Monat gilt, entscheidet der Server</b> an der injizierten {@link Clock} in der
  * {@link Geschaeftszone} (E8): Am 1. des Monats um 00:30 Ortszeit ist am Nullmeridian noch der
@@ -98,14 +100,22 @@ public class StartseiteUseCase {
     final List<AngebotMitFirma> alle = angebote.angebote(Optional.empty());
     final Map<Long, BigDecimal> angefallen = arbeitszeit.alleAngefallen();
     final Map<Long, BigDecimal> imMonat = arbeitszeit.alleImMonat(monat);
-    final Gestellte gestellte = rechnungen.gestellte(monat);
+    final Gestellte gestellte = rechnungen.gestellte();
     return new Startseitenstand(
         monat,
         monate,
         alle.stream().filter(zeile -> inArbeit(zeile.angebot().status())).toList(),
         nichtAbgerechnet(alle, angefallen, imMonat, gestellte.mengenJePosition()),
-        gestellte.imMonat(),
+        abgerechnetIm(monat, gestellte),
         interneStundenImMonat(alle, imMonat));
+  }
+
+  /*
+   * Die Abrechnung des geltenden Monats aus der Karte aller Monate (Plan #274, E4). Ein Monat ohne
+   * gestellte Rechnung fehlt in der Karte und ergibt die Summe ueber keinen — 0,00 und Anzahl 0.
+   */
+  private static Monatsabrechnung abgerechnetIm(final YearMonth monat, final Gestellte gestellte) {
+    return Monatsabrechnung.summe(Stream.ofNullable(gestellte.jeMonat().get(monat)));
   }
 
   /*

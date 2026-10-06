@@ -14,7 +14,7 @@
  * der Einstellungen sind Zahlen, und das Muster ist bereits an der Schnittstelle geprueft.
  *
  * <p>Hier liegt die eine Tuer dieses Moduls nach draussen: {@code Rechnungsauskunft}. Sie sagt
- * anderen Modulen, was gestellt wurde — die Summe eines Monats und die abgerechneten Mengen je
+ * anderen Modulen, was gestellt wurde — die Summe je Monat und die abgerechneten Mengen je
  * Angebotsposition (#206, Kriterien 5 und 7). Sie kennt dabei <b>nur gestellte</b> Rechnungen,
  * waehrend {@code Abrechnungsstand} Entwuerfe mitzaehlt; welche der beiden Groessen gemeint ist,
  * entscheidet die Frage: was noch abzurechnen waere oder was schon draussen ist.
