@@ -22,6 +22,7 @@ const ArbeitszeitPage = lazy(async () => import('./pages/ArbeitszeitPage'));
 const RechnungenPage = lazy(async () => import('./pages/RechnungenPage'));
 const RechnungPage = lazy(async () => import('./pages/RechnungPage'));
 const NachtragMaske = lazy(async () => import('./pages/NachtragMaske'));
+const NachgetrageneRechnungPage = lazy(async () => import('./pages/NachgetrageneRechnungPage'));
 const EigeneAngabenMaske = lazy(async () => import('./pages/EigeneAngabenMaske'));
 const AdministrationPage = lazy(async () => import('./pages/AdministrationPage'));
 const StartseitePage = lazy(async () => import('./pages/StartseitePage'));
@@ -79,6 +80,7 @@ export default function App() {
                 Rechnung hat ihren eigenen Kennungsraum unter `/rechnungen/nachgetragen/`. */}
             <Route path="/rechnungen/nachtragen" element={<NachtragMaske />} />
             <Route path="/rechnungen/:rechnungId" element={<RechnungPage />} />
+            <Route path="/rechnungen/nachgetragen/:id" element={<NachgetrageneRechnungPage />} />
             <Route
               path="/rechnungen/nachgetragen/:id/bearbeiten"
               element={<NachtragMaske />}

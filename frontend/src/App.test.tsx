@@ -147,6 +147,10 @@ describe('App', () => {
     ['fuehrt „/rechnungen/4" ohne Sitzung auf die Anmeldeseite', '/rechnungen/4'],
     ['fuehrt „/rechnungen/nachtragen" ohne Sitzung auf die Anmeldeseite', '/rechnungen/nachtragen'],
     [
+      'fuehrt „/rechnungen/nachgetragen/7" ohne Sitzung auf die Anmeldeseite',
+      '/rechnungen/nachgetragen/7',
+    ],
+    [
       'fuehrt „/rechnungen/nachgetragen/7/bearbeiten" ohne Sitzung auf die Anmeldeseite',
       '/rechnungen/nachgetragen/7/bearbeiten',
     ],
@@ -291,6 +295,24 @@ describe('App', () => {
       await screen.findByRole('heading', { level: 1, name: 'Rechnung nachtragen' }),
     ).toBeInTheDocument();
     expect(screen.getByRole('navigation', { name: 'Hauptnavigation' })).toBeInTheDocument();
+  });
+
+  it('zeigt „/rechnungen/nachgetragen/7" als Einzelansicht der nachgetragenen Rechnung', async () => {
+    fensterbreite(1440);
+    fetchNachPfad({
+      'GET /api/auth/me': json(200, KONTO),
+      'GET /api/instance': json(200, { version: '0.1.3' }),
+      'GET /api/nachgetragene-rechnungen/7': json(200, NACHTRAG),
+    });
+
+    renderApp(['/rechnungen/nachgetragen/7'], 0);
+
+    // Ein eigener Kennungsraum (E21): Die Ansicht fragt den Weg der nachgetragenen Rechnung.
+    expect(screen.getByRole('status')).toHaveTextContent('Sitzung wird geprüft');
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Rechnung RE-2026-014' }),
+    ).toBeInTheDocument();
+    expect(screen.getByText('nachgetragen')).toBeInTheDocument();
   });
 
   it('zeigt „/rechnungen/nachgetragen/7/bearbeiten" als Maske der nachgetragenen Rechnung', async () => {
