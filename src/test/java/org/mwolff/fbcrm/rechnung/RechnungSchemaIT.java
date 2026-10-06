@@ -11,8 +11,9 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 /**
- * Prueft das Schema der Rechnung nach {@code V18__rechnung.sql} und {@code
- * V21__rechnung_zustand_erledigt.sql} gegen eine echte PostgreSQL-Instanz.
+ * Prueft das Schema der Rechnung nach {@code V18__rechnung.sql}, {@code
+ * V21__rechnung_zustand_erledigt.sql} und {@code V22__rechnung_nachgetragen.sql} gegen eine echte
+ * PostgreSQL-Instanz.
  *
  * <p>Gegenstand sind die Zusagen, die allein die Datenbank haelt: die beiden gegenlaeufigen CHECKs
  * um den Zustand, die Eindeutigkeit der Nummer, die Wertebereiche der Positionen und die
@@ -136,10 +137,23 @@ class RechnungSchemaIT extends AbstractIntegrationTest {
 
     final Long angebot = Long.valueOf(angebotId);
 
-    // When / Then
+    // When / Then — V22: der Index ueber lower(nummer) haelt auch die gleiche Schreibweise ab.
     assertThatThrownBy(() -> jdbc.update(INSERT_GESTELLT, angebot, "R26-0004", STEUERSATZ))
         .isInstanceOf(DataIntegrityViolationException.class)
-        .hasMessageContaining("rechnung_nummer_key");
+        .hasMessageContaining("rechnung_nummer_lower_key");
+  }
+
+  @Test
+  void rechnungNummer_givenTheSameNumberInAnotherCase_thenRejectedByTheDatabase() {
+    // Given
+    jdbc.update(INSERT_GESTELLT, Long.valueOf(angebotId), "RE-1", STEUERSATZ);
+
+    final Long angebot = Long.valueOf(angebotId);
+
+    // When / Then — #254, Kriterium 4: „RE-1" und „re-1" sind dieselbe Nummer.
+    assertThatThrownBy(() -> jdbc.update(INSERT_GESTELLT, angebot, "re-1", STEUERSATZ))
+        .isInstanceOf(DataIntegrityViolationException.class)
+        .hasMessageContaining("rechnung_nummer_lower_key");
   }
 
   @Test
@@ -235,10 +249,12 @@ class RechnungSchemaIT extends AbstractIntegrationTest {
   void rechnungZustand_givenAnUnknownState_thenRejectedByTheDatabase() {
     final Long angebot = Long.valueOf(angebotId);
 
-    // When / Then — ein fuenfter Zustand faellt durch beide gegenlaeufigen CHECKs.
+    // When / Then — ein fuenfter Zustand faellt durch beide gegenlaeufigen CHECKs und nicht nur
+    // durch rechnung_zustand. Postgres prueft die CHECKs nach Namen und meldet den ersten
+    // verletzten: rechnung_entwurf, weil der fuenfte Zustand kein Entwurf ohne Nummer ist.
     assertThatThrownBy(
             () -> jdbc.update(INSERT_MIT_ZUSTAND, angebot, "MAHNUNG", "R26-0006", STEUERSATZ))
         .isInstanceOf(DataIntegrityViolationException.class)
-        .hasMessageContaining("rechnung_zustand");
+        .hasMessageContaining("rechnung_entwurf");
   }
 }

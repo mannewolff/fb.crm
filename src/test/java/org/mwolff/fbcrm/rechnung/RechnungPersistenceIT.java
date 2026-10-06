@@ -269,6 +269,16 @@ class RechnungPersistenceIT extends AbstractIntegrationTest {
   }
 
   @Test
+  void existiertNummer_givenTheSameNumberInAnotherCase_thenAnswersTrue() {
+    // Given
+    final Rechnung entwurf = geschrieben(entwurf(List.of(beratung("3.00"))));
+    geschrieben(entwurf.gestellt("RE-1", NEUNZEHN, 10, EMPFAENGER, ABSENDER, GESTELLT_AM));
+
+    // When / Then — #254, Kriterium 4: „RE-1" und „re-1" sind dieselbe Nummer.
+    assertThat(vergeben("re-1")).isTrue();
+  }
+
+  @Test
   void findByAngebot_thenLoadsEveryRechnungOfTheAngebotWithItsPositions() {
     // Given
     geschrieben(entwurf(List.of(beratung("3.00"))));

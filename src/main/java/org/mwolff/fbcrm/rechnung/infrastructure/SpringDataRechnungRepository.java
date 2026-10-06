@@ -34,11 +34,12 @@ interface SpringDataRechnungRepository extends JpaRepository<RechnungEntity, Lon
    * Ob eine Rechnung diese Nummer schon traegt (#160, Kriterium 18).
    *
    * <p>Als {@code count(…) > 0} und nicht als Laden der Zeile: Gebraucht wird die Antwort, nicht
-   * die Rechnung.
+   * die Rechnung. Verglichen wird ueber {@code lower(…)} wie im eindeutigen Index {@code
+   * rechnung_nummer_lower_key}: „RE-1" und „re-1" sind dieselbe Nummer (#254, Kriterium 4).
    *
    * @param nummer die zu pruefende Rechnungsnummer
    */
-  @Query("select count(r) > 0 from RechnungEntity r where r.nummer = :nummer")
+  @Query("select count(r) > 0 from RechnungEntity r where lower(r.nummer) = lower(:nummer)")
   boolean existiertNummer(@Param("nummer") String nummer);
 
   /**

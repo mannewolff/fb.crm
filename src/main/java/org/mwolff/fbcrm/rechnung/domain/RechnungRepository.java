@@ -77,11 +77,13 @@ public interface RechnungRepository {
   void delete(long id);
 
   /**
-   * Ob eine Rechnung diese Nummer schon traegt (#160, Kriterium 18).
+   * Ob eine Rechnung diese Nummer schon traegt, ohne Ansehen der Schreibweise (#160, Kriterium 18;
+   * #254, Kriterium 4): „RE-1" und „re-1" sind dieselbe Nummer.
    *
    * <p>Die Vorabpruefung des Stellens: Sie erspart dem Anwender einen Datenbankfehler und laesst
-   * den Anwendungsfall mit 409 antworten. Die Zusage haelt trotzdem {@code UNIQUE} in der Datenbank
-   * — zwischen Frage und Antwort kann eine zweite Sitzung dieselbe Nummer schreiben.
+   * den Anwendungsfall mit 409 antworten. Die Zusage haelt trotzdem der eindeutige Index ueber
+   * {@code lower(nummer)} in der Datenbank — zwischen Frage und Antwort kann eine zweite Sitzung
+   * dieselbe Nummer schreiben.
    *
    * @param nummer die zu pruefende Rechnungsnummer
    */
