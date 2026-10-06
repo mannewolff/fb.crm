@@ -1,7 +1,6 @@
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Link from '@mui/material/Link';
-import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
@@ -11,8 +10,8 @@ import { requestPasswordReset } from '../api/auth';
 import { ApiError } from '../api/client';
 import type { FieldErrors } from '../api/client';
 import AuthCard from '../components/AuthCard';
+import EmailFeld from '../components/EmailFeld';
 import KupferTaste from '../components/KupferTaste';
-import { meldungAm } from '../lib/feldmeldung';
 
 /**
  * „Passwort vergessen" (K7).
@@ -79,18 +78,11 @@ export default function ForgotPasswordPage() {
         sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}
       >
         {fehler === null ? null : <Alert severity="error">{fehler}</Alert>}
-        <TextField
-          label="E-Mail-Adresse"
-          type="email"
-          value={email}
-          onChange={(ereignis) => {
-            setEmail(ereignis.target.value);
-          }}
-          error={meldungAm(feldFehler, 'email') !== undefined}
-          helperText={meldungAm(feldFehler, 'email')}
+        <EmailFeld
+          wert={email}
+          setzeWert={setEmail}
+          feldFehler={feldFehler}
           autoComplete="username"
-          required
-          fullWidth
         />
         <KupferTaste disabled={laeuft}>Link anfordern</KupferTaste>
       </Box>

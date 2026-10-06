@@ -8,6 +8,7 @@ import type { Dispatch, FormEvent, ReactNode, SetStateAction } from 'react';
 import { eigeneAngabenLesen, eigeneAngabenPflegen } from '../api/eigeneAngaben';
 import type { EigeneAngaben } from '../api/eigeneAngaben';
 import type { FieldErrors } from '../api/client';
+import AnschriftFelder from '../components/AnschriftFelder';
 import Karte from '../components/Karte';
 import { useKopfPfad } from '../components/KopfPfad';
 import type { PfadVerweis } from '../components/KopfPfad';
@@ -270,34 +271,7 @@ export default function EigeneAngabenMaske() {
               setzeWerte={setzeWerte}
               meldung={meldungAm(feldFehler, 'berufsbezeichnung')}
             />
-            <Eingabe
-              label="Straße und Hausnummer"
-              feld="strasse"
-              werte={werte}
-              setzeWerte={setzeWerte}
-              meldung={meldungAm(feldFehler, 'strasse')}
-            />
-            <Eingabe
-              label="Postleitzahl"
-              feld="plz"
-              werte={werte}
-              setzeWerte={setzeWerte}
-              meldung={meldungAm(feldFehler, 'plz')}
-            />
-            <Eingabe
-              label="Ort"
-              feld="ort"
-              werte={werte}
-              setzeWerte={setzeWerte}
-              meldung={meldungAm(feldFehler, 'ort')}
-            />
-            <Eingabe
-              label="Land"
-              feld="land"
-              werte={werte}
-              setzeWerte={setzeWerte}
-              meldung={meldungAm(feldFehler, 'land')}
-            />
+            <AnschriftFelder werte={werte} setzeWerte={setzeWerte} feldFehler={feldFehler} />
             <Eingabe
               label="E-Mail-Adresse"
               feld="email"

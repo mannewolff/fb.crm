@@ -10,6 +10,7 @@ import { firmaAendern, firmaAnlegen, firmaLesen } from '../api/firmen';
 import type { FieldErrors } from '../api/client';
 import { useKopfPfad } from '../components/KopfPfad';
 import type { PfadVerweis } from '../components/KopfPfad';
+import AnschriftFelder from '../components/AnschriftFelder';
 import Karte from '../components/Karte';
 import KupferTaste from '../components/KupferTaste';
 import WeicheTaste from '../components/WeicheTaste';
@@ -239,34 +240,7 @@ export default function FirmaMaske() {
               meldung={nameMeldung}
               pflicht
             />
-            <Eingabe
-              label="Straße und Hausnummer"
-              feld="strasse"
-              werte={werte}
-              setzeWerte={setzeWerte}
-              meldung={meldungAm(feldFehler, 'strasse')}
-            />
-            <Eingabe
-              label="Postleitzahl"
-              feld="plz"
-              werte={werte}
-              setzeWerte={setzeWerte}
-              meldung={meldungAm(feldFehler, 'plz')}
-            />
-            <Eingabe
-              label="Ort"
-              feld="ort"
-              werte={werte}
-              setzeWerte={setzeWerte}
-              meldung={meldungAm(feldFehler, 'ort')}
-            />
-            <Eingabe
-              label="Land"
-              feld="land"
-              werte={werte}
-              setzeWerte={setzeWerte}
-              meldung={meldungAm(feldFehler, 'land')}
-            />
+            <AnschriftFelder werte={werte} setzeWerte={setzeWerte} feldFehler={feldFehler} />
             <Eingabe
               label="Steuernummer"
               feld="steuernummer"
