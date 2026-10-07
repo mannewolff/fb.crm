@@ -159,6 +159,22 @@ class ArchitectureTest {
         .check(CLASSES);
   }
 
+  @Test
+  void jahresabschlussModule_thenNothingDependsOnIt() {
+    noClasses()
+        .that()
+        .resideOutsideOfPackage("org.mwolff.fbcrm.jahresabschluss..")
+        .should()
+        .dependOnClassesThat()
+        .resideInAPackage("org.mwolff.fbcrm.jahresabschluss..")
+        .because(
+            "der Jahresabschluss liest aus den Fachmodulen und wird von keinem gelesen; die"
+                + " Richtung ist jahresabschluss -> angebot, arbeitszeit, rechnung, common"
+                + " (Plan #288, E20)")
+        .allowEmptyShould(true)
+        .check(CLASSES);
+  }
+
   private static final int HOECHSTENS_PARAMETER = 7;
 
   /**
