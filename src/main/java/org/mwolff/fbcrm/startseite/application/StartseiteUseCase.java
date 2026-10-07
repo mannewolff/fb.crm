@@ -40,9 +40,9 @@ import org.springframework.transaction.annotation.Transactional;
  * {@link Geschaeftszone} (E8): Am 1. des Monats um 00:30 Ortszeit ist am Nullmeridian noch der
  * Vormonat. Welche Jahre und Monate zur Wahl stehen, entsteht aus dem Bestand ({@link
  * WaehlbareZeitraeume}, #273, Kriterien 1 und 2). Wer keinen Zeitraum nennt oder einen, der nicht
- * zur Wahl steht, bekommt den laufenden Monat — ein unbekannter Zeitraum ist kein Fehler, sondern
- * ein fehlender (E18). Die Verdichtung der Rechnungen zu „Abgerechnet" steht daneben in {@link
- * Abrechnungsblick} (Plan #274, E16).
+ * zur Wahl steht, bekommt das laufende Jahr — ein unbekannter Zeitraum ist kein Fehler, sondern ein
+ * fehlender (E18; Issue #283). Die Verdichtung der Rechnungen zu „Abgerechnet" steht daneben in
+ * {@link Abrechnungsblick} (Plan #274, E16).
  *
  * <p><b>Was „in Arbeit" heisst, steht hier</b> und wird nicht mit der Zeiterfassung geteilt (E22):
  * „bestellt" oder „erledigt" ist die fachliche Kennzeichnung eines Angebots aus #206, „auf diese
@@ -87,8 +87,8 @@ public class StartseiteUseCase {
   /**
    * Der Stand der Startseite fuer einen Zeitraum.
    *
-   * @param gewaehlt der gewuenschte Monat oder das gewuenschte Jahr, oder leer fuer den laufenden
-   *     Monat; ein Zeitraum, der nicht zur Wahl steht, wirkt wie ein fehlender
+   * @param gewaehlt der gewuenschte Monat oder das gewuenschte Jahr, oder leer fuer das laufende
+   *     Jahr; ein Zeitraum, der nicht zur Wahl steht, wirkt wie ein fehlender
    * @return die drei Kennzahlen, die internen Stunden des Zeitraums, der geltende Zeitraum und die
    *     waehlbaren
    */
@@ -104,7 +104,7 @@ public class StartseiteUseCase {
                 new Zeitraum.Jahr(diesesJahr.minusYears(1)).von(),
                 new Zeitraum.Jahr(diesesJahr).bis()));
     final Zeitraum zeitraum =
-        gewaehlt.filter(waehlbar::enthaelt).orElse(new Zeitraum.Monat(laufend));
+        gewaehlt.filter(waehlbar::enthaelt).orElse(new Zeitraum.Jahr(diesesJahr));
     final List<AngebotMitFirma> alle = angebote.angebote(Optional.empty());
     final Map<Long, BigDecimal> angefallen = arbeitszeit.alleAngefallen();
     final Map<Long, BigDecimal> imZeitraum =

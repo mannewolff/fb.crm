@@ -38,8 +38,8 @@ import { RADIUS_RUND, ZAHLEN_KLASSE } from '../theme';
  * <b>Der Zeitraum steht in der Adresse</b> (`?zeitraum=JJJJ-MM` oder `?zeitraum=JJJJ`, E18; Plan
  * #274, E1): Er ist teilbar, uebersteht das Neuladen, und „zurueck" nimmt den Wechsel zurueck —
  * fuer ein Jahr genauso wie fuer einen Monat, dieselbe Entscheidung wie in {@link ArbeitszeitPage}.
- * Fehlt er oder ist er keiner, fragt die Ansicht ohne Parameter; welcher Monat der laufende ist,
- * entscheidet der Server an seiner Uhr in der Geschaeftszone (E8).
+ * Fehlt er oder ist er keiner, fragt die Ansicht ohne Parameter; welches Jahr das laufende ist,
+ * entscheidet der Server an seiner Uhr in der Geschaeftszone (E8; Issue #283).
  *
  * <b>Der gezeigte Zeitraum kommt aus der Antwort</b> und nicht aus der Adresse: Der Server nimmt
  * einen Zeitraum ausserhalb der waehlbaren wie einen fehlenden (E18), und nur seine Antwort weiss,

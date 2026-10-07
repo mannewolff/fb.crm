@@ -229,13 +229,13 @@ const PFAD = '/api/startseite';
 /**
  * Der Stand der Startseite: die Kennzahlen, der geltende Zeitraum und die waehlbaren.
  *
- * <b>Ohne Zeitraum fragt die Ansicht ohne Parameter</b>: Welcher Monat der laufende ist,
- * entscheidet der Server an seiner Uhr in der Geschaeftszone (Plan #208, E8). Ein hier gerechneter
- * Monat waere ein zweiter Wahrheitsort daneben — in einem Browser, der in einer anderen Zone steht,
- * der falsche.
+ * <b>Ohne Zeitraum fragt die Ansicht ohne Parameter</b>: Welches Jahr das laufende ist, entscheidet
+ * der Server an seiner Uhr in der Geschaeftszone (Plan #208, E8; Issue #283). Ein hier gerechneter
+ * Zeitraum waere ein zweiter Wahrheitsort daneben — in einem Browser, der in einer anderen Zone
+ * steht, der falsche.
  *
  * @param zeitraum der gewuenschte Zeitraum als `JJJJ-MM` oder `JJJJ` (Plan #274, E1), oder
- *     weggelassen fuer den laufenden Monat
+ *     weggelassen fuer das laufende Jahr
  */
 export function startseite(zeitraum?: string): Promise<Startseitenstand> {
   const weg = zeitraum === undefined ? PFAD : `${PFAD}?zeitraum=${encodeURIComponent(zeitraum)}`;

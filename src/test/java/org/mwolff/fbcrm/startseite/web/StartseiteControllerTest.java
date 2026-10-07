@@ -51,7 +51,7 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
  * <p>Gegenstand ist die Abbildung jedes Feldes des {@link Startseitenstand} auf die Antwort — die
  * drei Kennzahlen mit ihren Zeilen, der geltende Zeitraum und die waehlbaren — sowie der Zeitraum
  * als Parameter und sein Weglassen: Fehlt er, geht {@code Optional.empty()} an den Anwendungsfall,
- * und welcher Monat laeuft, entscheidet dieser an seiner Uhr (Plan #208, E8).
+ * und welches Jahr laeuft, entscheidet dieser an seiner Uhr (Plan #208, E8; Issue #283).
  *
  * <p><b>Welche Felder</b> die Antwort traegt, entscheidet dieser Layer; <b>wie</b> Monat und Datum
  * geschrieben werden, entscheidet der von Spring Boot gebaute ObjectMapper, den {@code
@@ -277,7 +277,7 @@ class StartseiteControllerTest {
 
   @Test
   void stand_withoutTheParameter_thenAsksWithoutAZeitraum() throws Exception {
-    // Given — E8: welcher Monat laeuft, entscheidet der Anwendungsfall an seiner Uhr.
+    // Given — E8: welches Jahr laeuft, entscheidet der Anwendungsfall an seiner Uhr (#283).
     when(useCase.stand(Optional.empty())).thenReturn(stand());
 
     // When / Then

@@ -26,8 +26,8 @@ const JAHR = /^\d{4}$/u;
  * Ein Wert aus der Adresse als Zeitraum, oder `null` (E1, E15).
  *
  * Nimmt einen Monat `JJJJ-MM` mit Monat 1 bis 12 oder ein Jahr `JJJJ`. Was keines von beiden ist,
- * ist hier kein Zeitraum — dann fragt die Ansicht ohne Parameter, und der Server nimmt den
- * laufenden Monat. Ein stiller Ersatzwert waere ein Zeitraum, den niemand gewaehlt hat.
+ * ist hier kein Zeitraum — dann fragt die Ansicht ohne Parameter, und der Server nimmt das
+ * laufende Jahr. Ein stiller Ersatzwert waere ein Zeitraum, den niemand gewaehlt hat.
  */
 export function alsZeitraum(wert: string | null): string | null {
   if (wert !== null && JAHR.test(wert)) {

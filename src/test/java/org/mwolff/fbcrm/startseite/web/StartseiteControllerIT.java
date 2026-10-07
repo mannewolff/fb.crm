@@ -110,9 +110,9 @@ class StartseiteControllerIT extends AbstractIntegrationTest {
   }
 
   @Test
-  void stand_whenSignedIn_thenAnswers200WithTheLaufenderMonthAsTheOnlySelectableOne() {
+  void stand_whenSignedIn_thenAnswers200WithTheLaufendesJahrAndTheOnlySelectableMonth() {
     // Given — ein leerer Bestand: zur Wahl stehen allein der laufende Monat und das laufende Jahr
-    // (#273, Kriterien 1 und 2).
+    // (#273, Kriterien 1 und 2). Ohne Parameter gilt das laufende Jahr (Issue #283).
     final YearMonth laufend = YearMonth.now(Geschaeftszone.ZONE);
 
     // When
@@ -122,7 +122,8 @@ class StartseiteControllerIT extends AbstractIntegrationTest {
     assertThat(gelesen.getStatusCode()).isEqualTo(HttpStatus.OK);
     final StartseiteResponse stand = Objects.requireNonNull(gelesen.getBody());
     assertThat(stand.zeitraum())
-        .isEqualTo(new StartseiteResponse.ZeitraumResponse("MONAT", laufend.toString()));
+        .isEqualTo(
+            new StartseiteResponse.ZeitraumResponse("JAHR", String.valueOf(laufend.getYear())));
     assertThat(stand.waehlbar().monate()).containsExactly(laufend);
     assertThat(stand.waehlbar().jahre()).containsExactly(String.valueOf(laufend.getYear()));
   }
@@ -165,8 +166,9 @@ class StartseiteControllerIT extends AbstractIntegrationTest {
   }
 
   @Test
-  void stand_givenAMonthWithoutAnything_thenTheLaufenderMonthIsInForce() {
-    // Given — im Vormonat geschah nichts; er steht nicht zur Wahl (#273, Kriterium 2).
+  void stand_givenAMonthWithoutAnything_thenTheLaufendesJahrIsInForce() {
+    // Given — im Vormonat geschah nichts; er steht nicht zur Wahl (#273, Kriterium 2) und wirkt
+    // damit wie ein fehlender Zeitraum (Issue #283).
     final YearMonth laufend = YearMonth.now(Geschaeftszone.ZONE);
 
     // When
@@ -175,7 +177,8 @@ class StartseiteControllerIT extends AbstractIntegrationTest {
             ruf(PFAD + "?zeitraum=" + laufend.minusMonths(1), StartseiteResponse.class).getBody());
 
     // Then
-    assertThat(stand.zeitraum().wert()).isEqualTo(laufend.toString());
+    assertThat(stand.zeitraum().art()).isEqualTo("JAHR");
+    assertThat(stand.zeitraum().wert()).isEqualTo(String.valueOf(laufend.getYear()));
     assertThat(stand.waehlbar().monate()).containsExactly(laufend);
   }
 

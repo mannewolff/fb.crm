@@ -68,8 +68,8 @@ public record WaehlbareZeitraeume(List<Year> jahre, List<YearMonth> monate) {
   }
 
   /**
-   * Ob ein Zeitraum zur Wahl steht — fuer den Rueckfall des Anwendungsfalls auf den laufenden
-   * Monat.
+   * Ob ein Zeitraum zur Wahl steht — fuer den Rueckfall des Anwendungsfalls auf das laufende Jahr
+   * (Issue #283).
    *
    * @param zeitraum der gewuenschte Zeitraum
    * @return {@code true}, wenn er unter den waehlbaren Jahren oder Monaten steht

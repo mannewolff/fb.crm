@@ -67,6 +67,12 @@ class StartseiteUseCaseTest {
   /** Der laufende Monat an dieser Uhr, in der Geschaeftszone gelesen. */
   private static final YearMonth OKTOBER = YearMonth.of(2026, 10);
 
+  /**
+   * Der laufende Monat als ausdrueckliche Wahl — er steht immer zur Wahl (#273, Kriterium 1). Wer
+   * den Monat meint, nennt ihn: Ohne Zeitraum gilt das laufende Jahr (Issue #283).
+   */
+  private static final Optional<Zeitraum> IM_OKTOBER = Optional.of(new Zeitraum.Monat(OKTOBER));
+
   /** Ein Monat des laufenden Jahres vor dem laufenden — waehlbar, sobald etwas in ihm geschah. */
   private static final YearMonth AUGUST = YearMonth.of(2026, 8);
 
@@ -262,7 +268,7 @@ class StartseiteUseCaseTest {
         Map.of());
 
     // When
-    final Startseitenstand stand = useCase.stand(Optional.empty());
+    final Startseitenstand stand = useCase.stand(IM_OKTOBER);
 
     // Then
     assertThat(stand.inArbeit())
@@ -280,7 +286,7 @@ class StartseiteUseCaseTest {
         Map.of(BERATUNG_ID, new BigDecimal("5.00")));
 
     // When
-    final Startseitenstand stand = useCase.stand(Optional.empty());
+    final Startseitenstand stand = useCase.stand(IM_OKTOBER);
 
     // Then
     assertThat(stand.nichtAbgerechnet().betrag()).isEqualByComparingTo("1500.00");
@@ -296,7 +302,7 @@ class StartseiteUseCaseTest {
         Map.of(BERATUNG_ID, new BigDecimal("20.00")));
 
     // When
-    final Startseitenstand stand = useCase.stand(Optional.empty());
+    final Startseitenstand stand = useCase.stand(IM_OKTOBER);
 
     // Then
     assertThat(stand.nichtAbgerechnet().betrag()).isEqualByComparingTo("0.00");
@@ -313,7 +319,7 @@ class StartseiteUseCaseTest {
         Map.of(BERATUNG_ID, new BigDecimal("15.00")));
 
     // When
-    final Startseitenstand stand = useCase.stand(Optional.empty());
+    final Startseitenstand stand = useCase.stand(IM_OKTOBER);
 
     // Then
     assertThat(stand.nichtAbgerechnet().betrag()).isEqualByComparingTo("0.00");
@@ -334,8 +340,8 @@ class StartseiteUseCaseTest {
                 Map.of(OKTOBER, OKTOBER_GESTELLT), Map.of(BERATUNG_ID, new BigDecimal("20.00"))));
 
     // When
-    final BigDecimal mitEntwurf = useCase.stand(Optional.empty()).nichtAbgerechnet().betrag();
-    final BigDecimal nachDemStellen = useCase.stand(Optional.empty()).nichtAbgerechnet().betrag();
+    final BigDecimal mitEntwurf = useCase.stand(IM_OKTOBER).nichtAbgerechnet().betrag();
+    final BigDecimal nachDemStellen = useCase.stand(IM_OKTOBER).nichtAbgerechnet().betrag();
 
     // Then
     assertThat(mitEntwurf).isEqualByComparingTo("2000.00");
@@ -352,7 +358,7 @@ class StartseiteUseCaseTest {
         Map.of());
 
     // When
-    final Startseitenstand stand = useCase.stand(Optional.empty());
+    final Startseitenstand stand = useCase.stand(IM_OKTOBER);
 
     // Then
     assertThat(stand.nichtAbgerechnet().betrag()).isEqualByComparingTo("0.00");
@@ -371,7 +377,7 @@ class StartseiteUseCaseTest {
         Map.of());
 
     // When
-    final Startseitenstand stand = useCase.stand(Optional.empty());
+    final Startseitenstand stand = useCase.stand(IM_OKTOBER);
 
     // Then
     assertThat(stand.nichtAbgerechnet().erfasstImZeitraum()).isEqualByComparingTo("49.96");
@@ -388,7 +394,7 @@ class StartseiteUseCaseTest {
         Map.of(BERATUNG_ID, new BigDecimal("20.00")));
 
     // When
-    final Startseitenstand stand = useCase.stand(Optional.empty());
+    final Startseitenstand stand = useCase.stand(IM_OKTOBER);
 
     // Then
     assertThat(stand.nichtAbgerechnet().erfasstImZeitraum()).isEqualByComparingTo("2200.00");
@@ -414,7 +420,7 @@ class StartseiteUseCaseTest {
         Map.of());
 
     // When
-    final Startseitenstand stand = useCase.stand(Optional.empty());
+    final Startseitenstand stand = useCase.stand(IM_OKTOBER);
 
     // Then — 1.000,00 € + 260,00 € am ersten, 600,00 € am zweiten, das dritte traegt nichts.
     assertThat(stand.nichtAbgerechnet().anteile())
@@ -450,7 +456,7 @@ class StartseiteUseCaseTest {
     gegebenZweiMonate();
 
     // When
-    final Startseitenstand oktober = useCase.stand(Optional.empty());
+    final Startseitenstand oktober = useCase.stand(IM_OKTOBER);
     final Startseitenstand august = useCase.stand(Optional.of(new Zeitraum.Monat(AUGUST)));
 
     // Then
@@ -466,7 +472,7 @@ class StartseiteUseCaseTest {
     gegebenZweiMonate();
 
     // When
-    final Startseitenstand oktober = useCase.stand(Optional.empty());
+    final Startseitenstand oktober = useCase.stand(IM_OKTOBER);
     final Startseitenstand august = useCase.stand(Optional.of(new Zeitraum.Monat(AUGUST)));
 
     // Then — min(12, 20) − 5 = 7 Stunden zu 100,00 €, in beiden Staenden (#206, Kriterium 3).
@@ -493,15 +499,18 @@ class StartseiteUseCaseTest {
   }
 
   @Test
-  void stand_withoutAZeitraum_thenTheLaufenderMonatOfTheClockAnswers() {
-    // Given
-    gegebenImOktober(List.of(), Map.of(), Map.of(), Map.of());
+  void stand_withoutAZeitraum_thenTheLaufendesJahrOfTheClockAnswers() {
+    // Given — eine gestellte Rechnung im Oktober, gefragt wird ohne Zeitraum (Issue #283).
+    final Zeitraum.Jahr diesesJahr = new Zeitraum.Jahr(DIESES_JAHR);
+    gegebenVorgaenge(Map.of(OKTOBER, OKTOBER_GESTELLT), Set.of());
+    when(arbeitszeit.alleImZeitraum(diesesJahr.von(), diesesJahr.bis())).thenReturn(Map.of());
 
     // When
     final Startseitenstand stand = useCase.stand(Optional.empty());
 
-    // Then — 22:30 UTC am 30. September ist in der Geschaeftszone schon Oktober.
-    assertThat(stand.zeitraum()).isEqualTo(new Zeitraum.Monat(OKTOBER));
+    // Then — das laufende Jahr der Uhr und nicht ihr laufender Monat.
+    assertThat(stand.zeitraum()).isEqualTo(diesesJahr);
+    assertThat(stand.abgerechnet().summe()).isEqualTo(OKTOBER_GESTELLT);
   }
 
   /** Stellt einen leeren Bestand bereit, dessen einzige Vorgaenge die genannten Monate sind. */
@@ -521,7 +530,7 @@ class StartseiteUseCaseTest {
     when(arbeitszeit.alleImZeitraum(OKTOBER.atDay(1), OKTOBER.atEndOfMonth())).thenReturn(Map.of());
 
     // When
-    final Startseitenstand stand = useCase.stand(Optional.empty());
+    final Startseitenstand stand = useCase.stand(IM_OKTOBER);
 
     // Then
     assertThat(stand.waehlbar().monate()).containsExactly(OKTOBER);
@@ -545,17 +554,18 @@ class StartseiteUseCaseTest {
   }
 
   @Test
-  void stand_withoutARechnungInTheLetztesJahr_thenThatJahrFallsBackToTheLaufenderMonat() {
+  void stand_withoutARechnungInTheLetztesJahr_thenThatJahrFallsBackToTheLaufendesJahr() {
     // Given — eine Rechnung nur im laufenden Jahr (#273, Kriterium 1).
+    final Zeitraum.Jahr diesesJahr = new Zeitraum.Jahr(DIESES_JAHR);
     gegebenVorgaenge(Map.of(AUGUST, AUGUST_GESTELLT), Set.of());
-    when(arbeitszeit.alleImZeitraum(OKTOBER.atDay(1), OKTOBER.atEndOfMonth())).thenReturn(Map.of());
+    when(arbeitszeit.alleImZeitraum(diesesJahr.von(), diesesJahr.bis())).thenReturn(Map.of());
 
     // When
     final Startseitenstand stand = useCase.stand(Optional.of(new Zeitraum.Jahr(LETZTES_JAHR)));
 
     // Then
     assertThat(stand.waehlbar().jahre()).containsExactly(DIESES_JAHR);
-    assertThat(stand.zeitraum()).isEqualTo(new Zeitraum.Monat(OKTOBER));
+    assertThat(stand.zeitraum()).isEqualTo(diesesJahr);
   }
 
   @Test
@@ -591,30 +601,32 @@ class StartseiteUseCaseTest {
   }
 
   @Test
-  void stand_withAnOldJahr_thenTheLaufenderMonatAnswers() {
+  void stand_withAnOldJahr_thenTheLaufendesJahrAnswers() {
     // Given — 2024 steht nie zur Wahl, auch mit Rechnung nicht (#273, Kriterium 1).
+    final Zeitraum.Jahr diesesJahr = new Zeitraum.Jahr(DIESES_JAHR);
     gegebenVorgaenge(Map.of(YearMonth.of(2024, 6), AUGUST_GESTELLT), Set.of());
-    when(arbeitszeit.alleImZeitraum(OKTOBER.atDay(1), OKTOBER.atEndOfMonth())).thenReturn(Map.of());
+    when(arbeitszeit.alleImZeitraum(diesesJahr.von(), diesesJahr.bis())).thenReturn(Map.of());
 
     // When
     final Startseitenstand stand = useCase.stand(Optional.of(new Zeitraum.Jahr(Year.of(2024))));
 
-    // Then
-    assertThat(stand.zeitraum()).isEqualTo(new Zeitraum.Monat(OKTOBER));
+    // Then — die Rechnung von 2024 zaehlt im laufenden Jahr nicht mit.
+    assertThat(stand.zeitraum()).isEqualTo(diesesJahr);
     assertThat(stand.abgerechnet().summe()).isEqualTo(NICHTS_GESTELLT);
   }
 
   @Test
-  void stand_withAMonatWithoutVorgang_thenTheLaufenderMonatAnswers() {
+  void stand_withAMonatWithoutVorgang_thenTheLaufendesJahrAnswers() {
     // Given — im August geschah nichts; er steht nicht zur Wahl (#273, Kriterium 2).
+    final Zeitraum.Jahr diesesJahr = new Zeitraum.Jahr(DIESES_JAHR);
     gegebenVorgaenge(Map.of(), Set.of());
-    when(arbeitszeit.alleImZeitraum(OKTOBER.atDay(1), OKTOBER.atEndOfMonth())).thenReturn(Map.of());
+    when(arbeitszeit.alleImZeitraum(diesesJahr.von(), diesesJahr.bis())).thenReturn(Map.of());
 
     // When
     final Startseitenstand stand = useCase.stand(Optional.of(new Zeitraum.Monat(AUGUST)));
 
-    // Then
-    assertThat(stand.zeitraum()).isEqualTo(new Zeitraum.Monat(OKTOBER));
+    // Then — ein Zeitraum, der nicht zur Wahl steht, wirkt wie ein fehlender (Issue #283).
+    assertThat(stand.zeitraum()).isEqualTo(diesesJahr);
   }
 
   @Test
@@ -725,7 +737,7 @@ class StartseiteUseCaseTest {
         .thenReturn(Map.of(BERATUNG_ID, new BigDecimal("12.00")));
 
     // When
-    final Startseitenstand monat = useCase.stand(Optional.empty());
+    final Startseitenstand monat = useCase.stand(IM_OKTOBER);
     final Startseitenstand imJahr = useCase.stand(Optional.of(jahr));
 
     // Then — (min(12, 20) − 5) × 100,00 + 1 × 200,00 = 900,00 in beiden Staenden.
@@ -746,7 +758,7 @@ class StartseiteUseCaseTest {
     when(rechnungen.gestellte()).thenReturn(new Gestellte(Map.of(), Map.of()));
 
     // When
-    final Startseitenstand stand = useCase.stand(Optional.empty());
+    final Startseitenstand stand = useCase.stand(IM_OKTOBER);
 
     // Then
     assertThat(stand.inArbeit()).isEmpty();
@@ -771,7 +783,7 @@ class StartseiteUseCaseTest {
         Map.of());
 
     // When
-    final Startseitenstand stand = useCase.stand(Optional.empty());
+    final Startseitenstand stand = useCase.stand(IM_OKTOBER);
 
     // Then — nur die drei Stunden des Kundenangebots zu 100,00 € stehen in beiden Betraegen, und
     // das interne Angebot steht in keiner Zeile darunter.
@@ -798,7 +810,7 @@ class StartseiteUseCaseTest {
         Map.of());
 
     // When
-    final Startseitenstand stand = useCase.stand(Optional.empty());
+    final Startseitenstand stand = useCase.stand(IM_OKTOBER);
 
     // Then
     assertThat(stand.inArbeit())
@@ -818,7 +830,7 @@ class StartseiteUseCaseTest {
         Map.of());
 
     // When
-    final Startseitenstand stand = useCase.stand(Optional.empty());
+    final Startseitenstand stand = useCase.stand(IM_OKTOBER);
 
     // Then
     assertThat(stand.abgerechnet().summe()).isEqualTo(OKTOBER_GESTELLT);
@@ -844,7 +856,7 @@ class StartseiteUseCaseTest {
         Map.of());
 
     // When
-    final Startseitenstand stand = useCase.stand(Optional.empty());
+    final Startseitenstand stand = useCase.stand(IM_OKTOBER);
 
     // Then — 8,00 + 4,50 Stunden; die drei Kundenstunden fehlen darin.
     assertThat(stand.interneStundenImZeitraum()).isEqualByComparingTo("12.50");
@@ -863,7 +875,7 @@ class StartseiteUseCaseTest {
         Map.of());
 
     // When
-    final Startseitenstand stand = useCase.stand(Optional.empty());
+    final Startseitenstand stand = useCase.stand(IM_OKTOBER);
 
     // Then
     assertThat(stand.interneStundenImZeitraum()).isEqualByComparingTo("0");

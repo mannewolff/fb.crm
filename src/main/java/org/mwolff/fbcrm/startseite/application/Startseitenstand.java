@@ -11,10 +11,10 @@ import org.mwolff.fbcrm.angebot.application.AngebotMitFirma;
  * Aussage ueber Werte, und drei Antworten koennten sich widersprechen.
  *
  * <p><b>Der Zeitraum steht in der Antwort, auch wenn er gefragt war.</b> Wer keinen nennt oder
- * einen, der nicht zur Wahl steht, bekommt den laufenden Monat — und erfaehrt hier, welcher das ist
- * (Plan #208, E8, E18). Dazu stehen die waehlbaren Jahre und Monate selbst darin: Die Wahl der
- * Ansicht rendert genau diese Listen, und der gezeigte Zeitraum ist immer einer der waehlbaren
- * (#273, Kriterien 1 und 2).
+ * einen, der nicht zur Wahl steht, bekommt das laufende Jahr — und erfaehrt hier, welches das ist
+ * (Plan #208, E8, E18; Issue #283). Dazu stehen die waehlbaren Jahre und Monate selbst darin: Die
+ * Wahl der Ansicht rendert genau diese Listen, und der gezeigte Zeitraum ist immer einer der
+ * waehlbaren (#273, Kriterien 1 und 2).
  *
  * <p>Die Zahl der Angebote in Arbeit traegt der Stand nicht als eigenes Feld — die Liste ist die
  * Wahrheit, und die Ansicht zaehlt sie. Bei {@link Abgerechnet} ist die Anzahl dagegen ein Feld:
