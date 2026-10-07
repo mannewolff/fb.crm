@@ -26,6 +26,7 @@ const NachgetrageneRechnungPage = lazy(async () => import('./pages/Nachgetragene
 const EigeneAngabenMaske = lazy(async () => import('./pages/EigeneAngabenMaske'));
 const AdministrationPage = lazy(async () => import('./pages/AdministrationPage'));
 const JahresabschluessePage = lazy(async () => import('./pages/JahresabschluessePage'));
+const JahresabschlussPage = lazy(async () => import('./pages/JahresabschlussPage'));
 const StartseitePage = lazy(async () => import('./pages/StartseitePage'));
 
 /**
@@ -89,6 +90,8 @@ export default function App() {
             {/* Das Jahr steht spaeter im Pfad und nicht als Parameter (Plan #288, E16): Es benennt
                 ein eigenes Objekt — den Abschluss — und filtert keine Ansicht. */}
             <Route path="/jahresabschluesse" element={<JahresabschluessePage />} />
+            {/* Statisch vor dynamisch (E16): `/jahresabschluesse` ist die Uebersicht. */}
+            <Route path="/jahresabschluesse/:jahr" element={<JahresabschlussPage />} />
             <Route path="/firmen" element={<FirmenPage />} />
             {/* Statisch vor dynamisch: `/firmen/neu` ist die Maske, nicht die Firma „neu". */}
             <Route path="/firmen/neu" element={<FirmaMaske />} />

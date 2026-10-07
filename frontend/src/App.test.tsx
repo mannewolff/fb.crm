@@ -4,7 +4,7 @@ import { MemoryRouter, useNavigate } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import App from './App';
-import { fetchNachPfad, json } from './test/fetchNachPfad';
+import { fetchNachPfad, json, problem } from './test/fetchNachPfad';
 import { renderMitTheme } from './test/render';
 
 const KONTO = { id: 1, displayName: 'Manfred Wolff', email: 'info@mwolff.org' };
@@ -155,6 +155,10 @@ describe('App', () => {
       '/rechnungen/nachgetragen/7/bearbeiten',
     ],
     ['fuehrt „/jahresabschluesse" ohne Sitzung auf die Anmeldeseite', '/jahresabschluesse'],
+    [
+      'fuehrt „/jahresabschluesse/2025" ohne Sitzung auf die Anmeldeseite',
+      '/jahresabschluesse/2025',
+    ],
     ['fuehrt „/eigene-angaben" ohne Sitzung auf die Anmeldeseite', '/eigene-angaben'],
     ['fuehrt „/administration“ ohne Sitzung auf die Anmeldeseite', '/administration'],
   ])('%s', async (_name, pfad) => {
@@ -275,6 +279,22 @@ describe('App', () => {
 
     expect(
       await screen.findByRole('heading', { level: 1, name: 'Jahresabschlüsse' }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('navigation', { name: 'Hauptnavigation' })).toBeInTheDocument();
+  });
+
+  it('zeigt „/jahresabschluesse/2025" als Abschluss des Jahres im Rahmen', async () => {
+    fensterbreite(1440);
+    fetchNachPfad({
+      'GET /api/auth/me': json(200, KONTO),
+      'GET /api/instance': json(200, { version: '0.1.3' }),
+      'GET /api/jahresabschluesse/2025': problem(404, 'Kein Abschluss'),
+    });
+
+    renderApp(['/jahresabschluesse/2025'], 0);
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Jahresabschluss 2025' }),
     ).toBeInTheDocument();
     expect(screen.getByRole('navigation', { name: 'Hauptnavigation' })).toBeInTheDocument();
   });
