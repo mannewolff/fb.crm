@@ -1,19 +1,26 @@
 package org.mwolff.fbcrm.jahresabschluss.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mwolff.fbcrm.rechnung.domain.Rechnungszustand.ABGESCHRIEBEN;
+import static org.mwolff.fbcrm.rechnung.domain.Rechnungszustand.BEZAHLT;
+import static org.mwolff.fbcrm.rechnung.domain.Rechnungszustand.ENTWURF;
+import static org.mwolff.fbcrm.rechnung.domain.Rechnungszustand.GESTELLT;
 
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.Year;
+import java.time.YearMonth;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -23,21 +30,25 @@ import org.mwolff.fbcrm.angebot.application.AngebotMitFirma;
 import org.mwolff.fbcrm.angebot.application.AngeboteUebersichtUseCase;
 import org.mwolff.fbcrm.angebot.domain.Angebot;
 import org.mwolff.fbcrm.angebot.domain.Angebotsstatus;
+import org.mwolff.fbcrm.common.Geldrechnung;
 import org.mwolff.fbcrm.rechnung.application.GestellteRechnung;
+import org.mwolff.fbcrm.rechnung.application.Monatsabrechnung;
 import org.mwolff.fbcrm.rechnung.application.Rechnungsauskunft;
 import org.mwolff.fbcrm.rechnung.domain.Rechnungszustand;
 
 /**
  * Die Uebersicht aller Jahre des Jahresabschlusses (#287, Kriterien 1 und 3; Plan #288, E7, E8,
- * E10, E19, E21).
+ * E10, E19, E21) und der Abschluss eines Jahres (Kriterien 4 bis 6; E2, E3, E5, E13, E14).
  *
  * <p>Gegenstand sind die Regeln dieses Moduls: welche Jahre erscheinen, in welcher Reihenfolge,
- * welches noch laeuft und wie die drei Hauptzahlen entstehen. Die beiden Auskuenfte, aus denen das
- * entsteht, sind gemockt — sie gehoeren fremden Modulen und sind dort geprueft ({@code
- * RechnungsauskunftTest}, {@code AngeboteUebersichtUseCaseTest}).
+ * welches noch laeuft und wie die drei Hauptzahlen entstehen; dazu, wie Einnahmen, Rechnungsstand
+ * und Steuerzeilen eines Jahres entstehen und wann es keinen Abschluss gibt. Die beiden Auskuenfte,
+ * aus denen das entsteht, sind gemockt — sie gehoeren fremden Modulen und sind dort geprueft
+ * ({@code RechnungsauskunftTest}, {@code AngeboteUebersichtUseCaseTest}).
  *
- * <p>Die Statusmengen ({@code Angebotsblick}) und die Prozentrundung ({@code Quote}) werden hier
- * mitgeprueft und haben keine eigene Testklasse: Sie sind paket-privat und keine eigene Zusage.
+ * <p>Die Statusmengen ({@code Angebotsblick}), die Prozentrundung ({@code Quote}) und die
+ * Gruppierung je Steuersatz ({@code Steuerblick}) werden hier mitgeprueft und haben keine eigene
+ * Testklasse: Sie sind paket-privat und keine eigene Zusage.
  *
  * <p>Die Uhr steht fest auf dem 31. Dezember 2026 um 23:30 UTC. In der Geschaeftszone ist das schon
  * der 1. Januar 2027, 00:30 Uhr — das laufende Jahr ist darum 2027 und nicht 2026. Am Nullmeridian
@@ -74,6 +85,23 @@ class JahresabschlussUseCaseTest {
         new BigDecimal(netto).multiply(new BigDecimal("1.19")),
         new BigDecimal("19.00"),
         Rechnungszustand.GESTELLT,
+        FIRMA,
+        ADLER);
+  }
+
+  /* Eine Rechnung mit allen Angaben in der Hand des Tests; ein Satz null ist ein Nachtrag. */
+  private static GestellteRechnung rechnung(
+      final LocalDate datum,
+      final String netto,
+      final String brutto,
+      final String satz,
+      final Rechnungszustand zustand) {
+    return new GestellteRechnung(
+        datum,
+        new BigDecimal(netto),
+        new BigDecimal(brutto),
+        satz == null ? null : new BigDecimal(satz),
+        zustand,
         FIRMA,
         ADLER);
   }
@@ -256,6 +284,275 @@ class JahresabschlussUseCaseTest {
 
     // When
     useCase.jahre();
+
+    // Then
+    verify(rechnungen).gestellteRechnungen();
+    verify(uebersicht).angebote(Optional.empty());
+  }
+
+  @Test
+  void abschluss_thenEinnahmenSumEveryGestellteZustandAndNachtragAndUstIsBruttoMinusNetto() {
+    // Given — 2025: gestellt, bezahlt, abgeschrieben und ein Nachtrag; dazu Rechnungen aus 2024
+    //         und 2026, die nicht mitzaehlen.
+    gegeben(
+        List.of(
+            rechnung(LocalDate.of(2025, 1, 1), "1000.00", "1190.00", "19.00", GESTELLT),
+            rechnung(LocalDate.of(2025, 4, 1), "500.00", "535.00", "7.00", BEZAHLT),
+            rechnung(LocalDate.of(2025, 7, 1), "200.00", "238.00", "19.00", ABGESCHRIEBEN),
+            rechnung(LocalDate.of(2025, 12, 31), "300.00", "357.01", null, BEZAHLT),
+            rechnung(LocalDate.of(2024, 12, 31), "99.00", "117.81", "19.00", GESTELLT),
+            rechnung(LocalDate.of(2026, 1, 1), "88.00", "104.72", "19.00", GESTELLT)),
+        List.of());
+
+    // When
+    final Jahresabschluss abschluss = useCase.abschluss(Year.of(2025));
+
+    // Then
+    assertThat(abschluss.jahr()).isEqualTo(Year.of(2025));
+    assertThat(abschluss.laeuftNoch()).isFalse();
+    assertThat(abschluss.einnahmen())
+        .isEqualTo(
+            new Einnahmen(
+                new BigDecimal("2000.00"), new BigDecimal("2320.01"), new BigDecimal("320.01")));
+    assertThat(abschluss.rechnungsstand().anzahl()).isEqualTo(4);
+  }
+
+  @Test
+  void abschluss_thenNettoAndBruttoMatchTheMonatsabrechnungOfTheTwelveMonthsToTheCent() {
+    // Given — zweimal 0,50 € zu 7 %: je Rechnung 0,535 € gerundet 0,54 €, zusammen 1,08 €; aus der
+    //         Jahressumme mit dem Satz gerechnet waeren es 1,07 €. Dazu ein Nachtrag mit krummem
+    //         Brutto, das kein Satz erklaert.
+    final List<GestellteRechnung> gestellte =
+        List.of(
+            rechnung(LocalDate.of(2025, 1, 31), "0.50", "0.54", "7.00", GESTELLT),
+            rechnung(LocalDate.of(2025, 6, 15), "0.50", "0.54", "7.00", BEZAHLT),
+            rechnung(LocalDate.of(2025, 12, 1), "3.33", "3.96", "19.00", ABGESCHRIEBEN),
+            rechnung(LocalDate.of(2025, 12, 31), "10.00", "11.91", null, GESTELLT));
+    gegeben(gestellte, List.of());
+    // Die Abrechnung der zwoelf Monate so, wie Rechnungsauskunft#gestellte() sie bildet: je
+    // Rechnung Netto, Brutto und eine 1, je Monat summiert, die Monate summiert.
+    final Monatsabrechnung ueberDieMonate =
+        Monatsabrechnung.summe(
+            Stream.iterate(Year.of(2025).atMonth(1), monat -> monat.plusMonths(1))
+                .limit(12)
+                .map(
+                    monat ->
+                        Monatsabrechnung.summe(
+                            gestellte.stream()
+                                .filter(r -> YearMonth.from(r.rechnungDatum()).equals(monat))
+                                .map(
+                                    r ->
+                                        new Monatsabrechnung(
+                                            r.netto(), r.brutto(), 1, BigDecimal.ZERO, 0)))));
+
+    // When
+    final Einnahmen einnahmen = useCase.abschluss(Year.of(2025)).einnahmen();
+
+    // Then
+    assertThat(einnahmen.netto())
+        .isEqualTo(ueberDieMonate.netto())
+        .isEqualTo(new BigDecimal("14.33"));
+    assertThat(einnahmen.brutto())
+        .isEqualTo(ueberDieMonate.brutto())
+        .isEqualTo(new BigDecimal("16.95"));
+  }
+
+  @Test
+  void abschluss_whenAnEntwurfIsDatedInTheYear_thenItCountsNeitherInEinnahmenNorInAnzahl() {
+    // Given — neben einer gestellten Rechnung ein Entwurf mit Rechnungsdatum im Jahr.
+    gegeben(
+        List.of(
+            rechnung(LocalDate.of(2025, 3, 1), "100.00", "119.00", "19.00", GESTELLT),
+            rechnung(LocalDate.of(2025, 3, 2), "50.00", "59.50", "19.00", ENTWURF)),
+        List.of());
+
+    // When
+    final Jahresabschluss abschluss = useCase.abschluss(Year.of(2025));
+
+    // Then
+    assertThat(abschluss.einnahmen().netto()).isEqualTo(new BigDecimal("100.00"));
+    assertThat(abschluss.einnahmen().brutto()).isEqualTo(new BigDecimal("119.00"));
+    assertThat(abschluss.rechnungsstand().anzahl()).isEqualTo(1);
+  }
+
+  @Test
+  void abschluss_thenTheRechnungsstandNamesOffenAndAbgeschriebenEachWithAnzahlAndNetto() {
+    // Given — zwei offene (eine davon nachgetragen), eine bezahlte, zwei abgeschriebene.
+    gegeben(
+        List.of(
+            rechnung(LocalDate.of(2025, 1, 1), "100.00", "119.00", "19.00", GESTELLT),
+            rechnung(LocalDate.of(2025, 2, 1), "50.00", "59.50", null, GESTELLT),
+            rechnung(LocalDate.of(2025, 3, 1), "300.00", "357.00", "19.00", BEZAHLT),
+            rechnung(LocalDate.of(2025, 4, 1), "70.00", "83.30", "19.00", ABGESCHRIEBEN),
+            rechnung(LocalDate.of(2025, 5, 1), "30.00", "35.70", null, ABGESCHRIEBEN)),
+        List.of());
+
+    // When / Then
+    assertThat(useCase.abschluss(Year.of(2025)).rechnungsstand())
+        .isEqualTo(new Rechnungsstand(5, 2, new BigDecimal("150.00"), 2, new BigDecimal("100.00")));
+  }
+
+  @Test
+  void abschluss_whenNothingIsOffenOrAbgeschrieben_thenZeroAndZeroCent() {
+    // Given — alles bezahlt.
+    gegeben(
+        List.of(
+            rechnung(LocalDate.of(2025, 1, 1), "100.00", "119.00", "19.00", BEZAHLT),
+            rechnung(LocalDate.of(2025, 2, 1), "50.00", "59.50", null, BEZAHLT)),
+        List.of());
+
+    // When / Then
+    assertThat(useCase.abschluss(Year.of(2025)).rechnungsstand())
+        .isEqualTo(new Rechnungsstand(2, 0, new BigDecimal("0.00"), 0, new BigDecimal("0.00")));
+  }
+
+  @Test
+  void abschluss_withSaetze19And7AndANachtrag_thenSteuerzeilenAscendingAndTheNachtragLast() {
+    // Given — der Nachtrag hat genau 19 % zwischen Netto und Brutto; abgeleitet fiele er in die
+    //         Zeile zu 19 %, und genau das darf nicht geschehen (Kriterium 6, E13).
+    gegeben(
+        List.of(
+            rechnung(LocalDate.of(2025, 1, 1), "1000.00", "1190.00", "19.00", GESTELLT),
+            rechnung(LocalDate.of(2025, 2, 1), "300.00", "357.00", null, BEZAHLT),
+            rechnung(LocalDate.of(2025, 3, 1), "500.00", "535.00", "7.00", BEZAHLT),
+            rechnung(LocalDate.of(2025, 4, 1), "200.00", "238.00", "19.00", ABGESCHRIEBEN)),
+        List.of());
+
+    // When / Then
+    assertThat(useCase.abschluss(Year.of(2025)).steuerzeilen())
+        .extracting(Steuerzeile::satz, Steuerzeile::netto, Steuerzeile::umsatzsteuer)
+        .containsExactly(
+            tuple(new BigDecimal("7.00"), new BigDecimal("500.00"), new BigDecimal("35.00")),
+            tuple(new BigDecimal("19.00"), new BigDecimal("1200.00"), new BigDecimal("228.00")),
+            tuple(null, new BigDecimal("300.00"), new BigDecimal("57.00")));
+  }
+
+  @Test
+  void abschluss_whenRechnungenCarry19And19_00_thenTheyFallIntoOneSteuerzeile() {
+    // Given — derselbe Satz in zwei Schreibweisen, dazu 7 %, damit die Aufteilung dasteht.
+    gegeben(
+        List.of(
+            rechnung(LocalDate.of(2025, 1, 1), "100.00", "119.00", "19", GESTELLT),
+            rechnung(LocalDate.of(2025, 2, 1), "200.00", "238.00", "19.00", GESTELLT),
+            rechnung(LocalDate.of(2025, 3, 1), "10.00", "10.70", "7", GESTELLT)),
+        List.of());
+
+    // When / Then — der Satz steht auf zwei Nachkommastellen gebracht.
+    assertThat(useCase.abschluss(Year.of(2025)).steuerzeilen())
+        .extracting(Steuerzeile::satz, Steuerzeile::netto, Steuerzeile::umsatzsteuer)
+        .containsExactly(
+            tuple(new BigDecimal("7.00"), new BigDecimal("10.00"), new BigDecimal("0.70")),
+            tuple(new BigDecimal("19.00"), new BigDecimal("300.00"), new BigDecimal("57.00")));
+  }
+
+  @Test
+  void abschluss_whenEveryRechnungCarries19_thenTheAufteilungIsLeftOut() {
+    // Given — 19 und 19,00 sind ein Satz: Die Aufteilung ergaebe eine einzige Zeile (E14).
+    gegeben(
+        List.of(
+            rechnung(LocalDate.of(2025, 1, 1), "100.00", "119.00", "19", GESTELLT),
+            rechnung(LocalDate.of(2025, 2, 1), "200.00", "238.00", "19.00", BEZAHLT)),
+        List.of());
+
+    // When / Then
+    assertThat(useCase.abschluss(Year.of(2025)).steuerzeilen()).isEmpty();
+  }
+
+  @Test
+  void abschluss_whenThereAreOnlyNachtraege_thenTheAufteilungIsLeftOut() {
+    // Given — nur nachgetragene Rechnungen: eine einzige Zeile „Steuersatz nicht erfasst".
+    gegeben(
+        List.of(
+            rechnung(LocalDate.of(2025, 1, 1), "100.00", "119.00", null, GESTELLT),
+            rechnung(LocalDate.of(2025, 2, 1), "200.00", "214.00", null, BEZAHLT)),
+        List.of());
+
+    // When / Then
+    assertThat(useCase.abschluss(Year.of(2025)).steuerzeilen()).isEmpty();
+  }
+
+  @Test
+  void abschluss_thenTheSteuerzeilenAddUpToTheEinnahmenToTheCent() {
+    // Given — krumme Betraege in drei Saetzen und ein Nachtrag.
+    gegeben(
+        List.of(
+            rechnung(LocalDate.of(2025, 1, 1), "0.50", "0.54", "7.00", GESTELLT),
+            rechnung(LocalDate.of(2025, 2, 1), "0.50", "0.54", "7", BEZAHLT),
+            rechnung(LocalDate.of(2025, 3, 1), "3.33", "3.96", "19.00", GESTELLT),
+            rechnung(LocalDate.of(2025, 4, 1), "1234.57", "1469.14", "19", ABGESCHRIEBEN),
+            rechnung(LocalDate.of(2025, 5, 1), "99.99", "115.99", "16.00", GESTELLT),
+            rechnung(LocalDate.of(2025, 6, 1), "10.00", "11.91", null, GESTELLT)),
+        List.of());
+
+    // When
+    final Jahresabschluss abschluss = useCase.abschluss(Year.of(2025));
+
+    // Then
+    assertThat(abschluss.steuerzeilen()).hasSize(4);
+    assertThat(Geldrechnung.summe(abschluss.steuerzeilen().stream().map(Steuerzeile::netto)))
+        .isEqualTo(abschluss.einnahmen().netto())
+        .isEqualTo(new BigDecimal("1348.89"));
+    assertThat(Geldrechnung.summe(abschluss.steuerzeilen().stream().map(Steuerzeile::umsatzsteuer)))
+        .isEqualTo(abschluss.einnahmen().umsatzsteuer())
+        .isEqualTo(new BigDecimal("253.19"));
+  }
+
+  @Test
+  void abschluss_whenTheYearHasNoGestellteRechnungAndNoAbgegebenesAngebot_thenJahrOhneDaten() {
+    // Given — 1999 traegt nur einen Entwurf, ein angelegtes und ein internes Angebot; gestellt und
+    //         abgegeben ist allein in 2025 (E3).
+    gegeben(
+        List.of(
+            rechnung(LocalDate.of(2025, 1, 1), "100.00", "119.00", "19.00", GESTELLT),
+            rechnung(LocalDate.of(1999, 1, 1), "100.00", "119.00", "19.00", ENTWURF)),
+        List.of(
+            angebot(LocalDate.of(2025, 2, 1), Angebotsstatus.ABGEGEBEN),
+            angebot(LocalDate.of(1999, 2, 1), Angebotsstatus.ANGELEGT),
+            angebot(LocalDate.of(1999, 3, 1), Angebotsstatus.LAEUFT)));
+
+    // When / Then
+    assertThatThrownBy(() -> useCase.abschluss(Year.of(1999))).isInstanceOf(JahrOhneDaten.class);
+  }
+
+  @Test
+  void abschluss_whenTheYearHasOnlyAnAbgegebenesAngebot_thenEinnahmenAreZero() {
+    // Given — 2025 hat ein abgegebenes Angebot und keine gestellte Rechnung.
+    gegeben(
+        List.of(rechnung(LocalDate.of(2024, 1, 1), "100.00", "119.00", "19.00", GESTELLT)),
+        List.of(angebot(LocalDate.of(2025, 2, 1), Angebotsstatus.ABGEGEBEN)));
+
+    // When
+    final Jahresabschluss abschluss = useCase.abschluss(Year.of(2025));
+
+    // Then
+    assertThat(abschluss.einnahmen())
+        .isEqualTo(
+            new Einnahmen(new BigDecimal("0.00"), new BigDecimal("0.00"), new BigDecimal("0.00")));
+    assertThat(abschluss.rechnungsstand())
+        .isEqualTo(new Rechnungsstand(0, 0, new BigDecimal("0.00"), 0, new BigDecimal("0.00")));
+    assertThat(abschluss.steuerzeilen()).isEmpty();
+  }
+
+  @Test
+  void abschluss_thenOnlyTheLaufendesJahrInTheGeschaeftszoneLaeuftNoch() {
+    // Given — eine Rechnung vom 1. Januar 2027; die Uhr steht in UTC noch auf 2026.
+    gegeben(
+        List.of(rechnung(LocalDate.of(2027, 1, 1), "100.00", "119.00", "19.00", GESTELLT)),
+        List.of());
+
+    // When / Then
+    assertThat(useCase.abschluss(LAUFENDES_JAHR).laeuftNoch()).isTrue();
+  }
+
+  @Test
+  void abschluss_thenAsksEachAuskunftExactlyOnce() {
+    // Given
+    gegeben(
+        List.of(rechnung(LocalDate.of(2025, 3, 15), "1000.00")),
+        List.of(angebot(LocalDate.of(2025, 5, 2), Angebotsstatus.ABGEGEBEN)));
+
+    // When
+    useCase.abschluss(Year.of(2025));
 
     // Then
     verify(rechnungen).gestellteRechnungen();
