@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.mwolff.fbcrm.rechnung.domain.Rechnungszustand.ABGESCHRIEBEN;
 import static org.mwolff.fbcrm.rechnung.domain.Rechnungszustand.BEZAHLT;
@@ -19,6 +20,7 @@ import java.time.YearMonth;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.BeforeEach;
@@ -29,7 +31,11 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.mwolff.fbcrm.angebot.application.AngebotMitFirma;
 import org.mwolff.fbcrm.angebot.application.AngeboteUebersichtUseCase;
 import org.mwolff.fbcrm.angebot.domain.Angebot;
+import org.mwolff.fbcrm.angebot.domain.Angebotsposition;
 import org.mwolff.fbcrm.angebot.domain.Angebotsstatus;
+import org.mwolff.fbcrm.arbeitszeit.application.Arbeitszeitauskunft;
+import org.mwolff.fbcrm.common.Abrechnungsmodus;
+import org.mwolff.fbcrm.common.Einheit;
 import org.mwolff.fbcrm.common.Geldrechnung;
 import org.mwolff.fbcrm.rechnung.application.GestellteRechnung;
 import org.mwolff.fbcrm.rechnung.application.Monatsabrechnung;
@@ -38,17 +44,19 @@ import org.mwolff.fbcrm.rechnung.domain.Rechnungszustand;
 
 /**
  * Die Uebersicht aller Jahre des Jahresabschlusses (#287, Kriterien 1 und 3; Plan #288, E7, E8,
- * E10, E19, E21) und der Abschluss eines Jahres (Kriterien 4 bis 6; E2, E3, E5, E13, E14).
+ * E10, E19, E21) und der Abschluss eines Jahres (Kriterien 4 bis 12; E2, E3, E5, E9, E11 bis E14,
+ * E22).
  *
  * <p>Gegenstand sind die Regeln dieses Moduls: welche Jahre erscheinen, in welcher Reihenfolge,
  * welches noch laeuft und wie die drei Hauptzahlen entstehen; dazu, wie Einnahmen, Rechnungsstand
- * und Steuerzeilen eines Jahres entstehen und wann es keinen Abschluss gibt. Die beiden Auskuenfte,
- * aus denen das entsteht, sind gemockt — sie gehoeren fremden Modulen und sind dort geprueft
- * ({@code RechnungsauskunftTest}, {@code AngeboteUebersichtUseCaseTest}).
+ * und Steuerzeilen eines Jahres entstehen und wann es keinen Abschluss gibt; dazu Angebotsbilanz,
+ * Umsatz je Kunde und Arbeitszeit. Die drei Auskuenfte, aus denen das entsteht, sind gemockt — sie
+ * gehoeren fremden Modulen und sind dort geprueft ({@code RechnungsauskunftTest}, {@code
+ * AngeboteUebersichtUseCaseTest}, {@code ArbeitszeitauskunftTest}).
  *
- * <p>Die Statusmengen ({@code Angebotsblick}), die Prozentrundung ({@code Quote}) und die
- * Gruppierung je Steuersatz ({@code Steuerblick}) werden hier mitgeprueft und haben keine eigene
- * Testklasse: Sie sind paket-privat und keine eigene Zusage.
+ * <p>Die Statusmengen ({@code Angebotsblick}), die Prozentrundung ({@code Quote}), die Gruppierung
+ * je Steuersatz ({@code Steuerblick}) und die je Firma ({@code Kundenblick}) werden hier
+ * mitgeprueft und haben keine eigene Testklasse: Sie sind paket-privat und keine eigene Zusage.
  *
  * <p>Die Uhr steht fest auf dem 31. Dezember 2026 um 23:30 UTC. In der Geschaeftszone ist das schon
  * der 1. Januar 2027, 00:30 Uhr — das laufende Jahr ist darum 2027 und nicht 2026. Am Nullmeridian
@@ -69,13 +77,15 @@ class JahresabschlussUseCaseTest {
 
   @Mock private Rechnungsauskunft rechnungen;
   @Mock private AngeboteUebersichtUseCase uebersicht;
+  @Mock private Arbeitszeitauskunft arbeitszeit;
 
   private JahresabschlussUseCase useCase;
 
   @BeforeEach
   void baueDenAnwendungsfall() {
     useCase =
-        new JahresabschlussUseCase(rechnungen, uebersicht, Clock.fixed(JETZT, ZoneOffset.UTC));
+        new JahresabschlussUseCase(
+            rechnungen, uebersicht, arbeitszeit, Clock.fixed(JETZT, ZoneOffset.UTC));
   }
 
   private static GestellteRechnung rechnung(final LocalDate datum, final String netto) {
@@ -106,7 +116,21 @@ class JahresabschlussUseCaseTest {
         ADLER);
   }
 
-  private static AngebotMitFirma angebot(final LocalDate datum, final Angebotsstatus status) {
+  /* Eine gestellte Rechnung an eine bestimmte Firma; die Auskunft nennt ihren heutigen Namen. */
+  private static GestellteRechnung anFirma(
+      final long firmaId, final String firmaName, final String netto) {
+    return new GestellteRechnung(
+        LocalDate.of(2025, 6, 1),
+        new BigDecimal(netto),
+        new BigDecimal(netto),
+        new BigDecimal("0.00"),
+        Rechnungszustand.GESTELLT,
+        firmaId,
+        firmaName);
+  }
+
+  private static AngebotMitFirma angebot(
+      final LocalDate datum, final Angebotsstatus status, final Angebotsposition... positionen) {
     return new AngebotMitFirma(
         new Angebot(
             null,
@@ -116,10 +140,27 @@ class JahresabschlussUseCaseTest {
             status,
             datum,
             "Neugestaltung der Website",
-            List.of(),
+            List.of(positionen),
             ANGELEGT,
             ANGELEGT),
         ADLER);
+  }
+
+  private static Angebotsposition position(
+      final long id, final String menge, final String einzelpreis) {
+    return new Angebotsposition(
+        id,
+        "Umsetzung",
+        Abrechnungsmodus.AUFWAND,
+        new BigDecimal(menge),
+        Einheit.STUNDE,
+        new BigDecimal(einzelpreis));
+  }
+
+  /* Die Stunden je Position, die die Zeiterfassung fuer das Jahr 2025 nennt (E9). */
+  private void stunden2025(final Map<Long, BigDecimal> jePosition) {
+    when(arbeitszeit.alleImZeitraum(LocalDate.of(2025, 1, 1), LocalDate.of(2025, 12, 31)))
+        .thenReturn(jePosition);
   }
 
   private void gegeben(
@@ -285,9 +326,10 @@ class JahresabschlussUseCaseTest {
     // When
     useCase.jahre();
 
-    // Then
+    // Then — die Uebersicht braucht keine Stunden (E9).
     verify(rechnungen).gestellteRechnungen();
     verify(uebersicht).angebote(Optional.empty());
+    verifyNoInteractions(arbeitszeit);
   }
 
   @Test
@@ -554,8 +596,237 @@ class JahresabschlussUseCaseTest {
     // When
     useCase.abschluss(Year.of(2025));
 
-    // Then
+    // Then — die Stunden in einem Zug vom 1. Januar bis zum 31. Dezember (E9).
     verify(rechnungen).gestellteRechnungen();
     verify(uebersicht).angebote(Optional.empty());
+    verify(arbeitszeit).alleImZeitraum(LocalDate.of(2025, 1, 1), LocalDate.of(2025, 12, 31));
+  }
+
+  @Test
+  void abschluss_thenTheAngebotsbilanzNamesAbgegebenAngenommenOffenAndTheQuote() {
+    // Given — drei abgegebene Angebote in 2025, zwei davon heute bestellt oder erledigt; dazu ein
+    //         angelegtes in 2025 und ein abgegebenes in 2024, die nicht mitzaehlen (Kriterium 7).
+    gegeben(
+        List.of(),
+        List.of(
+            angebot(LocalDate.of(2025, 2, 1), Angebotsstatus.ABGEGEBEN, position(1, "10", "100")),
+            angebot(LocalDate.of(2025, 3, 1), Angebotsstatus.BESTELLT, position(2, "20", "100")),
+            angebot(LocalDate.of(2025, 4, 1), Angebotsstatus.ERLEDIGT, position(3, "5", "100")),
+            angebot(LocalDate.of(2025, 5, 1), Angebotsstatus.ANGELEGT, position(4, "1", "900")),
+            angebot(LocalDate.of(2024, 12, 31), Angebotsstatus.BESTELLT, position(5, "1", "800"))));
+
+    // When / Then
+    assertThat(useCase.abschluss(Year.of(2025)).angebotsbilanz())
+        .isEqualTo(
+            new Angebotsbilanz(
+                3,
+                2,
+                1,
+                new BigDecimal("66.7"),
+                new BigDecimal("3500.00"),
+                new BigDecimal("2500.00")));
+  }
+
+  @Test
+  void abschluss_thenTheVolumenAreTheSumsOfTheAngebotssummenOfAbgegebenAndAngenommen() {
+    // Given — 2,5 h zu 1.000,01 € sind gerundet 2.500,03 €; abgerechnet gilt als angenommen.
+    gegeben(
+        List.of(),
+        List.of(
+            angebot(
+                LocalDate.of(2025, 2, 1),
+                Angebotsstatus.ABGEGEBEN,
+                position(1, "2.5", "1000.01"),
+                position(2, "1", "100.00")),
+            angebot(
+                LocalDate.of(2025, 3, 1), Angebotsstatus.ABGERECHNET, position(3, "3", "33.333"))));
+
+    // When
+    final Angebotsbilanz bilanz = useCase.abschluss(Year.of(2025)).angebotsbilanz();
+
+    // Then — die Summe der Angebotssummen, je Position gerundet (Kriterium 8).
+    assertThat(bilanz.volumenAbgegeben()).isEqualTo(new BigDecimal("2700.03"));
+    assertThat(bilanz.volumenAngenommen()).isEqualTo(new BigDecimal("100.00"));
+  }
+
+  @Test
+  void abschluss_whenAngeboteAreIntern_thenTheyCountInNoZahlNoVolumenAndNotInTheQuote() {
+    // Given — neben einem abgegebenen Angebot ein laufendes und ein abgeschlossenes internes.
+    gegeben(
+        List.of(),
+        List.of(
+            angebot(LocalDate.of(2025, 2, 1), Angebotsstatus.ABGEGEBEN, position(1, "1", "100")),
+            angebot(LocalDate.of(2025, 3, 1), Angebotsstatus.LAEUFT, position(2, "50", "100")),
+            angebot(
+                LocalDate.of(2025, 4, 1), Angebotsstatus.ABGESCHLOSSEN, position(3, "70", "100"))));
+
+    // When / Then — 0 von 1 ergibt 0,0 und nicht null; positiver Nenner (Kriterien 11 und 12).
+    assertThat(useCase.abschluss(Year.of(2025)).angebotsbilanz())
+        .isEqualTo(
+            new Angebotsbilanz(
+                1, 0, 1, new BigDecimal("0.0"), new BigDecimal("100.00"), new BigDecimal("0.00")));
+  }
+
+  @Test
+  void abschluss_whenNoAngebotIsAbgegeben_thenTheAnnahmequoteIsNull() {
+    // Given — 2025 hat nur eine Rechnung.
+    gegeben(List.of(anFirma(FIRMA, ADLER, "100.00")), List.of());
+
+    // When / Then — Nenner null: keine Quote (Kriterium 11).
+    assertThat(useCase.abschluss(Year.of(2025)).angebotsbilanz())
+        .isEqualTo(
+            new Angebotsbilanz(0, 0, 0, null, new BigDecimal("0.00"), new BigDecimal("0.00")));
+  }
+
+  @Test
+  void abschluss_whenTwoRechnungenGoToTheSameFirma_thenOneKundenzeileWithItsHeutigenNamen() {
+    // Given — Firma 5 hiess bei der ersten Rechnung noch „Adler AG"; die Auskunft nennt an beiden
+    //         Rechnungen den heutigen Namen. Dazu eine zweite Firma.
+    gegeben(
+        List.of(
+            anFirma(FIRMA, "Adler Digital AG", "600.00"),
+            anFirma(7L, "Zeder KG", "250.00"),
+            anFirma(FIRMA, "Adler Digital AG", "400.00")),
+        List.of());
+
+    // When / Then
+    assertThat(useCase.abschluss(Year.of(2025)).kunden())
+        .containsExactly(
+            new Kundenzeile("Adler Digital AG", new BigDecimal("1000.00"), new BigDecimal("80.0")),
+            new Kundenzeile("Zeder KG", new BigDecimal("250.00"), new BigDecimal("20.0")));
+  }
+
+  @Test
+  void abschluss_whenTwoFirmenShareAName_thenTheyStayTwoKundenzeilen() {
+    // Given — zwei Firmen mit gleichem Namen und verschiedener Kennung (E22).
+    gegeben(List.of(anFirma(5L, ADLER, "300.00"), anFirma(6L, ADLER, "100.00")), List.of());
+
+    // When / Then
+    assertThat(useCase.abschluss(Year.of(2025)).kunden())
+        .containsExactly(
+            new Kundenzeile(ADLER, new BigDecimal("300.00"), new BigDecimal("75.0")),
+            new Kundenzeile(ADLER, new BigDecimal("100.00"), new BigDecimal("25.0")));
+  }
+
+  @Test
+  void abschluss_thenKundenzeilenDescendByNettoAndAscendByNameOnATie() {
+    // Given — Birke und Adler haben denselben Betrag; die Rechnungen stehen in keiner Ordnung.
+    gegeben(
+        List.of(
+            anFirma(1L, "Esche OHG", "100.00"),
+            anFirma(2L, "Birke GmbH", "200.00"),
+            anFirma(3L, "Zeder KG", "500.00"),
+            anFirma(4L, "Adler AG", "200.00")),
+        List.of());
+
+    // When / Then (E21)
+    assertThat(useCase.abschluss(Year.of(2025)).kunden())
+        .extracting(Kundenzeile::firmaName, Kundenzeile::netto, Kundenzeile::anteil)
+        .containsExactly(
+            tuple("Zeder KG", new BigDecimal("500.00"), new BigDecimal("50.0")),
+            tuple("Adler AG", new BigDecimal("200.00"), new BigDecimal("20.0")),
+            tuple("Birke GmbH", new BigDecimal("200.00"), new BigDecimal("20.0")),
+            tuple("Esche OHG", new BigDecimal("100.00"), new BigDecimal("10.0")));
+  }
+
+  @Test
+  void abschluss_thenTheAnteilRoundsHalfUpAndIsNotEvenedOutTo100() {
+    // Given — 100 von 1.600 sind 6,25 %, 1.500 von 1.600 sind 93,75 %.
+    gegeben(
+        List.of(anFirma(1L, "Adler AG", "100.00"), anFirma(2L, "Birke GmbH", "1500.00")),
+        List.of());
+
+    // When / Then — kaufmaennisch 6,3 und 93,8; zusammen 100,1, und kein Ausgleich (E10).
+    assertThat(useCase.abschluss(Year.of(2025)).kunden())
+        .extracting(Kundenzeile::anteil)
+        .containsExactly(new BigDecimal("93.8"), new BigDecimal("6.3"));
+  }
+
+  @Test
+  void abschluss_whenTheJahresumsatzIsZero_thenTheAnteilIsNull() {
+    // Given — eine gestellte Rechnung ueber 0,00 €.
+    gegeben(List.of(anFirma(FIRMA, ADLER, "0.00")), List.of());
+
+    // When / Then — Nenner null: kein Anteil (Kriterium 11).
+    assertThat(useCase.abschluss(Year.of(2025)).kunden())
+        .containsExactly(new Kundenzeile(ADLER, new BigDecimal("0.00"), null));
+  }
+
+  @Test
+  void abschluss_whenTheYearHasNoRechnung_thenThereIsNoKundenzeile() {
+    // Given
+    gegeben(List.of(), List.of(angebot(LocalDate.of(2025, 2, 1), Angebotsstatus.ABGEGEBEN)));
+
+    // When / Then
+    assertThat(useCase.abschluss(Year.of(2025)).kunden()).isEmpty();
+  }
+
+  @Test
+  void abschluss_thenTheArbeitszeitSeparatesKundenarbeitFromInternAndNamesTheErloesJeStunde() {
+    // Given — 10.000,00 € netto; Kundenarbeit an einem bestellten Angebot aus 2024 und an einem
+    //         abgegebenen aus 2025, interne Zeit an einem laufenden und einem abgeschlossenen
+    //         internen Angebot. Das Jahr des Angebots spielt keine Rolle, nur der Arbeitstag.
+    gegeben(
+        List.of(anFirma(FIRMA, ADLER, "10000.00")),
+        List.of(
+            angebot(
+                LocalDate.of(2024, 11, 1),
+                Angebotsstatus.BESTELLT,
+                position(11, "40", "100"),
+                position(12, "10", "100")),
+            angebot(LocalDate.of(2025, 2, 1), Angebotsstatus.ABGEGEBEN, position(13, "8", "100")),
+            angebot(LocalDate.of(2025, 1, 1), Angebotsstatus.LAEUFT, position(21, "1", "0")),
+            angebot(
+                LocalDate.of(2023, 1, 1), Angebotsstatus.ABGESCHLOSSEN, position(31, "1", "0"))));
+    stunden2025(
+        Map.of(
+            11L, new BigDecimal("30.00"),
+            12L, new BigDecimal("2.50"),
+            13L, new BigDecimal("5.00"),
+            21L, new BigDecimal("3.25"),
+            31L, new BigDecimal("1.75")));
+
+    // When
+    final Jahresarbeitszeit zeit = useCase.abschluss(Year.of(2025)).arbeitszeit();
+
+    // Then — 10.000,00 € ÷ 37,5 h = 266,666… €, kaufmaennisch 266,67 € (Kriterium 10; E12).
+    assertThat(zeit)
+        .isEqualTo(
+            new Jahresarbeitszeit(
+                new BigDecimal("37.50"), new BigDecimal("5.00"), new BigDecimal("266.67")));
+  }
+
+  @Test
+  void abschluss_whenThereAreNoKundenstunden_thenTheErloesJeStundeIsNull() {
+    // Given — Zeit nur an einem internen Angebot.
+    gegeben(
+        List.of(anFirma(FIRMA, ADLER, "10000.00")),
+        List.of(
+            angebot(LocalDate.of(2025, 2, 1), Angebotsstatus.ABGEGEBEN, position(11, "8", "100")),
+            angebot(LocalDate.of(2025, 1, 1), Angebotsstatus.LAEUFT, position(21, "1", "0"))));
+    stunden2025(Map.of(21L, new BigDecimal("4.00")));
+
+    // When
+    final Jahresarbeitszeit zeit = useCase.abschluss(Year.of(2025)).arbeitszeit();
+
+    // Then — Nenner null: kein Erloes je Stunde (Kriterium 11).
+    assertThat(zeit.kundenStunden()).isEqualByComparingTo("0");
+    assertThat(zeit.interneStunden()).isEqualTo(new BigDecimal("4.00"));
+    assertThat(zeit.erloesJeStunde()).isNull();
+  }
+
+  @Test
+  void abschluss_whenThereAreKundenstundenButNoEinnahmen_thenTheErloesJeStundeIsZero() {
+    // Given — 2025 hat ein abgegebenes Angebot mit 8 Stunden und keine Rechnung.
+    gegeben(
+        List.of(),
+        List.of(
+            angebot(LocalDate.of(2025, 2, 1), Angebotsstatus.ABGEGEBEN, position(11, "8", "100"))));
+    stunden2025(Map.of(11L, new BigDecimal("8.00")));
+
+    // When / Then — positiver Nenner, Zaehler null: 0,00 und nicht null (Kriterium 11).
+    assertThat(useCase.abschluss(Year.of(2025)).arbeitszeit())
+        .isEqualTo(
+            new Jahresarbeitszeit(new BigDecimal("8.00"), BigDecimal.ZERO, new BigDecimal("0.00")));
   }
 }

@@ -14,8 +14,8 @@
  * <p><b>Die Richtung der Abhaengigkeiten ist {@code jahresabschluss} → {@code angebot}, {@code
  * arbeitszeit}, {@code rechnung}, {@code common}; nichts zeigt zurueck</b> (E20). Gefragt wird
  * ausschliesslich an den Tueren, die jene Module nach draussen stellen — {@code
- * AngeboteUebersichtUseCase} und {@code Rechnungsauskunft}. Kein Port auf einen fremden Bestand
- * wird von hier aus aufgerufen.
+ * AngeboteUebersichtUseCase}, {@code Arbeitszeitauskunft} und {@code Rechnungsauskunft}. Kein Port
+ * auf einen fremden Bestand wird von hier aus aufgerufen.
  *
  * <p><b>Die Regeln bleiben, wo sie herkommen.</b> Jeder Geldbetrag entsteht nach {@code
  * common.Geldrechnung}. Hier steht nur, was allein der Jahresabschluss behauptet: welche Angebote

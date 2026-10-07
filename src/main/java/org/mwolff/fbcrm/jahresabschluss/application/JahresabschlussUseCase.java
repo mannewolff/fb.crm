@@ -2,6 +2,7 @@ package org.mwolff.fbcrm.jahresabschluss.application;
 
 import java.math.BigDecimal;
 import java.time.Clock;
+import java.time.LocalDate;
 import java.time.Year;
 import java.util.Comparator;
 import java.util.List;
@@ -10,9 +11,11 @@ import java.util.Optional;
 import java.util.SortedSet;
 import java.util.TreeSet;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import org.mwolff.fbcrm.angebot.application.AngebotMitFirma;
 import org.mwolff.fbcrm.angebot.application.AngeboteUebersichtUseCase;
 import org.mwolff.fbcrm.angebot.domain.Angebot;
+import org.mwolff.fbcrm.arbeitszeit.application.Arbeitszeitauskunft;
 import org.mwolff.fbcrm.common.Geldrechnung;
 import org.mwolff.fbcrm.common.Geschaeftszone;
 import org.mwolff.fbcrm.rechnung.application.GestellteRechnung;
@@ -25,12 +28,14 @@ import org.springframework.transaction.annotation.Transactional;
  * Der Jahresabschluss (#287; Plan #288, E1, E2): die Uebersicht aller Jahre mit Daten und der
  * Abschluss eines Jahres.
  *
- * <p><b>Zwei Auskuenfte, je einmal gefragt.</b> Die gestellten Rechnungen kommen einzeln aus {@link
+ * <p><b>Jede Auskunft einmal gefragt.</b> Die gestellten Rechnungen kommen einzeln aus {@link
  * Rechnungsauskunft#gestellteRechnungen()} (E4), die Angebote mit allen Status aus {@link
- * AngeboteUebersichtUseCase#angebote(Optional)}. Je Jahr zu fragen waere die Abfragelawine, die
- * diese Tueren gerade vermeiden. Dass dabei Angebote und Firmen zweimal geladen werden — einmal
- * fuer den Firmennamen an der Rechnung, einmal hier fuer die Angebotsbilanz —, ist der Preis
- * dafuer, dass der Weg zum Firmennamen im Modul {@code rechnung} bleibt (E6).
+ * AngeboteUebersichtUseCase#angebote(Optional)}; der Abschluss eines Jahres fragt dazu die Stunden
+ * des Jahres in einem Zug aus {@link Arbeitszeitauskunft#alleImZeitraum(LocalDate, LocalDate)}
+ * (E9), die Uebersicht braucht keine. Je Jahr zu fragen waere die Abfragelawine, die diese Tueren
+ * gerade vermeiden. Dass dabei Angebote und Firmen zweimal geladen werden — einmal fuer den
+ * Firmennamen an der Rechnung, einmal hier fuer die Angebotsbilanz —, ist der Preis dafuer, dass
+ * der Weg zum Firmennamen im Modul {@code rechnung} bleibt (E6).
  *
  * <p><b>Welche Jahre erscheinen</b> (#287, Kriterium 1): jedes mit mindestens einer gestellten
  * Rechnung oder einem abgegebenen Angebot, das juengste zuerst (E21). Fuer das laufende Jahr gilt
@@ -43,8 +48,9 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * <p><b>Gerechnet wird nicht hier</b>, wo es die Regel schon gibt: Die Einnahmen sind die Summe der
  * schon je Rechnung gerundeten Betraege nach {@link Geldrechnung}; die Annahmequote rundet {@link
- * Quote}, welche Angebote abgegeben und angenommen sind, sagt {@link Angebotsblick}, und die
- * Aufteilung je Steuersatz macht {@link Steuerblick}.
+ * Quote}, welche Angebote abgegeben und angenommen sind, sagt {@link Angebotsblick}, das auch ihre
+ * Bilanz zieht, die Aufteilung je Steuersatz macht {@link Steuerblick} und die je Kunde {@link
+ * Kundenblick}; den Erloes je Stunde teilt {@link Geldrechnung#je} (E12).
  */
 @Service
 @Transactional(readOnly = true)
@@ -52,14 +58,17 @@ public class JahresabschlussUseCase {
 
   private final Rechnungsauskunft rechnungen;
   private final AngeboteUebersichtUseCase angebote;
+  private final Arbeitszeitauskunft arbeitszeit;
   private final Clock clock;
 
   JahresabschlussUseCase(
       final Rechnungsauskunft rechnungen,
       final AngeboteUebersichtUseCase angebote,
+      final Arbeitszeitauskunft arbeitszeit,
       final Clock clock) {
     this.rechnungen = rechnungen;
     this.angebote = angebote;
+    this.arbeitszeit = arbeitszeit;
     this.clock = clock;
   }
 
@@ -94,12 +103,12 @@ public class JahresabschlussUseCase {
   }
 
   /**
-   * Der Abschluss eines Jahres: Einnahmen, Rechnungsstand und Umsatzsteuer je Satz (#287, Kriterien
-   * 4 bis 6).
+   * Der Abschluss eines Jahres: Einnahmen, Rechnungsstand und Umsatzsteuer je Satz, Angebotsbilanz,
+   * Umsatz je Kunde und Arbeitszeit (#287, Kriterien 4 bis 12).
    *
-   * <p>Gefragt werden dieselben zwei Auskuenfte wie in {@link #jahre()}, je einmal. Gerechnet wird
-   * mit den je Rechnung gerundeten Betraegen, die addiert werden (E5) — so treffen Netto und Brutto
-   * den Cent der Monatsabrechnung desselben Jahres.
+   * <p>Gefragt werden dieselben zwei Auskuenfte wie in {@link #jahre()} und dazu die Stunden des
+   * Jahres, jede einmal. Gerechnet wird mit den je Rechnung gerundeten Betraegen, die addiert
+   * werden (E5) — so treffen Netto und Brutto den Cent der Monatsabrechnung desselben Jahres.
    *
    * @param jahr das Kalenderjahr
    * @return der Abschluss des Jahres; ein Jahr nur mit abgegebenen Angeboten hat Einnahmen 0,00
@@ -111,21 +120,26 @@ public class JahresabschlussUseCase {
         gestellte().stream()
             .filter(rechnung -> Year.from(rechnung.rechnungDatum()).equals(jahr))
             .toList();
+    final List<Angebot> alle =
+        angebote.angebote(Optional.empty()).stream().map(AngebotMitFirma::angebot).toList();
     final List<Angebot> abgegeben =
-        angebote.angebote(Optional.empty()).stream()
-            .map(AngebotMitFirma::angebot)
+        alle.stream()
             .filter(angebot -> Angebotsblick.abgegeben(angebot.status()))
             .filter(angebot -> Angebotsblick.jahr(angebot).equals(jahr))
             .toList();
     if (imJahr.isEmpty() && abgegeben.isEmpty()) {
       throw new JahrOhneDaten();
     }
+    final Einnahmen einnahmen = einnahmen(imJahr);
     return new Jahresabschluss(
         jahr,
         jahr.equals(laufendesJahr()),
-        einnahmen(imJahr),
+        einnahmen,
         rechnungsstand(imJahr),
-        Steuerblick.zeilen(imJahr));
+        Steuerblick.zeilen(imJahr),
+        Angebotsblick.bilanz(abgegeben),
+        Kundenblick.zeilen(imJahr, einnahmen.netto()),
+        jahresarbeitszeit(jahr, alle, einnahmen.netto()));
   }
 
   /*
@@ -166,6 +180,37 @@ public class JahresabschlussUseCase {
         nettoSumme(offen),
         abgeschrieben.size(),
         nettoSumme(abgeschrieben));
+  }
+
+  /*
+   * Die Stunden mit Arbeitstag im Jahr, aus einem Zug vom 1. Januar bis zum 31. Dezember (E9).
+   * Ob eine Position Kundenarbeit oder ein internes Projekt ist, sagt ihr Angebot — hier, und nur
+   * hier, trennt der Filter auf interne Angebote (E8). Gezaehlt wird jede Position jedes Angebots,
+   * gleich aus welchem Jahr und in welchem Status: Es zaehlt der Arbeitstag, nicht das Angebot.
+   */
+  private Jahresarbeitszeit jahresarbeitszeit(
+      final Year jahr, final List<Angebot> alle, final BigDecimal einnahmenNetto) {
+    final Map<Long, BigDecimal> imJahr =
+        arbeitszeit.alleImZeitraum(jahr.atDay(1), jahr.atMonth(12).atEndOfMonth());
+    final BigDecimal kundenStunden =
+        stunden(alle.stream().filter(angebot -> !angebot.intern()), imJahr);
+    return new Jahresarbeitszeit(
+        kundenStunden,
+        stunden(alle.stream().filter(Angebot::intern), imJahr),
+        Geldrechnung.je(einnahmenNetto, kundenStunden));
+  }
+
+  /*
+   * Die Stunden der gegebenen Angebote im Jahr, ueber alle ihre Positionen addiert. Ohne setScale:
+   * Die Werte kommen mit Skala 2 aus der Auskunft und behalten sie; eine Stundenzahl ist kein
+   * Betrag, und ohne einen einzigen Eintrag steht 0 da.
+   */
+  private static BigDecimal stunden(
+      final Stream<Angebot> angebote, final Map<Long, BigDecimal> imJahr) {
+    return angebote
+        .flatMap(angebot -> angebot.positionen().stream())
+        .map(position -> imJahr.getOrDefault(position.requireId(), BigDecimal.ZERO))
+        .reduce(BigDecimal.ZERO, BigDecimal::add);
   }
 
   private static BigDecimal nettoSumme(final List<GestellteRechnung> rechnungen) {
