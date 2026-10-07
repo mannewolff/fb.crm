@@ -9,6 +9,7 @@ import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.Year;
 import java.time.YearMonth;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -16,6 +17,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -23,8 +25,10 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mwolff.fbcrm.angebot.application.AngebotNichtGefunden;
 import org.mwolff.fbcrm.angebot.domain.AngebotRepository;
+import org.mwolff.fbcrm.common.Geldrechnung;
 import org.mwolff.fbcrm.firma.application.FirmaNichtGefunden;
 import org.mwolff.fbcrm.firma.domain.FirmaRepository;
+import org.mwolff.fbcrm.rechnung.domain.NachgetrageneRechnung;
 import org.mwolff.fbcrm.rechnung.domain.NachgetrageneRechnungRepository;
 import org.mwolff.fbcrm.rechnung.domain.Nummernmuster;
 import org.mwolff.fbcrm.rechnung.domain.RechnungRepository;
@@ -61,6 +65,12 @@ import org.mwolff.fbcrm.rechnung.domain.Rechnungszustand;
  * bei der nachgetragenen von ihr selbst; fehlt eines von beidem im Bestand, ist das ein Widerspruch
  * und keine leere Zeile. Ohne eine offene Rechnung wird nach Angeboten und Firmen gar nicht
  * gefragt.
+ *
+ * <p>Die <b>zweite Tuer</b> (Plan #288, E4) nennt die gestellten Rechnungen einzeln: je Rechnung
+ * Rechnungsdatum, Netto, Brutto, Steuersatz, Zustand und Firma. Sie waehlt dieselben Rechnungen wie
+ * die Abrechnung je Monat und rechnet sie mit denselben Betraegen; darum trifft ihre Summe ueber
+ * ein Jahr den Cent der Monate dieses Jahres (E5). Ein Nachtrag traegt keinen Satz, und es wird
+ * keiner aus seinen Betraegen abgeleitet.
  */
 @ExtendWith(MockitoExtension.class)
 class RechnungsauskunftTest {
@@ -71,6 +81,12 @@ class RechnungsauskunftTest {
   private static final LocalDate ERSTER_SEPTEMBER = LocalDate.of(2026, 9, 1);
   private static final LocalDate LETZTER_SEPTEMBER = LocalDate.of(2026, 9, 30);
   private static final LocalDate ERSTER_OKTOBER = LocalDate.of(2026, 10, 1);
+  private static final LocalDate LETZTER_DEZEMBER_VORJAHR = LocalDate.of(2025, 12, 31);
+
+  /** Eine zweite Firma — die eines Nachtrags, der an keinem Angebot haengt. */
+  private static final long BIRKE = 6L;
+
+  private static final String BIRKE_NAME = "Birke GmbH";
 
   @Mock private RechnungRepository rechnungen;
   @Mock private NachgetrageneRechnungRepository nachtraege;
@@ -882,5 +898,279 @@ class RechnungsauskunftTest {
         .containsOnly(Rechnungsdoppel.FIRMENNAME);
     verify(angebote, times(1)).findAlle(Optional.empty());
     verify(firmen, times(1)).findAllById(Set.of(Long.valueOf(Rechnungsdoppel.FIRMA)));
+  }
+
+  /** Ein gestellter Nachtrag an die Birke, mit Netto und Brutto wie erfasst. */
+  private static NachgetrageneRechnung nachtragAnBirke(
+      final long id, final LocalDate datum, final String netto, final String brutto) {
+    return new NachgetrageneRechnung(
+        Long.valueOf(id),
+        BIRKE,
+        "AR-" + id,
+        datum,
+        new BigDecimal(netto),
+        new BigDecimal(brutto),
+        Rechnungszustand.GESTELLT,
+        null,
+        Rechnungsdoppel.ANGELEGT,
+        Rechnungsdoppel.ANGELEGT);
+  }
+
+  /** Das Angebot der Rechnungen, dazu die Adler AG und die Birke — beide Wege zum Namen. */
+  private void gegebenesAngebotUndZweiFirmen() {
+    when(angebote.findAlle(Optional.empty())).thenReturn(List.of(Rechnungsdoppel.angebot()));
+    when(firmen.findAllById(Set.of(Long.valueOf(Rechnungsdoppel.FIRMA), Long.valueOf(BIRKE))))
+        .thenReturn(List.of(Rechnungsdoppel.firma(), Rechnungsdoppel.firma(BIRKE, BIRKE_NAME)));
+  }
+
+  @Test
+  void gestellteRechnungen_thenOneLinePerGestellteAndNoneForTheEntwurf() {
+    // Given — gestellt, bezahlt, abgeschrieben und ein Entwurf, alle zu 7 % festgeschrieben bis auf
+    // den Entwurf; die Einstellungen nennen inzwischen 19 %.
+    gegebenerAktuellerSatz("19.00");
+    gegebenesAngebotMitFirma();
+    when(rechnungen.findAlle())
+        .thenReturn(
+            List.of(
+                Rechnungsdoppel.gestellt(
+                    1L,
+                    Rechnungsdoppel.ANGEBOT,
+                    "R26-0001",
+                    List.of(Rechnungsdoppel.beratung("80.00")),
+                    LETZTER_SEPTEMBER),
+                Rechnungsdoppel.gestellt(
+                        2L,
+                        Rechnungsdoppel.ANGEBOT,
+                        "R26-0002",
+                        List.of(Rechnungsdoppel.pauschale("1")),
+                        ERSTER_SEPTEMBER)
+                    .mitZustand(Rechnungszustand.BEZAHLT, Rechnungsdoppel.ANGELEGT),
+                Rechnungsdoppel.gestellt(
+                        3L,
+                        Rechnungsdoppel.ANGEBOT,
+                        "R26-0003",
+                        List.of(Rechnungsdoppel.beratung("10.00")),
+                        ERSTER_OKTOBER)
+                    .mitZustand(Rechnungszustand.ABGESCHRIEBEN, Rechnungsdoppel.ANGELEGT),
+                Rechnungsdoppel.entwurf(4L, List.of(Rechnungsdoppel.beratung("50.00")))));
+
+    // When
+    final List<GestellteRechnung> zeilen = auskunft.gestellteRechnungen();
+
+    // Then — je gestellte Rechnung eine Zeile mit ihrem festgeschriebenen Satz; der Entwurf fehlt.
+    final BigDecimal sieben = new BigDecimal("7.00");
+    assertThat(zeilen)
+        .containsExactlyInAnyOrder(
+            new GestellteRechnung(
+                LETZTER_SEPTEMBER,
+                new BigDecimal("8000.00"),
+                new BigDecimal("8560.00"),
+                sieben,
+                Rechnungszustand.GESTELLT,
+                Rechnungsdoppel.FIRMA,
+                Rechnungsdoppel.FIRMENNAME),
+            new GestellteRechnung(
+                ERSTER_SEPTEMBER,
+                new BigDecimal("1200.00"),
+                new BigDecimal("1284.00"),
+                sieben,
+                Rechnungszustand.BEZAHLT,
+                Rechnungsdoppel.FIRMA,
+                Rechnungsdoppel.FIRMENNAME),
+            new GestellteRechnung(
+                ERSTER_OKTOBER,
+                new BigDecimal("1000.00"),
+                new BigDecimal("1070.00"),
+                sieben,
+                Rechnungszustand.ABGESCHRIEBEN,
+                Rechnungsdoppel.FIRMA,
+                Rechnungsdoppel.FIRMENNAME));
+  }
+
+  @Test
+  void gestellteRechnungen_withANachtrag_thenNoSatzAndTheBetraegeAsErfasst() {
+    // Given — ein Nachtrag an die Birke, 1.000,00 € netto und 1.190,01 € brutto: Aus keinem Satz
+    // entstuende dieses Brutto, und es wird auch keiner daraus abgeleitet (E5).
+    gegebenerAktuellerSatz("19.00");
+    when(angebote.findAlle(Optional.empty())).thenReturn(List.of(Rechnungsdoppel.angebot()));
+    when(firmen.findAllById(Set.of(Long.valueOf(BIRKE))))
+        .thenReturn(List.of(Rechnungsdoppel.firma(BIRKE, BIRKE_NAME)));
+    when(rechnungen.findAlle()).thenReturn(List.of());
+    when(nachtraege.findAlle())
+        .thenReturn(List.of(nachtragAnBirke(9L, ERSTER_OKTOBER, "1000.00", "1190.01")));
+
+    // When
+    final List<GestellteRechnung> zeilen = auskunft.gestellteRechnungen();
+
+    // Then — die Firma haengt am Nachtrag selbst und nicht an einem Angebot.
+    assertThat(zeilen)
+        .containsExactly(
+            new GestellteRechnung(
+                ERSTER_OKTOBER,
+                new BigDecimal("1000.00"),
+                new BigDecimal("1190.01"),
+                null,
+                Rechnungszustand.GESTELLT,
+                BIRKE,
+                BIRKE_NAME));
+    assertThat(zeilen.getFirst().steuersatz()).isNull();
+  }
+
+  @Test
+  void gestellteRechnungen_withSeveralRechnungen_thenAngeboteAndFirmenAreAskedOnce() {
+    // Given — zwei geschriebene Rechnungen der Adler AG und zwei Nachtraege an die Birke.
+    gegebenerAktuellerSatz("19.00");
+    gegebenesAngebotUndZweiFirmen();
+    when(rechnungen.findAlle())
+        .thenReturn(
+            List.of(
+                Rechnungsdoppel.gestellt(
+                    1L,
+                    Rechnungsdoppel.ANGEBOT,
+                    "R26-0001",
+                    List.of(Rechnungsdoppel.beratung("1.00")),
+                    ERSTER_OKTOBER),
+                Rechnungsdoppel.gestellt(
+                    2L,
+                    Rechnungsdoppel.ANGEBOT,
+                    "R26-0002",
+                    List.of(Rechnungsdoppel.beratung("1.00")),
+                    ERSTER_OKTOBER)));
+    when(nachtraege.findAlle())
+        .thenReturn(
+            List.of(
+                nachtragAnBirke(1L, ERSTER_OKTOBER, "100.00", "119.00"),
+                nachtragAnBirke(2L, ERSTER_OKTOBER, "100.00", "119.00")));
+
+    // When
+    final List<GestellteRechnung> zeilen = auskunft.gestellteRechnungen();
+
+    // Then — vier Zeilen mit dem Namen ihrer Firma, gefragt wurde je einmal und nicht je Zeile.
+    assertThat(zeilen)
+        .extracting(GestellteRechnung::firmaName)
+        .containsExactlyInAnyOrder(
+            Rechnungsdoppel.FIRMENNAME, Rechnungsdoppel.FIRMENNAME, BIRKE_NAME, BIRKE_NAME);
+    verify(angebote, times(1)).findAlle(Optional.empty());
+    verify(firmen, times(1))
+        .findAllById(Set.of(Long.valueOf(Rechnungsdoppel.FIRMA), Long.valueOf(BIRKE)));
+  }
+
+  @Test
+  void gestellteRechnungen_withoutAnyGestellte_thenEmptyAndNeitherAngeboteNorFirmenAreAsked() {
+    // Given — nur ein Entwurf.
+    gegebenerAktuellerSatz("19.00");
+    when(rechnungen.findAlle())
+        .thenReturn(
+            List.of(Rechnungsdoppel.entwurf(1L, List.of(Rechnungsdoppel.beratung("50.00")))));
+
+    // When / Then
+    assertThat(auskunft.gestellteRechnungen()).isEmpty();
+    verifyNoInteractions(angebote, firmen);
+  }
+
+  @Test
+  void gestellteRechnungen_whenTheAngebotIsMissing_thenAngebotNichtGefunden() {
+    // Given — die Rechnung verweist auf ein Angebot, das es nicht gibt: ein Widerspruch im Bestand.
+    gegebenerAktuellerSatz("19.00");
+    when(angebote.findAlle(Optional.empty())).thenReturn(List.of());
+    when(rechnungen.findAlle())
+        .thenReturn(
+            List.of(
+                Rechnungsdoppel.gestellt(
+                        1L,
+                        Rechnungsdoppel.ANGEBOT,
+                        "R26-0001",
+                        List.of(Rechnungsdoppel.beratung("80.00")),
+                        ERSTER_OKTOBER)
+                    .mitZustand(Rechnungszustand.BEZAHLT, Rechnungsdoppel.ANGELEGT)));
+
+    // When / Then
+    assertThatThrownBy(() -> auskunft.gestellteRechnungen())
+        .isInstanceOf(AngebotNichtGefunden.class);
+  }
+
+  @Test
+  void gestellteRechnungen_whenTheFirmaIsMissing_thenFirmaNichtGefunden() {
+    // Given — das Angebot steht da, seine Firma nicht.
+    gegebenerAktuellerSatz("19.00");
+    when(angebote.findAlle(Optional.empty())).thenReturn(List.of(Rechnungsdoppel.angebot()));
+    when(firmen.findAllById(Set.of(Long.valueOf(Rechnungsdoppel.FIRMA)))).thenReturn(List.of());
+    when(rechnungen.findAlle())
+        .thenReturn(
+            List.of(
+                Rechnungsdoppel.gestellt(
+                    1L,
+                    Rechnungsdoppel.ANGEBOT,
+                    "R26-0001",
+                    List.of(Rechnungsdoppel.beratung("80.00")),
+                    ERSTER_OKTOBER)));
+
+    // When / Then
+    assertThatThrownBy(() -> auskunft.gestellteRechnungen()).isInstanceOf(FirmaNichtGefunden.class);
+  }
+
+  @Test
+  void gestellteRechnungen_overAYear_thenNettoAndBruttoMatchTheMonateOfGestellteToTheCent() {
+    // Given — Rechnungen ueber 0,50 € netto zu 7 % (je Rechnung 0,035 € Steuer), dazu bezahlte,
+    // ein Nachtrag mit krummem Brutto und eine Rechnung des Vorjahres, die nicht mitzaehlen darf.
+    gegebenerAktuellerSatz("19.00");
+    gegebenesAngebotUndZweiFirmen();
+    when(rechnungen.findAlle())
+        .thenReturn(
+            List.of(
+                Rechnungsdoppel.gestellt(
+                    1L,
+                    Rechnungsdoppel.ANGEBOT,
+                    "R26-0001",
+                    List.of(Rechnungsdoppel.beratung("1.00", new BigDecimal("0.50"))),
+                    ERSTER_SEPTEMBER),
+                Rechnungsdoppel.gestellt(
+                    2L,
+                    Rechnungsdoppel.ANGEBOT,
+                    "R26-0002",
+                    List.of(Rechnungsdoppel.beratung("1.00", new BigDecimal("0.50"))),
+                    LETZTER_SEPTEMBER),
+                Rechnungsdoppel.gestellt(
+                        3L,
+                        Rechnungsdoppel.ANGEBOT,
+                        "R26-0003",
+                        List.of(Rechnungsdoppel.beratung("3.33")),
+                        ERSTER_OKTOBER)
+                    .mitZustand(Rechnungszustand.BEZAHLT, Rechnungsdoppel.ANGELEGT),
+                Rechnungsdoppel.gestellt(
+                    4L,
+                    Rechnungsdoppel.ANGEBOT,
+                    "R25-0009",
+                    List.of(Rechnungsdoppel.beratung("7.00")),
+                    LETZTER_DEZEMBER_VORJAHR),
+                Rechnungsdoppel.entwurf(5L, List.of(Rechnungsdoppel.beratung("50.00")))));
+    when(nachtraege.findAlle())
+        .thenReturn(
+            List.of(
+                nachtragAnBirke(1L, ERSTER_OKTOBER, "1000.00", "1190.01"),
+                nachtragAnBirke(2L, LETZTER_DEZEMBER_VORJAHR, "10.00", "11.90")));
+    final Year jahr = Year.of(2026);
+
+    // When
+    final List<GestellteRechnung> imJahr =
+        auskunft.gestellteRechnungen().stream()
+            .filter(zeile -> Year.from(zeile.rechnungDatum()).equals(jahr))
+            .toList();
+    final Map<YearMonth, Monatsabrechnung> jeMonat = auskunft.gestellte().jeMonat();
+    final Monatsabrechnung ueberDieMonate =
+        Monatsabrechnung.summe(
+            Stream.iterate(jahr.atMonth(1), monat -> monat.plusMonths(1))
+                .limit(12)
+                .filter(jeMonat::containsKey)
+                .map(jeMonat::get));
+
+    // Then — auf den Cent dieselbe Zahl, denn beide addieren die je Rechnung gerundeten Betraege.
+    assertThat(imJahr).hasSize(ueberDieMonate.anzahl());
+    assertThat(Geldrechnung.summe(imJahr.stream().map(GestellteRechnung::netto)))
+        .isEqualTo(ueberDieMonate.netto())
+        .isEqualTo(new BigDecimal("1334.00"));
+    assertThat(Geldrechnung.summe(imJahr.stream().map(GestellteRechnung::brutto)))
+        .isEqualTo(ueberDieMonate.brutto())
+        .isEqualTo(new BigDecimal("1547.40"));
   }
 }

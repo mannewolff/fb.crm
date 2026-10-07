@@ -79,4 +79,45 @@ class GeldrechnungTest {
     assertThat(summe).isEqualTo(new BigDecimal("3.00"));
     assertThat(summe.scale()).isEqualTo(2);
   }
+
+  @Test
+  void je_givenAQuotientBelowTheHalfCent_thenRoundsDown() {
+    // When — 100,00 € auf drei verteilt ergeben 33,333… €.
+    final BigDecimal je = Geldrechnung.je(new BigDecimal("100.00"), new BigDecimal("3"));
+
+    // Then
+    assertThat(je).isEqualTo(new BigDecimal("33.33"));
+  }
+
+  @Test
+  void je_givenAQuotientExactlyOnTheHalfCent_thenRoundsUpAsCommerceDoes() {
+    // When — 0,05 € auf zwei verteilt ergeben 0,025 €.
+    final BigDecimal je = Geldrechnung.je(new BigDecimal("0.05"), new BigDecimal("2"));
+
+    // Then — HALF_EVEN gaebe hier 0.02 und waere damit falsch.
+    assertThat(je).isEqualTo(new BigDecimal("0.03"));
+  }
+
+  @Test
+  void je_givenANegativeQuotientExactlyOnTheHalfCent_thenRoundsAwayFromZero() {
+    // When — -0,05 € auf zwei verteilt ergeben -0,025 €.
+    final BigDecimal je = Geldrechnung.je(new BigDecimal("-0.05"), new BigDecimal("2"));
+
+    // Then — kaufmaennisch weg von der Null, also abwaerts: HALF_EVEN gaebe -0.02.
+    assertThat(je).isEqualTo(new BigDecimal("-0.03"));
+  }
+
+  @Test
+  void je_givenAQuotientWithoutRemainder_thenStillCarriesScaleTwo() {
+    // When / Then — die Skala haengt nicht am Zufall der Eingabe.
+    assertThat(Geldrechnung.je(new BigDecimal("300"), new BigDecimal("3")))
+        .isEqualTo(new BigDecimal("100.00"));
+  }
+
+  @Test
+  void je_givenNennerZero_thenNull() {
+    // When / Then — ohne Nenner gibt es keine Kennzahl, und das ist keine Ausnahme (E12).
+    assertThat(Geldrechnung.je(new BigDecimal("100.00"), BigDecimal.ZERO)).isNull();
+    assertThat(Geldrechnung.je(new BigDecimal("100.00"), new BigDecimal("0.00"))).isNull();
+  }
 }

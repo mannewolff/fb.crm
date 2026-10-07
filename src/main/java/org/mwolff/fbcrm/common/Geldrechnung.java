@@ -3,6 +3,7 @@ package org.mwolff.fbcrm.common;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.stream.Stream;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Die eine Regel, nach der jeder Beleg seine Betraege rechnet (E5).
@@ -51,6 +52,29 @@ public final class Geldrechnung {
    */
   public static BigDecimal summe(final Stream<BigDecimal> betraege) {
     return betraege.reduce(BigDecimal.ZERO, BigDecimal::add).setScale(CENT, RoundingMode.HALF_UP);
+  }
+
+  /**
+   * Ein Geldbetrag je Einheit: Zaehler geteilt durch Nenner, kaufmaennisch auf den Cent gerundet
+   * (Plan #288, E12) — etwa der Erloes je Stunde.
+   *
+   * <p>Die Division steht hier und nicht im Modul, das sie zuerst braucht, aus demselben Grund wie
+   * {@link #betrag} und {@link #summe}: Ihr Ergebnis ist ein Geldbetrag und wird gerundet wie jeder
+   * andere. Zwei Abschriften derselben Rundungsregel driften beim ersten Nachziehen um einen Cent
+   * auseinander.
+   *
+   * <p>Ein Nenner null ist kein Fehler, sondern eine Kennzahl, die es nicht gibt: Die Antwort ist
+   * dann {@code null}, und was an ihrer Stelle erscheint, entscheidet der Leser.
+   *
+   * @param zaehler der zu verteilende Betrag
+   * @param nenner die Menge, auf die er verteilt wird
+   * @return der Quotient mit Skala 2, oder {@code null} bei Nenner null
+   */
+  public static @Nullable BigDecimal je(final BigDecimal zaehler, final BigDecimal nenner) {
+    if (nenner.signum() == 0) {
+      return null;
+    }
+    return zaehler.divide(nenner, CENT, RoundingMode.HALF_UP);
   }
 
   private Geldrechnung() {}

@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Stream;
 import org.mwolff.fbcrm.angebot.application.AngebotNichtGefunden;
 import org.mwolff.fbcrm.angebot.domain.AngebotRepository;
 import org.mwolff.fbcrm.firma.application.FirmaNichtGefunden;
@@ -24,12 +25,15 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * Was die Rechnung anderen Modulen ueber ihre gestellten Rechnungen sagt (Plan #208, E5).
  *
- * <p><b>Die eine Tuer nach draussen.</b> Die Startseite (#206) braucht dreierlei: die Summe der
- * gestellten Rechnungen je Monat (Kriterium 7; Plan #274, E4), die schon abgerechneten Mengen je
- * Angebotsposition (Kriterium 5) und die noch offenen Rechnungen selbst (Issue #285). Alles geht
- * ueber diese Klasse und nicht ueber {@link RechnungRepository}: Der Port gehoert diesem Modul, und
- * ein fremdes Modul, das ihn selbst aufriefe, muesste den Zustand einer Rechnung, den geltenden
- * Steuersatz, die Rundungsregel und den Weg zum Firmennamen kennen.
+ * <p><b>Zwei Tueren nach draussen.</b> {@link #gestellte()} ist die Tuer der Startseite (#206): Sie
+ * braucht dreierlei — die Summe der gestellten Rechnungen je Monat (Kriterium 7; Plan #274, E4),
+ * die schon abgerechneten Mengen je Angebotsposition (Kriterium 5) und die noch offenen Rechnungen
+ * selbst (Issue #285). {@link #gestellteRechnungen()} ist die Tuer des Jahresabschlusses (Plan
+ * #288, E4): die gestellten Rechnungen einzeln, je Rechnung mit Steuersatz und Firma, die die
+ * Verdichtung je Monat verliert. Beides geht ueber diese Klasse und nicht ueber {@link
+ * RechnungRepository}: Der Port gehoert diesem Modul, und ein fremdes Modul, das ihn selbst
+ * aufriefe, muesste den Zustand einer Rechnung, den geltenden Steuersatz, die Rundungsregel und den
+ * Weg zum Firmennamen kennen.
  *
  * <p><b>Nur gestellte Rechnungen</b> — anders als {@link Abrechnungsstand}, der Entwuerfe
  * mitzaehlt, damit ein zweiter Entwurf dieselbe Menge nicht noch einmal als offen zeigt (#160,
@@ -53,12 +57,16 @@ import org.springframework.transaction.annotation.Transactional;
  * sie nicht: Sie gehoert zu keinem Angebot (Kriterium 11). In der Liste der offenen Rechnungen
  * steht sie neben der geschriebenen und nur durch ihre Art unterschieden.
  *
- * <p><b>Ein Durchlauf, drei Antworten.</b> {@link #gestellte()} liest {@link
- * RechnungRepository#findAlle()} genau einmal und rechnet alles daraus; drei Methoden waeren drei
- * Zuege durch dieselben Daten (Plan #208, E5).
+ * <p><b>Ein Durchlauf je Tuer.</b> {@link #gestellte()} liest {@link RechnungRepository#findAlle()}
+ * genau einmal und rechnet ihre drei Antworten daraus; drei Methoden waeren drei Zuege durch
+ * dieselben Daten (Plan #208, E5). Die zweite Tuer kostet einen eigenen Durchlauf, und das ist
+ * billiger als die Alternative: {@link Gestellte} um eine Zeile je Rechnung zu erweitern, liesse
+ * jeden Aufruf der Startseite Zeilen bauen und Firmennamen fuer alle gestellten Rechnungen holen,
+ * die sie nie zeigt. Der Jahresabschluss wird selten aufgerufen, die Startseite bei jedem Anmelden.
+ * Dieselben Betraege haelt beide Tueren zusammen, nicht ein gemeinsamer Durchlauf.
  *
- * <p><b>Die Zeilen der offenen Rechnungen entstehen daneben</b> ({@link OffenePosten}): Dort steht,
- * wie der Firmenname dazukommt und warum er in zwei Zuegen kommt.
+ * <p><b>Die Firma kommt daneben</b> ({@link Firmenblick}): Dort steht, wie der Firmenname dazukommt
+ * und warum in zwei Zuegen; die Zeilen der offenen Rechnungen baut {@link OffenePosten}.
  *
  * <p><b>Der Monat ist der des Rechnungsdatums</b> und nicht der des Stellens (#206, Antwort 4). Die
  * Betraege werden je Monat verdichtet und nicht gegen einen gefragten Zeitraum gefiltert: Welchen
@@ -151,6 +159,64 @@ public class Rechnungsauskunft {
         (monat, rechnungen) -> jeMonat.put(monat, Monatsabrechnung.summe(rechnungen.stream())));
     return new Gestellte(
         jeMonat, mengen, OffenePosten.zeilen(offeneEigene, offeneNachtraege, angebote, firmen));
+  }
+
+  /**
+   * Die gestellten Rechnungen einzeln, je Rechnung mit Rechnungsdatum, Betraegen, Steuersatz,
+   * Zustand und Firma (Plan #288, E4).
+   *
+   * <p>Gewaehlt werden dieselben Rechnungen wie in {@link #gestellte()}: die geschriebenen, die
+   * {@link Rechnungszustand#istGestellt() gestellt} sind, und alle nachgetragenen. Gerechnet wird
+   * mit denselben Betraegen (E5) — bei der geschriebenen Rechnung Brutto ueber {@link
+   * GeltenderSteuersatz}, beim Nachtrag Netto und Brutto wie erfasst. Darum ergibt die Summe ueber
+   * die Zeilen eines Zeitraums denselben Cent wie die Abrechnung seiner Monate. Ein Nachtrag traegt
+   * keinen Steuersatz, und keiner wird aus seinen Betraegen abgeleitet.
+   *
+   * <p>Die Reihenfolge ist keine Zusage: Wer die Zeilen liest, gruppiert und summiert sie.
+   *
+   * @return je gestellte Rechnung eine Zeile; leer, wo nichts gestellt ist
+   * @throws AngebotNichtGefunden wenn es das Angebot einer gestellten Rechnung nicht gibt
+   * @throws FirmaNichtGefunden wenn es die Firma eines solchen Angebots oder einer nachgetragenen
+   *     Rechnung nicht gibt — beides waere ein Widerspruch im Bestand
+   */
+  public List<GestellteRechnung> gestellteRechnungen() {
+    final BigDecimal aktuellerSatz = einstellungen.lies().steuersatz();
+    final List<Rechnung> eigene =
+        bestand.findAlle().stream().filter(rechnung -> rechnung.zustand().istGestellt()).toList();
+    final List<NachgetrageneRechnung> nachgetragene = nachtraege.findAlle();
+    final Firmenblick blick = Firmenblick.fuer(eigene, nachgetragene, angebote, firmen);
+    return Stream.concat(
+            eigene.stream().map(rechnung -> zeile(rechnung, aktuellerSatz, blick)),
+            nachgetragene.stream().map(rechnung -> zeile(rechnung, blick)))
+        .toList();
+  }
+
+  /* Die Zeile einer geschriebenen Rechnung — ihr Satz ist der geltende, ihre Firma die des Angebots. */
+  private static GestellteRechnung zeile(
+      final Rechnung rechnung, final BigDecimal aktuellerSatz, final Firmenblick blick) {
+    final BigDecimal satz = GeltenderSteuersatz.fuer(rechnung, aktuellerSatz);
+    final long firmaId = blick.firmaVon(rechnung);
+    return new GestellteRechnung(
+        rechnung.rechnungDatum(),
+        rechnung.netto(),
+        rechnung.brutto(satz),
+        satz,
+        rechnung.zustand(),
+        firmaId,
+        blick.nameVon(firmaId));
+  }
+
+  /* Die Zeile eines Nachtrags — Betraege wie erfasst, kein Satz, die Firma an ihm selbst. */
+  private static GestellteRechnung zeile(
+      final NachgetrageneRechnung rechnung, final Firmenblick blick) {
+    return new GestellteRechnung(
+        rechnung.rechnungDatum(),
+        rechnung.netto(),
+        rechnung.brutto(),
+        null,
+        rechnung.zustand(),
+        rechnung.firmaId(),
+        blick.nameVon(rechnung.firmaId()));
   }
 
   /*

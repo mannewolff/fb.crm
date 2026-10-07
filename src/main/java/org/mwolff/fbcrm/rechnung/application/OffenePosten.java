@@ -1,17 +1,11 @@
 package org.mwolff.fbcrm.rechnung.application;
 
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
-import java.util.Optional;
-import java.util.Set;
-import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import org.mwolff.fbcrm.angebot.application.AngebotNichtGefunden;
-import org.mwolff.fbcrm.angebot.domain.Angebot;
 import org.mwolff.fbcrm.angebot.domain.AngebotRepository;
 import org.mwolff.fbcrm.firma.application.FirmaNichtGefunden;
-import org.mwolff.fbcrm.firma.domain.Firma;
 import org.mwolff.fbcrm.firma.domain.FirmaRepository;
 import org.mwolff.fbcrm.rechnung.domain.NachgetrageneRechnung;
 import org.mwolff.fbcrm.rechnung.domain.Rechnung;
@@ -24,13 +18,10 @@ import org.mwolff.fbcrm.rechnung.domain.Rechnung;
  * einem Grenzwert von PMD haengen. Paket-privat und ohne eigene Testklasse — die Zerlegung ist
  * keine eigene Zusage, geprueft wird sie ueber {@code RechnungsauskunftTest}.
  *
- * <p><b>Der Firmenname kommt in zwei Zuegen, nicht je Zeile</b>, und wie in {@link
- * RechnungenUebersichtUseCase}: Bei der von fb.crm geschriebenen Rechnung haengt die Firma nicht an
- * ihr, sondern an ihrem Angebot, bei der nachgetragenen an ihr selbst. Je Zeile nachzufragen waere
- * die bekannte Abfrage-Lawine.
- *
- * <p><b>Ist nichts offen, wird gar nicht gefragt.</b> Das ist der Regelfall eines bezahlten
- * Bestands, und zwei Abfragen fuer eine leere Liste zahlte jeder Aufruf der Startseite mit.
+ * <p><b>Der Firmenname kommt in zwei Zuegen, nicht je Zeile</b>, ueber {@link Firmenblick}: Bei der
+ * von fb.crm geschriebenen Rechnung haengt die Firma nicht an ihr, sondern an ihrem Angebot, bei
+ * der nachgetragenen an ihr selbst. Ist nichts offen, wird gar nicht gefragt — das ist der
+ * Regelfall eines bezahlten Bestands.
  *
  * <p>Die Ports kommen als Parameter und nicht als Feld: Die Klasse haelt keinen Zustand, und wer
  * sie ruft, hat sie schon.
@@ -56,23 +47,10 @@ final class OffenePosten {
       final List<NachgetrageneRechnung> nachgetragene,
       final AngebotRepository angebote,
       final FirmaRepository firmen) {
-    if (eigene.isEmpty() && nachgetragene.isEmpty()) {
-      return List.of();
-    }
-    final Map<Long, Long> firmaJeAngebot =
-        angebote.findAlle(Optional.empty()).stream()
-            .collect(Collectors.toMap(Angebot::requireId, Angebot::firmaId));
-    final Set<Long> firmaIds =
-        Stream.concat(
-                eigene.stream().map(rechnung -> firmaVon(firmaJeAngebot, rechnung)),
-                nachgetragene.stream().map(NachgetrageneRechnung::firmaId))
-            .collect(Collectors.toSet());
-    final Map<Long, String> namen =
-        firmen.findAllById(firmaIds).stream()
-            .collect(Collectors.toMap(Firma::requireId, Firma::name));
+    final Firmenblick blick = Firmenblick.fuer(eigene, nachgetragene, angebote, firmen);
     return Stream.concat(
-            eigene.stream().map(rechnung -> zeile(rechnung, namen, firmaJeAngebot)),
-            nachgetragene.stream().map(rechnung -> zeile(rechnung, namen)))
+            eigene.stream().map(rechnung -> zeile(rechnung, blick)),
+            nachgetragene.stream().map(rechnung -> zeile(rechnung, blick)))
         .sorted(Rechnungsreihenfolge.OFFENE_AELTESTE_ZUERST)
         .toList();
   }
@@ -81,44 +59,25 @@ final class OffenePosten {
    * Die Zeile einer geschriebenen Rechnung. Die Nummer steht ohne Pruefung da: Eine Rechnung ohne
    * Nummer ist ein Entwurf, und ein Entwurf ist nicht offen (wie in Rechnungsbeleg).
    */
-  private static OffeneRechnung zeile(
-      final Rechnung rechnung,
-      final Map<Long, String> namen,
-      final Map<Long, Long> firmaJeAngebot) {
+  private static OffeneRechnung zeile(final Rechnung rechnung, final Firmenblick blick) {
     return new OffeneRechnung(
         false,
         rechnung.requireId(),
         Objects.requireNonNull(rechnung.nummer()),
-        nameVon(namen, firmaVon(firmaJeAngebot, rechnung)),
+        blick.nameVon(blick.firmaVon(rechnung)),
         rechnung.rechnungDatum(),
         rechnung.netto());
   }
 
   /* Die Zeile einer nachgetragenen Rechnung — ihre Firma haengt an ihr selbst. */
   private static OffeneRechnung zeile(
-      final NachgetrageneRechnung rechnung, final Map<Long, String> namen) {
+      final NachgetrageneRechnung rechnung, final Firmenblick blick) {
     return new OffeneRechnung(
         true,
         rechnung.requireId(),
         rechnung.nummer(),
-        nameVon(namen, rechnung.firmaId()),
+        blick.nameVon(rechnung.firmaId()),
         rechnung.rechnungDatum(),
         rechnung.netto());
-  }
-
-  private static long firmaVon(final Map<Long, Long> firmaJeAngebot, final Rechnung rechnung) {
-    final Long firmaId = firmaJeAngebot.get(rechnung.angebotId());
-    if (firmaId == null) {
-      throw new AngebotNichtGefunden();
-    }
-    return firmaId;
-  }
-
-  private static String nameVon(final Map<Long, String> namen, final long firmaId) {
-    final String name = namen.get(firmaId);
-    if (name == null) {
-      throw new FirmaNichtGefunden();
-    }
-    return name;
   }
 }
