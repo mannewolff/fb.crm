@@ -134,6 +134,9 @@
       ]
     }
   },
+  "pruefLauf": {
+    "pruefungMin": 60
+  },
   "night": {
     "kette": {
       "label": "kit:night",
