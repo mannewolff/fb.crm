@@ -25,7 +25,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Die drei Kennzahlen der Startseite (#206; Plan #208, E1).
+ * Die vier Kennzahlen der Startseite (#206; Plan #208, E1; Issue #285).
  *
  * <p><b>Vier Auskuenfte und keine je Angebot.</b> Die Angebote mit den Namen ihrer Firmen kommen in
  * einem Zug ({@link AngeboteUebersichtUseCase#angebote(Optional)}, E2) — mit allen Status, weil
@@ -35,6 +35,11 @@ import org.springframework.transaction.annotation.Transactional;
  * Arbeitszeitauskunft#monateMitEintragImZeitraum(LocalDate, LocalDate)}; Plan #208, E3; Plan #274,
  * E7), die gestellten Rechnungen je Monat in einem ({@link Rechnungsauskunft#gestellte()}, Plan
  * #274, E4). Je Angebot zu fragen waere die Abfragelawine, die diese Tueren gerade vermeiden.
+ *
+ * <p><b>„Offene Rechnungen" kommt aus demselben Zug</b> wie „Abgerechnet" ({@link
+ * Gestellte#offene()}, Issue #285) und wird hier nur noch summiert ({@link OffeneRechnungen#aus}).
+ * Sie traegt <b>keinen</b> Zeitraum: Was offen ist, ist es unabhaengig vom Rechnungsdatum, und eine
+ * Rechnung aus dem Vorjahr steht darum auch dann darin, wenn das laufende Jahr gewaehlt ist.
  *
  * <p><b>Welcher Zeitraum gilt, entscheidet der Server</b> an der injizierten {@link Clock} in der
  * {@link Geschaeftszone} (E8): Am 1. des Monats um 00:30 Ortszeit ist am Nullmeridian noch der
@@ -89,7 +94,7 @@ public class StartseiteUseCase {
    *
    * @param gewaehlt der gewuenschte Monat oder das gewuenschte Jahr, oder leer fuer das laufende
    *     Jahr; ein Zeitraum, der nicht zur Wahl steht, wirkt wie ein fehlender
-   * @return die drei Kennzahlen, die internen Stunden des Zeitraums, der geltende Zeitraum und die
+   * @return die vier Kennzahlen, die internen Stunden des Zeitraums, der geltende Zeitraum und die
    *     waehlbaren
    */
   public Startseitenstand stand(final Optional<Zeitraum> gewaehlt) {
@@ -115,6 +120,7 @@ public class StartseiteUseCase {
         alle.stream().filter(zeile -> inArbeit(zeile.angebot().status())).toList(),
         nichtAbgerechnet(alle, angefallen, imZeitraum, gestellte.mengenJePosition()),
         Abrechnungsblick.fuer(gestellte.jeMonat(), zeitraum),
+        OffeneRechnungen.aus(gestellte.offene()),
         interneStundenImZeitraum(alle, imZeitraum));
   }
 

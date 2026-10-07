@@ -7,10 +7,12 @@ import java.util.List;
 import org.mwolff.fbcrm.angebot.application.AngebotMitFirma;
 import org.mwolff.fbcrm.angebot.domain.Angebotsstatus;
 import org.mwolff.fbcrm.rechnung.application.Monatsabrechnung;
+import org.mwolff.fbcrm.rechnung.application.OffeneRechnung;
 import org.mwolff.fbcrm.startseite.application.Abgerechnet;
 import org.mwolff.fbcrm.startseite.application.Abrechnungsmonat;
 import org.mwolff.fbcrm.startseite.application.Angebotsanteil;
 import org.mwolff.fbcrm.startseite.application.NichtAbgerechnet;
+import org.mwolff.fbcrm.startseite.application.OffeneRechnungen;
 import org.mwolff.fbcrm.startseite.application.Startseitenstand;
 import org.mwolff.fbcrm.startseite.application.WaehlbareZeitraeume;
 import org.mwolff.fbcrm.startseite.application.Zeitraum;
@@ -34,7 +36,9 @@ import org.mwolff.fbcrm.startseite.application.Zeitraum;
  *
  * <p><b>Die Zahl der Angebote in Arbeit steht nicht als Feld darin</b> — die Liste ist die
  * Wahrheit, und die Ansicht zaehlt sie. Bei {@code abgerechnet} ist die Anzahl dagegen ein Feld:
- * Dort stehen die Rechnungen selbst nicht in der Antwort (Plan #208, E20).
+ * Dort stehen die Rechnungen selbst nicht in der Antwort (Plan #208, E20). Bei {@code
+ * offeneRechnungen} stehen beide — die Rechnungen und ihre Zahl: Die Kachel nennt sie im Wort („1
+ * Rechnung"), und die Ansicht soll sie dafuer nicht selbst rechnen (Issue #285).
  *
  * <p><b>Die internen Stunden stehen neben den Kennzahlen</b> und in keiner von ihnen (#207,
  * Kriterium 9): Sie sind eine Stundenzahl und kein Betrag — interne Arbeit traegt keinen Preis, und
@@ -48,6 +52,7 @@ import org.mwolff.fbcrm.startseite.application.Zeitraum;
  * @param nichtAbgerechnet was aus erfasster Arbeitszeit noch abzurechnen ist
  * @param abgerechnet Netto, Brutto, Anzahl und der noch offene Anteil der im Zeitraum gestellten
  *     Rechnungen, bei einem Jahr samt seinen Monaten
+ * @param offeneRechnungen worauf noch Geld fehlt — Stand von heute, ohne Zeitraum (Issue #285)
  * @param interneStundenImZeitraum die im gewaehlten Zeitraum auf interne Angebote gebuchten Stunden
  */
 public record StartseiteResponse(
@@ -56,6 +61,7 @@ public record StartseiteResponse(
     List<Angebotszeile> inArbeit,
     NichtAbgerechnetResponse nichtAbgerechnet,
     AbgerechnetResponse abgerechnet,
+    OffeneRechnungenResponse offeneRechnungen,
     BigDecimal interneStundenImZeitraum) {
 
   /** Derselbe Stand in der Sprache der Schnittstelle. */
@@ -66,6 +72,7 @@ public record StartseiteResponse(
         stand.inArbeit().stream().map(Angebotszeile::of).toList(),
         NichtAbgerechnetResponse.of(stand.nichtAbgerechnet()),
         AbgerechnetResponse.of(stand.abgerechnet()),
+        OffeneRechnungenResponse.of(stand.offeneRechnungen()),
         stand.interneStundenImZeitraum());
   }
 
@@ -177,7 +184,12 @@ public record StartseiteResponse(
    * <p><b>Das Offene steht daneben und nicht darin</b> (Issue #284): {@code netto} bleibt der
    * Umsatz des Zeitraums nach Rechnungsdatum — eine bezahlte Rechnung zaehlt dort weiter mit —, und
    * {@code offenNetto} sagt, wie viel davon noch nicht bezahlt ist. Beide Betraege sind netto; die
-   * Ansicht stellt sie untereinander, und zwei Einheiten nebeneinander waeren dort nicht zu lesen.
+   * Ansicht stellt sie in der Monatsliste nebeneinander, Netto und Spalte „Offen".
+   *
+   * <p><b>Dieses Offene ist das des Zeitraums</b> und nicht die Kennzahl {@code offeneRechnungen}
+   * daneben (Issue #285): Jenes ist der Stand von heute ueber alle Monate, dieses der Anteil genau
+   * dieser Summe. Die beiden Zahlen unterscheiden sich, sobald im gewaehlten Zeitraum nicht alles
+   * Offene liegt.
    *
    * @param netto die Summe der Netto-Betraege der im Zeitraum gestellten Rechnungen
    * @param brutto die Summe ihrer Brutto-Betraege, jeder mit dem Satz seiner Rechnung
@@ -236,6 +248,68 @@ public record StartseiteResponse(
           abrechnung.brutto(),
           abrechnung.offenNetto(),
           abrechnung.offenAnzahl());
+    }
+  }
+
+  /**
+   * Die Kennzahl „Offene Rechnungen" (Issue #285).
+   *
+   * <p><b>Ohne Zeitraum</b>, anders als {@code abgerechnet}: Sie ist der Stand von heute ueber alle
+   * Monate und aendert sich mit der Wahl nicht — eine offene Rechnung aus dem Vorjahr steht auch
+   * dann darin, wenn das laufende Jahr gilt.
+   *
+   * <p><b>Betrag und Anzahl stehen neben der Liste</b>, obwohl die Liste beides hergibt: Die Kachel
+   * zeigt die Summe gross und die Zahl im Wort, und die Ansicht soll dafuer keine zweite Wahrheit
+   * rechnen (sie rechnet nichts, #216).
+   *
+   * @param netto die Summe der Netto-Betraege aller offenen Rechnungen; 0,00 ohne eine solche
+   * @param anzahl die Zahl dieser Rechnungen
+   * @param rechnungen diese Rechnungen selbst, aelteste zuerst; leer, wo nichts offen ist
+   */
+  public record OffeneRechnungenResponse(
+      BigDecimal netto, int anzahl, List<OffeneRechnungszeile> rechnungen) {
+
+    static OffeneRechnungenResponse of(final OffeneRechnungen offene) {
+      return new OffeneRechnungenResponse(
+          offene.netto(),
+          offene.anzahl(),
+          offene.rechnungen().stream().map(OffeneRechnungszeile::of).toList());
+    }
+  }
+
+  /**
+   * Eine Zeile der Karte „Offene Rechnungen" (Issue #285).
+   *
+   * <p><b>Die Zeile traegt ihre Art</b>, wie in {@code RechnungenUebersichtResponse}: Art und
+   * Kennung zusammen bezeichnen eine Rechnung, und die Ansicht waehlt daran den Weg — {@code
+   * /rechnungen/:id} oder {@code /rechnungen/nachgetragen/:id} (Plan #259, E18, E21).
+   *
+   * <p>Der Zustand steht nicht dabei: Jede Zeile dieser Liste ist offen, und ein Feld, das immer
+   * denselben Wert traegt, sagt nichts.
+   *
+   * @param nachgetragen ob die Rechnung nachgetragen und nicht von fb.crm geschrieben ist
+   * @param id Kennung der Rechnung im Raum ihrer Art — der Weg dorthin
+   * @param nummer die Rechnungsnummer; sie traegt den Weg in der Ansicht
+   * @param firmaName Name der Firma, an die die Rechnung geht
+   * @param rechnungDatum Datum der Rechnung
+   * @param netto der Nettobetrag
+   */
+  public record OffeneRechnungszeile(
+      boolean nachgetragen,
+      long id,
+      String nummer,
+      String firmaName,
+      LocalDate rechnungDatum,
+      BigDecimal netto) {
+
+    static OffeneRechnungszeile of(final OffeneRechnung rechnung) {
+      return new OffeneRechnungszeile(
+          rechnung.nachgetragen(),
+          rechnung.id(),
+          rechnung.nummer(),
+          rechnung.firmaName(),
+          rechnung.rechnungDatum(),
+          rechnung.netto());
     }
   }
 }

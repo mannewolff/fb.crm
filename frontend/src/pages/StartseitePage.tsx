@@ -1,7 +1,13 @@
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
-import { IconClock, IconFileInvoice, IconReceipt, IconTool } from '@tabler/icons-react';
+import {
+  IconCashBanknote,
+  IconClock,
+  IconFileInvoice,
+  IconReceipt,
+  IconTool,
+} from '@tabler/icons-react';
 import { useEffect, useState } from 'react';
 import type { ChangeEvent, ReactNode } from 'react';
 import { Link as RouterLink, useSearchParams } from 'react-router-dom';
@@ -10,6 +16,7 @@ import { startseite } from '../api/startseite';
 import type {
   Anteilszeile,
   Monatszeile,
+  OffeneRechnungszeile,
   StartseiteAngebotszeile,
   Startseitenstand,
   Zeitraumart,
@@ -56,15 +63,17 @@ import { RADIUS_RUND, ZAHLEN_KLASSE } from '../theme';
  * eine weiche Taste auf `/rechnungen`, statt sie hier ein zweites Mal zu holen. Bei Jahreswahl
  * stehen darueber die Monate des Jahres mit ihrer Summe (Plan #274, E11, E13, E14).
  *
- * <b>Was von „Abgerechnet" noch offen ist, steht an zwei Stellen</b> (Issue #284): als dritte Zeile
- * der Kachel, in Jahres- wie in Monatsansicht, und als Spalte „Offen" der Monatsliste samt ihrer
- * Summe. Beide fehlen bzw. tragen einen Gedankenstrich, wo nichts offen ist — so faellt das Offene
- * genau dann auf, wenn es eines gibt. Die grosse Zahl der Kachel bleibt unberuehrt: Sie ist der
- * Umsatz des Zeitraums nach Rechnungsdatum, nicht der Zahlungseingang.
+ * <b>Das Offene steht an zwei Stellen, und sie sagen Verschiedenes.</b> Die Kachel „Offene
+ * Rechnungen" mit ihrer Karte ist der <b>Stand von heute</b> ueber alle Monate (Issue #285) und
+ * aendert sich mit der Zeitraumwahl nicht — wie „Angebote in Arbeit" und die grosse Zahl von „Noch
+ * nicht abgerechnet". Die Spalte „Offen" der Monatsliste ist dagegen der Anteil <b>dieses</b>
+ * Zeitraums (Issue #284); sie traegt einen Gedankenstrich, wo nichts offen ist, damit das Offene
+ * genau dort auffaellt, wo es eines gibt. Die grosse Zahl von „Abgerechnet" bleibt von beidem
+ * unberuehrt: Sie ist der Umsatz des Zeitraums nach Rechnungsdatum, nicht der Zahlungseingang.
  *
  * <b>Die internen Stunden stehen unter den Kacheln und nicht darin</b> (#207, Kriterium 9): Die
- * Kachelreihe traegt Betraege, interne Arbeit traegt keinen Preis. Eine Stundenzahl zwischen drei
- * Euro-Kacheln laese sich wie eine vierte Kennzahl in Euro.
+ * Kachelreihe traegt Betraege, interne Arbeit traegt keinen Preis. Eine Stundenzahl zwischen vier
+ * Euro-Kacheln laese sich wie eine fuenfte Kennzahl in Euro.
  *
  * <b>Der Weg liegt auf dem Datum</b>, nicht auf der Zeile — wie in {@link Angebotsliste}: Ein
  * Angebot hat keine Nummer, und ein `tr` mit `onClick` waere fuer Tastatur und Screenreader kein
@@ -89,6 +98,7 @@ const AUSFALL = 'Der Geschäftsstand ist gerade nicht zu erreichen. Bitte späte
 
 const TITEL_IN_ARBEIT = 'Angebote in Arbeit';
 const TITEL_OFFEN = 'Noch nicht abgerechnet';
+const TITEL_OFFENE_RECHNUNGEN = 'Offene Rechnungen';
 const TITEL_ABGERECHNET = 'Abgerechnet';
 
 /**
@@ -124,9 +134,11 @@ const WORTE: Readonly<
 
 const LEER_IN_ARBEIT = 'Kein Angebot ist gerade in Arbeit.';
 const LEER_OFFEN = 'Nichts offen — alle erfasste Zeit ist abgerechnet.';
+const LEER_OFFENE_RECHNUNGEN = 'Keine Rechnung ist offen.';
 
 const SPALTEN_IN_ARBEIT: readonly string[] = ['Firma', 'Angebot', 'Status'];
 const SPALTEN_OFFEN: readonly string[] = ['Firma', 'Angebot', 'Anteil'];
+const SPALTEN_OFFENE_RECHNUNGEN: readonly string[] = ['Rechnung', 'Firma', 'Datum', 'Netto'];
 const SPALTEN_ABGERECHNET: readonly string[] = ['Monat', 'Rechnungen', 'Netto', 'Brutto', 'Offen'];
 
 /**
@@ -158,15 +170,18 @@ const SUMMENBETRAG = { fontWeight: 700, whiteSpace: 'nowrap', textAlign: 'right'
 const ZEILENBETRAG = { whiteSpace: 'nowrap', textAlign: 'right' } as const;
 
 /**
- * Die Beschriftung der Kachelzeile „davon offen" (#284).
+ * Die Zweitzeile der Kachel „Offene Rechnungen": wie viele es sind (Issue #285).
  *
- * <b>Hier entsteht keine Zahl</b> — Betrag und Anzahl kommen aus der Antwort; gesetzt wird nur das
- * Wort dazu. Die Mehrzahl steht ausgeschrieben und nicht als „Rechnung(en)": Ein Satz mit Klammer
- * liest sich vorgelesen wie ein Formular.
+ * <b>Hier entsteht keine Zahl</b> — die Anzahl kommt aus der Antwort; gesetzt wird nur das Wort
+ * dazu. Die Mehrzahl steht ausgeschrieben und nicht als „Rechnung(en)": Ein Satz mit Klammer liest
+ * sich vorgelesen wie ein Formular. Ohne offene Rechnung steht „keine Rechnung" und nicht
+ * „0 Rechnungen" — die Null ist in der grossen Zahl darueber schon gesagt.
  */
-function offenWort(nettoInCent: number, anzahl: number): string {
-  const rechnungen = anzahl === 1 ? '1 Rechnung' : `${String(anzahl)} Rechnungen`;
-  return `davon offen: ${euro(nettoInCent)} (${rechnungen})`;
+function rechnungenWort(anzahl: number): string {
+  if (anzahl === 0) {
+    return 'keine Rechnung';
+  }
+  return anzahl === 1 ? '1 Rechnung' : `${String(anzahl)} Rechnungen`;
 }
 
 /** Die Symbolgroesse in den Kacheln (CLAUDE-design.md, „Bausteine": Symbolfeld 48 px). */
@@ -266,7 +281,7 @@ function Zeitraumwahl({
   );
 }
 
-/** Die drei Kacheln im Raster; es bricht um, sobald eine Kachel ihre Mindestbreite verliert. */
+/** Die vier Kacheln im Raster; es bricht um, sobald eine Kachel ihre Mindestbreite verliert. */
 function Kacheln({ geschaeft }: { readonly geschaeft: Startseitenstand }) {
   return (
     <Box
@@ -289,19 +304,23 @@ function Kacheln({ geschaeft }: { readonly geschaeft: Startseitenstand }) {
         zahl={euro(geschaeft.nichtAbgerechnet.nettoInCent)}
         zweitzeile={`${WORTE[geschaeft.zeitraum.art].erfasst}: ${euro(geschaeft.nichtAbgerechnet.erfasstImZeitraumInCent)}`}
       />
+      {/* Flieder heisst „Rechnungen als Menge" (CLAUDE-design.md, „Toenungen"); Bernstein traegt
+          schon die Nachbarkachel, und Rose bedeutet „ueberfaellig" — das ist eine offene Rechnung
+          nicht von selbst (Issue #285). Die Kachel steht an dritter Stelle: Die drei Kacheln mit
+          dem Stand von heute stehen zusammen, die des Zeitraums dahinter. */}
+      <Kennzahlkachel
+        toenung="flieder"
+        symbol={<IconCashBanknote size={SYMBOL_KACHEL} stroke={1.8} aria-hidden />}
+        beschriftung={TITEL_OFFENE_RECHNUNGEN}
+        zahl={euro(geschaeft.offeneRechnungen.nettoInCent)}
+        zweitzeile={rechnungenWort(geschaeft.offeneRechnungen.anzahl)}
+      />
       <Kennzahlkachel
         toenung="salbei"
         symbol={<IconReceipt size={SYMBOL_KACHEL} stroke={1.8} aria-hidden />}
         beschriftung={TITEL_ABGERECHNET}
         zahl={euro(geschaeft.abgerechnet.nettoInCent)}
         zweitzeile={`${euro(geschaeft.abgerechnet.bruttoInCent)} brutto`}
-        // Entschieden an der Anzahl und nicht am Betrag: „Es gibt eine offene Rechnung" ist die
-        // Aussage, und eine offene Rechnung ueber 0,00 € soll nicht stillschweigend verschwinden.
-        drittzeile={
-          geschaeft.abgerechnet.offenAnzahl === 0
-            ? undefined
-            : offenWort(geschaeft.abgerechnet.offenNettoInCent, geschaeft.abgerechnet.offenAnzahl)
-        }
       />
     </Box>
   );
@@ -374,6 +393,56 @@ function OffenZeile({ zeile }: { readonly zeile: Anteilszeile }) {
       </Box>
       <Box component="td" sx={{ fontWeight: 500, whiteSpace: 'nowrap' }}>
         <Angebotsweg angebotId={zeile.angebotId} tag={zeile.angebotDatum} />
+      </Box>
+      <Box
+        component="td"
+        className={ZAHLEN_KLASSE}
+        sx={{ fontWeight: 600, whiteSpace: 'nowrap', textAlign: 'right' }}
+      >
+        {euro(zeile.nettoInCent)}
+      </Box>
+    </Box>
+  );
+}
+
+/**
+ * Der Weg zur Rechnung, auf ihrer Nummer — je Art ein eigener Kennungsraum (Plan #259, E21).
+ *
+ * Dieselbe Gestalt wie der Weg in {@link RechnungenPage}: Ein Link traegt sein Ziel, ist teilbar
+ * und mit der Tastatur erreichbar; ein `tr` mit `onClick` waere fuer Hilfsmittel kein Weg.
+ */
+function Rechnungsweg({ zeile }: { readonly zeile: OffeneRechnungszeile }) {
+  const kennung = String(zeile.id);
+  return (
+    <Box
+      component={RouterLink}
+      to={zeile.nachgetragen ? `/rechnungen/nachgetragen/${kennung}` : `/rechnungen/${kennung}`}
+      className={ZAHLEN_KLASSE}
+      sx={(theme) => ({
+        color: 'inherit',
+        textDecoration: 'none',
+        '&:hover': { color: theme.vars.palette.kupferwolke.kupfer },
+      })}
+    >
+      {zeile.nummer}
+    </Box>
+  );
+}
+
+/** Eine Zeile der offenen Rechnungen: Nummer als Weg, Firma, Datum, Netto (Issue #285). */
+function OffeneRechnungZeile({ zeile }: { readonly zeile: OffeneRechnungszeile }) {
+  return (
+    <Box component="tr">
+      <Box component="td" sx={{ fontWeight: 500, whiteSpace: 'nowrap' }}>
+        <Rechnungsweg zeile={zeile} />
+      </Box>
+      <Box component="td">{zeile.firmaName}</Box>
+      <Box
+        component="td"
+        className={ZAHLEN_KLASSE}
+        sx={{ whiteSpace: 'nowrap' }}
+      >
+        {tagWort(zeile.rechnungDatum)}
       </Box>
       <Box
         component="td"
@@ -534,7 +603,7 @@ function Jahresliste({ geschaeft }: { readonly geschaeft: Startseitenstand }) {
   );
 }
 
-/** Die drei Karten unter den Kacheln: je Kennzahl, woraus sie entstanden ist. */
+/** Die vier Karten unter den Kacheln, in der Reihenfolge der Kacheln: je Kennzahl ihre Herkunft. */
 function Listen({ geschaeft }: { readonly geschaeft: Startseitenstand }) {
   return (
     <>
@@ -556,6 +625,20 @@ function Listen({ geschaeft }: { readonly geschaeft: Startseitenstand }) {
           <Tafel beschriftung={TITEL_OFFEN} spalten={SPALTEN_OFFEN}>
             {geschaeft.nichtAbgerechnet.angebote.map((zeile) => (
               <OffenZeile key={zeile.angebotId} zeile={zeile} />
+            ))}
+          </Tafel>
+        )}
+      </Karte>
+      <Karte titel={TITEL_OFFENE_RECHNUNGEN} anzahl={geschaeft.offeneRechnungen.anzahl}>
+        {geschaeft.offeneRechnungen.rechnungen.length === 0 ? (
+          <Leersatz>{LEER_OFFENE_RECHNUNGEN}</Leersatz>
+        ) : (
+          <Tafel beschriftung={TITEL_OFFENE_RECHNUNGEN} spalten={SPALTEN_OFFENE_RECHNUNGEN}>
+            {geschaeft.offeneRechnungen.rechnungen.map((zeile) => (
+              <OffeneRechnungZeile
+                key={`${zeile.nachgetragen ? 'nachgetragen' : 'rechnung'}-${String(zeile.id)}`}
+                zeile={zeile}
+              />
             ))}
           </Tafel>
         )}

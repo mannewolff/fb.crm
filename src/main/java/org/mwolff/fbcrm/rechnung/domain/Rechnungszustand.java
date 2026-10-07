@@ -56,7 +56,8 @@ public enum Rechnungszustand {
    *
    * <p>Die zweite Frage neben {@link #istGestellt()}, und beide sagen Verschiedenes: Jene sagt,
    * dass die Rechnung draussen ist und darum in den Umsatz des Monats zaehlt, diese, dass noch Geld
-   * fehlt. Die Startseite braucht beide — „Abgerechnet" fragt die erste, „davon offen" die zweite.
+   * fehlt. Die Startseite braucht beide — „Abgerechnet" fragt die erste, „Offene Rechnungen" und
+   * die Spalte „Offen" ihrer Monatsliste die zweite.
    *
    * <p><b>Abgeschrieben ist nicht offen.</b> Die Forderung kommt nicht mehr herein; sie als offen
    * zu zeigen hiesse, auf Geld zu warten, das niemand mehr schickt. Der Entwurf ist es ebenso nicht

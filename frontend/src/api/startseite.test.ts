@@ -5,7 +5,8 @@ import { fetchNachPfad, json } from '../test/fetchNachPfad';
 
 /**
  * Ein Stand bei Monatswahl, wie `StartseiteResponse` ihn schreibt — Monate als `JJJJ-MM`, Jahre als
- * `JJJJ`, Geld als Dezimalzahl. Die Monatsliste unter „Abgerechnet" ist dann leer.
+ * `JJJJ`, Geld als Dezimalzahl. Die Monatsliste unter „Abgerechnet" ist dann leer. „Offene
+ * Rechnungen" traegt zwei Zeilen, eine je Art (Issue #285).
  */
 const STAND = {
   zeitraum: { art: 'MONAT', wert: '2026-10' },
@@ -43,6 +44,28 @@ const STAND = {
     offenNetto: 360,
     offenAnzahl: 1,
     monate: [],
+  },
+  offeneRechnungen: {
+    netto: 500,
+    anzahl: 2,
+    rechnungen: [
+      {
+        nachgetragen: false,
+        id: 7,
+        nummer: 'R26-0007',
+        firmaName: 'IT Bildungshaus',
+        rechnungDatum: '2026-09-30',
+        netto: 360,
+      },
+      {
+        nachgetragen: true,
+        id: 3,
+        nummer: 'AR-1',
+        firmaName: 'Werkstatt Nord',
+        rechnungDatum: '2026-10-01',
+        netto: 140,
+      },
+    ],
   },
   interneStundenImZeitraum: 12.5,
 };
@@ -265,6 +288,97 @@ describe('parseStartseitenstand', () => {
         monate: [{ ...JAHRESSTAND.abgerechnet.monate[0], offenAnzahl: null }],
       },
     };
+
+    expect(() => parseStartseitenstand(kaputt)).toThrow(TypeError);
+  });
+
+  it('verengt die offenen Rechnungen samt Art, Nummer und Betrag in ganzen Cent (#285)', () => {
+    const gelesen = parseStartseitenstand(STAND);
+
+    expect(gelesen.offeneRechnungen).toEqual({
+      nettoInCent: 50000,
+      anzahl: 2,
+      rechnungen: [
+        {
+          nachgetragen: false,
+          id: 7,
+          nummer: 'R26-0007',
+          firmaName: 'IT Bildungshaus',
+          rechnungDatum: '2026-09-30',
+          nettoInCent: 36000,
+        },
+        {
+          nachgetragen: true,
+          id: 3,
+          nummer: 'AR-1',
+          firmaName: 'Werkstatt Nord',
+          rechnungDatum: '2026-10-01',
+          nettoInCent: 14000,
+        },
+      ],
+    });
+  });
+
+  it('liest „nichts offen" als 0 und leere Liste, nicht als fehlendes Feld (#285)', () => {
+    const leer = { ...STAND, offeneRechnungen: { netto: 0, anzahl: 0, rechnungen: [] } };
+
+    const gelesen = parseStartseitenstand(leer);
+
+    expect(gelesen.offeneRechnungen.nettoInCent).toBe(0);
+    expect(gelesen.offeneRechnungen.anzahl).toBe(0);
+    expect(gelesen.offeneRechnungen.rechnungen).toEqual([]);
+  });
+
+  it('scheitert, wo die Kennzahl „Offene Rechnungen" fehlt (#285)', () => {
+    expect(() => parseStartseitenstand({ ...STAND, offeneRechnungen: undefined })).toThrow(
+      TypeError,
+    );
+  });
+
+  it('scheitert, wo die Liste der offenen Rechnungen keine Liste ist (#285)', () => {
+    const kaputt = { ...STAND, offeneRechnungen: { ...STAND.offeneRechnungen, rechnungen: null } };
+
+    expect(() => parseStartseitenstand(kaputt)).toThrow(TypeError);
+  });
+
+  it('scheitert, wo die Art einer offenen Rechnung kein Wahrheitswert ist (#285)', () => {
+    const kaputt = {
+      ...STAND,
+      offeneRechnungen: {
+        ...STAND.offeneRechnungen,
+        rechnungen: [{ ...STAND.offeneRechnungen.rechnungen[0], nachgetragen: 'nein' }],
+      },
+    };
+
+    expect(() => parseStartseitenstand(kaputt)).toThrow(TypeError);
+  });
+
+  it('scheitert, wo die Nummer einer offenen Rechnung fehlt — sie traegt den Weg (#285)', () => {
+    const kaputt = {
+      ...STAND,
+      offeneRechnungen: {
+        ...STAND.offeneRechnungen,
+        rechnungen: [{ ...STAND.offeneRechnungen.rechnungen[0], nummer: null }],
+      },
+    };
+
+    expect(() => parseStartseitenstand(kaputt)).toThrow(TypeError);
+  });
+
+  it('scheitert, wo eine offene Rechnung einen Betrag mit drei Nachkommastellen traegt (#285)', () => {
+    const kaputt = {
+      ...STAND,
+      offeneRechnungen: {
+        ...STAND.offeneRechnungen,
+        rechnungen: [{ ...STAND.offeneRechnungen.rechnungen[0], netto: 1.005 }],
+      },
+    };
+
+    expect(() => parseStartseitenstand(kaputt)).toThrow(TypeError);
+  });
+
+  it('scheitert, wo die Zahl der offenen Rechnungen keine Zahl ist (#285)', () => {
+    const kaputt = { ...STAND, offeneRechnungen: { ...STAND.offeneRechnungen, anzahl: '2' } };
 
     expect(() => parseStartseitenstand(kaputt)).toThrow(TypeError);
   });

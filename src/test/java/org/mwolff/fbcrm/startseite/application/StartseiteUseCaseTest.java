@@ -1,6 +1,7 @@
 package org.mwolff.fbcrm.startseite.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.Mockito.when;
 
@@ -11,6 +12,7 @@ import java.time.LocalDate;
 import java.time.Year;
 import java.time.YearMonth;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -30,10 +32,11 @@ import org.mwolff.fbcrm.common.Abrechnungsmodus;
 import org.mwolff.fbcrm.common.Einheit;
 import org.mwolff.fbcrm.rechnung.application.Gestellte;
 import org.mwolff.fbcrm.rechnung.application.Monatsabrechnung;
+import org.mwolff.fbcrm.rechnung.application.OffeneRechnung;
 import org.mwolff.fbcrm.rechnung.application.Rechnungsauskunft;
 
 /**
- * Die drei Kennzahlen der Startseite (#206, Kriterien 3 bis 8; Plan #208).
+ * Die vier Kennzahlen der Startseite (#206, Kriterien 3 bis 8; Plan #208; Issue #285).
  *
  * <p>Gegenstand sind die Rechenregeln und nichts sonst: welche Angebote „in Arbeit" sind, was aus
  * erfasster Zeit noch abzurechnen ist, was im gewaehlten Zeitraum erfasst wurde, welche Zeitraeume
@@ -43,7 +46,11 @@ import org.mwolff.fbcrm.rechnung.application.Rechnungsauskunft;
  *
  * <p>Die Verdichtung der Rechnungen zu Summe und Monatszeilen ({@code Abrechnungsblick}) wird hier
  * mitgeprueft und hat keine eigene Testklasse: Sie ist paket-privat und keine eigene Zusage (Plan
- * #274, E16).
+ * #274, E16). Dasselbe gilt fuer die Summe der offenen Rechnungen ({@code OffeneRechnungen#aus}).
+ *
+ * <p><b>„Offene Rechnungen" traegt keinen Zeitraum</b> (Issue #285): Die Kennzahl kommt aus
+ * derselben Auskunft wie „Abgerechnet", wird aber nicht gegen den Zeitraum gefiltert. Belegt wird
+ * das an einer offenen Rechnung aus dem letzten Jahr, die bei jeder Wahl dasteht.
  *
  * <p>Die Uhr steht fest auf dem 30. September 2026 um 22:30 UTC. In der Geschaeftszone ist das
  * schon der 1. Oktober — der laufende Monat ist darum Oktober und nicht September. Am Nullmeridian
@@ -170,6 +177,25 @@ class StartseiteUseCaseTest {
   private static final BigDecimal NICHTS_OFFEN = new BigDecimal("0.00");
 
   /**
+   * Eine offene Rechnung aus dem Mai des letzten Jahres (Issue #285).
+   *
+   * <p>Absichtlich ausserhalb jedes waehlbaren Zeitraums dieser Uhr bis auf das letzte Jahr: An ihr
+   * zeigt sich, dass die Kennzahl der Stand von heute ist und nicht die Auswahl eines Zeitraums.
+   */
+  private static final OffeneRechnung OFFENE_AUS_DEM_VORJAHR =
+      new OffeneRechnung(
+          false, 7L, "R25-0007", ADLER, LocalDate.of(2025, 5, 20), new BigDecimal("360.00"));
+
+  /** Dazu ein offener Nachtrag vom Oktober — so addiert die Summe mehr als einen Betrag. */
+  private static final OffeneRechnung OFFENER_NACHTRAG =
+      new OffeneRechnung(
+          true, 3L, "AR-1", BUCHE, LocalDate.of(2026, 10, 1), new BigDecimal("140.00"));
+
+  /** Was die Rechnungsauskunft als offen liefert — aelteste zuerst, ueber alle Monate. */
+  private static final List<OffeneRechnung> OFFENE =
+      List.of(OFFENE_AUS_DEM_VORJAHR, OFFENER_NACHTRAG);
+
+  /**
    * Was im Oktober gestellt wurde — die Zahlen der Kennzahl 3 kommen fertig aus der Auskunft.
    *
    * <p>Die eine Rechnung des Oktobers ist noch offen (Issue #284): Sie ist der Fall aus dem Anlass
@@ -266,7 +292,7 @@ class StartseiteUseCaseTest {
     when(arbeitszeit.alleAngefallen()).thenReturn(angefallen);
     when(arbeitszeit.alleImZeitraum(OKTOBER.atDay(1), OKTOBER.atEndOfMonth())).thenReturn(imMonat);
     when(rechnungen.gestellte())
-        .thenReturn(new Gestellte(Map.of(OKTOBER, OKTOBER_GESTELLT), gestellteMengen));
+        .thenReturn(new Gestellte(Map.of(OKTOBER, OKTOBER_GESTELLT), gestellteMengen, OFFENE));
   }
 
   @Test
@@ -351,9 +377,11 @@ class StartseiteUseCaseTest {
     when(arbeitszeit.alleImZeitraum(OKTOBER.atDay(1), OKTOBER.atEndOfMonth())).thenReturn(Map.of());
     when(rechnungen.gestellte())
         .thenReturn(
-            new Gestellte(Map.of(OKTOBER, OKTOBER_GESTELLT), Map.of()),
+            new Gestellte(Map.of(OKTOBER, OKTOBER_GESTELLT), Map.of(), OFFENE),
             new Gestellte(
-                Map.of(OKTOBER, OKTOBER_GESTELLT), Map.of(BERATUNG_ID, new BigDecimal("20.00"))));
+                Map.of(OKTOBER, OKTOBER_GESTELLT),
+                Map.of(BERATUNG_ID, new BigDecimal("20.00")),
+                OFFENE));
 
     // When
     final BigDecimal mitEntwurf = useCase.stand(IM_OKTOBER).nichtAbgerechnet().betrag();
@@ -463,7 +491,9 @@ class StartseiteUseCaseTest {
     when(rechnungen.gestellte())
         .thenReturn(
             new Gestellte(
-                Map.of(OKTOBER, OKTOBER_GESTELLT, AUGUST, AUGUST_GESTELLT), gestellteMengen));
+                Map.of(OKTOBER, OKTOBER_GESTELLT, AUGUST, AUGUST_GESTELLT),
+                gestellteMengen,
+                OFFENE));
   }
 
   @Test
@@ -505,7 +535,7 @@ class StartseiteUseCaseTest {
     when(arbeitszeit.alleAngefallen()).thenReturn(Map.of());
     when(arbeitszeit.alleImZeitraum(AUGUST.atDay(1), AUGUST.atEndOfMonth())).thenReturn(Map.of());
     when(rechnungen.gestellte())
-        .thenReturn(new Gestellte(Map.of(AUGUST, AUGUST_GESTELLT), Map.of()));
+        .thenReturn(new Gestellte(Map.of(AUGUST, AUGUST_GESTELLT), Map.of(), OFFENE));
 
     // When
     final Startseitenstand stand = useCase.stand(Optional.of(new Zeitraum.Monat(AUGUST)));
@@ -536,7 +566,7 @@ class StartseiteUseCaseTest {
     when(arbeitszeit.alleAngefallen()).thenReturn(Map.of());
     when(arbeitszeit.monateMitEintragImZeitraum(ANFANG_LETZTES_JAHR, ENDE_DIESES_JAHR))
         .thenReturn(mitArbeitszeit);
-    when(rechnungen.gestellte()).thenReturn(new Gestellte(jeMonat, Map.of()));
+    when(rechnungen.gestellte()).thenReturn(new Gestellte(jeMonat, Map.of(), OFFENE));
   }
 
   @Test
@@ -777,7 +807,7 @@ class StartseiteUseCaseTest {
                 angebot(1L, Angebotsstatus.LAEUFT, List.of(EIGENE)),
                 angebot(2L, Angebotsstatus.BESTELLT, List.of(BERATUNG))));
     when(arbeitszeit.alleAngefallen()).thenReturn(Map.of());
-    when(rechnungen.gestellte()).thenReturn(new Gestellte(Map.of(), Map.of()));
+    when(rechnungen.gestellte()).thenReturn(new Gestellte(Map.of(), Map.of(), List.of()));
     final Zeitraum.Jahr jahr = new Zeitraum.Jahr(DIESES_JAHR);
     when(arbeitszeit.alleImZeitraum(jahr.von(), jahr.bis()))
         .thenReturn(
@@ -805,7 +835,9 @@ class StartseiteUseCaseTest {
     when(rechnungen.gestellte())
         .thenReturn(
             new Gestellte(
-                Map.of(OKTOBER, OKTOBER_GESTELLT), Map.of(BERATUNG_ID, new BigDecimal("5.00"))));
+                Map.of(OKTOBER, OKTOBER_GESTELLT),
+                Map.of(BERATUNG_ID, new BigDecimal("5.00")),
+                OFFENE));
     final Zeitraum.Jahr jahr = new Zeitraum.Jahr(DIESES_JAHR);
     when(arbeitszeit.alleImZeitraum(OKTOBER.atDay(1), OKTOBER.atEndOfMonth()))
         .thenReturn(Map.of(BERATUNG_ID, new BigDecimal("2.00")));
@@ -831,7 +863,7 @@ class StartseiteUseCaseTest {
     when(uebersicht.angebote(Optional.empty())).thenReturn(List.of());
     when(arbeitszeit.alleAngefallen()).thenReturn(Map.of());
     when(arbeitszeit.alleImZeitraum(OKTOBER.atDay(1), OKTOBER.atEndOfMonth())).thenReturn(Map.of());
-    when(rechnungen.gestellte()).thenReturn(new Gestellte(Map.of(), Map.of()));
+    when(rechnungen.gestellte()).thenReturn(new Gestellte(Map.of(), Map.of(), List.of()));
 
     // When
     final Startseitenstand stand = useCase.stand(IM_OKTOBER);
@@ -955,5 +987,87 @@ class StartseiteUseCaseTest {
 
     // Then
     assertThat(stand.interneStundenImZeitraum()).isEqualByComparingTo("0");
+  }
+
+  @Test
+  void stand_thenOffeneRechnungenCarryTheirSummeAnzahlAndTheLinesInOrder() {
+    // Given — zwei offene Rechnungen, wie die Auskunft sie liefert (Issue #285).
+    gegebenImOktober(List.of(), Map.of(), Map.of(), Map.of());
+
+    // When
+    final OffeneRechnungen offene = useCase.stand(IM_OKTOBER).offeneRechnungen();
+
+    // Then — 360,00 + 140,00 netto, zwei Rechnungen, die Reihenfolge der Auskunft.
+    assertThat(offene.netto()).isEqualByComparingTo("500.00");
+    assertThat(offene.anzahl()).isEqualTo(2);
+    assertThat(offene.rechnungen()).containsExactly(OFFENE_AUS_DEM_VORJAHR, OFFENER_NACHTRAG);
+  }
+
+  @Test
+  void stand_withAnotherMonat_thenOffeneRechnungenStayTheSame() {
+    // Given — derselbe Bestand, einmal Oktober, einmal August (Issue #285).
+    gegebenZweiMonate();
+
+    // When
+    final Startseitenstand oktober = useCase.stand(IM_OKTOBER);
+    final Startseitenstand august = useCase.stand(Optional.of(new Zeitraum.Monat(AUGUST)));
+
+    // Then — die Kennzahl ist der Stand von heute und folgt der Wahl nicht.
+    assertThat(august.offeneRechnungen()).isEqualTo(oktober.offeneRechnungen());
+    assertThat(august.offeneRechnungen().netto()).isEqualByComparingTo("500.00");
+  }
+
+  @Test
+  void stand_withTheJahr_thenAnOffeneRechnungOfTheVorjahrStandsThereToo() {
+    // Given — das laufende Jahr ist gewaehlt; die eine offene Rechnung stammt aus dem letzten
+    // (Issue #285, Kriterium 2). Waere die Liste nach Zeitraum beschnitten, fehlte sie hier.
+    when(uebersicht.angebote(Optional.empty())).thenReturn(List.of());
+    when(arbeitszeit.alleAngefallen()).thenReturn(Map.of());
+    when(rechnungen.gestellte())
+        .thenReturn(new Gestellte(Map.of(), Map.of(), List.of(OFFENE_AUS_DEM_VORJAHR)));
+    final Zeitraum.Jahr jahr = new Zeitraum.Jahr(DIESES_JAHR);
+    when(arbeitszeit.alleImZeitraum(jahr.von(), jahr.bis())).thenReturn(Map.of());
+
+    // When
+    final Startseitenstand stand = useCase.stand(Optional.of(jahr));
+
+    // Then — der Zeitraum ist 2026, die Rechnung von 2025 steht trotzdem in der Kennzahl.
+    assertThat(stand.zeitraum()).isEqualTo(jahr);
+    assertThat(stand.abgerechnet().summe().anzahl()).isZero();
+    assertThat(stand.offeneRechnungen().anzahl()).isEqualTo(1);
+    assertThat(stand.offeneRechnungen().netto()).isEqualByComparingTo("360.00");
+  }
+
+  @Test
+  void stand_withoutAnyOffeneRechnung_thenZeroAndAnEmptyList() {
+    // Given — nichts offen: Die Kachel behaelt ihre Gestalt und zeigt 0,00 (Issue #285).
+    when(uebersicht.angebote(Optional.empty())).thenReturn(List.of());
+    when(arbeitszeit.alleAngefallen()).thenReturn(Map.of());
+    when(arbeitszeit.alleImZeitraum(OKTOBER.atDay(1), OKTOBER.atEndOfMonth())).thenReturn(Map.of());
+    when(rechnungen.gestellte()).thenReturn(new Gestellte(Map.of(), Map.of(), List.of()));
+
+    // When
+    final OffeneRechnungen offene = useCase.stand(IM_OKTOBER).offeneRechnungen();
+
+    // Then
+    assertThat(offene.netto()).isEqualByComparingTo("0.00");
+    assertThat(offene.anzahl()).isZero();
+    assertThat(offene.rechnungen()).isEmpty();
+  }
+
+  @Test
+  void offeneRechnungen_thenTheListIsACopyAndTheCallerCannotChangeIt() {
+    // Given — die Liste aus dem kompakten Konstruktor (Issue #285).
+    final List<OffeneRechnung> eigene = new ArrayList<>();
+    eigene.add(OFFENE_AUS_DEM_VORJAHR);
+    final OffeneRechnungen offene = new OffeneRechnungen(new BigDecimal("360.00"), 1, eigene);
+
+    // When — der Aufrufer veraendert seine Liste weiter.
+    eigene.add(OFFENER_NACHTRAG);
+
+    // Then
+    assertThat(offene.rechnungen()).containsExactly(OFFENE_AUS_DEM_VORJAHR);
+    assertThatThrownBy(() -> offene.rechnungen().clear())
+        .isInstanceOf(UnsupportedOperationException.class);
   }
 }

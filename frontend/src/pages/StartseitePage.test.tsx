@@ -57,6 +57,20 @@ const STAND = {
     offenAnzahl: 1,
     monate: [],
   },
+  offeneRechnungen: {
+    netto: 360,
+    anzahl: 1,
+    rechnungen: [
+      {
+        nachgetragen: false,
+        id: 7,
+        nummer: 'R26-0007',
+        firmaName: 'IT Bildungshaus',
+        rechnungDatum: '2026-10-02',
+        netto: 360,
+      },
+    ],
+  },
   interneStundenImZeitraum: 12.5,
 };
 
@@ -67,6 +81,7 @@ const LEERER_STAND = {
   inArbeit: [],
   nichtAbgerechnet: { netto: 0, erfasstImZeitraum: 0, angebote: [] },
   abgerechnet: { netto: 0, brutto: 0, anzahl: 0, offenNetto: 0, offenAnzahl: 0, monate: [] },
+  offeneRechnungen: { netto: 0, anzahl: 0, rechnungen: [] },
   interneStundenImZeitraum: 0,
 };
 
@@ -167,10 +182,29 @@ const JAHR_ALLES_BEZAHLT = {
   },
 };
 
-/** Zwei offene Rechnungen — die Mehrzahl in der Kachelzeile. */
-const JAHR_MIT_ZWEI_OFFENEN = {
-  ...JAHR_MIT_OFFENEM,
-  abgerechnet: { ...JAHR_MIT_OFFENEM.abgerechnet, offenNetto: 3960, offenAnzahl: 2 },
+/**
+ * Zwei offene Rechnungen, eine je Art — dieselbe Kennung 7 in beiden Kennungsraeumen (Issue #285).
+ *
+ * Absichtlich dieselbe Zahl: Nur so zeigt sich, dass erst Art und Kennung zusammen den Weg
+ * bestimmen und die Liste auch zwei Zeilen mit gleicher Kennung auseinanderhalten kann.
+ */
+const MIT_NACHGETRAGENER = {
+  ...STAND,
+  offeneRechnungen: {
+    netto: 500,
+    anzahl: 2,
+    rechnungen: [
+      ...STAND.offeneRechnungen.rechnungen,
+      {
+        nachgetragen: true,
+        id: 7,
+        nummer: 'AR-1',
+        firmaName: 'Adler AG',
+        rechnungDatum: '2026-10-05',
+        netto: 140,
+      },
+    ],
+  },
 };
 
 /** Die Werte der Eintraege in einer Gruppe der Wahl, in ihrer Reihenfolge. */
@@ -201,10 +235,11 @@ function mitRouten(routen: Routen) {
   return fetchNachPfad(routen);
 }
 
-/** Die Stellen der drei Kacheln im Raster, in der Reihenfolge der Kennzahlen (#206, 4 bis 7). */
+/** Die Stellen der vier Kacheln im Raster, in ihrer zugesagten Reihenfolge (Issue #285). */
 const IN_ARBEIT = 0;
 const OFFEN = 1;
-const ABGERECHNET = 2;
+const OFFENE_RECHNUNGEN = 2;
+const ABGERECHNET = 3;
 
 /**
  * Die Kachel an ihrer Stelle im Raster.
@@ -230,7 +265,7 @@ describe('StartseitePage (Issue #216; #206 Kriterien 1, 3 bis 8)', () => {
     expect(screen.getByText('Der Geschäftsstand wird geladen …')).toBeInTheDocument();
   });
 
-  it('zeigt die drei Kennzahlen als Kacheln mit ihren Zahlen', async () => {
+  it('zeigt die vier Kennzahlen als Kacheln mit ihren Zahlen', async () => {
     mitRouten({ [OHNE_MONAT]: json(200, STAND) });
 
     renderSeite();
@@ -246,13 +281,19 @@ describe('StartseitePage (Issue #216; #206 Kriterien 1, 3 bis 8)', () => {
     expect(abgerechnet).toHaveTextContent('11.424,00 € brutto');
   });
 
-  it('nennt in „Abgerechnet" den noch offenen Betrag netto (#284)', async () => {
+  it('traegt „Offene Rechnungen" als dritte Kachel mit Betrag und Zahl im Wort (#285)', async () => {
     mitRouten({ [OHNE_MONAT]: json(200, STAND) });
 
     renderSeite();
 
-    expect(within(await kachel(ABGERECHNET)).getByTestId('kennzahlkachel-drittzeile'))
-      .toHaveTextContent('davon offen: 360,00 € (1 Rechnung)');
+    const offeneRechnungen = await kachel(OFFENE_RECHNUNGEN);
+    expect(offeneRechnungen).toHaveTextContent('Offene Rechnungen');
+    expect(offeneRechnungen).toHaveTextContent('360,00 €');
+    expect(within(offeneRechnungen).getByTestId('kennzahlkachel-zweitzeile')).toHaveTextContent(
+      '1 Rechnung',
+    );
+    // „Abgerechnet" traegt die Zeile nicht mehr — sie ist eine eigene Kachel geworden (#285).
+    expect(await kachel(ABGERECHNET)).not.toHaveTextContent(/offen/u);
   });
 
   it('zeigt die Angebote in Arbeit mit Firma, Datum und Status', async () => {
@@ -377,11 +418,16 @@ describe('StartseitePage (Issue #216; #206 Kriterien 1, 3 bis 8)', () => {
 
     expect(await kachel(IN_ARBEIT)).toHaveTextContent('Angebote in Arbeit0');
     expect(await kachel(OFFEN)).toHaveTextContent('0,00 €');
+    expect(await kachel(OFFENE_RECHNUNGEN)).toHaveTextContent('0,00 €');
+    expect(
+      within(await kachel(OFFENE_RECHNUNGEN)).getByTestId('kennzahlkachel-zweitzeile'),
+    ).toHaveTextContent('keine Rechnung');
     expect(await kachel(ABGERECHNET)).toHaveTextContent('0,00 €');
     expect(screen.getByText('Kein Angebot ist gerade in Arbeit.')).toBeInTheDocument();
     expect(
       screen.getByText('Nichts offen — alle erfasste Zeit ist abgerechnet.'),
     ).toBeInTheDocument();
+    expect(screen.getByText('Keine Rechnung ist offen.')).toBeInTheDocument();
     expect(screen.getByText('Keine Rechnung in diesem Monat.')).toBeInTheDocument();
     expect(screen.queryByRole('table')).not.toBeInTheDocument();
   });
@@ -541,13 +587,14 @@ describe('StartseitePage: Zeitraumwahl (Issue #281; #273 Kriterien 1, 2, 5 bis 9
 });
 
 /**
- * Das Offene in Kachel und Monatsliste (Issue #284).
+ * Das Offene des Zeitraums in der Monatsliste (Issue #284).
  *
  * Der Anlass ist der Oktober 2026 mit einer gestellten, nicht bezahlten Rechnung ueber 360,00 €
- * netto. Geprueft wird, dass er in beiden Ansichten zu sehen ist, dass er mit dem Bezahlen
- * verschwindet und dass „Abgerechnet" dabei unveraendert bleibt.
+ * netto. Geprueft wird, dass die Spalte „Offen" ihn zeigt, dass er mit dem Bezahlen verschwindet
+ * und dass „Abgerechnet" dabei unveraendert bleibt. Die Kachel „Offene Rechnungen" steht daneben
+ * und traegt eine andere Aussage — sie hat ihren eigenen Block (Issue #285).
  */
-describe('StartseitePage: offene Rechnungen (Issue #284)', () => {
+describe('StartseitePage: offener Anteil des Zeitraums (Issue #284)', () => {
   /**
    * Die Zelle der Spalte „Offen" einer Zeile — die letzte.
    *
@@ -559,14 +606,12 @@ describe('StartseitePage: offene Rechnungen (Issue #284)', () => {
     return zellen[zellen.length - 1];
   }
 
-  it('zeigt bei Jahreswahl „davon offen" in der Kachel, in der Monatszeile und in der Summe', async () => {
+  it('zeigt bei Jahreswahl den offenen Betrag in der Monatszeile und in der Summe', async () => {
     mitRouten({ [JAHR_2026]: json(200, JAHR_MIT_OFFENEM) });
 
     renderSeite('/?zeitraum=2026');
 
-    expect(within(await kachel(ABGERECHNET)).getByTestId('kennzahlkachel-drittzeile'))
-      .toHaveTextContent('davon offen: 360,00 € (1 Rechnung)');
-    const tafel = screen.getByRole('table', { name: 'Abgerechnet' });
+    const tafel = await screen.findByRole('table', { name: 'Abgerechnet' });
     const zeilen = within(tafel).getAllByRole('row').slice(1);
     expect(zeilen.map((zeile) => zeile.textContent)).toEqual([
       'März 202613.600,00 €4.284,00 €—',
@@ -575,13 +620,13 @@ describe('StartseitePage: offene Rechnungen (Issue #284)', () => {
     ]);
   });
 
-  it('zeigt bei Monatswahl dieselbe Kachelzeile und keine Monatsliste', async () => {
+  it('zeigt bei Monatswahl keine Monatsliste und laesst die Kachel unberuehrt', async () => {
     mitRouten({ [OKTOBER]: json(200, MONAT_MIT_OFFENEM) });
 
     renderSeite('/?zeitraum=2026-10');
 
-    expect(within(await kachel(ABGERECHNET)).getByTestId('kennzahlkachel-drittzeile'))
-      .toHaveTextContent('davon offen: 360,00 € (1 Rechnung)');
+    expect(await kachel(ABGERECHNET)).toHaveTextContent('360,00 €');
+    expect(await kachel(ABGERECHNET)).not.toHaveTextContent(/offen/u);
     expect(screen.queryByRole('table', { name: 'Abgerechnet' })).not.toBeInTheDocument();
   });
 
@@ -598,14 +643,12 @@ describe('StartseitePage: offene Rechnungen (Issue #284)', () => {
     expect(offenZelle(zeilen[0])).toHaveAttribute('data-offen', 'nein');
   });
 
-  it('laesst Kachelzeile und Betrag weg, nachdem die Rechnung bezahlt ist', async () => {
+  it('laesst den Betrag weg, nachdem die Rechnung bezahlt ist', async () => {
     mitRouten({ [JAHR_2026]: json(200, JAHR_ALLES_BEZAHLT) });
 
     renderSeite('/?zeitraum=2026');
 
     const tafel = await screen.findByRole('table', { name: 'Abgerechnet' });
-    expect(screen.queryByTestId('kennzahlkachel-drittzeile')).not.toBeInTheDocument();
-    expect(screen.queryByText(/davon offen/u)).not.toBeInTheDocument();
     const zeilen = within(tafel).getAllByRole('row').slice(1);
     // „Abgerechnet" bleibt unveraendert: Netto und Brutto zaehlen die bezahlte Rechnung weiter mit.
     expect(zeilen.map((zeile) => zeile.textContent)).toEqual([
@@ -616,22 +659,82 @@ describe('StartseitePage: offene Rechnungen (Issue #284)', () => {
     expect(await kachel(ABGERECHNET)).toHaveTextContent('3.960,00 €');
     expect(await kachel(ABGERECHNET)).toHaveTextContent('4.712,40 € brutto');
   });
+});
 
-  it('setzt die Mehrzahl, wo mehr als eine Rechnung offen ist', async () => {
-    mitRouten({ [JAHR_2026]: json(200, JAHR_MIT_ZWEI_OFFENEN) });
+/**
+ * Die Kachel „Offene Rechnungen" und ihre Karte (Issue #285).
+ *
+ * Der Anlass ist die offene Oktober-Rechnung ueber 360,00 € netto. Geprueft wird, dass Kachel und
+ * Karte sie zeigen, dass beide an keinem Zeitraum haengen, dass die Wege beider Arten stimmen und
+ * dass der leere Fall seinen Satz traegt.
+ */
+describe('StartseitePage: Kachel „Offene Rechnungen" (Issue #285)', () => {
+  it('zeigt die Karte mit Nummer als Weg, Firma, Datum und Netto', async () => {
+    mitRouten({ [OHNE_MONAT]: json(200, STAND) });
 
-    renderSeite('/?zeitraum=2026');
+    renderSeite();
 
-    expect(within(await kachel(ABGERECHNET)).getByTestId('kennzahlkachel-drittzeile'))
-      .toHaveTextContent('davon offen: 3.960,00 € (2 Rechnungen)');
+    const tafel = await screen.findByRole('table', { name: 'Offene Rechnungen' });
+    expect(
+      within(tafel)
+        .getAllByRole('columnheader')
+        .map((kopf) => kopf.textContent),
+    ).toEqual(['Rechnung', 'Firma', 'Datum', 'Netto']);
+    const zeilen = within(tafel).getAllByRole('row').slice(1);
+    expect(zeilen.map((zeile) => zeile.textContent)).toEqual([
+      'R26-0007IT Bildungshaus02.10.2026360,00 €',
+    ]);
+    expect(within(tafel).getByRole('link', { name: 'R26-0007' })).toHaveAttribute(
+      'href',
+      '/rechnungen/7',
+    );
   });
 
-  it('nennt im leeren Zeitraum nichts Offenes', async () => {
+  it('fuehrt von einer nachgetragenen Rechnung in ihren eigenen Kennungsraum', async () => {
+    mitRouten({ [OHNE_MONAT]: json(200, MIT_NACHGETRAGENER) });
+
+    renderSeite();
+
+    const tafel = await screen.findByRole('table', { name: 'Offene Rechnungen' });
+    expect(within(tafel).getByRole('link', { name: 'R26-0007' })).toHaveAttribute(
+      'href',
+      '/rechnungen/7',
+    );
+    expect(within(tafel).getByRole('link', { name: 'AR-1' })).toHaveAttribute(
+      'href',
+      '/rechnungen/nachgetragen/7',
+    );
+    expect(await kachel(OFFENE_RECHNUNGEN)).toHaveTextContent('500,00 €');
+    expect(
+      within(await kachel(OFFENE_RECHNUNGEN)).getByTestId('kennzahlkachel-zweitzeile'),
+    ).toHaveTextContent('2 Rechnungen');
+  });
+
+  it('laesst Kachel und Karte beim Wechsel auf das Jahr unberuehrt', async () => {
+    const nutzer = userEvent.setup();
+    mitRouten({
+      [OHNE_MONAT]: json(200, STAND),
+      [JAHR_2026]: json(200, JAHRES_STAND),
+    });
+
+    renderSeite();
+    const imMonat = (await kachel(OFFENE_RECHNUNGEN)).textContent;
+    await nutzer.selectOptions(screen.getByRole('combobox', { name: 'Zeitraum' }), '2026');
+    await screen.findByRole('table', { name: 'Abgerechnet' });
+
+    expect((await kachel(OFFENE_RECHNUNGEN)).textContent).toBe(imMonat);
+    expect(
+      within(screen.getByRole('table', { name: 'Offene Rechnungen' })).getAllByRole('row'),
+    ).toHaveLength(2);
+  });
+
+  it('sagt ohne offene Rechnung „Keine Rechnung ist offen." und zeigt 0,00 €', async () => {
     mitRouten({ [OHNE_MONAT]: json(200, LEERER_STAND) });
 
     renderSeite();
 
-    await screen.findByText('Keine Rechnung in diesem Monat.');
-    expect(screen.queryByTestId('kennzahlkachel-drittzeile')).not.toBeInTheDocument();
+    expect(await screen.findByText('Keine Rechnung ist offen.')).toBeInTheDocument();
+    expect(screen.queryByRole('table', { name: 'Offene Rechnungen' })).not.toBeInTheDocument();
+    expect(await kachel(OFFENE_RECHNUNGEN)).toHaveTextContent('0,00 €');
   });
 });

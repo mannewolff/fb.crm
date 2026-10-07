@@ -1,5 +1,5 @@
 import { apiJson } from './client';
-import { FORMFEHLER, inHundertsteln, liste, objekt, text, zahl } from './verengen';
+import { FORMFEHLER, inHundertsteln, jaNein, liste, objekt, text, zahl } from './verengen';
 import { alsAngebotsstatus } from '../lib/angebotsstatus';
 import type { Angebotsstatus } from '../lib/angebotsstatus';
 import { alsZeitraumart } from '../lib/zeitraum';
@@ -32,7 +32,9 @@ export type { Zeitraumart } from '../lib/zeitraum';
  *
  * <b>Die Zahl der Angebote in Arbeit steht in keinem Feld</b>: Die Liste ist die Wahrheit, und wer
  * sie zeigt, zaehlt sie (Plan #208, E20). Bei {@link Abgerechnet} ist `anzahl` dagegen ein Feld —
- * dort stehen die Rechnungen selbst nicht in der Antwort.
+ * dort stehen die Rechnungen selbst nicht in der Antwort. Bei {@link OffeneRechnungen} stehen
+ * beide: Die Kachel nennt die Zahl im Wort, und wer sie zeigt, soll sie nicht selbst rechnen
+ * (Issue #285).
  */
 
 /** Ein Angebot in Arbeit — „bestellt" oder „erledigt" (#206, Kriterium 4). */
@@ -124,7 +126,42 @@ export interface Abgerechnet {
   readonly monate: readonly Monatszeile[];
 }
 
-/** Der ganze Stand der Startseite (#206, Kriterien 3 bis 8; #273). */
+/**
+ * Eine offene Rechnung — gestellt und noch nicht bezahlt (Issue #285).
+ *
+ * `nachgetragen` ist die Art: Erst Art und `id` zusammen bezeichnen eine Rechnung, denn die beiden
+ * Arten haben zwei Kennungsraeume — und die Ansicht waehlt daran den Weg (wie in `api/rechnungen.ts`).
+ *
+ * Die Nummer steht ohne `null` da, anders als in der Rechnungsliste: Eine Rechnung ohne Nummer ist
+ * ein Entwurf, und ein Entwurf ist nicht offen.
+ */
+export interface OffeneRechnungszeile {
+  readonly nachgetragen: boolean;
+  readonly id: number;
+  readonly nummer: string;
+  readonly firmaName: string;
+  /** Tag (`YYYY-MM-DD`), wie das Backend ein `LocalDate` liefert. */
+  readonly rechnungDatum: string;
+  /** Der Nettobetrag in ganzen Cent. */
+  readonly nettoInCent: number;
+}
+
+/**
+ * Die Kennzahl „Offene Rechnungen": worauf noch Geld fehlt (Issue #285).
+ *
+ * <b>Ohne Zeitraum</b>, anders als {@link Abgerechnet}: Der Stand von heute ueber alle Monate. Eine
+ * offene Rechnung aus dem Vorjahr steht auch dann darin, wenn das laufende Jahr gilt.
+ */
+export interface OffeneRechnungen {
+  /** Die Summe aller offenen Rechnungen, netto und in ganzen Cent; 0 ohne eine solche. */
+  readonly nettoInCent: number;
+  /** Die Zahl dieser Rechnungen — eine Anzahl, kein Betrag. */
+  readonly anzahl: number;
+  /** Diese Rechnungen selbst, aelteste zuerst; leer, wo nichts offen ist. */
+  readonly rechnungen: readonly OffeneRechnungszeile[];
+}
+
+/** Der ganze Stand der Startseite (#206, Kriterien 3 bis 8; #273; Issue #285). */
 export interface Startseitenstand {
   /** Der geltende Zeitraum — immer einer der waehlbaren. */
   readonly zeitraum: Zeitraum;
@@ -132,6 +169,7 @@ export interface Startseitenstand {
   readonly inArbeit: readonly StartseiteAngebotszeile[];
   readonly nichtAbgerechnet: NichtAbgerechnet;
   readonly abgerechnet: Abgerechnet;
+  readonly offeneRechnungen: OffeneRechnungen;
   /**
    * Die im gewaehlten Zeitraum auf interne Angebote gebuchten Stunden, in ganzen Hundertsteln.
    *
@@ -227,7 +265,28 @@ function parseAbgerechnet(wert: unknown): Abgerechnet {
   };
 }
 
-/** Verengt den Stand der Startseite samt beiden Kennzahlen oder scheitert. */
+function parseOffeneRechnungszeile(wert: unknown): OffeneRechnungszeile {
+  const zeile = objekt(wert);
+  return {
+    nachgetragen: jaNein(zeile.nachgetragen),
+    id: zahl(zeile.id),
+    nummer: text(zeile.nummer),
+    firmaName: text(zeile.firmaName),
+    rechnungDatum: text(zeile.rechnungDatum),
+    nettoInCent: inHundertsteln(zeile.netto),
+  };
+}
+
+function parseOffeneRechnungen(wert: unknown): OffeneRechnungen {
+  const kennzahl = objekt(wert);
+  return {
+    nettoInCent: inHundertsteln(kennzahl.netto),
+    anzahl: zahl(kennzahl.anzahl),
+    rechnungen: liste(kennzahl.rechnungen).map(parseOffeneRechnungszeile),
+  };
+}
+
+/** Verengt den Stand der Startseite samt allen Kennzahlen oder scheitert. */
 export function parseStartseitenstand(wert: unknown): Startseitenstand {
   const antwort = objekt(wert);
   return {
@@ -236,6 +295,7 @@ export function parseStartseitenstand(wert: unknown): Startseitenstand {
     inArbeit: liste(antwort.inArbeit).map(parseAngebotszeile),
     nichtAbgerechnet: parseNichtAbgerechnet(antwort.nichtAbgerechnet),
     abgerechnet: parseAbgerechnet(antwort.abgerechnet),
+    offeneRechnungen: parseOffeneRechnungen(antwort.offeneRechnungen),
     interneStundenInHundertsteln: inHundertsteln(antwort.interneStundenImZeitraum),
   };
 }

@@ -9,11 +9,11 @@ import { RADIUS_KACHEL, RADIUS_SYMBOLFELD } from '../theme';
  * Die Kennzahl-Kachel: eine Zahl auf einer Toenung (Vorlage `.zahl-karte` Z. 71–74, HTML Z. 152–154;
  * CLAUDE-design.md, „Bausteine").
  *
- * Sie ist <b>reine Darstellung</b>: Beschriftung, Zahl und die beiden Zusatzzeilen kommen fertig
- * formatiert herein. Die Kachel rechnet nichts und formatiert nichts — wer eine Kennzahl zeigt,
- * weiss, in welcher Einheit sie steht (Arbeitspaket 215). <b>Ob eine Zusatzzeile ueberhaupt
- * dasteht, entscheidet der Aufrufer</b>, indem er sie uebergibt oder weglaesst; die Kachel kennt
- * keine Bedingung dafuer (Issue #284).
+ * Sie ist <b>reine Darstellung</b>: Beschriftung, Zahl und die Zweitzeile kommen fertig formatiert
+ * herein. Die Kachel rechnet nichts und formatiert nichts — wer eine Kennzahl zeigt, weiss, in
+ * welcher Einheit sie steht (Arbeitspaket 215). <b>Ob die Zweitzeile ueberhaupt dasteht,
+ * entscheidet der Aufrufer</b>, indem er sie uebergibt oder weglaesst; die Kachel kennt keine
+ * Bedingung dafuer.
  *
  * <b>Die Toenung kommt als Name</b>, nicht als Farbpaar: So bleibt ihre Bedeutung im Aufruf lesbar,
  * und kein Aufrufer paart eine Flaeche mit der Schrift einer anderen Toenung (wie `Mal`).
@@ -43,13 +43,6 @@ export interface KennzahlkachelProps {
   readonly zahl: string;
   /** Eine zweite Zeile unter der Zahl, etwa der Bruttobetrag oder der Wert des Monats. */
   readonly zweitzeile?: string;
-  /**
-   * Eine dritte Zeile darunter, etwa der noch offene Anteil (Issue #284).
-   *
-   * Sie steht unabhaengig von der Zweitzeile und wird wie diese nur gezeigt, wo sie uebergeben ist:
-   * Eine Kachel, die eine leere Zeile frei hielte, waere in der Reihe hoeher als ihre Nachbarn.
-   */
-  readonly drittzeile?: string;
 }
 
 export default function Kennzahlkachel({
@@ -58,7 +51,6 @@ export default function Kennzahlkachel({
   beschriftung,
   zahl,
   zweitzeile,
-  drittzeile,
 }: KennzahlkachelProps) {
   return (
     <Box
@@ -106,15 +98,6 @@ export default function Kennzahlkachel({
             sx={{ fontSize: 13, fontWeight: 500 }}
           >
             {zweitzeile}
-          </Typography>
-        )}
-        {drittzeile === undefined ? null : (
-          <Typography
-            data-testid="kennzahlkachel-drittzeile"
-            component="div"
-            sx={{ fontSize: 13, fontWeight: 700 }}
-          >
-            {drittzeile}
           </Typography>
         )}
       </Box>

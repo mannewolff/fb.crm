@@ -27,10 +27,12 @@ import org.mwolff.fbcrm.common.Abrechnungsmodus;
 import org.mwolff.fbcrm.common.Einheit;
 import org.mwolff.fbcrm.common.web.GlobalExceptionHandler;
 import org.mwolff.fbcrm.rechnung.application.Monatsabrechnung;
+import org.mwolff.fbcrm.rechnung.application.OffeneRechnung;
 import org.mwolff.fbcrm.startseite.application.Abgerechnet;
 import org.mwolff.fbcrm.startseite.application.Abrechnungsmonat;
 import org.mwolff.fbcrm.startseite.application.Angebotsanteil;
 import org.mwolff.fbcrm.startseite.application.NichtAbgerechnet;
+import org.mwolff.fbcrm.startseite.application.OffeneRechnungen;
 import org.mwolff.fbcrm.startseite.application.StartseiteUseCase;
 import org.mwolff.fbcrm.startseite.application.Startseitenstand;
 import org.mwolff.fbcrm.startseite.application.WaehlbareZeitraeume;
@@ -49,7 +51,7 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
  * ZeitraumConverter} ausdruecklich im Wandlungsdienst — sonst wuerde hier nichts gewandelt.
  *
  * <p>Gegenstand ist die Abbildung jedes Feldes des {@link Startseitenstand} auf die Antwort — die
- * drei Kennzahlen mit ihren Zeilen, der geltende Zeitraum und die waehlbaren — sowie der Zeitraum
+ * vier Kennzahlen mit ihren Zeilen, der geltende Zeitraum und die waehlbaren — sowie der Zeitraum
  * als Parameter und sein Weglassen: Fehlt er, geht {@code Optional.empty()} an den Anwendungsfall,
  * und welches Jahr laeuft, entscheidet dieser an seiner Uhr (Plan #208, E8; Issue #283).
  *
@@ -74,6 +76,22 @@ class StartseiteControllerTest {
   private static final long ERLEDIGT_ID = 12L;
   private static final String ADLER = "Adler AG";
   private static final String BUCHE = "Buche GmbH";
+
+  /** Die beiden offenen Rechnungen der Kennzahl „Offene Rechnungen" (Issue #285). */
+  private static final OffeneRechnungen OFFENE =
+      new OffeneRechnungen(
+          new BigDecimal("500.00"),
+          2,
+          List.of(
+              new OffeneRechnung(
+                  false,
+                  7L,
+                  "R26-0007",
+                  ADLER,
+                  LocalDate.of(2026, 9, 30),
+                  new BigDecimal("360.00")),
+              new OffeneRechnung(
+                  true, 3L, "AR-1", BUCHE, LocalDate.of(2026, 10, 1), new BigDecimal("140.00"))));
 
   @Mock private StartseiteUseCase useCase;
 
@@ -173,6 +191,7 @@ class StartseiteControllerTest {
                     angebot(BESTELLT_ID, Angebotsstatus.BESTELLT, ADLER),
                     new BigDecimal("1200.00")))),
         abgerechnet,
+        OFFENE,
         new BigDecimal("12.50"));
   }
 
@@ -308,6 +327,44 @@ class StartseiteControllerTest {
         .andExpect(jsonPath("$.abgerechnet.monate[0].offenAnzahl").value(0))
         .andExpect(jsonPath("$.abgerechnet.monate[1].offenNetto").value(360.00))
         .andExpect(jsonPath("$.abgerechnet.monate[1].offenAnzahl").value(1));
+  }
+
+  @Test
+  void stand_thenTheFourthFigureCarriesSumCountAndItsLines() throws Exception {
+    // Given — Issue #285: Betrag, Anzahl und je offene Rechnung ihre Eckdaten samt Art.
+    when(useCase.stand(Optional.of(IM_OKTOBER))).thenReturn(stand());
+
+    // When / Then
+    mockMvc
+        .perform(get(PFAD).param("zeitraum", "2026-10"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.offeneRechnungen.netto").value(500.00))
+        .andExpect(jsonPath("$.offeneRechnungen.anzahl").value(2))
+        .andExpect(jsonPath("$.offeneRechnungen.rechnungen.length()").value(2))
+        .andExpect(jsonPath("$.offeneRechnungen.rechnungen[0].nachgetragen").value(false))
+        .andExpect(jsonPath("$.offeneRechnungen.rechnungen[0].id").value(7))
+        .andExpect(jsonPath("$.offeneRechnungen.rechnungen[0].nummer").value("R26-0007"))
+        .andExpect(jsonPath("$.offeneRechnungen.rechnungen[0].firmaName").value(ADLER))
+        .andExpect(jsonPath("$.offeneRechnungen.rechnungen[0].rechnungDatum").exists())
+        .andExpect(jsonPath("$.offeneRechnungen.rechnungen[0].netto").value(360.00))
+        .andExpect(jsonPath("$.offeneRechnungen.rechnungen[1].nachgetragen").value(true))
+        .andExpect(jsonPath("$.offeneRechnungen.rechnungen[1].id").value(3))
+        .andExpect(jsonPath("$.offeneRechnungen.rechnungen[1].nummer").value("AR-1"))
+        .andExpect(jsonPath("$.offeneRechnungen.rechnungen[1].firmaName").value(BUCHE))
+        .andExpect(jsonPath("$.offeneRechnungen.rechnungen[1].netto").value(140.00));
+  }
+
+  @Test
+  void stand_givenAJahr_thenTheFourthFigureIsTheSameAsWithAMonat() throws Exception {
+    // Given — Issue #285: Die Kennzahl traegt keinen Zeitraum; derselbe Stand, andere Wahl.
+    when(useCase.stand(Optional.of(IM_JAHR))).thenReturn(imJahr());
+
+    // When / Then — die Zahlen stehen unveraendert da, obwohl „Abgerechnet" andere traegt.
+    mockMvc
+        .perform(get(PFAD).param("zeitraum", "2026"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.offeneRechnungen.netto").value(500.00))
+        .andExpect(jsonPath("$.offeneRechnungen.anzahl").value(2));
   }
 
   @Test

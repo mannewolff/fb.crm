@@ -31,5 +31,17 @@ final class Rechnungsreihenfolge {
           .thenComparing(Rechnungslistenzeile::nachgetragen)
           .thenComparing(Rechnungslistenzeile::id, Comparator.reverseOrder());
 
+  /**
+   * Die offenen Rechnungen: aelteste zuerst, bei gleichem Datum nach Nummer (Issue #285).
+   *
+   * <p>Umgekehrt zu den Listen oben, und das ist die Aussage dieser Liste: Was am laengsten offen
+   * ist, steht oben. Die Nummer entscheidet den Gleichstand und nicht die Kennung — sie ist in
+   * fb.crm ueber beide Arten eindeutig ({@code Rechnungsnummern#vergeben}), waehrend dieselbe
+   * Kennung in beiden Kennungsraeumen vorkommen kann. Jede Zeile traegt sie, denn offen ist nur,
+   * was gestellt ist.
+   */
+  static final Comparator<OffeneRechnung> OFFENE_AELTESTE_ZUERST =
+      Comparator.comparing(OffeneRechnung::rechnungDatum).thenComparing(OffeneRechnung::nummer);
+
   private Rechnungsreihenfolge() {}
 }

@@ -1,6 +1,7 @@
 package org.mwolff.fbcrm.startseite.web;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.tuple;
 
 import java.time.Instant;
 import java.time.Year;
@@ -45,6 +46,10 @@ import org.springframework.jdbc.core.JdbcTemplate;
  * <p>Eine Ausnahme ist der offene Anteil (Issue #284): Dass der Zustand einer Rechnung aus der
  * Spalte {@code rechnung.zustand} bis in {@code offenNetto} und {@code offenAnzahl} der Antwort
  * trifft, laesst sich nur hier belegen — eine bezahlte und eine offene Rechnung im selben Monat.
+ *
+ * <p>Dasselbe gilt fuer die Kennzahl {@code offeneRechnungen} (Issue #285): Dass die Zeile ihren
+ * <b>Firmennamen</b> traegt, haengt an zwei echten Verknuepfungen — Rechnung → Angebot → Firma —,
+ * und die lassen sich nur am laufenden Weg belegen.
  */
 class StartseiteControllerIT extends AbstractIntegrationTest {
 
@@ -305,6 +310,42 @@ class StartseiteControllerIT extends AbstractIntegrationTest {
     assertThat(stand.abgerechnet().offenNetto()).isEqualByComparingTo("0.00");
     assertThat(stand.abgerechnet().offenAnzahl()).isZero();
     assertThat(stand.abgerechnet().monate().get(0).offenAnzahl()).isZero();
+  }
+
+  @Test
+  void stand_givenAnOpenInvoice_thenOffeneRechnungenCarriesItWithItsFirmaName() {
+    // Given — eine offene und eine bezahlte Rechnung im Januar (Issue #285).
+    final Year jahr = Year.now(Geschaeftszone.ZONE);
+    final YearMonth januar = jahr.atMonth(1);
+    gestellteRechnungAm(januar, "RE-1", "1");
+    gestellteRechnungAm(januar, "RE-2", "2", Rechnungszustand.BEZAHLT);
+
+    // When
+    final StartseiteResponse stand =
+        Objects.requireNonNull(ruf(PFAD + "?zeitraum=" + jahr, StartseiteResponse.class).getBody());
+
+    // Then — nur die offene, mit dem Namen ihrer Firma ueber ihr Angebot.
+    assertThat(stand.offeneRechnungen().netto()).isEqualByComparingTo("100.00");
+    assertThat(stand.offeneRechnungen().anzahl()).isEqualTo(1);
+    assertThat(stand.offeneRechnungen().rechnungen())
+        .extracting(
+            StartseiteResponse.OffeneRechnungszeile::nachgetragen,
+            StartseiteResponse.OffeneRechnungszeile::nummer,
+            StartseiteResponse.OffeneRechnungszeile::firmaName)
+        .containsExactly(tuple(false, "RE-1", "Adler AG"));
+  }
+
+  @Test
+  void stand_givenAnEmptyStock_thenOffeneRechnungenIsZeroAndEmpty() {
+    // Given — ohne einen Datensatz steht die Kennzahl auf 0,00 und nicht auf null (Issue #285).
+    // When
+    final StartseiteResponse stand =
+        Objects.requireNonNull(ruf(PFAD, StartseiteResponse.class).getBody());
+
+    // Then
+    assertThat(stand.offeneRechnungen().netto()).isEqualByComparingTo("0.00");
+    assertThat(stand.offeneRechnungen().anzahl()).isZero();
+    assertThat(stand.offeneRechnungen().rechnungen()).isEmpty();
   }
 
   @Test

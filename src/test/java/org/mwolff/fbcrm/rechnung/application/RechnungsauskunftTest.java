@@ -4,19 +4,27 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.YearMonth;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.mwolff.fbcrm.angebot.application.AngebotNichtGefunden;
+import org.mwolff.fbcrm.angebot.domain.AngebotRepository;
+import org.mwolff.fbcrm.firma.application.FirmaNichtGefunden;
+import org.mwolff.fbcrm.firma.domain.FirmaRepository;
 import org.mwolff.fbcrm.rechnung.domain.NachgetrageneRechnungRepository;
 import org.mwolff.fbcrm.rechnung.domain.Nummernmuster;
 import org.mwolff.fbcrm.rechnung.domain.RechnungRepository;
@@ -46,6 +54,13 @@ import org.mwolff.fbcrm.rechnung.domain.Rechnungszustand;
  * Netto und eine 1 in die offenen Felder, eine bezahlte und eine abgeschriebene nichts — und das an
  * beiden Aggregaten gleich, der geschriebenen Rechnung wie dem Nachtrag. „Abgerechnet" bleibt davon
  * unberuehrt: Es zaehlt den Umsatz nach Rechnungsdatum und nicht den Zahlungseingang.
+ *
+ * <p>Und als dritte Antwort <b>die offenen Rechnungen selbst</b> (Issue #285): dieselbe Auswahl wie
+ * beim offenen Betrag, aber als Zeilen mit Art, Kennung, Nummer, Firmenname, Rechnungsdatum und
+ * Netto, aelteste zuerst. Der Firmenname kommt bei der geschriebenen Rechnung ueber ihr Angebot und
+ * bei der nachgetragenen von ihr selbst; fehlt eines von beidem im Bestand, ist das ein Widerspruch
+ * und keine leere Zeile. Ohne eine offene Rechnung wird nach Angeboten und Firmen gar nicht
+ * gefragt.
  */
 @ExtendWith(MockitoExtension.class)
 class RechnungsauskunftTest {
@@ -60,12 +75,21 @@ class RechnungsauskunftTest {
   @Mock private RechnungRepository rechnungen;
   @Mock private NachgetrageneRechnungRepository nachtraege;
   @Mock private RechnungseinstellungenRepository einstellungen;
+  @Mock private AngebotRepository angebote;
+  @Mock private FirmaRepository firmen;
 
   private Rechnungsauskunft auskunft;
 
   @BeforeEach
   void baueDieAuskunft() {
-    auskunft = new Rechnungsauskunft(rechnungen, nachtraege, einstellungen);
+    auskunft = new Rechnungsauskunft(rechnungen, nachtraege, einstellungen, angebote, firmen);
+  }
+
+  /** Das Angebot der Rechnungen und die Firma dahinter — der Weg zum Namen (Issue #285). */
+  private void gegebenesAngebotMitFirma() {
+    when(angebote.findAlle(Optional.empty())).thenReturn(List.of(Rechnungsdoppel.angebot()));
+    when(firmen.findAllById(Set.of(Long.valueOf(Rechnungsdoppel.FIRMA))))
+        .thenReturn(List.of(Rechnungsdoppel.firma()));
   }
 
   /** Der Satz der aktuellen Einstellungen — er gilt nur, wo eine Rechnung keinen eigenen traegt. */
@@ -80,6 +104,7 @@ class RechnungsauskunftTest {
   void gestellte_thenReadsFindAlleExactlyOnce() {
     // Given — zwei gestellte Rechnungen, beide im Monat.
     gegebenerAktuellerSatz("19.00");
+    gegebenesAngebotMitFirma();
     when(rechnungen.findAlle())
         .thenReturn(
             List.of(
@@ -107,6 +132,7 @@ class RechnungsauskunftTest {
   void gestellte_withTheFirstAndTheLastDayOfTheMonth_thenBothBelongToIt() {
     // Given — 1. und 30. September, dazu der 1. Oktober.
     gegebenerAktuellerSatz("19.00");
+    gegebenesAngebotMitFirma();
     when(rechnungen.findAlle())
         .thenReturn(
             List.of(
@@ -144,6 +170,7 @@ class RechnungsauskunftTest {
   void gestellte_withRechnungenInTwoMonate_thenTheMengenCountOverBoth() {
     // Given — eine Rechnung im September, eine im Oktober, beide auf dieselbe Position.
     gegebenerAktuellerSatz("19.00");
+    gegebenesAngebotMitFirma();
     when(rechnungen.findAlle())
         .thenReturn(
             List.of(
@@ -177,6 +204,7 @@ class RechnungsauskunftTest {
   void gestellte_withSeveralRechnungenOnThePositions_thenTheMengenAreAddedUp() {
     // Given — zwei Rechnungen auf die Beratung, eine davon zusaetzlich auf die Pauschale.
     gegebenerAktuellerSatz("19.00");
+    gegebenesAngebotMitFirma();
     when(rechnungen.findAlle())
         .thenReturn(
             List.of(
@@ -206,6 +234,7 @@ class RechnungsauskunftTest {
   void gestellte_withAnEntwurfOnTheSamePositions_thenItChangesNeitherAnswer() {
     // Given — eine gestellte Rechnung und ein Entwurf ueber dieselbe Position im selben Monat.
     gegebenerAktuellerSatz("19.00");
+    gegebenesAngebotMitFirma();
     when(rechnungen.findAlle())
         .thenReturn(
             List.of(
@@ -233,6 +262,7 @@ class RechnungsauskunftTest {
   void gestellte_thenTheMonatIsTheRechnungsdatumAndNotTheZeitpunktOfStellen() {
     // Given — gestellt am 20. September (Rechnungsdoppel.ANGELEGT), Rechnungsdatum 1. Oktober.
     gegebenerAktuellerSatz("19.00");
+    gegebenesAngebotMitFirma();
     when(rechnungen.findAlle())
         .thenReturn(
             List.of(
@@ -255,6 +285,7 @@ class RechnungsauskunftTest {
   void gestellte_thenBruttoUsesTheFestgeschriebenenSatzOfEachRechnung() {
     // Given — die Rechnung traegt 7 %, die Einstellungen nennen inzwischen 19 %.
     gegebenerAktuellerSatz("19.00");
+    gegebenesAngebotMitFirma();
     when(rechnungen.findAlle())
         .thenReturn(
             List.of(
@@ -277,6 +308,7 @@ class RechnungsauskunftTest {
   void gestellte_thenBruttoIsTheSumOfTheRoundedBruttoOfEachRechnung() {
     // Given — zwei Rechnungen ueber je 0,50 € netto zu 7 %: je Rechnung 0,035 € Steuer.
     gegebenerAktuellerSatz("19.00");
+    gegebenesAngebotMitFirma();
     when(rechnungen.findAlle())
         .thenReturn(
             List.of(
@@ -333,7 +365,7 @@ class RechnungsauskunftTest {
 
   @Test
   void gestellte_thenTheMapsAreCopiesAndTheCallerCannotChangeThem() {
-    // Given — die Abbildungen aus dem kompakten Konstruktor.
+    // Given — die Abbildungen und die Liste aus dem kompakten Konstruktor.
     final Map<YearMonth, Monatsabrechnung> monate = new HashMap<>();
     monate.put(
         SEPTEMBER,
@@ -341,25 +373,39 @@ class RechnungsauskunftTest {
             new BigDecimal("0.00"), new BigDecimal("0.00"), 0, new BigDecimal("0.00"), 0));
     final Map<Long, BigDecimal> eigene = new HashMap<>();
     eigene.put(Long.valueOf(Rechnungsdoppel.BERATUNG_ID), new BigDecimal("80.00"));
-    final Gestellte gestellte = new Gestellte(monate, eigene);
+    final List<OffeneRechnung> offene = new ArrayList<>();
+    offene.add(offeneZeile(1L, "R26-0001", ERSTER_OKTOBER));
+    final Gestellte gestellte = new Gestellte(monate, eigene, offene);
 
-    // When — der Aufrufer veraendert seine Abbildungen weiter.
+    // When — der Aufrufer veraendert seine Abbildungen und seine Liste weiter.
     monate.put(OKTOBER, new Monatsabrechnung(BigDecimal.ONE, BigDecimal.ONE, 1, BigDecimal.ONE, 1));
     eigene.put(Long.valueOf(Rechnungsdoppel.PAUSCHALE_ID), BigDecimal.ONE);
+    offene.add(offeneZeile(2L, "R26-0002", ERSTER_OKTOBER));
 
     // Then
     assertThat(gestellte.jeMonat()).containsOnlyKeys(SEPTEMBER);
     assertThat(gestellte.mengenJePosition()).hasSize(1);
+    assertThat(gestellte.offene()).hasSize(1);
     assertThatThrownBy(() -> gestellte.jeMonat().clear())
         .isInstanceOf(UnsupportedOperationException.class);
     assertThatThrownBy(() -> gestellte.mengenJePosition().clear())
         .isInstanceOf(UnsupportedOperationException.class);
+    assertThatThrownBy(() -> gestellte.offene().clear())
+        .isInstanceOf(UnsupportedOperationException.class);
+  }
+
+  /** Eine Zeile, wie der kompakte Konstruktor sie bekommt — ohne eine Rechnung dahinter. */
+  private static OffeneRechnung offeneZeile(
+      final long id, final String nummer, final LocalDate datum) {
+    return new OffeneRechnung(
+        false, id, nummer, Rechnungsdoppel.FIRMENNAME, datum, new BigDecimal("360.00"));
   }
 
   @Test
   void gestellte_withAGestellteRechnung_thenItsNettoAndOneStandAsOffen() {
     // Given — eine gestellte, nicht bezahlte Rechnung ueber 360,00 € netto (Issue #284).
     gegebenerAktuellerSatz("19.00");
+    gegebenesAngebotMitFirma();
     when(rechnungen.findAlle())
         .thenReturn(
             List.of(
@@ -448,6 +494,7 @@ class RechnungsauskunftTest {
   void gestellte_withANachgetrageneRechnung_thenItIsOffenLikeAWrittenOne() {
     // Given — zwei Nachtraege im Oktober, einer gestellt und einer bezahlt (Issue #284).
     gegebenerAktuellerSatz("19.00");
+    gegebenesAngebotMitFirma();
     when(rechnungen.findAlle()).thenReturn(List.of());
     when(nachtraege.findAlle())
         .thenReturn(
@@ -525,6 +572,7 @@ class RechnungsauskunftTest {
   void gestellte_withNachgetragene_thenEachAddsItsBetraegeAndOneToItsMonatButNoMengen() {
     // Given — eine geschriebene Rechnung und zwei nachgetragene, eine davon im Oktober.
     gegebenerAktuellerSatz("19.00");
+    gegebenesAngebotMitFirma();
     when(rechnungen.findAlle())
         .thenReturn(
             List.of(
@@ -577,6 +625,7 @@ class RechnungsauskunftTest {
   void gestellte_withOnlyANachgetragene_thenItsMonatIsTheOnlyKey() {
     // Given — nur eine nachgetragene Rechnung, und die im Oktober.
     gegebenerAktuellerSatz("19.00");
+    gegebenesAngebotMitFirma();
     when(rechnungen.findAlle()).thenReturn(List.of());
     when(nachtraege.findAlle())
         .thenReturn(
@@ -599,5 +648,239 @@ class RechnungsauskunftTest {
                     new BigDecimal("500.00"),
                     1)));
     assertThat(gestellte.mengenJePosition()).isEmpty();
+  }
+
+  @Test
+  void gestellte_withAnOffeneRechnung_thenItStandsAsALineWithItsEckdaten() {
+    // Given — eine gestellte, nicht bezahlte Rechnung ueber 360,00 € netto (Issue #285).
+    gegebenerAktuellerSatz("19.00");
+    gegebenesAngebotMitFirma();
+    when(rechnungen.findAlle())
+        .thenReturn(
+            List.of(
+                Rechnungsdoppel.gestellt(
+                    7L,
+                    Rechnungsdoppel.ANGEBOT,
+                    "R26-0007",
+                    List.of(Rechnungsdoppel.beratung("100.00", new BigDecimal("3.60"))),
+                    ERSTER_OKTOBER)));
+
+    // When
+    final List<OffeneRechnung> offene = auskunft.gestellte().offene();
+
+    // Then — Art, Kennung, Nummer, Firmenname, Rechnungsdatum und Netto; der Name kommt ueber das
+    // Angebot, denn an der geschriebenen Rechnung haengt keine Firma.
+    assertThat(offene)
+        .containsExactly(
+            new OffeneRechnung(
+                false,
+                7L,
+                "R26-0007",
+                Rechnungsdoppel.FIRMENNAME,
+                ERSTER_OKTOBER,
+                new BigDecimal("360.00")));
+  }
+
+  @Test
+  void gestellte_withABezahlteOrAbgeschriebeneOrEntwurf_thenNoneOfThemIsOffen() {
+    // Given — bezahlt, abgeschrieben und Entwurf: keine davon wartet auf Geld (Issue #285).
+    gegebenerAktuellerSatz("19.00");
+    when(rechnungen.findAlle())
+        .thenReturn(
+            List.of(
+                Rechnungsdoppel.gestellt(
+                        1L,
+                        Rechnungsdoppel.ANGEBOT,
+                        "R26-0001",
+                        List.of(Rechnungsdoppel.beratung("80.00")),
+                        ERSTER_OKTOBER)
+                    .mitZustand(Rechnungszustand.BEZAHLT, Rechnungsdoppel.ANGELEGT),
+                Rechnungsdoppel.gestellt(
+                        2L,
+                        Rechnungsdoppel.ANGEBOT,
+                        "R26-0002",
+                        List.of(Rechnungsdoppel.beratung("80.00")),
+                        ERSTER_OKTOBER)
+                    .mitZustand(Rechnungszustand.ABGESCHRIEBEN, Rechnungsdoppel.ANGELEGT),
+                Rechnungsdoppel.entwurf(3L, List.of(Rechnungsdoppel.beratung("50.00")))));
+
+    // When
+    final Gestellte gestellte = auskunft.gestellte();
+
+    // Then — die Liste bleibt leer, und nach Angeboten und Firmen wird gar nicht gefragt.
+    assertThat(gestellte.offene()).isEmpty();
+    verifyNoInteractions(angebote, firmen);
+  }
+
+  @Test
+  void gestellte_withAnOffeneNachgetrageneRechnung_thenItStandsThereAsNachgetragen() {
+    // Given — ein gestellter und ein bezahlter Nachtrag (Issue #285).
+    gegebenerAktuellerSatz("19.00");
+    gegebenesAngebotMitFirma();
+    when(rechnungen.findAlle()).thenReturn(List.of());
+    when(nachtraege.findAlle())
+        .thenReturn(
+            List.of(
+                Rechnungsdoppel.nachgetragen(3L, "AR-1", ERSTER_OKTOBER, "360.00", "428.40", null),
+                Rechnungsdoppel.nachgetragen(4L, "AR-2", ERSTER_OKTOBER, "500.00", "595.00", null)
+                    .mitZustand(Rechnungszustand.BEZAHLT, Rechnungsdoppel.ANGELEGT)));
+
+    // When
+    final List<OffeneRechnung> offene = auskunft.gestellte().offene();
+
+    // Then — nur der gestellte, als nachgetragen gekennzeichnet und mit dem Namen seiner Firma;
+    // die haengt bei ihm an der Rechnung selbst und nicht an einem Angebot.
+    assertThat(offene)
+        .containsExactly(
+            new OffeneRechnung(
+                true,
+                3L,
+                "AR-1",
+                Rechnungsdoppel.FIRMENNAME,
+                ERSTER_OKTOBER,
+                new BigDecimal("360.00")));
+  }
+
+  @Test
+  void gestellte_withOffeneOfBothArten_thenTheOldestStandsFirstAndTheNummerBreaksTheTie() {
+    // Given — vier offene Rechnungen: zwei am 1. September, eine am 30. September, eine im Oktober.
+    gegebenerAktuellerSatz("19.00");
+    gegebenesAngebotMitFirma();
+    when(rechnungen.findAlle())
+        .thenReturn(
+            List.of(
+                Rechnungsdoppel.gestellt(
+                    1L,
+                    Rechnungsdoppel.ANGEBOT,
+                    "R26-0009",
+                    List.of(Rechnungsdoppel.beratung("1.00")),
+                    ERSTER_SEPTEMBER),
+                Rechnungsdoppel.gestellt(
+                    2L,
+                    Rechnungsdoppel.ANGEBOT,
+                    "R26-0002",
+                    List.of(Rechnungsdoppel.beratung("1.00")),
+                    ERSTER_OKTOBER)));
+    when(nachtraege.findAlle())
+        .thenReturn(
+            List.of(
+                Rechnungsdoppel.nachgetragen(
+                    1L, "AR-5", LETZTER_SEPTEMBER, "100.00", "119.00", null),
+                Rechnungsdoppel.nachgetragen(
+                    2L, "AR-1", ERSTER_SEPTEMBER, "100.00", "119.00", null)));
+
+    // When
+    final List<OffeneRechnung> offene = auskunft.gestellte().offene();
+
+    // Then — aeltestes Datum zuerst; am 1. September entscheidet die Nummer, nicht die Art und
+    // nicht die Kennung (AR-1 vor R26-0009). Danach der 30. September, dann der Oktober.
+    assertThat(offene)
+        .extracting(OffeneRechnung::nummer)
+        .containsExactly("AR-1", "R26-0009", "AR-5", "R26-0002");
+  }
+
+  @Test
+  void gestellte_withoutAnyOffene_thenNeitherAngeboteNorFirmenAreAsked() {
+    // Given — gar keine Rechnung: zwei Abfragen fuer eine leere Liste zahlte jeder Aufruf der
+    // Startseite mit (Issue #285).
+    gegebenerAktuellerSatz("19.00");
+    when(rechnungen.findAlle()).thenReturn(List.of());
+
+    // When
+    final Gestellte gestellte = auskunft.gestellte();
+
+    // Then
+    assertThat(gestellte.offene()).isEmpty();
+    verifyNoInteractions(angebote, firmen);
+  }
+
+  @Test
+  void gestellte_whenTheAngebotOfAnOffeneRechnungIsMissing_thenAngebotNichtGefunden() {
+    // Given — die offene Rechnung verweist auf ein Angebot, das es nicht gibt. Angebote werden
+    // nicht geloescht; das waere ein Widerspruch im Bestand und keine Zeile ohne Firma.
+    gegebenerAktuellerSatz("19.00");
+    when(angebote.findAlle(Optional.empty())).thenReturn(List.of());
+    when(rechnungen.findAlle())
+        .thenReturn(
+            List.of(
+                Rechnungsdoppel.gestellt(
+                    1L,
+                    Rechnungsdoppel.ANGEBOT,
+                    "R26-0001",
+                    List.of(Rechnungsdoppel.beratung("80.00")),
+                    ERSTER_OKTOBER)));
+
+    // When / Then
+    assertThatThrownBy(() -> auskunft.gestellte()).isInstanceOf(AngebotNichtGefunden.class);
+  }
+
+  @Test
+  void gestellte_whenTheFirmaOfAnOffeneRechnungIsMissing_thenFirmaNichtGefunden() {
+    // Given — das Angebot steht da, seine Firma nicht. Firmen werden ebenso nicht geloescht.
+    gegebenerAktuellerSatz("19.00");
+    when(angebote.findAlle(Optional.empty())).thenReturn(List.of(Rechnungsdoppel.angebot()));
+    when(firmen.findAllById(Set.of(Long.valueOf(Rechnungsdoppel.FIRMA)))).thenReturn(List.of());
+    when(rechnungen.findAlle())
+        .thenReturn(
+            List.of(
+                Rechnungsdoppel.gestellt(
+                    1L,
+                    Rechnungsdoppel.ANGEBOT,
+                    "R26-0001",
+                    List.of(Rechnungsdoppel.beratung("80.00")),
+                    ERSTER_OKTOBER)));
+
+    // When / Then
+    assertThatThrownBy(() -> auskunft.gestellte()).isInstanceOf(FirmaNichtGefunden.class);
+  }
+
+  @Test
+  void gestellte_whenTheFirmaOfAnOffeneNachgetrageneRechnungIsMissing_thenFirmaNichtGefunden() {
+    // Given — ein offener Nachtrag ohne seine Firma; bei ihm haengt sie an der Rechnung selbst.
+    gegebenerAktuellerSatz("19.00");
+    when(angebote.findAlle(Optional.empty())).thenReturn(List.of());
+    when(firmen.findAllById(Set.of(Long.valueOf(Rechnungsdoppel.FIRMA)))).thenReturn(List.of());
+    when(rechnungen.findAlle()).thenReturn(List.of());
+    when(nachtraege.findAlle())
+        .thenReturn(
+            List.of(
+                Rechnungsdoppel.nachgetragen(
+                    1L, "AR-1", ERSTER_OKTOBER, "360.00", "428.40", null)));
+
+    // When / Then
+    assertThatThrownBy(() -> auskunft.gestellte()).isInstanceOf(FirmaNichtGefunden.class);
+  }
+
+  @Test
+  void gestellte_withTwoOffeneRechnungenOfTheSameFirma_thenItIsAskedForOnlyOnce() {
+    // Given — zwei offene Rechnungen derselben Firma: Je Zeile nachzufragen waere die
+    // Abfrage-Lawine, die diese Tuer gerade vermeidet (Issue #285).
+    gegebenerAktuellerSatz("19.00");
+    gegebenesAngebotMitFirma();
+    when(rechnungen.findAlle())
+        .thenReturn(
+            List.of(
+                Rechnungsdoppel.gestellt(
+                    1L,
+                    Rechnungsdoppel.ANGEBOT,
+                    "R26-0001",
+                    List.of(Rechnungsdoppel.beratung("1.00")),
+                    ERSTER_OKTOBER),
+                Rechnungsdoppel.gestellt(
+                    2L,
+                    Rechnungsdoppel.ANGEBOT,
+                    "R26-0002",
+                    List.of(Rechnungsdoppel.beratung("1.00")),
+                    ERSTER_OKTOBER)));
+
+    // When
+    final List<OffeneRechnung> offene = auskunft.gestellte().offene();
+
+    // Then — beide Zeilen tragen den Namen, gefragt wurde einmal.
+    assertThat(offene)
+        .extracting(OffeneRechnung::firmaName)
+        .containsOnly(Rechnungsdoppel.FIRMENNAME);
+    verify(angebote, times(1)).findAlle(Optional.empty());
+    verify(firmen, times(1)).findAllById(Set.of(Long.valueOf(Rechnungsdoppel.FIRMA)));
   }
 }
