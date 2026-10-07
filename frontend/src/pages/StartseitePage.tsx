@@ -26,7 +26,7 @@ import Karte from '../components/Karte';
 import Kennzahlkachel from '../components/Kennzahlkachel';
 import { useKopfPfad } from '../components/KopfPfad';
 import type { PfadVerweis } from '../components/KopfPfad';
-import Tafel from '../components/Tafel';
+import Tafel, { type TafelSpalte } from '../components/Tafel';
 import WeicheTaste from '../components/WeicheTaste';
 import { monatWort, stundenWort } from '../lib/arbeitszeit';
 import { alsZeitraum, zeitraumWort } from '../lib/zeitraum';
@@ -136,10 +136,25 @@ const LEER_IN_ARBEIT = 'Kein Angebot ist gerade in Arbeit.';
 const LEER_OFFEN = 'Nichts offen — alle erfasste Zeit ist abgerechnet.';
 const LEER_OFFENE_RECHNUNGEN = 'Keine Rechnung ist offen.';
 
-const SPALTEN_IN_ARBEIT: readonly string[] = ['Firma', 'Angebot', 'Status'];
-const SPALTEN_OFFEN: readonly string[] = ['Firma', 'Angebot', 'Anteil'];
-const SPALTEN_OFFENE_RECHNUNGEN: readonly string[] = ['Rechnung', 'Firma', 'Datum', 'Netto'];
-const SPALTEN_ABGERECHNET: readonly string[] = ['Monat', 'Rechnungen', 'Netto', 'Brutto', 'Offen'];
+const SPALTEN_IN_ARBEIT: readonly TafelSpalte[] = ['Firma', 'Angebot', 'Status'];
+const SPALTEN_OFFEN: readonly TafelSpalte[] = [
+  'Firma',
+  'Angebot',
+  { beschriftung: 'Anteil', zahl: true },
+];
+const SPALTEN_OFFENE_RECHNUNGEN: readonly TafelSpalte[] = [
+  'Rechnung',
+  'Firma',
+  'Datum',
+  { beschriftung: 'Netto', zahl: true },
+];
+const SPALTEN_ABGERECHNET: readonly TafelSpalte[] = [
+  'Monat',
+  { beschriftung: 'Rechnungen', zahl: true },
+  { beschriftung: 'Netto', zahl: true },
+  { beschriftung: 'Brutto', zahl: true },
+  { beschriftung: 'Offen', zahl: true },
+];
 
 /**
  * Was an der Stelle eines offenen Betrags steht, wo nichts offen ist (#284).

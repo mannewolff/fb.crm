@@ -25,14 +25,21 @@ import { RADIUS_KLEIN } from '../theme';
  * Spalte eine Zahl fuehrt; eine Liste von Spaltennummern im Aufruf waere eine zweite, stumme
  * Beschreibung derselben Zeilen.
  *
+ * <b>Den Kopf einer rechtsbuendigen Zahlenspalte</b> stellt die Tafel buendig ueber ihre Zahlen:
+ * Die Spalte steht dafuer als `{ beschriftung, zahl: true }` in `spalten`, an ihrer Beschriftung und
+ * nicht als Nummer. Sonst stuende der Kopf links und die Betraege rechts darunter.
+ *
  * Nicht enthalten sind Auswahlhaken, Massenleiste, Gruppenzeilen, Spaltenwahl und Export. Sie
  * gehoeren zu Funktionen, die fb.crm nicht hat.
  */
+/** Eine Spalte: ihre Beschriftung, oder dazu die Angabe, dass sie rechtsbuendige Zahlen fuehrt. */
+export type TafelSpalte = string | { readonly beschriftung: string; readonly zahl: true };
+
 export interface TafelProps {
   /** Der zugaengliche Name der Tafel — sie ist eine eigene Landmarke im Dokument. */
   readonly beschriftung: string;
   /** Die Kopfzeile: je Spalte ihre Beschriftung, in der Reihenfolge der Zellen. */
-  readonly spalten: readonly string[];
+  readonly spalten: readonly TafelSpalte[];
   /** Die Datenzeilen als `tr` mit `td`. */
   readonly children: ReactNode;
 }
@@ -62,6 +69,9 @@ export default function Tafel({ beschriftung, spalten, children }: TafelProps) {
             padding: '8px 14px',
             whiteSpace: 'nowrap',
           },
+          // Mit dem Attribut spezifischer als der Selektor oben und schlaegt ihn darum; ein eigenes
+          // `sx` am `th` verloere gegen den Nachfahren-Selektor der Tafel.
+          '& thead th[data-zahl]': { textAlign: 'right' },
           '& tbody td': {
             padding: '12px 14px',
             fontSize: 13.5,
@@ -85,11 +95,20 @@ export default function Tafel({ beschriftung, spalten, children }: TafelProps) {
       >
         <Box component="thead">
           <Box component="tr">
-            {spalten.map((spalte) => (
-              <Box component="th" scope="col" key={spalte}>
-                {spalte}
-              </Box>
-            ))}
+            {spalten.map((spalte) => {
+              const zahl = typeof spalte !== 'string';
+              const beschriftung = zahl ? spalte.beschriftung : spalte;
+              return (
+                <Box
+                  component="th"
+                  scope="col"
+                  key={beschriftung}
+                  data-zahl={zahl ? '' : undefined}
+                >
+                  {beschriftung}
+                </Box>
+              );
+            })}
           </Box>
         </Box>
         <Box component="tbody">{children}</Box>

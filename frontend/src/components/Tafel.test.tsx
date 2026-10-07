@@ -65,6 +65,21 @@ describe('Tafel', () => {
     }
   });
 
+  it('stellt den Kopf einer Zahlenspalte rechtsbuendig und die uebrigen links', () => {
+    renderMitTheme(
+      <Tafel beschriftung="Abgerechnet" spalten={['Monat', { beschriftung: 'Netto', zahl: true }]}>
+        <tr>
+          <td>Mai 2026</td>
+          <td>12.605,00 €</td>
+        </tr>
+      </Tafel>,
+    );
+
+    // Ohne die Angabe stuende der Kopf links und die Betraege rechts darunter.
+    expect(screen.getByRole('columnheader', { name: 'Netto' })).toHaveStyle({ textAlign: 'right' });
+    expect(screen.getByRole('columnheader', { name: 'Monat' })).toHaveStyle({ textAlign: 'left' });
+  });
+
   it('gliedert die Zeilen ohne Linien', () => {
     renderTafel();
 
