@@ -40,7 +40,7 @@ import type { PfadVerweis } from '../components/KopfPfad';
 import KupferTaste, { kupferSx } from '../components/KupferTaste';
 import { EINHEIT_WORT } from '../components/Positionsmaske';
 import RechnungszustandChip from '../components/RechnungszustandChip';
-import Tafel from '../components/Tafel';
+import Tafel, { type TafelSpalte } from '../components/Tafel';
 import Ueberschreitungshinweis from '../components/Ueberschreitungshinweis';
 import TastenSymbol from '../components/TastenSymbol';
 import WeicheTaste from '../components/WeicheTaste';
@@ -149,24 +149,24 @@ const SYMBOL_TASTE = 16;
 /** Ueber jeder Rechnungsansicht steht die Liste der Rechnungen (E6). */
 const ZU_RECHNUNGEN: PfadVerweis = { titel: 'Rechnungen', ziel: '/rechnungen' };
 
-const SPALTEN: readonly string[] = [
+const SPALTEN: readonly TafelSpalte[] = [
   'Leistung',
   'Einheit',
-  'Einzelpreis',
-  'Angeboten',
-  'Abgerechnet',
-  'Offen',
+  { beschriftung: 'Einzelpreis', zahl: true },
+  { beschriftung: 'Angeboten', zahl: true },
+  { beschriftung: 'Abgerechnet', zahl: true },
+  { beschriftung: 'Offen', zahl: true },
   'Jetzt abrechnen',
-  'Betrag',
+  { beschriftung: 'Betrag', zahl: true },
 ];
 
 /** Die Spalten des fertigen Belegs — nur, was auf einer Rechnung steht (Kriterium 24). */
-const SPALTEN_BELEG: readonly string[] = [
-  'Anzahl',
+const SPALTEN_BELEG: readonly TafelSpalte[] = [
+  { beschriftung: 'Anzahl', zahl: true },
   'Einheit',
   'Leistung',
-  'Einzelpreis',
-  'Gesamtpreis',
+  { beschriftung: 'Einzelpreis', zahl: true },
+  { beschriftung: 'Gesamtpreis', zahl: true },
 ];
 
 /**

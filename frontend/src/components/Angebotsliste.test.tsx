@@ -81,6 +81,15 @@ describe('Angebotsliste (Kriterium 7)', () => {
     ]);
   });
 
+  it('stellt den Kopf einer Zahlenspalte rechtsbuendig und die uebrigen links (Issue #286)', () => {
+    renderListe([AELTER]);
+
+    expect(screen.getByRole('columnheader', { name: 'Summe' })).toHaveStyle({ textAlign: 'right' });
+    for (const name of ['Datum', 'Status']) {
+      expect(screen.getByRole('columnheader', { name })).toHaveStyle({ textAlign: 'left' });
+    }
+  });
+
   it('sagt es, wenn die Firma noch kein Angebot hat, statt eine leere Tafel zu zeigen', () => {
     renderListe([]);
 

@@ -37,7 +37,7 @@ import KupferTaste from '../components/KupferTaste';
 import Monatswahl, { monatOderKeiner, monatswahlWert } from '../components/Monatswahl';
 import { EINHEIT_WORT, MODUS_WORT } from '../components/Positionsmaske';
 import RechnungszustandChip from '../components/RechnungszustandChip';
-import Tafel from '../components/Tafel';
+import Tafel, { type TafelSpalte } from '../components/Tafel';
 import Ueberschreitungshinweis from '../components/Ueberschreitungshinweis';
 import WeicheTaste from '../components/WeicheTaste';
 import { nichtGefunden, serverMeldung } from '../lib/apifehler';
@@ -130,10 +130,27 @@ const WAHL_TITEL = 'Rechnung schreiben';
 const OHNE_NUMMER = 'Entwurf';
 
 /** Die Spalten der Positionstafel vor den Mengen des Stands. */
-const SPALTEN_VOR: readonly string[] = ['Bezeichnung', 'Abrechnung', 'Menge'];
+const SPALTEN_VOR: readonly TafelSpalte[] = [
+  'Bezeichnung',
+  'Abrechnung',
+  { beschriftung: 'Menge', zahl: true },
+];
 
 /** Die Spalten dahinter — „Einheit" gilt fuer jede Menge links von ihr. */
-const SPALTEN_NACH: readonly string[] = ['Einheit', 'Einzelpreis', 'Betrag'];
+const SPALTEN_NACH: readonly TafelSpalte[] = [
+  'Einheit',
+  { beschriftung: 'Einzelpreis', zahl: true },
+  { beschriftung: 'Betrag', zahl: true },
+];
+
+/** Die Zusatzspalte „Angefallen" (siehe {@link Zusatzspalten}). */
+const SPALTEN_ANGEFALLEN: readonly TafelSpalte[] = [{ beschriftung: 'Angefallen', zahl: true }];
+
+/** Die Zusatzspalten des Abrechnungsstands (siehe {@link Zusatzspalten}). */
+const SPALTEN_STAND: readonly TafelSpalte[] = [
+  { beschriftung: 'Abgerechnet', zahl: true },
+  { beschriftung: 'Offen', zahl: true },
+];
 
 /**
  * Welche Zusatzspalten die Positionstafel traegt — zwei Fragen, zwei Antworten.
@@ -158,7 +175,10 @@ interface Zusatzspalten {
  * Intern gibt es weder Menge noch Einheit noch Preis noch Abrechnungsart, und eine Rechnung gibt
  * es auch nie — es bleiben die Bezeichnung und die erfassten Stunden.
  */
-const SPALTEN_INTERN: readonly string[] = ['Bezeichnung', 'Angefallen'];
+const SPALTEN_INTERN: readonly TafelSpalte[] = [
+  'Bezeichnung',
+  { beschriftung: 'Angefallen', zahl: true },
+];
 
 /**
  * Die Spalten zu den gewaehlten Zusaetzen — intern eine eigene, kurze Reihe.
@@ -166,20 +186,25 @@ const SPALTEN_INTERN: readonly string[] = ['Bezeichnung', 'Angefallen'];
  * Ein Zweig und nicht fuenf verstreute `&& !intern`: So steht die interne Tafel an einer Stelle
  * und nicht an fuenfen.
  */
-function spaltenZu(zusatz: Zusatzspalten, intern: boolean): readonly string[] {
+function spaltenZu(zusatz: Zusatzspalten, intern: boolean): readonly TafelSpalte[] {
   if (intern) {
     return SPALTEN_INTERN;
   }
   return [
     ...SPALTEN_VOR,
-    ...(zusatz.angefallen ? ['Angefallen'] : []),
-    ...(zusatz.stand ? ['Abgerechnet', 'Offen'] : []),
+    ...(zusatz.angefallen ? SPALTEN_ANGEFALLEN : []),
+    ...(zusatz.stand ? SPALTEN_STAND : []),
     ...SPALTEN_NACH,
   ];
 }
 
 /** Die Spalten der Rechnungstafel — ohne Firma, die steht schon im Kopf des Angebots. */
-const SPALTEN_RECHNUNGEN: readonly string[] = ['Nummer', 'Rechnungsdatum', 'Betrag', 'Zustand'];
+const SPALTEN_RECHNUNGEN: readonly TafelSpalte[] = [
+  'Nummer',
+  'Rechnungsdatum',
+  { beschriftung: 'Betrag', zahl: true },
+  'Zustand',
+];
 
 /** Ab diesen Staenden laesst sich zu einem Angebot eine Rechnung schreiben (Kriterium 3). */
 const ABRECHENBAR: ReadonlySet<Angebot['status']> = new Set(['BESTELLT', 'ERLEDIGT', 'ABGERECHNET']);
@@ -802,7 +827,7 @@ export default function AngebotPage() {
                 {OHNE_POSITION}
               </Typography>
             ) : (
-              <Tafel beschriftung="Positionen" spalten={[...spaltenZu(zusatz, angebot.intern)]}>
+              <Tafel beschriftung="Positionen" spalten={spaltenZu(zusatz, angebot.intern)}>
                 {angebot.positionen.map((position) => (
                   // Die Kennung ist der Schluessel: Seit Issue #171 traegt jede Position eine
                   // eigene und bleibt ueber ein Speichern hinweg dieselbe. Die Reihenfolge der

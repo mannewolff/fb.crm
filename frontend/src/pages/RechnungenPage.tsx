@@ -32,7 +32,7 @@ import KupferTaste from '../components/KupferTaste';
 import Monatswahl, { monatOderKeiner, monatswahlWert } from '../components/Monatswahl';
 import NachgetragenChip from '../components/NachgetragenChip';
 import RechnungszustandChip from '../components/RechnungszustandChip';
-import Tafel from '../components/Tafel';
+import Tafel, { type TafelSpalte } from '../components/Tafel';
 import TastenSymbol from '../components/TastenSymbol';
 import WeicheTaste, { weichSx } from '../components/WeicheTaste';
 import { euro } from '../lib/geld';
@@ -93,11 +93,11 @@ const WAHL_LEER =
 /** Was an der Stelle der Nummer steht, solange die Rechnung keine hat (Kriterium 15). */
 const OHNE_NUMMER = 'Entwurf';
 
-const SPALTEN: readonly string[] = [
+const SPALTEN: readonly TafelSpalte[] = [
   'Nummer',
   'Firma',
   'Rechnungsdatum',
-  'Betrag',
+  { beschriftung: 'Betrag', zahl: true },
   'Zustand',
   'Dokument',
 ];

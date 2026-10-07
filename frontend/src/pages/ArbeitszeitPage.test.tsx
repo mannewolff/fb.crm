@@ -210,6 +210,18 @@ describe('ArbeitszeitPage (Kriterium 5, Plan A13, A20)', () => {
     expect(tafel.getByText('Adler AG')).toBeInTheDocument();
   });
 
+  it('stellt den Kopf einer Zahlenspalte rechtsbuendig und die uebrigen links (Issue #286)', async () => {
+    mitRouten({ [NOVEMBER]: json(200, MONATSLISTE) });
+
+    renderSeite('/arbeitszeit?monat=2026-11');
+
+    const tafel = within(await screen.findByRole('table', { name: 'Arbeitszeit November 2026' }));
+    expect(tafel.getByRole('columnheader', { name: 'Dauer' })).toHaveStyle({ textAlign: 'right' });
+    for (const name of ['Zeit', 'Position', 'Aktionen']) {
+      expect(tafel.getByRole('columnheader', { name })).toHaveStyle({ textAlign: 'left' });
+    }
+  });
+
   it('laedt den Vormonat und schreibt ihn in die Adresse', async () => {
     mitRouten({ [NOVEMBER]: json(200, MONATSLISTE), [OKTOBER]: json(200, LEERER_MONAT) });
     const nutzer = userEvent.setup();

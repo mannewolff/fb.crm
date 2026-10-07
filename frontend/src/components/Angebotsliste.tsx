@@ -8,7 +8,7 @@ import { tagWort } from '../lib/tag';
 import { ZAHLEN_KLASSE } from '../theme';
 import AngebotsstatusChip from './AngebotsstatusChip';
 import InternChip from './InternChip';
-import Tafel from './Tafel';
+import Tafel, { type TafelSpalte } from './Tafel';
 
 /**
  * Die Angebote einer Firma als Tafel (Kriterium 7).
@@ -30,7 +30,11 @@ import Tafel from './Tafel';
  * fuer den Screenreader wie eine fehlende Angabe, der Strich sagt „hier gibt es keinen Betrag".
  */
 
-const SPALTEN = ['Datum', 'Status', 'Summe'] as const;
+const SPALTEN: readonly TafelSpalte[] = [
+  'Datum',
+  'Status',
+  { beschriftung: 'Summe', zahl: true },
+];
 const LEER = 'Noch kein Angebot an diese Firma.';
 
 /** Was in „Summe" steht, wenn es keinen Betrag gibt (Halbgeviertstrich). */
@@ -93,7 +97,7 @@ export default function Angebotsliste({ angebote }: AngebotslisteProps) {
     );
   }
   return (
-    <Tafel beschriftung="Angebote" spalten={[...SPALTEN]}>
+    <Tafel beschriftung="Angebote" spalten={SPALTEN}>
       {angebote.map((angebot) => (
         <Zeile key={angebot.id} angebot={angebot} />
       ))}

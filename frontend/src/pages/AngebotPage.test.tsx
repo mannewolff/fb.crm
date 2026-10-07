@@ -713,6 +713,56 @@ describe('AngebotPage — die Spalte „Angefallen" (Issue #193, Kriterien 7, 8,
   });
 });
 
+describe('AngebotPage — die Koepfe der Zahlenspalten (Issue #286)', () => {
+  it('stellt in Positions- und Rechnungstafel den Kopf einer Zahlenspalte rechtsbuendig und die uebrigen links', async () => {
+    fetchNachPfad({
+      ...LEERE_BEREICHE,
+      [ABRECHNUNG]: json(200, { positionen: [STAND_STUNDEN], rechnungen: [GESTELLTE], angefallen: 8 }),
+      'GET /api/angebote/9': json(200, ANGEBOT_MIT_STUNDEN),
+    });
+
+    renderSeite();
+    await screen.findByRole('heading', { level: 1, name: UEBERSCHRIFT });
+
+    // Mit Rechnung und buchbarer Position traegt die Positionstafel alle Zusatzspalten.
+    const positionen = within(await screen.findByRole('table', { name: 'Positionen' }));
+    await positionen.findByRole('columnheader', { name: 'Angefallen' });
+    for (const name of ['Menge', 'Angefallen', 'Abgerechnet', 'Offen', 'Einzelpreis', 'Betrag']) {
+      expect(positionen.getByRole('columnheader', { name })).toHaveStyle({ textAlign: 'right' });
+    }
+    for (const name of ['Bezeichnung', 'Abrechnung', 'Einheit']) {
+      expect(positionen.getByRole('columnheader', { name })).toHaveStyle({ textAlign: 'left' });
+    }
+
+    const rechnungen = within(screen.getByRole('table', { name: 'Rechnungen' }));
+    expect(rechnungen.getByRole('columnheader', { name: 'Betrag' })).toHaveStyle({
+      textAlign: 'right',
+    });
+    for (const name of ['Nummer', 'Rechnungsdatum', 'Zustand']) {
+      expect(rechnungen.getByRole('columnheader', { name })).toHaveStyle({ textAlign: 'left' });
+    }
+  });
+
+  it('stellt in der internen Positionstafel „Angefallen" rechtsbuendig und „Bezeichnung" links', async () => {
+    fetchNachPfad({
+      ...LEERE_BEREICHE,
+      [ABRECHNUNG]: json(200, { positionen: [STAND_STUNDEN], rechnungen: [], angefallen: 8 }),
+      'GET /api/angebote/9': json(200, { ...ANGEBOT_MIT_STUNDEN, intern: true, status: 'LAEUFT' }),
+    });
+
+    renderSeite();
+    await screen.findByRole('heading', { level: 1, name: UEBERSCHRIFT });
+
+    const tafel = within(await screen.findByRole('table', { name: 'Positionen' }));
+    expect(tafel.getByRole('columnheader', { name: 'Angefallen' })).toHaveStyle({
+      textAlign: 'right',
+    });
+    expect(tafel.getByRole('columnheader', { name: 'Bezeichnung' })).toHaveStyle({
+      textAlign: 'left',
+    });
+  });
+});
+
 describe('AngebotPage — der Bereich „Rechnungen" (Issue #187, Kriterium 26)', () => {
   it('stellt die Karte zwischen die Positionen und die Anlagen', async () => {
     fetchNachPfad({

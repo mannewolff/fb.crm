@@ -168,6 +168,19 @@ describe('RechnungenPage — die Liste (#160, Kriterien 1, 2, 24)', () => {
     ]);
   });
 
+  it('stellt den Kopf einer Zahlenspalte rechtsbuendig und die uebrigen links (Issue #286)', async () => {
+    fetchNachPfad({ [WEG_LISTE]: json(200, { rechnungen: [GESTELLT] }) });
+
+    renderSeite();
+
+    const tafel = within(await screen.findByRole('table', { name: 'Rechnungen' }));
+    expect(tafel.getByRole('columnheader', { name: 'Betrag' })).toHaveStyle({ textAlign: 'right' });
+    // Nummer und Datum stehen links wie ihre Zellen; „Dokument" ist eine Tastenspalte, keine Zahl.
+    for (const name of ['Nummer', 'Rechnungsdatum', 'Dokument']) {
+      expect(tafel.getByRole('columnheader', { name })).toHaveStyle({ textAlign: 'left' });
+    }
+  });
+
   it('traegt an der gestellten Rechnung Nummer, Firma, Datum, Betrag, Zustand und den Download', async () => {
     fetchNachPfad({ [WEG_LISTE]: json(200, { rechnungen: [GESTELLT] }) });
 

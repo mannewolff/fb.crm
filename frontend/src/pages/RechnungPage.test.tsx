@@ -268,6 +268,21 @@ describe('RechnungPage — die Maske des Entwurfs (Kriterien 4, 6 bis 8)', () =>
     expect(within(zeile).getByTestId('zeile-offen')).toHaveTextContent('0,00');
   });
 
+  it('stellt den Kopf einer Zahlenspalte rechtsbuendig und die uebrigen links (Issue #286)', async () => {
+    fetchNachPfad({ [WEG]: json(200, ENTWURF) });
+
+    renderSeite();
+    const tafel = within(await screen.findByRole('table', { name: 'Positionen' }));
+
+    for (const name of ['Einzelpreis', 'Angeboten', 'Abgerechnet', 'Offen', 'Betrag']) {
+      expect(tafel.getByRole('columnheader', { name })).toHaveStyle({ textAlign: 'right' });
+    }
+    // „Jetzt abrechnen" haelt ein Eingabefeld und keine rechtsbuendige Zahl.
+    for (const name of ['Leistung', 'Einheit', 'Jetzt abrechnen']) {
+      expect(tafel.getByRole('columnheader', { name })).toHaveStyle({ textAlign: 'left' });
+    }
+  });
+
   it('zeigt Rechnungsdatum und Leistungszeitraum als Felder', async () => {
     fetchNachPfad({ [WEG]: json(200, ENTWURF) });
 
@@ -782,6 +797,20 @@ describe('RechnungPage — die gestellte Rechnung (Kriterien 14, 15 und 24)', ()
     expect(stammdaten).toHaveTextContent('Oktober 2026');
     expect(stammdaten).toHaveTextContent('19,00 %');
     expect(stammdaten).toHaveTextContent('14 Tage');
+  });
+
+  it('stellt im Beleg den Kopf einer Zahlenspalte rechtsbuendig und die uebrigen links (Issue #286)', async () => {
+    fetchNachPfad({ [WEG]: json(200, GESTELLT) });
+
+    renderSeite();
+    const tafel = within(await screen.findByRole('table', { name: 'Positionen' }));
+
+    for (const name of ['Anzahl', 'Einzelpreis', 'Gesamtpreis']) {
+      expect(tafel.getByRole('columnheader', { name })).toHaveStyle({ textAlign: 'right' });
+    }
+    for (const name of ['Einheit', 'Leistung']) {
+      expect(tafel.getByRole('columnheader', { name })).toHaveStyle({ textAlign: 'left' });
+    }
   });
 
   it('zeigt nur die abgerechneten Positionen mit Anzahl, Einheit, Text und Preisen', async () => {

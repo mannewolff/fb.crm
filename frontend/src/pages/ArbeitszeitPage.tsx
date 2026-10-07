@@ -14,7 +14,7 @@ import Karte from '../components/Karte';
 import { useKopfPfad } from '../components/KopfPfad';
 import type { PfadVerweis } from '../components/KopfPfad';
 import KupferTaste from '../components/KupferTaste';
-import Tafel from '../components/Tafel';
+import Tafel, { type TafelSpalte } from '../components/Tafel';
 import { rundeIcontaste } from '../components/rundeIcontaste';
 import ZeiteintragMaske from '../components/ZeiteintragMaske';
 import {
@@ -72,7 +72,12 @@ const LEER = 'Noch keine Arbeitszeit in diesem Monat. Erfassen Sie die erste üb
 const LOESCHEN_FRAGE = 'Der Eintrag wird gelöscht. Das lässt sich nicht zurücknehmen.';
 const AUSFALL_LOESCHEN = 'Der Eintrag wurde nicht gelöscht. Bitte später erneut versuchen.';
 
-const SPALTEN: readonly string[] = ['Zeit', 'Dauer', 'Position', 'Aktionen'];
+const SPALTEN: readonly TafelSpalte[] = [
+  'Zeit',
+  { beschriftung: 'Dauer', zahl: true },
+  'Position',
+  'Aktionen',
+];
 
 /** Die Symbolgroesse in den Tasten (wie in {@link RechnungenPage}). */
 const SYMBOL_TASTE = 16;

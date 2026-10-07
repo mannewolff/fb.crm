@@ -94,6 +94,18 @@ describe('AngebotePage — die Uebersicht (Issue #127, Kriterium 8)', () => {
     expect(erste.getByText('1.200,00 €')).toBeInTheDocument();
   });
 
+  it('stellt den Kopf einer Zahlenspalte rechtsbuendig und die uebrigen links (Issue #286)', async () => {
+    fetchNachPfad({ 'GET /api/angebote': json(200, { angebote: [JUENGER] }) });
+
+    renderSeite();
+
+    const tafel = within(await screen.findByRole('table', { name: 'Angebote' }));
+    expect(tafel.getByRole('columnheader', { name: 'Summe' })).toHaveStyle({ textAlign: 'right' });
+    for (const name of ['Datum', 'Firma', 'Status']) {
+      expect(tafel.getByRole('columnheader', { name })).toHaveStyle({ textAlign: 'left' });
+    }
+  });
+
   it('fuehrt ueber das Datum auf das Angebot', async () => {
     fetchNachPfad({ 'GET /api/angebote': json(200, { angebote: [JUENGER, AELTER] }) });
 

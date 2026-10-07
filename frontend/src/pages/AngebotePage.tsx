@@ -13,7 +13,7 @@ import InternChip from '../components/InternChip';
 import Karte from '../components/Karte';
 import { useKopfPfad } from '../components/KopfPfad';
 import type { PfadVerweis } from '../components/KopfPfad';
-import Tafel from '../components/Tafel';
+import Tafel, { type TafelSpalte } from '../components/Tafel';
 import { ANGEBOTSSTATUS, alsAngebotsstatus, angebotsstatusBild } from '../lib/angebotsstatus';
 import type { Angebotsstatus } from '../lib/angebotsstatus';
 import { euro } from '../lib/geld';
@@ -52,7 +52,12 @@ const AUSFALL = 'Die Angebote sind gerade nicht zu erreichen. Bitte später erne
 const LEER_ALLE = 'Es gibt noch kein Angebot. Angebote entstehen auf der Seite ihrer Firma.';
 const LEER_GEFILTERT = 'In diesem Status gibt es kein Angebot.';
 
-const SPALTEN: readonly string[] = ['Datum', 'Firma', 'Status', 'Summe'];
+const SPALTEN: readonly TafelSpalte[] = [
+  'Datum',
+  'Firma',
+  'Status',
+  { beschriftung: 'Summe', zahl: true },
+];
 
 /** Was in „Summe" steht, wenn es keinen Betrag gibt (Halbgeviertstrich). */
 const OHNE_BETRAG = '\u2013';
