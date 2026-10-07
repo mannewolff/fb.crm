@@ -33,7 +33,7 @@ const DEZIMAL = /^(\d+)(?:[.,](\d{1,2}))?$/u;
  * wiederholter Gruppe lief bei langen Ziffernfolgen super-linear (Sonar `typescript:S8786`).
  * Ein Vorzeichen bleibt vorne stehen und bekommt keinen Punkt hinter sich.
  */
-function mitTausenderpunkt(ganze: string): string {
+export function mitTausenderpunkt(ganze: string): string {
   const vorzeichen = ganze.startsWith('-') ? '-' : '';
   let rest = ganze.slice(vorzeichen.length);
   const gruppen: string[] = [];

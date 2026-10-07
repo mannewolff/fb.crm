@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   inHundertsteln,
+  inHundertstelnOderNull,
   jaNein,
   liste,
   objekt,
@@ -103,5 +104,25 @@ describe('inHundertsteln', () => {
     ['null', null],
   ])('weist %s ab', (_fall, wert) => {
     expect(() => inHundertsteln(wert)).toThrow(TypeError);
+  });
+});
+
+describe('inHundertstelnOderNull', () => {
+  it('laesst null als null durch', () => {
+    expect(inHundertstelnOderNull(null)).toBeNull();
+  });
+
+  it('rechnet eine Dezimalzahl in ganze Hundertstel', () => {
+    expect(inHundertstelnOderNull(19)).toBe(1900);
+    expect(inHundertstelnOderNull(19.5)).toBe(1950);
+    expect(inHundertstelnOderNull(19.25)).toBe(1925);
+  });
+
+  it.each([
+    ['drei Nachkommastellen', 1.005],
+    ['eine Zeichenkette', '19.5'],
+    ['nichts', undefined],
+  ])('weist %s ab', (_fall, wert) => {
+    expect(() => inHundertstelnOderNull(wert)).toThrow(TypeError);
   });
 });

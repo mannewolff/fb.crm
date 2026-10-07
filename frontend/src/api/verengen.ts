@@ -82,6 +82,11 @@ export function inHundertsteln(wert: unknown): number {
   return gelesen;
 }
 
+/** Ein Betrag, der fehlen darf — dann steht dort `null`, nie eine Null (Plan #288, E18). */
+export function inHundertstelnOderNull(wert: unknown): number | null {
+  return wert === null ? null : inHundertsteln(wert);
+}
+
 /** Ein Wahrheitswert — „ja" ist keiner. */
 export function jaNein(wert: unknown): boolean {
   if (typeof wert !== 'boolean') {
