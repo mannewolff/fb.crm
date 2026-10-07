@@ -25,6 +25,7 @@ const NachtragMaske = lazy(async () => import('./pages/NachtragMaske'));
 const NachgetrageneRechnungPage = lazy(async () => import('./pages/NachgetrageneRechnungPage'));
 const EigeneAngabenMaske = lazy(async () => import('./pages/EigeneAngabenMaske'));
 const AdministrationPage = lazy(async () => import('./pages/AdministrationPage'));
+const JahresabschluessePage = lazy(async () => import('./pages/JahresabschluessePage'));
 const StartseitePage = lazy(async () => import('./pages/StartseitePage'));
 
 /**
@@ -85,6 +86,9 @@ export default function App() {
               path="/rechnungen/nachgetragen/:id/bearbeiten"
               element={<NachtragMaske />}
             />
+            {/* Das Jahr steht spaeter im Pfad und nicht als Parameter (Plan #288, E16): Es benennt
+                ein eigenes Objekt — den Abschluss — und filtert keine Ansicht. */}
+            <Route path="/jahresabschluesse" element={<JahresabschluessePage />} />
             <Route path="/firmen" element={<FirmenPage />} />
             {/* Statisch vor dynamisch: `/firmen/neu` ist die Maske, nicht die Firma „neu". */}
             <Route path="/firmen/neu" element={<FirmaMaske />} />

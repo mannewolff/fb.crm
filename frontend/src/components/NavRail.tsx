@@ -3,6 +3,7 @@ import Typography from '@mui/material/Typography';
 import {
   IconBook,
   IconBuildingCommunity,
+  IconChartHistogram,
   IconClock,
   IconFileDescription,
   IconFileInvoice,
@@ -60,6 +61,7 @@ const SYMBOLE: Readonly<Record<Symbolname, TablerIcon>> = {
   'file-description': IconFileDescription,
   clock: IconClock,
   'file-invoice': IconFileInvoice,
+  'chart-histogram': IconChartHistogram,
   'building-community': IconBuildingCommunity,
   id: IconId,
   settings: IconSettings,

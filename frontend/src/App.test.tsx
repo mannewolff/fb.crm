@@ -154,6 +154,7 @@ describe('App', () => {
       'fuehrt „/rechnungen/nachgetragen/7/bearbeiten" ohne Sitzung auf die Anmeldeseite',
       '/rechnungen/nachgetragen/7/bearbeiten',
     ],
+    ['fuehrt „/jahresabschluesse" ohne Sitzung auf die Anmeldeseite', '/jahresabschluesse'],
     ['fuehrt „/eigene-angaben" ohne Sitzung auf die Anmeldeseite', '/eigene-angaben'],
     ['fuehrt „/administration“ ohne Sitzung auf die Anmeldeseite', '/administration'],
   ])('%s', async (_name, pfad) => {
@@ -258,6 +259,22 @@ describe('App', () => {
 
     expect(
       await screen.findByRole('heading', { level: 1, name: 'Rechnungen' }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('navigation', { name: 'Hauptnavigation' })).toBeInTheDocument();
+  });
+
+  it('zeigt „/jahresabschluesse" als Uebersicht der Jahre im Rahmen', async () => {
+    fensterbreite(1440);
+    fetchNachPfad({
+      'GET /api/auth/me': json(200, KONTO),
+      'GET /api/instance': json(200, { version: '0.1.3' }),
+      'GET /api/jahresabschluesse': json(200, []),
+    });
+
+    renderApp(['/jahresabschluesse'], 0);
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Jahresabschlüsse' }),
     ).toBeInTheDocument();
     expect(screen.getByRole('navigation', { name: 'Hauptnavigation' })).toBeInTheDocument();
   });

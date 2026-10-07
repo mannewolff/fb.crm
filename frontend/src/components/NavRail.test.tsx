@@ -63,7 +63,7 @@ describe('navItems (E15, E18)', () => {
     ]);
   });
 
-  it('fuehrt „Geschäft" mit Angeboten, Arbeitszeit und Rechnungen oberhalb von „Stammdaten"', () => {
+  it('fuehrt „Geschäft" mit Angeboten, Arbeitszeit, Rechnungen und Jahresabschluessen oberhalb von „Stammdaten"', () => {
     expect(
       NAV_BLOECKE.map((block) => [block.titel, block.eintraege.map((e) => [e.beschriftung, e.ziel])]),
     ).toEqual([
@@ -75,6 +75,8 @@ describe('navItems (E15, E18)', () => {
           ['Angebote', '/angebote'],
           ['Arbeitszeit', '/arbeitszeit'],
           ['Rechnungen', '/rechnungen'],
+          // Die Kette endet in der Auswertung des Jahres (Plan #288, E15).
+          ['Jahresabschlüsse', '/jahresabschluesse'],
         ],
       ],
       // „Eigene Angaben" ist ein Stammdatum wie die Firma und steht neben ihr — nicht hinter
@@ -129,12 +131,14 @@ describe('NavRail', () => {
       '/angebote',
       '/arbeitszeit',
       '/rechnungen',
+      '/jahresabschluesse',
       '/firmen',
       '/eigene-angaben',
     ]);
     expect(bloecke.getByRole('link', { name: 'Angebote' })).toBeInTheDocument();
     expect(bloecke.getByRole('link', { name: 'Arbeitszeit' })).toBeInTheDocument();
     expect(bloecke.getByRole('link', { name: 'Rechnungen' })).toBeInTheDocument();
+    expect(bloecke.getByRole('link', { name: 'Jahresabschlüsse' })).toBeInTheDocument();
     expect(bloecke.getByRole('link', { name: 'Firmen' })).toBeInTheDocument();
     expect(bloecke.getByRole('link', { name: 'Eigene Angaben' })).toBeInTheDocument();
     // Kein Umschalter in den Bloecken — Tasten stehen an der Marke und im Fuss.
@@ -235,6 +239,9 @@ describe('NavRail', () => {
     ['/rechnungen', 'Rechnungen'],
     // Und die Ansicht einer Rechnung laesst „Rechnungen" aktiv stehen (Issue #184).
     ['/rechnungen/4', 'Rechnungen'],
+    ['/jahresabschluesse', 'Jahresabschlüsse'],
+    // Der Abschluss eines Jahres laesst „Jahresabschlüsse" aktiv stehen (Plan #288, E16).
+    ['/jahresabschluesse/2025', 'Jahresabschlüsse'],
   ])('setzt auf %s aria-current="page" an „%s" und nur dort (K12)', (adresse, beschriftung) => {
     angemeldet();
 

@@ -4,8 +4,8 @@
  * Oberhalb des Fusses stehen die <b>Navigationsbloecke</b>, jeder mit einem Gruppentitel in
  * Satzschreibung (CLAUDE-design.md, „Rahmen"). Dieser Stand traegt zwei Bloecke: „Geschäft" mit der
  * Uebersicht aller Angebote (Issue #127, Kriterium 8), der Ansicht „Arbeitszeit" (Issue #193,
- * Kriterium 5) und der Liste aller Rechnungen (Issue #184, #160 Kriterium 1), darunter
- * „Stammdaten". Das Tagesgeschaeft steht oben, weil es der haeufigere Weg ist; Angebote entstehen
+ * Kriterium 5), der Liste aller Rechnungen (Issue #184, #160 Kriterium 1) und den
+ * Jahresabschluessen (#287, Kriterium 1), darunter „Stammdaten". Das Tagesgeschaeft steht oben, weil es der haeufigere Weg ist; Angebote entstehen
  * weiterhin an der Firma (Issue #126). Welche Bloecke dazukommen, entsteht mit den Fachplaenen.
  *
  * Im Fuss stehen „Administration" und „Dokumentation" als eigene Gruppe ueber der Nutzerkarte
@@ -22,6 +22,7 @@ export type Symbolname =
   | 'file-description'
   | 'clock'
   | 'file-invoice'
+  | 'chart-histogram'
   | 'building-community'
   | 'id'
   | 'settings'
@@ -50,6 +51,10 @@ export const NAV_BLOECKE: readonly NavBlock[] = [
       // „Rechnungen" steht unter „Arbeitszeit": Das ist die Reihenfolge der Kette, und eine
       // Rechnung entsteht aus einem Angebot (Issue #184).
       { beschriftung: 'Rechnungen', ziel: '/rechnungen', symbol: 'file-invoice' },
+      // „Jahresabschlüsse" steht unter „Rechnungen": Die Kette Angebot → Arbeitszeit → Rechnung
+      // endet in der Auswertung des Jahres, und ein eigener Block mit einem Eintrag benennt keine
+      // Gruppe (Plan #288, E15).
+      { beschriftung: 'Jahresabschlüsse', ziel: '/jahresabschluesse', symbol: 'chart-histogram' },
     ],
   },
   {
