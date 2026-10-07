@@ -1,9 +1,6 @@
 {
   "codeHost": "github",
   "issueTracker": "toolbox",
-  "befunde": {
-    "schwelle": 15
-  },
   "buildChecks": [
     {
       "cmd": "mvn verify -DskipITs -Dskip.frontend=true -Djacoco.skip=true",
@@ -62,6 +59,9 @@
     "in_progress": "In progress",
     "in_review": "In review",
     "done": "Done"
+  },
+  "befunde": {
+    "schwelle": 15
   },
   "checkAreas": {
     "backend": [
