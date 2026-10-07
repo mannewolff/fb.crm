@@ -7,20 +7,27 @@ import type { ReactNode } from 'react';
 import { useParams } from 'react-router-dom';
 
 import { jahresabschluss } from '../api/jahresabschluesse';
-import type { Jahresabschluss, Steuerzeile } from '../api/jahresabschluesse';
+import type {
+  Angebotsbilanz,
+  Jahresabschluss,
+  Jahresarbeitszeit,
+  Kundenzeile,
+  Steuerzeile,
+} from '../api/jahresabschluesse';
 import Karte from '../components/Karte';
 import Kennzahlkachel from '../components/Kennzahlkachel';
 import { useKopfPfad } from '../components/KopfPfad';
 import type { PfadVerweis } from '../components/KopfPfad';
 import Tafel, { type TafelSpalte } from '../components/Tafel';
 import { nichtGefunden } from '../lib/apifehler';
+import { stundenWort } from '../lib/arbeitszeit';
 import { euro } from '../lib/geld';
 import { prozentWort } from '../lib/prozent';
 import { ZAHLEN_KLASSE } from '../theme';
 
 /**
- * Der Jahresabschluss eines Jahres auf `/jahresabschluesse/<jahr>` (#287, Kriterien 4 bis 6;
- * Plan #288, E3, E11, E16, E17).
+ * Der Jahresabschluss eines Jahres auf `/jahresabschluesse/<jahr>` (#287, Kriterien 4 bis 11;
+ * Plan #288, E3, E10, E11, E16, E17).
  *
  * Aufbau wie die Startseite: eine Kopfkarte mit der Kachelreihe, darunter je Thema eine
  * {@link Karte} mit {@link Tafel} — kein eigener Baustein (E17). <b>Keine Zahl entsteht hier.</b>
@@ -34,6 +41,12 @@ import { ZAHLEN_KLASSE } from '../theme';
  * <b>Ob die Steuertafel dasteht, entscheidet die Antwort</b> (E14, Kriterium 6): Der Server
  * schickt eine leere Liste, wo die Aufteilung nur eine Zeile ergaebe. Die Ansicht laesst die Karte
  * dann weg und prueft keine eigene Bedingung.
+ *
+ * <b>Eine nicht berechenbare Kennzahl</b> kommt als `null` (E11, Kriterium 11): Die Ansicht setzt
+ * den Strich und daneben den Grund der Stelle im Wortlaut — als Wort, nicht nur im Tooltip, wie in
+ * {@link JahresabschluessePage}. Eine 0 ist dagegen eine Zahl und steht als Zahl. Die Anteile am
+ * Jahresumsatz summieren sich nicht zwingend auf 100,0 % (E10); die Ansicht gleicht nicht aus und
+ * sortiert nicht nach — Reihenfolge und Anteile stehen fertig in der Antwort.
  *
  * <b>Ein Jahr ohne Daten hat keinen Abschluss</b> (E3): Der Weg antwortet mit 404, und die Ansicht
  * sagt das in einem Satz statt einer Seite voller Nullen. Eine Adresse, die kein Jahr ist, geht
@@ -61,6 +74,18 @@ const TITEL_BRUTTO = 'Einnahmen brutto';
 const TITEL_UMSATZSTEUER = 'Enthaltene Umsatzsteuer';
 const TITEL_RECHNUNGEN = 'Rechnungen';
 const TITEL_STEUER = 'Umsatzsteuer je Steuersatz';
+const TITEL_KUNDEN = 'Umsatz je Kunde';
+const TITEL_ANGEBOTE = 'Angebote';
+const TITEL_ARBEITSZEIT = 'Arbeitszeit';
+
+/** Der Satz der leeren Kundenkarte — ein Jahr nur mit Angeboten hat keinen Kunden mit Umsatz. */
+const LEER_KUNDEN = 'Keine Rechnung an einen Kunden in diesem Jahr.';
+
+/** Was an der Stelle einer nicht berechenbaren Kennzahl steht, und je Stelle ihr Grund (Kriterium 11). */
+const STRICH = '—';
+const OHNE_UMSATZ = 'kein Umsatz';
+const OHNE_ANGEBOTE = 'keine abgegebenen Angebote';
+const OHNE_KUNDENSTUNDEN = 'keine Kundenstunden';
 
 /** Die Zeile der nachgetragenen Rechnungen, deren Satz nicht erfasst ist (Kriterium 6). */
 const OHNE_SATZ = 'Steuersatz nicht erfasst';
@@ -75,6 +100,13 @@ const SPALTEN_STEUER: readonly TafelSpalte[] = [
   { beschriftung: 'Netto', zahl: true },
   { beschriftung: 'Umsatzsteuer', zahl: true },
 ];
+const SPALTEN_KUNDEN: readonly TafelSpalte[] = [
+  'Firma',
+  { beschriftung: 'Netto', zahl: true },
+  { beschriftung: 'Anteil am Jahresumsatz', zahl: true },
+];
+/** Angebote und Arbeitszeit sind je eine Handvoll Kennzahlen: Wort und Wert. */
+const SPALTEN_KENNZAHLEN: readonly TafelSpalte[] = ['Kennzahl', { beschriftung: 'Wert', zahl: true }];
 
 /** Dieselbe Gestalt wie eine Betragszelle in {@link StartseitePage}. */
 const ZAHLENZELLE = { whiteSpace: 'nowrap', textAlign: 'right' } as const;
@@ -248,6 +280,151 @@ function Steuersaetze({ zeilen }: { readonly zeilen: readonly Steuerzeile[] }) {
   );
 }
 
+/** Ein beigestelltes Wort in schwacher Schrift: der Grund am Strich — wie in der Uebersicht. */
+function Beiwort({ children }: { readonly children: string }) {
+  return (
+    <Box
+      component="span"
+      sx={(theme) => ({
+        marginLeft: '8px',
+        fontSize: 12.5,
+        fontWeight: 400,
+        color: theme.vars.palette.kupferwolke.textSchwach,
+      })}
+    >
+      {children}
+    </Box>
+  );
+}
+
+/** Ein Wert oder, wo die Antwort keinen hat, der Strich mit dem Grund der Stelle (Kriterium 11). */
+function WertOderStrich({
+  wert,
+  setzen,
+  grund,
+}: {
+  readonly wert: number | null;
+  readonly setzen: (wert: number) => string;
+  readonly grund: string;
+}) {
+  if (wert === null) {
+    return (
+      <>
+        {STRICH}
+        <Beiwort>{grund}</Beiwort>
+      </>
+    );
+  }
+  return <>{setzen(wert)}</>;
+}
+
+/** Eine Zeile eines Kunden: Firma, Netto, Anteil (Kriterium 9). */
+function Kundenzeile({ zeile }: { readonly zeile: Kundenzeile }) {
+  return (
+    <Box component="tr">
+      <Box component="td" sx={{ fontWeight: 600, whiteSpace: 'nowrap' }}>
+        {zeile.firmaName}
+      </Box>
+      <Box component="td" className={ZAHLEN_KLASSE} sx={{ ...ZAHLENZELLE, fontWeight: 600 }}>
+        {euro(zeile.nettoInCent)}
+      </Box>
+      <Box component="td" className={ZAHLEN_KLASSE} sx={ZAHLENZELLE}>
+        <WertOderStrich
+          wert={zeile.anteilInHundertstelProzent}
+          setzen={prozentWort}
+          grund={OHNE_UMSATZ}
+        />
+      </Box>
+    </Box>
+  );
+}
+
+/** Die Kunden des Jahres in der Reihenfolge der Antwort; ohne Kunden ein Satz statt der Tafel. */
+function Kunden({ zeilen }: { readonly zeilen: readonly Kundenzeile[] }) {
+  return (
+    <Karte titel={TITEL_KUNDEN}>
+      {zeilen.length === 0 ? (
+        <Typography
+          role="status"
+          sx={(theme) => ({ fontSize: 12.5, color: theme.vars.palette.kupferwolke.textMatt })}
+        >
+          {LEER_KUNDEN}
+        </Typography>
+      ) : (
+        <Tafel beschriftung={TITEL_KUNDEN} spalten={SPALTEN_KUNDEN}>
+          {zeilen.map((zeile, stelle) => (
+            // Zwei Firmen koennen gleich heissen; erst die Stelle macht den Schluessel eindeutig.
+            <Kundenzeile key={`${String(stelle)}-${zeile.firmaName}`} zeile={zeile} />
+          ))}
+        </Tafel>
+      )}
+    </Karte>
+  );
+}
+
+/** Eine Zeile aus Wort und Wert — fuer Angebote und Arbeitszeit. */
+function Kennzahlzeile({ wort, children }: { readonly wort: string; readonly children: ReactNode }) {
+  return (
+    <Box component="tr">
+      <Box component="th" scope="row" sx={ZEILENKOPF}>
+        {wort}
+      </Box>
+      <Box component="td" className={ZAHLEN_KLASSE} sx={ZAHLENZELLE}>
+        {children}
+      </Box>
+    </Box>
+  );
+}
+
+/** Die Angebote des Jahres: Stueckzahlen, Quote und Volumen (Kriterien 7 und 8). */
+function Angebote({ bilanz }: { readonly bilanz: Angebotsbilanz }) {
+  return (
+    <Karte titel={TITEL_ANGEBOTE}>
+      <Tafel beschriftung={TITEL_ANGEBOTE} spalten={SPALTEN_KENNZAHLEN}>
+        <Kennzahlzeile wort="Abgegeben">{String(bilanz.abgegeben)}</Kennzahlzeile>
+        <Kennzahlzeile wort="Angenommen">{String(bilanz.angenommen)}</Kennzahlzeile>
+        <Kennzahlzeile wort="Heute noch offen">{String(bilanz.offen)}</Kennzahlzeile>
+        <Kennzahlzeile wort="Annahmequote">
+          <WertOderStrich
+            wert={bilanz.annahmequoteInHundertstelProzent}
+            setzen={prozentWort}
+            grund={OHNE_ANGEBOTE}
+          />
+        </Kennzahlzeile>
+        <Kennzahlzeile wort="Volumen netto abgegeben">
+          {euro(bilanz.volumenAbgegebenInCent)}
+        </Kennzahlzeile>
+        <Kennzahlzeile wort="Volumen netto angenommen">
+          {euro(bilanz.volumenAngenommenInCent)}
+        </Kennzahlzeile>
+      </Tafel>
+    </Karte>
+  );
+}
+
+/** Die Arbeitszeit des Jahres und der Erloes je Kundenstunde (Kriterium 10). */
+function Arbeitszeit({ arbeitszeit }: { readonly arbeitszeit: Jahresarbeitszeit }) {
+  return (
+    <Karte titel={TITEL_ARBEITSZEIT}>
+      <Tafel beschriftung={TITEL_ARBEITSZEIT} spalten={SPALTEN_KENNZAHLEN}>
+        <Kennzahlzeile wort="Kundenarbeit">
+          {stundenWort(arbeitszeit.kundenStundenInHundertsteln)}
+        </Kennzahlzeile>
+        <Kennzahlzeile wort="Interne Projekte">
+          {stundenWort(arbeitszeit.interneStundenInHundertsteln)}
+        </Kennzahlzeile>
+        <Kennzahlzeile wort="Erlös je Stunde">
+          <WertOderStrich
+            wert={arbeitszeit.erloesJeStundeInCent}
+            setzen={euro}
+            grund={OHNE_KUNDENSTUNDEN}
+          />
+        </Kennzahlzeile>
+      </Tafel>
+    </Karte>
+  );
+}
+
 /** Was in der Kopfkarte steht: Ladehinweis, Meldung oder die Kacheln mit ihrer Zaehlweise. */
 function kopfinhaltZu(stand: Stand, jahr: string): ReactNode {
   if (stand.art === 'laedt') {
@@ -313,6 +490,9 @@ export default function JahresabschlussPage() {
         <>
           <Rechnungen abschluss={stand.abschluss} />
           <Steuersaetze zeilen={stand.abschluss.steuerzeilen} />
+          <Kunden zeilen={stand.abschluss.kunden} />
+          <Angebote bilanz={stand.abschluss.angebotsbilanz} />
+          <Arbeitszeit arbeitszeit={stand.abschluss.arbeitszeit} />
         </>
       ) : null}
     </Box>

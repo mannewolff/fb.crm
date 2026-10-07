@@ -272,3 +272,246 @@ describe('JahresabschlussPage — Umsatzsteuer je Steuersatz (#287, Kriterium 6)
     ).not.toBeInTheDocument();
   });
 });
+
+describe('JahresabschlussPage — Umsatz je Kunde (#287, Kriterien 9 und 11)', () => {
+  it('zeigt je Kunde Firma, Netto und Anteil in der Reihenfolge, die der Weg liefert', async () => {
+    fetchNachPfad({
+      [WEG]: json(200, {
+        ...ABSCHLUSS,
+        kunden: [
+          { firmaName: 'Zeta AG', netto: 700, anteil: 70 },
+          { firmaName: 'Alpha GmbH', netto: 300, anteil: 30 },
+        ],
+      }),
+    });
+
+    renderSeite();
+
+    expect(
+      await screen.findByRole('heading', { level: 2, name: 'Umsatz je Kunde' }),
+    ).toBeInTheDocument();
+    expect((await datenzeilen('Umsatz je Kunde')).map(zellen)).toEqual([
+      ['Zeta AG', '700,00 €', '70,0 %'],
+      ['Alpha GmbH', '300,00 €', '30,0 %'],
+    ]);
+  });
+
+  it('stellt den Kopf der beiden Zahlenspalten rechts und den der Firma links', async () => {
+    fetchNachPfad({ [WEG]: json(200, ABSCHLUSS) });
+
+    renderSeite();
+
+    const tafel = within(await screen.findByRole('table', { name: 'Umsatz je Kunde' }));
+    expect(tafel.getByRole('columnheader', { name: 'Firma' })).toHaveStyle({ textAlign: 'left' });
+    for (const name of ['Netto', 'Anteil am Jahresumsatz']) {
+      expect(tafel.getByRole('columnheader', { name })).toHaveStyle({ textAlign: 'right' });
+    }
+  });
+
+  it('zeigt eine Firma mit zwei Rechnungen als die eine Zeile, die der Weg dafuer liefert', async () => {
+    // Zusammengefasst hat der Server; die Ansicht teilt nicht auf und fasst nicht nach.
+    fetchNachPfad({
+      [WEG]: json(200, {
+        ...ABSCHLUSS,
+        kunden: [{ firmaName: 'Muster GmbH', netto: 1000, anteil: 100 }],
+      }),
+    });
+
+    renderSeite();
+
+    const zeilen = await datenzeilen('Umsatz je Kunde');
+    expect(zeilen).toHaveLength(1);
+    expect(zellen(zeilen[0])).toEqual(['Muster GmbH', '1.000,00 €', '100,0 %']);
+  });
+
+  it('zeigt einen fehlenden Anteil als „—" mit dem Grund „kein Umsatz"', async () => {
+    fetchNachPfad({
+      [WEG]: json(200, {
+        ...ABSCHLUSS,
+        kunden: [{ firmaName: 'Muster GmbH', netto: 0, anteil: null }],
+      }),
+    });
+
+    renderSeite();
+
+    const [zeile] = await datenzeilen('Umsatz je Kunde');
+    const anteil = within(zeile).getAllByRole('cell')[2];
+    expect(anteil).toHaveTextContent('—');
+    expect(within(anteil).getByText('kein Umsatz')).toBeInTheDocument();
+  });
+
+  it('zeigt einen Anteil 0 als „0,0 %" und nicht als Strich', async () => {
+    fetchNachPfad({
+      [WEG]: json(200, {
+        ...ABSCHLUSS,
+        kunden: [
+          { firmaName: 'Muster GmbH', netto: 1000, anteil: 100 },
+          { firmaName: 'Klein KG', netto: 0, anteil: 0 },
+        ],
+      }),
+    });
+
+    renderSeite();
+
+    const zeilen = await datenzeilen('Umsatz je Kunde');
+    expect(zellen(zeilen[1])).toEqual(['Klein KG', '0,00 €', '0,0 %']);
+    expect(zeilen[1]).not.toHaveTextContent('kein Umsatz');
+  });
+
+  it('zeigt ohne Kunden einen leeren Zustand und keine Tafel', async () => {
+    fetchNachPfad({ [WEG]: json(200, { ...ABSCHLUSS, kunden: [] }) });
+
+    renderSeite();
+
+    await screen.findByRole('heading', { level: 2, name: 'Umsatz je Kunde' });
+    expect(screen.getByText('Keine Rechnung an einen Kunden in diesem Jahr.')).toBeInTheDocument();
+    expect(screen.queryByRole('table', { name: 'Umsatz je Kunde' })).not.toBeInTheDocument();
+  });
+});
+
+describe('JahresabschlussPage — Angebote (#287, Kriterien 7, 8 und 11)', () => {
+  it('nennt abgegeben, angenommen, heute offen, Quote und beide Volumen', async () => {
+    fetchNachPfad({ [WEG]: json(200, ABSCHLUSS) });
+
+    renderSeite();
+
+    expect(
+      await screen.findByRole('heading', { level: 2, name: 'Angebote' }),
+    ).toBeInTheDocument();
+    expect((await datenzeilen('Angebote')).map(zellen)).toEqual([
+      ['Abgegeben', '4'],
+      ['Angenommen', '3'],
+      ['Heute noch offen', '1'],
+      ['Annahmequote', '75,0 %'],
+      ['Volumen netto abgegeben', '2.000,00 €'],
+      ['Volumen netto angenommen', '1.500,50 €'],
+    ]);
+  });
+
+  it('stellt den Kopf der Wertspalte rechts', async () => {
+    fetchNachPfad({ [WEG]: json(200, ABSCHLUSS) });
+
+    renderSeite();
+
+    const tafel = within(await screen.findByRole('table', { name: 'Angebote' }));
+    expect(tafel.getByRole('columnheader', { name: 'Wert' })).toHaveStyle({ textAlign: 'right' });
+  });
+
+  it('zeigt eine fehlende Annahmequote als „—" mit dem Grund „keine abgegebenen Angebote"', async () => {
+    fetchNachPfad({
+      [WEG]: json(200, {
+        ...ABSCHLUSS,
+        angebotsbilanz: {
+          abgegeben: 0,
+          angenommen: 0,
+          offen: 0,
+          annahmequote: null,
+          volumenAbgegeben: 0,
+          volumenAngenommen: 0,
+        },
+      }),
+    });
+
+    renderSeite();
+
+    const zeile = (await datenzeilen('Angebote'))[3];
+    const quote = within(zeile).getAllByRole('cell')[0];
+    expect(quote).toHaveTextContent('—');
+    expect(within(quote).getByText('keine abgegebenen Angebote')).toBeInTheDocument();
+  });
+
+  it('zeigt eine Quote 0 bei abgegebenen Angeboten als „0,0 %" und nicht als Strich', async () => {
+    fetchNachPfad({
+      [WEG]: json(200, {
+        ...ABSCHLUSS,
+        angebotsbilanz: {
+          abgegeben: 2,
+          angenommen: 0,
+          offen: 2,
+          annahmequote: 0,
+          volumenAbgegeben: 500,
+          volumenAngenommen: 0,
+        },
+      }),
+    });
+
+    renderSeite();
+
+    const zeilen = await datenzeilen('Angebote');
+    expect(zellen(zeilen[1])).toEqual(['Angenommen', '0']);
+    expect(zellen(zeilen[3])).toEqual(['Annahmequote', '0,0 %']);
+    expect(zellen(zeilen[5])).toEqual(['Volumen netto angenommen', '0,00 €']);
+  });
+});
+
+describe('JahresabschlussPage — Arbeitszeit (#287, Kriterien 10 und 11)', () => {
+  it('nennt Kundenstunden, interne Stunden und den Erloes je Stunde', async () => {
+    fetchNachPfad({
+      [WEG]: json(200, {
+        ...ABSCHLUSS,
+        arbeitszeit: { kundenStunden: 12.5, interneStunden: 2.25, erloesJeStunde: 80 },
+      }),
+    });
+
+    renderSeite();
+
+    expect(
+      await screen.findByRole('heading', { level: 2, name: 'Arbeitszeit' }),
+    ).toBeInTheDocument();
+    expect((await datenzeilen('Arbeitszeit')).map(zellen)).toEqual([
+      ['Kundenarbeit', '12,50 Std.'],
+      ['Interne Projekte', '2,25 Std.'],
+      ['Erlös je Stunde', '80,00 €'],
+    ]);
+  });
+
+  it('zeigt einen fehlenden Erloes als „—" mit dem Grund „keine Kundenstunden"', async () => {
+    fetchNachPfad({
+      [WEG]: json(200, {
+        ...ABSCHLUSS,
+        arbeitszeit: { kundenStunden: 0, interneStunden: 3, erloesJeStunde: null },
+      }),
+    });
+
+    renderSeite();
+
+    const zeilen = await datenzeilen('Arbeitszeit');
+    expect(zellen(zeilen[0])).toEqual(['Kundenarbeit', '0,00 Std.']);
+    const erloes = within(zeilen[2]).getAllByRole('cell')[0];
+    expect(erloes).toHaveTextContent('—');
+    expect(within(erloes).getByText('keine Kundenstunden')).toBeInTheDocument();
+  });
+
+  it('zeigt einen Erloes 0 bei Kundenstunden als „0,00 €" und nicht als Strich', async () => {
+    fetchNachPfad({
+      [WEG]: json(200, {
+        ...ABSCHLUSS,
+        arbeitszeit: { kundenStunden: 5, interneStunden: 0, erloesJeStunde: 0 },
+      }),
+    });
+
+    renderSeite();
+
+    const zeilen = await datenzeilen('Arbeitszeit');
+    expect(zellen(zeilen[2])).toEqual(['Erlös je Stunde', '0,00 €']);
+  });
+});
+
+describe('JahresabschlussPage — Reihenfolge der Karten (#287)', () => {
+  it('stellt Umsatz je Kunde, Angebote und Arbeitszeit unter die Karten des Vorpakets', async () => {
+    fetchNachPfad({ [WEG]: json(200, ABSCHLUSS) });
+
+    renderSeite();
+
+    await screen.findByRole('heading', { level: 2, name: 'Arbeitszeit' });
+    expect(
+      screen.getAllByRole('heading', { level: 2 }).map((ueberschrift) => ueberschrift.textContent),
+    ).toEqual([
+      'Rechnungen',
+      'Umsatzsteuer je Steuersatz',
+      'Umsatz je Kunde',
+      'Angebote',
+      'Arbeitszeit',
+    ]);
+  });
+});
