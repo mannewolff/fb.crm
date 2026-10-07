@@ -12,7 +12,12 @@ import org.mwolff.fbcrm.rechnung.application.Monatsabrechnung;
  * Ansicht unterscheidet den leeren Jahresfall vom Monatsfall an der Art des Zeitraums und nicht an
  * der Liste.
  *
- * @param summe Netto, Brutto und Anzahl der im Zeitraum gestellten Rechnungen
+ * <p><b>Was davon noch offen ist, steht in der Abrechnung selbst</b> ({@link
+ * Monatsabrechnung#offenNetto()}, Issue #284) und nicht als eigenes Feld daneben: Summe und
+ * Monatszeilen tragen es ohne Zutun dieser Stufe mit, weil sie beide Monatsabrechnungen sind.
+ *
+ * @param summe Netto, Brutto und Anzahl der im Zeitraum gestellten Rechnungen samt dem offenen
+ *     Anteil
  * @param monate bei Jahreswahl je Monat mit mindestens einer gestellten Rechnung seine Abrechnung,
  *     aeltester zuerst; bei Monatswahl leer
  */

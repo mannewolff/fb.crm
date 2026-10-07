@@ -62,4 +62,52 @@ describe('Kennzahlkachel', () => {
 
     expect(screen.queryByTestId('kennzahlkachel-zweitzeile')).not.toBeInTheDocument();
   });
+
+  it('zeigt die Drittzeile unter der Zweitzeile, wo sie uebergeben ist (#284)', () => {
+    renderMitTheme(
+      <Kennzahlkachel
+        toenung="salbei"
+        symbol={<span>€</span>}
+        beschriftung="Abgerechnet"
+        zahl="1.800,00 €"
+        zweitzeile="2.142,00 € brutto"
+        drittzeile="davon offen: 360,00 € (1 Rechnung)"
+      />,
+    );
+
+    const zweite = screen.getByTestId('kennzahlkachel-zweitzeile');
+    const dritte = screen.getByTestId('kennzahlkachel-drittzeile');
+    expect(dritte).toHaveTextContent('davon offen: 360,00 € (1 Rechnung)');
+    // Die Reihenfolge ist Teil der Zusage: Das Offene erklaert die Zahlen darueber.
+    expect(zweite.compareDocumentPosition(dritte) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('laesst die Drittzeile weg, wo keine uebergeben ist (#284)', () => {
+    renderMitTheme(
+      <Kennzahlkachel
+        toenung="salbei"
+        symbol={<span>€</span>}
+        beschriftung="Abgerechnet"
+        zahl="1.800,00 €"
+        zweitzeile="2.142,00 € brutto"
+      />,
+    );
+
+    expect(screen.queryByTestId('kennzahlkachel-drittzeile')).not.toBeInTheDocument();
+  });
+
+  it('zeigt die Drittzeile auch ohne Zweitzeile — beide stehen fuer sich', () => {
+    renderMitTheme(
+      <Kennzahlkachel
+        toenung="salbei"
+        symbol={<span>€</span>}
+        beschriftung="Abgerechnet"
+        zahl="1.800,00 €"
+        drittzeile="davon offen: 360,00 € (1 Rechnung)"
+      />,
+    );
+
+    expect(screen.queryByTestId('kennzahlkachel-zweitzeile')).not.toBeInTheDocument();
+    expect(screen.getByTestId('kennzahlkachel-drittzeile')).toBeInTheDocument();
+  });
 });

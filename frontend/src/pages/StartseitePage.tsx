@@ -56,6 +56,12 @@ import { RADIUS_RUND, ZAHLEN_KLASSE } from '../theme';
  * eine weiche Taste auf `/rechnungen`, statt sie hier ein zweites Mal zu holen. Bei Jahreswahl
  * stehen darueber die Monate des Jahres mit ihrer Summe (Plan #274, E11, E13, E14).
  *
+ * <b>Was von „Abgerechnet" noch offen ist, steht an zwei Stellen</b> (Issue #284): als dritte Zeile
+ * der Kachel, in Jahres- wie in Monatsansicht, und als Spalte „Offen" der Monatsliste samt ihrer
+ * Summe. Beide fehlen bzw. tragen einen Gedankenstrich, wo nichts offen ist — so faellt das Offene
+ * genau dann auf, wenn es eines gibt. Die grosse Zahl der Kachel bleibt unberuehrt: Sie ist der
+ * Umsatz des Zeitraums nach Rechnungsdatum, nicht der Zahlungseingang.
+ *
  * <b>Die internen Stunden stehen unter den Kacheln und nicht darin</b> (#207, Kriterium 9): Die
  * Kachelreihe traegt Betraege, interne Arbeit traegt keinen Preis. Eine Stundenzahl zwischen drei
  * Euro-Kacheln laese sich wie eine vierte Kennzahl in Euro.
@@ -121,7 +127,15 @@ const LEER_OFFEN = 'Nichts offen — alle erfasste Zeit ist abgerechnet.';
 
 const SPALTEN_IN_ARBEIT: readonly string[] = ['Firma', 'Angebot', 'Status'];
 const SPALTEN_OFFEN: readonly string[] = ['Firma', 'Angebot', 'Anteil'];
-const SPALTEN_ABGERECHNET: readonly string[] = ['Monat', 'Rechnungen', 'Netto', 'Brutto'];
+const SPALTEN_ABGERECHNET: readonly string[] = ['Monat', 'Rechnungen', 'Netto', 'Brutto', 'Offen'];
+
+/**
+ * Was an der Stelle eines offenen Betrags steht, wo nichts offen ist (#284).
+ *
+ * Ein Gedankenstrich und keine 0,00 €: So faellt das Offene genau dort auf, wo es eines gibt — in
+ * einer Spalte voller Nullen verschwaende es zwischen ihnen.
+ */
+const KEIN_OFFENES = '—';
 
 /**
  * Die Gestalt der Kopfzelle der Summenzeile — wie `Monatssumme` in {@link ArbeitszeitPage} (E14).
@@ -139,6 +153,21 @@ const SUMMENKOPF = {
 
 /** Die Gestalt einer Betragszelle der Summenzeile. */
 const SUMMENBETRAG = { fontWeight: 700, whiteSpace: 'nowrap', textAlign: 'right' } as const;
+
+/** Dieselbe Gestalt in einer Datenzeile — ohne das Gewicht der Summe (#284). */
+const ZEILENBETRAG = { whiteSpace: 'nowrap', textAlign: 'right' } as const;
+
+/**
+ * Die Beschriftung der Kachelzeile „davon offen" (#284).
+ *
+ * <b>Hier entsteht keine Zahl</b> — Betrag und Anzahl kommen aus der Antwort; gesetzt wird nur das
+ * Wort dazu. Die Mehrzahl steht ausgeschrieben und nicht als „Rechnung(en)": Ein Satz mit Klammer
+ * liest sich vorgelesen wie ein Formular.
+ */
+function offenWort(nettoInCent: number, anzahl: number): string {
+  const rechnungen = anzahl === 1 ? '1 Rechnung' : `${String(anzahl)} Rechnungen`;
+  return `davon offen: ${euro(nettoInCent)} (${rechnungen})`;
+}
 
 /** Die Symbolgroesse in den Kacheln (CLAUDE-design.md, „Bausteine": Symbolfeld 48 px). */
 const SYMBOL_KACHEL = 22;
@@ -266,6 +295,13 @@ function Kacheln({ geschaeft }: { readonly geschaeft: Startseitenstand }) {
         beschriftung={TITEL_ABGERECHNET}
         zahl={euro(geschaeft.abgerechnet.nettoInCent)}
         zweitzeile={`${euro(geschaeft.abgerechnet.bruttoInCent)} brutto`}
+        // Entschieden an der Anzahl und nicht am Betrag: „Es gibt eine offene Rechnung" ist die
+        // Aussage, und eine offene Rechnung ueber 0,00 € soll nicht stillschweigend verschwinden.
+        drittzeile={
+          geschaeft.abgerechnet.offenAnzahl === 0
+            ? undefined
+            : offenWort(geschaeft.abgerechnet.offenNettoInCent, geschaeft.abgerechnet.offenAnzahl)
+        }
       />
     </Box>
   );
@@ -351,6 +387,49 @@ function OffenZeile({ zeile }: { readonly zeile: Anteilszeile }) {
 }
 
 /**
+ * Die Zelle der Spalte „Offen" — fuer eine Monatszeile wie fuer die Summenzeile (#284).
+ *
+ * <b>Ein Betrag ueber 0 ist hervorgehoben</b>, und zwar in der Melderfarbe Bernstein, die laut
+ * CLAUDE-design.md „Grenze erreicht, bald faellig" bedeutet und auf der Flaeche der Tafel AA
+ * erreicht (5,25:1). Steht nichts offen, traegt die Zelle den Gedankenstrich in der matten Schrift:
+ * Ein mattes Zeichen ist keine Meldung, und genau das ist hier die Aussage.
+ *
+ * <b>Die Farbe traegt die Aussage nicht allein</b> (CLAUDE-design.md, „Zustandsformen"): Der
+ * Unterschied zwischen „360,00 €" und „—" steht im Text und ist auch ohne Farbwahrnehmung zu lesen.
+ * Das Attribut `data-offen` sagt dasselbe maschinenlesbar — daran prueft der Test die
+ * Hervorhebung, ohne einen Farbwert abzuschreiben.
+ *
+ * Die Gestalt kommt als `sx` herein, weil die Summenzeile ihr eigenes Gewicht traegt.
+ */
+function OffenZelle({
+  nettoInCent,
+  anzahl,
+  gestalt,
+}: {
+  readonly nettoInCent: number;
+  readonly anzahl: number;
+  readonly gestalt: Record<string, unknown>;
+}) {
+  const offen = anzahl > 0;
+  return (
+    <Box
+      component="td"
+      className={ZAHLEN_KLASSE}
+      data-offen={offen ? 'ja' : 'nein'}
+      sx={(theme) => ({
+        ...gestalt,
+        color: offen
+          ? theme.vars.palette.kupferwolke.melder.bernstein
+          : theme.vars.palette.kupferwolke.textMatt,
+        fontWeight: offen ? 700 : undefined,
+      })}
+    >
+      {offen ? euro(nettoInCent) : KEIN_OFFENES}
+    </Box>
+  );
+}
+
+/**
  * Ein Monat des gewaehlten Jahres: Monatsname, Zahl der Rechnungen, netto, brutto (#273, 7).
  *
  * <b>Der Monatsname ist ein Link</b> auf `/?zeitraum=JJJJ-MM` und kein Schalter (Plan #274, E13) —
@@ -394,6 +473,11 @@ function AbrechnungsmonatZeile({ zeile }: { readonly zeile: Monatszeile }) {
       >
         {euro(zeile.bruttoInCent)}
       </Box>
+      <OffenZelle
+        nettoInCent={zeile.offenNettoInCent}
+        anzahl={zeile.offenAnzahl}
+        gestalt={ZEILENBETRAG}
+      />
     </Box>
   );
 }
@@ -420,6 +504,11 @@ function Jahressumme({ geschaeft }: { readonly geschaeft: Startseitenstand }) {
       <Box component="td" className={ZAHLEN_KLASSE} sx={SUMMENBETRAG}>
         {euro(geschaeft.abgerechnet.bruttoInCent)}
       </Box>
+      <OffenZelle
+        nettoInCent={geschaeft.abgerechnet.offenNettoInCent}
+        anzahl={geschaeft.abgerechnet.offenAnzahl}
+        gestalt={SUMMENBETRAG}
+      />
     </Box>
   );
 }

@@ -36,7 +36,14 @@ const STAND = {
       },
     ],
   },
-  abgerechnet: { netto: 1800, brutto: 2142, anzahl: 2, monate: [] },
+  abgerechnet: {
+    netto: 1800,
+    brutto: 2142,
+    anzahl: 2,
+    offenNetto: 360,
+    offenAnzahl: 1,
+    monate: [],
+  },
   interneStundenImZeitraum: 12.5,
 };
 
@@ -48,9 +55,11 @@ const JAHRESSTAND = {
     netto: 5400,
     brutto: 6426,
     anzahl: 5,
+    offenNetto: 1800,
+    offenAnzahl: 2,
     monate: [
-      { monat: '2026-03', anzahl: 3, netto: 3600, brutto: 4284 },
-      { monat: '2026-09', anzahl: 2, netto: 1800, brutto: 2142 },
+      { monat: '2026-03', anzahl: 3, netto: 3600, brutto: 4284, offenNetto: 0, offenAnzahl: 0 },
+      { monat: '2026-09', anzahl: 2, netto: 1800, brutto: 2142, offenNetto: 1800, offenAnzahl: 2 },
     ],
   },
 };
@@ -73,6 +82,8 @@ describe('parseStartseitenstand', () => {
       nettoInCent: 180000,
       bruttoInCent: 214200,
       anzahl: 2,
+      offenNettoInCent: 36000,
+      offenAnzahl: 1,
       monate: [],
     });
   });
@@ -85,9 +96,25 @@ describe('parseStartseitenstand', () => {
       nettoInCent: 540000,
       bruttoInCent: 642600,
       anzahl: 5,
+      offenNettoInCent: 180000,
+      offenAnzahl: 2,
       monate: [
-        { monat: '2026-03', anzahl: 3, nettoInCent: 360000, bruttoInCent: 428400 },
-        { monat: '2026-09', anzahl: 2, nettoInCent: 180000, bruttoInCent: 214200 },
+        {
+          monat: '2026-03',
+          anzahl: 3,
+          nettoInCent: 360000,
+          bruttoInCent: 428400,
+          offenNettoInCent: 0,
+          offenAnzahl: 0,
+        },
+        {
+          monat: '2026-09',
+          anzahl: 2,
+          nettoInCent: 180000,
+          bruttoInCent: 214200,
+          offenNettoInCent: 180000,
+          offenAnzahl: 2,
+        },
       ],
     });
   });
@@ -184,6 +211,58 @@ describe('parseStartseitenstand', () => {
       nichtAbgerechnet: {
         ...STAND.nichtAbgerechnet,
         angebote: [{ ...STAND.nichtAbgerechnet.angebote[0], netto: 1.005 }],
+      },
+    };
+
+    expect(() => parseStartseitenstand(kaputt)).toThrow(TypeError);
+  });
+
+  it('liest den offenen Anteil als ganze Cent und die Zahl der offenen Rechnungen (#284)', () => {
+    const gelesen = parseStartseitenstand(STAND);
+
+    expect(gelesen.abgerechnet.offenNettoInCent).toBe(36000);
+    expect(gelesen.abgerechnet.offenAnzahl).toBe(1);
+  });
+
+  it('liest „nichts offen" als 0 und nicht als fehlendes Feld (#284)', () => {
+    const bezahlt = { ...STAND, abgerechnet: { ...STAND.abgerechnet, offenNetto: 0, offenAnzahl: 0 } };
+
+    const gelesen = parseStartseitenstand(bezahlt);
+
+    expect(gelesen.abgerechnet.offenNettoInCent).toBe(0);
+    expect(gelesen.abgerechnet.offenAnzahl).toBe(0);
+  });
+
+  it('scheitert, wo der offene Betrag fehlt — eine halb gelesene Kennzahl geht nicht weiter', () => {
+    const kaputt = { ...STAND, abgerechnet: { ...STAND.abgerechnet, offenNetto: undefined } };
+
+    expect(() => parseStartseitenstand(kaputt)).toThrow(TypeError);
+  });
+
+  it('scheitert, wo die Zahl der offenen Rechnungen keine Zahl ist', () => {
+    const kaputt = { ...STAND, abgerechnet: { ...STAND.abgerechnet, offenAnzahl: '1' } };
+
+    expect(() => parseStartseitenstand(kaputt)).toThrow(TypeError);
+  });
+
+  it('scheitert, wo eine Monatszeile den offenen Betrag mit drei Nachkommastellen traegt', () => {
+    const kaputt = {
+      ...JAHRESSTAND,
+      abgerechnet: {
+        ...JAHRESSTAND.abgerechnet,
+        monate: [{ ...JAHRESSTAND.abgerechnet.monate[0], offenNetto: 1.005 }],
+      },
+    };
+
+    expect(() => parseStartseitenstand(kaputt)).toThrow(TypeError);
+  });
+
+  it('scheitert, wo die Zahl der offenen Rechnungen einer Monatszeile fehlt', () => {
+    const kaputt = {
+      ...JAHRESSTAND,
+      abgerechnet: {
+        ...JAHRESSTAND.abgerechnet,
+        monate: [{ ...JAHRESSTAND.abgerechnet.monate[0], offenAnzahl: null }],
       },
     };
 

@@ -41,6 +41,11 @@ import org.mwolff.fbcrm.rechnung.domain.Rechnungszustand;
  * <p>Eine <b>nachgetragene</b> Rechnung zaehlt in die Abrechnung des Monats ihres Rechnungsdatums
  * mit Netto und Brutto wie erfasst; die Mengen je Angebotsposition beruehrt sie nicht, denn sie
  * gehoert zu keinem Angebot (Plan #259, E20; #254, Kriterien 9 und 11).
+ *
+ * <p>Dazu, <b>wie viel davon noch offen ist</b> (Issue #284): Eine gestellte Rechnung traegt ihr
+ * Netto und eine 1 in die offenen Felder, eine bezahlte und eine abgeschriebene nichts — und das an
+ * beiden Aggregaten gleich, der geschriebenen Rechnung wie dem Nachtrag. „Abgerechnet" bleibt davon
+ * unberuehrt: Es zaehlt den Umsatz nach Rechnungsdatum und nicht den Zahlungseingang.
  */
 @ExtendWith(MockitoExtension.class)
 class RechnungsauskunftTest {
@@ -330,13 +335,16 @@ class RechnungsauskunftTest {
   void gestellte_thenTheMapsAreCopiesAndTheCallerCannotChangeThem() {
     // Given — die Abbildungen aus dem kompakten Konstruktor.
     final Map<YearMonth, Monatsabrechnung> monate = new HashMap<>();
-    monate.put(SEPTEMBER, new Monatsabrechnung(new BigDecimal("0.00"), new BigDecimal("0.00"), 0));
+    monate.put(
+        SEPTEMBER,
+        new Monatsabrechnung(
+            new BigDecimal("0.00"), new BigDecimal("0.00"), 0, new BigDecimal("0.00"), 0));
     final Map<Long, BigDecimal> eigene = new HashMap<>();
     eigene.put(Long.valueOf(Rechnungsdoppel.BERATUNG_ID), new BigDecimal("80.00"));
     final Gestellte gestellte = new Gestellte(monate, eigene);
 
     // When — der Aufrufer veraendert seine Abbildungen weiter.
-    monate.put(OKTOBER, new Monatsabrechnung(BigDecimal.ONE, BigDecimal.ONE, 1));
+    monate.put(OKTOBER, new Monatsabrechnung(BigDecimal.ONE, BigDecimal.ONE, 1, BigDecimal.ONE, 1));
     eigene.put(Long.valueOf(Rechnungsdoppel.PAUSCHALE_ID), BigDecimal.ONE);
 
     // Then
@@ -346,6 +354,136 @@ class RechnungsauskunftTest {
         .isInstanceOf(UnsupportedOperationException.class);
     assertThatThrownBy(() -> gestellte.mengenJePosition().clear())
         .isInstanceOf(UnsupportedOperationException.class);
+  }
+
+  @Test
+  void gestellte_withAGestellteRechnung_thenItsNettoAndOneStandAsOffen() {
+    // Given — eine gestellte, nicht bezahlte Rechnung ueber 360,00 € netto (Issue #284).
+    gegebenerAktuellerSatz("19.00");
+    when(rechnungen.findAlle())
+        .thenReturn(
+            List.of(
+                Rechnungsdoppel.gestellt(
+                    1L,
+                    Rechnungsdoppel.ANGEBOT,
+                    "R26-0001",
+                    List.of(Rechnungsdoppel.beratung("100.00", new BigDecimal("3.60"))),
+                    ERSTER_OKTOBER)));
+
+    // When
+    final Monatsabrechnung imMonat = auskunft.gestellte().jeMonat().get(OKTOBER);
+
+    // Then — dasselbe Netto steht in beiden Feldern: Was gestellt und nicht bezahlt ist, ist offen.
+    assertThat(imMonat.netto()).isEqualByComparingTo("360.00");
+    assertThat(imMonat.offenNetto()).isEqualByComparingTo("360.00");
+    assertThat(imMonat.offenAnzahl()).isEqualTo(1);
+  }
+
+  @Test
+  void gestellte_withABezahlteRechnung_thenItCountsButIsNoLongerOffen() {
+    // Given — dieselbe Rechnung, inzwischen bezahlt (Issue #284).
+    gegebenerAktuellerSatz("19.00");
+    when(rechnungen.findAlle())
+        .thenReturn(
+            List.of(
+                Rechnungsdoppel.gestellt(
+                        1L,
+                        Rechnungsdoppel.ANGEBOT,
+                        "R26-0001",
+                        List.of(Rechnungsdoppel.beratung("100.00", new BigDecimal("3.60"))),
+                        ERSTER_OKTOBER)
+                    .mitZustand(Rechnungszustand.BEZAHLT, Rechnungsdoppel.ANGELEGT)));
+
+    // When
+    final Monatsabrechnung imMonat = auskunft.gestellte().jeMonat().get(OKTOBER);
+
+    // Then — „Abgerechnet" bleibt unveraendert, das Offene ist weg.
+    assertThat(imMonat.netto()).isEqualByComparingTo("360.00");
+    assertThat(imMonat.anzahl()).isEqualTo(1);
+    assertThat(imMonat.offenNetto()).isEqualByComparingTo("0.00");
+    assertThat(imMonat.offenAnzahl()).isZero();
+  }
+
+  @Test
+  void gestellte_withAnAbgeschriebeneRechnung_thenItCountsButIsNoLongerOffen() {
+    // Given — dieselbe Rechnung, abgeschrieben: Sie kommt nicht mehr herein (Issue #284).
+    gegebenerAktuellerSatz("19.00");
+    when(rechnungen.findAlle())
+        .thenReturn(
+            List.of(
+                Rechnungsdoppel.gestellt(
+                        1L,
+                        Rechnungsdoppel.ANGEBOT,
+                        "R26-0001",
+                        List.of(Rechnungsdoppel.beratung("100.00", new BigDecimal("3.60"))),
+                        ERSTER_OKTOBER)
+                    .mitZustand(Rechnungszustand.ABGESCHRIEBEN, Rechnungsdoppel.ANGELEGT)));
+
+    // When
+    final Monatsabrechnung imMonat = auskunft.gestellte().jeMonat().get(OKTOBER);
+
+    // Then — sie zaehlt im Umsatz des Monats und steht nicht als offener Posten da.
+    assertThat(imMonat.netto()).isEqualByComparingTo("360.00");
+    assertThat(imMonat.anzahl()).isEqualTo(1);
+    assertThat(imMonat.offenNetto()).isEqualByComparingTo("0.00");
+    assertThat(imMonat.offenAnzahl()).isZero();
+  }
+
+  @Test
+  void gestellte_withAnEntwurf_thenItIsNeitherAbgerechnetNorOffen() {
+    // Given — ein Entwurf allein: Er ist nicht draussen und darum auch nichts Offenes (Issue #284).
+    gegebenerAktuellerSatz("19.00");
+    when(rechnungen.findAlle())
+        .thenReturn(
+            List.of(Rechnungsdoppel.entwurf(1L, List.of(Rechnungsdoppel.beratung("50.00")))));
+
+    // When
+    final Gestellte gestellte = auskunft.gestellte();
+
+    // Then — kein Monatsschluessel, also auch kein offener Posten.
+    assertThat(gestellte.jeMonat()).isEmpty();
+  }
+
+  @Test
+  void gestellte_withANachgetrageneRechnung_thenItIsOffenLikeAWrittenOne() {
+    // Given — zwei Nachtraege im Oktober, einer gestellt und einer bezahlt (Issue #284).
+    gegebenerAktuellerSatz("19.00");
+    when(rechnungen.findAlle()).thenReturn(List.of());
+    when(nachtraege.findAlle())
+        .thenReturn(
+            List.of(
+                Rechnungsdoppel.nachgetragen(1L, "AR-1", ERSTER_OKTOBER, "360.00", "428.40", null),
+                Rechnungsdoppel.nachgetragen(2L, "AR-2", ERSTER_OKTOBER, "500.00", "595.00", null)
+                    .mitZustand(Rechnungszustand.BEZAHLT, Rechnungsdoppel.ANGELEGT)));
+
+    // When
+    final Monatsabrechnung imMonat = auskunft.gestellte().jeMonat().get(OKTOBER);
+
+    // Then — beide zaehlen in „Abgerechnet", offen ist allein der gestellte Nachtrag.
+    assertThat(imMonat.netto()).isEqualByComparingTo("860.00");
+    assertThat(imMonat.anzahl()).isEqualTo(2);
+    assertThat(imMonat.offenNetto()).isEqualByComparingTo("360.00");
+    assertThat(imMonat.offenAnzahl()).isEqualTo(1);
+  }
+
+  @Test
+  void gestellte_withAnAbgeschriebeneNachgetrageneRechnung_thenItIsNotOffen() {
+    // Given — ein abgeschriebener Nachtrag; der Ausgang zaehlt an beiden Aggregaten gleich.
+    gegebenerAktuellerSatz("19.00");
+    when(rechnungen.findAlle()).thenReturn(List.of());
+    when(nachtraege.findAlle())
+        .thenReturn(
+            List.of(
+                Rechnungsdoppel.nachgetragen(1L, "AR-1", ERSTER_OKTOBER, "360.00", "428.40", null)
+                    .mitZustand(Rechnungszustand.ABGESCHRIEBEN, Rechnungsdoppel.ANGELEGT)));
+
+    // When
+    final Monatsabrechnung imMonat = auskunft.gestellte().jeMonat().get(OKTOBER);
+
+    // Then
+    assertThat(imMonat.netto()).isEqualByComparingTo("360.00");
+    assertThat(imMonat.offenNetto()).isEqualByComparingTo("0.00");
+    assertThat(imMonat.offenAnzahl()).isZero();
   }
 
   @Test
@@ -409,16 +547,26 @@ class RechnungsauskunftTest {
     final Gestellte gestellte = auskunft.gestellte();
 
     // Then — im September 8.000,00 + 1.000,00 netto, 8.560,00 + 1.190,01 brutto wie erfasst, zwei
-    // Rechnungen; der Nachtrag vom Oktober steht im Oktober. Die Mengen bleiben die der
-    // geschriebenen Rechnung.
+    // Rechnungen; der Nachtrag vom Oktober steht im Oktober. Offen ist im September allein die
+    // geschriebene Rechnung — der Nachtrag ist bezahlt. Die Mengen bleiben die der geschriebenen.
     assertThat(gestellte.jeMonat())
         .containsOnly(
             Map.entry(
                 SEPTEMBER,
-                new Monatsabrechnung(new BigDecimal("9000.00"), new BigDecimal("9750.01"), 2)),
+                new Monatsabrechnung(
+                    new BigDecimal("9000.00"),
+                    new BigDecimal("9750.01"),
+                    2,
+                    new BigDecimal("8000.00"),
+                    1)),
             Map.entry(
                 OKTOBER,
-                new Monatsabrechnung(new BigDecimal("500.00"), new BigDecimal("595.00"), 1)));
+                new Monatsabrechnung(
+                    new BigDecimal("500.00"),
+                    new BigDecimal("595.00"),
+                    1,
+                    new BigDecimal("500.00"),
+                    1)));
     assertThat(gestellte.mengenJePosition())
         .containsOnly(
             Map.entry(Long.valueOf(Rechnungsdoppel.BERATUNG_ID), new BigDecimal("80.00")));
@@ -444,7 +592,12 @@ class RechnungsauskunftTest {
         .containsOnly(
             Map.entry(
                 OKTOBER,
-                new Monatsabrechnung(new BigDecimal("500.00"), new BigDecimal("595.00"), 1)));
+                new Monatsabrechnung(
+                    new BigDecimal("500.00"),
+                    new BigDecimal("595.00"),
+                    1,
+                    new BigDecimal("500.00"),
+                    1)));
     assertThat(gestellte.mengenJePosition()).isEmpty();
   }
 }

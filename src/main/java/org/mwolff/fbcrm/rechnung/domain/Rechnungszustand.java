@@ -14,6 +14,11 @@ package org.mwolff.fbcrm.rechnung.domain;
  * stand, fragt darum diese Methode: Sonst gaebe eine bezahlte Rechnung ihre Positionsmengen frei,
  * verschwaende aus der Monatsabrechnung und verlore ihr Dokument.
  *
+ * <p><b>Offen ist dagegen allein Gestellt</b> ({@link #istOffen()}, Issue #284): Wer wissen will,
+ * wo noch Geld fehlt, fragt nicht nach der Festschreibung, sondern nach dem Ausgang. Die beiden
+ * Fragen stehen nebeneinander, weil sie Verschiedenes beantworten — „ist draussen" und „ist
+ * bezahlt".
+ *
  * <p>Ein Zahlungsdatum oder ein gezahlter Betrag steht nicht dabei: Der Zahlungseingang liegt laut
  * CLAUDE.md ausserhalb des Umfangs.
  *
@@ -44,6 +49,26 @@ public enum Rechnungszustand {
    */
   public boolean istGestellt() {
     return this != ENTWURF;
+  }
+
+  /**
+   * Ob die Forderung noch offen ist — allein {@link #GESTELLT} (Issue #284).
+   *
+   * <p>Die zweite Frage neben {@link #istGestellt()}, und beide sagen Verschiedenes: Jene sagt,
+   * dass die Rechnung draussen ist und darum in den Umsatz des Monats zaehlt, diese, dass noch Geld
+   * fehlt. Die Startseite braucht beide — „Abgerechnet" fragt die erste, „davon offen" die zweite.
+   *
+   * <p><b>Abgeschrieben ist nicht offen.</b> Die Forderung kommt nicht mehr herein; sie als offen
+   * zu zeigen hiesse, auf Geld zu warten, das niemand mehr schickt. Der Entwurf ist es ebenso nicht
+   * — er ist noch gar nicht draussen.
+   *
+   * <p>Hier wird der eine Zustand genannt und nicht die Gegenseite aufgezaehlt, anders als in
+   * {@link #istGestellt()}: „Offen" ist der Zustand vor jedem Ausgang, und ein spaeterer fuenfter
+   * waere wieder ein Ausgang. Er faellt damit von selbst unter „nicht offen" — und das ist die
+   * vorsichtige Seite: Eine Kennzahl, die zu wenig Offenes zeigt, erfindet keinen Posten.
+   */
+  public boolean istOffen() {
+    return this == GESTELLT;
   }
 
   /**

@@ -8,12 +8,16 @@ import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.EnumSource;
 
 /**
- * Die vier Zustaende einer Rechnung und die eine Frage, die sie beantworten (Issue #253).
+ * Die vier Zustaende einer Rechnung und die zwei Fragen, die sie beantworten (Issue #253, #284).
  *
  * <p>Gegenstand ist {@link Rechnungszustand#istGestellt()}: Bezahlt und Abgeschrieben sind
  * weiterhin gestellte Rechnungen — sie behalten Nummer, Dokument und ihre abgerechneten Mengen, und
  * jede Pruefung, die bisher auf {@code == GESTELLT} stand, fragt diese Methode. Ohne sie gaeben
  * bezahlte Rechnungen ihre Positionsmengen frei und verschwaenden aus der Monatsabrechnung.
+ *
+ * <p>Daneben {@link Rechnungszustand#istOffen()}: Offen ist allein {@code GESTELLT} — die Frage der
+ * Startseite nach dem, worauf noch Geld fehlt (Issue #284). Beide Fragen zusammen unterscheiden
+ * „ist draussen" von „ist bezahlt".
  *
  * <p>Dazu die Kantenregel {@link Rechnungszustand#ausgangswechselErlaubt}, die die Rechnung und die
  * nachgetragene Rechnung gleichermassen fragen (Plan #259, E4).
@@ -31,6 +35,24 @@ class RechnungszustandTest {
   @Test
   void istGestellt_givenEntwurf_thenFalse() {
     assertThat(Rechnungszustand.ENTWURF.istGestellt()).isFalse();
+  }
+
+  @Test
+  void istOffen_givenGestellt_thenTrue() {
+    assertThat(Rechnungszustand.GESTELLT.istOffen()).isTrue();
+  }
+
+  /**
+   * Die Gegenseite von {@link Rechnungszustand#istOffen()}, aufgezaehlt und nicht negiert: Der
+   * Entwurf ist noch nicht draussen, die bezahlte Forderung ist erledigt, und die abgeschriebene
+   * kommt nicht mehr herein (Issue #284).
+   */
+  @ParameterizedTest
+  @EnumSource(
+      value = Rechnungszustand.class,
+      names = {"ENTWURF", "BEZAHLT", "ABGESCHRIEBEN"})
+  void istOffen_givenEveryOtherState_thenFalse(final Rechnungszustand zustand) {
+    assertThat(zustand.istOffen()).isFalse();
   }
 
   /**

@@ -46,8 +46,8 @@ import org.mwolff.fbcrm.startseite.application.Zeitraum;
  * @param waehlbar die waehlbaren Jahre und Monate
  * @param inArbeit die Angebote im Status „bestellt" oder „erledigt", neueste zuerst
  * @param nichtAbgerechnet was aus erfasster Arbeitszeit noch abzurechnen ist
- * @param abgerechnet Netto, Brutto und Anzahl der im Zeitraum gestellten Rechnungen, bei einem Jahr
- *     samt seinen Monaten
+ * @param abgerechnet Netto, Brutto, Anzahl und der noch offene Anteil der im Zeitraum gestellten
+ *     Rechnungen, bei einem Jahr samt seinen Monaten
  * @param interneStundenImZeitraum die im gewaehlten Zeitraum auf interne Angebote gebuchten Stunden
  */
 public record StartseiteResponse(
@@ -174,14 +174,27 @@ public record StartseiteResponse(
    * <p>Die Monatszeilen stehen in der Kennzahl, weil sie ihre Herkunft sind (Plan #274, E11). Bei
    * Monatswahl ist die Liste leer und nicht {@code null}.
    *
+   * <p><b>Das Offene steht daneben und nicht darin</b> (Issue #284): {@code netto} bleibt der
+   * Umsatz des Zeitraums nach Rechnungsdatum — eine bezahlte Rechnung zaehlt dort weiter mit —, und
+   * {@code offenNetto} sagt, wie viel davon noch nicht bezahlt ist. Beide Betraege sind netto; die
+   * Ansicht stellt sie untereinander, und zwei Einheiten nebeneinander waeren dort nicht zu lesen.
+   *
    * @param netto die Summe der Netto-Betraege der im Zeitraum gestellten Rechnungen
    * @param brutto die Summe ihrer Brutto-Betraege, jeder mit dem Satz seiner Rechnung
    * @param anzahl die Zahl dieser Rechnungen
+   * @param offenNetto die Summe der Netto-Betraege derjenigen, die noch offen sind; 0,00 ohne eine
+   *     solche
+   * @param offenAnzahl die Zahl dieser offenen Rechnungen
    * @param monate bei Jahreswahl je Monat mit mindestens einer gestellten Rechnung eine Zeile,
    *     aeltester zuerst; bei Monatswahl leer
    */
   public record AbgerechnetResponse(
-      BigDecimal netto, BigDecimal brutto, int anzahl, List<Monatszeile> monate) {
+      BigDecimal netto,
+      BigDecimal brutto,
+      int anzahl,
+      BigDecimal offenNetto,
+      int offenAnzahl,
+      List<Monatszeile> monate) {
 
     static AbgerechnetResponse of(final Abgerechnet abgerechnet) {
       final Monatsabrechnung summe = abgerechnet.summe();
@@ -189,6 +202,8 @@ public record StartseiteResponse(
           summe.netto(),
           summe.brutto(),
           summe.anzahl(),
+          summe.offenNetto(),
+          summe.offenAnzahl(),
           abgerechnet.monate().stream().map(Monatszeile::of).toList());
     }
   }
@@ -200,13 +215,27 @@ public record StartseiteResponse(
    * @param anzahl die Zahl der in ihm gestellten Rechnungen
    * @param netto die Summe ihrer Netto-Betraege
    * @param brutto die Summe ihrer Brutto-Betraege
+   * @param offenNetto die Summe der Netto-Betraege derjenigen, die noch offen sind (Issue #284);
+   *     0,00 in einem Monat, dessen Rechnungen alle bezahlt oder abgeschrieben sind
+   * @param offenAnzahl die Zahl dieser offenen Rechnungen
    */
-  public record Monatszeile(YearMonth monat, int anzahl, BigDecimal netto, BigDecimal brutto) {
+  public record Monatszeile(
+      YearMonth monat,
+      int anzahl,
+      BigDecimal netto,
+      BigDecimal brutto,
+      BigDecimal offenNetto,
+      int offenAnzahl) {
 
     static Monatszeile of(final Abrechnungsmonat zeile) {
       final Monatsabrechnung abrechnung = zeile.abrechnung();
       return new Monatszeile(
-          zeile.monat(), abrechnung.anzahl(), abrechnung.netto(), abrechnung.brutto());
+          zeile.monat(),
+          abrechnung.anzahl(),
+          abrechnung.netto(),
+          abrechnung.brutto(),
+          abrechnung.offenNetto(),
+          abrechnung.offenAnzahl());
     }
   }
 }

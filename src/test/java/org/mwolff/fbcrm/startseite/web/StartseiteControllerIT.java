@@ -15,6 +15,7 @@ import org.mwolff.fbcrm.auth.domain.AccountRepository;
 import org.mwolff.fbcrm.auth.domain.PasswordHasher;
 import org.mwolff.fbcrm.auth.domain.Role;
 import org.mwolff.fbcrm.common.Geschaeftszone;
+import org.mwolff.fbcrm.rechnung.domain.Rechnungszustand;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.http.HttpEntity;
@@ -40,6 +41,10 @@ import org.springframework.jdbc.core.JdbcTemplate;
  * er zeigt, dass die Startseite auch ohne einen einzigen Datensatz antwortet und nicht auf eine
  * leere Liste faellt. Nur wo ein Monat waehlbar sein muss oder die Jahreswahl ihre Monate zeigen
  * soll, liegen gestellte Rechnungen darin.
+ *
+ * <p>Eine Ausnahme ist der offene Anteil (Issue #284): Dass der Zustand einer Rechnung aus der
+ * Spalte {@code rechnung.zustand} bis in {@code offenNetto} und {@code offenAnzahl} der Antwort
+ * trifft, laesst sich nur hier belegen — eine bezahlte und eine offene Rechnung im selben Monat.
  */
 class StartseiteControllerIT extends AbstractIntegrationTest {
 
@@ -143,6 +148,8 @@ class StartseiteControllerIT extends AbstractIntegrationTest {
     assertThat(stand.abgerechnet().netto()).isEqualByComparingTo("0.00");
     assertThat(stand.abgerechnet().brutto()).isEqualByComparingTo("0.00");
     assertThat(stand.abgerechnet().anzahl()).isZero();
+    assertThat(stand.abgerechnet().offenNetto()).isEqualByComparingTo("0.00");
+    assertThat(stand.abgerechnet().offenAnzahl()).isZero();
     assertThat(stand.abgerechnet().monate()).isEmpty();
     assertThat(stand.interneStundenImZeitraum()).isEqualByComparingTo("0.00");
   }
@@ -253,6 +260,53 @@ class StartseiteControllerIT extends AbstractIntegrationTest {
     assertThat(stand.abgerechnet().monate().get(1).brutto()).isEqualByComparingTo("238.00");
   }
 
+  /**
+   * Der offene Anteil ueber den ganzen Weg — Issue #284.
+   *
+   * <p>Zwei gestellte Rechnungen im Januar, eine davon bezahlt: Nur so zeigt der Lauf, dass der
+   * Zustand aus der Datenbank bis in die Antwort trifft. {@code netto} zaehlt beide, {@code
+   * offenNetto} nur die offene, und das in der Summe wie in der Monatszeile.
+   */
+  @Test
+  void stand_givenAPaidAndAnOpenInvoice_thenOffenNettoAndOffenAnzahlCountOnlyTheOpenOne() {
+    // Given — im Januar 1 h offen und 2 h bezahlt, je 100,00 netto zu 19 %.
+    final Year jahr = Year.now(Geschaeftszone.ZONE);
+    final YearMonth januar = jahr.atMonth(1);
+    gestellteRechnungAm(januar, "RE-1", "1");
+    gestellteRechnungAm(januar, "RE-2", "2", Rechnungszustand.BEZAHLT);
+
+    // When
+    final StartseiteResponse stand =
+        Objects.requireNonNull(ruf(PFAD + "?zeitraum=" + jahr, StartseiteResponse.class).getBody());
+
+    // Then
+    assertThat(stand.abgerechnet().netto()).isEqualByComparingTo("300.00");
+    assertThat(stand.abgerechnet().anzahl()).isEqualTo(2);
+    assertThat(stand.abgerechnet().offenNetto()).isEqualByComparingTo("100.00");
+    assertThat(stand.abgerechnet().offenAnzahl()).isEqualTo(1);
+    assertThat(stand.abgerechnet().monate()).hasSize(1);
+    assertThat(stand.abgerechnet().monate().get(0).offenNetto()).isEqualByComparingTo("100.00");
+    assertThat(stand.abgerechnet().monate().get(0).offenAnzahl()).isEqualTo(1);
+  }
+
+  @Test
+  void stand_givenOnlyPaidInvoices_thenNothingIsOffenButAbgerechnetStands() {
+    // Given — eine einzige, bezahlte Rechnung (Issue #284).
+    final Year jahr = Year.now(Geschaeftszone.ZONE);
+    gestellteRechnungAm(jahr.atMonth(1), "RE-1", "1", Rechnungszustand.BEZAHLT);
+
+    // When
+    final StartseiteResponse stand =
+        Objects.requireNonNull(ruf(PFAD + "?zeitraum=" + jahr, StartseiteResponse.class).getBody());
+
+    // Then — „Abgerechnet" bleibt unveraendert, offen ist nichts.
+    assertThat(stand.abgerechnet().netto()).isEqualByComparingTo("100.00");
+    assertThat(stand.abgerechnet().anzahl()).isEqualTo(1);
+    assertThat(stand.abgerechnet().offenNetto()).isEqualByComparingTo("0.00");
+    assertThat(stand.abgerechnet().offenAnzahl()).isZero();
+    assertThat(stand.abgerechnet().monate().get(0).offenAnzahl()).isZero();
+  }
+
   @Test
   void stand_givenAMonatWithAnInvoice_thenTheMonthLinesAreEmpty() {
     // Given — E11: bei Monatswahl steht die leere Liste und nicht null.
@@ -279,6 +333,20 @@ class StartseiteControllerIT extends AbstractIntegrationTest {
    */
   private void gestellteRechnungAm(
       final YearMonth monat, final String nummer, final String stunden) {
+    gestellteRechnungAm(monat, nummer, stunden, Rechnungszustand.GESTELLT);
+  }
+
+  /**
+   * Dieselbe Rechnung mit frei gewaehltem Ausgang — fuer den offenen Anteil (Issue #284).
+   *
+   * <p>Der Zustand geht direkt in die Spalte und nicht ueber den Weg des Zustandswechsels: Hier
+   * geht es darum, <b>dass</b> ein Monat eine Rechnung in genau diesem Zustand traegt.
+   */
+  private void gestellteRechnungAm(
+      final YearMonth monat,
+      final String nummer,
+      final String stunden,
+      final Rechnungszustand zustand) {
     final Long firmaId =
         jdbc.queryForObject(
             "INSERT INTO firma (name) VALUES ('Adler AG') RETURNING id", Long.class);
@@ -305,11 +373,12 @@ class StartseiteControllerIT extends AbstractIntegrationTest {
             """
             INSERT INTO rechnung (angebot_id, zustand, rechnung_datum, nummer, steuersatz,
                                   zahlungsziel_tage, gestellt_am, empfaenger_firma, absender_name)
-            VALUES (?, 'GESTELLT', ?, ?, 19.00, 10, now(), 'Adler AG', 'Manfred Wolff')
+            VALUES (?, ?, ?, ?, 19.00, 10, now(), 'Adler AG', 'Manfred Wolff')
             RETURNING id
             """,
             Long.class,
             angebotId,
+            zustand.name(),
             monat.atDay(1),
             nummer);
     jdbc.update(

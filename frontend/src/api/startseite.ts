@@ -86,6 +86,10 @@ export interface Monatszeile {
   readonly anzahl: number;
   readonly nettoInCent: number;
   readonly bruttoInCent: number;
+  /** Was von `nettoInCent` noch offen ist, in ganzen Cent; 0 in einem bezahlten Monat (#284). */
+  readonly offenNettoInCent: number;
+  /** Die Zahl der noch offenen Rechnungen dieses Monats — eine Anzahl, kein Betrag. */
+  readonly offenAnzahl: number;
 }
 
 /**
@@ -101,12 +105,21 @@ export interface NichtAbgerechnet {
   readonly angebote: readonly Anteilszeile[];
 }
 
-/** Die Kennzahl „Abgerechnet" fuer den gewaehlten Zeitraum (#206, Kriterium 7; #273, 4 und 7). */
+/**
+ * Die Kennzahl „Abgerechnet" fuer den gewaehlten Zeitraum (#206, Kriterium 7; #273, 4 und 7).
+ *
+ * `nettoInCent` ist der Umsatz des Zeitraums nach Rechnungsdatum — eine bezahlte Rechnung zaehlt
+ * dort weiter mit. `offenNettoInCent` sagt, wie viel davon noch nicht bezahlt ist (#284).
+ */
 export interface Abgerechnet {
   readonly nettoInCent: number;
   readonly bruttoInCent: number;
   /** Die Zahl der im Zeitraum gestellten Rechnungen — eine Anzahl, kein Betrag. */
   readonly anzahl: number;
+  /** Was von `nettoInCent` noch offen ist, in ganzen Cent; 0, wo nichts offen ist (#284). */
+  readonly offenNettoInCent: number;
+  /** Die Zahl der noch offenen Rechnungen — eine Anzahl, kein Betrag. */
+  readonly offenAnzahl: number;
   /** Bei Jahreswahl je Monat mit gestellter Rechnung eine Zeile, aeltester zuerst; sonst leer. */
   readonly monate: readonly Monatszeile[];
 }
@@ -168,6 +181,8 @@ function parseMonatszeile(wert: unknown): Monatszeile {
     anzahl: zahl(zeile.anzahl),
     nettoInCent: inHundertsteln(zeile.netto),
     bruttoInCent: inHundertsteln(zeile.brutto),
+    offenNettoInCent: inHundertsteln(zeile.offenNetto),
+    offenAnzahl: zahl(zeile.offenAnzahl),
   };
 }
 
@@ -206,6 +221,8 @@ function parseAbgerechnet(wert: unknown): Abgerechnet {
     nettoInCent: inHundertsteln(kennzahl.netto),
     bruttoInCent: inHundertsteln(kennzahl.brutto),
     anzahl: zahl(kennzahl.anzahl),
+    offenNettoInCent: inHundertsteln(kennzahl.offenNetto),
+    offenAnzahl: zahl(kennzahl.offenAnzahl),
     monate: liste(kennzahl.monate).map(parseMonatszeile),
   };
 }

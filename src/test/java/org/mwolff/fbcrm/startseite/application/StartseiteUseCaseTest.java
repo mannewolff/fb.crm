@@ -166,21 +166,32 @@ class StartseiteUseCaseTest {
           Einheit.PERSONENTAG,
           new BigDecimal("800.00"));
 
-  /** Was im Oktober gestellt wurde — die Zahlen der Kennzahl 3 kommen fertig aus der Auskunft. */
-  private static final Monatsabrechnung OKTOBER_GESTELLT =
-      new Monatsabrechnung(new BigDecimal("1000.00"), new BigDecimal("1070.00"), 1);
+  /** Nichts offen: der Betrag, den eine durchweg bezahlte Monatsabrechnung traegt (Issue #284). */
+  private static final BigDecimal NICHTS_OFFEN = new BigDecimal("0.00");
 
-  /** Dieselbe Angabe fuer den August — ein anderer Monat, andere Zahlen. */
+  /**
+   * Was im Oktober gestellt wurde — die Zahlen der Kennzahl 3 kommen fertig aus der Auskunft.
+   *
+   * <p>Die eine Rechnung des Oktobers ist noch offen (Issue #284): Sie ist der Fall aus dem Anlass
+   * des Pakets und zugleich der Beleg, dass das Offene durch Summe und Monatszeile laeuft.
+   */
+  private static final Monatsabrechnung OKTOBER_GESTELLT =
+      new Monatsabrechnung(
+          new BigDecimal("1000.00"), new BigDecimal("1070.00"), 1, new BigDecimal("1000.00"), 1);
+
+  /** Dieselbe Angabe fuer den August — ein anderer Monat, andere Zahlen, nichts offen. */
   private static final Monatsabrechnung AUGUST_GESTELLT =
-      new Monatsabrechnung(new BigDecimal("2000.00"), new BigDecimal("2140.00"), 2);
+      new Monatsabrechnung(
+          new BigDecimal("2000.00"), new BigDecimal("2140.00"), 2, NICHTS_OFFEN, 0);
 
   /** Was ein Monat ohne gestellte Rechnung ergibt — er fehlt in der Karte der Auskunft. */
   private static final Monatsabrechnung NICHTS_GESTELLT =
-      new Monatsabrechnung(new BigDecimal("0.00"), new BigDecimal("0.00"), 0);
+      new Monatsabrechnung(new BigDecimal("0.00"), new BigDecimal("0.00"), 0, NICHTS_OFFEN, 0);
 
   /** Was im Maerz gestellt wurde — Betraege mit Cent, damit die Jahressumme sie trifft. */
   private static final Monatsabrechnung MAERZ_GESTELLT =
-      new Monatsabrechnung(new BigDecimal("300.10"), new BigDecimal("357.12"), 1);
+      new Monatsabrechnung(
+          new BigDecimal("300.10"), new BigDecimal("357.12"), 1, new BigDecimal("0.10"), 1);
 
   /** Rechnungen in drei Monaten des laufenden Jahres und einer des letzten, in loser Folge. */
   private static final Map<YearMonth, Monatsabrechnung> DREI_MONATE_UND_EIN_ALTER =
@@ -189,7 +200,12 @@ class StartseiteUseCaseTest {
           MAERZ, MAERZ_GESTELLT,
           AUGUST, AUGUST_GESTELLT,
           MAI_LETZTES_JAHR,
-              new Monatsabrechnung(new BigDecimal("999.99"), new BigDecimal("999.99"), 9));
+              new Monatsabrechnung(
+                  new BigDecimal("999.99"),
+                  new BigDecimal("999.99"),
+                  9,
+                  new BigDecimal("999.99"),
+                  9));
 
   @Mock private AngeboteUebersichtUseCase uebersicht;
   @Mock private Arbeitszeitauskunft arbeitszeit;
@@ -639,9 +655,69 @@ class StartseiteUseCaseTest {
     // When
     final Startseitenstand stand = useCase.stand(Optional.of(jahr));
 
-    // Then — 300,10 + 2.000,00 + 1.000,00 netto; der Mai des letzten Jahres zaehlt nicht mit.
+    // Then — 300,10 + 2.000,00 + 1.000,00 netto; der Mai des letzten Jahres zaehlt nicht mit. Offen
+    // sind 0,10 + 1.000,00 aus zwei Rechnungen — der August ist bezahlt (Issue #284).
     assertThat(stand.abgerechnet().summe())
-        .isEqualTo(new Monatsabrechnung(new BigDecimal("3300.10"), new BigDecimal("3567.12"), 4));
+        .isEqualTo(
+            new Monatsabrechnung(
+                new BigDecimal("3300.10"),
+                new BigDecimal("3567.12"),
+                4,
+                new BigDecimal("1000.10"),
+                2));
+  }
+
+  @Test
+  void stand_withTheJahr_thenTheOffeneBetraegeOfItsMonateSumUpToo() {
+    // Given — das Jahr mit drei Monaten, zwei davon mit Offenem (Issue #284).
+    gegebenVorgaenge(DREI_MONATE_UND_EIN_ALTER, Set.of());
+    final Zeitraum.Jahr jahr = new Zeitraum.Jahr(DIESES_JAHR);
+    when(arbeitszeit.alleImZeitraum(jahr.von(), jahr.bis())).thenReturn(Map.of());
+
+    // When
+    final Startseitenstand stand = useCase.stand(Optional.of(jahr));
+
+    // Then — das Offene laeuft ohne eigenes Zutun des Anwendungsfalls durch die Monatsabrechnung.
+    assertThat(stand.abgerechnet().summe().offenNetto()).isEqualByComparingTo("1000.10");
+    assertThat(stand.abgerechnet().summe().offenAnzahl()).isEqualTo(2);
+    assertThat(stand.abgerechnet().monate())
+        .extracting(
+            zeile -> zeile.abrechnung().offenNetto(), zeile -> zeile.abrechnung().offenAnzahl())
+        .containsExactly(
+            tuple(new BigDecimal("0.10"), Integer.valueOf(1)),
+            tuple(NICHTS_OFFEN, Integer.valueOf(0)),
+            tuple(new BigDecimal("1000.00"), Integer.valueOf(1)));
+  }
+
+  @Test
+  void stand_withAMonatWhoseRechnungIsPaid_thenNothingIsOffenButAbgerechnetStands() {
+    // Given — der August: zwei gestellte Rechnungen, beide bezahlt (Issue #284).
+    gegebenVorgaenge(DREI_MONATE_UND_EIN_ALTER, Set.of());
+    when(arbeitszeit.alleImZeitraum(AUGUST.atDay(1), AUGUST.atEndOfMonth())).thenReturn(Map.of());
+
+    // When
+    final Startseitenstand stand = useCase.stand(Optional.of(new Zeitraum.Monat(AUGUST)));
+
+    // Then — „Abgerechnet" bleibt, was es war; offen ist nichts.
+    assertThat(stand.abgerechnet().summe().netto()).isEqualByComparingTo("2000.00");
+    assertThat(stand.abgerechnet().summe().brutto()).isEqualByComparingTo("2140.00");
+    assertThat(stand.abgerechnet().summe().offenNetto()).isEqualByComparingTo("0.00");
+    assertThat(stand.abgerechnet().summe().offenAnzahl()).isZero();
+  }
+
+  @Test
+  void stand_withAMonatWithAnOffeneRechnung_thenTheSummeCarriesIt() {
+    // Given — der Oktober mit der einen offenen Rechnung (Issue #284, Anlass des Pakets).
+    gegebenVorgaenge(DREI_MONATE_UND_EIN_ALTER, Set.of());
+    when(arbeitszeit.alleImZeitraum(OKTOBER.atDay(1), OKTOBER.atEndOfMonth())).thenReturn(Map.of());
+
+    // When
+    final Startseitenstand stand = useCase.stand(Optional.of(new Zeitraum.Monat(OKTOBER)));
+
+    // Then — auch bei Monatswahl, wo keine Monatszeile steht, traegt die Summe das Offene.
+    assertThat(stand.abgerechnet().summe().offenNetto()).isEqualByComparingTo("1000.00");
+    assertThat(stand.abgerechnet().summe().offenAnzahl()).isEqualTo(1);
+    assertThat(stand.abgerechnet().monate()).isEmpty();
   }
 
   @Test

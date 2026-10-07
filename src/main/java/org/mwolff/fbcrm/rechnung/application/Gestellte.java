@@ -17,8 +17,8 @@ import java.util.Map;
  * entscheidet der Aufrufer (Plan #274, E4). {@link #mengenJePosition()} kennt keinen Monat — eine
  * Rechnung haelt nicht fest, aus welchem Monat ihre Stunden stammen (#206, Antwort 2).
  *
- * @param jeMonat je Monat Netto, Brutto und Anzahl der in ihm gestellten Rechnungen; ein Monat ohne
- *     gestellte Rechnung fehlt darin
+ * @param jeMonat je Monat Netto, Brutto und Anzahl der in ihm gestellten Rechnungen samt dem, was
+ *     davon noch offen ist (Issue #284); ein Monat ohne gestellte Rechnung fehlt darin
  * @param mengenJePosition je Angebotsposition die auf gestellten Rechnungen abgerechnete Menge,
  *     ueber alle Monate; eine Position ohne Rechnungszeile fehlt darin
  */

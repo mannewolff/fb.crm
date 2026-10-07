@@ -49,7 +49,14 @@ const STAND = {
       { angebotId: 11, firmaName: 'IT Bildungshaus', angebotDatum: '2026-09-24', netto: 1800 },
     ],
   },
-  abgerechnet: { netto: 9600, brutto: 11424, anzahl: 3, monate: [] },
+  abgerechnet: {
+    netto: 9600,
+    brutto: 11424,
+    anzahl: 3,
+    offenNetto: 360,
+    offenAnzahl: 1,
+    monate: [],
+  },
   interneStundenImZeitraum: 12.5,
 };
 
@@ -59,7 +66,7 @@ const LEERER_STAND = {
   waehlbar: { jahre: ['2026', '2025'], monate: MONATE },
   inArbeit: [],
   nichtAbgerechnet: { netto: 0, erfasstImZeitraum: 0, angebote: [] },
-  abgerechnet: { netto: 0, brutto: 0, anzahl: 0, monate: [] },
+  abgerechnet: { netto: 0, brutto: 0, anzahl: 0, offenNetto: 0, offenAnzahl: 0, monate: [] },
   interneStundenImZeitraum: 0,
 };
 
@@ -90,9 +97,11 @@ const JAHRES_STAND = {
     netto: 9600,
     brutto: 11424,
     anzahl: 3,
+    offenNetto: 360,
+    offenAnzahl: 1,
     monate: [
-      { monat: '2026-03', anzahl: 1, netto: 3600, brutto: 4284 },
-      { monat: '2026-09', anzahl: 2, netto: 6000, brutto: 7140 },
+      { monat: '2026-03', anzahl: 1, netto: 3600, brutto: 4284, offenNetto: 0, offenAnzahl: 0 },
+      { monat: '2026-09', anzahl: 2, netto: 6000, brutto: 7140, offenNetto: 360, offenAnzahl: 1 },
     ],
   },
   interneStundenImZeitraum: 80,
@@ -105,6 +114,64 @@ const LEERES_JAHR = {
 };
 
 const JAHR_2026 = 'GET /api/startseite?zeitraum=2026';
+
+const WEG_OKTOBER = '/api/startseite?zeitraum=2026-10';
+const OKTOBER = `GET ${WEG_OKTOBER}`;
+
+/**
+ * Der Anlass von Issue #284: eine gestellte, nicht bezahlte Rechnung im Oktober 2026 ueber 360,00 €
+ * netto, bei Wahl des Jahres 2026. Der Oktober traegt sie, der Maerz nichts Offenes.
+ */
+const JAHR_MIT_OFFENEM = {
+  ...LEERER_STAND,
+  zeitraum: { art: 'JAHR', wert: '2026' },
+  abgerechnet: {
+    netto: 3960,
+    brutto: 4712.4,
+    anzahl: 2,
+    offenNetto: 360,
+    offenAnzahl: 1,
+    monate: [
+      { monat: '2026-03', anzahl: 1, netto: 3600, brutto: 4284, offenNetto: 0, offenAnzahl: 0 },
+      { monat: '2026-10', anzahl: 1, netto: 360, brutto: 428.4, offenNetto: 360, offenAnzahl: 1 },
+    ],
+  },
+};
+
+/** Derselbe Bestand, aber der Oktober gewaehlt — dann steht keine Monatsliste da. */
+const MONAT_MIT_OFFENEM = {
+  ...LEERER_STAND,
+  zeitraum: { art: 'MONAT', wert: '2026-10' },
+  abgerechnet: {
+    netto: 360,
+    brutto: 428.4,
+    anzahl: 1,
+    offenNetto: 360,
+    offenAnzahl: 1,
+    monate: [],
+  },
+};
+
+/** Dasselbe Jahr, nachdem die Oktober-Rechnung auf bezahlt gestellt wurde (#284). */
+const JAHR_ALLES_BEZAHLT = {
+  ...JAHR_MIT_OFFENEM,
+  abgerechnet: {
+    ...JAHR_MIT_OFFENEM.abgerechnet,
+    offenNetto: 0,
+    offenAnzahl: 0,
+    monate: JAHR_MIT_OFFENEM.abgerechnet.monate.map((zeile) => ({
+      ...zeile,
+      offenNetto: 0,
+      offenAnzahl: 0,
+    })),
+  },
+};
+
+/** Zwei offene Rechnungen — die Mehrzahl in der Kachelzeile. */
+const JAHR_MIT_ZWEI_OFFENEN = {
+  ...JAHR_MIT_OFFENEM,
+  abgerechnet: { ...JAHR_MIT_OFFENEM.abgerechnet, offenNetto: 3960, offenAnzahl: 2 },
+};
 
 /** Die Werte der Eintraege in einer Gruppe der Wahl, in ihrer Reihenfolge. */
 function werteIn(gruppe: HTMLElement): string[] {
@@ -177,6 +244,15 @@ describe('StartseitePage (Issue #216; #206 Kriterien 1, 3 bis 8)', () => {
     expect(abgerechnet).toHaveTextContent('Abgerechnet');
     expect(abgerechnet).toHaveTextContent('9.600,00 €');
     expect(abgerechnet).toHaveTextContent('11.424,00 € brutto');
+  });
+
+  it('nennt in „Abgerechnet" den noch offenen Betrag netto (#284)', async () => {
+    mitRouten({ [OHNE_MONAT]: json(200, STAND) });
+
+    renderSeite();
+
+    expect(within(await kachel(ABGERECHNET)).getByTestId('kennzahlkachel-drittzeile'))
+      .toHaveTextContent('davon offen: 360,00 € (1 Rechnung)');
   });
 
   it('zeigt die Angebote in Arbeit mit Firma, Datum und Status', async () => {
@@ -370,12 +446,12 @@ describe('StartseitePage: Zeitraumwahl (Issue #281; #273 Kriterien 1, 2, 5 bis 9
       within(tafel)
         .getAllByRole('columnheader')
         .map((kopf) => kopf.textContent),
-    ).toEqual(['Monat', 'Rechnungen', 'Netto', 'Brutto']);
+    ).toEqual(['Monat', 'Rechnungen', 'Netto', 'Brutto', 'Offen']);
     const zeilen = within(tafel).getAllByRole('row').slice(1);
     expect(zeilen.map((zeile) => zeile.textContent)).toEqual([
-      'März 202613.600,00 €4.284,00 €',
-      'September 202626.000,00 €7.140,00 €',
-      'Summe 202639.600,00 €11.424,00 €',
+      'März 202613.600,00 €4.284,00 €—',
+      'September 202626.000,00 €7.140,00 €360,00 €',
+      'Summe 202639.600,00 €11.424,00 €360,00 €',
     ]);
     expect(within(tafel).getByRole('rowheader', { name: 'Summe 2026' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Zu den Rechnungen' })).toHaveAttribute(
@@ -461,5 +537,101 @@ describe('StartseitePage: Zeitraumwahl (Issue #281; #273 Kriterien 1, 2, 5 bis 9
     expect(
       within(screen.getByRole('table', { name: 'Angebote in Arbeit' })).getAllByRole('row').length,
     ).toBe(imMonat.tafel);
+  });
+});
+
+/**
+ * Das Offene in Kachel und Monatsliste (Issue #284).
+ *
+ * Der Anlass ist der Oktober 2026 mit einer gestellten, nicht bezahlten Rechnung ueber 360,00 €
+ * netto. Geprueft wird, dass er in beiden Ansichten zu sehen ist, dass er mit dem Bezahlen
+ * verschwindet und dass „Abgerechnet" dabei unveraendert bleibt.
+ */
+describe('StartseitePage: offene Rechnungen (Issue #284)', () => {
+  /**
+   * Die Zelle der Spalte „Offen" einer Zeile — die letzte.
+   *
+   * Von hinten gezaehlt und nicht mit einer festen Nummer: In der Summenzeile ist die erste Zelle
+   * eine Kopfzelle und faellt aus der Rolle `cell` heraus.
+   */
+  function offenZelle(zeile: HTMLElement): HTMLElement {
+    const zellen = within(zeile).getAllByRole('cell');
+    return zellen[zellen.length - 1];
+  }
+
+  it('zeigt bei Jahreswahl „davon offen" in der Kachel, in der Monatszeile und in der Summe', async () => {
+    mitRouten({ [JAHR_2026]: json(200, JAHR_MIT_OFFENEM) });
+
+    renderSeite('/?zeitraum=2026');
+
+    expect(within(await kachel(ABGERECHNET)).getByTestId('kennzahlkachel-drittzeile'))
+      .toHaveTextContent('davon offen: 360,00 € (1 Rechnung)');
+    const tafel = screen.getByRole('table', { name: 'Abgerechnet' });
+    const zeilen = within(tafel).getAllByRole('row').slice(1);
+    expect(zeilen.map((zeile) => zeile.textContent)).toEqual([
+      'März 202613.600,00 €4.284,00 €—',
+      'Oktober 20261360,00 €428,40 €360,00 €',
+      'Summe 202623.960,00 €4.712,40 €360,00 €',
+    ]);
+  });
+
+  it('zeigt bei Monatswahl dieselbe Kachelzeile und keine Monatsliste', async () => {
+    mitRouten({ [OKTOBER]: json(200, MONAT_MIT_OFFENEM) });
+
+    renderSeite('/?zeitraum=2026-10');
+
+    expect(within(await kachel(ABGERECHNET)).getByTestId('kennzahlkachel-drittzeile'))
+      .toHaveTextContent('davon offen: 360,00 € (1 Rechnung)');
+    expect(screen.queryByRole('table', { name: 'Abgerechnet' })).not.toBeInTheDocument();
+  });
+
+  it('hebt den offenen Betrag hervor und laesst den Gedankenstrich matt', async () => {
+    mitRouten({ [JAHR_2026]: json(200, JAHR_MIT_OFFENEM) });
+
+    renderSeite('/?zeitraum=2026');
+
+    const tafel = await screen.findByRole('table', { name: 'Abgerechnet' });
+    const zeilen = within(tafel).getAllByRole('row').slice(1);
+    // Die Hervorhebung ist eine Aussage und keine Zierde: Ohne sie unterschiede sich der offene
+    // Betrag in nichts von Netto und Brutto daneben.
+    expect(offenZelle(zeilen[1])).toHaveAttribute('data-offen', 'ja');
+    expect(offenZelle(zeilen[0])).toHaveAttribute('data-offen', 'nein');
+  });
+
+  it('laesst Kachelzeile und Betrag weg, nachdem die Rechnung bezahlt ist', async () => {
+    mitRouten({ [JAHR_2026]: json(200, JAHR_ALLES_BEZAHLT) });
+
+    renderSeite('/?zeitraum=2026');
+
+    const tafel = await screen.findByRole('table', { name: 'Abgerechnet' });
+    expect(screen.queryByTestId('kennzahlkachel-drittzeile')).not.toBeInTheDocument();
+    expect(screen.queryByText(/davon offen/u)).not.toBeInTheDocument();
+    const zeilen = within(tafel).getAllByRole('row').slice(1);
+    // „Abgerechnet" bleibt unveraendert: Netto und Brutto zaehlen die bezahlte Rechnung weiter mit.
+    expect(zeilen.map((zeile) => zeile.textContent)).toEqual([
+      'März 202613.600,00 €4.284,00 €—',
+      'Oktober 20261360,00 €428,40 €—',
+      'Summe 202623.960,00 €4.712,40 €—',
+    ]);
+    expect(await kachel(ABGERECHNET)).toHaveTextContent('3.960,00 €');
+    expect(await kachel(ABGERECHNET)).toHaveTextContent('4.712,40 € brutto');
+  });
+
+  it('setzt die Mehrzahl, wo mehr als eine Rechnung offen ist', async () => {
+    mitRouten({ [JAHR_2026]: json(200, JAHR_MIT_ZWEI_OFFENEN) });
+
+    renderSeite('/?zeitraum=2026');
+
+    expect(within(await kachel(ABGERECHNET)).getByTestId('kennzahlkachel-drittzeile'))
+      .toHaveTextContent('davon offen: 3.960,00 € (2 Rechnungen)');
+  });
+
+  it('nennt im leeren Zeitraum nichts Offenes', async () => {
+    mitRouten({ [OHNE_MONAT]: json(200, LEERER_STAND) });
+
+    renderSeite();
+
+    await screen.findByText('Keine Rechnung in diesem Monat.');
+    expect(screen.queryByTestId('kennzahlkachel-drittzeile')).not.toBeInTheDocument();
   });
 });

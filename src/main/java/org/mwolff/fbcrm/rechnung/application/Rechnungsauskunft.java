@@ -13,6 +13,7 @@ import org.mwolff.fbcrm.rechnung.domain.Rechnung;
 import org.mwolff.fbcrm.rechnung.domain.RechnungRepository;
 import org.mwolff.fbcrm.rechnung.domain.RechnungseinstellungenRepository;
 import org.mwolff.fbcrm.rechnung.domain.Rechnungsposition;
+import org.mwolff.fbcrm.rechnung.domain.Rechnungszustand;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -34,6 +35,12 @@ import org.springframework.transaction.annotation.Transactional;
  * abgeschriebene Rechnung ist draussen und bleibt in beiden Antworten (Issue #253) — sie aus der
  * Monatsabrechnung fallen zu lassen hiesse, den Umsatz des Monats mit dem Zahlungseingang zu
  * verwechseln, und ihre Mengen freizugeben zeigte abgerechnete Leistung wieder als offen.
+ *
+ * <p><b>Was noch offen ist, steht daneben</b> ({@link Monatsabrechnung#offenNetto()}, Issue #284):
+ * Dieselbe Rechnung zaehlt in den Umsatz des Monats und, solange sie {@link
+ * org.mwolff.fbcrm.rechnung.domain.Rechnungszustand#istOffen() offen} ist, zugleich in den offenen
+ * Posten. Beides kommt aus einem Durchlauf und derselben Gruppierung; der Ausgang entscheidet nur,
+ * ob die zweite Zahl mitwaechst.
  *
  * <p><b>Nachgetragene Rechnungen zaehlen in den Monat</b> ihres Rechnungsdatums, mit Netto und
  * Brutto wie erfasst und jede als eine Rechnung (Plan #259, E20; #254, Kriterium 9). Jeder Zustand
@@ -74,13 +81,17 @@ public class Rechnungsauskunft {
    * ein; die Abrechnung eines Monats ist die {@link Monatsabrechnung#summe Summe} seiner
    * Rechnungen. Die nachgetragenen Rechnungen gehen nur in die Abrechnung je Monat ein.
    *
+   * <p>Ist eine Rechnung noch offen, traegt sie dasselbe Netto und eine 1 zusaetzlich in die
+   * offenen Felder (Issue #284). Eine bezahlte oder abgeschriebene traegt dort nichts bei und
+   * bleibt in Netto, Brutto und Anzahl unveraendert stehen.
+   *
    * <p>Brutto entsteht je Rechnung mit dem Satz, der fuer sie gilt ({@link GeltenderSteuersatz}) —
    * demselben, mit dem die Rechnungsliste rechnet. Darum wird der Satz der aktuellen Einstellungen
    * einmal je Aufruf gelesen, auch wenn ihn im Regelfall keine gestellte Rechnung braucht: Eine
    * Rechnung ohne eigenen Satz waere sonst nicht zu rechnen (#206, Kriterium 9).
    *
-   * @return je Monat mit mindestens einer gestellten Rechnung deren Abrechnung, und die
-   *     abgerechneten Mengen ueber alle Monate
+   * @return je Monat mit mindestens einer gestellten Rechnung deren Abrechnung samt offenem Anteil,
+   *     und die abgerechneten Mengen ueber alle Monate
    */
   public Gestellte gestellte() {
     final BigDecimal aktuellerSatz = einstellungen.lies().steuersatz();
@@ -93,10 +104,10 @@ public class Rechnungsauskunft {
       rechnungenJeMonat
           .computeIfAbsent(YearMonth.from(rechnung.rechnungDatum()), monat -> new ArrayList<>())
           .add(
-              new Monatsabrechnung(
+              alsAbrechnung(
                   rechnung.netto(),
                   rechnung.brutto(GeltenderSteuersatz.fuer(rechnung, aktuellerSatz)),
-                  1));
+                  rechnung.zustand()));
       for (final Rechnungsposition position : rechnung.positionen()) {
         mengen.merge(position.angebotPositionId(), position.menge(), BigDecimal::add);
       }
@@ -104,11 +115,28 @@ public class Rechnungsauskunft {
     for (final NachgetrageneRechnung rechnung : nachtraege.findAlle()) {
       rechnungenJeMonat
           .computeIfAbsent(YearMonth.from(rechnung.rechnungDatum()), monat -> new ArrayList<>())
-          .add(new Monatsabrechnung(rechnung.netto(), rechnung.brutto(), 1));
+          .add(alsAbrechnung(rechnung.netto(), rechnung.brutto(), rechnung.zustand()));
     }
     final Map<YearMonth, Monatsabrechnung> jeMonat = new HashMap<>();
     rechnungenJeMonat.forEach(
         (monat, rechnungen) -> jeMonat.put(monat, Monatsabrechnung.summe(rechnungen.stream())));
     return new Gestellte(jeMonat, mengen);
+  }
+
+  /*
+   * Eine einzelne gestellte Rechnung als Abrechnung ueber einen Monat: ihre Betraege, die Anzahl 1
+   * und — wenn sie noch offen ist — dasselbe Netto noch einmal als offener Posten (Issue #284).
+   *
+   * Die eine Stelle fuer beide Aggregate, die geschriebene Rechnung und den Nachtrag: Zwei
+   * Abschriften desselben Dreisatzes liefen beim ersten Nachziehen auseinander, und ein Nachtrag,
+   * der seinen Ausgang anders auswertete als eine Rechnung, waere in der Kennzahl nicht erklaerbar.
+   *
+   * Gefragt wird Rechnungszustand#istOffen() und nicht `== GESTELLT`: Was „offen" heisst, gehoert
+   * zum Zustand und nicht zu seinen Lesern.
+   */
+  private static Monatsabrechnung alsAbrechnung(
+      final BigDecimal netto, final BigDecimal brutto, final Rechnungszustand zustand) {
+    final boolean offen = zustand.istOffen();
+    return new Monatsabrechnung(netto, brutto, 1, offen ? netto : BigDecimal.ZERO, offen ? 1 : 0);
   }
 }

@@ -118,7 +118,12 @@ class StartseiteControllerTest {
     return stand(
         IM_OKTOBER,
         new Abgerechnet(
-            new Monatsabrechnung(new BigDecimal("1000.00"), new BigDecimal("1190.00"), 2),
+            new Monatsabrechnung(
+                new BigDecimal("1000.00"),
+                new BigDecimal("1190.00"),
+                2,
+                new BigDecimal("360.00"),
+                1),
             List.of()));
   }
 
@@ -126,15 +131,29 @@ class StartseiteControllerTest {
     return stand(
         IM_JAHR,
         new Abgerechnet(
-            new Monatsabrechnung(new BigDecimal("1500.00"), new BigDecimal("1785.00"), 3),
+            new Monatsabrechnung(
+                new BigDecimal("1500.00"),
+                new BigDecimal("1785.00"),
+                3,
+                new BigDecimal("360.00"),
+                1),
             List.of(
                 new Abrechnungsmonat(
                     YearMonth.of(2026, 8),
-                    new Monatsabrechnung(new BigDecimal("500.00"), new BigDecimal("595.00"), 1)),
+                    new Monatsabrechnung(
+                        new BigDecimal("500.00"),
+                        new BigDecimal("595.00"),
+                        1,
+                        new BigDecimal("0.00"),
+                        0)),
                 new Abrechnungsmonat(
                     OKTOBER,
                     new Monatsabrechnung(
-                        new BigDecimal("1000.00"), new BigDecimal("1190.00"), 2)))));
+                        new BigDecimal("1000.00"),
+                        new BigDecimal("1190.00"),
+                        2,
+                        new BigDecimal("360.00"),
+                        1)))));
   }
 
   private static Startseitenstand stand(final Zeitraum zeitraum, final Abgerechnet abgerechnet) {
@@ -242,6 +261,19 @@ class StartseiteControllerTest {
   }
 
   @Test
+  void stand_givenAMonat_thenTheThirdFigureAlsoCarriesWhatIsStillOffen() throws Exception {
+    // Given — Issue #284: der offene Anteil steht neben Netto, Brutto und Anzahl.
+    when(useCase.stand(Optional.of(IM_OKTOBER))).thenReturn(stand());
+
+    // When / Then
+    mockMvc
+        .perform(get(PFAD).param("zeitraum", "2026-10"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.abgerechnet.offenNetto").value(360.00))
+        .andExpect(jsonPath("$.abgerechnet.offenAnzahl").value(1));
+  }
+
+  @Test
   void stand_givenAJahr_thenTheThirdFigureCarriesTheSumAndItsMonths() throws Exception {
     // Given — #273, Kriterium 7: je Monat Anzahl, Netto und Brutto, aeltester zuerst.
     when(useCase.stand(Optional.of(IM_JAHR))).thenReturn(imJahr());
@@ -261,6 +293,21 @@ class StartseiteControllerTest {
         .andExpect(jsonPath("$.abgerechnet.monate[1].anzahl").value(2))
         .andExpect(jsonPath("$.abgerechnet.monate[1].netto").value(1000.00))
         .andExpect(jsonPath("$.abgerechnet.monate[1].brutto").value(1190.00));
+  }
+
+  @Test
+  void stand_givenAJahr_thenEachMonthLineAlsoCarriesWhatIsStillOffen() throws Exception {
+    // Given — Issue #284: auch die Monatszeile traegt den offenen Anteil, der August nichts.
+    when(useCase.stand(Optional.of(IM_JAHR))).thenReturn(imJahr());
+
+    // When / Then
+    mockMvc
+        .perform(get(PFAD).param("zeitraum", "2026"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.abgerechnet.monate[0].offenNetto").value(0.00))
+        .andExpect(jsonPath("$.abgerechnet.monate[0].offenAnzahl").value(0))
+        .andExpect(jsonPath("$.abgerechnet.monate[1].offenNetto").value(360.00))
+        .andExpect(jsonPath("$.abgerechnet.monate[1].offenAnzahl").value(1));
   }
 
   @Test
