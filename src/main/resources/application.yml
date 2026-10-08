@@ -1,0 +1,147 @@
+# fb.crm — Grundkonfiguration.
+#
+# Ausschliesslich Platzhalter mit Default (${VAR:default}); echte Zugangsdaten stehen in der
+# Umgebung bzw. in .env und niemals hier (CLAUDE-security.md).
+spring:
+  application:
+    name: fb-crm
+  # Ohne diese Ausnahme legte der Security-Starter einen Standardbenutzer mit zufaelligem Passwort
+  # an und schriebe es ins Log. Angemeldet wird ausschliesslich ueber das eigene Session-Cookie
+  # (SecurityConfig); einen Benutzer im Speicher gibt es nicht.
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration
+  datasource:
+    url: ${FBCRM_DB_URL:jdbc:postgresql://localhost:5432/fbcrm}
+    username: ${FBCRM_DB_USER:fbcrm}
+    password: ${FBCRM_DB_PASSWORD:fbcrm}
+  jpa:
+    # Das Schema gehoert Flyway. update/create waere ausserhalb von Tests ein Datenrisiko
+    # (CLAUDE-java.md §6.4).
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+  # Der Riegel des Containers fuer hochgeladene Dateien (Plan #150, E8). Er liegt bewusst *ueber*
+  # der fachlichen Grenze aus common/Uploadgrenze.java (26.214.400 Byte, angeschrieben 25 MB):
+  # Bis 26MB kommt die Datei im Anwendungsfall an, und der Absender liest die Meldung mit der
+  # Grenze am Feld `datei` statt eine abgebrochene Zerlegung zu sehen (Kriterium 6 aus Issue
+  # #148). max-request-size liegt um 1MB darueber, weil neben dem Dateiteil noch die Grenzzeilen
+  # des Formulars im Rumpf stehen.
+  servlet:
+    multipart:
+      max-file-size: 26MB
+      max-request-size: 27MB
+  # Der SMTP-Zugang des Postausgangsfachs. spring.mail.host steht hier mit Default, damit die
+  # Autokonfiguration den JavaMailSender in jedem Fall baut — sonst haette eine Instanz mit
+  # FBCRM_MAIL_ENABLED=false und leerem Host keine Bean, und der Hintergrundjob liesse sich
+  # nicht verdrahten. Ob ueberhaupt etwas hinausgeht, entscheidet allein fbcrm.mail.enabled.
+  mail:
+    host: ${FBCRM_SMTP_HOST:localhost}
+    port: ${FBCRM_SMTP_PORT:1025}
+    username: ${FBCRM_SMTP_USER:}
+    password: ${FBCRM_SMTP_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: ${FBCRM_SMTP_AUTH:true}
+          starttls:
+            enable: ${FBCRM_SMTP_STARTTLS:true}
+
+# Schalter der Anmeldung (AuthProperties).
+#
+# FBCRM_SESSION_SECRET hat bewusst KEINEN brauchbaren Default: Der leere Wert unten laesst die
+# Validierung (mindestens 32 Zeichen) scheitern, und die Anwendung startet nicht. Ein
+# Vorgabegeheimnis im Repository waere ein bekanntes Geheimnis (CLAUDE-security.md).
+#
+# FBCRM_TRUSTED_PROXIES ist bewusst leer: Nur wenn die Gegenstelle einer Anfrage hier steht,
+# glaubt die Anwendung ihrem X-Forwarded-For. Leer heisst, es zaehlt die Peer-Adresse (E9).
+fbcrm:
+  # Betriebsschalter (OperationsProperties, StartupValidator). Default false — der strengere der
+  # beiden Faelle: Wer den Entwicklungsbetrieb will, sagt es ausdruecklich. Bei true startet die
+  # Anwendung mit dem voreingestellten Signaturgeheimnis und warnt; bei false verweigert sie den
+  # Start (E27).
+  dev-mode: ${FBCRM_DEV_MODE:false}
+  # Einmal-Schluessel fuer den ersten Plattform-Admin (SetupProperties). Leer heisst deaktiviert,
+  # und zwar wirklich: Bei leerem Wert wird gar nicht erst verglichen, sondern jeder Aufruf von
+  # POST /api/setup abgewiesen — auch der mit leerer Eingabe (E5).
+  setup:
+    bootstrap-token: ${FBCRM_BOOTSTRAP_ADMIN_TOKEN:}
+  auth:
+    session-secret: ${FBCRM_SESSION_SECRET:}
+    session-ttl: ${FBCRM_SESSION_TTL:P1D}
+    # Laufzeit eines Reset-Links (K7: „nur begrenzte Zeit"). Deutlich kuerzer als eine Sitzung —
+    # der Link liegt in einem Postfach, und ein Postfach wird mitgelesen.
+    password-reset-ttl: ${FBCRM_PASSWORD_RESET_TTL:PT1H}
+    cookie-name: ${FBCRM_SESSION_COOKIE_NAME:fbcrm_session}
+    cookie-secure: ${FBCRM_SESSION_COOKIE_SECURE:true}
+    login-max-attempts: ${FBCRM_LOGIN_MAX_ATTEMPTS:10}
+    login-attempt-window: ${FBCRM_LOGIN_ATTEMPT_WINDOW:PT15M}
+    trusted-proxies: ${FBCRM_TRUSTED_PROXIES:}
+  # Der Mailversand (MailProperties). Default aus: Wer Mail hinausschicken will, sagt es
+  # ausdruecklich. FBCRM_BASE_URL ist die oeffentliche Adresse der Instanz; aus ihr entsteht der
+  # Link in der Reset-Mail. Aus der Anfrage laesst er sich nicht ableiten — ein aus Kopfzeilen
+  # gebauter Link waere faelschbar (CLAUDE-security.md).
+  mail:
+    enabled: ${FBCRM_MAIL_ENABLED:false}
+    from: ${FBCRM_MAIL_FROM:no-reply@fbcrm.local}
+    base-url: ${FBCRM_BASE_URL:https://localhost}
+  # Der Objektspeicher der Anhaenge (MinioProperties, E7). Kein Wert hat eine brauchbare
+  # Vorbelegung: Der leere Wert unten laesst die Validierung (@NotBlank) scheitern, und die
+  # Anwendung startet nicht. Ein Vorgabezugang im Repository waere ein bekannter Zugang
+  # (CLAUDE-security.md); docker-compose.yml Z. 69 ff. setzt die Werte fuer den lokalen Stack.
+  minio:
+    endpoint: ${FBCRM_MINIO_ENDPOINT:}
+    access-key: ${FBCRM_MINIO_ACCESS_KEY:}
+    secret-key: ${FBCRM_MINIO_SECRET_KEY:}
+    bucket: ${FBCRM_MINIO_BUCKET:}
+  # Das transaktionale Postausgangsfach (OutboxProperties, E7). Default aus, wie bei dev-mode und
+  # mail.enabled der strengere der beiden Faelle; docker-compose.yml Z. 69 schaltet es ein.
+  outbox:
+    enabled: ${FBCRM_OUTBOX_ENABLED:false}
+    poll-interval-ms: ${FBCRM_OUTBOX_POLL_INTERVAL_MS:5000}
+    max-attempts: ${FBCRM_OUTBOX_MAX_ATTEMPTS:8}
+    retention-days: ${FBCRM_OUTBOX_RETENTION_DAYS:7}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: never
+      show-components: never
+  health:
+    # Der Mail-Starter meldet die Erreichbarkeit des SMTP-Servers als Teil der Gesundheit der
+    # Anwendung. Sie gehoert nicht dazu: Das Postausgangsfach faengt genau den Fall ab, dass der
+    # Mailserver gerade nicht da ist (E7) — waere er Teil des Healthchecks, naehme der Container
+    # sich bei jeder Wartung des Mailservers selbst aus dem Verkehr. Ausserdem oeffnete jede
+    # Abfrage von /actuator/health eine SMTP-Verbindung, und dieser Pfad steht offen.
+    mail:
+      enabled: false
+
+server:
+  tomcat:
+    # Wie viel Restrumpf Tomcat wegliest, bevor es die Verbindung zumacht (Plan #150, E8). Der
+    # Vorgabewert von 2 MB reicht nicht: Ueberschreitet der Rumpf max-request-size, vergleicht
+    # Tomcat das schon mit der angekuendigten Laenge und liest deshalb *kein einziges Byte* — zu
+    # verwerfen ist dann der ganze Rumpf und nicht nur ein Rest. Bleibt davon etwas uebrig,
+    # schneidet Tomcat die Verbindung ab, und der Browser zeigte einen Netzfehler statt der
+    # Meldung mit der Grenze, die Kriterium 6 aus Issue #148 verlangt.
+    #
+    # 32MB liegt darum ueber max-request-size (27MB) und nicht nur knapp darueber: Bis zu dieser
+    # Groesse bekommt der Absender seine Meldung zu sehen. Wer mehr schickt, sieht weiterhin einen
+    # Abbruch — unbegrenztes Wegwerfen (-1) waere ein Angriffspunkt, und wer 32 MB hochlaedt,
+    # arbeitet ohnehin an der Maske vorbei.
+    max-swallow-size: 32MB
+  error:
+    include-stacktrace: never
+    include-message: never
+    include-binding-errors: never

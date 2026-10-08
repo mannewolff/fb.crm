@@ -1,0 +1,63 @@
+S1 Flaeche x=   0 y=   0 breite  20 hoehe 842 47/140/151
+S1 Text    x=  71 y= 777 LINKS  FETT     9 91/171/181     AGILE COACH · SOFTWARE ENGINEER · KI-PRAKTIKER
+S1 Text    x=  71 y= 735 LINKS  FETT    26 36/53/57       Max Mustermann
+S1 Text    x=  71 y= 716 LINKS  NORMAL  11 47/140/151     mmuster.org
+S1 Text    x= 540 y= 776 RECHTS NORMAL   9 95/122/127     Max Mustermann
+S1 Text    x= 540 y= 763 RECHTS NORMAL   9 95/122/127     Muster Str. 34a
+S1 Text    x= 540 y= 750 RECHTS NORMAL   9 95/122/127     28197 Bremen
+S1 Text    x= 540 y= 737 RECHTS NORMAL   9 95/122/127     Tel 0173 0000 000
+S1 Text    x= 540 y= 724 RECHTS NORMAL   9 95/122/127     info@mmuster.org
+S1 Text    x= 540 y= 711 RECHTS NORMAL   9 95/122/127     mmuster.org
+S1 Linie   x=  71 y= 686 bis x= 540 y= 686 staerke 1 216/236/238
+S1 Text    x=  71 y= 661 LINKS  NORMAL   7 95/122/127     Max Mustermann · Muster Str. 34a · 28197 Bremen
+S1 Linie   x=  71 y= 656 bis x= 540 y= 656 staerke 1 192/216/219
+S1 Text    x=  71 y= 639 LINKS  NORMAL  11 36/53/57       Franz Mustermann GmbH
+S1 Text    x=  71 y= 626 LINKS  NORMAL  11 36/53/57       Muster-Str. 24
+S1 Text    x=  71 y= 603 LINKS  NORMAL  11 36/53/57       28217 Bremen
+S1 Text    x= 540 y= 604 RECHTS NORMAL   9 95/122/127     Bremen, 28.09.2026
+S1 Text    x=  71 y= 550 LINKS  FETT    11 36/53/57       Rechnung 0003-2026
+S1 Text    x=  71 y= 523 LINKS  NORMAL  11 36/53/57       Sehr geehrte Damen und Herren,
+S1 Text    x=  71 y= 499 LINKS  NORMAL  11 36/53/57       Für meine Leistungen im September 2026 stelle ich Ihnen in Rechnung
+S1 Linie   x=  71 y= 467 bis x= 503 y= 467 staerke 1 0/0/0
+S1 Text    x=  75 y= 454 LINKS  NORMAL  10 0/0/0          Anzahl
+S1 Text    x= 140 y= 454 LINKS  NORMAL  10 0/0/0          Position
+S1 Text    x= 375 y= 454 LINKS  NORMAL  10 0/0/0          Einzelpreis
+S1 Text    x= 440 y= 454 LINKS  NORMAL  10 0/0/0          Gesamtpreis
+S1 Linie   x=  71 y= 449 bis x= 503 y= 449 staerke 2 0/0/0
+S1 Text    x= 132 y= 438 RECHTS NORMAL  10 0/0/0          3
+S1 Text    x= 432 y= 438 RECHTS NORMAL  10 0/0/0          120,00 €
+S1 Text    x= 499 y= 438 RECHTS NORMAL  10 0/0/0          360,00 €
+S1 Text    x= 140 y= 438 LINKS  NORMAL  10 0/0/0          Stunden KI Beratung am 15.09.2026
+S1 Linie   x=  71 y= 433 bis x= 503 y= 433 staerke 1 0/0/0
+S1 Text    x= 132 y= 422 RECHTS NORMAL  10 0/0/0          2,5
+S1 Text    x= 432 y= 422 RECHTS NORMAL  10 0/0/0          480,00 €
+S1 Text    x= 499 y= 422 RECHTS NORMAL  10 0/0/0          1.200,00 €
+S1 Text    x= 140 y= 422 LINKS  NORMAL  10 0/0/0          Personentage Workshop
+S1 Linie   x=  71 y= 417 bis x= 503 y= 417 staerke 1 0/0/0
+S1 Text    x= 132 y= 406 RECHTS NORMAL  10 0/0/0          1
+S1 Text    x= 432 y= 406 RECHTS NORMAL  10 0/0/0          200,00 €
+S1 Text    x= 499 y= 406 RECHTS NORMAL  10 0/0/0          200,00 €
+S1 Text    x= 140 y= 406 LINKS  NORMAL  10 0/0/0          Reisekosten
+S1 Linie   x=  71 y= 401 bis x= 503 y= 401 staerke 2 0/0/0
+S1 Text    x= 367 y= 390 RECHTS NORMAL  10 0/0/0          Gesamtbetrag netto
+S1 Text    x= 499 y= 390 RECHTS NORMAL  10 0/0/0          1.760,00 €
+S1 Linie   x=  71 y= 385 bis x= 503 y= 385 staerke 1 0/0/0
+S1 Text    x= 367 y= 374 RECHTS NORMAL  10 0/0/0          + 19% Mehrwertsteuer
+S1 Text    x= 499 y= 374 RECHTS NORMAL  10 0/0/0          334,40 €
+S1 Linie   x=  71 y= 369 bis x= 503 y= 369 staerke 2 0/0/0
+S1 Text    x= 367 y= 358 RECHTS NORMAL  10 0/0/0          Gesamtbetrag brutto
+S1 Text    x= 499 y= 358 RECHTS NORMAL  10 0/0/0          2.094,40 €
+S1 Linie   x=  71 y= 353 bis x= 503 y= 353 staerke 1 0/0/0
+S1 Linie   x=  71 y= 351 bis x= 503 y= 351 staerke 1 0/0/0
+S1 Linie   x=  71 y= 353 bis x=  71 y= 467 staerke 1 0/0/0
+S1 Linie   x= 136 y= 353 bis x= 136 y= 467 staerke 1 0/0/0
+S1 Linie   x= 371 y= 353 bis x= 371 y= 467 staerke 1 0/0/0
+S1 Linie   x= 436 y= 353 bis x= 436 y= 467 staerke 1 0/0/0
+S1 Linie   x= 503 y= 353 bis x= 503 y= 467 staerke 1 0/0/0
+S1 Text    x=  71 y= 311 LINKS  NORMAL  11 36/53/57       Bitte überweisen Sie den Betrag innerhalb von 10 Tagen
+S1 Text    x=  71 y= 269 LINKS  NORMAL  11 36/53/57       Mit freundlichen Grüßen
+S1 Text    x=  71 y= 253 LINKS  NORMAL  11 36/53/57       Max Mustermann
+S1 Linie   x=  71 y=  69 bis x= 540 y=  69 staerke 1 192/216/219
+S1 Text    x=  71 y=  55 LINKS  NORMAL   8 95/122/127     Max Mustermann · mmuster.org
+S1 Text    x=  71 y=  46 LINKS  NORMAL   8 95/122/127     USt-IdNr. DE 01010101010
+S1 Text    x=  71 y=  37 LINKS  NORMAL   8 95/122/127     Bankverbindung: MLP Bank Heidelberg · IBAN DE00 xxxx xxxx xxxx xxxx xx

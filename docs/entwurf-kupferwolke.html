@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>fb.crm – Entwurf „Kupferwolke"</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
+<style>
+:root{
+  --grund:#F6F3EF; --flaeche:#FFFFFF; --flaeche-weich:#FBF9F6;
+  --text:#1F1B18; --text-matt:#6B625B; --text-schwach:#756C64;
+  --kupfer:#A0521F; --kupfer-glanz:#E08A4F; --kupfer-taste:#AE5A24; --kupfer-tief:#8E4718; --pfirsich:#FDEBDD; --pfirsich-text:#8A4418;
+  --salbei:#E4F1E8; --salbei-text:#2E6B45;
+  --flieder:#ECEAFB; --flieder-text:#4B3FA0;
+  --himmel:#E3EFFB; --himmel-text:#1F5A96;
+  --linie:#EFE9E3;
+  --schatten:0 1px 2px rgba(80,50,30,.04),0 8px 24px -6px rgba(80,50,30,.10);
+  --schatten-hoch:0 2px 4px rgba(80,50,30,.05),0 18px 40px -10px rgba(80,50,30,.18);
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:"Plus Jakarta Sans",system-ui,sans-serif;font-size:14.5px;color:var(--text);
+  background:
+    radial-gradient(900px 500px at 12% -10%, rgba(224,138,79,.18), transparent 60%),
+    radial-gradient(700px 500px at 100% 0%, rgba(160,150,240,.12), transparent 60%),
+    var(--grund);
+  min-height:100vh}
+.app{display:grid;grid-template-columns:260px 1fr;gap:24px;padding:20px;min-height:100vh}
+/* Schiene */
+.schiene{background:var(--flaeche);border-radius:28px;box-shadow:var(--schatten);padding:22px 16px;display:flex;flex-direction:column;gap:6px;position:sticky;top:20px;height:calc(100vh - 40px)}
+.marke{display:flex;align-items:center;gap:12px;padding:4px 8px 18px}
+.marke .mal{width:42px;height:42px;border-radius:14px;background:linear-gradient(135deg,var(--kupfer-glanz),var(--kupfer));display:grid;place-items:center;color:#fff;font-size:22px;box-shadow:0 6px 16px -4px rgba(184,97,42,.5)}
+.marke b{font-size:17px;font-weight:800;letter-spacing:-.01em}
+.marke small{display:block;color:var(--text-schwach);font-size:12px}
+.gruppe{font-size:12px;font-weight:600;color:var(--text-schwach);padding:14px 12px 6px}
+.nav a{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:14px;color:var(--text-matt);text-decoration:none;font-weight:500;transition:background .15s}
+.nav a i{font-size:20px}
+.nav a:hover{background:var(--flaeche-weich)}
+.nav a.aktiv{background:var(--pfirsich);color:var(--pfirsich-text);font-weight:700}
+.nav a .zahl{margin-left:auto;font-size:12px;background:var(--flaeche-weich);border-radius:99px;padding:2px 8px;color:var(--text-matt)}
+.nav a.aktiv .zahl{background:#fff;color:var(--pfirsich-text)}
+.schiene .fuss{margin-top:auto;background:var(--flaeche-weich);border-radius:20px;padding:14px;display:flex;gap:10px;align-items:center}
+.avatar{border-radius:50%;display:grid;place-items:center;font-weight:700;flex:none}
+/* Inhalt */
+main{display:flex;flex-direction:column;gap:22px;max-width:1180px;width:100%}
+.kopf{display:flex;align-items:center;gap:16px;padding:6px 4px}
+.pfad{color:var(--text-schwach);font-weight:500;display:flex;gap:8px;align-items:center}
+.pfad a{color:var(--text-schwach);text-decoration:none}
+.pfad b{color:var(--text)}
+.suche{margin-left:auto;display:flex;align-items:center;gap:10px;background:var(--flaeche);border-radius:99px;padding:10px 16px;width:320px;color:var(--text-schwach);box-shadow:var(--schatten)}
+.suche kbd{margin-left:auto;font:600 11px "Plus Jakarta Sans";background:var(--flaeche-weich);border-radius:6px;padding:2px 7px;color:var(--text-matt)}
+.rund{width:42px;height:42px;border-radius:50%;background:var(--flaeche);box-shadow:var(--schatten);display:grid;place-items:center;font-size:19px;color:var(--text-matt)}
+.karte{background:var(--flaeche);border-radius:28px;box-shadow:var(--schatten);padding:28px}
+/* Held */
+.held{display:flex;gap:24px;align-items:center;position:relative;overflow:hidden}
+.held::after{content:"";position:absolute;right:-80px;top:-120px;width:340px;height:340px;border-radius:50%;background:radial-gradient(circle,var(--pfirsich),transparent 70%);pointer-events:none}
+.firmenmal{width:84px;height:84px;border-radius:26px;background:linear-gradient(135deg,#FFD9BD,#F7B98E);color:var(--pfirsich-text);display:grid;place-items:center;font-size:28px;font-weight:800;flex:none}
+.held h1{margin:0 0 6px;font-size:28px;font-weight:800;letter-spacing:-.02em}
+.held .adresse{color:var(--text-matt);display:flex;align-items:center;gap:6px}
+.chips{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+.chip{font-size:12.5px;font-weight:600;border-radius:99px;padding:5px 12px;display:inline-flex;gap:6px;align-items:center}
+.aktionen{margin-left:auto;display:flex;gap:10px;align-items:center;position:relative;z-index:1}
+.taste{border:0;font:600 14px "Plus Jakarta Sans";border-radius:99px;padding:11px 20px;cursor:pointer;display:inline-flex;gap:8px;align-items:center;transition:transform .12s, box-shadow .12s}
+.taste:hover{transform:translateY(-1px)}
+.taste.primaer{background:linear-gradient(135deg,var(--kupfer-taste),var(--kupfer-tief));color:#fff;box-shadow:0 8px 20px -6px rgba(184,97,42,.55)}
+.taste.weich{background:var(--flaeche-weich);color:var(--text);box-shadow:inset 0 0 0 1px var(--linie)}
+.icontaste{width:40px;height:40px;border-radius:50%;border:0;background:var(--flaeche-weich);color:var(--text-matt);font-size:18px;display:grid;place-items:center;cursor:pointer}
+.icontaste:hover{background:var(--pfirsich);color:var(--pfirsich-text)}
+/* Kennzahlen */
+.zahlen{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+.zahl-karte{border-radius:24px;padding:22px 24px;display:flex;gap:16px;align-items:center}
+.zahl-karte .ikon{width:48px;height:48px;border-radius:16px;background:rgba(255,255,255,.7);display:grid;place-items:center;font-size:22px}
+.zahl-karte small{display:block;font-weight:600;font-size:13px;opacity:.85}
+.zahl-karte b{font-size:26px;font-weight:800;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+/* Raster */
+.raster{display:grid;grid-template-columns:1.6fr 1fr;gap:22px;align-items:start}
+.karte h2{margin:0;font-size:18px;font-weight:700;display:flex;align-items:center;gap:10px}
+.karte h2 .anzahl{font-size:12px;background:var(--flaeche-weich);border-radius:99px;padding:2px 9px;color:var(--text-matt);font-weight:600}
+.kopfzeile{display:flex;align-items:center;margin-bottom:18px}
+.kopfzeile .taste{margin-left:auto;padding:8px 14px;font-size:13px}
+.personen{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}
+.person{background:var(--flaeche-weich);border-radius:22px;padding:18px;display:flex;gap:14px;align-items:flex-start;transition:box-shadow .15s, background .15s}
+.person:hover{background:#fff;box-shadow:var(--schatten-hoch)}
+.person .name{font-weight:700;font-size:15px}
+.person .rolle{color:var(--text-matt);font-size:13px;margin:2px 0 10px}
+.person .kontakt{display:flex;flex-direction:column;gap:6px;font-size:13px}
+.person .kontakt a{color:var(--kupfer);text-decoration:none;display:flex;gap:6px;align-items:center;font-weight:500}
+.person .kontakt span{color:var(--text-matt);display:flex;gap:6px;align-items:center}
+.person .mehr{margin-left:auto;opacity:0;transition:opacity .15s}
+.person:hover .mehr,.person:focus-within .mehr{opacity:1}
+.neu{border:2px dashed var(--linie);background:transparent;display:grid;place-items:center;color:var(--text-schwach);font-weight:600;min-height:120px;cursor:pointer}
+.neu:hover{border-color:var(--kupfer-glanz);color:var(--kupfer)}
+/* Zeitleiste */
+.zeit{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px}
+.zeit li{display:flex;gap:14px;padding:12px;border-radius:18px}
+.zeit li:hover{background:var(--flaeche-weich)}
+.zeit .punkt{width:36px;height:36px;border-radius:12px;display:grid;place-items:center;font-size:17px;flex:none}
+.zeit b{font-weight:600;font-size:14px;display:block}
+.zeit small{color:var(--text-schwach);font-size:12.5px}
+.stamm{display:grid;grid-template-columns:auto 1fr;gap:10px 20px;margin-top:18px;padding-top:18px;border-top:1px solid var(--linie);font-size:13.5px}
+.stamm dt{color:var(--text-schwach)}
+.stamm dd{margin:0;font-weight:500}
+:focus-visible{outline:2px solid var(--kupfer);outline-offset:2px}
+@media (prefers-reduced-motion: reduce){*{transition-duration:0s !important;animation-duration:0s !important}}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="schiene">
+    <div class="marke"><div class="mal"><i class="ti ti-chart-bar"></i></div><div><b>fb.crm</b><small>v0.1.5</small></div></div>
+    <nav class="nav">
+      <a href="#"><i class="ti ti-smart-home"></i>Übersicht</a>
+      <div class="gruppe">Arbeit</div>
+      <a href="#"><i class="ti ti-stack-2"></i>Vorgänge<span class="zahl">7</span></a>
+      <a href="#"><i class="ti ti-file-invoice"></i>Rechnungen<span class="zahl">2</span></a>
+      <div class="gruppe">Stammdaten</div>
+      <a href="#" class="aktiv"><i class="ti ti-building-community"></i>Firmen<span class="zahl">12</span></a>
+    </nav>
+    <div class="fuss">
+      <div class="avatar" style="width:38px;height:38px;background:#2F2A26;color:#fff;font-size:14px">M</div>
+      <div><b style="font-size:13.5px">Manne</b><small style="display:block;color:var(--text-schwach);font-size:12px">Plattform-Admin</small></div>
+      <i class="ti ti-settings" style="margin-left:auto;color:var(--text-schwach);font-size:18px"></i>
+    </div>
+  </aside>
+
+  <main>
+    <div class="kopf">
+      <div class="pfad"><a href="#">Firmen</a><i class="ti ti-chevron-right"></i><b>IT Bildungshaus</b></div>
+      <div class="suche"><i class="ti ti-search"></i>Firmen, Vorgänge, Personen …<kbd>/</kbd></div>
+      <div class="rund"><i class="ti ti-bell"></i></div>
+    </div>
+
+    <section class="karte held">
+      <div class="firmenmal">IB</div>
+      <div>
+        <h1>IT Bildungshaus</h1>
+        <div class="adresse"><i class="ti ti-map-pin"></i>Konsul-Smidt-Str. 24 · 28197 Bremen · Deutschland</div>
+        <div class="chips">
+          <span class="chip" style="background:var(--salbei);color:var(--salbei-text)"><i class="ti ti-circle-check"></i>Aktiv</span>
+          <span class="chip" style="background:var(--flieder);color:var(--flieder-text)"><i class="ti ti-users"></i>2 Ansprechpartner</span>
+          <span class="chip" style="background:var(--himmel);color:var(--himmel-text)"><i class="ti ti-calendar"></i>Kunde seit März 2026</span>
+        </div>
+      </div>
+      <div class="aktionen">
+        <button class="taste weich"><i class="ti ti-pencil"></i>Bearbeiten</button>
+        <button class="taste primaer"><i class="ti ti-plus"></i>Neuer Vorgang</button>
+        <button class="icontaste" aria-label="Weitere Aktionen"><i class="ti ti-dots"></i></button>
+      </div>
+    </section>
+
+    <div class="zahlen">
+      <div class="zahl-karte" style="background:var(--pfirsich);color:var(--pfirsich-text)"><div class="ikon"><i class="ti ti-stack-2"></i></div><div><small>Offene Vorgänge</small><b>3</b></div></div>
+      <div class="zahl-karte" style="background:var(--salbei);color:var(--salbei-text)"><div class="ikon"><i class="ti ti-coin-euro"></i></div><div><small>Umsatz 2026</small><b>18.450 €</b></div></div>
+      <div class="zahl-karte" style="background:var(--flieder);color:var(--flieder-text)"><div class="ikon"><i class="ti ti-file-invoice"></i></div><div><small>Offene Rechnungen</small><b>1 · 2.380 €</b></div></div>
+    </div>
+
+    <div class="raster">
+      <section class="karte">
+        <div class="kopfzeile"><h2>Ansprechpartner <span class="anzahl">2</span></h2></div>
+        <div class="personen">
+          <div class="person">
+            <div class="avatar" style="width:48px;height:48px;background:var(--flieder);color:var(--flieder-text)">GR</div>
+            <div>
+              <div class="name">Gabi Rosenbaum</div>
+              <div class="rolle">Führungskraft</div>
+              <div class="kontakt">
+                <a href="#"><i class="ti ti-mail"></i>gabi.rosenbaum@it-bildungshaus.de</a>
+                <span><i class="ti ti-phone"></i>0421 123 45 67</span>
+              </div>
+            </div>
+            <button class="icontaste mehr" aria-label="Aktionen für Gabi Rosenbaum"><i class="ti ti-dots-vertical"></i></button>
+          </div>
+          <div class="person">
+            <div class="avatar" style="width:48px;height:48px;background:var(--salbei);color:var(--salbei-text)">KW</div>
+            <div>
+              <div class="name">Konstanze Wilschewski</div>
+              <div class="rolle">Ansprechpartnerin</div>
+              <div class="kontakt">
+                <a href="#"><i class="ti ti-mail"></i>konstanze.wilschewski@…</a>
+              </div>
+            </div>
+            <button class="icontaste mehr" aria-label="Aktionen für Konstanze Wilschewski"><i class="ti ti-dots-vertical"></i></button>
+          </div>
+          <div class="person neu"><span><i class="ti ti-user-plus"></i> Ansprechpartner hinzufügen</span></div>
+        </div>
+      </section>
+
+      <section class="karte">
+        <div class="kopfzeile"><h2>Zuletzt passiert</h2></div>
+        <ul class="zeit">
+          <li><div class="punkt" style="background:var(--pfirsich);color:var(--pfirsich-text)"><i class="ti ti-message-circle"></i></div><div><b>Anfrage „Java-Schulung Q4"</b><small>Vorgang V-2026-014 · vor 2 Tagen</small></div></li>
+          <li><div class="punkt" style="background:var(--himmel);color:var(--himmel-text)"><i class="ti ti-file-text"></i></div><div><b>Angebot A-2026-009 versendet</b><small>4.200 € · vor 1 Woche</small></div></li>
+          <li><div class="punkt" style="background:var(--salbei);color:var(--salbei-text)"><i class="ti ti-cash"></i></div><div><b>Zahlung eingegangen</b><small>R-2026-006 · 3.570 € · 12. Sep.</small></div></li>
+        </ul>
+        <dl class="stamm">
+          <dt>Straße</dt><dd>Konsul-Smidt-Str. 24</dd>
+          <dt>PLZ / Ort</dt><dd>28197 Bremen</dd>
+          <dt>Land</dt><dd>Deutschland</dd>
+        </dl>
+      </section>
+    </div>
+  </main>
+</div>
+</body>
+</html>

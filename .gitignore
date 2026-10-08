@@ -1,0 +1,18 @@
+# claude-workflow-kit (Issue #208): workflow.config.json gehoert ins Repo,
+# alles andere unter .claude/ ist lokaler Zustand.
+.claude/*
+!.claude/workflow.config.json
+.claude/workflow.config.local.json
+.claude/board-meta-cache.json
+.DS_Store
+.env
+
+# Maven-Build
+target/
+
+# Vite-Build und Abhaengigkeiten des Frontends
+frontend/node_modules/
+frontend/dist/
+frontend/coverage/
+
+/install.mjs

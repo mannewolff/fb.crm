@@ -1,0 +1,664 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-parent</artifactId>
+    <version>3.5.16</version>
+    <relativePath/>
+  </parent>
+
+  <groupId>org.mwolff</groupId>
+  <artifactId>fb-crm</artifactId>
+  <version>1.0.0</version>
+  <name>fb.crm</name>
+  <description>Self-hostbares Mini-CRM fuer Freiberufler</description>
+
+  <properties>
+    <java.version>25</java.version>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+
+    <!-- Schalter aus .claude/workflow.config.json (mutationCommand nutzt -Dskip.frontend=true).
+         Das gesamte frontend-maven-plugin haengt daran, damit
+         mvn -Ppit -Dskip.frontend=true test ohne Node durchlaeuft. -->
+    <skip.frontend>false</skip.frontend>
+
+    <frontend-maven-plugin.version>1.15.1</frontend-maven-plugin.version>
+    <node.version>v22.11.0</node.version>
+    <npm.version>10.9.0</npm.version>
+
+    <jspecify.version>1.0.1</jspecify.version>
+    <archunit.version>1.5.0</archunit.version>
+    <!-- Das Spring-Boot-BOM managt BouncyCastle nicht; Argon2PasswordEncoder braucht es zur
+         Laufzeit. Die Version steht deshalb hier und wird mit den uebrigen Abhaengigkeiten
+         gepflegt. -->
+    <bouncycastle.version>1.86</bouncycastle.version>
+    <!-- Das Spring-Boot-BOM managt das AWS SDK nicht; der S3-Adapter des Objektspeichers braucht
+         es. Die Version steht deshalb hier und wird ueber das AWS-BOM unten auf alle
+         Teilartefakte durchgereicht — ohne das BOM zoege s3 seine Geschwister in abweichenden
+         Versionen herein, und dependencyConvergence des Enforcers braeche den Build. -->
+    <awssdk.version>2.55.5</awssdk.version>
+    <!-- Das Spring-Boot-BOM managt PDFBox nicht; der Beleg-Drucker braucht es. PDFBox zieht
+         BouncyCastle in seiner eigenen Version mit — deshalb stehen bcprov und bcpkix unten im
+         dependencyManagement auf ${bouncycastle.version}: ohne das braeche dependencyConvergence
+         des Enforcers an zwei Versionen derselben Krypto-Bibliothek, und die aeltere zu nehmen
+         waere ein Rueckschritt in einer Sicherheitsbibliothek. -->
+    <pdfbox.version>3.0.8</pdfbox.version>
+
+    <jacoco.version>0.8.15</jacoco.version>
+    <maven-enforcer-plugin.version>3.6.3</maven-enforcer-plugin.version>
+    <pitest-maven.version>1.30.0</pitest-maven.version>
+    <pitest-junit5-plugin.version>1.2.3</pitest-junit5-plugin.version>
+    <maven-checkstyle-plugin.version>3.6.0</maven-checkstyle-plugin.version>
+    <checkstyle.version>14.1.0</checkstyle.version>
+    <spotbugs-maven-plugin.version>4.10.4.1</spotbugs-maven-plugin.version>
+    <maven-pmd-plugin.version>3.28.0</maven-pmd-plugin.version>
+    <pmd.version>7.27.0</pmd.version>
+    <spotless-maven-plugin.version>3.10.2</spotless-maven-plugin.version>
+    <google-java-format.version>1.36.1</google-java-format.version>
+    <error-prone.version>2.50.0</error-prone.version>
+    <nullaway.version>0.14.1</nullaway.version>
+  </properties>
+
+  <dependencyManagement>
+    <dependencies>
+      <dependency>
+        <groupId>software.amazon.awssdk</groupId>
+        <artifactId>bom</artifactId>
+        <version>${awssdk.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.bouncycastle</groupId>
+        <artifactId>bcprov-jdk18on</artifactId>
+        <version>${bouncycastle.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.bouncycastle</groupId>
+        <artifactId>bcpkix-jdk18on</artifactId>
+        <version>${bouncycastle.version}</version>
+      </dependency>
+    </dependencies>
+  </dependencyManagement>
+
+  <dependencies>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-web</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-data-jpa</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-validation</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-actuator</artifactId>
+    </dependency>
+    <!-- Der Zustellweg des Postausgangsfachs (Issue #25, E7). Geprueft wird die Zeile im
+         Postausgangsfach, nicht der SMTP-Verkehr (E25); der Starter liefert JavaMailSender
+         und damit den Fremdcode hinter dem Port MailGateway. -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-mail</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.flywaydb</groupId>
+      <artifactId>flyway-core</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.flywaydb</groupId>
+      <artifactId>flyway-database-postgresql</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.postgresql</groupId>
+      <artifactId>postgresql</artifactId>
+      <scope>runtime</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.jspecify</groupId>
+      <artifactId>jspecify</artifactId>
+      <version>${jspecify.version}</version>
+    </dependency>
+
+    <!-- Der Objektspeicher der Anhaenge (Issue #59, E7): MinIO spricht S3, angesprochen wird es
+         mit dem synchronen S3Client des AWS SDK. Der asynchrone Netty-Client bleibt draussen —
+         der Adapter schreibt und liest blockierend, und Netty braechte eine zweite
+         Netzwerk-Stack-Version in einen Build, der dependencyConvergence erzwingt. -->
+    <dependency>
+      <groupId>software.amazon.awssdk</groupId>
+      <artifactId>s3</artifactId>
+      <exclusions>
+        <exclusion>
+          <groupId>software.amazon.awssdk</groupId>
+          <artifactId>netty-nio-client</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
+
+    <!-- Der Starter kommt mit diesem Paket (Issue #23): Ab hier existiert eine SecurityConfig,
+         die die Zugangsregel selbst setzt, statt die Autokonfiguration raten zu lassen. Er zieht
+         spring-security-crypto mit, das den Argon2-Hasher aus #22 traegt. -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-security</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.bouncycastle</groupId>
+      <artifactId>bcprov-jdk18on</artifactId>
+      <version>${bouncycastle.version}</version>
+    </dependency>
+
+    <!-- Der Drucker der Belege (E10): PDFBox 3 unter Apache-2.0, ohne Copyleft in einer selbst
+         gehosteten Anwendung. Nur der duenne Schreiber PdfBoxDrucker laeuft dagegen; Umbruch und
+         Seitenwechsel rechnet der Satz des Belegs ohne die Bibliothek. -->
+    <dependency>
+      <groupId>org.apache.pdfbox</groupId>
+      <artifactId>pdfbox</artifactId>
+      <version>${pdfbox.version}</version>
+      <exclusions>
+        <!-- spring-jcl liefert dieselbe API (org.apache.commons.logging) und bruecke sie nach
+             Logback. Liegt daneben das echte commons-logging, waehlt die Entdeckungslogik von
+             Commons Logging eine der beiden, warnt darueber im Log und schreibt die Meldungen der
+             Bibliothek moeglicherweise an der Protokollierung der Anwendung vorbei. -->
+        <exclusion>
+          <groupId>commons-logging</groupId>
+          <artifactId>commons-logging</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
+
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-test</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-testcontainers</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.testcontainers</groupId>
+      <artifactId>junit-jupiter</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.testcontainers</groupId>
+      <artifactId>postgresql</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <!-- Zweiter Container der Suite (E23): der Objektspeicher, gegen den S3DokumentSpeicherIT
+         laeuft. Wie bei Postgres die echte Engine statt eines Ersatzes (CLAUDE-java.md §3.1). -->
+    <dependency>
+      <groupId>org.testcontainers</groupId>
+      <artifactId>minio</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>com.tngtech.archunit</groupId>
+      <artifactId>archunit</artifactId>
+      <version>${archunit.version}</version>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-enforcer-plugin</artifactId>
+        <version>${maven-enforcer-plugin.version}</version>
+        <executions>
+          <execution>
+            <id>enforce-build-environment</id>
+            <goals>
+              <goal>enforce</goal>
+            </goals>
+            <configuration>
+              <rules>
+                <requireJavaVersion>
+                  <version>[25,26)</version>
+                </requireJavaVersion>
+                <requireMavenVersion>
+                  <version>[3.9,)</version>
+                </requireMavenVersion>
+                <dependencyConvergence/>
+                <banDuplicatePomDependencyVersions/>
+              </rules>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-compiler-plugin</artifactId>
+        <configuration>
+          <release>${java.version}</release>
+          <compilerArgs>
+            <!-- -serial ist die einzige dokumentierte Ausnahme (CLAUDE-java.md §7): die
+                 Domaenenexceptions werden nicht serialisiert und tragen kein serialVersionUID. -->
+            <arg>-Xlint:all,-serial</arg>
+            <arg>-Werror</arg>
+            <arg>-XDcompilePolicy=simple</arg>
+            <arg>--should-stop=ifError=FLOW</arg>
+            <arg>-Xplugin:ErrorProne -Xep:NullAway:ERROR -XepOpt:NullAway:AnnotatedPackages=org.mwolff.fbcrm -XepOpt:NullAway:JSpecifyMode=true</arg>
+          </compilerArgs>
+          <annotationProcessorPaths>
+            <path>
+              <groupId>com.google.errorprone</groupId>
+              <artifactId>error_prone_core</artifactId>
+              <version>${error-prone.version}</version>
+            </path>
+            <path>
+              <groupId>com.uber.nullaway</groupId>
+              <artifactId>nullaway</artifactId>
+              <version>${nullaway.version}</version>
+            </path>
+          </annotationProcessorPaths>
+        </configuration>
+        <executions>
+          <execution>
+            <id>default-testCompile</id>
+            <goals>
+              <goal>testCompile</goal>
+            </goals>
+            <configuration>
+              <!-- NullAway gilt fuer Produktivcode; Tests konstruieren absichtlich mit null
+                   (CLAUDE-java.md §6.2). Error Prone bleibt auch hier scharf. -->
+              <compilerArgs>
+                <arg>-Xlint:all,-serial</arg>
+                <arg>-Werror</arg>
+                <arg>-XDcompilePolicy=simple</arg>
+                <arg>--should-stop=ifError=FLOW</arg>
+                <arg>-Xplugin:ErrorProne -Xep:NullAway:OFF</arg>
+              </compilerArgs>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <configuration>
+          <includes>
+            <include>**/*Test.java</include>
+          </includes>
+          <!-- @{argLine} traegt den JaCoCo-Agenten; Mockito laedt seinen Agenten zur Laufzeit
+               nach und warnt auf JDK 21+ ohne diesen Schalter. -->
+          <argLine>@{argLine} -XX:+EnableDynamicAgentLoading</argLine>
+        </configuration>
+      </plugin>
+
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-failsafe-plugin</artifactId>
+        <configuration>
+          <includes>
+            <include>**/*IT.java</include>
+          </includes>
+          <argLine>@{argLine} -XX:+EnableDynamicAgentLoading</argLine>
+        </configuration>
+      </plugin>
+
+      <plugin>
+        <groupId>org.jacoco</groupId>
+        <artifactId>jacoco-maven-plugin</artifactId>
+        <version>${jacoco.version}</version>
+        <configuration>
+          <excludes>
+            <!-- Reine main-Methode ohne Fachlogik (CLAUDE-java.md §5.2). -->
+            <exclude>org/mwolff/fbcrm/FbCrmApplication.class</exclude>
+            <!-- S3-Zugang (CLAUDE-java.md §5.2): Die Klasse besteht aus Aufrufen des AWS SDK und
+                 ist nur gegen einen echten Objektspeicher sinnvoll pruefbar. Dass die Bean den
+                 fehlenden Eimer beim Start anlegt, weist S3ConfigIT gegen den MinIO-Container
+                 nach (E28). -->
+            <exclude>org/mwolff/fbcrm/config/S3Config.class</exclude>
+            <!-- Derselbe Grund fuer den Port auf denselben Speicher (E9): Der Adapter der
+                 archivierten Belege besteht aus Aufrufen des AWS SDK. Was er zusagt — ablegen,
+                 byteweise wiederlesen, die Schluesselform rechnung/<rechnungId>/<uuid>.pdf und der
+                 Fehlschlag bei unbekanntem Schluessel — weist S3DokumentSpeicherIT gegen den
+                 MinIO-Container nach (E28). PdfBoxDrucker bleibt in Abdeckung: Der Drucker ist
+                 ohne Infrastruktur pruefbar. -->
+            <exclude>org/mwolff/fbcrm/rechnung/infrastructure/S3DokumentSpeicher.class</exclude>
+            <!-- Derselbe Grund fuer den Adapter der Anlagen am Angebot (Plan #150, E3): Aufrufe des
+                 AWS SDK, nur gegen einen echten Objektspeicher sinnvoll pruefbar. Was er zusagt —
+                 gestreamt ablegen, byteweise wiederlesen, die Schluesselform
+                 angebot/<angebotId>/anlage/<uuid> ohne Teil des Dateinamens, leer bei unbekanntem
+                 Schluessel und ein Loeschen, das an einem unbekannten Schluessel nicht scheitert —
+                 weist S3AnlageSpeicherIT gegen den MinIO-Container nach. Klassenweise und nicht per
+                 Paket-Wildcard, damit die uebrigen Adapter des Pakets in Abdeckung bleiben. -->
+            <exclude>org/mwolff/fbcrm/angebot/infrastructure/S3AnlageSpeicher.class</exclude>
+          </excludes>
+        </configuration>
+        <executions>
+          <execution>
+            <id>prepare-agent</id>
+            <goals>
+              <goal>prepare-agent</goal>
+            </goals>
+          </execution>
+          <execution>
+            <id>report</id>
+            <phase>verify</phase>
+            <goals>
+              <goal>report</goal>
+            </goals>
+          </execution>
+          <execution>
+            <id>check</id>
+            <phase>verify</phase>
+            <goals>
+              <goal>check</goal>
+            </goals>
+            <configuration>
+              <rules>
+                <rule>
+                  <element>BUNDLE</element>
+                  <limits>
+                    <limit>
+                      <counter>LINE</counter>
+                      <value>COVEREDRATIO</value>
+                      <minimum>1.00</minimum>
+                    </limit>
+                    <limit>
+                      <counter>BRANCH</counter>
+                      <value>COVEREDRATIO</value>
+                      <minimum>1.00</minimum>
+                    </limit>
+                  </limits>
+                </rule>
+              </rules>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-checkstyle-plugin</artifactId>
+        <version>${maven-checkstyle-plugin.version}</version>
+        <dependencies>
+          <dependency>
+            <groupId>com.puppycrawl.tools</groupId>
+            <artifactId>checkstyle</artifactId>
+            <version>${checkstyle.version}</version>
+          </dependency>
+        </dependencies>
+        <configuration>
+          <configLocation>config/checkstyle/checkstyle.xml</configLocation>
+          <includeTestSourceDirectory>true</includeTestSourceDirectory>
+          <consoleOutput>true</consoleOutput>
+          <failsOnError>true</failsOnError>
+          <violationSeverity>warning</violationSeverity>
+        </configuration>
+        <executions>
+          <execution>
+            <id>checkstyle-check</id>
+            <phase>verify</phase>
+            <goals>
+              <goal>check</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+
+      <plugin>
+        <groupId>com.github.spotbugs</groupId>
+        <artifactId>spotbugs-maven-plugin</artifactId>
+        <version>${spotbugs-maven-plugin.version}</version>
+        <configuration>
+          <effort>Max</effort>
+          <threshold>Medium</threshold>
+          <excludeFilterFile>config/spotbugs/exclude.xml</excludeFilterFile>
+        </configuration>
+        <executions>
+          <execution>
+            <id>spotbugs-check</id>
+            <phase>verify</phase>
+            <goals>
+              <goal>check</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-pmd-plugin</artifactId>
+        <version>${maven-pmd-plugin.version}</version>
+        <dependencies>
+          <dependency>
+            <groupId>net.sourceforge.pmd</groupId>
+            <artifactId>pmd-core</artifactId>
+            <version>${pmd.version}</version>
+          </dependency>
+          <dependency>
+            <groupId>net.sourceforge.pmd</groupId>
+            <artifactId>pmd-java</artifactId>
+            <version>${pmd.version}</version>
+          </dependency>
+        </dependencies>
+        <configuration>
+          <rulesets>
+            <ruleset>config/pmd/ruleset.xml</ruleset>
+          </rulesets>
+          <includeTests>false</includeTests>
+          <printFailingErrors>true</printFailingErrors>
+          <failOnViolation>true</failOnViolation>
+        </configuration>
+        <executions>
+          <execution>
+            <id>pmd-check</id>
+            <phase>verify</phase>
+            <goals>
+              <goal>check</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+
+      <plugin>
+        <groupId>com.diffplug.spotless</groupId>
+        <artifactId>spotless-maven-plugin</artifactId>
+        <version>${spotless-maven-plugin.version}</version>
+        <configuration>
+          <java>
+            <googleJavaFormat>
+              <version>${google-java-format.version}</version>
+            </googleJavaFormat>
+            <removeUnusedImports/>
+            <trimTrailingWhitespace/>
+            <endWithNewline/>
+          </java>
+        </configuration>
+        <executions>
+          <execution>
+            <id>spotless-check</id>
+            <phase>verify</phase>
+            <goals>
+              <goal>check</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+
+      <!-- Der Vite-Build laeuft im Maven-Lauf mit einer eigenen, festgelegten Node-Version;
+           das Ergebnis liegt danach unter target/classes/static und wird von Spring Boot aus
+           classpath:/static/ serviert. Node und npm landen unter target/ und nicht im
+           Arbeitsbaum. Das gesamte Plugin haengt an skip.frontend, damit
+           mvn -Ppit -Dskip.frontend=true test ohne Node durchlaeuft. -->
+      <plugin>
+        <groupId>com.github.eirslett</groupId>
+        <artifactId>frontend-maven-plugin</artifactId>
+        <version>${frontend-maven-plugin.version}</version>
+        <configuration>
+          <workingDirectory>frontend</workingDirectory>
+          <installDirectory>${project.build.directory}</installDirectory>
+          <skip>${skip.frontend}</skip>
+        </configuration>
+        <executions>
+          <execution>
+            <id>install-node-and-npm</id>
+            <phase>generate-resources</phase>
+            <goals>
+              <goal>install-node-and-npm</goal>
+            </goals>
+            <configuration>
+              <nodeVersion>${node.version}</nodeVersion>
+              <npmVersion>${npm.version}</npmVersion>
+            </configuration>
+          </execution>
+          <execution>
+            <id>npm-ci</id>
+            <phase>generate-resources</phase>
+            <goals>
+              <goal>npm</goal>
+            </goals>
+            <configuration>
+              <!-- ci statt install: der Lauf haelt sich an package-lock.json und aendert sie
+                   nicht, damit der Arbeitsbaum nach mvn verify unveraendert bleibt. -->
+              <arguments>ci</arguments>
+            </configuration>
+          </execution>
+          <execution>
+            <id>npm-run-build</id>
+            <phase>generate-resources</phase>
+            <goals>
+              <goal>npm</goal>
+            </goals>
+            <configuration>
+              <arguments>run build</arguments>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-resources-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>copy-frontend-build</id>
+            <phase>process-resources</phase>
+            <goals>
+              <goal>copy-resources</goal>
+            </goals>
+            <configuration>
+              <!-- Derselbe Schalter: ohne Frontend-Build gibt es nichts zu kopieren. -->
+              <skip>${skip.frontend}</skip>
+              <outputDirectory>${project.build.outputDirectory}/static</outputDirectory>
+              <resources>
+                <resource>
+                  <directory>frontend/dist</directory>
+                </resource>
+              </resources>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+
+      <plugin>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-maven-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>build-info</id>
+            <goals>
+              <goal>build-info</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
+
+  <profiles>
+    <profile>
+      <id>pit</id>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.pitest</groupId>
+            <artifactId>pitest-maven</artifactId>
+            <version>${pitest-maven.version}</version>
+            <dependencies>
+              <dependency>
+                <groupId>org.pitest</groupId>
+                <artifactId>pitest-junit5-plugin</artifactId>
+                <version>${pitest-junit5-plugin.version}</version>
+              </dependency>
+            </dependencies>
+            <configuration>
+              <targetClasses>
+                <param>org.mwolff.fbcrm.*</param>
+              </targetClasses>
+              <targetTests>
+                <param>org.mwolff.fbcrm.*Test</param>
+              </targetTests>
+              <excludedClasses>
+                <!-- Reine main-Methode ohne Fachlogik (CLAUDE-java.md §5.2). -->
+                <param>org.mwolff.fbcrm.FbCrmApplication</param>
+                <!-- Bean-Wiring ohne eigene Entscheidung im Code (CLAUDE-java.md §5.2). Beide
+                     bauen nur eine Spring-DSL zusammen; was sie bewirken, weisen AccessRuleIT
+                     und SecurityHeadersIT gegen den laufenden Server nach. Die Pfadregel des
+                     SPA-Fallbacks steht in SpaResourceResolver und ist dort unit-getestet —
+                     diese Klasse bleibt in Abdeckung und Mutationstest. -->
+                <param>org.mwolff.fbcrm.auth.web.SecurityConfig</param>
+                <param>org.mwolff.fbcrm.config.SpaForwardingConfig</param>
+                <!-- S3-Zugang (CLAUDE-java.md §5.2), dieselbe Begruendung wie beim
+                     JaCoCo-Ausschluss: Aufrufe des AWS SDK, nachgewiesen von S3ConfigIT gegen
+                     den MinIO-Container. PIT faehrt ohnehin nur *Test, nicht *IT. -->
+                <param>org.mwolff.fbcrm.config.S3Config</param>
+                <!-- Der S3-Adapter der Belege (E9), dieselbe Begruendung wie beim JaCoCo-Ausschluss:
+                     Aufrufe des AWS SDK, nachgewiesen von S3DokumentSpeicherIT gegen den
+                     MinIO-Container. -->
+                <param>org.mwolff.fbcrm.rechnung.infrastructure.S3DokumentSpeicher</param>
+                <!-- Der S3-Adapter der Anlagen (Plan #150, E3), dieselbe Begruendung wie beim
+                     JaCoCo-Ausschluss: Aufrufe des AWS SDK, nachgewiesen von S3AnlageSpeicherIT
+                     gegen den MinIO-Container. -->
+                <param>org.mwolff.fbcrm.angebot.infrastructure.S3AnlageSpeicher</param>
+              </excludedClasses>
+              <mutators>
+                <mutator>STRONGER</mutator>
+              </mutators>
+              <features>
+                <!-- Methodengenaue Ausnahmen aus §5.4 gelten auch fuer PIT. Hier steht der
+                     einfache Name und nicht der mit Paket: PIT vergleicht den Deskriptor der
+                     Annotation mit endsWith, und der traegt Schraegstriche — ein Eintrag mit
+                     Punkten passt nie und laesst das Feature wirkungslos (Issue #192). -->
+                <feature>+FANN(annotation[ExcludeFromJacocoGeneratedReport])</feature>
+              </features>
+              <!-- Eine eigene Schwelle fuer Test Strength bietet pitest-maven nicht; sie wird
+                   ueber mutationThreshold=100 miterzwungen (CLAUDE-java.md §5.1). Auf
+                   coverageThreshold wird bewusst verzichtet: PITs Zeilenzaehlung rechnet die
+                   ueber FANN ausgenommenen Methoden mit, waehrend die verbindliche
+                   Zeilen- und Zweigabdeckung von JaCoCo kommt — dort steht sie auf 100 %. -->
+              <mutationThreshold>100</mutationThreshold>
+              <timeoutFactor>1.5</timeoutFactor>
+              <timeoutConstant>4000</timeoutConstant>
+            </configuration>
+            <executions>
+              <execution>
+                <id>pit-mutation-coverage</id>
+                <phase>test</phase>
+                <goals>
+                  <goal>mutationCoverage</goal>
+                </goals>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+  </profiles>
+</project>

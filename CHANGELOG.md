@@ -1,0 +1,262 @@
+# Changelog
+
+Alle nennenswerten Änderungen an fb.crm stehen hier. Das Format folgt
+[Keep a Changelog](https://keepachangelog.com/de/1.1.0/), die Versionsnummern folgen
+[Semantic Versioning](https://semver.org/lang/de/); die laufende Nummer steht in
+[`VERSION`](VERSION), das Verfahren in [`RELEASING.md`](RELEASING.md).
+
+Gepflegt wird die Datei von `scripts/gen-changelog.mjs`: Es setzt den Block einer neuen Version
+unmittelbar unter `## [Unreleased]`. Diese Überschrift ist damit der Ankerpunkt des Skripts und
+bleibt stehen, auch wenn nichts darunter steht.
+
+## [Unreleased]
+
+## [1.0.0] - 2026-10-08
+
+- chore: v0.1.17
+- Sonar S2637 in NachtragDokumentUseCase: Null-Pruefung statt Optional-Kette (Issue #301)
+- Mutationstest: sieben ueberlebende Mutanten getoetet (Issue #300)
+- chore: v0.1.16
+- Filigraneres Layout: kleinere Tasten, dichtere Abstaende (Issue #299)
+- install version 4.0
+- chore: v0.1.15
+- Jahresabschluss-Ansicht: Umsatz je Kunde, Angebote und Arbeitszeit (Issue #298)
+- Jahresabschluss-Ansicht: Einnahmen, Rechnungen und Umsatzsteuer je Satz (Issue #297)
+- Jahresabschluesse: Navigationseintrag, Route und Jahresuebersicht (Issue #296)
+- Jahresabschluss: Verengung, Prozentwort und Schnittstellenmodul im Frontend (Issue #295)
+- Jahresabschluss: die beiden Wege /api/jahresabschluesse (Issue #294)
+- Jahresabschluss: Angebotsbilanz, Umsatz je Kunde und Arbeitszeit (Issue #293)
+- Jahresabschluss: Einnahmen, Rechnungsstand und Umsatzsteuer je Satz (Issue #292)
+- Jahresabschluss: Modul anlegen und Jahresuebersicht rechnen (Issue #290)
+- Rechnung: zweite Tuer gestellteRechnungen() und Geldrechnung.je (Issue #289)
+- Workflow-Config: Zeitbudget des Prueflaufs auf 60 Minuten
+- Tafeln: Koepfe rechtsbuendiger Zahlenspalten rechts stellen (Issue #286)
+- chore: v0.1.14
+- Tafel: Kopf einer Zahlenspalte rechtsbuendig, Startseite nutzt es
+- Startseite: eigene Kachel „Offene Rechnungen" mit Liste (Issue #285)
+- Startseite: offene Rechnungen in Kachel und Monatsliste (Issue #284)
+- Startseite: Rueckfall auf das laufende Jahr statt den laufenden Monat (Issue #283)
+- Workflow Änderung mit neuem runner
+- Frontend: Startseite mit Zeitraumwahl, Beschriftungen und Monatsliste (Issue #281)
+- Frontend: lib/zeitraum.ts und der Leser der Startseiten-Antwort (Issue #280)
+- startseite.web: Der Parameter zeitraum und die neue Antwort (Issue #279)
+- startseite: Der Zeitraum im Anwendungsfall samt Jahresabrechnung (Issue #278)
+- startseite: Zeitraum und waehlbare Zeitraeume als Wertbegriffe (Issue #277)
+- arbeitszeit: Stunden und Monate je Zeitraum statt je Monat (Issue #276)
+- Gestellte Rechnungen je Monat statt eines Monats (Issue #275)
+- Frontend: Rechnungsliste um Nachtragsweg und Kennzeichnung (Issue #272)
+- Frontend: Einzelansicht der nachgetragenen Rechnung (Issue #271)
+- Frontend: Zugangsmodul, Chip und Nachtrags-Maske (Issue #270)
+- Gemischte Rechnungsliste und Kennzahl Abgerechnet (Issue #269)
+- Web-Schicht der nachgetragenen Rechnung (Issue #268)
+- Nachtrag: Dokument ablegen, lesen und entfernen (Issue #267)
+- Nachtrag loeschen und Zustand setzen (Issue #266)
+- Nachtrag anlegen, aendern und lesen (Issue #265)
+- Dokumentspeicher und Nach-Commit-Haken fuer nachgetragene Originale (Issue #264)
+- Rechnungsnummern ueber beide Bestaende pruefen (Issue #263)
+- Nachgetragene Rechnung: Aggregat, Port und Persistenz (Issue #262)
+- Nachgetragene Rechnung: Tabelle und schreibweiseunabhaengige Rechnungsnummer (Issue #261)
+- CI: JSON-Pruefung des Bereichs betrieb im Job verify
+- Workflow-Config: JSON-Pruefung fuer den Bereich betrieb
+- Workflow-Config: Modelle auf opus-5-5, Befunde-Schwelle 15
+- Rechnung als bezahlt oder abgeschrieben markieren (Issue #253)
+- chore: v0.1.13
+- Sonar Duplikate in Anzeigen: Angabenliste und runde Icontaste (Issue #252)
+- Sonar Duplikate in Formularen: AnschriftFelder und EmailFeld (Issue #251)
+- Sonar Frontend: verschachtelte Ternaries und Komplexitaet aufgeloest (Issue #250)
+- Sonar Reliability: Symbol umbenannt, zwei Ausdruecke ohne Backtracking (Issue #249)
+- Sonar Frontend: kleine Maintainability-Funde behoben (Issue #248)
+- Sonar: Casts im Seitenzeichner wieder entfernt (Issue #247)
+- chore: v0.1.12
+- Ladehinweis der Karte Rechnungen gezielt getestet (Issue #246)
+- chore: v0.1.11
+- Sonar Maintainability: Einzelfunde in AngebotAendernUseCase und Tests (Issue #244)
+- S107: Entities in mail und auth bilden sich aus dem Domaenenobjekt (Issue #243)
+- S107 und Duplikat: Entities in firma und eigeneangaben, Anschrift als Embeddable (Issue #242)
+- S107: Entities in rechnung und angebot bilden sich aus dem Domaenenobjekt (Issue #241)
+- Sonar Security: bewusste Ausnahmen begruendet, Dummy-Passwort zufaellig (Issue #240)
+- Uhr der Anwendung tickt in Mikrosekunden (Issue #239)
+- chore: v0.1.10
+- Sonar: Workflow SonarQube Cloud mit Abdeckung (Issue #225)
+- Sonar: sonar-project.properties mit Abgleich der Abdeckungsausschluesse (Issue #224)
+- Sonar Token eingebaut
+- Startseite: interne Angebote aus den Kennzahlen, interne Stunden als eigene Zeile (Issue #237)
+- Arbeitszeit-Ansicht: Kennzeichen intern und Aufteilung der Monatssumme (Issue #236)
+- Angebotsansicht: internes Angebot mit Stunden und ohne Rechnungsweg (Issue #235)
+- Angebotsmaske: Kaestchen Internes Projekt und Positionen ohne Zahlen (Issue #234)
+- Angebotslisten: Kennzeichen intern und Strich in der Spalte Summe (Issue #233)
+- Frontend: Baustein Intern, zwei neue Status, Felder der Schnittstelle (Issue #232)
+- Angebot: Gesamtsumme der angefallenen Stunden am Abrechnungsstand (Issue #231)
+- Arbeitszeit: Monatssumme aufgeteilt in fuer Kunden und intern (Issue #230)
+- Arbeitszeit: jede Position eines laufenden internen Angebots traegt Stunden (Issue #229)
+- Angebot: bebuchte Position zwingt beim Wechsel nach extern zu Stunden (Issue #228)
+- Angebot: Kennzeichen umstellen, Positionsangaben nach Zielart (Issue #227)
+- Angebot: Kennzeichen intern und die Status laeuft/abgeschlossen (Issue #226)
+- Sonar: Ausnahmepruefungen mit einem Aufruf, Casts im PDF-Satz (Issue #220)
+- Sonar-Funde ohne Abwaegung beheben, Migrationen ausnehmen (Issue #219)
+- chore: v0.1.9
+- Schiene: Markenzeichen wird Weg auf die Startseite (Issue #217)
+- Startseite: Ansicht auf / mit den drei Kennzahlen (Issue #216)
+- Startseite: Zugang zum Weg und die Kennzahlkachel (Issue #215)
+- Startseite: Weg GET /api/startseite (Issue #214)
+- Startseite: Modul und Anwendungsfall fuer die drei Kennzahlen (Issue #213)
+- Rechnung: Auskunft ueber gestellte Rechnungen und nicht abgerechnete Stunden (Issue #212)
+- Arbeitszeit: erfasste Stunden ueber alle Angebote je Position (Issue #211)
+- Angebot: Spalte "Angefallen" in der Positionstafel (Issue #204)
+- Rechnung: Monat der Arbeitszeit beim Anlegen waehlen (Issue #203)
+- Arbeitszeit: Eintraege erfassen, aendern und loeschen (Oberflaeche) (Issue #202)
+- Arbeitszeit: Ansicht mit Monatsliste (Issue #201)
+- Abrechnungsstand: angefallene Stunden je Position (Issue #200)
+- Rechnung: Entwurf mit Arbeitszeit eines Monats anlegen (Issue #199)
+- Arbeitszeit: Monatsliste und buchbare Positionen lesen (Issue #197)
+- Arbeitszeit: Eintraege erfassen, aendern und loeschen (Issue #196)
+- Arbeitszeit: Tabelle, Zeiteintrag und Bestand (Issue #195)
+- chore: v0.1.8
+- docs: CLAUDE-security.md ohne Registrierung und E-Mail-Verifikation
+- Mutationswert zurueck auf 100 (Issue #192)
+- Blob-Tests unter Node 22 (Issue #191)
+- MinIO-Abbild von quay.io auf chainguard/minio (Issue #190)
+- CLAUDE.md: Einzelplatz-Betrieb und Zuschnitt nach dem Rückschnitt
+- chore: v0.1.7
+- Favicon: das Kupfer-Mal der Marke
+- Rechnung: Nummernpruefung in den Einstellungen, Jahreswechsel und Gleichzeitigkeit (Issue #189)
+- Rechnung: Angebotsansicht mit Rechnungen und Abrechnungsstand (Issue #187)
+- Rechnung: Stellen mit Rueckfrage und Ansicht der gestellten Rechnung (Issue #186)
+- Rechnung: Entwurfsmaske mit Teilabrechnung (Issue #185)
+- Rechnung: Schnittstelle, Navigation und Seite Rechnungen (Issue #184)
+- Rechnung: Dokument herunterladen (Issue #183)
+- Rechnung: Stellen mit Nummer, Festschreibung und Dokument (Issue #182)
+- Rechnung: Layout des Dokuments nach Vorlage (Issue #181)
+- Rechnung: Druckmodell mit Ausrichtung, Farbe, Linie und Flaeche (Issue #180)
+- Rechnung: Bindung berechneter Positionen am Angebot (Issue #179)
+- Rechnung: Wege fuer Liste, Entwurf und Abrechnungsstand (Issue #178)
+- Rechnung: Abrechnungsstand und Entwurf (Issue #177)
+- Rechnung: Tabellen, Fachobjekt und Bestand (Issue #176)
+- Rechnung: Nummernkreis je Jahr (Issue #175)
+- Rechnung: altes Angebots-Layout entfernt (Issue #174)
+- Rechnung: Druckbausteine ziehen nach rechnung um (Issue #174)
+- Rechnung: Eigene Angaben mit Berufsbezeichnung und Webadresse (Issue #173)
+- Rechnung: Angebotsmaske reicht die Positionskennung mit (Issue #172)
+- Rechnung: Angebotspositionen mit dauerhafter Kennung (Issue #171)
+- Rechnungsvorlage eingefügt
+- Einstellungen zur Rechnung: Seite Administration (Issue #166)
+- Einstellungen zur Rechnung: Schnittstelle und Nummernmuster im Frontend (Issue #165)
+- Einstellungen zur Rechnung: Anwendungsfaelle und Wege (Issue #164)
+- Einstellungen zur Rechnung: Tabelle, Nummernmuster und Bestand (Issue #163)
+- Anlagen am Angebot: Vorschau fuer Bilder und PDFs (Issue #157)
+- Anlagen am Angebot: Bereich in der Angebotsansicht (Issue #156)
+- Anlagen am Angebot: Schnittstelle, Dateiwahl und Groesse im Frontend (Issue #155)
+- Anlagen am Angebot: Wege fuer Hochladen, Inhalt und Loeschen (Issue #154)
+- Anlagen am Angebot: Anwendungsfall (Issue #153)
+- Anlagen am Angebot: Ablage im Objektspeicher (Issue #152)
+- Anlagen am Angebot: Tabelle, Fachobjekt und Bestand (Issue #151)
+- Kommentare am Angebot: Bereich in der Angebotsansicht (Issue #146)
+- Kommentare am Angebot: Schnittstelle und Zeitpunkt im Frontend (Issue #145)
+- Kommentare am Angebot: Anwendungsfall und Wege (Issue #144)
+- Kommentare am Angebot: Tabelle, Fachobjekt und Bestand (Issue #143)
+- Wahl des Ansprechpartners: Feldfehler und Auswahl nach dem Speichern (Issue #138)
+- Angebot ohne Beleg: Uebersicht in der Navigation (Issue #136)
+- Angebot ohne Beleg: Oberflaeche des Angebots (Issue #135)
+- Angebot ohne Beleg: Uebersicht aller Angebote im Backend (Issue #134)
+- Angebot ohne Beleg: Backend, Datenmodell und Status (Issue #133)
+- chore: v0.1.6
+- Rueckbau 2: Vorgang entfernt, Angebot direkt an Firma und Ansprechpartner (Issue #126)
+- Paketstufe ohne Abdeckungsgrenze, wie in kanban-kit
+- Rueckbau 1: Auftrag, Auftragsbestand und Pipeline entfernt (Issue #125)
+- Paketstufe ohne ITs, voller mvn verify auf Stufe push
+- Auftragsbestand-Ansicht mit zwei Kennzahl-Kacheln (Issue #124)
+- Auftragsansicht, Pflege-Maske und die Auftragsliste am Vorgang (Issue #123)
+- Oberflaeche: Auftrag anlegen am angenommenen Angebot (Issue #122)
+- Zeitbudget der Nacht-Kette fuer Umsetzung und Abdeckung erhoeht
+- Auftragsbestand: die Auswertung im Backend (Issue #121)
+- Auftrag pflegen, loeschen und die Auftragsliste am Vorgang (Issue #120)
+- Auftrag anlegen und lesen: Anwendungsfall und Schnittstelle (Issue #119)
+- Migration, Domaene und Persistenz des Auftrags (Issue #118)
+- Phase Auftrag und der mehrfach besetzbare Belegstand-Port (Issue #117)
+- Gemeinsame Werttypen und die Geldrechnung fuer Angebot und Auftrag (Issue #116)
+- CLAUDE-java.md an die gelebten Test- und Ablagekonventionen angleichen (Issue #91)
+- Pipeline-Ansicht mit Kennzahl-Kacheln (Issue #105)
+- Angebotsansichten am Vorgang: Maske, Ansicht und Liste (Issue #104)
+- Frontend-Grundlagen: Phase, Geld, Ereignis und die Vorgangsfelder (Issue #103)
+- Pipeline: die Auswertung im Backend (Issue #102)
+- Vorgang: Phase Angebot und die beiden Pipeline-Felder (Issue #101)
+- Angebot: Reaktion des Kunden annehmen und ablehnen (Issue #100)
+- Angebot versenden: Nummer, Kopien, PDF und Historie (Issue #99)
+- Angebot: Beleg-PDF aus Layout, Drucker und Ablage (Issue #98)
+- Angebot: Entwurf anlegen, aendern und verwerfen (Issue #97)
+- Angebot: Schema, Domaene und Persistenz (Issue #96)
+- Eigene Angaben: Ansicht und Navigationseintrag (Issue #95)
+- Eigene Angaben: Bereich im Backend (Issue #94)
+- Vorgangshistorie: Ereignisse als dritte Eintragsart (Issue #93)
+- Grundlagen: Anschrift nach common, Geschaeftszone, S3-Client als Bean (Issue #92)
+- Zeit für Review raufgesetzt
+- feat: Speichergrenze fuer den API-Container (Issue #85)
+- feat: Kupferwolke — Aufraeumen und Designquelle abschliessen (Issue #83)
+- feat: Kupferwolke — Vorgangsansichten (Issue #82)
+- feat: Kupferwolke — Firmenansichten (Issue #81)
+- test: Kupferwolke — Zusagen der Anmeldekarte festschreiben (Issue #80)
+- feat: Kupferwolke — Kopfkarte, Innenkarte, Zeitleiste und Aktionsmenue (Issue #79)
+- feat: Kupferwolke — Grundbausteine Karte, Tasten, Mal, Chip, Tafel (Issue #78)
+- feat: Kupferwolke — Rahmen mit Schiene, Kopf und Buehne (Issue #77)
+- feat: Kupferwolke — Theme und Schrift (Issue #76)
+- feat: Eintrag der Historie an Ort und Stelle aendern (Issue #74)
+- feat: Maske zum Aendern eines Vorgangs mit stillgelegter Zuordnung (Issue #73)
+- feat: Vorgaenge in der Detailansicht der Firma (Issue #71)
+- feat: Maske zum Hinzufuegen eines Eintrags (Issue #70)
+- feat: Maske zum Anlegen eines Vorgangs (Issue #69)
+- feat: Detailansicht des Vorgangs mit Kopf, Feldern und Abschluss (Issue #72)
+- feat: Baustein Historie fuer den Vorgang (Issue #68)
+- docs: Uebergang zur Kupferwolke fuer Ready-Pakete #68-#74 geklaert
+- docs: Designsprache Kupferwolke loest Kupferwarte ab
+- feat: Block Geschaeft in der Schiene und Uebersicht der Vorgaenge (Issue #67)
+- feat: Schnittstelle und Hilfsfunktionen der Oberflaeche fuer den Vorgang (Issue #66)
+- feat: Anhang ausliefern und Neustart-Nachweis (Issue #65)
+- feat: Eintraege hinzufuegen und aendern, mit Upload und Groessengrenze (Issue #64)
+- feat: Schreibweg fuer Vorgang anlegen, aendern, abschliessen (Issue #63)
+- Paketzeit auf 75 min gehoben
+- chore: v0.1.5
+- feat: Leseweg fuer Vorgangsuebersicht, Detail und Firmenliste (Issue #60)
+- feat: Objektspeicher MinIO fuer Anhaenge (Issue #59)
+- feat: Persistenz fuer Vorgang, Historie und Nummernkreis (Issue #58)
+- feat: Schema und Domaene des Vorgangs samt Historie (Issue #57)
+- chore: CI faehrt mvn verify ohne Frontend-Build
+- chore: mvn verify im Pruefkatalog ohne Frontend-Build
+- .env.example: Zeitpunkt des Einlesens und Postgres-Passwort (Issue #51)
+- gate eingefügt
+- chore: v0.1.4
+- feat: Maske und Zeilen-Aktionen der Ansprechpartner (Issue #49)
+- feat: Maske und Detailansicht der Firma (Issue #48)
+- feat: Schiene mit Block Stammdaten und Schaltflaeche unter 900 px (Issue #47)
+- feat: Firmen-Uebersicht mit Suche, Schalter und Kopfaktion (Issue #46)
+- feat: Frontend-Bausteine fuer Firmen und Ansprechpartner (Issue #45)
+- feat: Ansprechpartner als Anwendungsfall und Schnittstelle (Issue #44)
+- feat: Firma als Anwendungsfall und Schnittstelle (Issue #43)
+- feat: Firma und Ansprechpartner als Schema, Domaene und Persistenz (Issue #42)
+- Modelle in workflow.config eingetragne
+- install.mjs aus der Versionierung genommen
+- Modell Opus 5.5 eingepflegt
+- Konfiguration geändert
+- chore: v0.1.3
+- Nur ein Erscheinungsbild: hell, unabhaengig von der Systemeinstellung (Issue #34)
+- chore: v0.1.2
+- CI-Pipeline: dieselben Gates wie lokal (Issue #31)
+- EnvExampleSecretTest: Hex-Schluessel sicher erkennen, Kontrolltests ohne Zufall (Issue #32)
+- Rahmen der Anwendung: Schiene, Kopf, Nutzer-Mal und leeres Panel (Issue #30)
+- Einrichtungsseite und die beiden Passwort-Seiten (Issue #28)
+- Betrieb: Container-Image, .env.example, Healthcheck und Inbetriebnahme im README (Issue #32)
+- chore: v0.1.1
+- bump-version-Tests von der Ist-Version des Repositories entkoppeln (Issue #33)
+- Anmeldeseite, Sitzungszustand im Frontend und Zugangsregel der Oberflaeche (Issue #27)
+- Versionsstand der Instanz: VERSION, Release-Skripte und GET /api/instance (Issue #26)
+- Postausgangsfach und Passwort-Reset per Einmal-Link (Issue #25)
+- Stufen in Konfiguration konfiguriert
+- Einrichtung per Einmal-Schlüssel und Start-Validierung der Betriebsschalter (Issue #24)
+- Anmelden, Abmelden, Sitzungspruefung und Zugangsregel der API (Issue #23)
+- Konto, Passwort-Hashing und Session-Token-Format (Issue #22)
+- Frontend-Gerüst und Theme „Kupferwarte" (Issue #21)
+- Maven-Gerüst, statische Gates, Anwendungsstart und Flyway-Baseline (Issue #20)
+- .env in die gitignore
+- Projektdateien von kanban-kit auf fb.crm umschreiben (Issue #17)
+- Workflow aus kanban-kit übernommen
+- Initiale Bestückung von Dateien aus dem Kanban-kit
+- Initial commit

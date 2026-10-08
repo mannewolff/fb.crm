@@ -1,0 +1,89 @@
+# SonarQube Cloud — Analyse mit Abdeckung (Plan #221, A1 bis A3).
+#
+# Eigener Workflow statt eines Jobs in ci.yml (A1): Der Scan braucht Dinge, die die CI-Gates nicht
+# brauchen — die volle Historie, die Dependency-Jars und das Geheimnis SONAR_TOKEN —, und sein
+# Ergebnis soll kein Gate roetfaerben. Ein fehlendes Token oder ein Ausfall von SonarCloud wuerde
+# sonst einen gruenen Build als rot ausweisen, obwohl am Code nichts fehlt. Darum laeuft er nur auf
+# main und auf Zuruf, wo ci.yml bei jedem Push und jedem Pull Request laeuft.
+#
+# Die Scan-Action steht auf einer Commit-SHA statt auf einem beweglichen Tag: Ein Tag laesst sich
+# verschieben, und diese Action bekommt das Token zu sehen. Dieselbe SHA faehrt das Schwesterprojekt
+# kanban-kit, damit sich beide zusammen nachziehen lassen.
+#
+# Was der Scan auswertet, steht in sonar-project.properties; SonarWorkflowTest haelt die Pfade
+# dieser Datei und die Schritte hier deckungsgleich.
+#
+# "on" steht in Anfuehrungszeichen: YAML 1.1 liest ein nacktes on als true.
+name: SonarQube Cloud
+
+"on":
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+# Der Scan liest nur; das Token geht ausschliesslich an SonarCloud (E3).
+permissions:
+  contents: read
+
+jobs:
+  sonar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Ohne volle Historie kann Sonar die Funde nicht den Commits zuordnen.
+          fetch-depth: 0
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "25"
+          cache: maven
+
+      # Wie in ci.yml: "mvn" ist der Maven-Wrapper, damit der Lauf die Maven-Version aus
+      # .mvn/wrapper faehrt und nicht die des Runners.
+      - name: Maven-Wrapper als mvn bereitstellen
+        run: |
+          mkdir -p "$RUNNER_TEMP/bin"
+          printf '#!/bin/sh\nexec "%s/mvnw" "$@"\n' "$GITHUB_WORKSPACE" > "$RUNNER_TEMP/bin/mvn"
+          chmod +x "$RUNNER_TEMP/bin/mvn"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+
+      # verify erzeugt die Klassen und das JaCoCo-XML, copy-dependencies die Jars, auf die
+      # sonar.java.libraries zeigt. Beides braucht die sonar-scanner-CLI, die hier statt des
+      # sonar-maven-plugin laeuft.
+      - name: Backend bauen und messen
+        run: mvn -B verify dependency:copy-dependencies -DoutputDirectory=target/dependency
+
+      # Bei einer Abweichung zwischen Sonar und der lokalen Messung ist der Bericht die einzige
+      # Grundlage (E2) — darum auch nach einem roten Lauf.
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: jacoco-xml
+          path: target/site/jacoco/jacoco.xml
+          retention-days: 14
+
+      - uses: actions/setup-node@v4
+        with:
+          # engines.node — dieselbe Quelle wie in ci.yml.
+          node-version-file: frontend/package.json
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Abhaengigkeiten installieren
+        run: npm --prefix frontend ci
+
+      # Erzeugt frontend/coverage/lcov.info, den Frontend-Bericht aus sonar-project.properties.
+      - name: Frontend messen
+        run: npm --prefix frontend run test:coverage
+
+      # Auf eine Commit-SHA gepinnt (v8.2.0) — Begruendung im Kopfkommentar.
+      - uses: SonarSource/sonarqube-scan-action@713881670b6b3676cda39549040e2d88c70d582e
+        with:
+          # workflow_dispatch ist von jedem Branch aus startbar, und die kostenlose Stufe kennt nur
+          # main (E1).
+          args: -Dsonar.branch.name=main
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}

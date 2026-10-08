@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  fb.crm — PMD-Regelsatz (CLAUDE-java.md §7).
+
+  Kuratiert: die PMD-Kategorien laufen vollstaendig, einzelne Regeln sind abgeschaltet. Jede
+  Deaktivierung steht als eigener <exclude> mit Begruendung darueber — Pauschalausschluesse
+  ganzer Kategorien gibt es nicht.
+-->
+<ruleset name="fb.crm"
+         xmlns="http://pmd.sourceforge.net/ruleset/2.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://pmd.sourceforge.net/ruleset/2.0.0 https://pmd.sourceforge.io/ruleset_2_0_0.xsd">
+
+  <description>Regelsatz fuer fb.crm — Produktivcode, Java 25.</description>
+
+  <rule ref="category/java/bestpractices.xml">
+    <!-- SLF4J wird mit Platzhaltern aufgerufen ({}); ein if-isDebugEnabled davor waere
+         Rauschen ohne Wirkung. -->
+    <exclude name="GuardLogStatement"/>
+  </rule>
+
+  <rule ref="category/java/codestyle.xml">
+    <!-- Deckt sich mit Checkstyle FinalLocalVariable/FinalParameters; doppelte Meldung
+         desselben Verstosses. -->
+    <exclude name="LocalVariableCouldBeFinal"/>
+    <exclude name="MethodArgumentCouldBeFinal"/>
+    <!-- Ein Record oder eine Konfigurationsklasse braucht keinen handgeschriebenen
+         Konstruktor. -->
+    <exclude name="AtLeastOneConstructor"/>
+    <!-- Frueher Rueckgabewert ist oft die klarere Form; der Guide verlangt keinen
+         Single-Exit-Stil. -->
+    <exclude name="OnlyOneReturn"/>
+    <!-- Bezeichnerlaenge ist kein Qualitaetsmass: "id", "e" und
+         "passwordResetTokenRepository" sind alle richtig. -->
+    <exclude name="ShortVariable"/>
+    <exclude name="LongVariable"/>
+    <exclude name="ShortClassName"/>
+    <exclude name="ShortMethodName"/>
+    <!-- Kollidiert mit Google Java Format, das Klammern nach eigener Regel setzt. -->
+    <exclude name="UselessParentheses"/>
+    <!-- Negierte Bedingungen sind oft die kuerzere Wahrheit ("wenn nicht vorhanden, dann"). -->
+    <exclude name="ConfusingTernary"/>
+    <!-- Package-private ist in Tests und bei Slice-Sichtbarkeit der Normalfall; ein
+         Pflichtkommentar dafuer traegt nichts bei. -->
+    <exclude name="CommentDefaultAccessModifier"/>
+    <!-- Verlangt Suffixe wie *Utils fuer Klassen mit statischen Methoden; die Namen im
+         Projekt folgen der Fachsprache, nicht der Technik. -->
+    <exclude name="ClassNamingConventions"/>
+  </rule>
+
+  <rule ref="category/java/design.xml">
+    <!-- Erzeugt bei jedem Methodenaufruf auf einem Rueckgabewert einen Treffer; in einer
+         Spring-Anwendung mit Buildern und Streams unbenutzbar. -->
+    <exclude name="LawOfDemeter"/>
+    <!-- Braucht eine gepflegte Paketliste als Property; Schichtentrennung erzwingt
+         stattdessen ArchUnit (CLAUDE-java.md §6.1). -->
+    <exclude name="LoosePackageCoupling"/>
+    <!-- Zaehlt Importe statt Kopplung; Spring-Konfigurationen liegen strukturell darueber. -->
+    <exclude name="ExcessiveImports"/>
+    <!-- Records und DTOs sind hier gewollt reine Datentraeger (CLAUDE-java.md §6.2). -->
+    <exclude name="DataClass"/>
+  </rule>
+
+  <rule ref="category/java/errorprone.xml">
+    <!-- Konsistent zur Compiler-Ausnahme -serial (CLAUDE-java.md §7): die Domaenenexceptions
+         werden nicht serialisiert. -->
+    <exclude name="MissingSerialVersionUID"/>
+    <!-- Gleiche Begruendung, betrifft dieselben Klassen. -->
+    <exclude name="NonSerializableClass"/>
+    <!-- Trifft Statuscodes, Grenzwerte und SQL-Namen; die Zahl bzw. der Text ist dort die
+         Aussage. -->
+    <exclude name="AvoidLiteralsInIfCondition"/>
+    <exclude name="AvoidDuplicateLiterals"/>
+  </rule>
+
+  <rule ref="category/java/multithreading.xml">
+    <!-- Verlangt ConcurrentHashMap auch fuer unveraenderliche Nachschlagetabellen. -->
+    <exclude name="UseConcurrentHashMap"/>
+  </rule>
+
+  <rule ref="category/java/performance.xml">
+    <!-- Objekte in Schleifen zu erzeugen ist der Normalfall beim Mappen von Zeilen auf
+         Domaenenobjekte. -->
+    <exclude name="AvoidInstantiatingObjectsInLoops"/>
+  </rule>
+
+  <rule ref="category/java/security.xml"/>
+
+  <rule ref="category/java/documentation.xml">
+    <!-- Javadoc-Pflicht erzeugt Fuellsaetze; der Guide verlangt sie nicht. -->
+    <exclude name="CommentRequired"/>
+    <!-- Laenge eines Kommentars sagt nichts ueber seinen Wert. -->
+    <exclude name="CommentSize"/>
+  </rule>
+</ruleset>

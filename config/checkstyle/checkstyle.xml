@@ -1,0 +1,189 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE module PUBLIC
+    "-//Checkstyle//DTD Checkstyle Configuration 1.3//EN"
+    "https://checkstyle.org/dtds/configuration_1_3.dtd">
+
+<!--
+  fb.crm — Checkstyle-Regelsatz (CLAUDE-java.md §7).
+
+  Grundlage ist der Google-Java-Style. Die reinen Formatregeln (Einrueckung, Zeilenumbrueche,
+  Klammerstellung, Importreihenfolge) sind hier bewusst NICHT enthalten: Spotless formatiert mit
+  Google Java Format und ist dafuer die einzige Quelle. Zwei Werkzeuge mit demselben Anspruch
+  widersprechen sich frueher oder spaeter; Checkstyle prueft deshalb nur, was das Format nicht
+  herstellen kann.
+
+  Jede bewusste Abweichung vom Google-Regelsatz steht unten als eigener Kommentar an der Stelle,
+  an der die Regel sonst stuende.
+-->
+<module name="Checker">
+  <property name="charset" value="UTF-8"/>
+  <property name="severity" value="warning"/>
+  <property name="fileExtensions" value="java"/>
+
+  <module name="NewlineAtEndOfFile"/>
+  <module name="FileTabCharacter">
+    <property name="eachLine" value="true"/>
+  </module>
+  <module name="LineLength">
+    <property name="max" value="120"/>
+    <property name="ignorePattern" value="^package.*|^import.*|https?://"/>
+  </module>
+  <module name="RegexpSingleline">
+    <property name="format" value="\s+$"/>
+    <property name="message" value="Leerzeichen am Zeilenende."/>
+  </module>
+
+  <!--
+    CLAUDE-java.md §7: "@SuppressWarnings ist erklaerungspflichtig: Kommentar mit Begruendung
+    direkt darueber, sonst Build-Bruch." Erzwungen wird ein Blockkommentar (/* … */ oder /** … */)
+    unmittelbar ueber der Annotation — der Zeilenkommentar scheidet aus, weil ein Java-Regex nur
+    Lookbehind fester Laenge kennt und "// irgendwas" beliebig lang ist.
+  -->
+  <module name="RegexpMultiline">
+    <property name="format" value="(?&lt;!\*/)\R[ \t]*@SuppressWarnings"/>
+    <property name="message"
+              value="@SuppressWarnings braucht eine Begruendung als Blockkommentar direkt darueber (CLAUDE-java.md §7)."/>
+  </module>
+
+  <!--
+    Die Spring-Boot-Startklasse sieht fuer HideUtilityClassConstructor wie eine Hilfsklasse aus
+    (nur eine statische main). Sie ist zugleich Konfigurationsklasse und wird von Spring
+    instanziiert — ein privater Konstruktor bricht den Anwendungsstart.
+  -->
+  <module name="SuppressionSingleFilter">
+    <property name="files" value=".*[\\/][A-Za-z0-9]*Application\.java"/>
+    <property name="checks" value="HideUtilityClassConstructor"/>
+  </module>
+
+  <module name="TreeWalker">
+
+    <!-- Dateien und Typen -->
+    <module name="OuterTypeFilename"/>
+    <module name="OneTopLevelClass"/>
+
+    <!-- Importe -->
+    <module name="AvoidStarImport"/>
+    <module name="IllegalImport"/>
+    <module name="RedundantImport"/>
+    <module name="UnusedImports"/>
+
+    <!-- Benennung (Google-Konventionen) -->
+    <module name="PackageName">
+      <property name="format" value="^[a-z]+(\.[a-z][a-z0-9]*)*$"/>
+    </module>
+    <module name="TypeName"/>
+    <module name="MemberName"/>
+    <module name="ConstantName"/>
+    <module name="StaticVariableName"/>
+    <module name="LocalVariableName"/>
+    <module name="LocalFinalVariableName"/>
+    <module name="ParameterName"/>
+    <module name="CatchParameterName"/>
+    <module name="LambdaParameterName"/>
+    <module name="PatternVariableName"/>
+    <module name="RecordComponentName"/>
+    <module name="RecordTypeParameterName"/>
+    <module name="ClassTypeParameterName"/>
+    <module name="MethodTypeParameterName"/>
+    <module name="InterfaceTypeParameterName"/>
+    <module name="MethodName">
+      <!-- Testmethoden duerfen Unterstriche tragen: methodUnderTest_givenX_thenY
+           (CLAUDE-java.md §3.3). -->
+      <property name="format" value="^[a-z][a-zA-Z0-9]*(_[a-zA-Z0-9]+)*$"/>
+    </module>
+    <module name="AbbreviationAsWordInName">
+      <property name="allowedAbbreviationLength" value="2"/>
+      <property name="ignoreStaticFinal" value="true"/>
+    </module>
+
+    <!-- Struktur und Lesbarkeit -->
+    <module name="NeedBraces"/>
+    <module name="EmptyBlock">
+      <property name="option" value="text"/>
+    </module>
+    <module name="EmptyCatchBlock"/>
+    <module name="LeftCurly"/>
+    <module name="RightCurly"/>
+    <module name="ArrayTypeStyle"/>
+    <module name="UpperEll"/>
+    <module name="ModifierOrder"/>
+    <module name="RedundantModifier"/>
+    <module name="MultipleVariableDeclarations"/>
+    <module name="OneStatementPerLine"/>
+    <module name="DefaultComesLast"/>
+    <module name="MissingSwitchDefault"/>
+    <module name="FallThrough"/>
+    <module name="NestedTryDepth"/>
+    <module name="ExplicitInitialization"/>
+    <module name="SimplifyBooleanExpression"/>
+    <module name="SimplifyBooleanReturn"/>
+    <module name="StringLiteralEquality"/>
+    <module name="CovariantEquals"/>
+    <module name="EqualsHashCode"/>
+    <module name="NoFinalizer"/>
+    <module name="AvoidEscapedUnicodeCharacters">
+      <property name="allowEscapesForControlCharacters" value="true"/>
+      <property name="allowNonPrintableEscapes" value="true"/>
+    </module>
+
+    <!-- Unveraenderlichkeit: CLAUDE-java.md §6.2 "final als Default". -->
+    <module name="FinalLocalVariable">
+      <property name="tokens" value="VARIABLE_DEF"/>
+    </module>
+    <module name="FinalParameters">
+      <property name="tokens" value="METHOD_DEF,CTOR_DEF,LITERAL_CATCH"/>
+    </module>
+    <module name="FinalClass"/>
+    <module name="HideUtilityClassConstructor"/>
+    <module name="InterfaceIsType"/>
+    <module name="VisibilityModifier">
+      <property name="protectedAllowed" value="true"/>
+    </module>
+    <module name="ParameterAssignment"/>
+
+    <!-- Fehlerbehandlung: CLAUDE-java.md §6.5. -->
+    <module name="IllegalCatch"/>
+    <module name="IllegalThrows"/>
+
+    <!-- Verbote aus CLAUDE-java.md §6.2/§6.5 als harte Leitplanke statt als Bitte im Guide. -->
+    <module name="IllegalImport">
+      <property name="id" value="NoJodaAndLegacyDate"/>
+      <property name="illegalClasses"
+                value="java.util.Date, java.util.Calendar, java.util.GregorianCalendar, java.sql.Date, java.sql.Timestamp, org.joda.time.DateTime"/>
+    </module>
+    <module name="RegexpSinglelineJava">
+      <property name="id" value="NoSystemOut"/>
+      <property name="format" value="System\.(out|err)\.print"/>
+      <property name="message" value="Kein System.out/System.err — Logging laeuft ueber SLF4J (CLAUDE-java.md §6.5)."/>
+      <property name="ignoreComments" value="true"/>
+    </module>
+    <module name="RegexpSinglelineJava">
+      <property name="id" value="NoPrintStackTrace"/>
+      <property name="format" value="\.printStackTrace\s*\("/>
+      <property name="message" value="Kein printStackTrace (CLAUDE-java.md §6.5)."/>
+      <property name="ignoreComments" value="true"/>
+    </module>
+    <module name="RegexpSinglelineJava">
+      <property name="id" value="TodoNeedsTicket"/>
+      <property name="format" value="(TODO|FIXME)(?!.*#\d+)"/>
+      <property name="message" value="TODO/FIXME nur mit Ticket-Referenz #N (CLAUDE-java.md §6.5)."/>
+      <property name="ignoreComments" value="false"/>
+    </module>
+
+    <!--
+      Bewusst NICHT aktiviert, jede Zeile mit Grund:
+
+      * Indentation, WhitespaceAround, OperatorWrap, SeparatorWrap, EmptyLineSeparator,
+        CustomImportOrder — Formatregeln; Spotless mit Google Java Format ist die einzige
+        Quelle dafuer (siehe Kopf dieser Datei).
+      * MissingJavadocMethod / MissingJavadocType / JavadocMethod — der Guide verlangt keine
+        Javadoc-Pflicht; erzwungene Javadoc erzeugt erfahrungsgemaess Fuellsaetze statt Wissen.
+      * MagicNumber — Grenzwerte und Statuscodes stehen in Tests und Konfigurationen dicht an
+        dicht; die Regel traefe fast nur Stellen, an denen die Zahl die Aussage ist.
+      * FinalLocalVariable fuer PARAMETER_DEF — dieselbe Pflicht deckt FinalParameters ab;
+        beide Module zugleich melden denselben Verstoss doppelt.
+      * DeclarationOrder — Google Java Format sortiert Member nicht um, und die Reihenfolge
+        "erst Felder, dann Konstruktor, dann Methoden" haelt der Code ohnehin ein.
+    -->
+  </module>
+</module>
