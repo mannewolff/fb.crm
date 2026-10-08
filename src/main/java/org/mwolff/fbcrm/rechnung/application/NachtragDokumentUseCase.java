@@ -1,7 +1,6 @@
 package org.mwolff.fbcrm.rechnung.application;
 
 import java.time.Clock;
-import java.util.Optional;
 import org.mwolff.fbcrm.angebot.domain.Vorschauart;
 import org.mwolff.fbcrm.common.NachDemCommit;
 import org.mwolff.fbcrm.common.Uploadgrenze;
@@ -109,7 +108,11 @@ public class NachtragDokumentUseCase {
   }
 
   private static String schluesselVon(final NachgetrageneRechnung rechnung) {
-    return Optional.ofNullable(rechnung.pdfSchluessel()).orElseThrow(NachtragNichtGefunden::new);
+    final String schluessel = rechnung.pdfSchluessel();
+    if (schluessel == null) {
+      throw new NachtragNichtGefunden();
+    }
+    return schluessel;
   }
 
   /*
