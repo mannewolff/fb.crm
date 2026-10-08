@@ -37,7 +37,7 @@ import TastenSymbol from '../components/TastenSymbol';
 import WeicheTaste, { weichSx } from '../components/WeicheTaste';
 import { euro } from '../lib/geld';
 import { tagWort } from '../lib/tag';
-import { RADIUS_KLEIN, ZAHLEN_KLASSE } from '../theme';
+import { ABSTAND_BUEHNE, RADIUS_KLEIN, ZAHLEN_KLASSE } from '../theme';
 
 /**
  * Die Liste aller Rechnungen mit „Neue Rechnung" (#160, Kriterien 1, 2, 24; Plan E15).
@@ -393,7 +393,7 @@ export default function RechnungenPage() {
   }
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: '22px' }}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: ABSTAND_BUEHNE }}>
       <Karte
         titel="Rechnungen"
         titelEbene={1}

@@ -103,7 +103,8 @@ Kräftige Zustandsfarben für Symbole, Zahlen und schmale Markierungen. Sie steh
 | Markenname | 17 px / 800 | „fb.crm" in der Schiene |
 | Name in Liste | 15 px / 700 | Person, Firma, Vorgang in Karten und Zeilen |
 | Fließtext | 14,5 px / 400, Zeilenhöhe 1,5 | alles Lesbare |
-| Navigation, Tasten | 14 px / 500 bzw. 600; aktiver Eintrag 700 | Schiene, Tasten |
+| Navigation | 14 px / 500; aktiver Eintrag 700 | Schiene |
+| Tasten | 13,5 px / 600 | Kupfertaste, weiche Taste |
 | Klein | 12–13,5 px / 500–600 | Chips, Gruppentitel, Zähler, Zeitangaben |
 
 - **Satzschreibung überall** — auch Gruppentitel der Schiene („Stammdaten", nicht „STAMMDATEN"). Keine Versalien mit Laufweite.
@@ -169,15 +170,16 @@ Vorlage: `docs/entwurf-kupferwolke.html`.
 - **Aufbau:** zweispaltig mit 20 px Außenabstand und 24 px Spalt; links die Schiene (260 px), rechts die Bühne mit höchstens 1180 px Breite.
 - **Schiene:** eine freistehende weiße Karte (Radius groß, `schatten-karte`), klebt oben. Oben die **Marke**: Markenmal (42 px, Radius 14, Verlauf Kupfer-Glanz → Kupfer, Kupfer-Schatten), Name, Version. Darunter **Navigationsgruppen**, jede mit einem Gruppentitel in Satzschreibung und immer offen. Ein Eintrag ist ein echter Link mit Symbol (20 px) und Beschriftung, Radius klein; Hover „Fläche weich". Der **aktive Eintrag** (`aria-current="page"`, längster passender Pfad) liegt auf Pfirsich mit Pfirsich-Schrift in 700. Zähler an Einträgen als runde Plakette rechts — erst, wenn die Shell diese Daten kennt. Unten der **Fuß** als Kachel „Fläche weich": Personen-Kürzel, Name, Rolle und der Weg zu den Einstellungen; ein Klick öffnet das Menü mit „Profil bearbeiten" und „Abmelden". Welche Gruppen und Einträge es gibt, entsteht mit den Fachplänen. Eingeklappt (76 px) bleiben Markenmal, Symbole und Kürzel.
 - **Die Schiene ist der einzige Ort, an dem man zwischen den Ansichten wechselt.**
-- **Kopf:** eine Zeile ohne eigene Fläche über der Bühne. Links der **Pfad** (Text schwach, verlinkte Stufen, Chevron als Trenner, letzte Stufe in Text und 700). Rechts die **Suche** als weiße Pille (320 px, `schatten-karte`) mit Lupe, Platzhalter und der Tastenkappe des echten Kürzels `/`; daneben runde Kopftasten (42 px) für Dinge, die es geben wird — keine ohne fachlichen Anlass.
-- **Bühne:** Abstand zwischen Bereichen 22 px, Innenabstand einer Karte 28 px.
+- **Kopf:** eine Zeile ohne eigene Fläche über der Bühne. Links der **Pfad** (Text schwach, verlinkte Stufen, Chevron als Trenner, letzte Stufe in Text und 700). Rechts die **Suche** als weiße Pille (320 px, `schatten-karte`) mit Lupe, Platzhalter und der Tastenkappe des echten Kürzels `/`; daneben runde Kopftasten (36 px) für Dinge, die es geben wird — keine ohne fachlichen Anlass.
+- **Bühne:** Abstand zwischen Bereichen 16 px, Innenabstand einer Karte und der Kopfkarte 22 px.
+- **Dichte:** Tasten, Icontasten, Kopftasten, Eingabefelder und die Abstände von Bühne, Karte und Kennzahl-Kachel sind bewusst dichter als die Vorlage (Entscheidung Manne, 2026-10-08) — es gelten die Maße dieser Datei.
 - **Fokusring:** 2 px Kupfer mit 2 px Abstand an jedem Tastaturziel; Eingabefelder zeigen den Fokus als 2 px Kupferrand.
 - **Mindestbreite:** 768 px vollständig bedienbar; unterhalb von 900 px liegt die Schiene hinter einer Schaltfläche.
 
 ### Bausteine
 
 - **Kopfkarte** (Detailansichten): Mal (84 px, Radius 26, Tönung mit Kürzel in 800), Titel, eine Zeile mit den wichtigsten Stammdaten (Symbol davor, Teile durch „·" getrennt), darunter Chips. Rechts die Aktionen. Ein weicher Pfirsich-Kreis rechts oben ist Schmuck.
-- **Kennzahl-Kacheln:** Raster aus zwei bis vier Kacheln, jede auf einer Tönung mit Symbolfeld (48 px, halbtransparentes Weiß), Beschriftung (13 px / 600) und Zahl.
+- **Kennzahl-Kacheln:** Raster aus zwei bis vier Kacheln, jede auf einer Tönung mit Innenabstand 16 px oben/unten und 20 px seitlich, Symbolfeld (48 px, halbtransparentes Weiß), Beschriftung (13 px / 600) und Zahl.
 - **Innenkarten:** für **wenige gleichrangige Objekte** innerhalb einer Karte (z. B. Ansprechpartner einer Firma) — Raster, Personen-Kürzel (48 px Kreis auf Tönung), Name, Rolle, Kontaktwege mit Symbol. Die letzte Kachel ist die **Hinzufügen-Kachel** (gestrichelter Rand).
 - **Zeilen:** **Listen mit vielen Einträgen** (Firmenliste, Vorgänge, Rechnungen) sind Zeilen in einer Karte, kein Kartenraster. Zeile mit Radius klein, Hover „Fläche weich", ganze Zeile als Link auf das Objekt.
 - **Zeitleiste:** Einträge mit Symbolfeld (36 px, Radius 12, Tönung nach Art des Ereignisses), Titel (600) und Unterzeile (Text schwach).
@@ -185,16 +187,17 @@ Vorlage: `docs/entwurf-kupferwolke.html`.
 
 ### Tasten
 
+- **Pillenmaß:** Kupfertaste und weiche Taste tragen 7 px oben/unten und 14 px seitlich Innenabstand bei 13,5 px Schrift (rund 34 px hoch).
 - **Kupfertaste:** Pille, Verlauf Kupfer Taste, weiße Schrift 600, `schatten-kupfer`. **Genau eine je Ansicht** — die Hauptaktion. Sie steht in der Kopfkarte (Detailansicht) bzw. rechts im Kartenkopf der Liste.
 - **Weiche Taste:** Pille, „Fläche weich" mit 1 px Linie als Innenring, Textfarbe — für die zweitwichtigste Aktion (z. B. „Bearbeiten").
-- **Icontaste:** Kreis 40 px, „Fläche weich", Symbol in Text matt; Hover Pfirsich. Braucht immer einen zugänglichen Namen.
+- **Icontaste:** Kreis 34 px, „Fläche weich", Symbol in Text matt; Hover Pfirsich. Braucht immer einen zugänglichen Namen.
 - **⋯-Menü:** **Seltene und folgenreiche Aktionen** (Stilllegen, Löschen, Archivieren) stehen nie als gleichrangige Taste neben den anderen, sondern im ⋯-Menü; im Menü tragen sie Rosé-Schrift und fragen vor der Ausführung nach.
 - **Hover:** Tasten heben sich um 1 px; Innenkarten gehen im Hover auf Weiß mit `schatten-hoch`.
 - **Aktionen, die erst im Hover erscheinen** (⋯ an Innenkarten), erscheinen ebenso bei **Tastaturfokus** (`:focus-within`) und sind auf Geräten ohne Hover (`@media (hover: none)`) **immer sichtbar**.
 
 ### Eingabefelder
 
-Weiße Fläche, 1 px „Rand stark", Radius klein, Beschriftung über dem Feld (13 px / 600, Text matt). Fokus: 2 px Kupferrand. Fehler: Rand und Hinweistext in Zinnober, dazu ein Symbol — nie Farbe allein.
+Weiße Fläche, 1 px „Rand stark", Radius klein, kleine Feldgröße (MUI `size: 'small'`) als Vorgabe, Beschriftung über dem Feld (13 px / 600, Text matt). Fokus: 2 px Kupferrand. Fehler: Rand und Hinweistext in Zinnober, dazu ein Symbol — nie Farbe allein.
 
 ---
 

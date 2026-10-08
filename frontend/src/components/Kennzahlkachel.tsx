@@ -59,7 +59,7 @@ export default function Kennzahlkachel({
         display: 'flex',
         alignItems: 'center',
         gap: '16px',
-        padding: '22px 24px',
+        padding: '16px 20px',
         borderRadius: `${RADIUS_KACHEL}px`,
         backgroundColor: theme.vars.palette.kupferwolke.toenung[toenung].flaeche,
         color: theme.vars.palette.kupferwolke.toenung[toenung].schrift,

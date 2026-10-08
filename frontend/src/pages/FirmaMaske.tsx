@@ -17,6 +17,7 @@ import WeicheTaste from '../components/WeicheTaste';
 import { feldMeldungen, nichtGefunden } from '../lib/apifehler';
 import { meldungAm } from '../lib/feldmeldung';
 import { kennungAus } from '../lib/kennung';
+import { ABSTAND_BUEHNE } from '../theme';
 
 /**
  * Die Maske der Firma — Anlegen unter `/firmen/neu`, Aendern unter `/firmen/:id/bearbeiten`
@@ -218,7 +219,7 @@ export default function FirmaMaske() {
         flexDirection: 'column',
         // Aussenabstand und Spalt bringt der Rahmen mit; hier bleibt nur der Abstand zwischen
         // den Bereichen der Buehne (CLAUDE-design.md, „Rahmen").
-        gap: '22px',
+        gap: ABSTAND_BUEHNE,
       }}
     >
       <Karte titel={titel}>

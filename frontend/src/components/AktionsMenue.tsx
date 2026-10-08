@@ -11,7 +11,7 @@ import { IconDots } from '@tabler/icons-react';
 import type { ReactNode } from 'react';
 import { useEffect, useId, useState } from 'react';
 
-import { RADIUS_RUND } from '../theme';
+import { RADIUS_RUND, TASTE_INNENABSTAND } from '../theme';
 import { rundeIcontaste } from './rundeIcontaste';
 import TastenSymbol from './TastenSymbol';
 import WeicheTaste from './WeicheTaste';
@@ -66,8 +66,6 @@ interface OffeneRueckfrage {
   readonly ausfuehren: () => void;
 }
 
-/** Kantenlaenge der Icontaste (CLAUDE-design.md, „Tasten": Kreis 40 px). */
-
 /**
  * Die Rueckfrage vor einer folgenreichen Aktion.
  *
@@ -116,7 +114,7 @@ function Rueckfrage({
           }}
           sx={(theme) => ({
             borderRadius: `${RADIUS_RUND}px`,
-            padding: '11px 20px',
+            padding: TASTE_INNENABSTAND,
             color: theme.vars.palette.kupferwolke.toenung.rose.schrift,
             background: theme.vars.palette.kupferwolke.toenung.rose.flaeche,
             '&:hover': {

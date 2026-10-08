@@ -17,6 +17,7 @@ import { feldMeldungen, nichtGefunden } from '../lib/apifehler';
 import { istEmailForm } from '../lib/emailform';
 import { meldungAm } from '../lib/feldmeldung';
 import { kennungAus } from '../lib/kennung';
+import { ABSTAND_BUEHNE } from '../theme';
 
 /**
  * Die Maske des Ansprechpartners — Anlegen unter `/firmen/:id/ansprechpartner/neu`, Aendern unter
@@ -252,7 +253,7 @@ export default function AnsprechpartnerMaske() {
         flexDirection: 'column',
         // Aussenabstand und Spalt bringt der Rahmen mit; hier bleibt nur der Abstand zwischen
         // den Bereichen der Buehne (CLAUDE-design.md, „Rahmen").
-        gap: '22px',
+        gap: ABSTAND_BUEHNE,
       }}
     >
       <Karte

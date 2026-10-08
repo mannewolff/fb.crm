@@ -1,9 +1,6 @@
 import type { Theme } from '@mui/material/styles';
 
-import { RADIUS_RUND } from '../theme';
-
-/** Durchmesser einer runden Icontaste (Vorlage: Kreis 40 px). */
-export const ICONTASTE = 40;
+import { ICONTASTE, RADIUS_RUND } from '../theme';
 
 /**
  * Das Aussehen einer runden Icontaste als `sx`: Kreis auf „Flaeche weich", Symbol in „Text matt",

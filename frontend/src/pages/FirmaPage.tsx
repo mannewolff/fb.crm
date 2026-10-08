@@ -43,6 +43,7 @@ import { nichtGefunden } from '../lib/apifehler';
 import { kennungAus } from '../lib/kennung';
 import { namensZug } from '../lib/namenszug';
 import { emailZiel, telefonZiel } from '../lib/telefonlink';
+import { ABSTAND_BUEHNE } from '../theme';
 
 /**
  * Die Detailansicht einer Firma (Kriterien 5, 10, 13, 14) in der Kupferwolke.
@@ -537,7 +538,7 @@ export default function FirmaPage() {
         flexDirection: 'column',
         // Aussenabstand und Spalt bringt der Rahmen mit; hier bleibt nur der Abstand zwischen
         // den Bereichen der Buehne (CLAUDE-design.md, „Rahmen").
-        gap: '22px',
+        gap: ABSTAND_BUEHNE,
       }}
     >
       {schaltFehler === null ? null : <Alert severity="error">{schaltFehler}</Alert>}

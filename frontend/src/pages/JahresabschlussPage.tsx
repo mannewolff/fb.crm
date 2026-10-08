@@ -23,7 +23,7 @@ import { nichtGefunden } from '../lib/apifehler';
 import { stundenWort } from '../lib/arbeitszeit';
 import { euro } from '../lib/geld';
 import { prozentWort } from '../lib/prozent';
-import { ZAHLEN_KLASSE } from '../theme';
+import { ABSTAND_BUEHNE, ZAHLEN_KLASSE } from '../theme';
 
 /**
  * Der Jahresabschluss eines Jahres auf `/jahresabschluesse/<jahr>` (#287, Kriterien 4 bis 11;
@@ -478,7 +478,7 @@ export default function JahresabschlussPage() {
   }, [jahr]);
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: '22px' }}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: ABSTAND_BUEHNE }}>
       <Karte
         titel={titel}
         titelEbene={1}

@@ -53,7 +53,7 @@ import { kennungAus } from '../lib/kennung';
 import { istGestellt } from '../lib/rechnungszustand';
 import type { Rechnungszustand } from '../lib/rechnungszustand';
 import { KEIN_ZEITRAUM, tagWort } from '../lib/tag';
-import { RADIUS_RUND, ZAHLEN_KLASSE } from '../theme';
+import { ABSTAND_BUEHNE, RADIUS_RUND, TASTE_INNENABSTAND, ZAHLEN_KLASSE } from '../theme';
 
 /**
  * Die Seite der einzelnen Rechnung: im Entwurf die Maske der Teilabrechnung (Issue #185), nach dem
@@ -674,7 +674,7 @@ function Rueckfrage({
           }}
           sx={(theme) => ({
             borderRadius: `${RADIUS_RUND}px`,
-            padding: '11px 20px',
+            padding: TASTE_INNENABSTAND,
             color: theme.vars.palette.kupferwolke.toenung.rose.schrift,
             background: theme.vars.palette.kupferwolke.toenung.rose.flaeche,
             '&:hover': {
@@ -1110,7 +1110,7 @@ export default function RechnungPage() {
   }
 
   /** Der Rahmen jeder Bereitschaft: der Abstand zwischen den Karten der Buehne. */
-  const spalten = { display: 'flex', flexDirection: 'column', gap: '22px' } as const;
+  const spalten = { display: 'flex', flexDirection: 'column', gap: ABSTAND_BUEHNE } as const;
 
   if (stand.art === 'laedt') {
     return (

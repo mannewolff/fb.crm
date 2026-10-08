@@ -28,7 +28,7 @@ import { meldungAm } from '../lib/feldmeldung';
 import { dezimal, euro, hundertstel } from '../lib/geld';
 import { kennungAus } from '../lib/kennung';
 import { namensZug } from '../lib/namenszug';
-import { ZAHLEN_KLASSE } from '../theme';
+import { ABSTAND_BUEHNE, ZAHLEN_KLASSE } from '../theme';
 
 /**
  * Die Maske des Angebots — Anlegen und Bearbeiten in einer Ansicht (Issue #127, Kriterien 2, 5).
@@ -512,7 +512,7 @@ export default function AngebotMaske() {
   const summe = summeIn(positionen);
 
   /** Der Rahmen jeder Bereitschaft: der Abstand zwischen den Karten der Buehne. */
-  const spalten = { display: 'flex', flexDirection: 'column', gap: '22px' } as const;
+  const spalten = { display: 'flex', flexDirection: 'column', gap: ABSTAND_BUEHNE } as const;
 
   if (stand.art === 'laedt') {
     return (

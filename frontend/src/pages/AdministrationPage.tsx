@@ -20,6 +20,7 @@ import { feldMeldungen } from '../lib/apifehler';
 import { meldungAm } from '../lib/feldmeldung';
 import { dezimal, hundertstel } from '../lib/geld';
 import { istGueltigesMuster, rechnungsnummer } from '../lib/nummernmuster';
+import { ABSTAND_BUEHNE } from '../theme';
 
 /**
  * Die Seite „Administration" unter `/administration` mit ihrem Bereich „Rechnung" (#159,
@@ -283,7 +284,7 @@ export default function AdministrationPage() {
         flexDirection: 'column',
         // Aussenabstand und Spalt bringt der Rahmen mit; hier bleibt nur der Abstand zwischen
         // den Bereichen der Buehne (CLAUDE-design.md, „Rahmen").
-        gap: '22px',
+        gap: ABSTAND_BUEHNE,
       }}
     >
       <Typography variant="h1" component="h1">

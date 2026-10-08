@@ -38,7 +38,7 @@ import { euro } from '../lib/geld';
 import { kennungAus } from '../lib/kennung';
 import type { Rechnungszustand } from '../lib/rechnungszustand';
 import { tagWort } from '../lib/tag';
-import { ZAHLEN_KLASSE } from '../theme';
+import { ABSTAND_BUEHNE, ZAHLEN_KLASSE } from '../theme';
 
 /**
  * Die Einzelansicht der nachgetragenen Rechnung unter `/rechnungen/nachgetragen/:id` (#254,
@@ -269,7 +269,7 @@ export default function NachgetrageneRechnungPage() {
   }
 
   /** Der Rahmen jeder Bereitschaft: der Abstand zwischen den Karten der Buehne. */
-  const spalten = { display: 'flex', flexDirection: 'column', gap: '22px' } as const;
+  const spalten = { display: 'flex', flexDirection: 'column', gap: ABSTAND_BUEHNE } as const;
 
   if (stand.art === 'laedt') {
     return (

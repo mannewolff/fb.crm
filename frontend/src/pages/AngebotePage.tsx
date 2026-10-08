@@ -18,7 +18,7 @@ import { ANGEBOTSSTATUS, alsAngebotsstatus, angebotsstatusBild } from '../lib/an
 import type { Angebotsstatus } from '../lib/angebotsstatus';
 import { euro } from '../lib/geld';
 import { tagWort } from '../lib/tag';
-import { RADIUS_RUND, ZAHLEN_KLASSE } from '../theme';
+import { ABSTAND_BUEHNE, RADIUS_RUND, ZAHLEN_KLASSE } from '../theme';
 
 /**
  * Die Uebersicht aller Angebote, nach Status filterbar (Issue #127, Kriterium 8).
@@ -188,7 +188,7 @@ export default function AngebotePage() {
   }, [status]);
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: '22px' }}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: ABSTAND_BUEHNE }}>
       <Karte
         titel="Angebote"
         titelEbene={1}

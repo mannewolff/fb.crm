@@ -33,6 +33,7 @@ import { ersteDatei } from '../lib/dateiwahl';
 import { meldungAm } from '../lib/feldmeldung';
 import { dezimal, hundertstel } from '../lib/geld';
 import { kennungAus } from '../lib/kennung';
+import { ABSTAND_BUEHNE } from '../theme';
 
 /**
  * Die Maske der nachgetragenen Rechnung — Anlegen unter `/rechnungen/nachtragen`, Aendern unter
@@ -473,7 +474,7 @@ export default function NachtragMaske() {
         display: 'flex',
         flexDirection: 'column',
         // Aussenabstand und Spalt bringt der Rahmen mit (CLAUDE-design.md, „Rahmen").
-        gap: '22px',
+        gap: ABSTAND_BUEHNE,
       }}
     >
       <Karte titel={titel} titelEbene={1}>

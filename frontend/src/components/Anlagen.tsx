@@ -12,7 +12,7 @@ import { dateigroesse, MAX_UPLOAD_BYTE } from '../lib/dateigroesse';
 import { ersteDatei } from '../lib/dateiwahl';
 import { meldungAm } from '../lib/feldmeldung';
 import { zeitpunktWort } from '../lib/zeitpunkt';
-import { RADIUS_KLEIN, RADIUS_RUND, ZAHLEN_KLASSE } from '../theme';
+import { ICONTASTE, RADIUS_KLEIN, RADIUS_RUND, ZAHLEN_KLASSE } from '../theme';
 import AktionsMenue from './AktionsMenue';
 import AnlageVorschau from './AnlageVorschau';
 import type { AnlageMitVorschau } from './AnlageVorschau';
@@ -81,9 +81,6 @@ const FELD = 'datei';
 
 /** Die Symbolgroesse in Tasten und Menueeintraegen (wie in {@link Kommentare}). */
 const SYMBOL = 16;
-
-/** Kantenlaenge der Icontaste (CLAUDE-design.md, „Tasten": Kreis 40 px). */
-const ICONTASTE = 40;
 
 /** Was der Bereich ueber seinen Bestand weiss. */
 type Stand = 'laedt' | 'gelesen' | 'ausfall';

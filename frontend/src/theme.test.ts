@@ -5,6 +5,10 @@ import { describe, expect, it } from 'vitest';
 
 import { contrastRatio } from './lib/contrast';
 import {
+  ABSTAND_BUEHNE,
+  ICONTASTE,
+  KARTE_INNENABSTAND,
+  KOPFTASTE,
   KUPFERWOLKE,
   RADIUS_GROSS,
   RADIUS_KACHEL,
@@ -15,6 +19,7 @@ import {
   RADIUS_SYMBOL,
   RADIUS_SYMBOLFELD,
   SCHATTEN,
+  TASTE_INNENABSTAND,
   theme,
 } from './theme';
 
@@ -159,6 +164,31 @@ function quelldateien(verzeichnis: string): readonly string[] {
     return [pfad];
   });
 }
+
+/**
+ * Die Masse sind bewusst dichter als die Vorlage (CLAUDE-design.md, „Rahmen" und „Tasten";
+ * Entscheidung Manne, 2026-10-08, Issue #299).
+ */
+describe('Filigrane Masse', () => {
+  it('gibt der Pille 7 px auf 14 px Innenabstand und der Aufschrift 13,5 px', () => {
+    expect(TASTE_INNENABSTAND).toBe('7px 14px');
+    expect(theme.typography.button.fontSize).toBe(13.5);
+  });
+
+  it('macht die Icontaste 34 px und die runde Kopftaste 36 px gross', () => {
+    expect(ICONTASTE).toBe(34);
+    expect(KOPFTASTE).toBe(36);
+  });
+
+  it('stellt Bereiche der Buehne 16 px auseinander und rueckt den Inhalt einer Karte 22 px ein', () => {
+    expect(ABSTAND_BUEHNE).toBe('16px');
+    expect(KARTE_INNENABSTAND).toBe(22);
+  });
+
+  it('gibt Eingabefeldern die kleine Groesse als Vorgabe', () => {
+    expect(theme.components?.MuiTextField?.defaultProps).toEqual({ size: 'small' });
+  });
+});
 
 describe('Kupferwarte abgelegt', () => {
   it('findet im Quelltext weder kupferwarte noch Archivo, Plex oder monoFontFamily', () => {

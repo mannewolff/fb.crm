@@ -3,7 +3,7 @@ import Paper from '@mui/material/Paper';
 import Typography from '@mui/material/Typography';
 import type { ReactNode } from 'react';
 
-import { RADIUS_GROSS, RADIUS_RUND } from '../theme';
+import { KARTE_INNENABSTAND, RADIUS_GROSS, RADIUS_RUND } from '../theme';
 
 /**
  * Die Karte: die tragende, schwebende Flaeche der Buehne (Vorlage `.karte` Z. 53, `.kopfzeile`
@@ -42,9 +42,6 @@ export interface KarteProps {
   readonly titelEbene?: 1 | 2;
 }
 
-/** Innenabstand einer Karte (CLAUDE-design.md, „Rahmen"; Vorlage `.karte` Z. 53). */
-const INNENABSTAND = 28;
-
 /** Abstand zwischen Kartenkopf und Inhalt (Vorlage `.kopfzeile` Z. 79). */
 const KOPF_ABSTAND = 18;
 
@@ -63,7 +60,7 @@ export default function Karte({
         borderRadius: `${RADIUS_GROSS}px`,
         background: theme.vars.palette.kupferwolke.flaeche,
         boxShadow: theme.vars.palette.kupferwolke.schatten.karte,
-        padding: `${String(INNENABSTAND)}px`,
+        padding: `${String(KARTE_INNENABSTAND)}px`,
         overflow: 'hidden',
       })}
     >

@@ -7,7 +7,7 @@ import { IconMenu2 } from '@tabler/icons-react';
 import { useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 
-import { RADIUS_KLEIN, RADIUS_RUND } from '../theme';
+import { ABSTAND_BUEHNE, KOPFTASTE, RADIUS_KLEIN, RADIUS_RUND } from '../theme';
 import { KopfPfadProvider } from './KopfPfad';
 import NavRail from './NavRail';
 import TopBar from './TopBar';
@@ -17,7 +17,7 @@ import TopBar from './TopBar';
  * (Vorlage `.app` Z. 28, `main` Z. 45).
  *
  * Die Masse stehen in der Designquelle („Rahmen"): 20 px Aussenabstand, 24 px Spalt zwischen
- * Schiene und Buehne, die Buehne hoechstens 1180 px breit, 22 px zwischen ihren Bereichen.
+ * Schiene und Buehne, die Buehne hoechstens 1180 px breit, 16 px zwischen ihren Bereichen.
  *
  * Drei Betriebsarten, und jede steht hier im Code und nicht nur im Stylesheet — eine per CSS
  * versteckte Schiene bliebe im Baum und haette im Tabulatorweg keinen Ort:
@@ -69,12 +69,12 @@ function SchieneSchalter({
       sx={(t) => ({
         display: 'grid',
         placeItems: 'center',
-        width: 40,
-        height: 40,
+        width: KOPFTASTE,
+        height: KOPFTASTE,
         flex: 'none',
         padding: 0,
         cursor: 'pointer',
-        // Icontaste: Kreis 40 px auf „Flaeche weich", Symbol in Text matt, Hover Pfirsich
+        // Runde Kopftaste: Kreis 36 px auf „Flaeche weich", Symbol in Text matt, Hover Pfirsich
         // (CLAUDE-design.md, „Tasten").
         borderRadius: `${RADIUS_RUND}px`,
         border: 0,
@@ -159,7 +159,7 @@ export default function AppShell({ children }: { readonly children: ReactNode })
             maxWidth: 1180,
             display: 'flex',
             flexDirection: 'column',
-            gap: '22px',
+            gap: ABSTAND_BUEHNE,
           }}
         >
           <TopBar

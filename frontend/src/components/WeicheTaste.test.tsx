@@ -4,9 +4,15 @@ import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 
 import { renderMitTheme } from '../test/render';
-import WeicheTaste from './WeicheTaste';
+import { TASTE_INNENABSTAND, theme } from '../theme';
+import WeicheTaste, { weichSx } from './WeicheTaste';
 
 describe('WeicheTaste', () => {
+  it('traegt das dichtere Pillenmass 7 px auf 14 px (Issue #299)', () => {
+    expect(weichSx(theme).padding).toBe(TASTE_INNENABSTAND);
+    expect(TASTE_INNENABSTAND).toBe('7px 14px');
+  });
+
   it('ist als Weg ein echter Link mit Ziel', () => {
     renderMitTheme(
       <MemoryRouter>

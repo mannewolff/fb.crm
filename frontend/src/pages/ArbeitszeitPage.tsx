@@ -26,7 +26,7 @@ import {
   zeitspanneWort,
 } from '../lib/arbeitszeit';
 import { tagWort } from '../lib/tag';
-import { ZAHLEN_KLASSE } from '../theme';
+import { ABSTAND_BUEHNE, ZAHLEN_KLASSE } from '../theme';
 
 /**
  * Die Ansicht „Arbeitszeit": die Eintraege eines Monats nach Tagen, mit Summen (Issue #193,
@@ -81,8 +81,6 @@ const SPALTEN: readonly TafelSpalte[] = [
 
 /** Die Symbolgroesse in den Tasten (wie in {@link RechnungenPage}). */
 const SYMBOL_TASTE = 16;
-
-/** Kantenlaenge der Icontaste (CLAUDE-design.md, „Tasten": Kreis 40 px). */
 
 /** Die Symbolgroesse in den Menueeintraegen (wie in {@link Kommentare}). */
 const SYMBOL_MENUE = 17;
@@ -448,7 +446,7 @@ export default function ArbeitszeitPage() {
   const gezeigterMonat = monat ?? (stand.art === 'daten' ? stand.monatsliste.monat : null);
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: '22px' }}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: ABSTAND_BUEHNE }}>
       <Karte
         titel="Arbeitszeit"
         titelEbene={1}

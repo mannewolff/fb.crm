@@ -16,6 +16,7 @@ import KupferTaste from '../components/KupferTaste';
 import WeicheTaste from '../components/WeicheTaste';
 import { feldMeldungen } from '../lib/apifehler';
 import { meldungAm } from '../lib/feldmeldung';
+import { ABSTAND_BUEHNE } from '../theme';
 
 /**
  * Die Maske „Eigene Angaben" unter `/eigene-angaben` (Kriterium 1).
@@ -242,7 +243,7 @@ export default function EigeneAngabenMaske() {
         flexDirection: 'column',
         // Aussenabstand und Spalt bringt der Rahmen mit; hier bleibt nur der Abstand zwischen
         // den Bereichen der Buehne (CLAUDE-design.md, „Rahmen").
-        gap: '22px',
+        gap: ABSTAND_BUEHNE,
       }}
     >
       <Karte titel={TITEL} titelEbene={1}>

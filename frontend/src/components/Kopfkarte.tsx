@@ -4,7 +4,7 @@ import Typography from '@mui/material/Typography';
 import type { ReactNode } from 'react';
 
 import type { ToenungName } from '../theme';
-import { RADIUS_GROSS } from '../theme';
+import { KARTE_INNENABSTAND, RADIUS_GROSS } from '../theme';
 import Mal from './Mal';
 
 /**
@@ -43,8 +43,7 @@ export interface KopfkarteProps {
 /** Kantenlaenge des Mals in der Kopfkarte (CLAUDE-design.md, „Bausteine"). */
 const MAL = 84;
 
-/** Innenabstand und Spalt wie in der Karte bzw. der Vorlage (`.karte` Z. 53, `.held` Z. 55). */
-const INNENABSTAND = 28;
+/** Spalt wie in der Vorlage (`.held` Z. 55); den Innenabstand teilt die Kopfkarte mit der Karte. */
 const SPALT = 24;
 
 export default function Kopfkarte({
@@ -66,7 +65,7 @@ export default function Kopfkarte({
         alignItems: 'center',
         flexWrap: 'wrap',
         gap: `${String(SPALT)}px`,
-        padding: `${String(INNENABSTAND)}px`,
+        padding: `${String(KARTE_INNENABSTAND)}px`,
         borderRadius: `${RADIUS_GROSS}px`,
         background: theme.vars.palette.kupferwolke.flaeche,
         boxShadow: theme.vars.palette.kupferwolke.schatten.karte,

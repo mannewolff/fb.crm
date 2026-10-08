@@ -1,14 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
-import { RADIUS_RUND, theme } from '../theme';
-import { ICONTASTE, rundeIcontaste } from './rundeIcontaste';
+import { ICONTASTE, RADIUS_RUND, theme } from '../theme';
+import { rundeIcontaste } from './rundeIcontaste';
 
 describe('rundeIcontaste', () => {
   const stil = rundeIcontaste(theme);
   const farben = theme.vars.palette.kupferwolke;
 
-  it('ist ein Kreis von 40 px', () => {
-    expect(ICONTASTE).toBe(40);
+  it('ist ein Kreis von 34 px', () => {
+    expect(ICONTASTE).toBe(34);
     expect(stil).toMatchObject({
       width: ICONTASTE,
       height: ICONTASTE,

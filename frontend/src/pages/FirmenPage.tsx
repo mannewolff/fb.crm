@@ -17,7 +17,7 @@ import type { PfadVerweis } from '../components/KopfPfad';
 import KupferTaste from '../components/KupferTaste';
 import Tafel from '../components/Tafel';
 import ZustandsChip from '../components/ZustandsChip';
-import { RADIUS_RUND, ZAHLEN_KLASSE } from '../theme';
+import { ABSTAND_BUEHNE, RADIUS_RUND, ZAHLEN_KLASSE } from '../theme';
 
 /**
  * Die Uebersicht der Firmen (Kriterien 2, 3, 6 und 13) in der Kupferwolke.
@@ -244,7 +244,7 @@ export default function FirmenPage() {
         flexDirection: 'column',
         // Aussenabstand und Spalt bringt der Rahmen mit; hier bleibt nur der Abstand zwischen
         // den Bereichen der Buehne (CLAUDE-design.md, „Rahmen").
-        gap: '22px',
+        gap: ABSTAND_BUEHNE,
       }}
     >
       <Karte

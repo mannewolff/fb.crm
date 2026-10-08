@@ -44,6 +44,23 @@ export const RADIUS_KLEIN = 14;
 /** Tasten, Chips, Suche, Zaehler — die runde Form. */
 export const RADIUS_RUND = 999;
 
+/*
+ * Masse von Tasten und Abstaenden — bewusst dichter als die Vorlage (CLAUDE-design.md, „Rahmen"
+ * und „Tasten"; Entscheidung Manne, 2026-10-08, Issue #299). Bausteine und Seiten lesen sie von
+ * hier; keine Abschrift in den Ansichten.
+ */
+
+/** Innenabstand einer Pille (Kupfertaste, weiche Taste, Rose-Taste einer Rueckfrage). */
+export const TASTE_INNENABSTAND = '7px 14px';
+/** Durchmesser einer runden Icontaste. */
+export const ICONTASTE = 34;
+/** Durchmesser einer runden Kopftaste. */
+export const KOPFTASTE = 36;
+/** Abstand zwischen den Bereichen der Buehne und den Spalten einer Ansicht. */
+export const ABSTAND_BUEHNE = '16px';
+/** Innenabstand einer Karte und der Kopfkarte. */
+export const KARTE_INNENABSTAND = 22;
+
 /** Fokusring: 2 px Kupfer mit 2 px Abstand (Vorlage Z. 103). */
 export const FOCUS_RING_WIDTH = 2;
 export const FOCUS_RING_OFFSET = 2;
@@ -285,7 +302,7 @@ export const theme = createTheme({
     body1: { fontSize: 14.5, fontWeight: 400, lineHeight: 1.5 },
     body2: { fontSize: 13.5, fontWeight: 500 },
     caption: { fontSize: 12.5, fontWeight: 600 },
-    button: { fontSize: 14, fontWeight: 600, textTransform: 'none' },
+    button: { fontSize: 13.5, fontWeight: 600, textTransform: 'none' },
     // Gruppentitel der Schiene: Satzschreibung, keine Versalien mit Laufweite
     // (CLAUDE-design.md, Typografie).
     overline: {
@@ -354,6 +371,10 @@ export const theme = createTheme({
           },
         }),
       },
+    },
+    // Eingabefelder in der kleinen Groesse — die dichtere Gestalt (Issue #299).
+    MuiTextField: {
+      defaultProps: { size: 'small' },
     },
     // Was ueber allem liegt, hebt sich weiter ab (CLAUDE-design.md, „Tiefe").
     MuiMenu: {

@@ -45,7 +45,7 @@ import { stundenWort } from '../lib/arbeitszeit';
 import { dezimal, euro } from '../lib/geld';
 import { kennungAus } from '../lib/kennung';
 import { tagWort } from '../lib/tag';
-import { ZAHLEN_KLASSE } from '../theme';
+import { ABSTAND_BUEHNE, ZAHLEN_KLASSE } from '../theme';
 
 /**
  * Die Ansicht eines Angebots (Issue #127).
@@ -920,7 +920,7 @@ export default function AngebotPage() {
         flexDirection: 'column',
         // Aussenabstand und Spalt bringt der Rahmen mit; hier bleibt nur der Abstand zwischen
         // den Bereichen der Buehne (CLAUDE-design.md, „Rahmen").
-        gap: '22px',
+        gap: ABSTAND_BUEHNE,
       }}
     >
       {meldung === null ? null : <Alert severity="error">{meldung}</Alert>}

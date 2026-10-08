@@ -20,7 +20,7 @@ import { instance } from '../api/instance';
 import { FUSS_EINTRAEGE, NAV_BLOECKE } from '../layout/navItems';
 import type { NavEintrag, Symbolname } from '../layout/navItems';
 import { liesEingeklappt, merkeEingeklappt } from '../lib/railState';
-import { RADIUS_GROSS, RADIUS_KLEIN, RADIUS_RUND } from '../theme';
+import { ICONTASTE, RADIUS_GROSS, RADIUS_KLEIN, RADIUS_RUND } from '../theme';
 import BrandMark from './BrandMark';
 import UserMenu from './UserMenu';
 
@@ -167,10 +167,10 @@ function EinklappTaste({
       aria-expanded={!eingeklappt}
       onClick={umschalten}
       sx={(theme) => ({
-        // Icontaste: Kreis 40 px auf „Flaeche weich", Symbol in Text matt, Hover Pfirsich
+        // Icontaste: Kreis 34 px auf „Flaeche weich", Symbol in Text matt, Hover Pfirsich
         // (CLAUDE-design.md, „Tasten").
-        width: 40,
-        height: 40,
+        width: ICONTASTE,
+        height: ICONTASTE,
         flex: 'none',
         display: 'grid',
         placeItems: 'center',

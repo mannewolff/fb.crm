@@ -3,7 +3,7 @@ import type { Theme } from '@mui/material/styles';
 import type { ReactNode } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
 
-import { RADIUS_RUND } from '../theme';
+import { RADIUS_RUND, TASTE_INNENABSTAND } from '../theme';
 import TastenSymbol from './TastenSymbol';
 
 /**
@@ -47,7 +47,7 @@ export interface KupferTasteProps {
 export function kupferSx(theme: Theme) {
   return {
     borderRadius: `${RADIUS_RUND}px`,
-    padding: '11px 20px',
+    padding: TASTE_INNENABSTAND,
     gap: '8px',
     color: theme.vars.palette.kupferwolke.kupferSchrift,
     background: `linear-gradient(135deg, ${theme.vars.palette.kupferwolke.kupferTaste}, ${theme.vars.palette.kupferwolke.kupferTief})`,

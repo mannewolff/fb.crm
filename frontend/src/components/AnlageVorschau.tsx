@@ -13,7 +13,7 @@ import type { ReactNode } from 'react';
 
 import { anlageInhalt, anlageInhaltPfad } from '../api/anlagen';
 import type { Anlage, Vorschauart } from '../api/anlagen';
-import { RADIUS_RUND } from '../theme';
+import { ICONTASTE, KARTE_INNENABSTAND, RADIUS_RUND } from '../theme';
 import TastenSymbol from './TastenSymbol';
 import { weichSx } from './WeicheTaste';
 
@@ -88,9 +88,6 @@ const ANZEIGE_ART: Readonly<Record<Vorschauart, string>> = {
  * Tastenleiste, auf einem grossen waechst das Fenster nicht ins Unangenehme.
  */
 const INHALT_HOEHE = 'min(72vh, 720px)';
-
-/** Kantenlaenge der Icontaste (CLAUDE-design.md, „Tasten": Kreis 40 px). */
-const ICONTASTE = 40;
 
 /** Die Gestalt der Schliessen-Taste (Vorlage `.icontaste` Z. 67–68). */
 function icontasteSx(theme: Theme) {
@@ -208,7 +205,7 @@ export default function AnlageVorschau({
   return (
     <Dialog open onClose={onSchliessen} fullWidth maxWidth="lg" aria-labelledby={titelId}>
       <Box
-        sx={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '20px 20px 4px 28px' }}
+        sx={{ display: 'flex', alignItems: 'center', gap: '12px', padding: `20px 20px 4px ${String(KARTE_INNENABSTAND)}px` }}
       >
         <DialogTitle
           id={titelId}
