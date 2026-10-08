@@ -283,7 +283,9 @@ public class AngebotAendernUseCase {
     if (!intern) {
       return fuerKunden(angabe, platz);
     }
-    final Angebotsposition bisher = angabe.id() == null ? null : gespeichert.get(angabe.id());
+    // Eine Angabe ohne Kennung ist neu: Unter null steht nichts, weil jede gespeicherte Position
+    // eine Kennung traegt — eine eigene Abfrage auf null waere eine Abschrift davon.
+    final Angebotsposition bisher = gespeichert.get(angabe.id());
     return bisher == null ? neueInterne(angabe) : uebernommen(angabe, bisher);
   }
 

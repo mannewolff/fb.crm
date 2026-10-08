@@ -829,6 +829,31 @@ class AngebotAendernUseCaseTest {
   }
 
   @Test
+  void aendere_turningAnInternalAngebotExternalWithABookedFestpreisInStunden_thenRejects() {
+    // Given — STUNDE allein genuegt so wenig wie AUFWAND allein: Ein Festpreis in Stunden kennt
+    // keine erfasste Zeit.
+    angebotIst(
+        Angebotsdoppel.ohneAnsprechpartner(Angebotsdoppel.angebot(ANGEBOT, Angebotsstatus.LAEUFT)));
+    mitErfassterZeit(Angebotsdoppel.KONZEPTION_ID);
+
+    final AngebotDaten aenderung =
+        daten(
+            null,
+            false,
+            List.of(
+                mitEinheit(
+                    mitModus(Angebotsdoppel.KONZEPTION_ANGABE, Abrechnungsmodus.FESTPREIS),
+                    Einheit.STUNDE)));
+
+    // When / Then
+    assertThatThrownBy(() -> useCase.aendere(ANGEBOT, aenderung))
+        .isInstanceOf(Positionsangaben.class)
+        .hasMessageContaining("Konzeption");
+    verify(angebote).findById(ANGEBOT);
+    verifyNoMoreInteractions(angebote);
+  }
+
+  @Test
   void aendere_turningAnInternalAngebotExternalWithABookedPositionInStunden_thenWrites() {
     // Given — nach Aufwand in Stunden traegt die Position ihre erfasste Zeit; der Wechsel geht
     // durch. Die zweite, unbebuchte Position rechnet daneben nach Festpreis ab und bleibt frei:
@@ -890,6 +915,25 @@ class AngebotAendernUseCaseTest {
 
     // Then
     assertThat(geaendert.beschreibung()).isEqualTo(NEUER_TEXT);
+    assertThat(zeitbindung.gefragt).isEmpty();
+  }
+
+  @Test
+  void aendere_atAnInternalAngebotWithoutChangingTheArt_thenNeverAsksTheZeitbindung() {
+    // Given — auch die interne Arbeit, die intern bleibt, laesst die erfassten Zeiten ungelesen:
+    // Gesperrt ist allein der Weg nach aussen, selbst wenn die bebuchte Position dabei ohne Angaben
+    // zu Abrechnungsart und Einheit eingereicht wird.
+    angebotIst(
+        Angebotsdoppel.ohneAnsprechpartner(Angebotsdoppel.angebot(ANGEBOT, Angebotsstatus.LAEUFT)));
+    mitErfassterZeit(Angebotsdoppel.KONZEPTION_ID);
+    final Positionsangabe umbenannt =
+        new Positionsangabe(Angebotsdoppel.KONZEPTION_ID, "Umbau", null, null, null, null);
+
+    // When
+    final Angebot geaendert = aendere(daten(null, true, List.of(umbenannt)));
+
+    // Then
+    assertThat(geaendert.intern()).isTrue();
     assertThat(zeitbindung.gefragt).isEmpty();
   }
 

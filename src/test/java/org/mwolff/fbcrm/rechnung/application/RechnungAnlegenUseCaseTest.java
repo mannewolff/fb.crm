@@ -301,6 +301,48 @@ class RechnungAnlegenUseCaseTest {
   }
 
   @Test
+  void anlegen_withAMonat_thenAFestpreispositionIgnoresHoursReportedForIt() {
+    // Given — die Zeiterfassung meldet auch an der Pauschale Stunden. Ob eine Position Stunden
+    // traegt, sagt Buchbarkeit und nicht die Auskunft: Die Pauschale bleibt bei ihrer offenen
+    // Menge.
+    gegebenesAngebot(List.of(Rechnungsdoppel.beratungUeber("20.00"), Rechnungsdoppel.PAUSCHALE));
+    when(rechnungen.findByAngebot(Rechnungsdoppel.ANGEBOT)).thenReturn(List.of());
+    gemeldeteStunden(
+        Map.of(
+            Long.valueOf(Rechnungsdoppel.BERATUNG_ID),
+            new BigDecimal("12.00"),
+            Long.valueOf(Rechnungsdoppel.PAUSCHALE_ID),
+            new BigDecimal("3.00")));
+
+    // When
+    useCase().anlegen(Rechnungsdoppel.ANGEBOT, Optional.of(NOVEMBER));
+
+    // Then
+    assertThat(angelegt().positionen())
+        .extracting(Rechnungsposition::angebotPositionId, Rechnungsposition::menge)
+        .containsExactly(
+            tuple(Rechnungsdoppel.BERATUNG_ID, new BigDecimal("12.00")),
+            tuple(Rechnungsdoppel.PAUSCHALE_ID, BigDecimal.ONE));
+  }
+
+  @Test
+  void anlegen_withAMonat_thenAnswersTheEntwurfAsTheBestandWroteIt() {
+    // Given — auch der Entwurf nach Arbeitszeit kommt so zurueck, wie der Bestand ihn schrieb.
+    gegebenesAngebot(List.of(Rechnungsdoppel.beratungUeber("20.00")));
+    when(rechnungen.findByAngebot(Rechnungsdoppel.ANGEBOT)).thenReturn(List.of());
+    gemeldeteStunden(Map.of(Long.valueOf(Rechnungsdoppel.BERATUNG_ID), new BigDecimal("12.00")));
+    final Rechnung gespeichert =
+        Rechnungsdoppel.entwurf(4L, List.of(Rechnungsdoppel.beratung("12.00")));
+    when(rechnungen.save(any())).thenReturn(gespeichert);
+
+    // When
+    final Rechnung entwurf = useCase().anlegen(Rechnungsdoppel.ANGEBOT, Optional.of(NOVEMBER));
+
+    // Then
+    assertThat(entwurf).isSameAs(gespeichert);
+  }
+
+  @Test
   void anlegen_withAMonat_thenABuchbarePositionWithoutHoursIsAbsent() {
     // Given — im November wurde nur auf die Beratung gebucht; die Wartung steht nicht im Entwurf,
     // obwohl an ihr 10 Stunden offen sind (A10).

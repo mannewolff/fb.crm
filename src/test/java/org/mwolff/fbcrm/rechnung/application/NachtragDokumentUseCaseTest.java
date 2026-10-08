@@ -162,7 +162,9 @@ class NachtragDokumentUseCaseTest {
     // Then
     assertThat(ergebnis.pdfSchluessel()).isEqualTo(NEU);
     assertThat(ergebnis.updatedAt()).isEqualTo(JETZT);
-    verify(speicher, never()).loesche(anyString());
+    // any() statt anyString(): anyString() passt nicht auf null, und ohne bisheriges Original
+    // waere null genau der Schluessel, den ein falsches Entfernen hinterherschickte.
+    verify(speicher, never()).loesche(any());
   }
 
   @Test
