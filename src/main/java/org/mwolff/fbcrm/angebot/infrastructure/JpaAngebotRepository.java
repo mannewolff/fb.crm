@@ -161,6 +161,7 @@ class JpaAngebotRepository implements AngebotRepository {
         zeile.isIntern(),
         zeile.getStatus(),
         zeile.getAngebotDatum(),
+        zeile.getTitel(),
         zeile.getBeschreibung(),
         positionszeilen.stream().map(JpaAngebotRepository::toDomain).toList(),
         zeile.getCreatedAt(),

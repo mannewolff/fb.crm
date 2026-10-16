@@ -50,6 +50,7 @@ class JpaAngebotRepositoryTest {
   private static final LocalDate ANGEBOTSDATUM = LocalDate.of(2026, 9, 20);
   private static final Instant ANGELEGT = Instant.parse("2026-09-20T08:00:00Z");
   private static final Instant GEAENDERT = Instant.parse("2026-09-27T10:30:00Z");
+  private static final String TITEL = "Website-Relaunch";
   private static final String BESCHREIBUNG = "Neugestaltung der Website";
 
   /**
@@ -120,10 +121,27 @@ class JpaAngebotRepositoryTest {
         status.intern(),
         status,
         ANGEBOTSDATUM,
+        TITEL,
         BESCHREIBUNG,
         positionen,
         ANGELEGT,
         GEAENDERT);
+  }
+
+  /** Dasselbe Angebot mit einem anderen Titel — {@code null} fuer ein Angebot von vor #316. */
+  private static Angebot mitTitel(final Angebot angebot, final @Nullable String titel) {
+    return new Angebot(
+        angebot.id(),
+        angebot.firmaId(),
+        angebot.ansprechpartnerId(),
+        angebot.intern(),
+        angebot.status(),
+        angebot.angebotDatum(),
+        titel,
+        angebot.beschreibung(),
+        angebot.positionen(),
+        angebot.createdAt(),
+        angebot.updatedAt());
   }
 
   private static Angebotsposition mitKennung(
@@ -208,6 +226,7 @@ class JpaAngebotRepositoryTest {
             zeile -> assertThat(zeile.isIntern()).isFalse(),
             zeile -> assertThat(zeile.getStatus()).isEqualTo(Angebotsstatus.BESTELLT),
             zeile -> assertThat(zeile.getAngebotDatum()).isEqualTo(ANGEBOTSDATUM),
+            zeile -> assertThat(zeile.getTitel()).isEqualTo(TITEL),
             zeile -> assertThat(zeile.getBeschreibung()).isEqualTo(BESCHREIBUNG),
             zeile -> assertThat(zeile.getCreatedAt()).isEqualTo(ANGELEGT),
             zeile -> assertThat(zeile.getUpdatedAt()).isEqualTo(GEAENDERT));
@@ -570,6 +589,7 @@ class JpaAngebotRepositoryTest {
             gelesen -> assertThat(gelesen.isIntern()).isEqualTo(Angebotsstatus.BESTELLT.intern()),
             gelesen -> assertThat(gelesen.getStatus()).isEqualTo(Angebotsstatus.BESTELLT),
             gelesen -> assertThat(gelesen.getAngebotDatum()).isEqualTo(ANGEBOTSDATUM),
+            gelesen -> assertThat(gelesen.getTitel()).isEqualTo(TITEL),
             gelesen -> assertThat(gelesen.getBeschreibung()).isEqualTo(BESCHREIBUNG),
             gelesen -> assertThat(gelesen.getCreatedAt()).isEqualTo(ANGELEGT),
             gelesen -> assertThat(gelesen.getUpdatedAt()).isEqualTo(GEAENDERT));
@@ -600,5 +620,56 @@ class JpaAngebotRepositoryTest {
             gelesen ->
                 assertThat(gelesen.getLeistungsjahr())
                     .isEqualTo((short) position.leistungsjahr().getValue()));
+  }
+
+  @Test
+  void save_givenAChangedTitle_thenWritesTheNewTitleIntoTheRow() {
+    // Given — Issue #316: ein gespeichertes Angebot bekommt einen neuen Titel und wird
+    // fortgeschrieben.
+    erwarteSchreibenDerZeile(zeile());
+
+    // When
+    repository.save(mitTitel(angebot(List.of()), "Betreuung 2027"));
+
+    // Then
+    verify(angebote).save(gespeicherte.capture());
+    assertThat(gespeicherte.getValue().getTitel()).isEqualTo("Betreuung 2027");
+  }
+
+  @Test
+  void save_givenNoTitle_thenWritesNullIntoTheRow() {
+    // Given — #314, Kriterium 4: ein Angebot von vor dem Titel bleibt ohne.
+    erwarteSchreibenDerZeile(AngebotEntity.aus(mitTitel(angebot(List.of()), null)));
+
+    // When
+    final Angebot gesichert = repository.save(mitTitel(angebot(List.of()), null));
+
+    // Then
+    verify(angebote).save(gespeicherte.capture());
+    assertThat(gespeicherte.getValue().getTitel()).isNull();
+    assertThat(gesichert.titel()).isNull();
+  }
+
+  @Test
+  void findById_thenReadsTheTitleBack() {
+    // Given
+    when(angebote.findById(11L)).thenReturn(Optional.of(zeile()));
+    when(positionen.findByAngebot(11L)).thenReturn(List.of());
+
+    // When / Then
+    assertThat(repository.findById(11L))
+        .hasValueSatisfying(angebot -> assertThat(angebot.titel()).isEqualTo(TITEL));
+  }
+
+  @Test
+  void findById_givenARowWithoutTitle_thenTheTitleStaysNull() {
+    // Given
+    when(angebote.findById(11L))
+        .thenReturn(Optional.of(AngebotEntity.aus(mitTitel(angebot(List.of()), null))));
+    when(positionen.findByAngebot(11L)).thenReturn(List.of());
+
+    // When / Then
+    assertThat(repository.findById(11L))
+        .hasValueSatisfying(angebot -> assertThat(angebot.titel()).isNull());
   }
 }

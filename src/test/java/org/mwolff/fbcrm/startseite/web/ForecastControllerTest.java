@@ -73,6 +73,7 @@ class ForecastControllerTest {
                 false,
                 Angebotsstatus.ANGELEGT,
                 ANGEBOTSDATUM,
+                "Website-Relaunch",
                 "Schulungen 2027",
                 List.of(position),
                 ANGELEGT,

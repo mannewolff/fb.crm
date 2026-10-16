@@ -121,6 +121,7 @@ final class Rechnungsdoppel {
         status.intern(),
         status,
         ANGEBOTSDATUM,
+        "Website-Relaunch",
         "Neugestaltung der Website",
         positionen,
         ANGELEGT,

@@ -76,6 +76,9 @@ public class AngebotAnlegenUseCase {
             intern,
             intern ? Angebotsstatus.LAEUFT : Angebotsstatus.ANGELEGT,
             heute,
+            // Der Titel kommt mit dem Anlegeweg herein (Issue #317); dieses Paket oeffnet nur den
+            // Bestand (Issue #316).
+            null,
             null,
             List.of(),
             jetzt,

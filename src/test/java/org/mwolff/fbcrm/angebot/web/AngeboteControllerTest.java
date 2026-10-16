@@ -59,6 +59,7 @@ class AngeboteControllerTest {
             status.intern(),
             status,
             LocalDate.of(2026, 9, 20),
+            "Website-Relaunch",
             null,
             List.of(
                 new Angebotsposition(

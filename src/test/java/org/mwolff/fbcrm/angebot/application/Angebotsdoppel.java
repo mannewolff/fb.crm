@@ -31,6 +31,8 @@ final class Angebotsdoppel {
   static final LocalDate ANGEBOTSDATUM = LocalDate.of(2026, 9, 20);
   static final Instant ANGELEGT = Instant.parse("2026-09-20T08:00:00Z");
 
+  static final String TITEL = "Website-Relaunch";
+
   static final String BESCHREIBUNG = "Neugestaltung der Website";
 
   /**
@@ -113,6 +115,7 @@ final class Angebotsdoppel {
         status.intern(),
         status,
         datum,
+        TITEL,
         BESCHREIBUNG,
         List.of(KONZEPTION, SCHULUNG),
         ANGELEGT,
@@ -128,6 +131,23 @@ final class Angebotsdoppel {
         angebot.intern(),
         angebot.status(),
         angebot.angebotDatum(),
+        angebot.titel(),
+        angebot.beschreibung(),
+        angebot.positionen(),
+        angebot.createdAt(),
+        angebot.updatedAt());
+  }
+
+  /** Dasselbe Angebot ohne Titel — ein Angebot von vor Issue #316 (#314, Kriterium 4). */
+  static Angebot ohneTitel(final Angebot angebot) {
+    return new Angebot(
+        angebot.id(),
+        angebot.firmaId(),
+        angebot.ansprechpartnerId(),
+        angebot.intern(),
+        angebot.status(),
+        angebot.angebotDatum(),
+        null,
         angebot.beschreibung(),
         angebot.positionen(),
         angebot.createdAt(),

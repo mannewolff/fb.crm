@@ -1,6 +1,7 @@
 package org.mwolff.fbcrm.angebot.web;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.nullValue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
@@ -17,6 +18,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.Year;
 import java.util.List;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -135,6 +137,11 @@ class AngebotControllerTest {
   }
 
   private static Angebot angebot(final Angebotsstatus status) {
+    return angebot(status, "Website-Relaunch");
+  }
+
+  /** Dasselbe Angebot mit frei gewaehltem Titel — {@code null} fuer ein Angebot von vor #316. */
+  private static Angebot angebot(final Angebotsstatus status, final @Nullable String titel) {
     return new Angebot(
         Long.valueOf(ANGEBOT),
         3L,
@@ -142,6 +149,7 @@ class AngebotControllerTest {
         status.intern(),
         status,
         ANGEBOTSDATUM,
+        titel,
         "Neugestaltung",
         List.of(KONZEPTION),
         ANGELEGT,
@@ -169,11 +177,24 @@ class AngebotControllerTest {
         .andExpect(jsonPath("$.ansprechpartnerId").value(8))
         .andExpect(jsonPath("$.ansprechpartnerName").value("Eva Adler"))
         .andExpect(jsonPath("$.status").value("BESTELLT"))
+        .andExpect(jsonPath("$.titel").value("Website-Relaunch"))
         .andExpect(jsonPath("$.beschreibung").value("Neugestaltung"))
         .andExpect(jsonPath("$.summe").value(2500.03))
         .andExpect(jsonPath("$.positionen[0].betrag").value(2500.03))
         .andExpect(jsonPath("$.positionen[0].einheit").value("PERSONENTAG"))
         .andExpect(jsonPath("$.nummer").doesNotExist());
+  }
+
+  @Test
+  void lesen_givenAnOfferWithoutTitle_thenAnswersWithNullAsTitle() throws Exception {
+    // Given — #314, Kriterium 4: ein Angebot von vor dem Titel traegt keinen.
+    when(lesen.lese(ANGEBOT)).thenReturn(angebot(Angebotsstatus.ANGELEGT, null));
+
+    // When / Then
+    mockMvc
+        .perform(get("/api/angebote/{id}", Long.valueOf(ANGEBOT)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.titel").value(nullValue()));
   }
 
   @Test

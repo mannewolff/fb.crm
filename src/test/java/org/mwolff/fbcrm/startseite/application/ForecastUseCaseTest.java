@@ -110,6 +110,7 @@ class ForecastUseCaseTest {
             status.intern(),
             status,
             ANGEBOTSDATUM,
+            "Website-Relaunch",
             "Schulungen",
             List.of(positionen),
             ANGELEGT,

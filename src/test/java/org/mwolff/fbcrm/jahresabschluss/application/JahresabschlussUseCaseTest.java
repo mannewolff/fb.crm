@@ -139,6 +139,7 @@ class JahresabschlussUseCaseTest {
             status.intern(),
             status,
             datum,
+            "Website-Relaunch",
             "Neugestaltung der Website",
             List.of(positionen),
             ANGELEGT,

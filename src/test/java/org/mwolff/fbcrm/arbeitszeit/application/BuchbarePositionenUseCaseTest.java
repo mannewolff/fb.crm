@@ -98,6 +98,7 @@ class BuchbarePositionenUseCaseTest {
         status.intern(),
         status,
         datum,
+        "Website-Relaunch",
         "Wartungsvertrag",
         List.of(positionen),
         Zeitdoppel.FRUEHER,

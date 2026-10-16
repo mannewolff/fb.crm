@@ -101,6 +101,7 @@ final class Zeitdoppel {
         status.intern(),
         status,
         TAG.withDayOfMonth(1),
+        "Website-Relaunch",
         "Neugestaltung der Website",
         List.of(KONZEPTION, WARTUNG, SCHULUNG),
         FRUEHER,

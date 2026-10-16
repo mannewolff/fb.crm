@@ -9,6 +9,7 @@ import java.time.LocalDate;
 import java.time.Year;
 import java.util.ArrayList;
 import java.util.List;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
@@ -26,6 +27,9 @@ import org.mwolff.fbcrm.common.Einheit;
  *
  * <p><b>Dazu die Art des Angebots</b> (Issue #226): Das Kennzeichen {@code intern} und der Status
  * sagen dasselbe oder das Angebot entsteht nicht (E3), und {@code umgestellt} setzt beide zusammen.
+ *
+ * <p><b>Dazu der Titel</b> (Issue #316, Plan #315 E1): nicht leer und hoechstens 200 Zeichen, am
+ * Rand von Leerraum befreit, und {@code null} fuer ein Angebot von vor dieser Aenderung.
  */
 class AngebotTest {
 
@@ -84,8 +88,24 @@ class AngebotTest {
         status.intern(),
         status,
         ANGEBOTSDATUM,
+        "Website-Relaunch",
         "Neugestaltung der Website",
         positionen,
+        ANGELEGT,
+        ANGELEGT);
+  }
+
+  private static Angebot mitTitel(final @Nullable String titel) {
+    return new Angebot(
+        7L,
+        3L,
+        8L,
+        false,
+        Angebotsstatus.ANGELEGT,
+        ANGEBOTSDATUM,
+        titel,
+        "Neugestaltung der Website",
+        List.of(KONZEPTION),
         ANGELEGT,
         ANGELEGT);
   }
@@ -98,6 +118,7 @@ class AngebotTest {
         intern,
         status,
         ANGEBOTSDATUM,
+        "Website-Relaunch",
         "Neugestaltung der Website",
         List.of(KONZEPTION),
         ANGELEGT,
@@ -386,5 +407,94 @@ class AngebotTest {
 
     // Then
     assertThat(angebot.positionen()).containsExactly(KONZEPTION);
+  }
+
+  @Test
+  void konstruktor_givenNoTitle_thenAcceptedAsAnOfferFromBeforeTheTitle() {
+    // Given — #314, Kriterium 4: ein bestehendes Angebot hat keinen Titel und bleibt gueltig.
+
+    // When / Then
+    assertThat(mitTitel(null).titel()).isNull();
+  }
+
+  @Test
+  void konstruktor_givenWhitespaceAroundTheTitle_thenStripsIt() {
+    // When / Then — E1: Leerraum am Rand gehoert nicht zum Titel.
+    assertThat(mitTitel("  Website-Relaunch \t").titel()).isEqualTo("Website-Relaunch");
+  }
+
+  @Test
+  void konstruktor_givenATitleOfOnlyWhitespace_thenRejected() {
+    // When / Then — #314, Kriterium 2: ein Titel nur aus Leerzeichen zaehlt als fehlend.
+    assertThatThrownBy(() -> mitTitel("   "))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("Titel");
+  }
+
+  @Test
+  void konstruktor_givenATitleOf201Characters_thenRejected() {
+    // When / Then — #314, Kriterium 1: hoechstens 200 Zeichen.
+    assertThatThrownBy(() -> mitTitel("x".repeat(201)))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("200");
+  }
+
+  @Test
+  void konstruktor_givenATitleOf200Characters_thenAccepted() {
+    // Given — die Grenze selbst geht durch.
+    final String titel = "x".repeat(200);
+
+    // When / Then
+    assertThat(mitTitel(titel).titel()).isEqualTo(titel);
+  }
+
+  @Test
+  void konstruktor_givenATitleOf200CharactersAfterStripping_thenAccepted() {
+    // Given — gezaehlt wird nach dem Abschneiden des Leerraums.
+    final String titel = "x".repeat(200);
+
+    // When / Then
+    assertThat(mitTitel(" " + titel + " ").titel()).isEqualTo(titel);
+  }
+
+  @Test
+  void umgestellt_thenKeepsTheTitle() {
+    // When
+    final Angebot umgestellt = angebot(Angebotsstatus.ABGEGEBEN).umgestellt(true, JETZT);
+
+    // Then
+    assertThat(umgestellt.titel()).isEqualTo("Website-Relaunch");
+  }
+
+  @Test
+  void statusWeiter_thenKeepsTheTitle() {
+    // When
+    final Angebot weiter = angebot(Angebotsstatus.ABGEGEBEN).statusWeiter(JETZT);
+
+    // Then
+    assertThat(weiter.titel()).isEqualTo("Website-Relaunch");
+  }
+
+  @Test
+  void geaendert_thenKeepsTheTitle() {
+    // Given — den Titel aendert erst der Aenderungsweg aus dem naechsten Paket (Issue #317).
+
+    // When
+    final Angebot geaendert =
+        angebot(Angebotsstatus.ANGELEGT)
+            .geaendert(ANGEBOTSDATUM, 9L, "Betreuung", List.of(PAUSCHALE), JETZT);
+
+    // Then
+    assertThat(geaendert.titel()).isEqualTo("Website-Relaunch");
+  }
+
+  @Test
+  void geaendert_givenAnOfferWithoutTitle_thenStaysWithoutTitle() {
+    // When
+    final Angebot geaendert =
+        mitTitel(null).geaendert(ANGEBOTSDATUM, 9L, "Betreuung", List.of(PAUSCHALE), JETZT);
+
+    // Then
+    assertThat(geaendert.titel()).isNull();
   }
 }

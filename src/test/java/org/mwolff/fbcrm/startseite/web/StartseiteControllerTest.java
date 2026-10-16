@@ -118,6 +118,7 @@ class StartseiteControllerTest {
             status.intern(),
             status,
             ANGEBOTSDATUM,
+            "Website-Relaunch",
             "Neugestaltung der Website",
             List.of(
                 new Angebotsposition(

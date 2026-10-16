@@ -112,6 +112,7 @@ class ArbeitszeitMonatUseCaseTest {
         false,
         Angebotsstatus.BESTELLT,
         ERSTER,
+        "Website-Relaunch",
         "Wartungsvertrag",
         List.of(
             new Angebotsposition(
@@ -135,6 +136,7 @@ class ArbeitszeitMonatUseCaseTest {
         true,
         Angebotsstatus.LAEUFT,
         ERSTER,
+        "Website-Relaunch",
         "Eigene Werkzeuge",
         List.of(
             new Angebotsposition(

@@ -110,6 +110,7 @@ final class Webdoppel {
         false,
         Angebotsstatus.BESTELLT,
         ANGEBOTSDATUM,
+        "Website-Relaunch",
         "Neugestaltung der Website",
         List.of(BERATUNG),
         ANGELEGT,

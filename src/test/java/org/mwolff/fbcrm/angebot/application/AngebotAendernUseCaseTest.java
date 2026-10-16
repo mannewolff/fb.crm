@@ -275,6 +275,7 @@ class AngebotAendernUseCaseTest {
         angebot.intern(),
         angebot.status(),
         angebot.angebotDatum(),
+        angebot.titel(),
         angebot.beschreibung(),
         List.of(positionen),
         angebot.createdAt(),

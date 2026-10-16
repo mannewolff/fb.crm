@@ -1,5 +1,6 @@
 package org.mwolff.fbcrm.angebot.web;
 
+import static org.hamcrest.Matchers.nullValue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
@@ -81,6 +82,15 @@ class FirmaAngeboteControllerTest {
 
   private static Angebot angebot(
       final long id, final @Nullable Long ansprechpartnerId, final Angebotsstatus status) {
+    return angebot(id, ansprechpartnerId, status, "Website-Relaunch");
+  }
+
+  /** Dasselbe Angebot mit frei gewaehltem Titel — {@code null} fuer ein Angebot von vor #316. */
+  private static Angebot angebot(
+      final long id,
+      final @Nullable Long ansprechpartnerId,
+      final Angebotsstatus status,
+      final @Nullable String titel) {
     return new Angebot(
         Long.valueOf(id),
         FIRMA,
@@ -88,6 +98,7 @@ class FirmaAngeboteControllerTest {
         status.intern(),
         status,
         ANGEBOTSDATUM,
+        titel,
         null,
         List.of(
             new Angebotsposition(
@@ -119,11 +130,25 @@ class FirmaAngeboteControllerTest {
         .andExpect(jsonPath("$.angebote.length()").value(2))
         .andExpect(jsonPath("$.angebote[0].id").value(Long.valueOf(ANGEBOT)))
         .andExpect(jsonPath("$.angebote[0].status").value("ANGELEGT"))
+        .andExpect(jsonPath("$.angebote[0].titel").value("Website-Relaunch"))
         .andExpect(jsonPath("$.angebote[0].intern").value(false))
         .andExpect(jsonPath("$.angebote[0].summe").value(2500.03))
         .andExpect(jsonPath("$.angebote[1].id").value(9))
         .andExpect(jsonPath("$.angebote[1].status").value("BESTELLT"));
     verifyNoInteractions(kunden);
+  }
+
+  @Test
+  void angebote_givenAnOfferWithoutTitle_thenTheRowCarriesNullAsTitle() throws Exception {
+    // Given — #314, Kriterium 4: ein Angebot von vor dem Titel traegt keinen.
+    when(liste.angebote(FIRMA))
+        .thenReturn(List.of(angebot(ANGEBOT, null, Angebotsstatus.ANGELEGT, null)));
+
+    // When / Then
+    mockMvc
+        .perform(get("/api/firmen/{firmaId}/angebote", Long.valueOf(FIRMA)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.angebote[0].titel").value(nullValue()));
   }
 
   @Test
@@ -140,6 +165,7 @@ class FirmaAngeboteControllerTest {
         .andExpect(jsonPath("$.status").value("ANGELEGT"))
         .andExpect(jsonPath("$.firmaId").value(Long.valueOf(FIRMA)))
         .andExpect(jsonPath("$.firmaName").value("Adler AG"))
+        .andExpect(jsonPath("$.titel").value("Website-Relaunch"))
         .andExpect(jsonPath("$.ansprechpartnerId").doesNotExist())
         .andExpect(jsonPath("$.ansprechpartnerName").doesNotExist())
         .andExpect(jsonPath("$.intern").value(false));

@@ -9,6 +9,7 @@ import java.time.LocalDate;
 import java.time.Year;
 import java.util.List;
 import java.util.Optional;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mwolff.fbcrm.AbstractIntegrationTest;
@@ -46,6 +47,7 @@ class AngebotPersistenceIT extends AbstractIntegrationTest {
 
   private static final LocalDate ANGEBOTSDATUM = LocalDate.of(2026, 9, 20);
   private static final Instant ANGELEGT = Instant.parse("2026-09-20T08:00:00Z");
+  private static final String TITEL = "Website-Relaunch";
   private static final String BESCHREIBUNG = "Neugestaltung der Website";
   private static final Angebotsposition KONZEPTION =
       new Angebotsposition(
@@ -119,6 +121,7 @@ class AngebotPersistenceIT extends AbstractIntegrationTest {
         status.intern(),
         status,
         ANGEBOTSDATUM,
+        TITEL,
         BESCHREIBUNG,
         positionen,
         ANGELEGT,
@@ -142,6 +145,22 @@ class AngebotPersistenceIT extends AbstractIntegrationTest {
   private Angebot geschriebenMit(final Angebot angebot, final List<Angebotsposition> positionen) {
     return geschrieben(
         angebot.geaendert(ANGEBOTSDATUM, ansprechpartnerId, BESCHREIBUNG, positionen, ANGELEGT));
+  }
+
+  /** Dasselbe Angebot mit einem anderen Titel — {@code null} fuer ein Angebot von vor #316. */
+  private static Angebot mitTitel(final Angebot angebot, final @Nullable String titel) {
+    return new Angebot(
+        angebot.id(),
+        angebot.firmaId(),
+        angebot.ansprechpartnerId(),
+        angebot.intern(),
+        angebot.status(),
+        angebot.angebotDatum(),
+        titel,
+        angebot.beschreibung(),
+        angebot.positionen(),
+        angebot.createdAt(),
+        angebot.updatedAt());
   }
 
   private static Angebotsposition umbenannt(final Angebotsposition position, final String name) {
@@ -173,6 +192,7 @@ class AngebotPersistenceIT extends AbstractIntegrationTest {
               assertThat(angebot.intern()).isFalse();
               assertThat(angebot.status()).isEqualTo(Angebotsstatus.ANGELEGT);
               assertThat(angebot.angebotDatum()).isEqualTo(ANGEBOTSDATUM);
+              assertThat(angebot.titel()).isEqualTo(TITEL);
               assertThat(angebot.beschreibung()).isEqualTo(BESCHREIBUNG);
               assertThat(angebot.createdAt()).isEqualTo(ANGELEGT);
               assertThat(angebot.updatedAt()).isEqualTo(ANGELEGT);
@@ -427,5 +447,47 @@ class AngebotPersistenceIT extends AbstractIntegrationTest {
   void findById_givenAnUnknownId_thenEmpty() {
     // When / Then
     assertThat(gelesen(4711L)).isEmpty();
+  }
+
+  @Test
+  void save_givenAChangedTitle_thenStoresItInItsColumnAndReadsItBack() {
+    // Given — Issue #316: der Titel wird geschrieben und danach fortgeschrieben.
+    final Angebot gespeichert = geschrieben(angebot(List.of(KONZEPTION)));
+
+    // When
+    geschrieben(mitTitel(gespeichert, "Betreuung 2027"));
+
+    // Then
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT titel FROM angebot WHERE id = ?",
+                String.class,
+                Long.valueOf(gespeichert.requireId())))
+        .isEqualTo("Betreuung 2027");
+    assertThat(gelesen(gespeichert.requireId()))
+        .hasValueSatisfying(angebot -> assertThat(angebot.titel()).isEqualTo("Betreuung 2027"));
+  }
+
+  @Test
+  void findById_givenARowWithoutTitle_thenReadsAnOfferWithoutTitle() {
+    // Given — #314, Kriterium 4: so steht ein Angebot von vor V24 im Bestand, ohne Titel.
+    jdbc.update(
+        "INSERT INTO angebot (firma_id, status, angebot_datum) VALUES (?, 'ANGELEGT', ?)",
+        Long.valueOf(firmaId),
+        ANGEBOTSDATUM);
+    final long id = jdbc.queryForObject("SELECT id FROM angebot", Long.class).longValue();
+
+    // When / Then
+    assertThat(gelesen(id)).hasValueSatisfying(angebot -> assertThat(angebot.titel()).isNull());
+  }
+
+  @Test
+  void save_givenNoTitle_thenNullStaysNull() {
+    // Given
+    final Angebot gespeichert = geschrieben(mitTitel(angebot(List.of(KONZEPTION)), null));
+
+    // When / Then
+    assertThat(gelesen(gespeichert.requireId()))
+        .hasValueSatisfying(angebot -> assertThat(angebot.titel()).isNull());
   }
 }

@@ -15,14 +15,14 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.support.TransactionTemplate;
 
 /**
- * Prueft das Schema des Angebots nach {@code V20__angebot_intern.sql} gegen eine echte
+ * Prueft das Schema des Angebots nach {@code V24__angebot_titel.sql} gegen eine echte
  * PostgreSQL-Instanz.
  *
  * <p>Gegenstand sind die Zusagen, die allein die Datenbank haelt: die sieben Status als CHECK, die
- * Bindung von {@code intern} an den Status ({@code angebot_art_status}, Issue #226), die
- * Wertebereiche der Positionen und die Reihenfolge als Schluessel. Gearbeitet wird mit {@link
- * JdbcTemplate} und direkten Anweisungen — der Weg ueber die Entities kaeme an einigen dieser
- * Faelle gar nicht vorbei.
+ * Bindung von {@code intern} an den Status ({@code angebot_art_status}, Issue #226), der Titel ohne
+ * blossen Leerraum ({@code angebot_titel}, Issue #316), die Wertebereiche der Positionen und die
+ * Reihenfolge als Schluessel. Gearbeitet wird mit {@link JdbcTemplate} und direkten Anweisungen —
+ * der Weg ueber die Entities kaeme an einigen dieser Faelle gar nicht vorbei.
  *
  * <p><b>Seit {@code V15__angebot_position_kennung.sql} ist die Reihenfolge aufgeschoben
  * eindeutig</b> (Plan #169, E2). Drei Zusagen gehoeren zusammen: {@code pg_constraint} meldet den
@@ -45,6 +45,10 @@ class AngebotSchemaIT extends AbstractIntegrationTest {
           + " (angebot_id, position, bezeichnung, abrechnungsmodus, menge, einheit, einzelpreis,"
           + " leistungsjahr)"
           + " VALUES (?, ?, ?, ?, CAST(? AS numeric), ?, CAST(? AS numeric), 2026)";
+
+  private static final String INSERT_ANGEBOT_MIT_TITEL =
+      "INSERT INTO angebot (firma_id, status, titel, angebot_datum)"
+          + " VALUES (?, 'ANGELEGT', ?, DATE '2026-09-20')";
 
   private static final String FIRMA = "Adler AG";
 
@@ -391,5 +395,31 @@ class AngebotSchemaIT extends AbstractIntegrationTest {
 
     // Then
     assertThat(spalten).isZero();
+  }
+
+  @Test
+  void angebotTitel_givenATitleOfOnlyWhitespace_thenRejectedByTheDatabase() {
+    // When / Then — Plan #315, E3: dieselbe Zusage wie der Konstruktor von Angebot.
+    assertThatThrownBy(() -> jdbc.update(INSERT_ANGEBOT_MIT_TITEL, firmaId, "   "))
+        .isInstanceOf(DataIntegrityViolationException.class)
+        .hasMessageContaining("angebot_titel");
+  }
+
+  @Test
+  void angebotTitel_givenNoTitle_thenAccepted() {
+    // When — #314, Kriterium 4: ein Angebot ohne Titel bleibt gueltig.
+    final int betroffen = jdbc.update(INSERT_ANGEBOT_MIT_TITEL, firmaId, null);
+
+    // Then
+    assertThat(betroffen).isEqualTo(1);
+  }
+
+  @Test
+  void angebotTitel_givenATitle_thenAccepted() {
+    // When
+    final int betroffen = jdbc.update(INSERT_ANGEBOT_MIT_TITEL, firmaId, "Website-Relaunch");
+
+    // Then
+    assertThat(betroffen).isEqualTo(1);
   }
 }

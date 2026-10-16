@@ -22,6 +22,8 @@ import org.mwolff.fbcrm.angebot.domain.Angebotsstatus;
  * @param intern ob das Angebot die eigene interne Arbeit festhaelt (Issue #226)
  * @param status wie weit das Angebot gediehen ist
  * @param angebotDatum Datum des Angebots
+ * @param titel die einzeilige Benennung des Angebots, oder {@code null} fuer ein Angebot von vor
+ *     dieser Aenderung (Issue #316)
  * @param beschreibung der Text des Angebots, oder {@code null}
  * @param positionen die Positionen in ihrer Reihenfolge
  * @param summe die Netto-Summe, gerechnet
@@ -35,6 +37,7 @@ public record AngebotResponse(
     boolean intern,
     Angebotsstatus status,
     LocalDate angebotDatum,
+    @Nullable String titel,
     @Nullable String beschreibung,
     List<AngebotPositionResponse> positionen,
     BigDecimal summe) {
@@ -50,6 +53,7 @@ public record AngebotResponse(
         angebot.intern(),
         angebot.status(),
         angebot.angebotDatum(),
+        angebot.titel(),
         angebot.beschreibung(),
         angebot.positionen().stream().map(AngebotPositionResponse::of).toList(),
         angebot.summe());
