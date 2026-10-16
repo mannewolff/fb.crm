@@ -141,6 +141,8 @@ const SPALTEN_NACH: readonly TafelSpalte[] = [
   'Einheit',
   { beschriftung: 'Einzelpreis', zahl: true },
   { beschriftung: 'Betrag', zahl: true },
+  // Das Leistungsjahr, nur am Kundenangebot (Issue #311, E12) — ein Jahr, kein weiterer Betrag.
+  'Jahr',
 ];
 
 /** Die Zusatzspalte „Angefallen" (siehe {@link Zusatzspalten}). */
@@ -414,6 +416,9 @@ function Positionszeile({
         sx={{ textAlign: 'right', whiteSpace: 'nowrap', fontWeight: 600 }}
       >
         {euro(position.betragInCent)}
+      </Box>
+      <Box component="td" className={ZAHLEN_KLASSE}>
+        {position.leistungsjahr}
       </Box>
     </Box>
   );

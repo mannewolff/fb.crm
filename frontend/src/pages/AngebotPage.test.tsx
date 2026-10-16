@@ -262,6 +262,7 @@ describe('AngebotPage — was das Angebot zeigt (Issue #127)', () => {
       'Einheit',
       'Einzelpreis',
       'Betrag',
+      'Jahr',
     ]);
     const zeile = within(screen.getAllByRole('row')[1]);
     expect(zeile.getByText('Konzeption')).toBeInTheDocument();
@@ -270,6 +271,8 @@ describe('AngebotPage — was das Angebot zeigt (Issue #127)', () => {
     expect(zeile.getByText('Personentag')).toBeInTheDocument();
     expect(zeile.getByText('1.000,01 €')).toBeInTheDocument();
     expect(zeile.getByText('2.500,03 €')).toBeInTheDocument();
+    // Die letzte Zelle traegt das Leistungsjahr, und nur das — kein neuer Betrag (Issue #311).
+    expect(zeile.getAllByRole('cell').at(-1)).toHaveTextContent(/^2026$/);
   });
 
   it('nennt die Summe mit dem Hinweis auf die Umsatzsteuer', async () => {
@@ -538,6 +541,7 @@ describe('AngebotPage — der Abrechnungsstand an den Positionen (Issue #187, Kr
       'Einheit',
       'Einzelpreis',
       'Betrag',
+      'Jahr',
     ]);
     const zeile = within(tafel.getAllByRole('row')[1]);
     // 80 von 160: beide Zahlen stehen gleich da, abgerechnet und offen.
@@ -560,6 +564,7 @@ describe('AngebotPage — der Abrechnungsstand an den Positionen (Issue #187, Kr
       'Einheit',
       'Einzelpreis',
       'Betrag',
+      'Jahr',
     ]);
     expect(screen.queryByText('Abgerechnet')).not.toBeInTheDocument();
   });
@@ -625,6 +630,7 @@ describe('AngebotPage — die Spalte „Angefallen" (Issue #193, Kriterien 7, 8,
       'Einheit',
       'Einzelpreis',
       'Betrag',
+      'Jahr',
     ]);
     expect(within(tafel.getAllByRole('row')[1]).getByText('8,00')).toBeInTheDocument();
   });
@@ -646,6 +652,7 @@ describe('AngebotPage — die Spalte „Angefallen" (Issue #193, Kriterien 7, 8,
       'Einheit',
       'Einzelpreis',
       'Betrag',
+      'Jahr',
     ]);
     expect(screen.queryByText('Angefallen')).not.toBeInTheDocument();
   });
@@ -1128,6 +1135,8 @@ describe('AngebotPage — das interne Angebot (Issue #235, Plan #218, E15)', () 
     expect(tafel.queryByText('Stunde')).not.toBeInTheDocument();
     expect(tafel.queryByText('120,00 €')).not.toBeInTheDocument();
     expect(tafel.queryByText('2.400,00 €')).not.toBeInTheDocument();
+    // Die Spalte „Jahr" gehoert allein dem Kundenangebot (Issue #311, E12).
+    expect(tafel.queryByRole('columnheader', { name: 'Jahr' })).not.toBeInTheDocument();
   });
 
   it('laesst die Zelle „Angefallen" leer, solange der Abrechnungsstand fehlt', async () => {
