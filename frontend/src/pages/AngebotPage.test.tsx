@@ -27,6 +27,7 @@ const ANGEBOT = {
   ansprechpartnerName: 'Eva Adler',
   status: 'ABGEGEBEN',
   angebotDatum: '2026-09-24',
+  titel: 'Neue Website',
   beschreibung: 'Neue Website mit Redaktionssystem',
   intern: false,
   positionen: [POSITION],

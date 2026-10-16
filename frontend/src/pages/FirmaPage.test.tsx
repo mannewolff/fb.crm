@@ -52,6 +52,7 @@ const KONTO = { id: 1, displayName: 'Manfred Wolff', email: 'info@mwolff.org' };
 interface AngebotRoh {
   readonly id: number;
   readonly angebotDatum: string;
+  readonly titel: string | null;
   readonly status: string;
   readonly intern: boolean;
   readonly summe: number;
@@ -60,6 +61,7 @@ interface AngebotRoh {
 const JUENGER: AngebotRoh = {
   id: 32,
   angebotDatum: '2026-09-26',
+  titel: 'Schulung Java',
   status: 'ANGELEGT',
   intern: false,
   summe: 1200,
@@ -68,6 +70,7 @@ const JUENGER: AngebotRoh = {
 const AELTER: AngebotRoh = {
   id: 31,
   angebotDatum: '2026-09-24',
+  titel: 'Neue Website',
   status: 'BESTELLT',
   intern: false,
   summe: 2500.03,

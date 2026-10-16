@@ -34,6 +34,7 @@ const ANGEBOT = {
   ansprechpartnerName: 'Eva Adler',
   status: 'ANGELEGT',
   angebotDatum: '2026-09-24',
+  titel: 'Neue Website',
   beschreibung: null,
   intern: false,
   positionen: [POSITION],
@@ -60,6 +61,7 @@ const ANGEBOT_VERENGT = {
   ansprechpartnerName: 'Eva Adler',
   status: 'ANGELEGT',
   angebotDatum: '2026-09-24',
+  titel: 'Neue Website',
   beschreibung: null,
   intern: false,
   positionen: [POSITION_VERENGT],
@@ -69,6 +71,7 @@ const ANGEBOT_VERENGT = {
 const ZEILE = {
   id: 9,
   angebotDatum: '2026-09-24',
+  titel: 'Neue Website',
   status: 'BESTELLT',
   intern: false,
   summe: 2500.03,
@@ -76,6 +79,7 @@ const ZEILE = {
 
 const EINGABE = {
   angebotDatum: '2026-09-24',
+  titel: 'Neue Website',
   ansprechpartnerId: 8,
   beschreibung: 'Neue Website',
   intern: false,
@@ -123,6 +127,14 @@ describe('parseAngebot', () => {
     expect(parseAngebot({ ...ANGEBOT, beschreibung: 'Neue Website' }).beschreibung).toBe(
       'Neue Website',
     );
+  });
+
+  it('liest den Titel (Issue #318)', () => {
+    expect(parseAngebot({ ...ANGEBOT, titel: 'Schulung Java' }).titel).toBe('Schulung Java');
+  });
+
+  it('liest ein Angebot ohne Titel als null — ein Angebot von vor dem Titel (Issue #318)', () => {
+    expect(parseAngebot({ ...ANGEBOT, titel: null })).toEqual({ ...ANGEBOT_VERENGT, titel: null });
   });
 
   it('nimmt ein Angebot ohne Position mit der Summe null an', () => {
@@ -190,6 +202,8 @@ describe('parseAngebot', () => {
     ['unbekannter Status', { ...ANGEBOT, status: 'VERHANDELT' }],
     ['ohne Status', { ...ANGEBOT, status: undefined }],
     ['ohne Angebotsdatum', { ...ANGEBOT, angebotDatum: null }],
+    ['Titel als Zahl', { ...ANGEBOT, titel: 7 }],
+    ['ohne Titel', { ...ANGEBOT, titel: undefined }],
     ['Beschreibung als Zahl', { ...ANGEBOT, beschreibung: 7 }],
     ['Positionen als Objekt', { ...ANGEBOT, positionen: {} }],
     ['Kennzeichen als Text', { ...ANGEBOT, intern: 'true' }],
@@ -235,12 +249,19 @@ describe('parseFirmaAngebote', () => {
         {
           id: 9,
           angebotDatum: '2026-09-24',
+          titel: 'Neue Website',
           status: 'BESTELLT',
           intern: false,
           summeInCent: 250003,
         },
       ],
     });
+  });
+
+  it('liest eine Zeile ohne Titel als null (Issue #318)', () => {
+    expect(parseFirmaAngebote({ angebote: [{ ...ZEILE, titel: null }] }).angebote[0].titel).toBe(
+      null,
+    );
   });
 
   it('verengt die leere Liste', () => {
@@ -254,6 +275,8 @@ describe('parseFirmaAngebote', () => {
     ['Zeile ohne id', { angebote: [{ ...ZEILE, id: null }] }],
     ['Zeile mit unbekanntem Status', { angebote: [{ ...ZEILE, status: 'OFFEN' }] }],
     ['Zeile ohne Angebotsdatum', { angebote: [{ ...ZEILE, angebotDatum: 7 }] }],
+    ['Zeile mit Titel als Zahl', { angebote: [{ ...ZEILE, titel: 7 }] }],
+    ['Zeile ohne Titel', { angebote: [{ ...ZEILE, titel: undefined }] }],
     ['Zeile ohne Kennzeichen', { angebote: [{ ...ZEILE, intern: null }] }],
     ['Zeile ohne Summe', { angebote: [{ ...ZEILE, summe: null }] }],
   ])('weist eine Antwort ab: %s', (_fall, rumpf) => {
@@ -345,12 +368,14 @@ describe('die Wege', () => {
   it('legt ein Angebot ohne Ansprechpartner an', async () => {
     const fetchMock = fetchNachPfad({ 'POST /api/firmen/5/angebote': json(201, ANGEBOT) });
 
-    expect(await angebotAnlegen(5, null, false)).toEqual(ANGEBOT_VERENGT);
+    expect(
+      await angebotAnlegen(5, { titel: 'Neue Website', ansprechpartnerId: null, intern: false }),
+    ).toEqual(ANGEBOT_VERENGT);
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/firmen/5/angebote',
       expect.objectContaining({
         method: 'POST',
-        body: JSON.stringify({ ansprechpartnerId: null, intern: false }),
+        body: JSON.stringify({ titel: 'Neue Website', ansprechpartnerId: null, intern: false }),
       }),
     );
   });
@@ -364,19 +389,21 @@ describe('die Wege', () => {
       },
     });
 
-    await angebotAnlegen(1, null, true);
+    await angebotAnlegen(1, { titel: 'Eigene Arbeit', ansprechpartnerId: null, intern: true });
 
-    expect(rumpf).toEqual({ ansprechpartnerId: null, intern: true });
+    expect(rumpf).toEqual({ titel: 'Eigene Arbeit', ansprechpartnerId: null, intern: true });
   });
 
   it('legt ein Angebot mit einem Ansprechpartner an', async () => {
     const fetchMock = fetchNachPfad({ 'POST /api/firmen/5/angebote': json(201, ANGEBOT) });
 
-    await angebotAnlegen(5, 8, false);
+    await angebotAnlegen(5, { titel: 'Schulung Java', ansprechpartnerId: 8, intern: false });
 
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/firmen/5/angebote',
-      expect.objectContaining({ body: JSON.stringify({ ansprechpartnerId: 8, intern: false }) }),
+      expect.objectContaining({
+        body: JSON.stringify({ titel: 'Schulung Java', ansprechpartnerId: 8, intern: false }),
+      }),
     );
   });
 
@@ -421,9 +448,11 @@ describe('die Wege', () => {
 
     // Die interne Arbeit hat keine Menge, keine Einheit, keinen Preis und keine Abrechnungsart
     // (Plan #218, E7) — ein mitgeschickter Wert waere eine Angabe, die es nicht gibt. Auch das
-    // Leistungsjahr bleibt draussen: Der Server belegt es vor (Plan #303, E2).
+    // Leistungsjahr bleibt draussen: Der Server belegt es vor (Plan #303, E2). Der Titel steht auf
+    // der obersten Ebene und bleibt (Issue #318).
     expect(rumpf).toEqual({
       angebotDatum: '2026-09-24',
+      titel: 'Neue Website',
       ansprechpartnerId: 8,
       beschreibung: 'Neue Website',
       intern: true,

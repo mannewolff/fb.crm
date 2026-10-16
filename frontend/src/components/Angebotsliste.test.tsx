@@ -9,6 +9,7 @@ import { renderMitTheme } from '../test/render';
 const JUENGER: AngebotZeile = {
   id: 12,
   angebotDatum: '2026-09-26',
+  titel: 'Schulung Java',
   status: 'ANGELEGT',
   intern: false,
   summeInCent: 120000,
@@ -17,6 +18,7 @@ const JUENGER: AngebotZeile = {
 const AELTER: AngebotZeile = {
   id: 9,
   angebotDatum: '2026-09-24',
+  titel: 'Neue Website',
   status: 'BESTELLT',
   intern: false,
   summeInCent: 250003,
@@ -25,6 +27,7 @@ const AELTER: AngebotZeile = {
 const INTERN: AngebotZeile = {
   id: 14,
   angebotDatum: '2026-09-28',
+  titel: 'Eigene Werkzeuge',
   status: 'LAEUFT',
   intern: true,
   summeInCent: 0,

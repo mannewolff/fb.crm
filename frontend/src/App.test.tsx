@@ -18,6 +18,7 @@ const ANGEBOT = {
   ansprechpartnerName: null,
   status: 'ABGEGEBEN',
   angebotDatum: '2026-09-24',
+  titel: 'Neue Website',
   beschreibung: null,
   intern: false,
   positionen: [],

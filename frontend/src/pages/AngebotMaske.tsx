@@ -38,7 +38,8 @@ import { ABSTAND_BUEHNE, ZAHLEN_KLASSE } from '../theme';
  * Die Maske des Angebots — Anlegen und Bearbeiten in einer Ansicht (Issue #127, Kriterien 2, 5).
  *
  * <b>Zwei Schritte, weil das Anlegen zwei Schritte sind.</b> Beim Anlegen nimmt das Backend nur
- * den Ansprechpartner (`AngebotAnlegenRequest`, Issue #126); Datum, Beschreibung und Positionen
+ * Ansprechpartner, Kennzeichen und Titel (`AngebotAnlegenRequest`, Issue #126, Plan #315); Datum,
+ * Beschreibung und Positionen
  * bekommt das Angebot danach ueber den einen Aenderungsweg (E8). Die Maske folgt dem: Unter
  * `/firmen/:id/angebote/neu` steht die Wahl des Ansprechpartners, danach fuehrt sie mit `replace`
  * in `/angebote/:angebotId/bearbeiten`. Beide Wege in einem
@@ -97,6 +98,14 @@ import { ABSTAND_BUEHNE, ZAHLEN_KLASSE } from '../theme';
  * gehoert ab dem Anlegen dem Menschen. Ist das Datumsfeld leer, bleibt auch das Jahr leer, und der
  * Server belegt es beim Speichern vor (E2).
  *
+ * <b>Der Titel ist das Pflichtfeld beider Schritte</b> (Plan #315, Kriterien 2, 3). Er steht in
+ * beiden als erstes Feld, weil er das Angebot benennt, und haengt an einem Zustand fuer beide
+ * Schritte (E9). Die Maske prueft ihn selbst, bevor etwas hinausgeht: Fehlt er, besteht er nur aus
+ * Leerzeichen oder ist er laenger als {@link TITEL_MAX} Zeichen, steht die Meldung am Feld, und
+ * es gibt keinen Netzweg (E5). Hinaus geht er getrimmt — so messen Maske, Anfrage und Spalte
+ * denselben Text (E7). Ein Angebot von vor dem Titel laedt mit leerem Feld und laesst sich erst
+ * speichern, wenn der Titel nachgetragen ist (Kriterium 4).
+ *
  * <b>Der Kopfpfad nennt die Firma beim Namen</b>, sobald sie bekannt ist.
  */
 
@@ -108,6 +117,10 @@ const AUSFALL_LESEN = 'Das Angebot ist gerade nicht zu erreichen. Bitte später 
 const AUSFALL_ANLEGEN = 'Das Angebot wurde nicht angelegt. Bitte später erneut versuchen.';
 const AUSFALL_SPEICHERN = 'Das Angebot wurde nicht gespeichert. Bitte später erneut versuchen.';
 const DATUM_FEHLT = 'Bitte das Datum des Angebots angeben.';
+/** Die hoechste Laenge des Titels — dieselbe wie `@Size(max = 200)` und die Spalte. */
+const TITEL_MAX = 200;
+const TITEL_FEHLT = 'Bitte einen Titel für das Angebot angeben.';
+const TITEL_ZU_LANG = 'Der Titel darf höchstens 200 Zeichen lang sein.';
 const GESPEICHERT = 'Gespeichert.';
 const ZAHLEN_UNKLAR =
   'Solange eine Menge oder ein Einzelpreis keine Zahl ist, kann nicht gespeichert werden.';
@@ -146,6 +159,8 @@ type Stand =
 
 /** Die Angaben des Angebots, so wie sie in den Feldern stehen. */
 interface Texte {
+  /** Der Titel, wie er im Feld steht — in beiden Schritten derselbe Zustand (E9). */
+  readonly titel: string;
   /** Tag (`YYYY-MM-DD`), wie das `date`-Feld ihn fuehrt. */
   readonly angebotDatum: string;
   /** Kennung des Ansprechpartners als Text, oder {@link KEINE_PERSON}. */
@@ -153,7 +168,12 @@ interface Texte {
   readonly beschreibung: string;
 }
 
-const LEERE_TEXTE: Texte = { angebotDatum: '', ansprechpartner: '', beschreibung: '' };
+const LEERE_TEXTE: Texte = {
+  titel: '',
+  angebotDatum: '',
+  ansprechpartner: '',
+  beschreibung: '',
+};
 
 /** Das Jahr eines Tages (`YYYY-MM-DD`) — leer, solange das Datumsfeld keinen Tag traegt. */
 function jahrAus(datum: string): string {
@@ -184,11 +204,22 @@ function alsZeilen(angebot: Angebot): readonly Maskenposition[] {
 /** Die Angaben der Antwort als Feldinhalte — `null` wird zum leeren Feld, nicht zu „null". */
 function alsTexte(angebot: Angebot): Texte {
   return {
+    // Ein Angebot von vor dem Titel laedt mit leerem Feld (E9, Kriterium 4).
+    titel: angebot.titel ?? '',
     angebotDatum: angebot.angebotDatum,
     ansprechpartner:
       angebot.ansprechpartnerId === null ? KEINE_PERSON : String(angebot.ansprechpartnerId),
     beschreibung: angebot.beschreibung ?? '',
   };
+}
+
+/** Was am Titel fehlt — `undefined`, wenn er so hinausgehen darf (E5); gemessen getrimmt (E7). */
+function titelFehler(wert: string): string | undefined {
+  const getrimmt = wert.trim();
+  if (getrimmt === '') {
+    return TITEL_FEHLT;
+  }
+  return getrimmt.length > TITEL_MAX ? TITEL_ZU_LANG : undefined;
 }
 
 /** Ein Feldinhalt als Angabe fuer den Rumpf — leer heisst „keine Angabe", nicht „leerer Text". */
@@ -388,6 +419,36 @@ function InternKaestchen({
   );
 }
 
+/**
+ * Das Titelfeld samt Meldung.
+ *
+ * Ein Baustein und nicht zweimal dasselbe Markup, aus demselben Grund wie {@link InternKaestchen}
+ * (E8).
+ */
+function TitelFeld({
+  wert,
+  setze,
+  meldung,
+}: {
+  readonly wert: string;
+  readonly setze: (wert: string) => void;
+  readonly meldung: string | undefined;
+}) {
+  return (
+    <TextField
+      label="Titel"
+      value={wert}
+      onChange={(ereignis) => {
+        setze(ereignis.target.value);
+      }}
+      error={meldung !== undefined}
+      helperText={meldung}
+      required
+      fullWidth
+    />
+  );
+}
+
 export default function AngebotMaske() {
   const { id, angebotId } = useParams();
   const firmaKennung = kennungAus(id);
@@ -476,17 +537,32 @@ export default function AngebotMaske() {
 
   const anlegen = async (firmaId: number) => {
     setzeFehler(null);
+    // Beide Meldungsquellen frisch: `meldung` liest die eigene vor der des Servers, und eine
+    // stehengebliebene eigene verdeckte sonst die neue Antwort.
+    setzeFeldFehler({});
+    const fehlenderTitel = titelFehler(texte.titel);
+    setzeEigeneFehler(fehlenderTitel === undefined ? {} : { titel: [fehlenderTitel] });
+    if (fehlenderTitel !== undefined) {
+      // Ohne Titel entsteht kein Angebot; hinaus geht nichts (Kriterium 2).
+      return;
+    }
     setzeLaeuft(true);
     try {
-      const angebot = await angebotAnlegen(
-        firmaId,
-        personWahl === KEINE_PERSON ? null : Number(personWahl),
+      const angebot = await angebotAnlegen(firmaId, {
+        titel: texte.titel.trim(),
+        ansprechpartnerId: personWahl === KEINE_PERSON ? null : Number(personWahl),
         intern,
-      );
+      });
       navigate(`/angebote/${String(angebot.id)}/bearbeiten`, { replace: true });
-    } catch {
+    } catch (ursache) {
       setzeLaeuft(false);
-      setzeFehler(AUSFALL_ANLEGEN);
+      // Eine Feldmeldung gehoert ans Feld, nicht in eine Ausfallmeldung (E6).
+      const felder = feldMeldungen(ursache);
+      if (Object.keys(felder).length > 0) {
+        setzeFeldFehler(felder);
+      } else {
+        setzeFehler(AUSFALL_ANLEGEN);
+      }
     }
   };
 
@@ -495,9 +571,14 @@ export default function AngebotMaske() {
     setzeFehler(null);
     setzeFeldFehler({});
     const fehlendesDatum = texte.angebotDatum === '';
-    setzeEigeneFehler(fehlendesDatum ? { angebotDatum: [DATUM_FEHLT] } : {});
+    const fehlenderTitel = titelFehler(texte.titel);
+    // Beide Meldungen koennen zugleich stehen: Wer speichert, soll alles Fehlende auf einmal sehen.
+    setzeEigeneFehler({
+      ...(fehlendesDatum ? { angebotDatum: [DATUM_FEHLT] } : {}),
+      ...(fehlenderTitel === undefined ? {} : { titel: [fehlenderTitel] }),
+    });
     const eingaben = alsEingaben(positionen, intern);
-    if (fehlendesDatum || eingaben === null) {
+    if (fehlendesDatum || fehlenderTitel !== undefined || eingaben === null) {
       // Was fehlt, steht am Feld beziehungsweise an der Summe; hinaus geht nichts.
       return;
     }
@@ -506,6 +587,7 @@ export default function AngebotMaske() {
       const neu = uebernahme(
         await angebotAendern(angebot, {
           angebotDatum: texte.angebotDatum,
+          titel: texte.titel.trim(),
           ansprechpartnerId:
             texte.ansprechpartner === KEINE_PERSON ? null : Number(texte.ansprechpartner),
           beschreibung: oderNull(texte.beschreibung),
@@ -586,6 +668,13 @@ export default function AngebotMaske() {
             >
               {`An: ${stand.firmaName}`}
             </Typography>
+            <TitelFeld
+              wert={texte.titel}
+              setze={(titel) => {
+                setzeTexte({ ...texte, titel });
+              }}
+              meldung={meldung('titel')}
+            />
             <TextField
               select
               label="Ansprechpartner"
@@ -593,7 +682,11 @@ export default function AngebotMaske() {
               onChange={(ereignis) => {
                 setzePersonWahl(ereignis.target.value);
               }}
-              helperText="Optional. Zur Wahl stehen die aktiven Ansprechpartner dieser Firma."
+              error={meldung('ansprechpartnerId') !== undefined}
+              helperText={
+                meldung('ansprechpartnerId') ??
+                'Optional. Zur Wahl stehen die aktiven Ansprechpartner dieser Firma.'
+              }
               fullWidth
               slotProps={{ select: { native: true }, inputLabel: { shrink: true } }}
             >
@@ -642,6 +735,13 @@ export default function AngebotMaske() {
               {GESPEICHERT}
             </Typography>
           ) : null}
+          <TitelFeld
+            wert={texte.titel}
+            setze={(titel) => {
+              setzeTexte({ ...texte, titel });
+            }}
+            meldung={meldung('titel')}
+          />
           <TextField
             label="Angebotsdatum"
             type="date"

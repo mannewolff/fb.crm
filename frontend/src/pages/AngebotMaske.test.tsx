@@ -30,6 +30,7 @@ const ANGEBOT = {
   ansprechpartnerName: null,
   status: 'ANGELEGT',
   angebotDatum: '2026-09-24',
+  titel: 'Relaunch',
   beschreibung: 'Neue Website',
   intern: false,
   positionen: [POSITION],
@@ -97,6 +98,21 @@ function gruppe(nummer: number) {
   return within(screen.getByRole('group', { name: `Position ${String(nummer)}` }));
 }
 
+/** Die Meldungen am Titel — derselbe Wortlaut wie in der Maske (Plan #315, E5). */
+const TITEL_FEHLT = 'Bitte einen Titel für das Angebot angeben.';
+const TITEL_ZU_LANG = 'Der Titel darf höchstens 200 Zeichen lang sein.';
+
+/** Das Titelfeld — `required` haengt der Beschriftung ein Sternchen an. */
+function titelFeld() {
+  return screen.getByRole('textbox', { name: /^Titel/ });
+}
+
+/** Wartet auf den ersten Schritt und traegt einen Titel ein. */
+async function titelEintragen(nutzer: ReturnType<typeof userEvent.setup>, titel: string) {
+  await screen.findByRole('combobox', { name: 'Ansprechpartner' });
+  await nutzer.type(titelFeld(), titel);
+}
+
 afterEach(() => {
   vi.restoreAllMocks();
 });
@@ -135,7 +151,7 @@ describe('AngebotMaske — Anlegen an einer Firma (Kriterium 2, Issue #126)', ()
     });
 
     renderMaske('/firmen/5/angebote/neu');
-    await screen.findByRole('combobox', { name: 'Ansprechpartner' });
+    await titelEintragen(nutzer, 'Relaunch');
     await nutzer.click(screen.getByRole('button', { name: 'Anlegen' }));
 
     expect(await screen.findByRole('heading', { level: 1, name: 'Angebot bearbeiten' }))
@@ -143,7 +159,10 @@ describe('AngebotMaske — Anlegen an einer Firma (Kriterium 2, Issue #126)', ()
     expect(screen.getByTestId('adresse')).toHaveTextContent('/angebote/9/bearbeiten');
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/firmen/5/angebote',
-      expect.objectContaining({ method: 'POST', body: JSON.stringify({ ansprechpartnerId: null, intern: false }) }),
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ titel: 'Relaunch', ansprechpartnerId: null, intern: false }),
+      }),
     );
   });
 
@@ -156,16 +175,14 @@ describe('AngebotMaske — Anlegen an einer Firma (Kriterium 2, Issue #126)', ()
     });
 
     renderMaske('/firmen/5/angebote/neu');
-    await nutzer.selectOptions(
-      await screen.findByRole('combobox', { name: 'Ansprechpartner' }),
-      '8',
-    );
+    await titelEintragen(nutzer, 'Relaunch');
+    await nutzer.selectOptions(screen.getByRole('combobox', { name: 'Ansprechpartner' }), '8');
     await nutzer.click(screen.getByRole('button', { name: 'Anlegen' }));
 
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/firmen/5/angebote',
       expect.objectContaining({
-        body: JSON.stringify({ ansprechpartnerId: 8, intern: false }),
+        body: JSON.stringify({ titel: 'Relaunch', ansprechpartnerId: 8, intern: false }),
       }),
     );
   });
@@ -178,7 +195,7 @@ describe('AngebotMaske — Anlegen an einer Firma (Kriterium 2, Issue #126)', ()
     });
 
     renderMaske('/firmen/5/angebote/neu');
-    await screen.findByRole('combobox', { name: 'Ansprechpartner' });
+    await titelEintragen(nutzer, 'Relaunch');
     await nutzer.click(screen.getByRole('button', { name: 'Anlegen' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('nicht angelegt');
@@ -290,13 +307,14 @@ describe('AngebotMaske — das Angebot bearbeiten (Issue #127, Kriterium 5)', ()
     renderMaske('/angebote/9/bearbeiten');
 
     expect(await bereit()).toHaveValue('2026-09-24');
+    expect(titelFeld()).toHaveValue('Relaunch');
     expect(screen.getByRole('combobox', { name: 'Ansprechpartner' })).toHaveValue('8');
     expect(screen.getByRole('textbox', { name: 'Beschreibung' })).toHaveValue('Neue Website');
     expect(gruppe(1).getByRole('textbox', { name: 'Bezeichnung' })).toHaveValue('Konzeption');
     expect(gruppe(1).getByRole('textbox', { name: 'Menge' })).toHaveValue('2,50');
     expect(gruppe(1).getByRole('textbox', { name: 'Einzelpreis (netto)' })).toHaveValue('1000,01');
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
-    // Genau drei Felder oberhalb der Positionen: Datum, Ansprechpartner, Beschreibung.
+    // Genau vier Felder oberhalb der Positionen: Titel, Datum, Ansprechpartner, Beschreibung.
     expect(screen.queryByLabelText(/Gültig bis/)).not.toBeInTheDocument();
   });
 
@@ -465,6 +483,7 @@ describe('AngebotMaske — das Angebot bearbeiten (Issue #127, Kriterium 5)', ()
         method: 'PUT',
         body: JSON.stringify({
           angebotDatum: '2026-09-25',
+          titel: 'Relaunch',
           ansprechpartnerId: 8,
           beschreibung: 'Neue Website',
           intern: false,
@@ -555,6 +574,7 @@ describe('AngebotMaske — das Angebot bearbeiten (Issue #127, Kriterium 5)', ()
       expect.objectContaining({
         body: JSON.stringify({
           angebotDatum: '2026-09-24',
+          titel: 'Relaunch',
           ansprechpartnerId: null,
           beschreibung: null,
           intern: false,
@@ -782,16 +802,15 @@ describe('AngebotMaske — das Kennzeichen „Internes Projekt" (Issue #207, Kri
     });
 
     renderMaske('/firmen/5/angebote/neu');
-    await nutzer.click(
-      await screen.findByRole('checkbox', { name: 'Internes Projekt' }),
-    );
+    await titelEintragen(nutzer, 'Relaunch');
+    await nutzer.click(screen.getByRole('checkbox', { name: 'Internes Projekt' }));
     await nutzer.click(screen.getByRole('button', { name: 'Anlegen' }));
 
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/firmen/5/angebote',
       expect.objectContaining({
         method: 'POST',
-        body: JSON.stringify({ ansprechpartnerId: null, intern: true }),
+        body: JSON.stringify({ titel: 'Relaunch', ansprechpartnerId: null, intern: true }),
       }),
     );
   });
@@ -806,12 +825,13 @@ describe('AngebotMaske — das Kennzeichen „Internes Projekt" (Issue #207, Kri
 
     renderMaske('/firmen/5/angebote/neu');
     expect(await screen.findByRole('checkbox', { name: 'Internes Projekt' })).not.toBeChecked();
+    await titelEintragen(nutzer, 'Relaunch');
     await nutzer.click(screen.getByRole('button', { name: 'Anlegen' }));
 
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/firmen/5/angebote',
       expect.objectContaining({
-        body: JSON.stringify({ ansprechpartnerId: null, intern: false }),
+        body: JSON.stringify({ titel: 'Relaunch', ansprechpartnerId: null, intern: false }),
       }),
     );
   });
@@ -888,6 +908,7 @@ describe('AngebotMaske — das Kennzeichen „Internes Projekt" (Issue #207, Kri
       expect.objectContaining({
         body: JSON.stringify({
           angebotDatum: '2026-09-24',
+          titel: 'Relaunch',
           ansprechpartnerId: null,
           beschreibung: 'Neue Website',
           intern: true,
@@ -911,6 +932,7 @@ describe('AngebotMaske — das Kennzeichen „Internes Projekt" (Issue #207, Kri
       expect.objectContaining({
         body: JSON.stringify({
           angebotDatum: '2026-09-24',
+          titel: 'Relaunch',
           ansprechpartnerId: null,
           beschreibung: 'Neue Website',
           intern: false,
@@ -939,6 +961,7 @@ describe('AngebotMaske — das Kennzeichen „Internes Projekt" (Issue #207, Kri
       expect.objectContaining({
         body: JSON.stringify({
           angebotDatum: '2026-09-24',
+          titel: 'Relaunch',
           ansprechpartnerId: null,
           beschreibung: 'Neue Website',
           intern: true,
@@ -1045,6 +1068,7 @@ describe('AngebotMaske — das Leistungsjahr der Positionen (Plan #303, Kriteriu
       expect.objectContaining({
         body: JSON.stringify({
           angebotDatum: '2026-09-24',
+          titel: 'Relaunch',
           ansprechpartnerId: null,
           beschreibung: 'Neue Website',
           intern: false,
@@ -1069,6 +1093,7 @@ describe('AngebotMaske — das Leistungsjahr der Positionen (Plan #303, Kriteriu
       expect.objectContaining({
         body: JSON.stringify({
           angebotDatum: '2026-09-24',
+          titel: 'Relaunch',
           ansprechpartnerId: null,
           beschreibung: 'Neue Website',
           intern: false,
@@ -1092,6 +1117,252 @@ describe('AngebotMaske — das Leistungsjahr der Positionen (Plan #303, Kriteriu
     expect(gruppe(1).getByText(KEIN_JAHR)).toBeInTheDocument();
     expect(screen.queryByText('Gespeichert.')).not.toBeInTheDocument();
     // Nur die beiden Lesewege sind hinausgegangen: Alles oder nichts (E8).
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+});
+
+/** Steht `vorne` im Dokument vor `hinten`? */
+function steht(vorne: HTMLElement, hinten: HTMLElement): boolean {
+  return (vorne.compareDocumentPosition(hinten) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
+}
+
+describe('AngebotMaske — der Titel im ersten Schritt (Issue #318, Kriterium 2)', () => {
+  it('fragt den Titel als erstes Feld und als Pflichtfeld ab (E8)', async () => {
+    fetchNachPfad({ 'GET /api/firmen/5': json(200, FIRMA) });
+
+    renderMaske('/firmen/5/angebote/neu');
+    const person = await screen.findByRole('combobox', { name: 'Ansprechpartner' });
+
+    expect(titelFeld()).toHaveValue('');
+    expect(titelFeld()).toBeRequired();
+    expect(steht(titelFeld(), person)).toBe(true);
+  });
+
+  it('Szenario: Neues Angebot ohne Titel — es entsteht keines, und die Meldung steht am Feld', async () => {
+    const nutzer = userEvent.setup();
+    const fetchMock = fetchNachPfad({
+      'GET /api/firmen/5': json(200, FIRMA),
+      'POST /api/firmen/5/angebote': json(201, ANGEBOT),
+    });
+
+    renderMaske('/firmen/5/angebote/neu');
+    await screen.findByRole('combobox', { name: 'Ansprechpartner' });
+    await nutzer.click(screen.getByRole('button', { name: 'Anlegen' }));
+
+    expect(titelFeld()).toHaveAccessibleDescription(TITEL_FEHLT);
+    expect(titelFeld()).toHaveAttribute('aria-invalid', 'true');
+    // Nur der Leseweg der Firma ist hinausgegangen: Ohne Titel entsteht nichts.
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId('adresse')).toHaveTextContent('/firmen/5/angebote/neu');
+
+    // Ein Titel nur aus Leerzeichen zaehlt als fehlend.
+    await nutzer.type(titelFeld(), '   ');
+    await nutzer.click(screen.getByRole('button', { name: 'Anlegen' }));
+
+    expect(titelFeld()).toHaveAccessibleDescription(TITEL_FEHLT);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId('adresse')).toHaveTextContent('/firmen/5/angebote/neu');
+  });
+
+  it('weist einen Titel ueber 200 Zeichen ab, ohne das Netz zu bemuehen', async () => {
+    const nutzer = userEvent.setup();
+    const fetchMock = fetchNachPfad({ 'GET /api/firmen/5': json(200, FIRMA) });
+
+    renderMaske('/firmen/5/angebote/neu');
+    await screen.findByRole('combobox', { name: 'Ansprechpartner' });
+    await nutzer.click(titelFeld());
+    await nutzer.paste('x'.repeat(201));
+    await nutzer.click(screen.getByRole('button', { name: 'Anlegen' }));
+
+    expect(titelFeld()).toHaveAccessibleDescription(TITEL_ZU_LANG);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('schickt einen gueltigen Titel getrimmt hinaus (E7)', async () => {
+    const nutzer = userEvent.setup();
+    const fetchMock = fetchNachPfad({
+      'GET /api/firmen/5': json(200, FIRMA),
+      'POST /api/firmen/5/angebote': json(201, ANGEBOT),
+      'GET /api/angebote/9': json(200, ANGEBOT),
+    });
+
+    renderMaske('/firmen/5/angebote/neu');
+    await screen.findByRole('combobox', { name: 'Ansprechpartner' });
+    // 200 Zeichen und Leerzeichen an beiden Enden: Gemessen wird, was hinausgeht.
+    await nutzer.click(titelFeld());
+    await nutzer.paste(`  ${'x'.repeat(200)}  `);
+    await nutzer.click(screen.getByRole('button', { name: 'Anlegen' }));
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'Angebot bearbeiten' }))
+      .toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/firmen/5/angebote',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ titel: 'x'.repeat(200), ansprechpartnerId: null, intern: false }),
+      }),
+    );
+  });
+
+  it('stellt eine Feldmeldung des Servers ans Feld „Ansprechpartner" statt einer Ausfallmeldung (E6)', async () => {
+    const nutzer = userEvent.setup();
+    const nichtWaehlbar = 'Dieser Ansprechpartner steht für das Angebot nicht zur Wahl.';
+    fetchNachPfad({
+      'GET /api/firmen/5': json(200, FIRMA),
+      'POST /api/firmen/5/angebote': problem(422, 'nicht waehlbar', {
+        ansprechpartnerId: [nichtWaehlbar],
+      }),
+    });
+
+    renderMaske('/firmen/5/angebote/neu');
+    await titelEintragen(nutzer, 'Relaunch');
+    await nutzer.selectOptions(screen.getByRole('combobox', { name: 'Ansprechpartner' }), '8');
+    await nutzer.click(screen.getByRole('button', { name: 'Anlegen' }));
+
+    expect(await screen.findByText(nichtWaehlbar)).toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: 'Ansprechpartner' })).toHaveAccessibleDescription(
+      nichtWaehlbar,
+    );
+    expect(screen.queryByText('nicht angelegt', { exact: false })).not.toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('laesst nach einem Fund am Titel keine stehengebliebene Meldung die des Servers verdecken', async () => {
+    const nutzer = userEvent.setup();
+    const vomServer = 'Der Titel ist so nicht zulässig.';
+    fetchNachPfad({
+      'GET /api/firmen/5': json(200, FIRMA),
+      'POST /api/firmen/5/angebote': problem(400, 'ungültig', { titel: [vomServer] }),
+    });
+
+    renderMaske('/firmen/5/angebote/neu');
+    await screen.findByRole('combobox', { name: 'Ansprechpartner' });
+    await nutzer.click(screen.getByRole('button', { name: 'Anlegen' }));
+    expect(titelFeld()).toHaveAccessibleDescription(TITEL_FEHLT);
+
+    await nutzer.type(titelFeld(), 'Relaunch');
+    await nutzer.click(screen.getByRole('button', { name: 'Anlegen' }));
+
+    expect(await screen.findByText(vomServer)).toBeInTheDocument();
+    expect(titelFeld()).toHaveAccessibleDescription(vomServer);
+    expect(screen.queryByText(TITEL_FEHLT)).not.toBeInTheDocument();
+  });
+
+  it('nimmt die Ausfallmeldung eines frueheren Versuchs beim naechsten Anlegen weg', async () => {
+    const nutzer = userEvent.setup();
+    fetchNachPfad({
+      'GET /api/firmen/5': json(200, FIRMA),
+      'POST /api/firmen/5/angebote': leer(500),
+    });
+
+    renderMaske('/firmen/5/angebote/neu');
+    await titelEintragen(nutzer, 'Relaunch');
+    await nutzer.click(screen.getByRole('button', { name: 'Anlegen' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('nicht angelegt');
+
+    await nutzer.clear(titelFeld());
+    await nutzer.click(screen.getByRole('button', { name: 'Anlegen' }));
+
+    expect(titelFeld()).toHaveAccessibleDescription(TITEL_FEHLT);
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+});
+
+describe('AngebotMaske — der Titel beim Bearbeiten (Issue #318, Kriterien 3, 4)', () => {
+  it('fuehrt den Titel als erstes Feld vor dem Angebotsdatum (E8)', async () => {
+    lesen();
+
+    renderMaske('/angebote/9/bearbeiten');
+    const datum = await bereit();
+
+    expect(titelFeld()).toBeRequired();
+    expect(steht(titelFeld(), datum)).toBe(true);
+  });
+
+  it('schickt einen geaenderten Titel getrimmt hinaus', async () => {
+    const nutzer = userEvent.setup();
+    const fetchMock = lesen(ANGEBOT, {
+      'PUT /api/angebote/9': json(200, { ...ANGEBOT, titel: 'Schulung Java' }),
+    });
+
+    renderMaske('/angebote/9/bearbeiten');
+    await bereit();
+    await nutzer.clear(titelFeld());
+    await nutzer.type(titelFeld(), '  Schulung Java ');
+    await nutzer.click(screen.getByRole('button', { name: 'Speichern' }));
+
+    expect(await screen.findByRole('status')).toHaveTextContent('Gespeichert');
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/angebote/9',
+      expect.objectContaining({
+        method: 'PUT',
+        body: JSON.stringify({
+          angebotDatum: '2026-09-24',
+          titel: 'Schulung Java',
+          ansprechpartnerId: null,
+          beschreibung: 'Neue Website',
+          intern: false,
+          positionen: [KONZEPTION_EINGABE],
+        }),
+      }),
+    );
+    expect(titelFeld()).toHaveValue('Schulung Java');
+  });
+
+  it('Szenario: Zu langer Titel — nicht gespeichert, Meldung am Feld', async () => {
+    const nutzer = userEvent.setup();
+    const fetchMock = lesen(ANGEBOT, { 'PUT /api/angebote/9': json(200, ANGEBOT) });
+
+    renderMaske('/angebote/9/bearbeiten');
+    await bereit();
+    await nutzer.clear(titelFeld());
+    await nutzer.paste('x'.repeat(201));
+    await nutzer.click(screen.getByRole('button', { name: 'Speichern' }));
+
+    expect(titelFeld()).toHaveAccessibleDescription(TITEL_ZU_LANG);
+    expect(titelFeld()).toHaveAttribute('aria-invalid', 'true');
+    // Nur die beiden Lesewege: kein PUT.
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+
+    // 200 Zeichen gehen durch.
+    await nutzer.clear(titelFeld());
+    await nutzer.paste('x'.repeat(200));
+    await nutzer.click(screen.getByRole('button', { name: 'Speichern' }));
+
+    expect(await screen.findByRole('status')).toHaveTextContent('Gespeichert');
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/angebote/9',
+      expect.objectContaining({ method: 'PUT' }),
+    );
+  });
+
+  it('Szenario: Bestehendes Angebot ohne Titel speichern — nicht gespeichert, Meldung am Feld', async () => {
+    const nutzer = userEvent.setup();
+    const fetchMock = lesen({ ...ANGEBOT, titel: null });
+
+    renderMaske('/angebote/9/bearbeiten');
+    await bereit();
+
+    // `null` wird zum leeren Feld, nicht zu „null" (E9).
+    expect(titelFeld()).toHaveValue('');
+    await nutzer.click(screen.getByRole('button', { name: 'Speichern' }));
+
+    expect(titelFeld()).toHaveAccessibleDescription(TITEL_FEHLT);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('zeigt die Meldungen an Titel und Datum zugleich', async () => {
+    const nutzer = userEvent.setup();
+    const fetchMock = lesen();
+
+    renderMaske('/angebote/9/bearbeiten');
+    await nutzer.clear(await bereit());
+    await nutzer.clear(titelFeld());
+    await nutzer.type(titelFeld(), '  ');
+    await nutzer.click(screen.getByRole('button', { name: 'Speichern' }));
+
+    expect(titelFeld()).toHaveAccessibleDescription(TITEL_FEHLT);
+    expect(screen.getByText('Bitte das Datum des Angebots angeben.')).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 });

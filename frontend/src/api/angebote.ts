@@ -52,6 +52,11 @@ import type { Angebotsstatus } from '../lib/angebotsstatus';
  * {@link PositionEingabe} eine Zahl oder `null` — herein kommt sie immer, hinaus nur, wenn es die
  * Position schon gibt. Sie ist der Griff, an dem spaeter eine Rechnungsposition haengt (#160,
  * Kriterium 28); ohne sie zaehlte jedes Speichern die Positionen als neu und loeschte die alten.
+ *
+ * <b>Der Titel ist die einzeilige Benennung des Angebots</b> (Plan #315), getrennt von der
+ * mehrzeiligen Beschreibung. Herein kommt er an jedem Angebot und an jeder Zeile der Firmenliste,
+ * und zwar als `null` an einem Angebot von vor dem Titel — das gibt es im Bestand und bleibt
+ * gueltig. Hinaus geht er dagegen immer: Anlegen und Aendern verlangen ihn (Issue #317).
  */
 
 /** Wie eine Position abgerechnet wird (`Abrechnungsmodus` im Backend, Kriterium 4). */
@@ -88,6 +93,8 @@ export interface Angebot {
   readonly status: Angebotsstatus;
   /** Tag (`YYYY-MM-DD`), wie das Backend ein `LocalDate` liefert. */
   readonly angebotDatum: string;
+  /** Die einzeilige Benennung — `null` an einem Angebot von vor dem Titel (Plan #315). */
+  readonly titel: string | null;
   readonly beschreibung: string | null;
   /** Ob das Angebot die eigene interne Arbeit festhaelt (Issue #226). */
   readonly intern: boolean;
@@ -100,6 +107,8 @@ export interface Angebot {
 export interface AngebotZeile {
   readonly id: number;
   readonly angebotDatum: string;
+  /** Die einzeilige Benennung — `null` an einem Angebot von vor dem Titel (Plan #315). */
+  readonly titel: string | null;
   readonly status: Angebotsstatus;
   /** Ob das Angebot die eigene interne Arbeit festhaelt (Issue #226). */
   readonly intern: boolean;
@@ -150,11 +159,22 @@ export interface PositionEingabe {
 export interface AngebotEingabe {
   /** Tag (`YYYY-MM-DD`). */
   readonly angebotDatum: string;
+  /** Die einzeilige Benennung, getrimmt — Pflicht, hoechstens 200 Zeichen (Plan #315, E7). */
+  readonly titel: string;
   readonly ansprechpartnerId: number | null;
   readonly beschreibung: string | null;
   /** Ob das Angebot die eigene interne Arbeit festhaelt — es bestimmt, was je Position hinausgeht. */
   readonly intern: boolean;
   readonly positionen: readonly PositionEingabe[];
+}
+
+/** Das neue Angebot — die Felder von `AngebotAnlegenRequest` (Plan #315, E13). */
+export interface AngebotAnlageEingabe {
+  /** Die einzeilige Benennung, getrimmt — Pflicht, hoechstens 200 Zeichen (Plan #315, E7). */
+  readonly titel: string;
+  readonly ansprechpartnerId: number | null;
+  /** Ob das Angebot die eigene interne Arbeit festhaelt — es bestimmt den Anfangsstatus. */
+  readonly intern: boolean;
 }
 
 function angebotsstatus(wert: unknown): Angebotsstatus {
@@ -212,6 +232,7 @@ export function parseAngebot(wert: unknown): Angebot {
     ansprechpartnerName: textOderNull(angebot.ansprechpartnerName),
     status: angebotsstatus(angebot.status),
     angebotDatum: text(angebot.angebotDatum),
+    titel: textOderNull(angebot.titel),
     beschreibung: textOderNull(angebot.beschreibung),
     intern: jaNein(angebot.intern),
     positionen: liste(angebot.positionen).map(parsePosition),
@@ -224,6 +245,7 @@ function parseZeile(wert: unknown): AngebotZeile {
   return {
     id: zahl(zeile.id),
     angebotDatum: text(zeile.angebotDatum),
+    titel: textOderNull(zeile.titel),
     status: angebotsstatus(zeile.status),
     intern: jaNein(zeile.intern),
     summeInCent: inHundertsteln(zeile.summe),
@@ -277,18 +299,13 @@ export function angeboteDerFirma(firmaId: number): Promise<FirmaAngebote> {
 /**
  * Legt an die Firma ein Angebot an (Kriterium 2; Issue #126).
  *
- * Der Rumpf geht immer hinaus, auch ohne Ansprechpartner: Das Backend nimmt ihn optional
- * (`@RequestBody(required = false)`), aber ein Aufruf mit stets derselben Form hat nur einen Weg
- * statt zweier, die auseinanderlaufen koennen.
+ * Der Rumpf geht als Ganzes hinaus, wie beim Aendern (Plan #315, E13): Titel, Ansprechpartner und
+ * Kennzeichen.
  */
-export function angebotAnlegen(
-  firmaId: number,
-  ansprechpartnerId: number | null,
-  intern: boolean,
-): Promise<Angebot> {
+export function angebotAnlegen(firmaId: number, eingabe: AngebotAnlageEingabe): Promise<Angebot> {
   return apiJson(
     `/api/firmen/${String(firmaId)}/angebote`,
-    { methode: 'POST', rumpf: { ansprechpartnerId, intern } },
+    { methode: 'POST', rumpf: eingabe },
     parseAngebot,
   );
 }
