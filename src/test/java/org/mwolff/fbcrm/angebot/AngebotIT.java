@@ -662,4 +662,72 @@ class AngebotIT extends AbstractIntegrationTest {
         .containsEntry("einheit", "STUNDE")
         .containsEntry("einzelpreis", new BigDecimal("0.00"));
   }
+
+  /** Dieselbe Position mit einem mitgeschickten Leistungsjahr (Issue #305). */
+  private static Map<String, Object> imJahr(final Map<String, Object> position, final int jahr) {
+    position.put("leistungsjahr", Integer.valueOf(jahr));
+    return position;
+  }
+
+  private AngebotResponse lies(final long angebotId) {
+    return Objects.requireNonNull(
+        ruf("/api/angebote/" + angebotId, HttpMethod.GET, null, AngebotResponse.class).getBody());
+  }
+
+  @Test
+  void aendern_withALeistungsjahr_thenItGoesRoundTripAndCanBeChanged() {
+    // Given — Issue #305: Das Angebotsdatum liegt 2026, die Position kommt mit 2027 — wie im
+    // Anlass von #302.
+    final long angebotId = angebot().id();
+    ruf(
+        "/api/angebote/" + angebotId,
+        HttpMethod.PUT,
+        rumpf(List.of(imJahr(position("Aufwaende Mai 2027", "AUFWAND", "135", "STUNDE"), 2027))),
+        AngebotResponse.class);
+    final AngebotResponse angelegt = lies(angebotId);
+
+    // When — dieselbe Position, das Jahr geaendert.
+    final long kennung = Objects.requireNonNull(angelegt.positionen().get(0).id()).longValue();
+    ruf(
+        "/api/angebote/" + angebotId,
+        HttpMethod.PUT,
+        rumpf(
+            List.of(
+                imJahr(positionMitKennung(kennung, "Aufwaende Mai 2027", "AUFWAND", "135"), 2028))),
+        AngebotResponse.class);
+    final AngebotResponse geaendert = lies(angebotId);
+
+    // Then
+    assertThat(angelegt.positionen())
+        .extracting(AngebotPositionResponse::leistungsjahr)
+        .containsExactly("2027");
+    assertThat(geaendert.positionen())
+        .extracting(AngebotPositionResponse::id, AngebotPositionResponse::leistungsjahr)
+        .containsExactly(tuple(Long.valueOf(kennung), "2028"));
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT leistungsjahr FROM angebot_position WHERE angebot_id = ?",
+                Integer.class,
+                Long.valueOf(angebotId)))
+        .isEqualTo(2028);
+  }
+
+  @Test
+  void aendern_withALeistungsjahrOutsideTheBounds_thenAnswers400AndWritesNothing() {
+    // Given — E10: Die Grenze steht an der Anfrage; die Datenbank sieht den Tippfehler nie.
+    final long angebotId = angebot().id();
+
+    // When
+    final ResponseEntity<String> antwort =
+        ruf(
+            "/api/angebote/" + angebotId,
+            HttpMethod.PUT,
+            rumpf(List.of(imJahr(position("Konzeption", "AUFWAND", "2.50", "PERSONENTAG"), 2100))),
+            String.class);
+
+    // Then
+    assertThat(antwort.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    assertThat(antwort.getBody()).contains("positionen[0].leistungsjahr");
+    assertThat(bezeichnungenNachPlatz(angebotId)).isEmpty();
+  }
 }

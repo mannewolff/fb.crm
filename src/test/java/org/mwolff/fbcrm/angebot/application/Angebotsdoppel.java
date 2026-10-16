@@ -89,7 +89,8 @@ final class Angebotsdoppel {
         position.abrechnungsmodus(),
         position.menge(),
         position.einheit(),
-        position.einzelpreis());
+        position.einzelpreis(),
+        null);
   }
 
   /** Ein angelegtes Angebot mit Kennung, zwei Positionen und Beschreibung. */

@@ -299,7 +299,7 @@ public class AngebotAendernUseCase {
     // Eine Angabe ohne Kennung ist neu: Unter null steht nichts, weil jede gespeicherte Position
     // eine Kennung traegt — eine eigene Abfrage auf null waere eine Abschrift davon.
     final Angebotsposition bisher = gespeichert.get(angabe.id());
-    return bisher == null ? neueInterne(angabe, vorbelegt) : uebernommen(angabe, bisher);
+    return bisher == null ? neueInterne(angabe, vorbelegt) : uebernommen(angabe, bisher, vorbelegt);
   }
 
   /*
@@ -326,13 +326,13 @@ public class AngebotAendernUseCase {
         menge,
         einheit,
         einzelpreis,
-        leistungsjahr(gespeichert.get(angabe.id()), vorbelegt));
+        leistungsjahr(angabe, gespeichert.get(angabe.id()), vorbelegt));
   }
 
   /*
    * Eine neue Position der internen Arbeit: AUFWAND, STUNDE und zweimal 0 (E8). Werte, die nichts
    * behaupten — die Maske zeigt sie bei interner Arbeit nicht, und die vier Spalten bleiben
-   * pflichtig. Das Leistungsjahr ist wie bei jeder neuen Position die Vorbelegung.
+   * pflichtig. Das Leistungsjahr folgt der Regel jeder neuen Position.
    */
   private static Angebotsposition neueInterne(final Positionsangabe angabe, final Year vorbelegt) {
     return new Angebotsposition(
@@ -342,17 +342,17 @@ public class AngebotAendernUseCase {
         OHNE_ZAHL,
         Einheit.STUNDE,
         OHNE_ZAHL,
-        leistungsjahr(null, vorbelegt));
+        leistungsjahr(angabe, null, vorbelegt));
   }
 
   /*
    * Eine vorhandene Position der internen Arbeit behaelt ihre gespeicherten vier Werte (Kriterium
    * 8): Nur so findet ein Angebot, das nach innen und zurueck gestellt wird, seine Zahlen wieder.
-   * Dasselbe gilt fuer ihr Leistungsjahr. Aenderbar bleibt allein die Bezeichnung — mehr zeigt die
-   * Maske dort nicht.
+   * Dasselbe gilt fuer ihr Leistungsjahr, solange die Angabe keines mitschickt. Aenderbar bleibt
+   * sonst allein die Bezeichnung — mehr zeigt die Maske dort nicht.
    */
   private static Angebotsposition uebernommen(
-      final Positionsangabe angabe, final Angebotsposition bisher) {
+      final Positionsangabe angabe, final Angebotsposition bisher, final Year vorbelegt) {
     return new Angebotsposition(
         bisher.id(),
         angabe.bezeichnung(),
@@ -360,17 +360,23 @@ public class AngebotAendernUseCase {
         bisher.menge(),
         bisher.einheit(),
         bisher.einzelpreis(),
-        bisher.leistungsjahr());
+        leistungsjahr(angabe, bisher, vorbelegt));
   }
 
   /*
-   * Die eine Stelle fuer das Leistungsjahr (#302, Kriterium 4; E2): Eine gespeicherte Position
-   * behaelt ihr Jahr, eine neue bekommt die Vorbelegung — das Jahr des eingereichten
-   * Angebotsdatums, das aendere(...) einmal bildet. Ein spaeter geaendertes Angebotsdatum
-   * verschiebt darum kein Jahr. Durchgereicht wird das Jahr und nicht das Datum: Mehr als das Jahr
-   * braucht keine der Hilfen.
+   * Die eine Stelle fuer das Leistungsjahr (#302, Kriterium 4; E2): Ein mitgeschicktes Jahr gilt
+   * (Issue #305) — seine Grenzen prueft die Bean-Validation an der Anfrage (E10). Sonst behaelt
+   * eine gespeicherte Position ihr Jahr, und eine neue bekommt die Vorbelegung — das Jahr des
+   * eingereichten Angebotsdatums, das aendere(...) einmal bildet. Ein spaeter geaendertes
+   * Angebotsdatum verschiebt darum kein Jahr. Durchgereicht wird das Jahr und nicht das Datum: Mehr
+   * als das Jahr braucht keine der Hilfen.
    */
-  private static Year leistungsjahr(final @Nullable Angebotsposition bisher, final Year vorbelegt) {
+  private static Year leistungsjahr(
+      final Positionsangabe angabe, final @Nullable Angebotsposition bisher, final Year vorbelegt) {
+    final Integer angegeben = angabe.leistungsjahr();
+    if (angegeben != null) {
+      return Year.of(angegeben);
+    }
     return bisher == null ? vorbelegt : bisher.leistungsjahr();
   }
 }

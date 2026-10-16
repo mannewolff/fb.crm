@@ -31,7 +31,13 @@ import org.mwolff.fbcrm.common.Identifiable;
  * @param abrechnungsmodus nach Aufwand oder zum Festpreis, oder {@code null}
  * @param menge Menge in der angegebenen Einheit, oder {@code null}
  * @param einheit Einheit der Menge, oder {@code null}
+ *     <p><b>Die fuenfte Angabe, die fehlen darf, ist das Leistungsjahr</b> (Issue #305, Plan #303,
+ *     E2). Sie fehlt aus einem anderen Grund als die vier davor: nicht wegen der Art des Angebots,
+ *     sondern weil es eine Vorbelegung gibt — eine neue Position bekommt das Jahr des
+ *     Angebotsdatums, eine gespeicherte behaelt ihr Jahr. Beides entscheidet {@link
+ *     AngebotAendernUseCase}; eine mitgeschickte Angabe schlaegt die Vorbelegung.
  * @param einzelpreis Netto-Preis je Einheit, oder {@code null}
+ * @param leistungsjahr das Jahr der Leistung, oder {@code null} fuer die Vorbelegung
  */
 public record Positionsangabe(
     @Nullable Long id,
@@ -39,5 +45,6 @@ public record Positionsangabe(
     @Nullable Abrechnungsmodus abrechnungsmodus,
     @Nullable BigDecimal menge,
     @Nullable Einheit einheit,
-    @Nullable BigDecimal einzelpreis)
+    @Nullable BigDecimal einzelpreis,
+    @Nullable Integer leistungsjahr)
     implements Identifiable {}

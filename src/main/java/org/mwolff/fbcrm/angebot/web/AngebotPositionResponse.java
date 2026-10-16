@@ -20,6 +20,9 @@ import org.mwolff.fbcrm.common.Einheit;
  * zurueckschickt, statt sie neu anzulegen — und spaeter der Griff, an dem eine Rechnungsposition
  * haengt (#160, Kriterium 28).
  *
+ * <p><b>Das Leistungsjahr als Text {@code JJJJ}</b> (Issue #305, Plan #303, E9): Jackson schriebe
+ * ein {@code Year} als Zahl, und die Startseite fuehrt Jahre aus demselben Grund als Text.
+ *
  * @param id Kennung der Position
  * @param bezeichnung die Leistung
  * @param abrechnungsmodus nach Aufwand oder zum Festpreis
@@ -27,6 +30,7 @@ import org.mwolff.fbcrm.common.Einheit;
  * @param einheit Einheit der Menge
  * @param einzelpreis Netto-Preis je Einheit
  * @param betrag Netto-Betrag der Position, gerechnet
+ * @param leistungsjahr das Jahr der Leistung als Text {@code JJJJ}
  */
 public record AngebotPositionResponse(
     @Nullable Long id,
@@ -35,7 +39,8 @@ public record AngebotPositionResponse(
     BigDecimal menge,
     Einheit einheit,
     BigDecimal einzelpreis,
-    BigDecimal betrag) {
+    BigDecimal betrag,
+    String leistungsjahr) {
 
   /** Die Sicht der Oberflaeche auf eine Position. */
   static AngebotPositionResponse of(final Angebotsposition position) {
@@ -46,6 +51,7 @@ public record AngebotPositionResponse(
         position.menge(),
         position.einheit(),
         position.einzelpreis(),
-        position.betrag());
+        position.betrag(),
+        position.leistungsjahr().toString());
   }
 }

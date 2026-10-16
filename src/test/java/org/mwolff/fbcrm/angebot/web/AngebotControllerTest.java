@@ -20,6 +20,8 @@ import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.Mock;
@@ -101,7 +103,8 @@ class AngebotControllerTest {
           Abrechnungsmodus.AUFWAND,
           new BigDecimal("2.50"),
           Einheit.PERSONENTAG,
-          new BigDecimal("1000.01"));
+          new BigDecimal("1000.01"),
+          null);
 
   private static final String RUMPF =
       """
@@ -518,7 +521,8 @@ class AngebotControllerTest {
                     Abrechnungsmodus.AUFWAND,
                     null,
                     Einheit.STUNDE,
-                    BigDecimal.TEN)));
+                    BigDecimal.TEN,
+                    null)));
     final String ohneMenge =
         """
         {"angebotDatum":"2026-09-25","positionen":[{"bezeichnung":"Konzeption",
@@ -535,5 +539,87 @@ class AngebotControllerTest {
         .andExpect(
             jsonPath("$.fieldErrors['positionen[0].menge'][0]")
                 .value(Positionsangaben.ANGABE_FEHLT));
+  }
+
+  /** Ein Rumpf mit einer neuen Position, die das angegebene Leistungsjahr mitschickt. */
+  private static String mitLeistungsjahr(final int jahr) {
+    return """
+        {"angebotDatum":"2026-09-25","positionen":[{"bezeichnung":"Konzeption",
+          "abrechnungsmodus":"AUFWAND","menge":"2.50","einheit":"PERSONENTAG",
+          "einzelpreis":"1000.01","leistungsjahr":%d}]}
+        """
+        .formatted(Integer.valueOf(jahr));
+  }
+
+  @Test
+  void lesen_thenAnswersWithTheLeistungsjahrAsText() throws Exception {
+    // Given — Issue #305, E9: Jackson schriebe ein Year als Zahl; die Antwort fuehrt es als Text
+    // JJJJ, wie die Startseite ihre Jahre.
+    when(lesen.lese(ANGEBOT)).thenReturn(angebot(Angebotsstatus.ANGELEGT));
+
+    // When / Then
+    mockMvc
+        .perform(get("/api/angebote/{id}", Long.valueOf(ANGEBOT)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.positionen[0].leistungsjahr").isString())
+        .andExpect(jsonPath("$.positionen[0].leistungsjahr").value("2026"));
+  }
+
+  @ParameterizedTest
+  @ValueSource(ints = {2000, 2027, 2099})
+  void aendern_withALeistungsjahrWithinTheBounds_thenPassesItOn(final int jahr) throws Exception {
+    // Given — Issue #305, E10: 2000 bis 2099 sind gueltig, die Grenzen eingeschlossen.
+    aendernAntwortet();
+
+    // When
+    mockMvc
+        .perform(
+            put("/api/angebote/{id}", Long.valueOf(ANGEBOT))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(mitLeistungsjahr(jahr)))
+        .andExpect(status().isOk());
+
+    // Then
+    assertThat(daten.getValue().positionen())
+        .singleElement()
+        .satisfies(position -> assertThat(position.leistungsjahr()).isEqualTo(jahr));
+  }
+
+  @ParameterizedTest
+  @ValueSource(ints = {1999, 2100})
+  void aendern_withALeistungsjahrOutsideTheBounds_thenAnswers400AtTheField(final int jahr)
+      throws Exception {
+    // Given — E10: „20267" ist ein Tippfehler und keine Angabe; die Bean-Validation weist ab, bevor
+    // der Anwendungsfall gefragt wird.
+
+    // When / Then
+    mockMvc
+        .perform(
+            put("/api/angebote/{id}", Long.valueOf(ANGEBOT))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(mitLeistungsjahr(jahr)))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.fieldErrors['positionen[0].leistungsjahr']").isNotEmpty());
+    verifyNoInteractions(aendern);
+  }
+
+  @Test
+  void aendern_withoutTheLeistungsjahrField_thenStaysValidAndPassesNull() throws Exception {
+    // Given — Issue #305, E2: Das Leistungsjahr ist nachgebbar. Ein Rumpf ohne das Feld — wie ihn
+    // die Systemgrenze am internen Angebot schickt — wird weder 400 noch 422.
+    aendernAntwortet();
+
+    // When
+    mockMvc
+        .perform(
+            put("/api/angebote/{id}", Long.valueOf(ANGEBOT))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(RUMPF))
+        .andExpect(status().isOk());
+
+    // Then
+    assertThat(daten.getValue().positionen())
+        .singleElement()
+        .satisfies(position -> assertThat(position.leistungsjahr()).isNull());
   }
 }
