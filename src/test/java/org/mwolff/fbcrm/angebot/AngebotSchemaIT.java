@@ -42,8 +42,9 @@ class AngebotSchemaIT extends AbstractIntegrationTest {
 
   private static final String INSERT_POSITION =
       "INSERT INTO angebot_position"
-          + " (angebot_id, position, bezeichnung, abrechnungsmodus, menge, einheit, einzelpreis)"
-          + " VALUES (?, ?, ?, ?, CAST(? AS numeric), ?, CAST(? AS numeric))";
+          + " (angebot_id, position, bezeichnung, abrechnungsmodus, menge, einheit, einzelpreis,"
+          + " leistungsjahr)"
+          + " VALUES (?, ?, ?, ?, CAST(? AS numeric), ?, CAST(? AS numeric), 2026)";
 
   private static final String FIRMA = "Adler AG";
 

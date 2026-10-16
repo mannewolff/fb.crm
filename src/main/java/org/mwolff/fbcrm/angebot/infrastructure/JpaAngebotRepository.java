@@ -1,5 +1,6 @@
 package org.mwolff.fbcrm.angebot.infrastructure;
 
+import java.time.Year;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -146,7 +147,8 @@ class JpaAngebotRepository implements AngebotRepository {
         position.abrechnungsmodus(),
         position.menge(),
         position.einheit(),
-        position.einzelpreis());
+        position.einzelpreis(),
+        position.leistungsjahr());
     return zeile;
   }
 
@@ -172,6 +174,7 @@ class JpaAngebotRepository implements AngebotRepository {
         zeile.getAbrechnungsmodus(),
         zeile.getMenge(),
         zeile.getEinheit(),
-        zeile.getEinzelpreis());
+        zeile.getEinzelpreis(),
+        Year.of(zeile.getLeistungsjahr()));
   }
 }

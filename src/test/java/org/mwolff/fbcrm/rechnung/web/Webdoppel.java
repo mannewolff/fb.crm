@@ -5,6 +5,7 @@ import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.Year;
 import java.util.List;
 import org.mwolff.fbcrm.angebot.domain.Angebot;
 import org.mwolff.fbcrm.angebot.domain.Angebotsposition;
@@ -66,7 +67,8 @@ final class Webdoppel {
           Abrechnungsmodus.AUFWAND,
           new BigDecimal("160.00"),
           Einheit.STUNDE,
-          STUNDENSATZ);
+          STUNDENSATZ,
+          Year.of(2026));
 
   /** Die Kopie des Empfaengers an einer gestellten Rechnung — die Firma hiess damals anders. */
   static final Belegempfaenger EMPFAENGER_KOPIE =

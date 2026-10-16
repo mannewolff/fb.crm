@@ -4,6 +4,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.time.Year;
 import java.util.List;
 import org.mwolff.fbcrm.angebot.domain.Angebot;
 import org.mwolff.fbcrm.angebot.domain.Angebotsposition;
@@ -61,7 +62,8 @@ final class Zeitdoppel {
           Abrechnungsmodus.AUFWAND,
           new BigDecimal("20.00"),
           Einheit.STUNDE,
-          new BigDecimal("120.00"));
+          new BigDecimal("120.00"),
+          Year.of(2026));
 
   static final Angebotsposition WARTUNG =
       new Angebotsposition(
@@ -70,7 +72,8 @@ final class Zeitdoppel {
           Abrechnungsmodus.AUFWAND,
           new BigDecimal("10.00"),
           Einheit.STUNDE,
-          new BigDecimal("130.00"));
+          new BigDecimal("130.00"),
+          Year.of(2026));
 
   static final Angebotsposition SCHULUNG =
       new Angebotsposition(
@@ -79,7 +82,8 @@ final class Zeitdoppel {
           Abrechnungsmodus.FESTPREIS,
           BigDecimal.ONE,
           Einheit.PAUSCHAL,
-          new BigDecimal("1200.00"));
+          new BigDecimal("1200.00"),
+          Year.of(2026));
 
   private Zeitdoppel() {}
 

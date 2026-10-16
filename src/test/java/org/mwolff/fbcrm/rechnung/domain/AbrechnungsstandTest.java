@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.Year;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.mwolff.fbcrm.angebot.domain.Angebotsposition;
@@ -38,7 +39,8 @@ class AbrechnungsstandTest {
           Abrechnungsmodus.AUFWAND,
           new BigDecimal("160.00"),
           Einheit.STUNDE,
-          new BigDecimal("100.00"));
+          new BigDecimal("100.00"),
+          Year.of(2026));
 
   /** Eine Pauschale — an ihr zeigt sich, dass Bruchteile genau rechnen (Frage 1 aus #160). */
   private static final Angebotsposition PAUSCHALE =
@@ -48,7 +50,8 @@ class AbrechnungsstandTest {
           Abrechnungsmodus.FESTPREIS,
           BigDecimal.ONE,
           Einheit.PAUSCHAL,
-          new BigDecimal("1200.00"));
+          new BigDecimal("1200.00"),
+          Year.of(2026));
 
   private static Rechnung rechnung(
       final long id, final Rechnungszustand zustand, final List<Rechnungsposition> positionen) {
@@ -265,7 +268,8 @@ class AbrechnungsstandTest {
         Abrechnungsmodus.AUFWAND,
         new BigDecimal(menge),
         Einheit.STUNDE,
-        BERATUNG.einzelpreis());
+        BERATUNG.einzelpreis(),
+        BERATUNG.leistungsjahr());
   }
 
   @Test
@@ -312,7 +316,8 @@ class AbrechnungsstandTest {
             Abrechnungsmodus.AUFWAND,
             new BigDecimal("10.00"),
             Einheit.STUNDE,
-            new BigDecimal("1000.01"));
+            new BigDecimal("1000.01"),
+            Year.of(2026));
     final Positionsstand stand = new Positionsstand(teuer, BigDecimal.ZERO);
 
     // When / Then — kaufmaennisch aufgerundet, wie jeder Betrag dieses Projekts.

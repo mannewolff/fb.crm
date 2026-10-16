@@ -10,6 +10,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.Year;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
@@ -66,7 +67,8 @@ class AngeboteControllerTest {
                     Abrechnungsmodus.AUFWAND,
                     new BigDecimal("2.50"),
                     Einheit.PERSONENTAG,
-                    new BigDecimal("1000.01"))),
+                    new BigDecimal("1000.01"),
+                    Year.of(2026))),
             ANGELEGT,
             ANGELEGT),
         "Adler AG");

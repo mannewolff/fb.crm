@@ -15,6 +15,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.Year;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -87,7 +88,8 @@ class AngebotControllerTest {
           Abrechnungsmodus.AUFWAND,
           new BigDecimal("2.50"),
           Einheit.PERSONENTAG,
-          new BigDecimal("1000.01"));
+          new BigDecimal("1000.01"),
+          Year.of(2026));
 
   /**
    * Dieselbe Position, wie die Maske sie einreicht — alle vier Angaben besetzt (Issue #227, E7).

@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.Year;
 import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -40,7 +41,8 @@ class AngebotTest {
           Abrechnungsmodus.AUFWAND,
           new BigDecimal("2.50"),
           Einheit.PERSONENTAG,
-          new BigDecimal("1000.01"));
+          new BigDecimal("1000.01"),
+          Year.of(2026));
 
   /** 1,5 × 0,01 € = 0,015 € und damit gerundet 0,02 €. */
   private static final Angebotsposition KLEINKRAM =
@@ -50,7 +52,8 @@ class AngebotTest {
           Abrechnungsmodus.AUFWAND,
           new BigDecimal("1.50"),
           Einheit.STUNDE,
-          new BigDecimal("0.01"));
+          new BigDecimal("0.01"),
+          Year.of(2026));
 
   private static final Angebotsposition PAUSCHALE =
       new Angebotsposition(
@@ -59,7 +62,8 @@ class AngebotTest {
           Abrechnungsmodus.FESTPREIS,
           BigDecimal.ONE,
           Einheit.PAUSCHAL,
-          new BigDecimal("1200.00"));
+          new BigDecimal("1200.00"),
+          Year.of(2026));
 
   private static Angebot angebot(final Angebotsstatus status) {
     return angebot(status, List.of(KONZEPTION));

@@ -64,8 +64,9 @@ class JpaZeiteintragRepositoryIT extends AbstractIntegrationTest {
   private long position(final long angebotId, final int platz, final String bezeichnung) {
     jdbc.update(
         "INSERT INTO angebot_position"
-            + " (angebot_id, position, bezeichnung, abrechnungsmodus, menge, einheit, einzelpreis)"
-            + " VALUES (?, ?, ?, 'AUFWAND', 20, 'STUNDE', 120.00)",
+            + " (angebot_id, position, bezeichnung, abrechnungsmodus, menge, einheit, einzelpreis,"
+            + " leistungsjahr)"
+            + " VALUES (?, ?, ?, 'AUFWAND', 20, 'STUNDE', 120.00, 2026)",
         Long.valueOf(angebotId),
         Integer.valueOf(platz),
         bezeichnung);

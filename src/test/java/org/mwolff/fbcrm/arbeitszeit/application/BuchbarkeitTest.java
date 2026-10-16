@@ -3,6 +3,7 @@ package org.mwolff.fbcrm.arbeitszeit.application;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.math.BigDecimal;
+import java.time.Year;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
@@ -36,7 +37,8 @@ class BuchbarkeitTest {
         abrechnungsmodus,
         new BigDecimal("20.00"),
         einheit,
-        new BigDecimal("120.00"));
+        new BigDecimal("120.00"),
+        Year.of(2026));
   }
 
   /** Das interne Angebot — seine Positionen sind die von {@link Zeitdoppel}. */

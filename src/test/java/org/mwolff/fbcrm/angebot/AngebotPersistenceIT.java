@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.tuple;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.Year;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
@@ -53,7 +54,8 @@ class AngebotPersistenceIT extends AbstractIntegrationTest {
           Abrechnungsmodus.AUFWAND,
           new BigDecimal("2.50"),
           Einheit.PERSONENTAG,
-          new BigDecimal("1000.01"));
+          new BigDecimal("1000.01"),
+          Year.of(2027));
 
   private static final Angebotsposition SCHULUNG =
       new Angebotsposition(
@@ -62,7 +64,8 @@ class AngebotPersistenceIT extends AbstractIntegrationTest {
           Abrechnungsmodus.FESTPREIS,
           new BigDecimal("1.00"),
           Einheit.PAUSCHAL,
-          new BigDecimal("1200.00"));
+          new BigDecimal("1200.00"),
+          Year.of(2026));
 
   private static final Angebotsposition BETREUUNG =
       new Angebotsposition(
@@ -71,7 +74,8 @@ class AngebotPersistenceIT extends AbstractIntegrationTest {
           Abrechnungsmodus.AUFWAND,
           new BigDecimal("8.00"),
           Einheit.STUNDE,
-          new BigDecimal("95.00"));
+          new BigDecimal("95.00"),
+          Year.of(2026));
 
   private final AngebotRepository repository;
   private final TransactionTemplate transaktion;
@@ -147,7 +151,8 @@ class AngebotPersistenceIT extends AbstractIntegrationTest {
         position.abrechnungsmodus(),
         position.menge(),
         position.einheit(),
-        position.einzelpreis());
+        position.einzelpreis(),
+        position.leistungsjahr());
   }
 
   @Test
@@ -361,7 +366,8 @@ class AngebotPersistenceIT extends AbstractIntegrationTest {
             Abrechnungsmodus.AUFWAND,
             new BigDecimal("1.00"),
             Einheit.STUNDE,
-            new BigDecimal("0.00"));
+            new BigDecimal("0.00"),
+            Year.of(2026));
     final Angebot gespeichert = geschrieben(angebot(List.of(ohneBezeichnung)));
 
     // Then
@@ -371,6 +377,50 @@ class AngebotPersistenceIT extends AbstractIntegrationTest {
                 assertThat(angebot.positionen())
                     .usingRecursiveFieldByFieldElementComparatorIgnoringFields("id")
                     .containsExactly(ohneBezeichnung));
+  }
+
+  @Test
+  void save_thenStoresTheLeistungsjahrInItsColumnAndReadsItBackAsYear() {
+    // Given — #302, Kriterium 4: die Konzeption liegt im Jahr nach dem Angebotsdatum.
+    final Angebot gespeichert = geschrieben(angebot(List.of(KONZEPTION, SCHULUNG)));
+
+    // When
+    final List<Short> spalte =
+        jdbc.queryForList(
+            "SELECT leistungsjahr FROM angebot_position WHERE angebot_id = ? ORDER BY position",
+            Short.class,
+            Long.valueOf(gespeichert.requireId()));
+
+    // Then
+    assertThat(spalte).containsExactly((short) 2027, (short) 2026);
+    assertThat(positionenVon(gespeichert.requireId()))
+        .extracting(Angebotsposition::leistungsjahr)
+        .containsExactly(Year.of(2027), Year.of(2026));
+  }
+
+  @Test
+  void save_givenAChangedLeistungsjahr_thenCarriesItOnInTheSameRow() {
+    // Given
+    final Angebot gespeichert = geschrieben(angebot(List.of(KONZEPTION)));
+    final Angebotsposition gefuehrt = positionenVon(gespeichert.requireId()).getFirst();
+
+    // When
+    geschriebenMit(
+        gespeichert,
+        List.of(
+            new Angebotsposition(
+                gefuehrt.id(),
+                gefuehrt.bezeichnung(),
+                gefuehrt.abrechnungsmodus(),
+                gefuehrt.menge(),
+                gefuehrt.einheit(),
+                gefuehrt.einzelpreis(),
+                Year.of(2028))));
+
+    // Then — dieselbe Kennung, das neue Jahr.
+    assertThat(positionenVon(gespeichert.requireId()))
+        .extracting(Angebotsposition::id, Angebotsposition::leistungsjahr)
+        .containsExactly(tuple(gefuehrt.id(), Year.of(2028)));
   }
 
   @Test

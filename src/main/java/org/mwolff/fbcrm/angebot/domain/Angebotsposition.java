@@ -1,6 +1,7 @@
 package org.mwolff.fbcrm.angebot.domain;
 
 import java.math.BigDecimal;
+import java.time.Year;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.fbcrm.common.Abrechnungsmodus;
 import org.mwolff.fbcrm.common.Einheit;
@@ -36,6 +37,9 @@ import org.mwolff.fbcrm.common.Identifiable;
  * @param menge Menge in der angegebenen Einheit, nicht negativ
  * @param einheit Einheit der Menge
  * @param einzelpreis Netto-Preis je Einheit, nicht negativ
+ * @param leistungsjahr das Jahr der Leistung, in dem der Rest dieser Position im Forecast steht
+ *     (#302, Kriterium 4) — nie {@code null}; nicht das Jahr des Angebotsdatums, auch wenn eine
+ *     neue Position damit vorbelegt wird (Plan #303, E2, E9)
  */
 public record Angebotsposition(
     @Nullable Long id,
@@ -43,7 +47,8 @@ public record Angebotsposition(
     Abrechnungsmodus abrechnungsmodus,
     BigDecimal menge,
     Einheit einheit,
-    BigDecimal einzelpreis)
+    BigDecimal einzelpreis,
+    Year leistungsjahr)
     implements Identifiable {
 
   /** Der Netto-Betrag der Position, kaufmaennisch auf den Cent gerundet (Kriterium 5). */

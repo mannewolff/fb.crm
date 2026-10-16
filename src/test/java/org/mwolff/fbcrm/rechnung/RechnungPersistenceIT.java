@@ -101,8 +101,9 @@ class RechnungPersistenceIT extends AbstractIntegrationTest {
       final String einzelpreis) {
     jdbc.update(
         "INSERT INTO angebot_position"
-            + " (angebot_id, position, bezeichnung, abrechnungsmodus, menge, einheit, einzelpreis)"
-            + " VALUES (?, ?, ?, 'AUFWAND', CAST(? AS numeric), ?, CAST(? AS numeric))",
+            + " (angebot_id, position, bezeichnung, abrechnungsmodus, menge, einheit, einzelpreis,"
+            + " leistungsjahr)"
+            + " VALUES (?, ?, ?, 'AUFWAND', CAST(? AS numeric), ?, CAST(? AS numeric), 2026)",
         Long.valueOf(angebotId),
         Integer.valueOf(platz),
         bezeichnung,

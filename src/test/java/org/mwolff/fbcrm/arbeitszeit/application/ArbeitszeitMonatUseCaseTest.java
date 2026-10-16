@@ -10,6 +10,7 @@ import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.Year;
 import java.time.YearMonth;
 import java.time.ZoneOffset;
 import java.util.List;
@@ -119,7 +120,8 @@ class ArbeitszeitMonatUseCaseTest {
                 Abrechnungsmodus.AUFWAND,
                 new BigDecimal("5.00"),
                 Einheit.STUNDE,
-                new BigDecimal("100.00"))),
+                new BigDecimal("100.00"),
+                Year.of(2026))),
         Zeitdoppel.FRUEHER,
         Zeitdoppel.FRUEHER);
   }
@@ -141,7 +143,8 @@ class ArbeitszeitMonatUseCaseTest {
                 Abrechnungsmodus.AUFWAND,
                 new BigDecimal("8.00"),
                 Einheit.STUNDE,
-                BigDecimal.ZERO)),
+                BigDecimal.ZERO,
+                Year.of(2026))),
         Zeitdoppel.FRUEHER,
         Zeitdoppel.FRUEHER);
   }

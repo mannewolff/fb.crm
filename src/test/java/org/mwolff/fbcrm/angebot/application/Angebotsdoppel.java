@@ -3,6 +3,7 @@ package org.mwolff.fbcrm.angebot.application;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.Year;
 import java.util.List;
 import org.mwolff.fbcrm.angebot.domain.Angebot;
 import org.mwolff.fbcrm.angebot.domain.Angebotsposition;
@@ -54,7 +55,8 @@ final class Angebotsdoppel {
           Abrechnungsmodus.AUFWAND,
           new BigDecimal("2.50"),
           Einheit.PERSONENTAG,
-          new BigDecimal("1000.01"));
+          new BigDecimal("1000.01"),
+          Year.of(2026));
 
   static final Angebotsposition SCHULUNG =
       new Angebotsposition(
@@ -63,7 +65,8 @@ final class Angebotsdoppel {
           Abrechnungsmodus.FESTPREIS,
           BigDecimal.ONE,
           Einheit.PAUSCHAL,
-          new BigDecimal("1200.00"));
+          new BigDecimal("1200.00"),
+          Year.of(2026));
 
   /** Dieselbe erste Position als Angabe der Maske — alle vier Angaben besetzt. */
   static final Positionsangabe KONZEPTION_ANGABE = angabe(KONZEPTION);

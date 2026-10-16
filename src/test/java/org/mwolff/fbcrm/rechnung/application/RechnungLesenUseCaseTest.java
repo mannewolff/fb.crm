@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
+import java.time.Year;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -213,7 +214,8 @@ class RechnungLesenUseCaseTest {
                     Abrechnungsmodus.AUFWAND,
                     new BigDecimal("160.00"),
                     Einheit.STUNDE,
-                    new BigDecimal("120.00")))));
+                    new BigDecimal("120.00"),
+                    Year.of(2026)))));
 
     // When
     final Rechnungsansicht ansicht = useCase.lese(ENTWURF);

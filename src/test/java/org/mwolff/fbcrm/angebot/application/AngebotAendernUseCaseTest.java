@@ -15,6 +15,7 @@ import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.Year;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -247,6 +248,34 @@ class AngebotAendernUseCaseTest {
         aktiv,
         Angebotsdoppel.ANGELEGT,
         Angebotsdoppel.ANGELEGT);
+  }
+
+  /** Dieselbe Position mit einem anderen Leistungsjahr. */
+  private static Angebotsposition imJahr(final Angebotsposition position, final int jahr) {
+    return new Angebotsposition(
+        position.id(),
+        position.bezeichnung(),
+        position.abrechnungsmodus(),
+        position.menge(),
+        position.einheit(),
+        position.einzelpreis(),
+        Year.of(jahr));
+  }
+
+  /** Dasselbe Angebot mit anderen gespeicherten Positionen. */
+  private static Angebot mitPositionen(
+      final Angebot angebot, final Angebotsposition... positionen) {
+    return new Angebot(
+        angebot.id(),
+        angebot.firmaId(),
+        angebot.ansprechpartnerId(),
+        angebot.intern(),
+        angebot.status(),
+        angebot.angebotDatum(),
+        angebot.beschreibung(),
+        List.of(positionen),
+        angebot.createdAt(),
+        angebot.updatedAt());
   }
 
   private void angebotIst(final Angebot angebot) {
@@ -662,7 +691,8 @@ class AngebotAendernUseCaseTest {
                 Abrechnungsmodus.AUFWAND,
                 BigDecimal.ZERO,
                 Einheit.STUNDE,
-                BigDecimal.ZERO));
+                BigDecimal.ZERO,
+                Year.of(2026)));
   }
 
   @Test
@@ -981,5 +1011,74 @@ class AngebotAendernUseCaseTest {
             position ->
                 assertThat(position.einzelpreis())
                     .isEqualTo(Angebotsdoppel.KONZEPTION.einzelpreis()));
+  }
+
+  @Test
+  void aendere_withANewPosition_thenPrefillsTheYearOfTheAngebotsdatum() {
+    // Given — #302, Kriterium 4 und E2: Eine neue Position ist mit dem Jahr des Angebotsdatums
+    // vorbelegt. Das Datum der Einreichung zaehlt, nicht das bisher gespeicherte.
+    angebotIst(Angebotsdoppel.ohneAnsprechpartner(Angebotsdoppel.angebot(ANGEBOT)));
+    final AngebotDaten aenderung =
+        new AngebotDaten(
+            LocalDate.of(2027, 1, 15),
+            null,
+            NEUER_TEXT,
+            false,
+            List.of(ohneKennung(Angebotsdoppel.KONZEPTION_ANGABE)));
+
+    // When
+    final Angebot geaendert = aendere(aenderung);
+
+    // Then
+    assertThat(geaendert.positionen())
+        .extracting(Angebotsposition::leistungsjahr)
+        .containsExactly(Year.of(2027));
+  }
+
+  @Test
+  void aendere_changingTheAngebotsdatum_thenAStoredPositionKeepsItsYear() {
+    // Given — Kriterium 4: Die Vorbelegung gilt nur beim Anlegen. Die Konzeption liegt 2027, das
+    // Angebot wechselt auf ein Datum in 2026.
+    angebotIst(
+        mitPositionen(
+            Angebotsdoppel.ohneAnsprechpartner(Angebotsdoppel.angebot(ANGEBOT)),
+            imJahr(Angebotsdoppel.KONZEPTION, 2027),
+            Angebotsdoppel.SCHULUNG));
+
+    // When
+    final Angebot geaendert =
+        aendere(daten(null, angaben(Angebotsdoppel.KONZEPTION, Angebotsdoppel.SCHULUNG)));
+
+    // Then
+    assertThat(geaendert.positionen())
+        .extracting(Angebotsposition::id, Angebotsposition::leistungsjahr)
+        .containsExactly(
+            tuple(Angebotsdoppel.KONZEPTION_ID, Year.of(2027)),
+            tuple(Angebotsdoppel.SCHULUNG_ID, Year.of(2026)));
+  }
+
+  @Test
+  void aendere_turningAnAngebotInternalAndBack_thenItsPositionsKeepTheirYear() {
+    // Given — dieselbe Regel in allen drei Uebersetzern: Ein Angebot, das nach innen und zurueck
+    // gestellt wird, findet sein Jahr wieder wie seine Zahlen (Kriterium 8 von #207).
+    angebotIst(
+        mitPositionen(
+            Angebotsdoppel.ohneAnsprechpartner(Angebotsdoppel.angebot(ANGEBOT)),
+            imJahr(Angebotsdoppel.KONZEPTION, 2027)));
+    final Positionsangabe nurBezeichnung =
+        new Positionsangabe(Angebotsdoppel.KONZEPTION_ID, "Konzeption", null, null, null, null);
+    final Angebot intern = aendere(daten(null, true, List.of(nurBezeichnung)));
+
+    // When — zurueck nach aussen, mit allen vier Angaben.
+    angebotIst(intern);
+    final Angebot zurueck = aendere(daten(null, false, List.of(Angebotsdoppel.KONZEPTION_ANGABE)));
+
+    // Then
+    assertThat(intern.positionen())
+        .extracting(Angebotsposition::leistungsjahr)
+        .containsExactly(Year.of(2027));
+    assertThat(zurueck.positionen())
+        .extracting(Angebotsposition::leistungsjahr)
+        .containsExactly(Year.of(2027));
   }
 }

@@ -11,6 +11,7 @@ import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.Year;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
@@ -280,6 +281,7 @@ class RechnungAendernUseCaseTest {
                 Rechnungsdoppel.BERATUNG.abrechnungsmodus(),
                 new BigDecimal("160.00"),
                 Rechnungsdoppel.BERATUNG.einheit(),
-                new BigDecimal("120.00"))));
+                new BigDecimal("120.00"),
+                Year.of(2026))));
   }
 }

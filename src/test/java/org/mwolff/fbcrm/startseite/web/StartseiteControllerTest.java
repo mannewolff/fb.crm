@@ -126,7 +126,8 @@ class StartseiteControllerTest {
                     Abrechnungsmodus.AUFWAND,
                     new BigDecimal("20.00"),
                     Einheit.STUNDE,
-                    new BigDecimal("100.00"))),
+                    new BigDecimal("100.00"),
+                    Year.of(2026))),
             ANGELEGT,
             ANGELEGT),
         firmaName);

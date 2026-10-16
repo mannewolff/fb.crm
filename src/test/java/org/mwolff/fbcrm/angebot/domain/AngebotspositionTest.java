@@ -3,6 +3,7 @@ package org.mwolff.fbcrm.angebot.domain;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.math.BigDecimal;
+import java.time.Year;
 import org.junit.jupiter.api.Test;
 import org.mwolff.fbcrm.common.Abrechnungsmodus;
 import org.mwolff.fbcrm.common.Einheit;
@@ -24,7 +25,8 @@ class AngebotspositionTest {
         Abrechnungsmodus.AUFWAND,
         new BigDecimal(menge),
         Einheit.PERSONENTAG,
-        new BigDecimal(einzelpreis));
+        new BigDecimal(einzelpreis),
+        Year.of(2026));
   }
 
   @Test
@@ -73,5 +75,26 @@ class AngebotspositionTest {
 
     // Then
     assertThat(betrag).isEqualTo(new BigDecimal("0.00"));
+  }
+
+  @Test
+  void leistungsjahr_thenCarriesTheYearOfTheServiceGivenAtConstruction() {
+    // Given — #302, Kriterium 4: das Angebot an IT Bildungshaus vom Oktober 2026 hat Positionen,
+    // deren Leistung 2027 erbracht wird.
+    final Angebotsposition position =
+        new Angebotsposition(
+            null,
+            "Aufwände Mai 2027",
+            Abrechnungsmodus.AUFWAND,
+            new BigDecimal("135.00"),
+            Einheit.STUNDE,
+            new BigDecimal("60.00"),
+            Year.of(2027));
+
+    // When
+    final Year jahr = position.leistungsjahr();
+
+    // Then
+    assertThat(jahr).isEqualTo(Year.of(2027));
   }
 }
