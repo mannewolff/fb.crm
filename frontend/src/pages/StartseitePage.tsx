@@ -21,6 +21,7 @@ import type {
   Startseitenstand,
   Zeitraumart,
 } from '../api/startseite';
+import Angebotsweg from '../components/Angebotsweg';
 import AngebotsstatusChip from '../components/AngebotsstatusChip';
 import Karte from '../components/Karte';
 import Kennzahlkachel from '../components/Kennzahlkachel';
@@ -361,24 +362,6 @@ function InterneStunden({
     >
       {`${WORTE[art].interneStunden}: ${stundenWort(stundenInHundertsteln)}`}
     </Typography>
-  );
-}
-
-/** Der Weg zum Angebot, auf seinem Datum — die Gestalt der Zeilenverweise aller Tafeln. */
-function Angebotsweg({ angebotId, tag }: { readonly angebotId: number; readonly tag: string }) {
-  return (
-    <Box
-      component={RouterLink}
-      to={`/angebote/${String(angebotId)}`}
-      className={ZAHLEN_KLASSE}
-      sx={(theme) => ({
-        color: 'inherit',
-        textDecoration: 'none',
-        '&:hover': { color: theme.vars.palette.kupferwolke.kupfer },
-      })}
-    >
-      {tagWort(tag)}
-    </Box>
   );
 }
 
