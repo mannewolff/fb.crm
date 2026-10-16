@@ -101,7 +101,7 @@ class AngebotPositionsbindungIT extends AbstractIntegrationTest {
                 ruf(
                         "/api/firmen/" + firmaId + "/angebote",
                         HttpMethod.POST,
-                        null,
+                        Map.of("titel", "Website-Relaunch"),
                         AngebotResponse.class)
                     .getBody())
             .id();
@@ -168,6 +168,7 @@ class AngebotPositionsbindungIT extends AbstractIntegrationTest {
       final Class<T> typ) {
     final Map<String, Object> rumpf = new LinkedHashMap<>();
     rumpf.put("angebotDatum", "2026-09-25");
+    rumpf.put("titel", "Website-Relaunch");
     rumpf.put("ansprechpartnerId", null);
     rumpf.put("beschreibung", "Neugestaltung der Website");
     rumpf.put("intern", intern);

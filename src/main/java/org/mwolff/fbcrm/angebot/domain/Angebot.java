@@ -104,8 +104,12 @@ public record Angebot(
   /**
    * Das Angebot mit neuen Angaben — in jedem Status (Kriterium 5).
    *
+   * <p>Der Titel kommt auf diesem Weg immer mit (Issue #317); getrimmt und geprueft wird er im
+   * Konstruktor (E1).
+   *
    * @param neuesDatum Datum des Angebots
    * @param neuerAnsprechpartnerId Kennung des Ansprechpartners, oder {@code null}
+   * @param neuerTitel die einzeilige Benennung des Angebots
    * @param neueBeschreibung Text des Angebots, oder {@code null}
    * @param neuePositionen die vollstaendige Positionsliste in der gewuenschten Reihenfolge
    * @param zeitpunkt Zeitpunkt der Aenderung
@@ -113,6 +117,7 @@ public record Angebot(
   public Angebot geaendert(
       final LocalDate neuesDatum,
       final @Nullable Long neuerAnsprechpartnerId,
+      final String neuerTitel,
       final @Nullable String neueBeschreibung,
       final List<Angebotsposition> neuePositionen,
       final Instant zeitpunkt) {
@@ -123,7 +128,7 @@ public record Angebot(
         intern,
         status,
         neuesDatum,
-        titel,
+        neuerTitel,
         neueBeschreibung,
         neuePositionen,
         createdAt,

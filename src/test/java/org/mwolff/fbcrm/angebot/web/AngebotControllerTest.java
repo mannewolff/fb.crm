@@ -72,6 +72,9 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
  * Weil Menge, Einheit und Preis dafuer keine Pflichtfelder der Bean-Validation mehr sind (E7), geht
  * eine Position ohne Menge jetzt bis in den Anwendungsfall durch und wird dort zu 422 statt zu 400
  * — der Test dazu haelt gerade diesen Unterschied fest.
+ *
+ * <p><b>Der Titel ist auf dem Aenderungsweg Pflicht</b> (Issue #317): Er fehlt nicht, ist nicht nur
+ * Leerraum und hat hoechstens 200 Zeichen — sonst 400 mit {@code fieldErrors.titel}.
  */
 @ExtendWith(MockitoExtension.class)
 class AngebotControllerTest {
@@ -110,7 +113,7 @@ class AngebotControllerTest {
 
   private static final String RUMPF =
       """
-      {"angebotDatum":"2026-09-25","ansprechpartnerId":9,"beschreibung":"Neu",
+      {"titel":"Wartung","angebotDatum":"2026-09-25","ansprechpartnerId":9,"beschreibung":"Neu",
        "positionen":[{"id":42,"bezeichnung":"Konzeption","abrechnungsmodus":"AUFWAND","menge":"2.50",
                       "einheit":"PERSONENTAG","einzelpreis":"1000.01"}]}
       """;
@@ -229,7 +232,7 @@ class AngebotControllerTest {
     aendernAntwortet();
     final String ohneKennung =
         """
-        {"angebotDatum":"2026-09-25","positionen":[{"bezeichnung":"Konzeption",
+        {"titel":"Wartung","angebotDatum":"2026-09-25","positionen":[{"bezeichnung":"Konzeption",
           "abrechnungsmodus":"AUFWAND","menge":"2.50","einheit":"PERSONENTAG",
           "einzelpreis":"1000.01"}]}
         """;
@@ -309,6 +312,7 @@ class AngebotControllerTest {
     final AngebotDaten uebergeben = daten.getValue();
     assertThat(uebergeben.angebotDatum()).isEqualTo(LocalDate.of(2026, 9, 25));
     assertThat(uebergeben.ansprechpartnerId()).isEqualTo(9L);
+    assertThat(uebergeben.titel()).isEqualTo("Wartung");
     assertThat(uebergeben.beschreibung()).isEqualTo("Neu");
     assertThat(uebergeben.intern()).isFalse();
     // Die Kennung der Position kommt mit durch: KONZEPTION_ANGABE traegt sie, und der Record
@@ -340,7 +344,7 @@ class AngebotControllerTest {
     // Given — jede Position braucht eine Bezeichnung (Issue #127).
     final String leer =
         """
-        {"angebotDatum":"2026-09-25","positionen":[{"bezeichnung":"  ",
+        {"titel":"Wartung","angebotDatum":"2026-09-25","positionen":[{"bezeichnung":"  ",
           "abrechnungsmodus":"AUFWAND","menge":"1.00","einheit":"STUNDE","einzelpreis":"10.00"}]}
         """;
 
@@ -360,7 +364,7 @@ class AngebotControllerTest {
     // Given — die Form wird an der Anfrage geprueft, nicht erst in der Datenbank.
     final String negativ =
         """
-        {"angebotDatum":"2026-09-25","positionen":[{"bezeichnung":"Konzeption",
+        {"titel":"Wartung","angebotDatum":"2026-09-25","positionen":[{"bezeichnung":"Konzeption",
           "abrechnungsmodus":"AUFWAND","menge":"-1.00","einheit":"STUNDE","einzelpreis":"10.00"}]}
         """;
 
@@ -377,7 +381,7 @@ class AngebotControllerTest {
   @Test
   void aendern_withoutAngebotDatum_thenAnswersWithAFieldError() throws Exception {
     // Given — das Datum ist die eine Pflichtangabe des Angebots.
-    final String ohneDatum = "{\"positionen\":[]}";
+    final String ohneDatum = "{\"titel\":\"Wartung\",\"positionen\":[]}";
 
     // When / Then
     mockMvc
@@ -454,7 +458,7 @@ class AngebotControllerTest {
     when(aendern.aendere(eq(ANGEBOT), daten.capture())).thenReturn(angebot(Angebotsstatus.LAEUFT));
     final String intern =
         """
-        {"angebotDatum":"2026-09-25","intern":true,"positionen":[{"id":42,
+        {"titel":"Wartung","angebotDatum":"2026-09-25","intern":true,"positionen":[{"id":42,
           "bezeichnung":"Konzeption"}]}
         """;
 
@@ -476,7 +480,7 @@ class AngebotControllerTest {
     aendernAntwortet();
     final String ohneArt =
         """
-        {"angebotDatum":"2026-09-25","positionen":[]}
+        {"titel":"Wartung","angebotDatum":"2026-09-25","positionen":[]}
         """;
 
     // When
@@ -497,7 +501,7 @@ class AngebotControllerTest {
     aendernAntwortet();
     final String ausdruecklichNull =
         """
-        {"angebotDatum":"2026-09-25","intern":null,"positionen":[]}
+        {"titel":"Wartung","angebotDatum":"2026-09-25","intern":null,"positionen":[]}
         """;
 
     // When
@@ -546,7 +550,7 @@ class AngebotControllerTest {
                     null)));
     final String ohneMenge =
         """
-        {"angebotDatum":"2026-09-25","positionen":[{"bezeichnung":"Konzeption",
+        {"titel":"Wartung","angebotDatum":"2026-09-25","positionen":[{"bezeichnung":"Konzeption",
           "abrechnungsmodus":"AUFWAND","einheit":"STUNDE","einzelpreis":"10.00"}]}
         """;
 
@@ -565,7 +569,7 @@ class AngebotControllerTest {
   /** Ein Rumpf mit einer neuen Position, die das angegebene Leistungsjahr mitschickt. */
   private static String mitLeistungsjahr(final int jahr) {
     return """
-        {"angebotDatum":"2026-09-25","positionen":[{"bezeichnung":"Konzeption",
+        {"titel":"Wartung","angebotDatum":"2026-09-25","positionen":[{"bezeichnung":"Konzeption",
           "abrechnungsmodus":"AUFWAND","menge":"2.50","einheit":"PERSONENTAG",
           "einzelpreis":"1000.01","leistungsjahr":%d}]}
         """
@@ -642,5 +646,62 @@ class AngebotControllerTest {
     assertThat(daten.getValue().positionen())
         .singleElement()
         .satisfies(position -> assertThat(position.leistungsjahr()).isNull());
+  }
+
+  @Test
+  void aendern_withATitle_thenPassesItOnAndTheAnswerCarriesIt() throws Exception {
+    // Given — #314, Kriterium 3: der Titel ist aenderbar.
+    when(aendern.aendere(eq(ANGEBOT), daten.capture()))
+        .thenReturn(angebot(Angebotsstatus.ANGELEGT, "Wartung"));
+
+    // When
+    mockMvc
+        .perform(
+            put("/api/angebote/{id}", Long.valueOf(ANGEBOT))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(RUMPF))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.titel").value("Wartung"));
+
+    // Then
+    assertThat(daten.getValue().titel()).isEqualTo("Wartung");
+  }
+
+  @ParameterizedTest
+  @ValueSource(
+      strings = {
+        "{\"angebotDatum\":\"2026-09-25\",\"positionen\":[]}",
+        "{\"titel\":null,\"angebotDatum\":\"2026-09-25\",\"positionen\":[]}",
+        "{\"titel\":\"   \",\"angebotDatum\":\"2026-09-25\",\"positionen\":[]}"
+      })
+  void aendern_withoutATitle_thenAnswers400AtTheTitle(final String rumpf) throws Exception {
+    // When / Then — #314, Kriterium 3: der Titel bleibt beim Aendern Pflicht; Leerraum zaehlt als
+    // fehlend.
+    mockMvc
+        .perform(
+            put("/api/angebote/{id}", Long.valueOf(ANGEBOT))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(rumpf))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.fieldErrors.titel").isArray());
+    verifyNoInteractions(aendern);
+  }
+
+  @Test
+  void aendern_withATitleOf201Characters_thenAnswers400AtTheTitle() throws Exception {
+    // Given — #314, Kriterium 1: hoechstens 200 Zeichen.
+    final String zuLang =
+        "{\"titel\":\"%s\",\"angebotDatum\":\"2026-09-25\",\"positionen\":[]}"
+            .formatted("x".repeat(201));
+
+    // When / Then
+    mockMvc
+        .perform(
+            put("/api/angebote/{id}", Long.valueOf(ANGEBOT))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(zuLang))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.fieldErrors.titel").isArray());
+    verifyNoInteractions(aendern);
   }
 }

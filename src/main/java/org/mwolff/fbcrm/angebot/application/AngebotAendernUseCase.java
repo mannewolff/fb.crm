@@ -23,10 +23,10 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * Das Aendern eines Angebots — in jedem Status (Issue #127, Kriterium 5).
  *
- * <p>Geschrieben wird das Angebot als Ganzes: Datum, Ansprechpartner, Beschreibung, die Art und die
- * vollstaendige Positionsliste in der gewuenschten Reihenfolge (E8). Die Plaetze der Positionen
- * vergibt der Bestand daraus lueckenlos neu (E24). Die Firma bleibt, wie sie ist; der Status folgt
- * der Art.
+ * <p>Geschrieben wird das Angebot als Ganzes: Datum, Ansprechpartner, Titel (Issue #317),
+ * Beschreibung, die Art und die vollstaendige Positionsliste in der gewuenschten Reihenfolge (E8).
+ * Die Plaetze der Positionen vergibt der Bestand daraus lueckenlos neu (E24). Die Firma bleibt, wie
+ * sie ist; der Status folgt der Art.
  *
  * <p>Der Ansprechpartner geht durch {@link Ansprechpartnerwahl}: Ein neu gewaehlter muss zur Firma
  * gehoeren und aktiv sein, der bisherige bleibt wählbar.
@@ -155,6 +155,7 @@ public class AngebotAendernUseCase {
             .geaendert(
                 daten.angebotDatum(),
                 daten.ansprechpartnerId(),
+                daten.titel(),
                 daten.beschreibung(),
                 positionen,
                 jetzt));

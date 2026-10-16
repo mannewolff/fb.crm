@@ -155,7 +155,8 @@ class AngebotTest {
 
     // When
     final Angebot geaendert =
-        angebot(status).geaendert(neuesDatum, 9L, "Betreuung", List.of(PAUSCHALE), JETZT);
+        angebot(status)
+            .geaendert(neuesDatum, 9L, "Wartung", "Betreuung", List.of(PAUSCHALE), JETZT);
 
     // Then
     assertThat(geaendert)
@@ -163,6 +164,7 @@ class AngebotTest {
             a -> assertThat(a.status()).isEqualTo(status),
             a -> assertThat(a.angebotDatum()).isEqualTo(neuesDatum),
             a -> assertThat(a.ansprechpartnerId()).isEqualTo(9L),
+            a -> assertThat(a.titel()).isEqualTo("Wartung"),
             a -> assertThat(a.beschreibung()).isEqualTo("Betreuung"),
             a -> assertThat(a.positionen()).containsExactly(PAUSCHALE),
             a -> assertThat(a.updatedAt()).isEqualTo(JETZT),
@@ -175,7 +177,8 @@ class AngebotTest {
   void geaendert_givenNoContactAndNoText_thenKeepsThemAbsent() {
     // When
     final Angebot geaendert =
-        angebot(Angebotsstatus.ANGELEGT).geaendert(ANGEBOTSDATUM, null, null, List.of(), JETZT);
+        angebot(Angebotsstatus.ANGELEGT)
+            .geaendert(ANGEBOTSDATUM, null, "Wartung", null, List.of(), JETZT);
 
     // Then
     assertThat(geaendert)
@@ -349,7 +352,8 @@ class AngebotTest {
 
     // When
     final Angebot geaendert =
-        angebot(status).geaendert(ANGEBOTSDATUM, 9L, "Betreuung", List.of(PAUSCHALE), JETZT);
+        angebot(status)
+            .geaendert(ANGEBOTSDATUM, 9L, "Wartung", "Betreuung", List.of(PAUSCHALE), JETZT);
 
     // Then
     assertThat(geaendert.intern()).isEqualTo(status.intern());
@@ -476,25 +480,47 @@ class AngebotTest {
   }
 
   @Test
-  void geaendert_thenKeepsTheTitle() {
-    // Given — den Titel aendert erst der Aenderungsweg aus dem naechsten Paket (Issue #317).
+  void geaendert_givenANewTitle_thenCarriesIt() {
+    // Given — Issue #317: der Aenderungsweg schreibt den Titel mit.
 
     // When
     final Angebot geaendert =
         angebot(Angebotsstatus.ANGELEGT)
-            .geaendert(ANGEBOTSDATUM, 9L, "Betreuung", List.of(PAUSCHALE), JETZT);
+            .geaendert(ANGEBOTSDATUM, 9L, "Wartung", "Betreuung", List.of(PAUSCHALE), JETZT);
 
     // Then
-    assertThat(geaendert.titel()).isEqualTo("Website-Relaunch");
+    assertThat(geaendert.titel()).isEqualTo("Wartung");
   }
 
   @Test
-  void geaendert_givenAnOfferWithoutTitle_thenStaysWithoutTitle() {
-    // When
+  void geaendert_givenAnOfferWithoutTitle_thenGetsTheNewTitle() {
+    // When — #314, Kriterium 4: ein Angebot von vor dem Titel bekommt ihn beim Aendern.
     final Angebot geaendert =
-        mitTitel(null).geaendert(ANGEBOTSDATUM, 9L, "Betreuung", List.of(PAUSCHALE), JETZT);
+        mitTitel(null)
+            .geaendert(ANGEBOTSDATUM, 9L, "Wartung", "Betreuung", List.of(PAUSCHALE), JETZT);
 
     // Then
-    assertThat(geaendert.titel()).isNull();
+    assertThat(geaendert.titel()).isEqualTo("Wartung");
+  }
+
+  @Test
+  void geaendert_givenATitleWithSurroundingBlanks_thenStripsIt() {
+    // When — getrimmt und geprueft wird im Konstruktor (E1).
+    final Angebot geaendert =
+        angebot(Angebotsstatus.ANGELEGT)
+            .geaendert(ANGEBOTSDATUM, 9L, "  Wartung  ", null, List.of(), JETZT);
+
+    // Then
+    assertThat(geaendert.titel()).isEqualTo("Wartung");
+  }
+
+  @Test
+  void geaendert_givenABlankTitle_thenRejected() {
+    // When / Then — der Konstruktor weist den leeren Titel auch auf dem Aenderungsweg ab (E1).
+    assertThatThrownBy(
+            () ->
+                angebot(Angebotsstatus.ANGELEGT)
+                    .geaendert(ANGEBOTSDATUM, 9L, "   ", null, List.of(), JETZT))
+        .isInstanceOf(IllegalArgumentException.class);
   }
 }

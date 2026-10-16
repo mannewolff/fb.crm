@@ -144,7 +144,8 @@ class AngebotPersistenceIT extends AbstractIntegrationTest {
   /** Dasselbe Angebot mit einer neuen Positionsliste, geschrieben in einem eigenen Zug. */
   private Angebot geschriebenMit(final Angebot angebot, final List<Angebotsposition> positionen) {
     return geschrieben(
-        angebot.geaendert(ANGEBOTSDATUM, ansprechpartnerId, BESCHREIBUNG, positionen, ANGELEGT));
+        angebot.geaendert(
+            ANGEBOTSDATUM, ansprechpartnerId, TITEL, BESCHREIBUNG, positionen, ANGELEGT));
   }
 
   /** Dasselbe Angebot mit einem anderen Titel — {@code null} fuer ein Angebot von vor #316. */
@@ -364,7 +365,8 @@ class AngebotPersistenceIT extends AbstractIntegrationTest {
   void save_givenNoContactAndNoText_thenReadsBackBothAbsent() {
     // Given — Ansprechpartner und Beschreibung sind optional.
     final Angebot gespeichert =
-        geschrieben(angebot(List.of()).geaendert(ANGEBOTSDATUM, null, null, List.of(), ANGELEGT));
+        geschrieben(
+            angebot(List.of()).geaendert(ANGEBOTSDATUM, null, TITEL, null, List.of(), ANGELEGT));
 
     // Then
     assertThat(gelesen(gespeichert.requireId()))

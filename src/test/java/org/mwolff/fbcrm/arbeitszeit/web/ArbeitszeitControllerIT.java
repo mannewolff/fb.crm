@@ -102,7 +102,7 @@ class ArbeitszeitControllerIT extends AbstractIntegrationTest {
                 ruf(
                         "/api/firmen/" + firmaId + "/angebote",
                         HttpMethod.POST,
-                        null,
+                        Map.of("titel", "Website-Relaunch"),
                         AngebotResponse.class)
                     .getBody())
             .id();
@@ -158,6 +158,7 @@ class ArbeitszeitControllerIT extends AbstractIntegrationTest {
       final List<Map<String, Object>> positionen) {
     final Map<String, Object> rumpf = new LinkedHashMap<>();
     rumpf.put("angebotDatum", "2026-11-01");
+    rumpf.put("titel", "Website-Relaunch");
     rumpf.put("ansprechpartnerId", null);
     rumpf.put("beschreibung", "Neugestaltung der Website");
     rumpf.put("positionen", positionen);

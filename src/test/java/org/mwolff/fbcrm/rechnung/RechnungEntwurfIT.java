@@ -114,7 +114,7 @@ class RechnungEntwurfIT extends AbstractIntegrationTest {
                 ruf(
                         "/api/firmen/" + firmaId + "/angebote",
                         HttpMethod.POST,
-                        null,
+                        Map.of("titel", "Website-Relaunch"),
                         AngebotResponse.class)
                     .getBody())
             .id();
@@ -141,6 +141,7 @@ class RechnungEntwurfIT extends AbstractIntegrationTest {
     position.put("einzelpreis", einzelpreis);
     final Map<String, Object> rumpf = new LinkedHashMap<>();
     rumpf.put("angebotDatum", "2026-09-25");
+    rumpf.put("titel", "Website-Relaunch");
     rumpf.put("ansprechpartnerId", null);
     rumpf.put("beschreibung", "Neugestaltung der Website");
     rumpf.put("positionen", List.of(position));
@@ -179,6 +180,7 @@ class RechnungEntwurfIT extends AbstractIntegrationTest {
     position.put("einzelpreis", STUNDENSATZ);
     final Map<String, Object> rumpf = new LinkedHashMap<>();
     rumpf.put("angebotDatum", "2026-09-25");
+    rumpf.put("titel", "Website-Relaunch");
     rumpf.put("ansprechpartnerId", null);
     rumpf.put("beschreibung", "Eigene Weiterbildung");
     rumpf.put("intern", true);

@@ -93,6 +93,7 @@ class AngebotAendernUseCaseTest {
   private static final Instant JETZT = Instant.parse("2026-09-28T09:30:00Z");
   private static final LocalDate NEUES_DATUM = LocalDate.of(2026, 9, 25);
   private static final String NEUER_TEXT = "Ueberarbeitete Beschreibung";
+  private static final String NEUER_TITEL = "Wartungsvertrag";
 
   /** Die Bezeichnung, mit der eine neue Position eingereicht wird. */
   private static final String NEUE_ARBEIT = "Umbau der Ablage";
@@ -235,7 +236,8 @@ class AngebotAendernUseCaseTest {
       final @Nullable Long ansprechpartnerId,
       final boolean intern,
       final List<Positionsangabe> positionen) {
-    return new AngebotDaten(NEUES_DATUM, ansprechpartnerId, NEUER_TEXT, intern, positionen);
+    return new AngebotDaten(
+        NEUES_DATUM, ansprechpartnerId, NEUER_TITEL, NEUER_TEXT, intern, positionen);
   }
 
   private static Ansprechpartner person(final long id, final long firmaId, final boolean aktiv) {
@@ -662,6 +664,49 @@ class AngebotAendernUseCaseTest {
   }
 
   @Test
+  void aendere_thenWritesTheNewTitle() {
+    // Given — Issue #317: der Titel ist auf dem Aenderungsweg aenderbar (#314, Kriterium 3).
+    angebotIst(Angebotsdoppel.ohneAnsprechpartner(Angebotsdoppel.angebot(ANGEBOT)));
+
+    // When
+    final Angebot geaendert = aendere(daten(null, List.of()));
+
+    // Then
+    assertThat(geaendert.titel()).isEqualTo(NEUER_TITEL);
+  }
+
+  @Test
+  void aendere_atAnAngebotWithoutTitle_thenItGetsTheTitle() {
+    // Given — #314, Kriterium 4: ein Angebot von vor dem Titel bekommt ihn beim Aendern.
+    angebotIst(
+        Angebotsdoppel.ohneTitel(
+            Angebotsdoppel.ohneAnsprechpartner(Angebotsdoppel.angebot(ANGEBOT))));
+
+    // When
+    final Angebot geaendert = aendere(daten(null, List.of()));
+
+    // Then
+    assertThat(geaendert.titel()).isEqualTo(NEUER_TITEL);
+  }
+
+  @Test
+  void aendere_turningAnAngebotInternalAndBack_thenTheTitleSurvives() {
+    // Given — der Artwechsel stellt das Angebot um, bevor die neuen Angaben es schreiben; der
+    // Titel geht dabei nicht verloren.
+    angebotIst(Angebotsdoppel.ohneAnsprechpartner(Angebotsdoppel.angebot(ANGEBOT)));
+    final Angebot intern = aendere(daten(null, true, List.of()));
+
+    // When
+    angebotIst(intern);
+    final Angebot zurueck = aendere(daten(null, false, List.of()));
+
+    // Then
+    assertThat(intern.titel()).isEqualTo(NEUER_TITEL);
+    assertThat(zurueck.intern()).isFalse();
+    assertThat(zurueck.titel()).isEqualTo(NEUER_TITEL);
+  }
+
+  @Test
   void aendere_settingTheInternalFlag_thenKeepsTheStoredMengeEinheitAndPreis() {
     // Given — Kriterium 8: Beim Wechsel nach innen bleiben die Werte gespeichert, obwohl die Maske
     // sie dann nicht mehr zeigt und darum auch nicht mehr sendet.
@@ -1047,6 +1092,7 @@ class AngebotAendernUseCaseTest {
         new AngebotDaten(
             LocalDate.of(2027, 1, 15),
             null,
+            NEUER_TITEL,
             NEUER_TEXT,
             false,
             List.of(ohneKennung(Angebotsdoppel.KONZEPTION_ANGABE)));

@@ -99,7 +99,7 @@ class AngebotKommentarIT extends AbstractIntegrationTest {
             ruf(
                     "/api/firmen/" + firmaId + "/angebote",
                     HttpMethod.POST,
-                    null,
+                    Map.of("titel", "Website-Relaunch"),
                     AngebotResponse.class)
                 .getBody())
         .id();
