@@ -4,6 +4,7 @@ import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import AngebotMaske from './AngebotMaske';
+import { KEIN_JAHR } from '../components/Positionsmaske';
 import { KopfPfadProvider } from '../components/KopfPfad';
 import { fetchNachPfad, json, leer, problem } from '../test/fetchNachPfad';
 import type { Routen } from '../test/fetchNachPfad';
@@ -18,6 +19,7 @@ const POSITION = {
   einheit: 'PERSONENTAG',
   einzelpreis: 1000.01,
   betrag: 2500.03,
+  leistungsjahr: '2026',
 };
 
 const ANGEBOT = {
@@ -254,6 +256,7 @@ const BETREUUNG = {
   einheit: 'PAUSCHAL',
   einzelpreis: 500,
   betrag: 500,
+  leistungsjahr: '2027',
 };
 
 /**
@@ -277,6 +280,7 @@ const KONZEPTION_EINGABE = {
   menge: '2.50',
   einheit: 'PERSONENTAG',
   einzelpreis: '1000.01',
+  leistungsjahr: '2026',
 };
 
 describe('AngebotMaske — das Angebot bearbeiten (Issue #127, Kriterium 5)', () => {
@@ -473,6 +477,8 @@ describe('AngebotMaske — das Angebot bearbeiten (Issue #127, Kriterium 5)', ()
               menge: '1.00',
               einheit: 'PAUSCHAL',
               einzelpreis: '0.00',
+              // Vorbelegt mit dem Jahr des Datumsfeldes beim Hinzufuegen (Kriterium 4).
+              leistungsjahr: '2026',
             },
             KONZEPTION_EINGABE,
           ],
@@ -842,6 +848,7 @@ describe('AngebotMaske — das Kennzeichen „Internes Projekt" (Issue #207, Kri
     expect(gruppe(1).queryByRole('textbox', { name: 'Menge' })).not.toBeInTheDocument();
     expect(gruppe(1).queryByRole('combobox', { name: 'Einheit' })).not.toBeInTheDocument();
     expect(gruppe(1).queryByRole('textbox', { name: 'Einzelpreis (netto)' })).not.toBeInTheDocument();
+    expect(gruppe(1).queryByRole('textbox', { name: 'Leistungsjahr' })).not.toBeInTheDocument();
     expect(screen.queryByTestId('angebot-summe')).not.toBeInTheDocument();
   });
 
@@ -920,6 +927,9 @@ describe('AngebotMaske — das Kennzeichen „Internes Projekt" (Issue #207, Kri
     renderMaske('/angebote/9/bearbeiten');
     await bereit();
     await nutzer.clear(gruppe(1).getByRole('textbox', { name: 'Menge' }));
+    const jahr = gruppe(1).getByRole('textbox', { name: 'Leistungsjahr' });
+    await nutzer.clear(jahr);
+    await nutzer.type(jahr, '2k26');
     await nutzer.click(screen.getByRole('checkbox', { name: 'Internes Projekt' }));
     await nutzer.click(screen.getByRole('button', { name: 'Speichern' }));
 
@@ -957,5 +967,131 @@ describe('AngebotMaske — das Kennzeichen „Internes Projekt" (Issue #207, Kri
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     expect(kaestchen).toBeEnabled();
     expect(kaestchen).toBeChecked();
+  });
+});
+
+describe('AngebotMaske — das Leistungsjahr der Positionen (Plan #303, Kriterium 4, E16)', () => {
+  it('zeigt das Jahr einer gespeicherten Position', async () => {
+    lesen({ ...ANGEBOT, positionen: [POSITION, BETREUUNG], summe: 3000.03 });
+
+    renderMaske('/angebote/9/bearbeiten');
+    await bereit();
+
+    expect(gruppe(1).getByRole('textbox', { name: 'Leistungsjahr' })).toHaveValue('2026');
+    expect(gruppe(2).getByRole('textbox', { name: 'Leistungsjahr' })).toHaveValue('2027');
+  });
+
+  it('belegt eine hinzugefuegte Position mit dem Jahr des Datumsfeldes vor', async () => {
+    const nutzer = userEvent.setup();
+    lesen();
+
+    renderMaske('/angebote/9/bearbeiten');
+    const datum = await bereit();
+    await nutzer.clear(datum);
+    await nutzer.type(datum, '2027-03-01');
+    await nutzer.click(screen.getByRole('button', { name: 'Position hinzufügen' }));
+
+    expect(gruppe(2).getByRole('textbox', { name: 'Leistungsjahr' })).toHaveValue('2027');
+  });
+
+  it('laesst die Jahre bestehender Zeilen stehen, wenn sich das Angebotsdatum aendert', async () => {
+    const nutzer = userEvent.setup();
+    lesen();
+
+    renderMaske('/angebote/9/bearbeiten');
+    const datum = await bereit();
+    await nutzer.click(screen.getByRole('button', { name: 'Position hinzufügen' }));
+    await nutzer.clear(datum);
+    await nutzer.type(datum, '2028-01-15');
+
+    // Die Vorbelegung gilt nur beim Anlegen der Zeile (Kriterium 4) — weder die geladene noch die
+    // eben hinzugefuegte Zeile folgt dem neuen Datum.
+    expect(gruppe(1).getByRole('textbox', { name: 'Leistungsjahr' })).toHaveValue('2026');
+    expect(gruppe(2).getByRole('textbox', { name: 'Leistungsjahr' })).toHaveValue('2026');
+
+    await nutzer.click(screen.getByRole('button', { name: 'Position hinzufügen' }));
+    expect(gruppe(3).getByRole('textbox', { name: 'Leistungsjahr' })).toHaveValue('2028');
+  });
+
+  it('laesst das Jahr einer hinzugefuegten Zeile leer, solange das Datumsfeld leer ist', async () => {
+    const nutzer = userEvent.setup();
+    lesen();
+
+    renderMaske('/angebote/9/bearbeiten');
+    await nutzer.clear(await bereit());
+    await nutzer.click(screen.getByRole('button', { name: 'Position hinzufügen' }));
+
+    const jahr = gruppe(2).getByRole('textbox', { name: 'Leistungsjahr' });
+    expect(jahr).toHaveValue('');
+    // Leer ist „keine Angabe" und keine Meldung (E16).
+    expect(jahr).toHaveAttribute('aria-invalid', 'false');
+    expect(gruppe(2).queryByText(KEIN_JAHR)).not.toBeInTheDocument();
+  });
+
+  it('schickt das eingegebene Jahr mit der Position hinaus', async () => {
+    const nutzer = userEvent.setup();
+    const fetchMock = lesen(ANGEBOT, { 'PUT /api/angebote/9': json(200, ANGEBOT) });
+
+    renderMaske('/angebote/9/bearbeiten');
+    await bereit();
+    const jahr = gruppe(1).getByRole('textbox', { name: 'Leistungsjahr' });
+    await nutzer.clear(jahr);
+    await nutzer.type(jahr, '2027');
+    await nutzer.click(screen.getByRole('button', { name: 'Speichern' }));
+
+    await screen.findByRole('status');
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/angebote/9',
+      expect.objectContaining({
+        body: JSON.stringify({
+          angebotDatum: '2026-09-24',
+          ansprechpartnerId: null,
+          beschreibung: 'Neue Website',
+          intern: false,
+          positionen: [{ ...KONZEPTION_EINGABE, leistungsjahr: '2027' }],
+        }),
+      }),
+    );
+  });
+
+  it('schickt ein geleertes Jahr als „keine Angabe" hinaus (E16)', async () => {
+    const nutzer = userEvent.setup();
+    const fetchMock = lesen(ANGEBOT, { 'PUT /api/angebote/9': json(200, ANGEBOT) });
+
+    renderMaske('/angebote/9/bearbeiten');
+    await bereit();
+    await nutzer.clear(gruppe(1).getByRole('textbox', { name: 'Leistungsjahr' }));
+    await nutzer.click(screen.getByRole('button', { name: 'Speichern' }));
+
+    await screen.findByRole('status');
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/angebote/9',
+      expect.objectContaining({
+        body: JSON.stringify({
+          angebotDatum: '2026-09-24',
+          ansprechpartnerId: null,
+          beschreibung: 'Neue Website',
+          intern: false,
+          positionen: [{ ...KONZEPTION_EINGABE, leistungsjahr: null }],
+        }),
+      }),
+    );
+  });
+
+  it('haelt das Speichern am Kundenangebot an, solange ein Jahr unlesbar ist (E16)', async () => {
+    const nutzer = userEvent.setup();
+    const fetchMock = lesen();
+
+    renderMaske('/angebote/9/bearbeiten');
+    await bereit();
+    const jahr = gruppe(1).getByRole('textbox', { name: 'Leistungsjahr' });
+    await nutzer.clear(jahr);
+    await nutzer.type(jahr, '2k26');
+    await nutzer.click(screen.getByRole('button', { name: 'Speichern' }));
+
+    expect(gruppe(1).getByText(KEIN_JAHR)).toBeInTheDocument();
+    expect(screen.queryByText('Gespeichert.')).not.toBeInTheDocument();
+    // Nur die beiden Lesewege sind hinausgegangen: Alles oder nichts (E8).
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 });

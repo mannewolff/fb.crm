@@ -20,7 +20,11 @@ import Karte from '../components/Karte';
 import { useKopfPfad } from '../components/KopfPfad';
 import type { PfadVerweis } from '../components/KopfPfad';
 import KupferTaste from '../components/KupferTaste';
-import Positionsmaske, { betragDerPosition, frischePosition } from '../components/Positionsmaske';
+import Positionsmaske, {
+  betragDerPosition,
+  frischePosition,
+  jahrUnlesbar,
+} from '../components/Positionsmaske';
 import type { Maskenposition } from '../components/Positionsmaske';
 import WeicheTaste from '../components/WeicheTaste';
 import { feldMeldungen, nichtGefunden } from '../lib/apifehler';
@@ -87,6 +91,12 @@ import { ABSTAND_BUEHNE, ZAHLEN_KLASSE } from '../theme';
  * eine unlesbare Zahl in einem verborgenen Feld das Speichern nicht mehr auf (siehe
  * {@link alsEingaben}).
  *
+ * <b>Das Leistungsjahr wird beim Anlegen der Zeile vorbelegt, nicht danach</b> (Plan #303,
+ * Kriterium 4). „Position hinzufuegen" nimmt das Jahr des Datumsfeldes, wie es in diesem Moment
+ * steht; ein spaeterer Wechsel des Angebotsdatums ruehrt keine bestehende Zeile an — das Jahr
+ * gehoert ab dem Anlegen dem Menschen. Ist das Datumsfeld leer, bleibt auch das Jahr leer, und der
+ * Server belegt es beim Speichern vor (E2).
+ *
  * <b>Der Kopfpfad nennt die Firma beim Namen</b>, sobald sie bekannt ist.
  */
 
@@ -145,6 +155,11 @@ interface Texte {
 
 const LEERE_TEXTE: Texte = { angebotDatum: '', ansprechpartner: '', beschreibung: '' };
 
+/** Das Jahr eines Tages (`YYYY-MM-DD`) — leer, solange das Datumsfeld keinen Tag traegt. */
+function jahrAus(datum: string): string {
+  return /^\d{4}-/.test(datum) ? datum.slice(0, 4) : '';
+}
+
 /** Der Schluessel einer gespeicherten Zeile — er haengt an der Kennung, nicht an der Stelle. */
 function schluesselZu(id: number): string {
   return `position-${String(id)}`;
@@ -160,6 +175,7 @@ function alsZeilen(angebot: Angebot): readonly Maskenposition[] {
     menge: dezimal(position.mengeInHundertsteln, ','),
     einheit: position.einheit,
     einzelpreis: dezimal(position.einzelpreisInCent, ','),
+    leistungsjahr: position.leistungsjahr,
     // Was gespeichert ist, hat jemand so gewollt: Ein Modus-Wechsel setzt es nicht um (F7).
     einheitVonHand: true,
   }));
@@ -182,7 +198,12 @@ function oderNull(wert: string): string | null {
 }
 
 /**
- * Eine Zeile als Positionseingabe — `null`, wenn Menge oder Preis keine Zahl sind.
+ * Eine Zeile als Positionseingabe — `null`, wenn Menge oder Preis keine Zahl sind oder das
+ * Leistungsjahr etwas enthaelt, das kein Jahr ist.
+ *
+ * Ein leeres Jahr ist dagegen „keine Angabe" und geht als `null` hinaus; der Server belegt es vor
+ * (Plan #303, E2, E16). Ein unlesbares Jahr stillschweigend so zu behandeln, hiesse: Meldung am
+ * Feld und zugleich „Gespeichert" mit einem anderen Jahr, als dasteht.
  *
  * Die Reihenfolge der Felder ist die von `AngebotPositionRequest`; die Reihenfolge der Liste ist
  * die gezeigte (E24).
@@ -193,7 +214,7 @@ function oderNull(wert: string): string | null {
 function alsEingabe(position: Maskenposition): PositionEingabe | null {
   const menge = hundertstel(position.menge);
   const preis = hundertstel(position.einzelpreis);
-  if (menge === null || preis === null) {
+  if (menge === null || preis === null || jahrUnlesbar(position.leistungsjahr)) {
     return null;
   }
   return {
@@ -203,6 +224,7 @@ function alsEingabe(position: Maskenposition): PositionEingabe | null {
     menge: dezimal(menge, '.'),
     einheit: position.einheit,
     einzelpreis: dezimal(preis, '.'),
+    leistungsjahr: oderNull(position.leistungsjahr),
   };
 }
 
@@ -231,17 +253,19 @@ const OHNE_ZAHLEN = {
   menge: '0.00',
   einheit: 'PERSONENTAG',
   einzelpreis: '0.00',
+  leistungsjahr: null,
 } as const;
 
 /**
- * Die ganze Liste als Eingaben — `null`, solange eine Zahl keine ist.
+ * Die ganze Liste als Eingaben — `null`, solange eine Zahl keine ist oder ein Jahr keines (E16).
  *
  * Alles oder nichts: Ein Angebot wird als Ganzes geschrieben (E8), und eine Liste, aus der die
  * unlesbaren Zeilen stillschweigend herausfielen, loeschte Positionen, die der Mensch sieht.
  *
- * <b>Am internen Angebot haelt eine unlesbare Zahl nichts auf.</b> Menge und Einzelpreis gehen von
- * dort nicht hinaus, sie sind verborgen, und die Meldung dazu stuende an der Summenzeile, die es
- * am internen Angebot nicht gibt. Ohne diese Ausnahme wiese die Maske ein Speichern stumm ab —
+ * <b>Am internen Angebot haelt eine unlesbare Zahl nichts auf</b>, ein unlesbares Jahr ebenso
+ * wenig. Menge, Einzelpreis und Leistungsjahr gehen von dort nicht hinaus, sie sind verborgen,
+ * und die Meldung dazu stuende an der Summenzeile oder am Feld, die es am internen Angebot nicht
+ * gibt. Ohne diese Ausnahme wiese die Maske ein Speichern stumm ab —
  * kein Hinweis, kein Netzweg, nichts.
  */
 function alsEingaben(
@@ -676,7 +700,10 @@ export default function AngebotMaske() {
         werkzeug={
           <WeicheTaste
             onClick={() => {
-              setzePositionen([...positionen, frischePosition(naechsterSchluessel())]);
+              setzePositionen([
+                ...positionen,
+                frischePosition(naechsterSchluessel(), jahrAus(texte.angebotDatum)),
+              ]);
             }}
             symbol={<IconPlus size={16} stroke={1.8} />}
           >

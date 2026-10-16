@@ -23,6 +23,7 @@ const POSITION = {
   einheit: 'PERSONENTAG',
   einzelpreis: 1000.01,
   betrag: 2500.03,
+  leistungsjahr: '2026',
 };
 
 const ANGEBOT = {
@@ -48,6 +49,7 @@ const POSITION_VERENGT = {
   einheit: 'PERSONENTAG',
   einzelpreisInCent: 100001,
   betragInCent: 250003,
+  leistungsjahr: '2026',
 };
 
 const ANGEBOT_VERENGT = {
@@ -85,6 +87,7 @@ const EINGABE = {
       menge: '2.50',
       einheit: 'PERSONENTAG' as const,
       einzelpreis: '1000.01',
+      leistungsjahr: '2026',
     },
   ],
 };
@@ -101,6 +104,8 @@ const EINGABE_MIT_NEUER_POSITION = {
       menge: '1.00',
       einheit: 'PAUSCHAL' as const,
       einzelpreis: '0.00',
+      // Kein Jahr heisst „keine Angabe": Der Server belegt es vor (Plan #303, E2).
+      leistungsjahr: null,
     },
   ],
 };
@@ -153,6 +158,13 @@ describe('parseAngebot', () => {
     },
   );
 
+  it('liest das Leistungsjahr als Text (Plan #303, E9)', () => {
+    expect(
+      parseAngebot({ ...ANGEBOT, positionen: [{ ...POSITION, leistungsjahr: '2027' }] })
+        .positionen[0].leistungsjahr,
+    ).toBe('2027');
+  });
+
   it.each([['STUNDE'], ['PERSONENTAG'], ['PAUSCHAL']])('nimmt die Einheit %s an', (einheit) => {
     expect(
       parseAngebot({ ...ANGEBOT, positionen: [{ ...POSITION, einheit }] }).positionen[0].einheit,
@@ -203,6 +215,14 @@ describe('parseAngebot', () => {
       { ...ANGEBOT, positionen: [{ ...POSITION, einzelpreis: -1 }] },
     ],
     ['Position ohne Betrag', { ...ANGEBOT, positionen: [{ ...POSITION, betrag: undefined }] }],
+    [
+      'Position ohne Leistungsjahr',
+      { ...ANGEBOT, positionen: [{ ...POSITION, leistungsjahr: undefined }] },
+    ],
+    [
+      'Position mit Leistungsjahr als Zahl',
+      { ...ANGEBOT, positionen: [{ ...POSITION, leistungsjahr: 2026 }] },
+    ],
   ])('weist eine Antwort ab: %s', (_fall, rumpf) => {
     expect(() => parseAngebot(rumpf)).toThrow(TypeError);
   });
@@ -400,7 +420,8 @@ describe('die Wege', () => {
     await angebotAendern(9, { ...EINGABE, intern: true });
 
     // Die interne Arbeit hat keine Menge, keine Einheit, keinen Preis und keine Abrechnungsart
-    // (Plan #218, E7) — ein mitgeschickter Wert waere eine Angabe, die es nicht gibt.
+    // (Plan #218, E7) — ein mitgeschickter Wert waere eine Angabe, die es nicht gibt. Auch das
+    // Leistungsjahr bleibt draussen: Der Server belegt es vor (Plan #303, E2).
     expect(rumpf).toEqual({
       angebotDatum: '2026-09-24',
       ansprechpartnerId: 8,

@@ -73,6 +73,8 @@ export interface AngebotPosition {
   readonly einzelpreisInCent: number;
   /** Netto-Betrag der Position in ganzen Cent, vom Server gerechnet (E5). */
   readonly betragInCent: number;
+  /** Das Jahr der Leistung als Text `JJJJ`, wie der Server es schickt (Plan #303, E9). */
+  readonly leistungsjahr: string;
 }
 
 /** Ein Angebot mit seinen Positionen (Issue #127). */
@@ -137,6 +139,11 @@ export interface PositionEingabe {
   readonly einheit: Einheit;
   /** Netto-Einzelpreis als Dezimaltext mit Punkt — „1000.01". */
   readonly einzelpreis: string;
+  /**
+   * Das Jahr der Leistung als Text `JJJJ` — `null` heisst „keine Angabe", und der Server belegt
+   * es vor (Plan #303, E2).
+   */
+  readonly leistungsjahr: string | null;
 }
 
 /** Das Angebot als Ganzes — die Felder von `AngebotRequest` (E8). */
@@ -190,6 +197,7 @@ function parsePosition(wert: unknown): AngebotPosition {
     einheit: parseEinheit(position.einheit),
     einzelpreisInCent: inHundertsteln(position.einzelpreis),
     betragInCent: inHundertsteln(position.betrag),
+    leistungsjahr: text(position.leistungsjahr),
   };
 }
 
@@ -302,6 +310,9 @@ export function angebotAendern(id: number, eingabe: AngebotEingabe): Promise<Ang
 
 /**
  * Der Rumpf des Aenderungswegs: beim internen Angebot ohne die vier Positionsangaben.
+ *
+ * Auch das Leistungsjahr bleibt dort draussen: Die interne Arbeit erscheint in keinem Forecast,
+ * und fehlt das Jahr, belegt der Server es vor (Plan #303, E2).
  *
  * Gefiltert wird hier und nicht in der Maske: Die Zusage „ein internes Angebot schickt keine Menge,
  * keine Einheit, keinen Preis und keine Abrechnungsart" gehoert an die Systemgrenze, wo sie fuer

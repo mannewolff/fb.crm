@@ -8,7 +8,7 @@ import { betrag, euro, hundertstel } from '../lib/geld';
 import { RADIUS_MITTEL, RADIUS_RUND, ZAHLEN_KLASSE } from '../theme';
 
 /**
- * Eine Position in der Maske des Angebots: die fuenf Felder, der mitrechnende Betrag und die drei
+ * Eine Position in der Maske des Angebots: die sechs Felder, der mitrechnende Betrag und die drei
  * Griffe (Kriterien 4, 5, 6).
  *
  * <b>Gesteuert, nicht selbststaendig.</b> Der Zustand liegt in der Angebotsmaske: Die Liste wird
@@ -27,6 +27,11 @@ import { RADIUS_MITTEL, RADIUS_RUND, ZAHLEN_KLASSE } from '../theme';
  * durch {@link hundertstel} und damit durch dieselbe Pruefung, die auch das Absenden benutzt;
  * beide Trenner sind erlaubt, „2,5" wie „2.5".
  *
+ * <b>Das Leistungsjahr meldet erst, wenn etwas darin steht</b> (Plan #303, E16). Ein leeres Feld
+ * ist „keine Angabe", und der Server belegt das Jahr dann vor; gemeldet wird nur ein Inhalt, der
+ * kein Jahr zwischen 2000 und 2099 ist. Vorbelegt wird es beim Anlegen der Zeile mit dem Jahr des
+ * Angebotsdatums ({@link frischePosition}), danach gehoert es dem Menschen (Kriterium 4).
+ *
  * <b>Die Vorbelegung der Einheit ist ein Vorschlag</b> (E26, F7): Ein Wechsel auf „Festpreis"
  * setzt „Pauschal", einer auf „Aufwand" „Personentag" — aber nur, solange niemand die Einheit
  * selbst gewaehlt hat. Wer „Stunde" gewaehlt hat, hat entschieden; ein Vorschlag nimmt eine
@@ -35,13 +40,13 @@ import { RADIUS_MITTEL, RADIUS_RUND, ZAHLEN_KLASSE } from '../theme';
  * nicht zu beantworten.
  *
  * <b>Am internen Angebot bleibt die Bezeichnung allein</b> (Issue #207, Kriterium 3): „Abrechnung",
- * „Menge", „Einheit", „Einzelpreis" und die Betragszeile entfallen, die drei Griffe und die Gruppe
+ * „Menge", „Einheit", „Einzelpreis", „Leistungsjahr" und die Betragszeile entfallen, die drei Griffe und die Gruppe
  * mit ihrer Nummer bleiben. Der Zustand wird dabei nicht beschnitten — verborgen ist nicht
  * geloescht, und wer das Kennzeichen wieder abwaehlt, findet seine Angaben unveraendert vor.
  *
  * Die Felder liegen in einer Gruppe mit dem Namen „Position <n>". Mehrere Zeilen tragen dieselben
  * Beschriftungen; ohne die Gruppe waere „Menge" auf der Seite mehrfach da, und ein Screenreader
- * saehe fuenf Felder ohne Zugehoerigkeit.
+ * saehe sechs Felder ohne Zugehoerigkeit.
  */
 
 /** Eine Position, so wie sie in der Maske steht — Menge und Preis als Text des Feldes. */
@@ -69,6 +74,8 @@ export interface Maskenposition {
   readonly menge: string;
   readonly einheit: Einheit;
   readonly einzelpreis: string;
+  /** Das Jahr der Leistung, wie es im Feld steht — leer heisst „keine Angabe" (Plan #303, E16). */
+  readonly leistungsjahr: string;
   /** Wahr, sobald ein Mensch die Einheit selbst gewaehlt hat (F7). */
   readonly einheitVonHand: boolean;
 }
@@ -104,8 +111,11 @@ const VORSCHLAG: Readonly<Record<Abrechnungsmodus, Einheit>> = {
  * Zeilen desselben Angebots muessen sich unterscheiden, und eine Konstante gaebe beiden denselben.
  * Den Schluessel vergibt die Maske und nicht diese Funktion — sie allein kennt die Zeilen, die es
  * schon gibt.
+ *
+ * Das Leistungsjahr kommt aus demselben Grund von aussen: Vorbelegt wird es mit dem Jahr des
+ * Angebotsdatums (Kriterium 4), und das Datum kennt die Maske, nicht diese Funktion.
  */
-export function frischePosition(schluessel: string): Maskenposition {
+export function frischePosition(schluessel: string, leistungsjahr: string): Maskenposition {
   return {
     // Ohne Kennung: Die entsteht erst, wenn der Server die Position anlegt (Plan #169, E2).
     id: null,
@@ -115,12 +125,29 @@ export function frischePosition(schluessel: string): Maskenposition {
     menge: '1',
     einheit: 'PERSONENTAG',
     einzelpreis: '0',
+    leistungsjahr,
     einheitVonHand: false,
   };
 }
 
 /** Was an einem Feld steht, dessen Zahl keine ist. */
 export const KEINE_ZAHL = 'Bitte eine Zahl mit höchstens zwei Nachkommastellen angeben.';
+
+/** Was am Leistungsjahr steht, wenn darin etwas anderes als ein Jahr steht (E16). */
+export const KEIN_JAHR = 'Bitte ein Jahr zwischen 2000 und 2099 angeben.';
+
+/**
+ * Ob das Feld etwas enthaelt, das kein Jahr zwischen 2000 und 2099 ist (Plan #303, E16).
+ *
+ * Ein leeres Feld ist nicht unlesbar, sondern „keine Angabe". Steht hier und nicht in der Maske,
+ * obwohl beide es brauchen: Die Zeile meldet damit, die Maske haelt damit das Speichern an. Zwei
+ * Regeln fuer dasselbe Feld meldeten irgendwann, was gespeichert wird, oder speicherten, was
+ * gemeldet wird.
+ */
+export function jahrUnlesbar(leistungsjahr: string): boolean {
+  const getrimmt = leistungsjahr.trim();
+  return getrimmt !== '' && !/^20\d{2}$/.test(getrimmt);
+}
 
 /**
  * Der Betrag der Position in ganzen Cent — `null`, solange Menge oder Preis keine Zahl sind.
@@ -149,8 +176,9 @@ export interface PositionsmaskeProps {
   /**
    * Ob die Zeile zu einem internen Angebot gehoert (Issue #207, Kriterium 3).
    *
-   * Dann entfallen „Abrechnung", „Menge", „Einheit", „Einzelpreis" und die Betragszeile; die
-   * Bezeichnung und die drei Griffe bleiben. Die {@link Maskenposition} behaelt dabei alle Felder:
+   * Dann entfallen „Abrechnung", „Menge", „Einheit", „Einzelpreis", „Leistungsjahr" und die
+   * Betragszeile; die Bezeichnung und die drei Griffe bleiben. Die {@link Maskenposition} behaelt
+   * dabei alle Felder:
    * Wer das Kennzeichen wieder abwaehlt, findet seine Angaben wieder, und was gespeichert ist,
    * behaelt auch der Server (Kriterium 8). Verborgen ist nicht geloescht.
    */
@@ -174,6 +202,7 @@ export default function Positionsmaske({
   const cent = betragDerPosition(position);
   const mengeFehlt = hundertstel(position.menge) === null;
   const preisFehlt = hundertstel(position.einzelpreis) === null;
+  const jahrFalsch = jahrUnlesbar(position.leistungsjahr);
   return (
     <Box
       component="fieldset"
@@ -220,7 +249,7 @@ export default function Positionsmaske({
             gridTemplateColumns: {
               xs: 'minmax(0, 1fr)',
               sm: 'repeat(2, minmax(0, 1fr))',
-              lg: 'repeat(4, minmax(0, 1fr))',
+              lg: 'repeat(5, minmax(0, 1fr))',
             },
           }}
         >
@@ -289,6 +318,18 @@ export default function Positionsmaske({
             helperText={preisFehlt ? KEINE_ZAHL : undefined}
             fullWidth
             slotProps={{ htmlInput: { inputMode: 'decimal', className: ZAHLEN_KLASSE } }}
+          />
+          <TextField
+            label="Leistungsjahr"
+            type="text"
+            value={position.leistungsjahr}
+            onChange={(ereignis) => {
+              aendere({ ...position, leistungsjahr: ereignis.target.value });
+            }}
+            error={jahrFalsch}
+            helperText={jahrFalsch ? KEIN_JAHR : undefined}
+            fullWidth
+            slotProps={{ htmlInput: { inputMode: 'numeric', className: ZAHLEN_KLASSE } }}
           />
         </Box>
         )}

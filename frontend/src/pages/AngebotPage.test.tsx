@@ -16,6 +16,7 @@ const POSITION = {
   einheit: 'PERSONENTAG',
   einzelpreis: 1000.01,
   betrag: 2500.03,
+  leistungsjahr: '2026',
 };
 
 const ANGEBOT = {
@@ -79,6 +80,7 @@ const STUNDEN_POSITION = {
   einheit: 'STUNDE',
   einzelpreis: 120,
   betrag: 2400,
+  leistungsjahr: '2026',
 };
 
 /** Dasselbe Angebot, dessen eine Position Stunden traegt. */
