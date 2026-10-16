@@ -189,6 +189,7 @@ class AngebotStatusMigrationIT extends AbstractIntegrationTest {
             "intern",
             "leistungsbeschreibung",
             "status",
+            "titel",
             "updated_at");
     assertThat(nummernkreis).isZero();
   }
