@@ -4,7 +4,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import AngebotPage from './AngebotPage';
-import { KopfPfadProvider } from '../components/KopfPfad';
+import KopfPfad, { KopfPfadProvider } from '../components/KopfPfad';
 import { fetchNachPfad, json, leer, problem } from '../test/fetchNachPfad';
 import { renderMitTheme } from '../test/render';
 
@@ -115,12 +115,14 @@ const STAND_TEIL = { positionen: [STAND_POSITION], rechnungen: [GESTELLTE], ange
 /** Ein bestelltes Angebot — ab diesem Status lässt sich eine Rechnung schreiben. */
 const BESTELLT = { ...ANGEBOT, status: 'BESTELLT' };
 
-const UEBERSCHRIFT = 'Angebot vom 24.09.2026';
+/** Das Angebot traegt einen Titel — er ist seine Ueberschrift (Issue #319, Kriterium 5). */
+const UEBERSCHRIFT = 'Neue Website';
 
-function renderSeite(start = '/angebote/9') {
+function renderSeite(start = '/angebote/9', mitKopf = false) {
   return renderMitTheme(
     <MemoryRouter initialEntries={[start]}>
       <KopfPfadProvider>
+        {mitKopf ? <KopfPfad /> : null}
         <Routes>
           <Route path="/angebote/:angebotId" element={<AngebotPage />} />
           {/* Das Ziel von „Rechnung schreiben" — die Probe liest hier ab, dass der Weg fuehrt. */}
@@ -168,7 +170,7 @@ afterEach(() => {
 });
 
 describe('AngebotPage — was das Angebot zeigt (Issue #127)', () => {
-  it('traegt „Angebot vom <Datum>" als die eine Ueberschrift', async () => {
+  it('traegt den Titel als die eine Ueberschrift', async () => {
     fetchNachPfad({
       ...LEERE_BEREICHE,
       'GET /api/angebote/9': json(200, ANGEBOT),
@@ -178,6 +180,26 @@ describe('AngebotPage — was das Angebot zeigt (Issue #127)', () => {
 
     expect(await screen.findByRole('heading', { level: 1, name: UEBERSCHRIFT })).toBeInTheDocument();
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+  });
+
+  it('Szenario: Angebotsseite mit und ohne Titel — Ueberschrift und Kopfpfad', async () => {
+    for (const [titel, name] of [
+      ['Java-Grundkurs', 'Java-Grundkurs'],
+      [null, 'Angebot vom 15.10.2026'],
+    ] as const) {
+      fetchNachPfad({
+        ...LEERE_BEREICHE,
+        'GET /api/angebote/9': json(200, { ...ANGEBOT, angebotDatum: '2026-10-15', titel }),
+      });
+
+      const { unmount } = renderSeite('/angebote/9', true);
+
+      expect(await screen.findByRole('heading', { level: 1, name })).toBeInTheDocument();
+      const pfad = within(screen.getByRole('navigation', { name: 'Pfad' }));
+      expect(await pfad.findByText(name)).toHaveAttribute('aria-current', 'page');
+      expect(within(screen.getByTestId('angebot-angaben')).getByText('Angebotsdatum')).toBeInTheDocument();
+      unmount();
+    }
   });
 
   it('nennt Firma, Ansprechpartner, Angebotsdatum und Status in den Angaben', async () => {

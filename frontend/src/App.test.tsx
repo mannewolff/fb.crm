@@ -229,7 +229,7 @@ describe('App', () => {
 
     expect(screen.getByRole('status')).toHaveTextContent('Sitzung wird geprüft');
     expect(
-      await screen.findByRole('heading', { level: 1, name: 'Angebot vom 24.09.2026' }),
+      await screen.findByRole('heading', { level: 1, name: 'Neue Website' }),
     ).toBeInTheDocument();
     expect(screen.getByRole('navigation', { name: 'Hauptnavigation' })).toBeInTheDocument();
   });

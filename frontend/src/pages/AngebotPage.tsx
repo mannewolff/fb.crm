@@ -229,9 +229,12 @@ type Abrechnungsstand =
   | { readonly art: 'daten'; readonly abrechnung: Angebotsabrechnung }
   | { readonly art: 'ausfall' };
 
-/** Die Ueberschrift: ein Angebot hat keine Nummer, es heisst nach seinem Datum. */
+/**
+ * Die Ueberschrift und die Endstufe des Kopfpfads: ein Angebot hat keine Nummer, es heisst nach
+ * seinem Titel — und ein Angebot aus der Zeit vor dem Titel weiter nach seinem Datum (Kriterium 5).
+ */
 function ueberschriftZu(angebot: Angebot): string {
-  return `Angebot vom ${tagWort(angebot.angebotDatum)}`;
+  return angebot.titel ?? `Angebot vom ${tagWort(angebot.angebotDatum)}`;
 }
 
 /** Die Beschriftung der Fusszeile — intern benennt sie Stunden, extern Geld (Issue #235). */

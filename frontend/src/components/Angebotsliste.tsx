@@ -16,9 +16,17 @@ import Tafel, { type TafelSpalte } from './Tafel';
  * <b>Nicht sortiert.</b> Die Reihenfolge kommt vom Server — neueste zuerst. Eine zweite Sortierung
  * hier waere eine zweite Wahrheit.
  *
- * <b>Der Weg liegt auf dem Datum, nicht auf der Zeile.</b> Eine ganze Tabellenzeile klickbar zu
- * machen hiesse, ein `tr` mit `onClick` zu versehen — kein Ziel des Tabulators und fuer den
- * Screenreader kein Weg. Ein Angebot hat keine Nummer; das Datum ist, was es in der Liste benennt.
+ * <b>Der Weg liegt auf dem Titel, nicht auf der Zeile</b> (Issue #319, Plan #315, E12). Eine ganze
+ * Tabellenzeile klickbar zu machen hiesse, ein `tr` mit `onClick` zu versehen — kein Ziel des
+ * Tabulators und fuer den Screenreader kein Weg. Ein Angebot hat keine Nummer; der Titel ist, was es
+ * in der Liste benennt. Beim Angebot ohne Titel liegt der Weg weiter auf dem Datum: Der Strich an
+ * der Stelle des Titels wird nie verlinkt — ein Verweis auf „–" waere ein Link ohne zugaenglichen
+ * Namen. Die jeweils andere Zelle traegt ihren Text ohne Verweis, damit eine Zeile nicht zwei
+ * Tabulatorwege zum selben Ziel hat.
+ *
+ * <b>Der Titel bricht um, statt gekuerzt zu werden</b> (E11): Bei einer Kuerzung verschwaende
+ * gerade der unterscheidende Teil. `overflowWrap: 'anywhere'` faengt auch den Titel ohne ein
+ * einziges Leerzeichen.
  *
  * <b>Das Kennzeichen „Intern" steht hinter dem Datum</b> (Issue #233) — in der Spalte, die das
  * Angebot benennt, und nicht in einer sechsten Spalte, die bei 768 px der Summe den Platz nimmt.
@@ -31,18 +39,52 @@ import Tafel, { type TafelSpalte } from './Tafel';
  */
 
 const SPALTEN: readonly TafelSpalte[] = [
+  'Titel',
   'Datum',
-  'Status',
   { beschriftung: 'Summe', zahl: true },
+  'Status',
 ];
 const LEER = 'Noch kein Angebot an diese Firma.';
 
-/** Was in „Summe" steht, wenn es keinen Betrag gibt (Halbgeviertstrich). */
-const OHNE_BETRAG = '\u2013';
+/**
+ * Was in „Titel" steht, wenn es keinen Titel gibt, und in „Summe", wenn es keinen Betrag gibt
+ * (Halbgeviertstrich). Eine Konstante fuer beide Zellen (E10): Kriterium 4 verlangt denselben Strich.
+ */
+const OHNE_ANGABE = '\u2013';
+
+/** Der Weg zum Angebot — er liegt auf dem Titel oder, beim Angebot ohne Titel, auf dem Datum. */
+function Weg({
+  angebot,
+  className,
+  children,
+}: {
+  readonly angebot: AngebotZeile;
+  readonly className?: string;
+  readonly children: string;
+}) {
+  return (
+    <Box
+      component={RouterLink}
+      to={`/angebote/${String(angebot.id)}`}
+      className={className}
+      sx={(theme) => ({
+        color: 'inherit',
+        textDecoration: 'none',
+        '&:hover': { color: theme.vars.palette.kupferwolke.kupfer },
+      })}
+    >
+      {children}
+    </Box>
+  );
+}
 
 function Zeile({ angebot }: { readonly angebot: AngebotZeile }) {
+  const datum = tagWort(angebot.angebotDatum);
   return (
     <Box component="tr">
+      <Box component="td" sx={{ overflowWrap: 'anywhere' }}>
+        {angebot.titel === null ? OHNE_ANGABE : <Weg angebot={angebot}>{angebot.titel}</Weg>}
+      </Box>
       <Box
         component="td"
         sx={{
@@ -53,29 +95,24 @@ function Zeile({ angebot }: { readonly angebot: AngebotZeile }) {
           gap: '8px',
         }}
       >
-        <Box
-          component={RouterLink}
-          to={`/angebote/${String(angebot.id)}`}
-          className={ZAHLEN_KLASSE}
-          sx={(theme) => ({
-            color: 'inherit',
-            textDecoration: 'none',
-            '&:hover': { color: theme.vars.palette.kupferwolke.kupfer },
-          })}
-        >
-          {tagWort(angebot.angebotDatum)}
-        </Box>
+        {angebot.titel === null ? (
+          <Weg angebot={angebot} className={ZAHLEN_KLASSE}>
+            {datum}
+          </Weg>
+        ) : (
+          <span className={ZAHLEN_KLASSE}>{datum}</span>
+        )}
         {angebot.intern ? <InternChip /> : null}
-      </Box>
-      <Box component="td">
-        <AngebotsstatusChip status={angebot.status} />
       </Box>
       <Box
         component="td"
         className={ZAHLEN_KLASSE}
         sx={{ fontWeight: 600, whiteSpace: 'nowrap', textAlign: 'right' }}
       >
-        {angebot.intern ? OHNE_BETRAG : euro(angebot.summeInCent)}
+        {angebot.intern ? OHNE_ANGABE : euro(angebot.summeInCent)}
+      </Box>
+      <Box component="td">
+        <AngebotsstatusChip status={angebot.status} />
       </Box>
     </Box>
   );

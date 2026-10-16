@@ -540,7 +540,7 @@ describe('FirmaPage — die Angebote der Firma (Kriterium 7)', () => {
 
     const tafel = within(await screen.findByRole('table', { name: 'Angebote' }));
     const wege = tafel.getAllByRole('link');
-    expect(wege.map((weg) => weg.textContent)).toEqual(['26.09.2026', '24.09.2026']);
+    expect(wege.map((weg) => weg.textContent)).toEqual(['Schulung Java', 'Neue Website']);
     expect(wege[0]).toHaveAttribute('href', '/angebote/32');
     expect(wege[1]).toHaveAttribute('href', '/angebote/31');
   });
