@@ -275,6 +275,67 @@ class RechnungsauskunftTest {
   }
 
   @Test
+  void abgerechneteMengen_withAnEntwurf_thenItCountsWhereGestellteLeavesItOut() {
+    // Given — eine gestellte Rechnung und ein Entwurf ueber dieselbe Position.
+    gegebenerAktuellerSatz("19.00");
+    gegebenesAngebotMitFirma();
+    when(rechnungen.findAlle())
+        .thenReturn(
+            List.of(
+                Rechnungsdoppel.gestellt(
+                    1L,
+                    Rechnungsdoppel.ANGEBOT,
+                    "R26-0001",
+                    List.of(Rechnungsdoppel.beratung("80.00")),
+                    LETZTER_SEPTEMBER),
+                Rechnungsdoppel.entwurf(2L, List.of(Rechnungsdoppel.beratung("50.00")))));
+
+    // When
+    final Map<Long, BigDecimal> abgerechnet = auskunft.abgerechneteMengen();
+    final Map<Long, BigDecimal> gestellt = auskunft.gestellte().mengenJePosition();
+
+    // Then — der Forecast zaehlt wie der Abrechnungsstand, nicht wie der Umsatz (#302, Kriterium
+    // 3).
+    assertThat(abgerechnet)
+        .containsOnly(
+            Map.entry(Long.valueOf(Rechnungsdoppel.BERATUNG_ID), new BigDecimal("130.00")));
+    assertThat(gestellt)
+        .containsOnly(
+            Map.entry(Long.valueOf(Rechnungsdoppel.BERATUNG_ID), new BigDecimal("80.00")));
+  }
+
+  @Test
+  void abgerechneteMengen_withTheSamePositionOnTwoRechnungen_thenTheMengenAreSummed() {
+    // Given — eine bezahlte und eine gestellte Rechnung auf dieselbe Position, dazu eine Pauschale.
+    when(rechnungen.findAlle())
+        .thenReturn(
+            List.of(
+                Rechnungsdoppel.gestellt(
+                        1L,
+                        Rechnungsdoppel.ANGEBOT,
+                        "R26-0001",
+                        List.of(Rechnungsdoppel.beratung("80.00")),
+                        LETZTER_SEPTEMBER)
+                    .mitZustand(Rechnungszustand.BEZAHLT, Rechnungsdoppel.ANGELEGT),
+                Rechnungsdoppel.gestellt(
+                    2L,
+                    Rechnungsdoppel.ANGEBOT,
+                    "R26-0002",
+                    List.of(Rechnungsdoppel.beratung("20.50"), Rechnungsdoppel.pauschale("0.5")),
+                    ERSTER_OKTOBER)));
+
+    // When
+    final Map<Long, BigDecimal> abgerechnet = auskunft.abgerechneteMengen();
+
+    // Then — ohne Steuersatz, Angebot oder Firma: Die Tuer fragt nur nach Mengen.
+    assertThat(abgerechnet)
+        .containsOnly(
+            Map.entry(Long.valueOf(Rechnungsdoppel.BERATUNG_ID), new BigDecimal("100.50")),
+            Map.entry(Long.valueOf(Rechnungsdoppel.PAUSCHALE_ID), new BigDecimal("0.5")));
+    verifyNoInteractions(nachtraege, einstellungen, angebote, firmen);
+  }
+
+  @Test
   void gestellte_thenTheMonatIsTheRechnungsdatumAndNotTheZeitpunktOfStellen() {
     // Given — gestellt am 20. September (Rechnungsdoppel.ANGELEGT), Rechnungsdatum 1. Oktober.
     gegebenerAktuellerSatz("19.00");
