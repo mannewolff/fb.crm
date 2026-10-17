@@ -1,6 +1,7 @@
 package org.mwolff.fbcrm.rechnung.web;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.nullValue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
@@ -104,6 +105,7 @@ class RechnungControllerTest {
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.id").value(Webdoppel.RECHNUNG))
         .andExpect(jsonPath("$.angebotId").value(Webdoppel.ANGEBOT))
+        .andExpect(jsonPath("$.angebotTitel").value(Webdoppel.TITEL))
         .andExpect(jsonPath("$.firmaId").value(Webdoppel.FIRMA))
         .andExpect(jsonPath("$.firmaName").value(Webdoppel.FIRMENNAME))
         .andExpect(jsonPath("$.leistungszeitraum").value(Webdoppel.ZEITRAUM))
@@ -135,6 +137,20 @@ class RechnungControllerTest {
         .andExpect(jsonPath("$.zeilen[0].offen").value(60.00))
         .andExpect(jsonPath("$.zeilen[0].menge").value(80.00))
         .andExpect(jsonPath("$.zeilen[0].ueberschreitung").value(20.00));
+  }
+
+  @Test
+  void lesen_withAnAngebotWithoutTitel_thenAngebotTitelIsNull() throws Exception {
+    // Given — Issue #327, Kriterium 7: das Angebot von vor #316 traegt keinen Titel.
+    when(lesen.lese(Webdoppel.RECHNUNG))
+        .thenReturn(Webdoppel.ansicht(Webdoppel.entwurf("80.00"), "0", null));
+
+    // When / Then
+    mockMvc
+        .perform(get(PFAD))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.angebotId").value(Webdoppel.ANGEBOT))
+        .andExpect(jsonPath("$.angebotTitel").value(nullValue()));
   }
 
   @Test

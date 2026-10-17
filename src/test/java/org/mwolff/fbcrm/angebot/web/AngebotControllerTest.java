@@ -1,6 +1,7 @@
 package org.mwolff.fbcrm.angebot.web;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.nullValue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
@@ -15,10 +16,14 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.Year;
 import java.util.List;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.Mock;
@@ -67,6 +72,9 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
  * Weil Menge, Einheit und Preis dafuer keine Pflichtfelder der Bean-Validation mehr sind (E7), geht
  * eine Position ohne Menge jetzt bis in den Anwendungsfall durch und wird dort zu 422 statt zu 400
  * — der Test dazu haelt gerade diesen Unterschied fest.
+ *
+ * <p><b>Der Titel ist auf dem Aenderungsweg Pflicht</b> (Issue #317): Er fehlt nicht, ist nicht nur
+ * Leerraum und hat hoechstens 200 Zeichen — sonst 400 mit {@code fieldErrors.titel}.
  */
 @ExtendWith(MockitoExtension.class)
 class AngebotControllerTest {
@@ -87,7 +95,8 @@ class AngebotControllerTest {
           Abrechnungsmodus.AUFWAND,
           new BigDecimal("2.50"),
           Einheit.PERSONENTAG,
-          new BigDecimal("1000.01"));
+          new BigDecimal("1000.01"),
+          Year.of(2026));
 
   /**
    * Dieselbe Position, wie die Maske sie einreicht — alle vier Angaben besetzt (Issue #227, E7).
@@ -99,11 +108,12 @@ class AngebotControllerTest {
           Abrechnungsmodus.AUFWAND,
           new BigDecimal("2.50"),
           Einheit.PERSONENTAG,
-          new BigDecimal("1000.01"));
+          new BigDecimal("1000.01"),
+          null);
 
   private static final String RUMPF =
       """
-      {"angebotDatum":"2026-09-25","ansprechpartnerId":9,"beschreibung":"Neu",
+      {"titel":"Wartung","angebotDatum":"2026-09-25","ansprechpartnerId":9,"beschreibung":"Neu",
        "positionen":[{"id":42,"bezeichnung":"Konzeption","abrechnungsmodus":"AUFWAND","menge":"2.50",
                       "einheit":"PERSONENTAG","einzelpreis":"1000.01"}]}
       """;
@@ -130,6 +140,11 @@ class AngebotControllerTest {
   }
 
   private static Angebot angebot(final Angebotsstatus status) {
+    return angebot(status, "Website-Relaunch");
+  }
+
+  /** Dasselbe Angebot mit frei gewaehltem Titel — {@code null} fuer ein Angebot von vor #316. */
+  private static Angebot angebot(final Angebotsstatus status, final @Nullable String titel) {
     return new Angebot(
         Long.valueOf(ANGEBOT),
         3L,
@@ -137,6 +152,7 @@ class AngebotControllerTest {
         status.intern(),
         status,
         ANGEBOTSDATUM,
+        titel,
         "Neugestaltung",
         List.of(KONZEPTION),
         ANGELEGT,
@@ -164,11 +180,24 @@ class AngebotControllerTest {
         .andExpect(jsonPath("$.ansprechpartnerId").value(8))
         .andExpect(jsonPath("$.ansprechpartnerName").value("Eva Adler"))
         .andExpect(jsonPath("$.status").value("BESTELLT"))
+        .andExpect(jsonPath("$.titel").value("Website-Relaunch"))
         .andExpect(jsonPath("$.beschreibung").value("Neugestaltung"))
         .andExpect(jsonPath("$.summe").value(2500.03))
         .andExpect(jsonPath("$.positionen[0].betrag").value(2500.03))
         .andExpect(jsonPath("$.positionen[0].einheit").value("PERSONENTAG"))
         .andExpect(jsonPath("$.nummer").doesNotExist());
+  }
+
+  @Test
+  void lesen_givenAnOfferWithoutTitle_thenAnswersWithNullAsTitle() throws Exception {
+    // Given — #314, Kriterium 4: ein Angebot von vor dem Titel traegt keinen.
+    when(lesen.lese(ANGEBOT)).thenReturn(angebot(Angebotsstatus.ANGELEGT, null));
+
+    // When / Then
+    mockMvc
+        .perform(get("/api/angebote/{id}", Long.valueOf(ANGEBOT)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.titel").value(nullValue()));
   }
 
   @Test
@@ -203,7 +232,7 @@ class AngebotControllerTest {
     aendernAntwortet();
     final String ohneKennung =
         """
-        {"angebotDatum":"2026-09-25","positionen":[{"bezeichnung":"Konzeption",
+        {"titel":"Wartung","angebotDatum":"2026-09-25","positionen":[{"bezeichnung":"Konzeption",
           "abrechnungsmodus":"AUFWAND","menge":"2.50","einheit":"PERSONENTAG",
           "einzelpreis":"1000.01"}]}
         """;
@@ -283,6 +312,7 @@ class AngebotControllerTest {
     final AngebotDaten uebergeben = daten.getValue();
     assertThat(uebergeben.angebotDatum()).isEqualTo(LocalDate.of(2026, 9, 25));
     assertThat(uebergeben.ansprechpartnerId()).isEqualTo(9L);
+    assertThat(uebergeben.titel()).isEqualTo("Wartung");
     assertThat(uebergeben.beschreibung()).isEqualTo("Neu");
     assertThat(uebergeben.intern()).isFalse();
     // Die Kennung der Position kommt mit durch: KONZEPTION_ANGABE traegt sie, und der Record
@@ -314,7 +344,7 @@ class AngebotControllerTest {
     // Given — jede Position braucht eine Bezeichnung (Issue #127).
     final String leer =
         """
-        {"angebotDatum":"2026-09-25","positionen":[{"bezeichnung":"  ",
+        {"titel":"Wartung","angebotDatum":"2026-09-25","positionen":[{"bezeichnung":"  ",
           "abrechnungsmodus":"AUFWAND","menge":"1.00","einheit":"STUNDE","einzelpreis":"10.00"}]}
         """;
 
@@ -334,7 +364,7 @@ class AngebotControllerTest {
     // Given — die Form wird an der Anfrage geprueft, nicht erst in der Datenbank.
     final String negativ =
         """
-        {"angebotDatum":"2026-09-25","positionen":[{"bezeichnung":"Konzeption",
+        {"titel":"Wartung","angebotDatum":"2026-09-25","positionen":[{"bezeichnung":"Konzeption",
           "abrechnungsmodus":"AUFWAND","menge":"-1.00","einheit":"STUNDE","einzelpreis":"10.00"}]}
         """;
 
@@ -351,7 +381,7 @@ class AngebotControllerTest {
   @Test
   void aendern_withoutAngebotDatum_thenAnswersWithAFieldError() throws Exception {
     // Given — das Datum ist die eine Pflichtangabe des Angebots.
-    final String ohneDatum = "{\"positionen\":[]}";
+    final String ohneDatum = "{\"titel\":\"Wartung\",\"positionen\":[]}";
 
     // When / Then
     mockMvc
@@ -428,7 +458,7 @@ class AngebotControllerTest {
     when(aendern.aendere(eq(ANGEBOT), daten.capture())).thenReturn(angebot(Angebotsstatus.LAEUFT));
     final String intern =
         """
-        {"angebotDatum":"2026-09-25","intern":true,"positionen":[{"id":42,
+        {"titel":"Wartung","angebotDatum":"2026-09-25","intern":true,"positionen":[{"id":42,
           "bezeichnung":"Konzeption"}]}
         """;
 
@@ -450,7 +480,7 @@ class AngebotControllerTest {
     aendernAntwortet();
     final String ohneArt =
         """
-        {"angebotDatum":"2026-09-25","positionen":[]}
+        {"titel":"Wartung","angebotDatum":"2026-09-25","positionen":[]}
         """;
 
     // When
@@ -471,7 +501,7 @@ class AngebotControllerTest {
     aendernAntwortet();
     final String ausdruecklichNull =
         """
-        {"angebotDatum":"2026-09-25","intern":null,"positionen":[]}
+        {"titel":"Wartung","angebotDatum":"2026-09-25","intern":null,"positionen":[]}
         """;
 
     // When
@@ -516,10 +546,11 @@ class AngebotControllerTest {
                     Abrechnungsmodus.AUFWAND,
                     null,
                     Einheit.STUNDE,
-                    BigDecimal.TEN)));
+                    BigDecimal.TEN,
+                    null)));
     final String ohneMenge =
         """
-        {"angebotDatum":"2026-09-25","positionen":[{"bezeichnung":"Konzeption",
+        {"titel":"Wartung","angebotDatum":"2026-09-25","positionen":[{"bezeichnung":"Konzeption",
           "abrechnungsmodus":"AUFWAND","einheit":"STUNDE","einzelpreis":"10.00"}]}
         """;
 
@@ -533,5 +564,144 @@ class AngebotControllerTest {
         .andExpect(
             jsonPath("$.fieldErrors['positionen[0].menge'][0]")
                 .value(Positionsangaben.ANGABE_FEHLT));
+  }
+
+  /** Ein Rumpf mit einer neuen Position, die das angegebene Leistungsjahr mitschickt. */
+  private static String mitLeistungsjahr(final int jahr) {
+    return """
+        {"titel":"Wartung","angebotDatum":"2026-09-25","positionen":[{"bezeichnung":"Konzeption",
+          "abrechnungsmodus":"AUFWAND","menge":"2.50","einheit":"PERSONENTAG",
+          "einzelpreis":"1000.01","leistungsjahr":%d}]}
+        """
+        .formatted(Integer.valueOf(jahr));
+  }
+
+  @Test
+  void lesen_thenAnswersWithTheLeistungsjahrAsText() throws Exception {
+    // Given — Issue #305, E9: Jackson schriebe ein Year als Zahl; die Antwort fuehrt es als Text
+    // JJJJ, wie die Startseite ihre Jahre.
+    when(lesen.lese(ANGEBOT)).thenReturn(angebot(Angebotsstatus.ANGELEGT));
+
+    // When / Then
+    mockMvc
+        .perform(get("/api/angebote/{id}", Long.valueOf(ANGEBOT)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.positionen[0].leistungsjahr").isString())
+        .andExpect(jsonPath("$.positionen[0].leistungsjahr").value("2026"));
+  }
+
+  @ParameterizedTest
+  @ValueSource(ints = {2000, 2027, 2099})
+  void aendern_withALeistungsjahrWithinTheBounds_thenPassesItOn(final int jahr) throws Exception {
+    // Given — Issue #305, E10: 2000 bis 2099 sind gueltig, die Grenzen eingeschlossen.
+    aendernAntwortet();
+
+    // When
+    mockMvc
+        .perform(
+            put("/api/angebote/{id}", Long.valueOf(ANGEBOT))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(mitLeistungsjahr(jahr)))
+        .andExpect(status().isOk());
+
+    // Then
+    assertThat(daten.getValue().positionen())
+        .singleElement()
+        .satisfies(position -> assertThat(position.leistungsjahr()).isEqualTo(jahr));
+  }
+
+  @ParameterizedTest
+  @ValueSource(ints = {1999, 2100})
+  void aendern_withALeistungsjahrOutsideTheBounds_thenAnswers400AtTheField(final int jahr)
+      throws Exception {
+    // Given — E10: „20267" ist ein Tippfehler und keine Angabe; die Bean-Validation weist ab, bevor
+    // der Anwendungsfall gefragt wird.
+
+    // When / Then
+    mockMvc
+        .perform(
+            put("/api/angebote/{id}", Long.valueOf(ANGEBOT))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(mitLeistungsjahr(jahr)))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.fieldErrors['positionen[0].leistungsjahr']").isNotEmpty());
+    verifyNoInteractions(aendern);
+  }
+
+  @Test
+  void aendern_withoutTheLeistungsjahrField_thenStaysValidAndPassesNull() throws Exception {
+    // Given — Issue #305, E2: Das Leistungsjahr ist nachgebbar. Ein Rumpf ohne das Feld — wie ihn
+    // die Systemgrenze am internen Angebot schickt — wird weder 400 noch 422.
+    aendernAntwortet();
+
+    // When
+    mockMvc
+        .perform(
+            put("/api/angebote/{id}", Long.valueOf(ANGEBOT))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(RUMPF))
+        .andExpect(status().isOk());
+
+    // Then
+    assertThat(daten.getValue().positionen())
+        .singleElement()
+        .satisfies(position -> assertThat(position.leistungsjahr()).isNull());
+  }
+
+  @Test
+  void aendern_withATitle_thenPassesItOnAndTheAnswerCarriesIt() throws Exception {
+    // Given — #314, Kriterium 3: der Titel ist aenderbar.
+    when(aendern.aendere(eq(ANGEBOT), daten.capture()))
+        .thenReturn(angebot(Angebotsstatus.ANGELEGT, "Wartung"));
+
+    // When
+    mockMvc
+        .perform(
+            put("/api/angebote/{id}", Long.valueOf(ANGEBOT))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(RUMPF))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.titel").value("Wartung"));
+
+    // Then
+    assertThat(daten.getValue().titel()).isEqualTo("Wartung");
+  }
+
+  @ParameterizedTest
+  @ValueSource(
+      strings = {
+        "{\"angebotDatum\":\"2026-09-25\",\"positionen\":[]}",
+        "{\"titel\":null,\"angebotDatum\":\"2026-09-25\",\"positionen\":[]}",
+        "{\"titel\":\"   \",\"angebotDatum\":\"2026-09-25\",\"positionen\":[]}"
+      })
+  void aendern_withoutATitle_thenAnswers400AtTheTitle(final String rumpf) throws Exception {
+    // When / Then — #314, Kriterium 3: der Titel bleibt beim Aendern Pflicht; Leerraum zaehlt als
+    // fehlend.
+    mockMvc
+        .perform(
+            put("/api/angebote/{id}", Long.valueOf(ANGEBOT))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(rumpf))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.fieldErrors.titel").isArray());
+    verifyNoInteractions(aendern);
+  }
+
+  @Test
+  void aendern_withATitleOf201Characters_thenAnswers400AtTheTitle() throws Exception {
+    // Given — #314, Kriterium 1: hoechstens 200 Zeichen.
+    final String zuLang =
+        "{\"titel\":\"%s\",\"angebotDatum\":\"2026-09-25\",\"positionen\":[]}"
+            .formatted("x".repeat(201));
+
+    // When / Then
+    mockMvc
+        .perform(
+            put("/api/angebote/{id}", Long.valueOf(ANGEBOT))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(zuLang))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.fieldErrors.titel").isArray());
+    verifyNoInteractions(aendern);
   }
 }

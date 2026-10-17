@@ -7,12 +7,14 @@ import AngebotePage from './AngebotePage';
 import { KopfPfadProvider } from '../components/KopfPfad';
 import { fetchNachPfad, json, leer } from '../test/fetchNachPfad';
 import { renderMitTheme } from '../test/render';
+import { ZAHLEN_KLASSE } from '../theme';
 
 const JUENGER = {
   id: 12,
   firmaId: 5,
   firmaName: 'Adler AG',
   angebotDatum: '2026-09-26',
+  titel: null,
   status: 'BESTELLT',
   intern: false,
   summe: 1200,
@@ -23,16 +25,32 @@ const AELTER = {
   firmaId: 6,
   firmaName: 'Biber GmbH',
   angebotDatum: '2026-09-24',
+  titel: null,
   status: 'ANGELEGT',
   intern: false,
   summe: 2500.03,
 };
+
+/** Zwei Angebote derselben Firma vom selben Tag — der Fall, fuer den es den Titel gibt (#322). */
+const JAVA = {
+  id: 21,
+  firmaId: 8,
+  firmaName: 'IT-Bildungshaus',
+  angebotDatum: '2026-10-15',
+  titel: 'Java-Grundkurs',
+  status: 'ANGELEGT',
+  intern: false,
+  summe: 3000,
+};
+
+const SPRING = { ...JAVA, id: 22, titel: 'Spring-Aufbaukurs' };
 
 const INTERN = {
   id: 14,
   firmaId: 7,
   firmaName: 'Caesar KG',
   angebotDatum: '2026-09-28',
+  titel: null,
   status: 'LAEUFT',
   intern: true,
   summe: 0,
@@ -71,13 +89,14 @@ describe('AngebotePage — die Uebersicht (Issue #127, Kriterium 8)', () => {
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
   });
 
-  it('zeigt die Tafel mit Datum, Firma, Status und Summe in der Reihenfolge der Antwort', async () => {
+  it('zeigt die Tafel mit Titel, Datum, Firma, Status und Summe in der Reihenfolge der Antwort', async () => {
     fetchNachPfad({ 'GET /api/angebote': json(200, { angebote: [JUENGER, AELTER] }) });
 
     renderSeite();
 
     const tafel = within(await screen.findByRole('table', { name: 'Angebote' }));
     expect(tafel.getAllByRole('columnheader').map((kopf) => kopf.textContent)).toEqual([
+      'Titel',
       'Datum',
       'Firma',
       'Status',
@@ -101,7 +120,7 @@ describe('AngebotePage — die Uebersicht (Issue #127, Kriterium 8)', () => {
 
     const tafel = within(await screen.findByRole('table', { name: 'Angebote' }));
     expect(tafel.getByRole('columnheader', { name: 'Summe' })).toHaveStyle({ textAlign: 'right' });
-    for (const name of ['Datum', 'Firma', 'Status']) {
+    for (const name of ['Titel', 'Datum', 'Firma', 'Status']) {
       expect(tafel.getByRole('columnheader', { name })).toHaveStyle({ textAlign: 'left' });
     }
   });
@@ -210,6 +229,67 @@ describe('AngebotePage — die Uebersicht (Issue #127, Kriterium 8)', () => {
   });
 });
 
+describe('AngebotePage — der Titel als erste Spalte (Issue #325)', () => {
+  /** Die Zellen der n-ten Zeile der Tafel; die nullte ist der Kopf. */
+  function zellen(n: number) {
+    const tafel = screen.getByRole('table', { name: 'Angebote' });
+    return within(within(tafel).getAllByRole('row')[n]).getAllByRole('cell');
+  }
+
+  it('Szenario: Zwei Angebote vom selben Tag in der Übersicht', async () => {
+    fetchNachPfad({ 'GET /api/angebote': json(200, { angebote: [JAVA, SPRING] }) });
+
+    renderSeite();
+
+    const tafel = within(await screen.findByRole('table', { name: 'Angebote' }));
+    expect(tafel.getAllByRole('columnheader').map((kopf) => kopf.textContent)).toEqual([
+      'Titel',
+      'Datum',
+      'Firma',
+      'Status',
+      'Summe',
+    ]);
+    expect(zellen(1)[0]).toHaveTextContent('Java-Grundkurs');
+    expect(zellen(2)[0]).toHaveTextContent('Spring-Aufbaukurs');
+    expect(tafel.getByRole('link', { name: 'Java-Grundkurs' })).toHaveAttribute(
+      'href',
+      '/angebote/21',
+    );
+    // E3: Mit Titel traegt allein der Titel den Weg; das Datum steht ohne Verweis daneben.
+    const datum = zellen(1)[1];
+    expect(within(datum).queryByRole('link')).not.toBeInTheDocument();
+    expect(within(datum).getByText('15.10.2026')).toHaveClass(ZAHLEN_KLASSE);
+  });
+
+  it('Szenario: Angebot ohne Titel', async () => {
+    fetchNachPfad({ 'GET /api/angebote': json(200, { angebote: [JUENGER] }) });
+
+    renderSeite();
+
+    await screen.findByRole('table', { name: 'Angebote' });
+    const [titel, datum] = zellen(1);
+    expect(titel).toHaveTextContent('\u2013');
+    expect(within(titel).queryByRole('link')).not.toBeInTheDocument();
+    expect(within(datum).getByRole('link', { name: '26.09.2026' })).toHaveAttribute(
+      'href',
+      '/angebote/12',
+    );
+  });
+
+  it('bricht einen langen Titel um, statt ihn zu kuerzen (Kriterium 8)', async () => {
+    const lang = 'x'.repeat(200);
+    fetchNachPfad({ 'GET /api/angebote': json(200, { angebote: [{ ...JAVA, titel: lang }] }) });
+
+    renderSeite();
+
+    await screen.findByRole('table', { name: 'Angebote' });
+    const titel = zellen(1)[0];
+    expect(within(titel).getByRole('link', { name: lang })).toBeInTheDocument();
+    expect(titel).toHaveStyle({ overflowWrap: 'anywhere' });
+    expect(titel).not.toHaveStyle({ whiteSpace: 'nowrap' });
+  });
+});
+
 describe('AngebotePage — leer, Ausfall, Laden', () => {
   it('sagt ohne jedes Angebot einen Satz statt einer leeren Tafel', async () => {
     fetchNachPfad({ 'GET /api/angebote': json(200, { angebote: [] }) });
@@ -256,7 +336,7 @@ describe('AngebotePage — Kennzeichen intern und Strich in der Summe (Issue #23
     const tafel = within(await screen.findByRole('table', { name: 'Angebote' }));
     const zeile = within(tafel.getAllByRole('row')[1]);
     expect(zeile.getByText('Intern')).toBeInTheDocument();
-    expect(zeile.getByText('\u2013')).toBeInTheDocument();
+    expect(zeile.getAllByRole('cell')[4]).toHaveTextContent(/^\u2013$/);
     expect(zeile.queryByText(/€/)).not.toBeInTheDocument();
   });
 
@@ -280,7 +360,7 @@ describe('AngebotePage — Kennzeichen intern und Strich in der Summe (Issue #23
 
     const tafel = within(await screen.findByRole('table', { name: 'Angebote' }));
     const zeile = within(tafel.getAllByRole('row')[1]);
-    expect(zeile.getByText('\u2013')).toBeInTheDocument();
+    expect(zeile.getAllByRole('cell')[4]).toHaveTextContent(/^\u2013$/);
     expect(zeile.queryByText('4.500,00 €')).not.toBeInTheDocument();
   });
 

@@ -11,6 +11,32 @@ bleibt stehen, auch wenn nichts darunter steht.
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-10-17
+
+- chore: v1.0.3
+- Titel am Angebot in der Angebotsauswahl der Zeiterfassung (Issue #328)
+- Titel am Angebot in der Wahl der neuen Rechnung und auf der Rechnungsseite (Issue #327)
+- Titel als erste Spalte in der Uebersicht aller Angebote (Issue #325)
+- Titel am Angebot im Forecast und in den Angebotskarten der Startseite (Issue #324)
+- chore: v1.0.2
+- Reparatur: Spalte titel in der erwarteten Spaltenliste (Issue #321)
+- Titel in der Firmentafel und auf der Angebotsseite (Issue #319)
+- Titelfeld im Datenweg und in der Angebotsmaske (Issue #318)
+- Titel pflichtig auf dem Anlege- und dem Aenderungsweg des Angebots (Issue #317)
+- Titel am Angebot: Spalte, Domaene, Bestand und Antworten (Issue #316)
+- chore: v1.0.1
+- Forecast-Karte auf der Startseite (Issue #313)
+- api/forecast.ts und die Forecasttafel (Issue #312)
+- Spalte Jahr in der Positionstafel des Angebots (Issue #311)
+- Feld Leistungsjahr in der Positionsmaske und Vorbelegung in der Angebotsmaske (Issue #310)
+- Angebotsweg nach components ziehen (Issue #309)
+- Weg GET /api/startseite/forecast (Issue #308)
+- ForecastUseCase: die Jahreszeilen rechnen (Issue #307)
+- AbgerechneteMengen als eine Stelle und eine Tuer an der Rechnungsauskunft (Issue #306)
+- Leistungsjahr ueber die Schnittstelle nachgeben (Issue #305)
+- Leistungsjahr an der Angebotsposition: Spalte, Migration und Vorbelegung (Issue #304)
+- Installer 5 installiert und Änderungen im workflow comittet
+
 ## [1.0.0] - 2026-10-08
 
 - chore: v0.1.17

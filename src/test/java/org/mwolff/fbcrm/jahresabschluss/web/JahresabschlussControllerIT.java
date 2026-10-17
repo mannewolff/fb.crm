@@ -211,8 +211,9 @@ class JahresabschlussControllerIT extends AbstractIntegrationTest {
         jdbc.queryForObject(
             """
             INSERT INTO angebot_position
-                (angebot_id, position, bezeichnung, abrechnungsmodus, menge, einheit, einzelpreis)
-            VALUES (?, 1, 'Beratung', 'AUFWAND', 10, 'STUNDE', 100.00) RETURNING id
+                (angebot_id, position, bezeichnung, abrechnungsmodus, menge, einheit, einzelpreis,
+                 leistungsjahr)
+            VALUES (?, 1, 'Beratung', 'AUFWAND', 10, 'STUNDE', 100.00, 2026) RETURNING id
             """,
             Long.class,
             angebotId);

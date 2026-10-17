@@ -69,6 +69,7 @@ class AbrechenbareAngeboteUseCaseTest {
         .satisfies(
             zeile -> assertThat(zeile.angebot().requireId()).isEqualTo(Rechnungsdoppel.ANGEBOT),
             zeile -> assertThat(zeile.firmaName()).isEqualTo("Adler AG"),
+            zeile -> assertThat(zeile.angebot().titel()).isEqualTo("Website-Relaunch"),
             zeile -> assertThat(zeile.angebot().angebotDatum()).isEqualTo("2026-09-20"),
             zeile -> assertThat(zeile.offenerBetrag()).isEqualByComparingTo("17200.00"));
     verify(firmen).findAllById(gefragteFirmen.capture());

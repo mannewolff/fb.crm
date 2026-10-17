@@ -16,3 +16,8 @@ frontend/dist/
 frontend/coverage/
 
 /install.mjs
+
+# Lokale Daten: Datenbank-Dump und Anlagen gehoeren nicht ins Repo
+/fbcrm.dump
+*.dump
+/anhaenge/

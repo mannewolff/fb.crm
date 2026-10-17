@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.tuple;
 import java.time.Instant;
 import java.util.Map;
 import java.util.Objects;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mwolff.fbcrm.AbstractIntegrationTest;
@@ -64,9 +65,9 @@ class AngeboteUebersichtIT extends AbstractIntegrationTest {
         "TRUNCATE angebot_position, angebot, ansprechpartner, firma RESTART IDENTITY CASCADE");
     adler = firma("Adler AG");
     biber = firma("Biber GmbH");
-    angebot(adler, "ANGELEGT", "2026-09-20");
-    angebot(biber, "BESTELLT", "2026-09-25");
-    angebot(adler, "BESTELLT", "2026-09-22");
+    angebot(adler, "ANGELEGT", "2026-09-20", null);
+    angebot(biber, "BESTELLT", "2026-09-25", "Java-Grundkurs");
+    angebot(adler, "BESTELLT", "2026-09-22", null);
     jdbc.execute("TRUNCATE outbox_message, password_reset_token, account RESTART IDENTITY CASCADE");
     accounts.save(
         new Account(null, MAIL, "Manne", hasher.hash(PASSWORT), Role.ADMIN, 0, ANGELEGT, ANGELEGT));
@@ -80,12 +81,15 @@ class AngeboteUebersichtIT extends AbstractIntegrationTest {
         .longValue();
   }
 
-  private void angebot(final long firma, final String status, final String datum) {
+  private void angebot(
+      final long firma, final String status, final String datum, final @Nullable String titel) {
     jdbc.update(
-        "INSERT INTO angebot (firma_id, status, angebot_datum) VALUES (?, ?, CAST(? AS date))",
+        "INSERT INTO angebot (firma_id, status, angebot_datum, titel)"
+            + " VALUES (?, ?, CAST(? AS date), ?)",
         Long.valueOf(firma),
         status,
-        datum);
+        datum,
+        titel);
   }
 
   private HttpHeaders angemeldeterKopf() {
@@ -111,11 +115,13 @@ class AngeboteUebersichtIT extends AbstractIntegrationTest {
     // Then
     assertThat(antwort.angebote())
         .extracting(
-            AngeboteUebersichtResponse.Zeile::firmaName, AngeboteUebersichtResponse.Zeile::status)
+            AngeboteUebersichtResponse.Zeile::firmaName,
+            AngeboteUebersichtResponse.Zeile::status,
+            AngeboteUebersichtResponse.Zeile::titel)
         .containsExactly(
-            tuple("Biber GmbH", Angebotsstatus.BESTELLT),
-            tuple("Adler AG", Angebotsstatus.BESTELLT),
-            tuple("Adler AG", Angebotsstatus.ANGELEGT));
+            tuple("Biber GmbH", Angebotsstatus.BESTELLT, "Java-Grundkurs"),
+            tuple("Adler AG", Angebotsstatus.BESTELLT, null),
+            tuple("Adler AG", Angebotsstatus.ANGELEGT, null));
   }
 
   @Test

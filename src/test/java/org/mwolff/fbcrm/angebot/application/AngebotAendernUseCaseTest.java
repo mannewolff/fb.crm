@@ -15,6 +15,7 @@ import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.Year;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -92,6 +93,7 @@ class AngebotAendernUseCaseTest {
   private static final Instant JETZT = Instant.parse("2026-09-28T09:30:00Z");
   private static final LocalDate NEUES_DATUM = LocalDate.of(2026, 9, 25);
   private static final String NEUER_TEXT = "Ueberarbeitete Beschreibung";
+  private static final String NEUER_TITEL = "Wartungsvertrag";
 
   /** Die Bezeichnung, mit der eine neue Position eingereicht wird. */
   private static final String NEUE_ARBEIT = "Umbau der Ablage";
@@ -189,7 +191,8 @@ class AngebotAendernUseCaseTest {
         angabe.abrechnungsmodus(),
         angabe.menge(),
         einheit,
-        angabe.einzelpreis());
+        angabe.einzelpreis(),
+        angabe.leistungsjahr());
   }
 
   private static Positionsangabe mitModus(
@@ -200,7 +203,8 @@ class AngebotAendernUseCaseTest {
         modus,
         angabe.menge(),
         angabe.einheit(),
-        angabe.einzelpreis());
+        angabe.einzelpreis(),
+        angabe.leistungsjahr());
   }
 
   private static Positionsangabe mitKennung(final Positionsangabe angabe, final @Nullable Long id) {
@@ -210,7 +214,8 @@ class AngebotAendernUseCaseTest {
         angabe.abrechnungsmodus(),
         angabe.menge(),
         angabe.einheit(),
-        angabe.einzelpreis());
+        angabe.einzelpreis(),
+        angabe.leistungsjahr());
   }
 
   private static Positionsangabe ohneKennung(final Positionsangabe angabe) {
@@ -231,7 +236,8 @@ class AngebotAendernUseCaseTest {
       final @Nullable Long ansprechpartnerId,
       final boolean intern,
       final List<Positionsangabe> positionen) {
-    return new AngebotDaten(NEUES_DATUM, ansprechpartnerId, NEUER_TEXT, intern, positionen);
+    return new AngebotDaten(
+        NEUES_DATUM, ansprechpartnerId, NEUER_TITEL, NEUER_TEXT, intern, positionen);
   }
 
   private static Ansprechpartner person(final long id, final long firmaId, final boolean aktiv) {
@@ -247,6 +253,35 @@ class AngebotAendernUseCaseTest {
         aktiv,
         Angebotsdoppel.ANGELEGT,
         Angebotsdoppel.ANGELEGT);
+  }
+
+  /** Dieselbe Position mit einem anderen Leistungsjahr. */
+  private static Angebotsposition imJahr(final Angebotsposition position, final int jahr) {
+    return new Angebotsposition(
+        position.id(),
+        position.bezeichnung(),
+        position.abrechnungsmodus(),
+        position.menge(),
+        position.einheit(),
+        position.einzelpreis(),
+        Year.of(jahr));
+  }
+
+  /** Dasselbe Angebot mit anderen gespeicherten Positionen. */
+  private static Angebot mitPositionen(
+      final Angebot angebot, final Angebotsposition... positionen) {
+    return new Angebot(
+        angebot.id(),
+        angebot.firmaId(),
+        angebot.ansprechpartnerId(),
+        angebot.intern(),
+        angebot.status(),
+        angebot.angebotDatum(),
+        angebot.titel(),
+        angebot.beschreibung(),
+        List.of(positionen),
+        angebot.createdAt(),
+        angebot.updatedAt());
   }
 
   private void angebotIst(final Angebot angebot) {
@@ -547,7 +582,8 @@ class AngebotAendernUseCaseTest {
             Angebotsdoppel.KONZEPTION.abrechnungsmodus(),
             new BigDecimal("4.00"),
             Angebotsdoppel.KONZEPTION.einheit(),
-            new BigDecimal("999.00"));
+            new BigDecimal("999.00"),
+            null);
 
     // When — und zugleich umgeordnet: die Reihenfolge ist ebenfalls frei.
     final Angebot geaendert =
@@ -628,12 +664,56 @@ class AngebotAendernUseCaseTest {
   }
 
   @Test
+  void aendere_thenWritesTheNewTitle() {
+    // Given — Issue #317: der Titel ist auf dem Aenderungsweg aenderbar (#314, Kriterium 3).
+    angebotIst(Angebotsdoppel.ohneAnsprechpartner(Angebotsdoppel.angebot(ANGEBOT)));
+
+    // When
+    final Angebot geaendert = aendere(daten(null, List.of()));
+
+    // Then
+    assertThat(geaendert.titel()).isEqualTo(NEUER_TITEL);
+  }
+
+  @Test
+  void aendere_atAnAngebotWithoutTitle_thenItGetsTheTitle() {
+    // Given — #314, Kriterium 4: ein Angebot von vor dem Titel bekommt ihn beim Aendern.
+    angebotIst(
+        Angebotsdoppel.ohneTitel(
+            Angebotsdoppel.ohneAnsprechpartner(Angebotsdoppel.angebot(ANGEBOT))));
+
+    // When
+    final Angebot geaendert = aendere(daten(null, List.of()));
+
+    // Then
+    assertThat(geaendert.titel()).isEqualTo(NEUER_TITEL);
+  }
+
+  @Test
+  void aendere_turningAnAngebotInternalAndBack_thenTheTitleSurvives() {
+    // Given — der Artwechsel stellt das Angebot um, bevor die neuen Angaben es schreiben; der
+    // Titel geht dabei nicht verloren.
+    angebotIst(Angebotsdoppel.ohneAnsprechpartner(Angebotsdoppel.angebot(ANGEBOT)));
+    final Angebot intern = aendere(daten(null, true, List.of()));
+
+    // When
+    angebotIst(intern);
+    final Angebot zurueck = aendere(daten(null, false, List.of()));
+
+    // Then
+    assertThat(intern.titel()).isEqualTo(NEUER_TITEL);
+    assertThat(zurueck.intern()).isFalse();
+    assertThat(zurueck.titel()).isEqualTo(NEUER_TITEL);
+  }
+
+  @Test
   void aendere_settingTheInternalFlag_thenKeepsTheStoredMengeEinheitAndPreis() {
     // Given — Kriterium 8: Beim Wechsel nach innen bleiben die Werte gespeichert, obwohl die Maske
     // sie dann nicht mehr zeigt und darum auch nicht mehr sendet.
     angebotIst(Angebotsdoppel.ohneAnsprechpartner(Angebotsdoppel.angebot(ANGEBOT)));
     final Positionsangabe nurBezeichnung =
-        new Positionsangabe(Angebotsdoppel.KONZEPTION_ID, "Konzeption", null, null, null, null);
+        new Positionsangabe(
+            Angebotsdoppel.KONZEPTION_ID, "Konzeption", null, null, null, null, null);
 
     // When
     final Angebot geaendert = aendere(daten(null, true, List.of(nurBezeichnung)));
@@ -648,7 +728,8 @@ class AngebotAendernUseCaseTest {
     // Werte, die nichts behaupten.
     angebotIst(
         Angebotsdoppel.ohneAnsprechpartner(Angebotsdoppel.angebot(ANGEBOT, Angebotsstatus.LAEUFT)));
-    final Positionsangabe neue = new Positionsangabe(null, NEUE_ARBEIT, null, null, null, null);
+    final Positionsangabe neue =
+        new Positionsangabe(null, NEUE_ARBEIT, null, null, null, null, null);
 
     // When
     final Angebot geaendert = aendere(daten(null, true, List.of(neue)));
@@ -662,7 +743,8 @@ class AngebotAendernUseCaseTest {
                 Abrechnungsmodus.AUFWAND,
                 BigDecimal.ZERO,
                 Einheit.STUNDE,
-                BigDecimal.ZERO));
+                BigDecimal.ZERO,
+                Year.of(2026)));
   }
 
   @Test
@@ -710,19 +792,37 @@ class AngebotAendernUseCaseTest {
     return Stream.of(
         arguments(
             new Positionsangabe(
-                null, NEUE_ARBEIT, Abrechnungsmodus.AUFWAND, null, Einheit.STUNDE, BigDecimal.TEN),
+                null,
+                NEUE_ARBEIT,
+                Abrechnungsmodus.AUFWAND,
+                null,
+                Einheit.STUNDE,
+                BigDecimal.TEN,
+                null),
             "positionen[0].menge"),
         arguments(
             new Positionsangabe(
-                null, NEUE_ARBEIT, Abrechnungsmodus.AUFWAND, BigDecimal.ONE, null, BigDecimal.TEN),
+                null,
+                NEUE_ARBEIT,
+                Abrechnungsmodus.AUFWAND,
+                BigDecimal.ONE,
+                null,
+                BigDecimal.TEN,
+                null),
             "positionen[0].einheit"),
         arguments(
             new Positionsangabe(
-                null, NEUE_ARBEIT, Abrechnungsmodus.AUFWAND, BigDecimal.ONE, Einheit.STUNDE, null),
+                null,
+                NEUE_ARBEIT,
+                Abrechnungsmodus.AUFWAND,
+                BigDecimal.ONE,
+                Einheit.STUNDE,
+                null,
+                null),
             "positionen[0].einzelpreis"),
         arguments(
             new Positionsangabe(
-                null, NEUE_ARBEIT, null, BigDecimal.ONE, Einheit.STUNDE, BigDecimal.TEN),
+                null, NEUE_ARBEIT, null, BigDecimal.ONE, Einheit.STUNDE, BigDecimal.TEN, null),
             "positionen[0].abrechnungsmodus"));
   }
 
@@ -759,7 +859,7 @@ class AngebotAendernUseCaseTest {
     final List<Positionsangabe> liste =
         List.of(
             Angebotsdoppel.KONZEPTION_ANGABE,
-            new Positionsangabe(null, NEUE_ARBEIT, null, null, null, null));
+            new Positionsangabe(null, NEUE_ARBEIT, null, null, null, null, null));
 
     final AngebotDaten aenderung = daten(null, false, liste);
 
@@ -927,7 +1027,7 @@ class AngebotAendernUseCaseTest {
         Angebotsdoppel.ohneAnsprechpartner(Angebotsdoppel.angebot(ANGEBOT, Angebotsstatus.LAEUFT)));
     mitErfassterZeit(Angebotsdoppel.KONZEPTION_ID);
     final Positionsangabe umbenannt =
-        new Positionsangabe(Angebotsdoppel.KONZEPTION_ID, "Umbau", null, null, null, null);
+        new Positionsangabe(Angebotsdoppel.KONZEPTION_ID, "Umbau", null, null, null, null, null);
 
     // When
     final Angebot geaendert = aendere(daten(null, true, List.of(umbenannt)));
@@ -965,7 +1065,7 @@ class AngebotAendernUseCaseTest {
     angebotIst(
         Angebotsdoppel.ohneAnsprechpartner(Angebotsdoppel.angebot(ANGEBOT, Angebotsstatus.LAEUFT)));
     final Positionsangabe umbenannt =
-        new Positionsangabe(Angebotsdoppel.KONZEPTION_ID, "Umbau", null, null, null, null);
+        new Positionsangabe(Angebotsdoppel.KONZEPTION_ID, "Umbau", null, null, null, null, null);
 
     // When
     final Angebot geaendert = aendere(daten(null, true, List.of(umbenannt)));
@@ -981,5 +1081,125 @@ class AngebotAendernUseCaseTest {
             position ->
                 assertThat(position.einzelpreis())
                     .isEqualTo(Angebotsdoppel.KONZEPTION.einzelpreis()));
+  }
+
+  @Test
+  void aendere_withANewPosition_thenPrefillsTheYearOfTheAngebotsdatum() {
+    // Given — #302, Kriterium 4 und E2: Eine neue Position ist mit dem Jahr des Angebotsdatums
+    // vorbelegt. Das Datum der Einreichung zaehlt, nicht das bisher gespeicherte.
+    angebotIst(Angebotsdoppel.ohneAnsprechpartner(Angebotsdoppel.angebot(ANGEBOT)));
+    final AngebotDaten aenderung =
+        new AngebotDaten(
+            LocalDate.of(2027, 1, 15),
+            null,
+            NEUER_TITEL,
+            NEUER_TEXT,
+            false,
+            List.of(ohneKennung(Angebotsdoppel.KONZEPTION_ANGABE)));
+
+    // When
+    final Angebot geaendert = aendere(aenderung);
+
+    // Then
+    assertThat(geaendert.positionen())
+        .extracting(Angebotsposition::leistungsjahr)
+        .containsExactly(Year.of(2027));
+  }
+
+  @Test
+  void aendere_changingTheAngebotsdatum_thenAStoredPositionKeepsItsYear() {
+    // Given — Kriterium 4: Die Vorbelegung gilt nur beim Anlegen. Die Konzeption liegt 2027, das
+    // Angebot wechselt auf ein Datum in 2026.
+    angebotIst(
+        mitPositionen(
+            Angebotsdoppel.ohneAnsprechpartner(Angebotsdoppel.angebot(ANGEBOT)),
+            imJahr(Angebotsdoppel.KONZEPTION, 2027),
+            Angebotsdoppel.SCHULUNG));
+
+    // When
+    final Angebot geaendert =
+        aendere(daten(null, angaben(Angebotsdoppel.KONZEPTION, Angebotsdoppel.SCHULUNG)));
+
+    // Then
+    assertThat(geaendert.positionen())
+        .extracting(Angebotsposition::id, Angebotsposition::leistungsjahr)
+        .containsExactly(
+            tuple(Angebotsdoppel.KONZEPTION_ID, Year.of(2027)),
+            tuple(Angebotsdoppel.SCHULUNG_ID, Year.of(2026)));
+  }
+
+  @Test
+  void aendere_turningAnAngebotInternalAndBack_thenItsPositionsKeepTheirYear() {
+    // Given — dieselbe Regel in allen drei Uebersetzern: Ein Angebot, das nach innen und zurueck
+    // gestellt wird, findet sein Jahr wieder wie seine Zahlen (Kriterium 8 von #207).
+    angebotIst(
+        mitPositionen(
+            Angebotsdoppel.ohneAnsprechpartner(Angebotsdoppel.angebot(ANGEBOT)),
+            imJahr(Angebotsdoppel.KONZEPTION, 2027)));
+    final Positionsangabe nurBezeichnung =
+        new Positionsangabe(
+            Angebotsdoppel.KONZEPTION_ID, "Konzeption", null, null, null, null, null);
+    final Angebot intern = aendere(daten(null, true, List.of(nurBezeichnung)));
+
+    // When — zurueck nach aussen, mit allen vier Angaben.
+    angebotIst(intern);
+    final Angebot zurueck = aendere(daten(null, false, List.of(Angebotsdoppel.KONZEPTION_ANGABE)));
+
+    // Then
+    assertThat(intern.positionen())
+        .extracting(Angebotsposition::leistungsjahr)
+        .containsExactly(Year.of(2027));
+    assertThat(zurueck.positionen())
+        .extracting(Angebotsposition::leistungsjahr)
+        .containsExactly(Year.of(2027));
+  }
+
+  /** Dieselbe Angabe mit einem mitgeschickten Leistungsjahr. */
+  private static Positionsangabe mitJahr(final Positionsangabe angabe, final int jahr) {
+    return new Positionsangabe(
+        angabe.id(),
+        angabe.bezeichnung(),
+        angabe.abrechnungsmodus(),
+        angabe.menge(),
+        angabe.einheit(),
+        angabe.einzelpreis(),
+        Integer.valueOf(jahr));
+  }
+
+  @ParameterizedTest
+  @CsvSource({"false", "true"})
+  void aendere_withANewPositionCarryingAYear_thenTheYearBeatsThePrefill(final boolean intern) {
+    // Given — Issue #305: Eine mitgeschickte Angabe gilt. Das Angebotsdatum liegt 2026, die neue
+    // Position kommt mit 2027 — wie im Anlass von #302.
+    angebotIst(Angebotsdoppel.ohneAnsprechpartner(Angebotsdoppel.angebot(ANGEBOT)));
+    final Positionsangabe neue = mitJahr(ohneKennung(Angebotsdoppel.KONZEPTION_ANGABE), 2027);
+
+    // When
+    final Angebot geaendert = aendere(daten(null, intern, List.of(neue)));
+
+    // Then
+    assertThat(geaendert.positionen())
+        .extracting(Angebotsposition::leistungsjahr)
+        .containsExactly(Year.of(2027));
+  }
+
+  @ParameterizedTest
+  @CsvSource({"false", "true"})
+  void aendere_withAStoredPositionCarryingAYear_thenTheYearBeatsTheStoredOne(final boolean intern) {
+    // Given — Issue #305: Auch an einer gespeicherten Position schlaegt die mitgeschickte Angabe
+    // das gespeicherte Jahr; ohne sie bliebe es bei 2027 (Regel aus #304).
+    angebotIst(
+        mitPositionen(
+            Angebotsdoppel.ohneAnsprechpartner(Angebotsdoppel.angebot(ANGEBOT)),
+            imJahr(Angebotsdoppel.KONZEPTION, 2027)));
+    final Positionsangabe geaenderteAngabe = mitJahr(Angebotsdoppel.KONZEPTION_ANGABE, 2028);
+
+    // When
+    final Angebot geaendert = aendere(daten(null, intern, List.of(geaenderteAngabe)));
+
+    // Then
+    assertThat(geaendert.positionen())
+        .extracting(Angebotsposition::id, Angebotsposition::leistungsjahr)
+        .containsExactly(tuple(Angebotsdoppel.KONZEPTION_ID, Year.of(2028)));
   }
 }

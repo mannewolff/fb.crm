@@ -245,6 +245,11 @@ function Wahlzeile({
       <Box component="span" sx={{ fontWeight: 600, flex: '1 1 160px' }}>
         {angebot.firmaName}
       </Box>
+      {angebot.titel !== null && (
+        <Box component="span" sx={{ flex: '1 1 160px', overflowWrap: 'anywhere' }}>
+          {angebot.titel}
+        </Box>
+      )}
       <Box
         component="span"
         className={ZAHLEN_KLASSE}

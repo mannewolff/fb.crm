@@ -12,6 +12,7 @@ import static org.mockito.Mockito.when;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.Year;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -49,7 +50,15 @@ class JpaAngebotRepositoryTest {
   private static final LocalDate ANGEBOTSDATUM = LocalDate.of(2026, 9, 20);
   private static final Instant ANGELEGT = Instant.parse("2026-09-20T08:00:00Z");
   private static final Instant GEAENDERT = Instant.parse("2026-09-27T10:30:00Z");
+  private static final String TITEL = "Website-Relaunch";
   private static final String BESCHREIBUNG = "Neugestaltung der Website";
+
+  /**
+   * Das Leistungsjahr der ersten Position — bewusst nicht das Jahr des Angebotsdatums: Die Spalte
+   * soll ihren eigenen Wert tragen und nicht zufaellig mit dem Datum uebereinstimmen (#302,
+   * Kriterium 4).
+   */
+  private static final Year LEISTUNGSJAHR = Year.of(2027);
 
   private static final Angebotsposition KONZEPTION =
       new Angebotsposition(
@@ -58,7 +67,8 @@ class JpaAngebotRepositoryTest {
           Abrechnungsmodus.AUFWAND,
           new BigDecimal("2.50"),
           Einheit.PERSONENTAG,
-          new BigDecimal("1000.01"));
+          new BigDecimal("1000.01"),
+          LEISTUNGSJAHR);
 
   private static final Angebotsposition SCHULUNG =
       new Angebotsposition(
@@ -67,7 +77,8 @@ class JpaAngebotRepositoryTest {
           Abrechnungsmodus.FESTPREIS,
           BigDecimal.ONE,
           Einheit.PAUSCHAL,
-          new BigDecimal("1200.00"));
+          new BigDecimal("1200.00"),
+          Year.of(2026));
 
   /** Dieselbe Position wie {@link #KONZEPTION}, umbenannt — fuer das Fortschreiben einer Zeile. */
   private static final Angebotsposition UMBENANNT =
@@ -77,7 +88,8 @@ class JpaAngebotRepositoryTest {
           Abrechnungsmodus.AUFWAND,
           new BigDecimal("2.50"),
           Einheit.PERSONENTAG,
-          new BigDecimal("1000.01"));
+          new BigDecimal("1000.01"),
+          Year.of(2026));
 
   @Mock private SpringDataAngebotRepository angebote;
 
@@ -109,10 +121,27 @@ class JpaAngebotRepositoryTest {
         status.intern(),
         status,
         ANGEBOTSDATUM,
+        TITEL,
         BESCHREIBUNG,
         positionen,
         ANGELEGT,
         GEAENDERT);
+  }
+
+  /** Dasselbe Angebot mit einem anderen Titel — {@code null} fuer ein Angebot von vor #316. */
+  private static Angebot mitTitel(final Angebot angebot, final @Nullable String titel) {
+    return new Angebot(
+        angebot.id(),
+        angebot.firmaId(),
+        angebot.ansprechpartnerId(),
+        angebot.intern(),
+        angebot.status(),
+        angebot.angebotDatum(),
+        titel,
+        angebot.beschreibung(),
+        angebot.positionen(),
+        angebot.createdAt(),
+        angebot.updatedAt());
   }
 
   private static Angebotsposition mitKennung(
@@ -123,7 +152,19 @@ class JpaAngebotRepositoryTest {
         position.abrechnungsmodus(),
         position.menge(),
         position.einheit(),
-        position.einzelpreis());
+        position.einzelpreis(),
+        position.leistungsjahr());
+  }
+
+  private static Angebotsposition mitJahr(final Angebotsposition position, final Year jahr) {
+    return new Angebotsposition(
+        position.id(),
+        position.bezeichnung(),
+        position.abrechnungsmodus(),
+        position.menge(),
+        position.einheit(),
+        position.einzelpreis(),
+        jahr);
   }
 
   private static AngebotEntity zeile() {
@@ -185,6 +226,7 @@ class JpaAngebotRepositoryTest {
             zeile -> assertThat(zeile.isIntern()).isFalse(),
             zeile -> assertThat(zeile.getStatus()).isEqualTo(Angebotsstatus.BESTELLT),
             zeile -> assertThat(zeile.getAngebotDatum()).isEqualTo(ANGEBOTSDATUM),
+            zeile -> assertThat(zeile.getTitel()).isEqualTo(TITEL),
             zeile -> assertThat(zeile.getBeschreibung()).isEqualTo(BESCHREIBUNG),
             zeile -> assertThat(zeile.getCreatedAt()).isEqualTo(ANGELEGT),
             zeile -> assertThat(zeile.getUpdatedAt()).isEqualTo(GEAENDERT));
@@ -227,7 +269,22 @@ class JpaAngebotRepositoryTest {
             zeile -> assertThat(zeile.getAbrechnungsmodus()).isEqualTo(Abrechnungsmodus.AUFWAND),
             zeile -> assertThat(zeile.getMenge()).isEqualTo(new BigDecimal("2.50")),
             zeile -> assertThat(zeile.getEinheit()).isEqualTo(Einheit.PERSONENTAG),
-            zeile -> assertThat(zeile.getEinzelpreis()).isEqualTo(new BigDecimal("1000.01")));
+            zeile -> assertThat(zeile.getEinzelpreis()).isEqualTo(new BigDecimal("1000.01")),
+            zeile -> assertThat(zeile.getLeistungsjahr()).isEqualTo((short) 2027));
+  }
+
+  @Test
+  void save_givenAPositionWithAKnownId_thenCarriesItsNewLeistungsjahrOn() {
+    // Given — #302, Kriterium 4: das Jahr der Leistung ist an jeder Position aenderbar, und die
+    // vorhandene Zeile uebernimmt es wie jede andere Angabe.
+    final AngebotPositionEntity vorhandene = positionszeile((short) 1, mitKennung(KONZEPTION, 71L));
+    erwarteSchreibenDerZeile(zeile(), List.of(vorhandene));
+
+    // When
+    repository.save(angebot(List.of(mitJahr(mitKennung(KONZEPTION, 71L), Year.of(2028)))));
+
+    // Then
+    assertThat(vorhandene.getLeistungsjahr()).isEqualTo((short) 2028);
   }
 
   @Test
@@ -328,6 +385,25 @@ class JpaAngebotRepositoryTest {
 
     // Then — die Kennung der Zeile steht danach an der Position (Plan #169, E2).
     assertThat(gefunden).contains(angebot(List.of(mitKennung(KONZEPTION, 71L))));
+  }
+
+  @Test
+  void findById_thenReadsTheLeistungsjahrOfAPositionAsYear() {
+    // Given — die Spalte ist ein smallint; am Fachobjekt steht das Jahr als Year (E9).
+    when(angebote.findById(11L)).thenReturn(Optional.of(zeile()));
+    when(positionen.findByAngebot(11L))
+        .thenReturn(List.of(positionszeile((short) 1, mitKennung(KONZEPTION, 71L))));
+
+    // When
+    final Optional<Angebot> gefunden = repository.findById(11L);
+
+    // Then
+    assertThat(gefunden)
+        .hasValueSatisfying(
+            angebot ->
+                assertThat(angebot.positionen())
+                    .extracting(Angebotsposition::leistungsjahr)
+                    .containsExactly(Year.of(2027)));
   }
 
   @Test
@@ -513,6 +589,7 @@ class JpaAngebotRepositoryTest {
             gelesen -> assertThat(gelesen.isIntern()).isEqualTo(Angebotsstatus.BESTELLT.intern()),
             gelesen -> assertThat(gelesen.getStatus()).isEqualTo(Angebotsstatus.BESTELLT),
             gelesen -> assertThat(gelesen.getAngebotDatum()).isEqualTo(ANGEBOTSDATUM),
+            gelesen -> assertThat(gelesen.getTitel()).isEqualTo(TITEL),
             gelesen -> assertThat(gelesen.getBeschreibung()).isEqualTo(BESCHREIBUNG),
             gelesen -> assertThat(gelesen.getCreatedAt()).isEqualTo(ANGELEGT),
             gelesen -> assertThat(gelesen.getUpdatedAt()).isEqualTo(GEAENDERT));
@@ -539,6 +616,60 @@ class JpaAngebotRepositoryTest {
             gelesen -> assertThat(gelesen.getMenge()).isEqualByComparingTo(position.menge()),
             gelesen -> assertThat(gelesen.getEinheit()).isEqualTo(position.einheit()),
             gelesen ->
-                assertThat(gelesen.getEinzelpreis()).isEqualByComparingTo(position.einzelpreis()));
+                assertThat(gelesen.getEinzelpreis()).isEqualByComparingTo(position.einzelpreis()),
+            gelesen ->
+                assertThat(gelesen.getLeistungsjahr())
+                    .isEqualTo((short) position.leistungsjahr().getValue()));
+  }
+
+  @Test
+  void save_givenAChangedTitle_thenWritesTheNewTitleIntoTheRow() {
+    // Given — Issue #316: ein gespeichertes Angebot bekommt einen neuen Titel und wird
+    // fortgeschrieben.
+    erwarteSchreibenDerZeile(zeile());
+
+    // When
+    repository.save(mitTitel(angebot(List.of()), "Betreuung 2027"));
+
+    // Then
+    verify(angebote).save(gespeicherte.capture());
+    assertThat(gespeicherte.getValue().getTitel()).isEqualTo("Betreuung 2027");
+  }
+
+  @Test
+  void save_givenNoTitle_thenWritesNullIntoTheRow() {
+    // Given — #314, Kriterium 4: ein Angebot von vor dem Titel bleibt ohne.
+    erwarteSchreibenDerZeile(AngebotEntity.aus(mitTitel(angebot(List.of()), null)));
+
+    // When
+    final Angebot gesichert = repository.save(mitTitel(angebot(List.of()), null));
+
+    // Then
+    verify(angebote).save(gespeicherte.capture());
+    assertThat(gespeicherte.getValue().getTitel()).isNull();
+    assertThat(gesichert.titel()).isNull();
+  }
+
+  @Test
+  void findById_thenReadsTheTitleBack() {
+    // Given
+    when(angebote.findById(11L)).thenReturn(Optional.of(zeile()));
+    when(positionen.findByAngebot(11L)).thenReturn(List.of());
+
+    // When / Then
+    assertThat(repository.findById(11L))
+        .hasValueSatisfying(angebot -> assertThat(angebot.titel()).isEqualTo(TITEL));
+  }
+
+  @Test
+  void findById_givenARowWithoutTitle_thenTheTitleStaysNull() {
+    // Given
+    when(angebote.findById(11L))
+        .thenReturn(Optional.of(AngebotEntity.aus(mitTitel(angebot(List.of()), null))));
+    when(positionen.findByAngebot(11L)).thenReturn(List.of());
+
+    // When / Then
+    assertThat(repository.findById(11L))
+        .hasValueSatisfying(angebot -> assertThat(angebot.titel()).isNull());
   }
 }

@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
-import Positionsmaske, { betragDerPosition, frischePosition } from './Positionsmaske';
+import Positionsmaske, { KEIN_JAHR, betragDerPosition, frischePosition } from './Positionsmaske';
 import type { Maskenposition } from './Positionsmaske';
 import { renderMitTheme } from '../test/render';
 
@@ -15,6 +15,7 @@ const POSITION: Maskenposition = {
   menge: '2,5',
   einheit: 'PERSONENTAG',
   einzelpreis: '1000,01',
+  leistungsjahr: '2026',
   einheitVonHand: false,
 };
 
@@ -66,7 +67,7 @@ function gruppe() {
 }
 
 describe('Positionsmaske — die Felder (Kriterium 4)', () => {
-  it('traegt Bezeichnung, Modus, Menge, Einheit und Einzelpreis mit Beschriftung', () => {
+  it('traegt Bezeichnung, Modus, Menge, Einheit, Einzelpreis und Leistungsjahr mit Beschriftung', () => {
     renderMitTheme(<Halter />);
 
     expect(gruppe().getByRole('textbox', { name: 'Bezeichnung' })).toHaveValue('Konzeption');
@@ -74,13 +75,14 @@ describe('Positionsmaske — die Felder (Kriterium 4)', () => {
     expect(gruppe().getByRole('textbox', { name: 'Menge' })).toHaveValue('2,5');
     expect(gruppe().getByRole('combobox', { name: 'Einheit' })).toHaveValue('PERSONENTAG');
     expect(gruppe().getByRole('textbox', { name: 'Einzelpreis (netto)' })).toHaveValue('1000,01');
+    expect(gruppe().getByRole('textbox', { name: 'Leistungsjahr' })).toHaveValue('2026');
   });
 
   it('zeigt die Kennung nirgends und macht kein Feld daraus (Plan #169)', () => {
     renderMitTheme(<Halter />);
 
-    // Fuenf Felder, nicht sechs: Die Kennung wird mitgefuehrt, nicht bedient.
-    expect(gruppe().getAllByRole('textbox')).toHaveLength(3);
+    // Sechs Felder, nicht sieben: Die Kennung wird mitgefuehrt, nicht bedient.
+    expect(gruppe().getAllByRole('textbox')).toHaveLength(4);
     expect(gruppe().getAllByRole('combobox')).toHaveLength(2);
     expect(gruppe().queryByText('3')).not.toBeInTheDocument();
   });
@@ -171,6 +173,56 @@ describe('Positionsmaske — der Betrag rechnet mit (Kriterium 5)', () => {
 
     expect(gruppe().getByText(/höchstens zwei Nachkommastellen/)).toBeInTheDocument();
     expect(gruppe().getByTestId('positions-betrag')).toHaveTextContent('—');
+  });
+});
+
+describe('Positionsmaske — das Leistungsjahr (Plan #303, Kriterium 4, E16)', () => {
+  it('nimmt ein anderes Jahr an, ohne zu melden', async () => {
+    const nutzer = userEvent.setup();
+    renderMitTheme(<Halter />);
+
+    const jahr = gruppe().getByRole('textbox', { name: 'Leistungsjahr' });
+    await nutzer.clear(jahr);
+    await nutzer.type(jahr, '2027');
+
+    expect(jahr).toHaveValue('2027');
+    expect(jahr).toHaveAttribute('aria-invalid', 'false');
+  });
+
+  it('meldet am Feld, was kein Jahr ist', async () => {
+    const nutzer = userEvent.setup();
+    renderMitTheme(<Halter />);
+
+    const jahr = gruppe().getByRole('textbox', { name: 'Leistungsjahr' });
+    await nutzer.clear(jahr);
+    await nutzer.type(jahr, '2k26');
+
+    expect(jahr).toHaveAttribute('aria-invalid', 'true');
+    expect(gruppe().getByText(KEIN_JAHR)).toBeInTheDocument();
+  });
+
+  it.each([['1999'], ['2100'], ['226']])('meldet %s als ausserhalb der Spanne', (eingabe) => {
+    renderMitTheme(<Halter start={{ ...POSITION, leistungsjahr: eingabe }} />);
+
+    expect(gruppe().getByText(KEIN_JAHR)).toBeInTheDocument();
+  });
+
+  it.each([['2000'], ['2099'], [' 2027 ']])('nimmt %s als Jahr an', (eingabe) => {
+    renderMitTheme(<Halter start={{ ...POSITION, leistungsjahr: eingabe }} />);
+
+    expect(gruppe().queryByText(KEIN_JAHR)).not.toBeInTheDocument();
+  });
+
+  it('meldet ein leeres Feld nicht — es ist „keine Angabe" (E16)', async () => {
+    const nutzer = userEvent.setup();
+    renderMitTheme(<Halter />);
+
+    const jahr = gruppe().getByRole('textbox', { name: 'Leistungsjahr' });
+    await nutzer.clear(jahr);
+
+    expect(jahr).toHaveValue('');
+    expect(jahr).toHaveAttribute('aria-invalid', 'false');
+    expect(gruppe().queryByText(KEIN_JAHR)).not.toBeInTheDocument();
   });
 });
 
@@ -278,7 +330,7 @@ describe('Positionsmaske — die Meldung an der Bezeichnung (Issue #127)', () =>
 
 describe('frischePosition und betragDerPosition', () => {
   it('startet eine neue Zeile ohne Text, mit Aufwand, Personentag und einem gueltigen Betrag', () => {
-    expect(frischePosition('neu-1')).toEqual({
+    expect(frischePosition('neu-1', '2026')).toEqual({
       // Eine frische Zeile hat noch keine Kennung — sie entsteht erst beim Speichern (E2).
       id: null,
       schluessel: 'neu-1',
@@ -287,13 +339,16 @@ describe('frischePosition und betragDerPosition', () => {
       menge: '1',
       einheit: 'PERSONENTAG',
       einzelpreis: '0',
+      // Vorbelegt mit dem Jahr, das die Maske uebergibt (Kriterium 4).
+      leistungsjahr: '2026',
       einheitVonHand: false,
     });
-    expect(betragDerPosition(frischePosition('neu-1'))).toBe(0);
+    expect(betragDerPosition(frischePosition('neu-1', '2026'))).toBe(0);
   });
 
-  it('gibt jeder frischen Zeile den uebergebenen Schluessel', () => {
-    expect(frischePosition('neu-2').schluessel).toBe('neu-2');
+  it('gibt jeder frischen Zeile den uebergebenen Schluessel und das uebergebene Jahr', () => {
+    expect(frischePosition('neu-2', '').schluessel).toBe('neu-2');
+    expect(frischePosition('neu-2', '').leistungsjahr).toBe('');
   });
 
   it('gibt nichts heraus, wenn Menge oder Einzelpreis keine Zahl sind', () => {
@@ -312,6 +367,7 @@ describe('Positionsmaske — das interne Angebot (Issue #207, Kriterium 3)', () 
     expect(gruppe().queryByRole('textbox', { name: 'Menge' })).not.toBeInTheDocument();
     expect(gruppe().queryByRole('combobox', { name: 'Einheit' })).not.toBeInTheDocument();
     expect(gruppe().queryByRole('textbox', { name: 'Einzelpreis (netto)' })).not.toBeInTheDocument();
+    expect(gruppe().queryByRole('textbox', { name: 'Leistungsjahr' })).not.toBeInTheDocument();
     expect(gruppe().queryByTestId('positions-betrag')).not.toBeInTheDocument();
     expect(gruppe().queryByText('Betrag')).not.toBeInTheDocument();
     // Ein einziges Feld, und die drei Griffe bleiben.
@@ -327,17 +383,20 @@ describe('Positionsmaske — das interne Angebot (Issue #207, Kriterium 3)', () 
     expect(screen.getByRole('group', { name: 'Position 1' })).toBeInTheDocument();
   });
 
-  it('zeigt ohne „intern" alle fuenf Felder und den Betrag', () => {
+  it('zeigt ohne „intern" alle sechs Felder und den Betrag', () => {
     renderMitTheme(<Halter />);
 
-    expect(gruppe().getAllByRole('textbox')).toHaveLength(3);
+    expect(gruppe().getAllByRole('textbox')).toHaveLength(4);
     expect(gruppe().getAllByRole('combobox')).toHaveLength(2);
     expect(gruppe().getByTestId('positions-betrag')).toHaveTextContent('2.500,03 €');
   });
 
   it('meldet eine unlesbare Menge nicht, solange sie verborgen ist', () => {
-    renderMitTheme(<Halter intern start={{ ...POSITION, menge: 'x', einzelpreis: 'y' }} />);
+    renderMitTheme(
+      <Halter intern start={{ ...POSITION, menge: 'x', einzelpreis: 'y', leistungsjahr: '2k26' }} />,
+    );
 
     expect(gruppe().queryByText(/höchstens zwei Nachkommastellen/)).not.toBeInTheDocument();
+    expect(gruppe().queryByText(KEIN_JAHR)).not.toBeInTheDocument();
   });
 });

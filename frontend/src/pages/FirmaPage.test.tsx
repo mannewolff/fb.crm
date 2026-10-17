@@ -52,6 +52,7 @@ const KONTO = { id: 1, displayName: 'Manfred Wolff', email: 'info@mwolff.org' };
 interface AngebotRoh {
   readonly id: number;
   readonly angebotDatum: string;
+  readonly titel: string | null;
   readonly status: string;
   readonly intern: boolean;
   readonly summe: number;
@@ -60,6 +61,7 @@ interface AngebotRoh {
 const JUENGER: AngebotRoh = {
   id: 32,
   angebotDatum: '2026-09-26',
+  titel: 'Schulung Java',
   status: 'ANGELEGT',
   intern: false,
   summe: 1200,
@@ -68,6 +70,7 @@ const JUENGER: AngebotRoh = {
 const AELTER: AngebotRoh = {
   id: 31,
   angebotDatum: '2026-09-24',
+  titel: 'Neue Website',
   status: 'BESTELLT',
   intern: false,
   summe: 2500.03,
@@ -537,7 +540,7 @@ describe('FirmaPage — die Angebote der Firma (Kriterium 7)', () => {
 
     const tafel = within(await screen.findByRole('table', { name: 'Angebote' }));
     const wege = tafel.getAllByRole('link');
-    expect(wege.map((weg) => weg.textContent)).toEqual(['26.09.2026', '24.09.2026']);
+    expect(wege.map((weg) => weg.textContent)).toEqual(['Schulung Java', 'Neue Website']);
     expect(wege[0]).toHaveAttribute('href', '/angebote/32');
     expect(wege[1]).toHaveAttribute('href', '/angebote/31');
   });

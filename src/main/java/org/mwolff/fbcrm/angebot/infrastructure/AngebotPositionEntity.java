@@ -9,6 +9,7 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.math.BigDecimal;
+import java.time.Year;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.fbcrm.angebot.domain.Angebotsposition;
 import org.mwolff.fbcrm.common.Abrechnungsmodus;
@@ -59,6 +60,13 @@ class AngebotPositionEntity {
   private BigDecimal einzelpreis;
 
   /*
+   * Das Jahr als smallint wie in V23__angebot_position_leistungsjahr.sql; das Year des Fachobjekts
+   * bildet JpaAngebotRepository beim Lesen daraus.
+   */
+  @Column(name = "leistungsjahr", nullable = false)
+  private short leistungsjahr;
+
+  /*
    * JPA verlangt einen parameterlosen Konstruktor und fuellt die Felder danach selbst; NullAway
    * sieht diesen Weg nicht und meldete sonst nicht initialisierte Felder.
    */
@@ -95,6 +103,7 @@ class AngebotPositionEntity {
     this.menge = position.menge();
     this.einheit = position.einheit();
     this.einzelpreis = position.einzelpreis();
+    this.leistungsjahr = (short) position.leistungsjahr().getValue();
   }
 
   /**
@@ -106,6 +115,7 @@ class AngebotPositionEntity {
    * @param menge Menge in der angegebenen Einheit
    * @param einheit Einheit der Menge
    * @param einzelpreis Netto-Preis je Einheit
+   * @param leistungsjahr das Jahr der Leistung
    */
   void uebernehme(
       final short position,
@@ -113,13 +123,15 @@ class AngebotPositionEntity {
       final Abrechnungsmodus abrechnungsmodus,
       final BigDecimal menge,
       final Einheit einheit,
-      final BigDecimal einzelpreis) {
+      final BigDecimal einzelpreis,
+      final Year leistungsjahr) {
     this.position = position;
     this.bezeichnung = bezeichnung;
     this.abrechnungsmodus = abrechnungsmodus;
     this.menge = menge;
     this.einheit = einheit;
     this.einzelpreis = einzelpreis;
+    this.leistungsjahr = (short) leistungsjahr.getValue();
   }
 
   @Nullable Long getId() {
@@ -152,5 +164,9 @@ class AngebotPositionEntity {
 
   BigDecimal getEinzelpreis() {
     return einzelpreis;
+  }
+
+  short getLeistungsjahr() {
+    return leistungsjahr;
   }
 }

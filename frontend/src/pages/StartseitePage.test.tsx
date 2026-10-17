@@ -10,6 +10,8 @@ import type { Routen } from '../test/fetchNachPfad';
 import { renderMitTheme } from '../test/render';
 
 const OHNE_MONAT = 'GET /api/startseite';
+const WEG_FORECAST = '/api/startseite/forecast';
+const FORECAST = `GET ${WEG_FORECAST}`;
 const WEG_SEPTEMBER = '/api/startseite?zeitraum=2026-09';
 const SEPTEMBER = `GET ${WEG_SEPTEMBER}`;
 
@@ -38,15 +40,28 @@ const STAND = {
       angebotId: 11,
       firmaName: 'IT Bildungshaus',
       angebotDatum: '2026-09-24',
+      angebotTitel: 'Java-Grundkurs',
       status: 'BESTELLT',
     },
-    { angebotId: 12, firmaName: 'Adler AG', angebotDatum: '2026-09-28', status: 'ERLEDIGT' },
+    {
+      angebotId: 12,
+      firmaName: 'Adler AG',
+      angebotDatum: '2026-09-28',
+      angebotTitel: null,
+      status: 'ERLEDIGT',
+    },
   ],
   nichtAbgerechnet: {
     netto: 1800,
     erfasstImZeitraum: 600,
     angebote: [
-      { angebotId: 11, firmaName: 'IT Bildungshaus', angebotDatum: '2026-09-24', netto: 1800 },
+      {
+        angebotId: 11,
+        firmaName: 'IT Bildungshaus',
+        angebotDatum: '2026-09-24',
+        angebotTitel: 'Java-Grundkurs',
+        netto: 1800,
+      },
     ],
   },
   abgerechnet: {
@@ -73,6 +88,36 @@ const STAND = {
   },
   interneStundenImZeitraum: 12.5,
 };
+
+/**
+ * Der Forecast, wie das Backend ihn schreibt: das Angebot an IT Bildungshaus aus #302 unter 2027.
+ *
+ * Er steht in jeder Routen-Tafel ({@link mitRouten}): Die Seite fragt ihn bei jedem Aufbau, und
+ * `fetchNachPfad` weist einen Pfad ohne Eintrag laut ab (Issue #313).
+ */
+const FORECAST_STAND = {
+  jahre: [
+    {
+      jahr: '2027',
+      zugesagtNetto: 0,
+      angebotenNetto: 17820,
+      summeNetto: 17820,
+      positionen: [
+        {
+          angebotId: 14,
+          firmaName: 'IT Bildungshaus',
+          angebotDatum: '2026-10-15',
+          angebotTitel: null,
+          bezeichnung: 'Aufwände Mai 2027',
+          netto: 8100,
+        },
+      ],
+    },
+  ],
+};
+
+/** Die Jahreszeile des Forecasts, wie die Tafel sie schreibt. */
+const FORECAST_2027 = '20270,00 €17.820,00 €17.820,00 €';
 
 /** Derselbe Monat, aber nichts darin — alle drei Kennzahlen stehen auf null. */
 const LEERER_STAND = {
@@ -231,8 +276,14 @@ function renderSeite(adresse = '/') {
   );
 }
 
+/**
+ * Das fetch-Doppel der Seite, immer mit dem Weg des Forecasts (Issue #313).
+ *
+ * Der Eintrag steht hier und nicht in jeder einzelnen Tafel: Die Seite fragt den Forecast bei jedem
+ * Aufbau, unabhaengig vom Zeitraum. Wer ihn anders braucht, ueberschreibt ihn in seiner Tafel.
+ */
 function mitRouten(routen: Routen) {
-  return fetchNachPfad(routen);
+  return fetchNachPfad({ [FORECAST]: json(200, FORECAST_STAND), ...routen });
 }
 
 /** Die Stellen der vier Kacheln im Raster, in ihrer zugesagten Reihenfolge (Issue #285). */
@@ -305,9 +356,10 @@ describe('StartseitePage (Issue #216; #206 Kriterien 1, 3 bis 8)', () => {
     expect(within(tafel).getByText('IT Bildungshaus')).toBeInTheDocument();
     expect(within(tafel).getByText('Bestellt')).toBeInTheDocument();
     expect(within(tafel).getByText('Erledigt')).toBeInTheDocument();
-    expect(within(tafel).getByRole('link', { name: '24.09.2026' })).toHaveAttribute(
+    // Kriterium 7 (Issue #324): Das Angebot ohne Titel fuehrt weiter ueber sein Datum.
+    expect(within(tafel).getByRole('link', { name: '28.09.2026' })).toHaveAttribute(
       'href',
-      '/angebote/11',
+      '/angebote/12',
     );
   });
 
@@ -318,10 +370,55 @@ describe('StartseitePage (Issue #216; #206 Kriterien 1, 3 bis 8)', () => {
 
     const tafel = await screen.findByRole('table', { name: 'Noch nicht abgerechnet' });
     expect(within(tafel).getByText('1.800,00 €')).toBeInTheDocument();
-    expect(within(tafel).getByRole('link', { name: '24.09.2026' })).toHaveAttribute(
+    expect(within(tafel).getByRole('link', { name: 'Java-Grundkurs' })).toHaveAttribute(
       'href',
       '/angebote/11',
     );
+  });
+
+  it('Szenario: Angebotskarten der Startseite', async () => {
+    mitRouten({ [OHNE_MONAT]: json(200, STAND) });
+
+    renderSeite();
+
+    for (const name of ['Angebote in Arbeit', 'Noch nicht abgerechnet']) {
+      const tafel = await screen.findByRole('table', { name });
+      expect(within(tafel).getByRole('link', { name: 'Java-Grundkurs' })).toHaveAttribute(
+        'href',
+        '/angebote/11',
+      );
+      // Kriterium 8: Die Angebotszelle bricht einen langen Titel um, statt ihn abzuschneiden (E10).
+      const zelle = within(tafel)
+        .getAllByRole('cell')
+        .filter((kandidat) => within(kandidat).queryByRole('link', { name: 'Java-Grundkurs' }));
+      expect(zelle).toHaveLength(1);
+      expect(zelle[0]).not.toHaveStyle({ whiteSpace: 'nowrap' });
+    }
+  });
+
+  it('zeigt in beiden Karten ein Angebot ohne Titel weiter mit seinem Datum (Kriterium 7)', async () => {
+    const ohneTitel = {
+      ...STAND,
+      inArbeit: STAND.inArbeit.map((zeile) => ({ ...zeile, angebotTitel: null })),
+      nichtAbgerechnet: {
+        ...STAND.nichtAbgerechnet,
+        angebote: STAND.nichtAbgerechnet.angebote.map((zeile) => ({
+          ...zeile,
+          angebotTitel: null,
+        })),
+      },
+    };
+    mitRouten({ [OHNE_MONAT]: json(200, ohneTitel) });
+
+    renderSeite();
+
+    for (const name of ['Angebote in Arbeit', 'Noch nicht abgerechnet']) {
+      const tafel = await screen.findByRole('table', { name });
+      expect(within(tafel).getByRole('link', { name: '24.09.2026' })).toHaveAttribute(
+        'href',
+        '/angebote/11',
+      );
+    }
   });
 
   it('traegt bei „Abgerechnet" eine weiche Taste auf die Rechnungen', async () => {
@@ -368,7 +465,7 @@ describe('StartseitePage (Issue #216; #206 Kriterien 1, 3 bis 8)', () => {
     renderSeite('/?zeitraum=2026-09');
 
     await screen.findByRole('table', { name: 'Angebote in Arbeit' });
-    expect(aufruf.mock.calls.map(([ziel]) => ziel)).toEqual([WEG_SEPTEMBER]);
+    expect(aufruf.mock.calls.map(([ziel]) => ziel)).toEqual([WEG_SEPTEMBER, WEG_FORECAST]);
   });
 
   it('fragt ohne Parameter, wenn in der Adresse kein Monat steht', async () => {
@@ -377,7 +474,7 @@ describe('StartseitePage (Issue #216; #206 Kriterien 1, 3 bis 8)', () => {
     renderSeite('/?zeitraum=uebermorgen');
 
     await screen.findByRole('table', { name: 'Angebote in Arbeit' });
-    expect(aufruf.mock.calls.map(([ziel]) => ziel)).toEqual(['/api/startseite']);
+    expect(aufruf.mock.calls.map(([ziel]) => ziel)).toEqual(['/api/startseite', WEG_FORECAST]);
   });
 
   it('meldet den Ausfall, wenn der Stand nicht zu erreichen ist', async () => {
@@ -385,9 +482,11 @@ describe('StartseitePage (Issue #216; #206 Kriterien 1, 3 bis 8)', () => {
 
     renderSeite();
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      'Der Geschäftsstand ist gerade nicht zu erreichen.',
-    );
+    // Am Text gefragt und nicht ueber `findByRole('alert')`: Die Forecast-Karte traegt ihre eigene
+    // Meldung, und zwei Meldungen liessen die Suche nach einer scheitern (Issue #313).
+    expect(
+      await screen.findByText(/Der Geschäftsstand ist gerade nicht zu erreichen\./u),
+    ).toBeInTheDocument();
     expect(screen.queryByRole('combobox', { name: 'Zeitraum' })).not.toBeInTheDocument();
   });
 
@@ -412,7 +511,7 @@ describe('StartseitePage (Issue #216; #206 Kriterien 1, 3 bis 8)', () => {
   });
 
   it('zeigt im leeren Monat Nullen in den Kacheln und je Liste einen Satz', async () => {
-    mitRouten({ [OHNE_MONAT]: json(200, LEERER_STAND) });
+    mitRouten({ [OHNE_MONAT]: json(200, LEERER_STAND), [FORECAST]: json(200, { jahre: [] }) });
 
     renderSeite();
 
@@ -561,7 +660,7 @@ describe('StartseitePage: Zeitraumwahl (Issue #281; #273 Kriterien 1, 2, 5 bis 9
     renderSeite('/');
 
     await screen.findByRole('table', { name: 'Angebote in Arbeit' });
-    expect(aufruf.mock.calls.map(([ziel]) => ziel)).toEqual(['/api/startseite']);
+    expect(aufruf.mock.calls.map(([ziel]) => ziel)).toEqual(['/api/startseite', WEG_FORECAST]);
   });
 
   it('laesst „Angebote in Arbeit" und den offenen Stand beim Wechsel aufs Jahr stehen', async () => {
@@ -736,5 +835,113 @@ describe('StartseitePage: Kachel „Offene Rechnungen" (Issue #285)', () => {
     expect(await screen.findByText('Keine Rechnung ist offen.')).toBeInTheDocument();
     expect(screen.queryByRole('table', { name: 'Offene Rechnungen' })).not.toBeInTheDocument();
     expect(await kachel(OFFENE_RECHNUNGEN)).toHaveTextContent('0,00 €');
+  });
+});
+
+/**
+ * Die Karte „Forecast" (Issue #313; #302 Kriterien 1 und 7; Plan #303, E8 und E15).
+ *
+ * Sie hat ihren eigenen Ladeweg ohne Zeitraum und steht ausserhalb des Geschaeftsstands: Ein
+ * Wechsel des Zeitraums laesst sie unberuehrt, und der Ausfall des einen Weges nimmt den anderen
+ * nicht mit.
+ */
+describe('StartseitePage: Karte „Forecast" (Issue #313)', () => {
+  /** Die Ueberschriften der Karten unterhalb der Kopfkarte, in ihrer Reihenfolge. */
+  function kartentitel(): (string | null)[] {
+    return screen.getAllByRole('heading', { level: 2 }).map((kopf) => kopf.textContent);
+  }
+
+  it('steht als eigene Karte hinter den vier Kennzahl-Karten', async () => {
+    mitRouten({ [OHNE_MONAT]: json(200, STAND) });
+
+    renderSeite();
+
+    const tafel = await screen.findByRole('table', { name: 'Forecast' });
+    await screen.findByRole('table', { name: 'Angebote in Arbeit' });
+    expect(kartentitel()).toEqual([
+      'Angebote in Arbeit',
+      'Noch nicht abgerechnet',
+      'Offene Rechnungen',
+      'Abgerechnet',
+      'Forecast',
+    ]);
+    expect(within(tafel).getAllByRole('row')[1]).toHaveTextContent(FORECAST_2027);
+  });
+
+  it('laesst die Zahlen beim Wechsel des Zeitraums stehen und fragt nicht erneut', async () => {
+    const nutzer = userEvent.setup();
+    const aufruf = mitRouten({
+      [OHNE_MONAT]: json(200, STAND),
+      [JAHR_2026]: json(200, JAHRES_STAND),
+    });
+
+    renderSeite();
+    const vorher = (await screen.findByRole('table', { name: 'Forecast' })).textContent;
+    await nutzer.selectOptions(
+      await screen.findByRole('combobox', { name: 'Zeitraum' }),
+      '2026',
+    );
+    await screen.findByRole('table', { name: 'Abgerechnet' });
+
+    expect(screen.getByRole('table', { name: 'Forecast' }).textContent).toBe(vorher);
+    expect(
+      aufruf.mock.calls.map(([ziel]) => ziel).filter((ziel) => ziel === WEG_FORECAST),
+    ).toHaveLength(1);
+  });
+
+  it('bleibt waehrend des Ladens eines neuen Zeitraums stehen', async () => {
+    const nutzer = userEvent.setup();
+    let liefere!: (wert: Response) => void;
+    const spaeter = new Promise<Response>((aufloesen) => {
+      liefere = aufloesen;
+    });
+    mitRouten({ [OHNE_MONAT]: json(200, STAND), [JAHR_2026]: () => spaeter });
+
+    renderSeite();
+    await screen.findByRole('table', { name: 'Forecast' });
+    await nutzer.selectOptions(
+      await screen.findByRole('combobox', { name: 'Zeitraum' }),
+      '2026',
+    );
+
+    expect(screen.getByText('Der Geschäftsstand wird geladen …')).toBeInTheDocument();
+    expect(screen.getByRole('table', { name: 'Forecast' })).toHaveTextContent(FORECAST_2027);
+    liefere(json(200, JAHRES_STAND)());
+    expect(await screen.findByRole('table', { name: 'Abgerechnet' })).toBeInTheDocument();
+  });
+
+  it('traegt ihre eigene Meldung, wenn ihr Weg scheitert, und die Seite steht weiter', async () => {
+    mitRouten({ [OHNE_MONAT]: json(200, STAND), [FORECAST]: leer(500) });
+
+    renderSeite();
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Der Forecast ist gerade nicht zu erreichen.',
+    );
+    expect(await kachel(IN_ARBEIT)).toHaveTextContent('Angebote in Arbeit2');
+    expect(screen.getByRole('table', { name: 'Angebote in Arbeit' })).toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: 'Zeitraum' })).toBeInTheDocument();
+    expect(screen.queryByRole('table', { name: 'Forecast' })).not.toBeInTheDocument();
+  });
+
+  it('bleibt mit ihren Zahlen stehen, wenn der Geschaeftsstand ausfaellt', async () => {
+    mitRouten({ [OHNE_MONAT]: leer(500) });
+
+    renderSeite();
+
+    const tafel = await screen.findByRole('table', { name: 'Forecast' });
+    expect(
+      await screen.findByText(/Der Geschäftsstand ist gerade nicht zu erreichen\./u),
+    ).toBeInTheDocument();
+    expect(within(tafel).getAllByRole('row')[1]).toHaveTextContent(FORECAST_2027);
+    expect(screen.queryByTestId('kennzahlkachel')).not.toBeInTheDocument();
+  });
+
+  it('sagt waehrend des Ladens, dass der Forecast geladen wird', () => {
+    mitRouten({ [OHNE_MONAT]: json(200, STAND) });
+
+    renderSeite();
+
+    expect(screen.getByText('Der Forecast wird geladen …')).toBeInTheDocument();
   });
 });

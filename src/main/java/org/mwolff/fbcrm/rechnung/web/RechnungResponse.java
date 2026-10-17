@@ -27,6 +27,7 @@ import org.mwolff.fbcrm.rechnung.domain.Rechnungszustand;
  *
  * @param id Kennung der Rechnung
  * @param angebotId Kennung des Angebots, das abgerechnet wird
+ * @param angebotTitel Titel dieses Angebots, oder {@code null} beim Angebot ohne Titel (Issue #327)
  * @param firmaId Kennung der Firma, an die die Rechnung geht
  * @param firmaName Name dieser Firma
  * @param rechnungDatum Datum der Rechnung
@@ -45,6 +46,7 @@ import org.mwolff.fbcrm.rechnung.domain.Rechnungszustand;
 public record RechnungResponse(
     long id,
     long angebotId,
+    @Nullable String angebotTitel,
     long firmaId,
     String firmaName,
     LocalDate rechnungDatum,
@@ -67,6 +69,7 @@ public record RechnungResponse(
     return new RechnungResponse(
         rechnung.requireId(),
         rechnung.angebotId(),
+        ansicht.angebotTitel(),
         ansicht.firmaId(),
         ansicht.firmaName(),
         rechnung.rechnungDatum(),

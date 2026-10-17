@@ -20,7 +20,11 @@ import Karte from '../components/Karte';
 import { useKopfPfad } from '../components/KopfPfad';
 import type { PfadVerweis } from '../components/KopfPfad';
 import KupferTaste from '../components/KupferTaste';
-import Positionsmaske, { betragDerPosition, frischePosition } from '../components/Positionsmaske';
+import Positionsmaske, {
+  betragDerPosition,
+  frischePosition,
+  jahrUnlesbar,
+} from '../components/Positionsmaske';
 import type { Maskenposition } from '../components/Positionsmaske';
 import WeicheTaste from '../components/WeicheTaste';
 import { feldMeldungen, nichtGefunden } from '../lib/apifehler';
@@ -34,7 +38,8 @@ import { ABSTAND_BUEHNE, ZAHLEN_KLASSE } from '../theme';
  * Die Maske des Angebots — Anlegen und Bearbeiten in einer Ansicht (Issue #127, Kriterien 2, 5).
  *
  * <b>Zwei Schritte, weil das Anlegen zwei Schritte sind.</b> Beim Anlegen nimmt das Backend nur
- * den Ansprechpartner (`AngebotAnlegenRequest`, Issue #126); Datum, Beschreibung und Positionen
+ * Ansprechpartner, Kennzeichen und Titel (`AngebotAnlegenRequest`, Issue #126, Plan #315); Datum,
+ * Beschreibung und Positionen
  * bekommt das Angebot danach ueber den einen Aenderungsweg (E8). Die Maske folgt dem: Unter
  * `/firmen/:id/angebote/neu` steht die Wahl des Ansprechpartners, danach fuehrt sie mit `replace`
  * in `/angebote/:angebotId/bearbeiten`. Beide Wege in einem
@@ -87,6 +92,20 @@ import { ABSTAND_BUEHNE, ZAHLEN_KLASSE } from '../theme';
  * eine unlesbare Zahl in einem verborgenen Feld das Speichern nicht mehr auf (siehe
  * {@link alsEingaben}).
  *
+ * <b>Das Leistungsjahr wird beim Anlegen der Zeile vorbelegt, nicht danach</b> (Plan #303,
+ * Kriterium 4). „Position hinzufuegen" nimmt das Jahr des Datumsfeldes, wie es in diesem Moment
+ * steht; ein spaeterer Wechsel des Angebotsdatums ruehrt keine bestehende Zeile an — das Jahr
+ * gehoert ab dem Anlegen dem Menschen. Ist das Datumsfeld leer, bleibt auch das Jahr leer, und der
+ * Server belegt es beim Speichern vor (E2).
+ *
+ * <b>Der Titel ist das Pflichtfeld beider Schritte</b> (Plan #315, Kriterien 2, 3). Er steht in
+ * beiden als erstes Feld, weil er das Angebot benennt, und haengt an einem Zustand fuer beide
+ * Schritte (E9). Die Maske prueft ihn selbst, bevor etwas hinausgeht: Fehlt er, besteht er nur aus
+ * Leerzeichen oder ist er laenger als {@link TITEL_MAX} Zeichen, steht die Meldung am Feld, und
+ * es gibt keinen Netzweg (E5). Hinaus geht er getrimmt — so messen Maske, Anfrage und Spalte
+ * denselben Text (E7). Ein Angebot von vor dem Titel laedt mit leerem Feld und laesst sich erst
+ * speichern, wenn der Titel nachgetragen ist (Kriterium 4).
+ *
  * <b>Der Kopfpfad nennt die Firma beim Namen</b>, sobald sie bekannt ist.
  */
 
@@ -98,6 +117,10 @@ const AUSFALL_LESEN = 'Das Angebot ist gerade nicht zu erreichen. Bitte später 
 const AUSFALL_ANLEGEN = 'Das Angebot wurde nicht angelegt. Bitte später erneut versuchen.';
 const AUSFALL_SPEICHERN = 'Das Angebot wurde nicht gespeichert. Bitte später erneut versuchen.';
 const DATUM_FEHLT = 'Bitte das Datum des Angebots angeben.';
+/** Die hoechste Laenge des Titels — dieselbe wie `@Size(max = 200)` und die Spalte. */
+const TITEL_MAX = 200;
+const TITEL_FEHLT = 'Bitte einen Titel für das Angebot angeben.';
+const TITEL_ZU_LANG = 'Der Titel darf höchstens 200 Zeichen lang sein.';
 const GESPEICHERT = 'Gespeichert.';
 const ZAHLEN_UNKLAR =
   'Solange eine Menge oder ein Einzelpreis keine Zahl ist, kann nicht gespeichert werden.';
@@ -136,6 +159,8 @@ type Stand =
 
 /** Die Angaben des Angebots, so wie sie in den Feldern stehen. */
 interface Texte {
+  /** Der Titel, wie er im Feld steht — in beiden Schritten derselbe Zustand (E9). */
+  readonly titel: string;
   /** Tag (`YYYY-MM-DD`), wie das `date`-Feld ihn fuehrt. */
   readonly angebotDatum: string;
   /** Kennung des Ansprechpartners als Text, oder {@link KEINE_PERSON}. */
@@ -143,7 +168,17 @@ interface Texte {
   readonly beschreibung: string;
 }
 
-const LEERE_TEXTE: Texte = { angebotDatum: '', ansprechpartner: '', beschreibung: '' };
+const LEERE_TEXTE: Texte = {
+  titel: '',
+  angebotDatum: '',
+  ansprechpartner: '',
+  beschreibung: '',
+};
+
+/** Das Jahr eines Tages (`YYYY-MM-DD`) — leer, solange das Datumsfeld keinen Tag traegt. */
+function jahrAus(datum: string): string {
+  return /^\d{4}-/.test(datum) ? datum.slice(0, 4) : '';
+}
 
 /** Der Schluessel einer gespeicherten Zeile — er haengt an der Kennung, nicht an der Stelle. */
 function schluesselZu(id: number): string {
@@ -160,6 +195,7 @@ function alsZeilen(angebot: Angebot): readonly Maskenposition[] {
     menge: dezimal(position.mengeInHundertsteln, ','),
     einheit: position.einheit,
     einzelpreis: dezimal(position.einzelpreisInCent, ','),
+    leistungsjahr: position.leistungsjahr,
     // Was gespeichert ist, hat jemand so gewollt: Ein Modus-Wechsel setzt es nicht um (F7).
     einheitVonHand: true,
   }));
@@ -168,11 +204,22 @@ function alsZeilen(angebot: Angebot): readonly Maskenposition[] {
 /** Die Angaben der Antwort als Feldinhalte — `null` wird zum leeren Feld, nicht zu „null". */
 function alsTexte(angebot: Angebot): Texte {
   return {
+    // Ein Angebot von vor dem Titel laedt mit leerem Feld (E9, Kriterium 4).
+    titel: angebot.titel ?? '',
     angebotDatum: angebot.angebotDatum,
     ansprechpartner:
       angebot.ansprechpartnerId === null ? KEINE_PERSON : String(angebot.ansprechpartnerId),
     beschreibung: angebot.beschreibung ?? '',
   };
+}
+
+/** Was am Titel fehlt — `undefined`, wenn er so hinausgehen darf (E5); gemessen getrimmt (E7). */
+function titelFehler(wert: string): string | undefined {
+  const getrimmt = wert.trim();
+  if (getrimmt === '') {
+    return TITEL_FEHLT;
+  }
+  return getrimmt.length > TITEL_MAX ? TITEL_ZU_LANG : undefined;
 }
 
 /** Ein Feldinhalt als Angabe fuer den Rumpf — leer heisst „keine Angabe", nicht „leerer Text". */
@@ -182,7 +229,12 @@ function oderNull(wert: string): string | null {
 }
 
 /**
- * Eine Zeile als Positionseingabe — `null`, wenn Menge oder Preis keine Zahl sind.
+ * Eine Zeile als Positionseingabe — `null`, wenn Menge oder Preis keine Zahl sind oder das
+ * Leistungsjahr etwas enthaelt, das kein Jahr ist.
+ *
+ * Ein leeres Jahr ist dagegen „keine Angabe" und geht als `null` hinaus; der Server belegt es vor
+ * (Plan #303, E2, E16). Ein unlesbares Jahr stillschweigend so zu behandeln, hiesse: Meldung am
+ * Feld und zugleich „Gespeichert" mit einem anderen Jahr, als dasteht.
  *
  * Die Reihenfolge der Felder ist die von `AngebotPositionRequest`; die Reihenfolge der Liste ist
  * die gezeigte (E24).
@@ -193,7 +245,7 @@ function oderNull(wert: string): string | null {
 function alsEingabe(position: Maskenposition): PositionEingabe | null {
   const menge = hundertstel(position.menge);
   const preis = hundertstel(position.einzelpreis);
-  if (menge === null || preis === null) {
+  if (menge === null || preis === null || jahrUnlesbar(position.leistungsjahr)) {
     return null;
   }
   return {
@@ -203,6 +255,7 @@ function alsEingabe(position: Maskenposition): PositionEingabe | null {
     menge: dezimal(menge, '.'),
     einheit: position.einheit,
     einzelpreis: dezimal(preis, '.'),
+    leistungsjahr: oderNull(position.leistungsjahr),
   };
 }
 
@@ -231,17 +284,19 @@ const OHNE_ZAHLEN = {
   menge: '0.00',
   einheit: 'PERSONENTAG',
   einzelpreis: '0.00',
+  leistungsjahr: null,
 } as const;
 
 /**
- * Die ganze Liste als Eingaben — `null`, solange eine Zahl keine ist.
+ * Die ganze Liste als Eingaben — `null`, solange eine Zahl keine ist oder ein Jahr keines (E16).
  *
  * Alles oder nichts: Ein Angebot wird als Ganzes geschrieben (E8), und eine Liste, aus der die
  * unlesbaren Zeilen stillschweigend herausfielen, loeschte Positionen, die der Mensch sieht.
  *
- * <b>Am internen Angebot haelt eine unlesbare Zahl nichts auf.</b> Menge und Einzelpreis gehen von
- * dort nicht hinaus, sie sind verborgen, und die Meldung dazu stuende an der Summenzeile, die es
- * am internen Angebot nicht gibt. Ohne diese Ausnahme wiese die Maske ein Speichern stumm ab —
+ * <b>Am internen Angebot haelt eine unlesbare Zahl nichts auf</b>, ein unlesbares Jahr ebenso
+ * wenig. Menge, Einzelpreis und Leistungsjahr gehen von dort nicht hinaus, sie sind verborgen,
+ * und die Meldung dazu stuende an der Summenzeile oder am Feld, die es am internen Angebot nicht
+ * gibt. Ohne diese Ausnahme wiese die Maske ein Speichern stumm ab —
  * kein Hinweis, kein Netzweg, nichts.
  */
 function alsEingaben(
@@ -364,6 +419,36 @@ function InternKaestchen({
   );
 }
 
+/**
+ * Das Titelfeld samt Meldung.
+ *
+ * Ein Baustein und nicht zweimal dasselbe Markup, aus demselben Grund wie {@link InternKaestchen}
+ * (E8).
+ */
+function TitelFeld({
+  wert,
+  setze,
+  meldung,
+}: {
+  readonly wert: string;
+  readonly setze: (wert: string) => void;
+  readonly meldung: string | undefined;
+}) {
+  return (
+    <TextField
+      label="Titel"
+      value={wert}
+      onChange={(ereignis) => {
+        setze(ereignis.target.value);
+      }}
+      error={meldung !== undefined}
+      helperText={meldung}
+      required
+      fullWidth
+    />
+  );
+}
+
 export default function AngebotMaske() {
   const { id, angebotId } = useParams();
   const firmaKennung = kennungAus(id);
@@ -452,17 +537,32 @@ export default function AngebotMaske() {
 
   const anlegen = async (firmaId: number) => {
     setzeFehler(null);
+    // Beide Meldungsquellen frisch: `meldung` liest die eigene vor der des Servers, und eine
+    // stehengebliebene eigene verdeckte sonst die neue Antwort.
+    setzeFeldFehler({});
+    const fehlenderTitel = titelFehler(texte.titel);
+    setzeEigeneFehler(fehlenderTitel === undefined ? {} : { titel: [fehlenderTitel] });
+    if (fehlenderTitel !== undefined) {
+      // Ohne Titel entsteht kein Angebot; hinaus geht nichts (Kriterium 2).
+      return;
+    }
     setzeLaeuft(true);
     try {
-      const angebot = await angebotAnlegen(
-        firmaId,
-        personWahl === KEINE_PERSON ? null : Number(personWahl),
+      const angebot = await angebotAnlegen(firmaId, {
+        titel: texte.titel.trim(),
+        ansprechpartnerId: personWahl === KEINE_PERSON ? null : Number(personWahl),
         intern,
-      );
+      });
       navigate(`/angebote/${String(angebot.id)}/bearbeiten`, { replace: true });
-    } catch {
+    } catch (ursache) {
       setzeLaeuft(false);
-      setzeFehler(AUSFALL_ANLEGEN);
+      // Eine Feldmeldung gehoert ans Feld, nicht in eine Ausfallmeldung (E6).
+      const felder = feldMeldungen(ursache);
+      if (Object.keys(felder).length > 0) {
+        setzeFeldFehler(felder);
+      } else {
+        setzeFehler(AUSFALL_ANLEGEN);
+      }
     }
   };
 
@@ -471,9 +571,14 @@ export default function AngebotMaske() {
     setzeFehler(null);
     setzeFeldFehler({});
     const fehlendesDatum = texte.angebotDatum === '';
-    setzeEigeneFehler(fehlendesDatum ? { angebotDatum: [DATUM_FEHLT] } : {});
+    const fehlenderTitel = titelFehler(texte.titel);
+    // Beide Meldungen koennen zugleich stehen: Wer speichert, soll alles Fehlende auf einmal sehen.
+    setzeEigeneFehler({
+      ...(fehlendesDatum ? { angebotDatum: [DATUM_FEHLT] } : {}),
+      ...(fehlenderTitel === undefined ? {} : { titel: [fehlenderTitel] }),
+    });
     const eingaben = alsEingaben(positionen, intern);
-    if (fehlendesDatum || eingaben === null) {
+    if (fehlendesDatum || fehlenderTitel !== undefined || eingaben === null) {
       // Was fehlt, steht am Feld beziehungsweise an der Summe; hinaus geht nichts.
       return;
     }
@@ -482,6 +587,7 @@ export default function AngebotMaske() {
       const neu = uebernahme(
         await angebotAendern(angebot, {
           angebotDatum: texte.angebotDatum,
+          titel: texte.titel.trim(),
           ansprechpartnerId:
             texte.ansprechpartner === KEINE_PERSON ? null : Number(texte.ansprechpartner),
           beschreibung: oderNull(texte.beschreibung),
@@ -562,6 +668,13 @@ export default function AngebotMaske() {
             >
               {`An: ${stand.firmaName}`}
             </Typography>
+            <TitelFeld
+              wert={texte.titel}
+              setze={(titel) => {
+                setzeTexte({ ...texte, titel });
+              }}
+              meldung={meldung('titel')}
+            />
             <TextField
               select
               label="Ansprechpartner"
@@ -569,7 +682,11 @@ export default function AngebotMaske() {
               onChange={(ereignis) => {
                 setzePersonWahl(ereignis.target.value);
               }}
-              helperText="Optional. Zur Wahl stehen die aktiven Ansprechpartner dieser Firma."
+              error={meldung('ansprechpartnerId') !== undefined}
+              helperText={
+                meldung('ansprechpartnerId') ??
+                'Optional. Zur Wahl stehen die aktiven Ansprechpartner dieser Firma.'
+              }
               fullWidth
               slotProps={{ select: { native: true }, inputLabel: { shrink: true } }}
             >
@@ -618,6 +735,13 @@ export default function AngebotMaske() {
               {GESPEICHERT}
             </Typography>
           ) : null}
+          <TitelFeld
+            wert={texte.titel}
+            setze={(titel) => {
+              setzeTexte({ ...texte, titel });
+            }}
+            meldung={meldung('titel')}
+          />
           <TextField
             label="Angebotsdatum"
             type="date"
@@ -676,7 +800,10 @@ export default function AngebotMaske() {
         werkzeug={
           <WeicheTaste
             onClick={() => {
-              setzePositionen([...positionen, frischePosition(naechsterSchluessel())]);
+              setzePositionen([
+                ...positionen,
+                frischePosition(naechsterSchluessel(), jahrAus(texte.angebotDatum)),
+              ]);
             }}
             symbol={<IconPlus size={16} stroke={1.8} />}
           >

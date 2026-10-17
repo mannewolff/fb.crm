@@ -56,6 +56,7 @@ class AngebotIT extends AbstractIntegrationTest {
   private static final String MAIL = "manne@example.org";
   private static final String PASSWORT = "richtiges-passwort";
   private static final Instant ANGELEGT = Instant.parse("2026-09-01T08:00:00Z");
+  private static final String TITEL = "Website-Relaunch";
 
   private final TestRestTemplate rest;
   private final AccountRepository accounts;
@@ -150,6 +151,7 @@ class AngebotIT extends AbstractIntegrationTest {
   private static Map<String, Object> rumpf(final List<Map<String, Object>> positionen) {
     final Map<String, Object> felder = new LinkedHashMap<>();
     felder.put("angebotDatum", "2026-09-25");
+    felder.put("titel", TITEL);
     felder.put("ansprechpartnerId", null);
     felder.put("beschreibung", "Neugestaltung der Website");
     felder.put("positionen", positionen);
@@ -183,13 +185,17 @@ class AngebotIT extends AbstractIntegrationTest {
     return ruf(
         "/api/firmen/" + firmaId + "/angebote",
         HttpMethod.POST,
-        Map.of("ansprechpartnerId", Long.valueOf(ansprechpartner)),
+        Map.of("titel", TITEL, "ansprechpartnerId", Long.valueOf(ansprechpartner)),
         typ);
   }
 
   private AngebotResponse angebot() {
     return Objects.requireNonNull(
-        ruf("/api/firmen/" + firmaId + "/angebote", HttpMethod.POST, null, AngebotResponse.class)
+        ruf(
+                "/api/firmen/" + firmaId + "/angebote",
+                HttpMethod.POST,
+                Map.of("titel", TITEL),
+                AngebotResponse.class)
             .getBody());
   }
 
@@ -216,7 +222,7 @@ class AngebotIT extends AbstractIntegrationTest {
         ruf(
             "/api/firmen/" + firmaId + "/angebote",
             HttpMethod.POST,
-            Map.of("intern", Boolean.TRUE),
+            Map.of("titel", TITEL, "intern", true),
             AngebotResponse.class);
 
     // Then
@@ -236,6 +242,7 @@ class AngebotIT extends AbstractIntegrationTest {
   void anlegen_withAnExplicitNullFlag_thenCreatesACustomerOffer() {
     // Given — ein {@code null} im Rumpf geht denselben Weg wie ein fehlendes Feld.
     final Map<String, Object> ohneArt = new LinkedHashMap<>();
+    ohneArt.put("titel", TITEL);
     ohneArt.put("intern", null);
 
     // When
@@ -259,7 +266,11 @@ class AngebotIT extends AbstractIntegrationTest {
 
     // When
     final ResponseEntity<AngebotResponse> antwort =
-        ruf("/api/firmen/" + firmaId + "/angebote", HttpMethod.POST, null, AngebotResponse.class);
+        ruf(
+            "/api/firmen/" + firmaId + "/angebote",
+            HttpMethod.POST,
+            Map.of("titel", TITEL),
+            AngebotResponse.class);
 
     // Then
     assertThat(antwort.getStatusCode()).isEqualTo(HttpStatus.CREATED);
@@ -267,8 +278,38 @@ class AngebotIT extends AbstractIntegrationTest {
     assertThat(angelegt.status()).isEqualTo(Angebotsstatus.ANGELEGT);
     assertThat(angelegt.intern()).isFalse();
     assertThat(angelegt.angebotDatum()).isEqualTo(heute);
+    assertThat(angelegt.titel()).isEqualTo(TITEL);
     assertThat(angelegt.beschreibung()).isNull();
     assertThat(angelegt.positionen()).isEmpty();
+  }
+
+  @Test
+  void titel_anlegenLesenAendernLesen_thenTheDatabaseCarriesItThroughout() {
+    // Given — Issue #317: der Titel kommt beim Anlegen herein und ist beim Aendern aenderbar.
+    final long angebotId = angebot().id();
+    final AngebotResponse gelesen =
+        Objects.requireNonNull(
+            ruf("/api/angebote/" + angebotId, HttpMethod.GET, null, AngebotResponse.class)
+                .getBody());
+    final Map<String, Object> neuerTitel = rumpf(List.of());
+    neuerTitel.put("titel", "Wartungsvertrag");
+
+    // When
+    final ResponseEntity<AngebotResponse> aendern =
+        ruf("/api/angebote/" + angebotId, HttpMethod.PUT, neuerTitel, AngebotResponse.class);
+    final AngebotResponse wiederGelesen =
+        Objects.requireNonNull(
+            ruf("/api/angebote/" + angebotId, HttpMethod.GET, null, AngebotResponse.class)
+                .getBody());
+
+    // Then
+    assertThat(gelesen.titel()).isEqualTo(TITEL);
+    assertThat(aendern.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(wiederGelesen.titel()).isEqualTo("Wartungsvertrag");
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT titel FROM angebot WHERE id = ?", String.class, Long.valueOf(angebotId)))
+        .isEqualTo("Wartungsvertrag");
   }
 
   @Test
@@ -452,7 +493,11 @@ class AngebotIT extends AbstractIntegrationTest {
 
     // When
     final ResponseEntity<String> anlegen =
-        ruf("/api/firmen/" + firmaId + "/angebote", HttpMethod.POST, null, String.class);
+        ruf(
+            "/api/firmen/" + firmaId + "/angebote",
+            HttpMethod.POST,
+            Map.of("titel", TITEL),
+            String.class);
     final ResponseEntity<AngebotResponse> aendern =
         ruf(
             "/api/angebote/" + angebotId,
@@ -661,5 +706,73 @@ class AngebotIT extends AbstractIntegrationTest {
         .containsEntry("menge", new BigDecimal("0.00"))
         .containsEntry("einheit", "STUNDE")
         .containsEntry("einzelpreis", new BigDecimal("0.00"));
+  }
+
+  /** Dieselbe Position mit einem mitgeschickten Leistungsjahr (Issue #305). */
+  private static Map<String, Object> imJahr(final Map<String, Object> position, final int jahr) {
+    position.put("leistungsjahr", Integer.valueOf(jahr));
+    return position;
+  }
+
+  private AngebotResponse lies(final long angebotId) {
+    return Objects.requireNonNull(
+        ruf("/api/angebote/" + angebotId, HttpMethod.GET, null, AngebotResponse.class).getBody());
+  }
+
+  @Test
+  void aendern_withALeistungsjahr_thenItGoesRoundTripAndCanBeChanged() {
+    // Given — Issue #305: Das Angebotsdatum liegt 2026, die Position kommt mit 2027 — wie im
+    // Anlass von #302.
+    final long angebotId = angebot().id();
+    ruf(
+        "/api/angebote/" + angebotId,
+        HttpMethod.PUT,
+        rumpf(List.of(imJahr(position("Aufwaende Mai 2027", "AUFWAND", "135", "STUNDE"), 2027))),
+        AngebotResponse.class);
+    final AngebotResponse angelegt = lies(angebotId);
+
+    // When — dieselbe Position, das Jahr geaendert.
+    final long kennung = Objects.requireNonNull(angelegt.positionen().get(0).id()).longValue();
+    ruf(
+        "/api/angebote/" + angebotId,
+        HttpMethod.PUT,
+        rumpf(
+            List.of(
+                imJahr(positionMitKennung(kennung, "Aufwaende Mai 2027", "AUFWAND", "135"), 2028))),
+        AngebotResponse.class);
+    final AngebotResponse geaendert = lies(angebotId);
+
+    // Then
+    assertThat(angelegt.positionen())
+        .extracting(AngebotPositionResponse::leistungsjahr)
+        .containsExactly("2027");
+    assertThat(geaendert.positionen())
+        .extracting(AngebotPositionResponse::id, AngebotPositionResponse::leistungsjahr)
+        .containsExactly(tuple(Long.valueOf(kennung), "2028"));
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT leistungsjahr FROM angebot_position WHERE angebot_id = ?",
+                Integer.class,
+                Long.valueOf(angebotId)))
+        .isEqualTo(2028);
+  }
+
+  @Test
+  void aendern_withALeistungsjahrOutsideTheBounds_thenAnswers400AndWritesNothing() {
+    // Given — E10: Die Grenze steht an der Anfrage; die Datenbank sieht den Tippfehler nie.
+    final long angebotId = angebot().id();
+
+    // When
+    final ResponseEntity<String> antwort =
+        ruf(
+            "/api/angebote/" + angebotId,
+            HttpMethod.PUT,
+            rumpf(List.of(imJahr(position("Konzeption", "AUFWAND", "2.50", "PERSONENTAG"), 2100))),
+            String.class);
+
+    // Then
+    assertThat(antwort.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    assertThat(antwort.getBody()).contains("positionen[0].leistungsjahr");
+    assertThat(bezeichnungenNachPlatz(angebotId)).isEmpty();
   }
 }

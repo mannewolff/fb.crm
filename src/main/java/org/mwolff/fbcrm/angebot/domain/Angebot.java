@@ -22,6 +22,10 @@ import org.mwolff.fbcrm.common.Identifiable;
  * geht mit dem Status Hand in Hand — siehe den Konstruktor und {@link #umgestellt(boolean,
  * Instant)}.
  *
+ * <p><b>Titel und Beschreibung</b> (Issue #316): Der Titel ist die kurze, einzeilige Benennung des
+ * Angebots, die Beschreibung der mehrzeilige Text daneben. Ein Angebot von vor dieser Aenderung
+ * traegt keinen Titel und bleibt trotzdem gueltig (#314, Kriterium 4).
+ *
  * <p><b>Nichts Gerechnetes wird gespeichert.</b> {@link #summe()} ist die Summe der gerundeten
  * Positionsbetraege (E5).
  *
@@ -36,6 +40,8 @@ import org.mwolff.fbcrm.common.Identifiable;
  * @param intern ob das Angebot die eigene interne Arbeit festhaelt und nicht an einen Kunden geht
  * @param status wie weit das Angebot gediehen ist
  * @param angebotDatum Datum des Angebots; beim Anlegen der Tag der Anlage, danach aenderbar
+ * @param titel die einzeilige Benennung des Angebots, hoechstens 200 Zeichen und ohne Leerraum am
+ *     Rand, oder {@code null} fuer ein Angebot von vor Issue #316
  * @param beschreibung der Text des Angebots, oder {@code null}
  * @param positionen die Positionen in ihrer Reihenfolge; die Liste ist die Reihenfolge (E24)
  * @param createdAt Zeitpunkt der Anlage
@@ -48,11 +54,17 @@ public record Angebot(
     boolean intern,
     Angebotsstatus status,
     LocalDate angebotDatum,
+    @Nullable String titel,
     @Nullable String beschreibung,
     List<Angebotsposition> positionen,
     Instant createdAt,
     Instant updatedAt)
     implements Identifiable {
+
+  /**
+   * Die hoechste Laenge des Titels in Zeichen (#314, Kriterium 1); so breit ist auch die Spalte.
+   */
+  private static final int TITEL_LAENGE = 200;
 
   /**
    * Nimmt die Positionen als Kopie: Der Aufrufer darf seine Liste danach weiterverwenden.
@@ -62,12 +74,24 @@ public record Angebot(
    * Anwendungsfall, damit kein Weg an der Regel vorbeifuehrt; die Datenbank haelt dieselbe Zusage
    * als CHECK {@code angebot_art_status}.
    *
-   * @throws IllegalArgumentException wenn Kennzeichen und Status nicht zueinander passen
+   * <p><b>Der Titel ist nicht leer und hoechstens 200 Zeichen lang</b> (Issue #316, Plan #315 E1).
+   * Leerraum am Rand wird vorher abgeschnitten; {@code null} bleibt erlaubt — ein Angebot von vor
+   * dem Titel. Die Datenbank haelt die erste Haelfte als CHECK {@code angebot_titel}.
+   *
+   * @throws IllegalArgumentException wenn Kennzeichen und Status nicht zueinander passen oder der
+   *     Titel leer oder laenger als 200 Zeichen ist
    */
   public Angebot {
     if (intern != status.intern()) {
       throw new IllegalArgumentException(
           "Kennzeichen intern=" + intern + " passt nicht zum Status " + status);
+    }
+    if (titel != null) {
+      titel = titel.strip();
+      if (titel.isEmpty() || titel.length() > TITEL_LAENGE) {
+        throw new IllegalArgumentException(
+            "Titel muss 1 bis " + TITEL_LAENGE + " Zeichen haben, hat " + titel.length());
+      }
     }
     positionen = List.copyOf(positionen);
   }
@@ -80,8 +104,12 @@ public record Angebot(
   /**
    * Das Angebot mit neuen Angaben — in jedem Status (Kriterium 5).
    *
+   * <p>Der Titel kommt auf diesem Weg immer mit (Issue #317); getrimmt und geprueft wird er im
+   * Konstruktor (E1).
+   *
    * @param neuesDatum Datum des Angebots
    * @param neuerAnsprechpartnerId Kennung des Ansprechpartners, oder {@code null}
+   * @param neuerTitel die einzeilige Benennung des Angebots
    * @param neueBeschreibung Text des Angebots, oder {@code null}
    * @param neuePositionen die vollstaendige Positionsliste in der gewuenschten Reihenfolge
    * @param zeitpunkt Zeitpunkt der Aenderung
@@ -89,6 +117,7 @@ public record Angebot(
   public Angebot geaendert(
       final LocalDate neuesDatum,
       final @Nullable Long neuerAnsprechpartnerId,
+      final String neuerTitel,
       final @Nullable String neueBeschreibung,
       final List<Angebotsposition> neuePositionen,
       final Instant zeitpunkt) {
@@ -99,6 +128,7 @@ public record Angebot(
         intern,
         status,
         neuesDatum,
+        neuerTitel,
         neueBeschreibung,
         neuePositionen,
         createdAt,
@@ -161,6 +191,7 @@ public record Angebot(
         neuIntern,
         status.fuerArt(neuIntern),
         angebotDatum,
+        titel,
         beschreibung,
         positionen,
         createdAt,
@@ -175,6 +206,7 @@ public record Angebot(
         intern,
         ziel,
         angebotDatum,
+        titel,
         beschreibung,
         positionen,
         createdAt,

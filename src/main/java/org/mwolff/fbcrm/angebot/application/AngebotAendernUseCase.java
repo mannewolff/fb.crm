@@ -3,6 +3,7 @@ package org.mwolff.fbcrm.angebot.application;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
+import java.time.Year;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -22,10 +23,10 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * Das Aendern eines Angebots — in jedem Status (Issue #127, Kriterium 5).
  *
- * <p>Geschrieben wird das Angebot als Ganzes: Datum, Ansprechpartner, Beschreibung, die Art und die
- * vollstaendige Positionsliste in der gewuenschten Reihenfolge (E8). Die Plaetze der Positionen
- * vergibt der Bestand daraus lueckenlos neu (E24). Die Firma bleibt, wie sie ist; der Status folgt
- * der Art.
+ * <p>Geschrieben wird das Angebot als Ganzes: Datum, Ansprechpartner, Titel (Issue #317),
+ * Beschreibung, die Art und die vollstaendige Positionsliste in der gewuenschten Reihenfolge (E8).
+ * Die Plaetze der Positionen vergibt der Bestand daraus lueckenlos neu (E24). Die Firma bleibt, wie
+ * sie ist; der Status folgt der Art.
  *
  * <p>Der Ansprechpartner geht durch {@link Ansprechpartnerwahl}: Ein neu gewaehlter muss zur Firma
  * gehoeren und aktiv sein, der bisherige bleibt wählbar.
@@ -65,6 +66,12 @@ import org.springframework.transaction.annotation.Transactional;
  * Wechsel <b>intern → extern</b> (E19): Der Weg nach innen nimmt keiner Position ihre Stunden, und
  * das Entfernen einer bebuchten Position scheitert weiter am Fremdschluessel.
  *
+ * <p><b>Das Leistungsjahr einer Position wird hier bestimmt</b> (#302, Kriterium 4; Plan #303, E2).
+ * Eine gespeicherte Position behaelt ihr bisheriges Jahr, eine neue ist mit dem Jahr des
+ * eingereichten Angebotsdatums vorbelegt. Die Vorbelegung gilt nur beim Anlegen: Wer spaeter das
+ * Angebotsdatum aendert, verschiebt kein Jahr. Die Regel gilt fuer beide Zielarten gleichermassen,
+ * damit ein Angebot, das nach innen und zurueck gestellt wird, sein Jahr wiederfindet.
+ *
  * <p><b>Die Reihenfolge der Pruefungen</b> ist Absicht: erst das Angebot, dann der Ansprechpartner,
  * die Positionskennungen, die Rechnungsbindung beim Artwechsel, die Bindung der berechneten
  * Positionen, die Angaben nach Zielart und zuletzt die erfasste Arbeitszeit. Die Sperre aus
@@ -73,13 +80,13 @@ import org.springframework.transaction.annotation.Transactional;
  * wollte.
  */
 /*
- * PMD.TooManyMethods: Fuenf Pruefungen und vier Uebersetzer einer Positionsangabe ergeben zusammen
- * mit dem einen oeffentlichen Weg mehr als die zehn Methoden der Schwelle. Jede Pruefung traegt
- * hier ihren Namen und ihre Begruendung — sie zusammenzuziehen hiesse, die Reihenfolge der
- * Abweisungen in einer langen Methode zu verstecken, und sie auf mehrere Klassen zu verteilen
- * hiesse, denselben geladenen Stand und dieselbe Einreichung durch mehrere Haende zu geben. Beides
- * waere schlechter zu lesen als die Folge kleiner, benannter Schritte an einer Stelle — dasselbe
- * Vorgehen wie bei {@code Rechnungslayout}.
+ * PMD.TooManyMethods: Fuenf Pruefungen, vier Uebersetzer einer Positionsangabe und die Regel fuer
+ * ihr Leistungsjahr ergeben zusammen mit dem einen oeffentlichen Weg mehr als die zehn Methoden der
+ * Schwelle. Jede Pruefung traegt hier ihren Namen und ihre Begruendung — sie zusammenzuziehen
+ * hiesse, die Reihenfolge der Abweisungen in einer langen Methode zu verstecken, und sie auf
+ * mehrere Klassen zu verteilen hiesse, denselben geladenen Stand und dieselbe Einreichung durch
+ * mehrere Haende zu geben. Beides waere schlechter zu lesen als die Folge kleiner, benannter
+ * Schritte an einer Stelle — dasselbe Vorgehen wie bei {@code Rechnungslayout}.
  */
 @SuppressWarnings("PMD.TooManyMethods")
 @Service
@@ -135,7 +142,11 @@ public class AngebotAendernUseCase {
     pruefeBindung(
         verwendung.verwendeteKennungen(angebotId), daten.positionen(), angebot.positionen());
     final List<Angebotsposition> positionen =
-        nachZielart(daten.positionen(), angebot.positionen(), daten.intern());
+        nachZielart(
+            daten.positionen(),
+            angebot.positionen(),
+            daten.intern(),
+            Year.from(daten.angebotDatum()));
     pruefeZeit(daten, angebot.intern());
     final Instant jetzt = clock.instant();
     return angebote.save(
@@ -144,6 +155,7 @@ public class AngebotAendernUseCase {
             .geaendert(
                 daten.angebotDatum(),
                 daten.ansprechpartnerId(),
+                daten.titel(),
                 daten.beschreibung(),
                 positionen,
                 jetzt));
@@ -263,14 +275,15 @@ public class AngebotAendernUseCase {
   private static List<Angebotsposition> nachZielart(
       final List<Positionsangabe> eingereicht,
       final List<Angebotsposition> vorhanden,
-      final boolean intern) {
+      final boolean intern,
+      final Year vorbelegt) {
     final Map<Long, Angebotsposition> gespeichert = new HashMap<>();
     for (final Angebotsposition position : vorhanden) {
       gespeichert.put(position.id(), position);
     }
     final List<Angebotsposition> positionen = new ArrayList<>(eingereicht.size());
     for (int platz = 0; platz < eingereicht.size(); platz++) {
-      positionen.add(position(eingereicht.get(platz), gespeichert, intern, platz));
+      positionen.add(position(eingereicht.get(platz), gespeichert, intern, platz, vorbelegt));
     }
     return positionen;
   }
@@ -279,21 +292,27 @@ public class AngebotAendernUseCase {
       final Positionsangabe angabe,
       final Map<Long, Angebotsposition> gespeichert,
       final boolean intern,
-      final int platz) {
+      final int platz,
+      final Year vorbelegt) {
     if (!intern) {
-      return fuerKunden(angabe, platz);
+      return fuerKunden(angabe, platz, gespeichert, vorbelegt);
     }
     // Eine Angabe ohne Kennung ist neu: Unter null steht nichts, weil jede gespeicherte Position
     // eine Kennung traegt — eine eigene Abfrage auf null waere eine Abschrift davon.
     final Angebotsposition bisher = gespeichert.get(angabe.id());
-    return bisher == null ? neueInterne(angabe) : uebernommen(angabe, bisher);
+    return bisher == null ? neueInterne(angabe, vorbelegt) : uebernommen(angabe, bisher, vorbelegt);
   }
 
   /*
    * Ein Angebot an einen Kunden braucht alle vier Angaben. Die Ausnahme nennt jede fehlende auf
-   * einmal — welche das sind, liest sie selbst aus der Angabe ab.
+   * einmal — welche das sind, liest sie selbst aus der Angabe ab. Das Leistungsjahr kommt von der
+   * gespeicherten Position, sofern es eine gibt.
    */
-  private static Angebotsposition fuerKunden(final Positionsangabe angabe, final int platz) {
+  private static Angebotsposition fuerKunden(
+      final Positionsangabe angabe,
+      final int platz,
+      final Map<Long, Angebotsposition> gespeichert,
+      final Year vorbelegt) {
     final Abrechnungsmodus modus = angabe.abrechnungsmodus();
     final BigDecimal menge = angabe.menge();
     final Einheit einheit = angabe.einheit();
@@ -302,32 +321,63 @@ public class AngebotAendernUseCase {
       throw Positionsangaben.fehlendeAngaben(platz, angabe);
     }
     return new Angebotsposition(
-        angabe.id(), angabe.bezeichnung(), modus, menge, einheit, einzelpreis);
+        angabe.id(),
+        angabe.bezeichnung(),
+        modus,
+        menge,
+        einheit,
+        einzelpreis,
+        leistungsjahr(angabe, gespeichert.get(angabe.id()), vorbelegt));
   }
 
   /*
    * Eine neue Position der internen Arbeit: AUFWAND, STUNDE und zweimal 0 (E8). Werte, die nichts
    * behaupten — die Maske zeigt sie bei interner Arbeit nicht, und die vier Spalten bleiben
-   * pflichtig.
+   * pflichtig. Das Leistungsjahr folgt der Regel jeder neuen Position.
    */
-  private static Angebotsposition neueInterne(final Positionsangabe angabe) {
+  private static Angebotsposition neueInterne(final Positionsangabe angabe, final Year vorbelegt) {
     return new Angebotsposition(
-        null, angabe.bezeichnung(), Abrechnungsmodus.AUFWAND, OHNE_ZAHL, Einheit.STUNDE, OHNE_ZAHL);
+        null,
+        angabe.bezeichnung(),
+        Abrechnungsmodus.AUFWAND,
+        OHNE_ZAHL,
+        Einheit.STUNDE,
+        OHNE_ZAHL,
+        leistungsjahr(angabe, null, vorbelegt));
   }
 
   /*
    * Eine vorhandene Position der internen Arbeit behaelt ihre gespeicherten vier Werte (Kriterium
    * 8): Nur so findet ein Angebot, das nach innen und zurueck gestellt wird, seine Zahlen wieder.
-   * Aenderbar bleibt allein die Bezeichnung — mehr zeigt die Maske dort nicht.
+   * Dasselbe gilt fuer ihr Leistungsjahr, solange die Angabe keines mitschickt. Aenderbar bleibt
+   * sonst allein die Bezeichnung — mehr zeigt die Maske dort nicht.
    */
   private static Angebotsposition uebernommen(
-      final Positionsangabe angabe, final Angebotsposition bisher) {
+      final Positionsangabe angabe, final Angebotsposition bisher, final Year vorbelegt) {
     return new Angebotsposition(
         bisher.id(),
         angabe.bezeichnung(),
         bisher.abrechnungsmodus(),
         bisher.menge(),
         bisher.einheit(),
-        bisher.einzelpreis());
+        bisher.einzelpreis(),
+        leistungsjahr(angabe, bisher, vorbelegt));
+  }
+
+  /*
+   * Die eine Stelle fuer das Leistungsjahr (#302, Kriterium 4; E2): Ein mitgeschicktes Jahr gilt
+   * (Issue #305) — seine Grenzen prueft die Bean-Validation an der Anfrage (E10). Sonst behaelt
+   * eine gespeicherte Position ihr Jahr, und eine neue bekommt die Vorbelegung — das Jahr des
+   * eingereichten Angebotsdatums, das aendere(...) einmal bildet. Ein spaeter geaendertes
+   * Angebotsdatum verschiebt darum kein Jahr. Durchgereicht wird das Jahr und nicht das Datum: Mehr
+   * als das Jahr braucht keine der Hilfen.
+   */
+  private static Year leistungsjahr(
+      final Positionsangabe angabe, final @Nullable Angebotsposition bisher, final Year vorbelegt) {
+    final Integer angegeben = angabe.leistungsjahr();
+    if (angegeben != null) {
+      return Year.of(angegeben);
+    }
+    return bisher == null ? vorbelegt : bisher.leistungsjahr();
   }
 }

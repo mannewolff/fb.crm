@@ -15,7 +15,7 @@ import org.mwolff.fbcrm.angebot.domain.Angebot;
 import org.mwolff.fbcrm.angebot.domain.Angebotsstatus;
 
 /**
- * Die Zeile der Tabelle {@code angebot} nach {@code V20__angebot_intern.sql}.
+ * Die Zeile der Tabelle {@code angebot} nach {@code V24__angebot_titel.sql}.
  *
  * <p>Firma und Ansprechpartner stehen als blosse Kennungen und nicht als Beziehung: Angebot und
  * Firma sind eigene Wurzeln mit eigenem Lebenszyklus, und eine Beziehung laedt das eine mit dem
@@ -54,6 +54,9 @@ class AngebotEntity {
 
   @Column(name = "angebot_datum", nullable = false)
   private LocalDate angebotDatum;
+
+  @Column(name = "titel", length = 200)
+  private @Nullable String titel;
 
   @Column(name = "leistungsbeschreibung", columnDefinition = "text")
   private @Nullable String beschreibung;
@@ -96,6 +99,7 @@ class AngebotEntity {
     this.intern = angebot.intern();
     this.status = angebot.status();
     this.angebotDatum = angebot.angebotDatum();
+    this.titel = angebot.titel();
     this.beschreibung = angebot.beschreibung();
     this.createdAt = angebot.createdAt();
     this.updatedAt = angebot.updatedAt();
@@ -123,6 +127,10 @@ class AngebotEntity {
 
   LocalDate getAngebotDatum() {
     return angebotDatum;
+  }
+
+  @Nullable String getTitel() {
+    return titel;
   }
 
   @Nullable String getBeschreibung() {

@@ -18,6 +18,7 @@ const ANGEBOT = {
   ansprechpartnerName: null,
   status: 'ABGEGEBEN',
   angebotDatum: '2026-09-24',
+  titel: 'Neue Website',
   beschreibung: null,
   intern: false,
   positionen: [],
@@ -28,6 +29,7 @@ const ANGEBOT = {
 const RECHNUNG = {
   id: 4,
   angebotId: 9,
+  angebotTitel: null,
   firmaId: 5,
   firmaName: 'Adler AG',
   rechnungDatum: '2026-10-01',
@@ -228,7 +230,7 @@ describe('App', () => {
 
     expect(screen.getByRole('status')).toHaveTextContent('Sitzung wird geprüft');
     expect(
-      await screen.findByRole('heading', { level: 1, name: 'Angebot vom 24.09.2026' }),
+      await screen.findByRole('heading', { level: 1, name: 'Neue Website' }),
     ).toBeInTheDocument();
     expect(screen.getByRole('navigation', { name: 'Hauptnavigation' })).toBeInTheDocument();
   });

@@ -28,6 +28,7 @@ const KONZEPTION = {
   bezeichnung: 'Konzeption',
   angebotId: 11,
   angebotDatum: '2026-09-24',
+  angebotTitel: null,
   intern: false,
   firmaName: 'IT Bildungshaus',
 };
@@ -37,6 +38,7 @@ const SCHULUNG = {
   bezeichnung: 'Schulung',
   angebotId: 11,
   angebotDatum: '2026-09-24',
+  angebotTitel: null,
   intern: false,
   firmaName: 'IT Bildungshaus',
 };
@@ -46,6 +48,7 @@ const BETREUUNG = {
   bezeichnung: 'Betreuung',
   angebotId: 21,
   angebotDatum: '2026-09-28',
+  angebotTitel: null,
   intern: false,
   firmaName: 'Adler AG',
 };
@@ -56,6 +59,7 @@ const ALTLAST = {
   bezeichnung: 'Altlast',
   angebotId: 31,
   angebotDatum: '2026-05-04',
+  angebotTitel: null,
   intern: false,
   firmaName: 'Vergangen GmbH',
 };
@@ -66,6 +70,7 @@ const EIGENE_WEBSEITE = {
   bezeichnung: 'Eigene Webseite',
   angebotId: 41,
   angebotDatum: '2026-09-30',
+  angebotTitel: null,
   intern: true,
   firmaName: 'Manfred Wolff',
 };
@@ -507,5 +512,51 @@ describe('ZeiteintragMaske — Kennzeichen intern in der Positionswahl (Issue #2
 
     expect(gespeichert).toHaveBeenCalledTimes(1);
     expect(rumpf).toEqual({ angebotPositionId: 301, tag: HEUTE, von: '09:00', bis: '10:45' });
+  });
+});
+
+describe('ZeiteintragMaske — Titel am Angebot in der Positionswahl (Issue #328; Plan #323, E11)', () => {
+  /** Zwei Angebote derselben Firma vom selben Tag, unterscheidbar nur am Titel. */
+  const JAVA = {
+    id: 501,
+    bezeichnung: 'Durchfuehrung',
+    angebotId: 51,
+    angebotDatum: '2026-10-15',
+    angebotTitel: 'Java-Grundkurs',
+    intern: false,
+    firmaName: 'IT-Bildungshaus',
+  };
+  const SPRING = { ...JAVA, id: 502, angebotId: 52, angebotTitel: 'Spring-Aufbaukurs' };
+
+  it('Szenario: Zeit auf das richtige Angebot buchen', async () => {
+    fetchNachPfad({ [POSITIONEN]: json(200, [JAVA, SPRING]) });
+
+    renderMaske();
+    await screen.findByRole('combobox', { name: 'Position' });
+
+    const namen = gruppen().map((gruppe) => gruppe.getAttribute('label'));
+    expect(namen).toEqual(['IT-Bildungshaus — Java-Grundkurs', 'IT-Bildungshaus — Spring-Aufbaukurs']);
+    expect(namen).not.toContain('IT-Bildungshaus — Angebot vom 15.10.2026');
+  });
+
+  it('haengt „— intern" auch hinter den Titel eines internen Angebots', async () => {
+    fetchNachPfad({
+      [POSITIONEN]: json(200, [{ ...EIGENE_WEBSEITE, angebotTitel: 'Eigene Webseite' }]),
+    });
+
+    renderMaske();
+    await screen.findByRole('combobox', { name: 'Position' });
+
+    expect(gruppen()[0]).toHaveAttribute('label', 'Manfred Wolff — Eigene Webseite — intern');
+  });
+
+  it('nennt einen Titel von 200 Zeichen vollstaendig im Gruppennamen (Kriterium 8)', async () => {
+    const titel = 'T'.repeat(200);
+    fetchNachPfad({ [POSITIONEN]: json(200, [{ ...JAVA, angebotTitel: titel }]) });
+
+    renderMaske();
+    await screen.findByRole('combobox', { name: 'Position' });
+
+    expect(gruppen()[0]).toHaveAttribute('label', `IT-Bildungshaus — ${titel}`);
   });
 });

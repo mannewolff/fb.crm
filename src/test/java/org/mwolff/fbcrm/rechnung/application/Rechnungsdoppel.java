@@ -3,6 +3,7 @@ package org.mwolff.fbcrm.rechnung.application;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.Year;
 import java.util.List;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.fbcrm.angebot.domain.Angebot;
@@ -70,7 +71,8 @@ final class Rechnungsdoppel {
           Abrechnungsmodus.AUFWAND,
           new BigDecimal("160.00"),
           Einheit.STUNDE,
-          STUNDENSATZ);
+          STUNDENSATZ,
+          Year.of(2026));
 
   static final Angebotsposition WARTUNG =
       new Angebotsposition(
@@ -79,7 +81,8 @@ final class Rechnungsdoppel {
           Abrechnungsmodus.AUFWAND,
           new BigDecimal("10.00"),
           Einheit.STUNDE,
-          new BigDecimal("130.00"));
+          new BigDecimal("130.00"),
+          Year.of(2026));
 
   static final Angebotsposition PAUSCHALE =
       new Angebotsposition(
@@ -88,7 +91,8 @@ final class Rechnungsdoppel {
           Abrechnungsmodus.FESTPREIS,
           BigDecimal.ONE,
           Einheit.PAUSCHAL,
-          PAUSCHALPREIS);
+          PAUSCHALPREIS,
+          Year.of(2026));
 
   private Rechnungsdoppel() {}
 
@@ -117,6 +121,7 @@ final class Rechnungsdoppel {
         status.intern(),
         status,
         ANGEBOTSDATUM,
+        "Website-Relaunch",
         "Neugestaltung der Website",
         positionen,
         ANGELEGT,
@@ -221,7 +226,8 @@ final class Rechnungsdoppel {
         Abrechnungsmodus.AUFWAND,
         new BigDecimal(menge),
         Einheit.STUNDE,
-        STUNDENSATZ);
+        STUNDENSATZ,
+        Year.of(2026));
   }
 
   /** Eine Rechnungsposition zur Beratung ueber die angegebene Menge. */

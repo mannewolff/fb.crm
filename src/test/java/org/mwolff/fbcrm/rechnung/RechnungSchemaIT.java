@@ -79,8 +79,9 @@ class RechnungSchemaIT extends AbstractIntegrationTest {
     angebotId = jdbc.queryForObject("SELECT id FROM angebot LIMIT 1", Long.class).longValue();
     jdbc.update(
         "INSERT INTO angebot_position"
-            + " (angebot_id, position, bezeichnung, abrechnungsmodus, menge, einheit, einzelpreis)"
-            + " VALUES (?, 1, 'Beratung', 'AUFWAND', 10, 'STUNDE', 120.00)",
+            + " (angebot_id, position, bezeichnung, abrechnungsmodus, menge, einheit, einzelpreis,"
+            + " leistungsjahr)"
+            + " VALUES (?, 1, 'Beratung', 'AUFWAND', 10, 'STUNDE', 120.00, 2026)",
         Long.valueOf(angebotId));
     angebotPositionId =
         jdbc.queryForObject("SELECT id FROM angebot_position LIMIT 1", Long.class).longValue();

@@ -2,6 +2,8 @@ package org.mwolff.fbcrm.angebot.web;
 
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Digits;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import java.math.BigDecimal;
@@ -37,12 +39,18 @@ import org.mwolff.fbcrm.common.Einheit;
  * Bean-Validation verwendet. {@code @DecimalMin} und {@code @Digits} bleiben: Sie gelten fuer einen
  * <em>vorhandenen</em> Wert und gehen an {@code null} vorbei.
  *
+ * <p><b>Das Leistungsjahr ist nachgebbar</b> (Issue #305, Plan #303, E2, E10). Fehlt es, belegt
+ * {@code AngebotAendernUseCase} es vor; die Systemgrenze am internen Angebot schickt es gar nicht
+ * mit. Ist es da, liegt es zwischen 2000 und 2099 — dieselbe Grenze wie der CHECK in {@code
+ * V23__angebot_position_leistungsjahr.sql}, hier mit der Meldung am Feld der Position.
+ *
  * @param id Kennung der Position, die fortgeschrieben werden soll, oder {@code null} fuer eine neue
  * @param bezeichnung die Leistung; nicht leer
  * @param abrechnungsmodus nach Aufwand oder zum Festpreis, oder {@code null}
  * @param menge Menge in der angegebenen Einheit, nicht negativ, oder {@code null}
  * @param einheit Einheit der Menge, oder {@code null}
  * @param einzelpreis Netto-Preis je Einheit, nicht negativ, oder {@code null}
+ * @param leistungsjahr das Jahr der Leistung, 2000 bis 2099, oder {@code null} fuer die Vorbelegung
  */
 public record AngebotPositionRequest(
     @Nullable Long id,
@@ -50,13 +58,15 @@ public record AngebotPositionRequest(
     @Nullable Abrechnungsmodus abrechnungsmodus,
     @Nullable @DecimalMin("0") @Digits(integer = 10, fraction = 2) BigDecimal menge,
     @Nullable Einheit einheit,
-    @Nullable @DecimalMin("0") @Digits(integer = 10, fraction = 2) BigDecimal einzelpreis) {
+    @Nullable @DecimalMin("0") @Digits(integer = 10, fraction = 2) BigDecimal einzelpreis,
+    @Nullable @Min(2000) @Max(2099) Integer leistungsjahr) {
 
   /** Die Meldung am Feld, wenn die Bezeichnung fehlt oder nur aus Leerzeichen besteht. */
   static final String BEZEICHNUNG_FEHLT = "Jede Position braucht eine Bezeichnung.";
 
   /** Dieselbe Position als Angabe in der Sprache der Anwendungsschicht. */
   Positionsangabe angabe() {
-    return new Positionsangabe(id, bezeichnung, abrechnungsmodus, menge, einheit, einzelpreis);
+    return new Positionsangabe(
+        id, bezeichnung, abrechnungsmodus, menge, einheit, einzelpreis, leistungsjahr);
   }
 }

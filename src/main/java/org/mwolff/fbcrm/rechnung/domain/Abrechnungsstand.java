@@ -1,10 +1,7 @@
 package org.mwolff.fbcrm.rechnung.domain;
 
 import java.math.BigDecimal;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
-import org.jspecify.annotations.Nullable;
 import org.mwolff.fbcrm.angebot.domain.Angebotsposition;
 import org.mwolff.fbcrm.common.Geldrechnung;
 
@@ -16,11 +13,9 @@ import org.mwolff.fbcrm.common.Geldrechnung;
  * Angebotsansicht, die Liste der abrechenbaren Angebote und spaeter den Sprung auf „abgerechnet"
  * (#160, Kriterien 4, 6, 7, 26).
  *
- * <p><b>Entwuerfe zaehlen wie gestellte Rechnungen.</b> Sonst zeigte ein zweiter Entwurf zum selben
- * Angebot dieselben Mengen noch einmal als offen, und es wuerde doppelt abgerechnet (Kriterium 6,
- * Frage 3 aus #160). Fuer die Maske eines Entwurfs bleibt genau dieser Entwurf aussen vor ({@link
- * #ohne(List, List, long)}): Seine eigene Menge ist keine fremde Abrechnung, sondern das, was
- * gerade eingetragen wird.
+ * <p><b>Entwuerfe zaehlen wie gestellte Rechnungen</b> — warum, steht an der einen Stelle, die die
+ * Mengen summiert: {@link AbgerechneteMengen} (Plan #303, E3). Fuer die Maske eines Entwurfs bleibt
+ * genau dieser Entwurf aussen vor ({@link #ohne(List, List, long)}).
  *
  * @param positionen je Angebotsposition ein Stand, in der Reihenfolge der uebergebenen Positionen
  */
@@ -39,7 +34,7 @@ public record Abrechnungsstand(List<Positionsstand> positionen) {
    */
   public static Abrechnungsstand fuer(
       final List<Angebotsposition> angebotspositionen, final List<Rechnung> rechnungen) {
-    return berechne(angebotspositionen, rechnungen, null);
+    return berechne(angebotspositionen, AbgerechneteMengen.aus(rechnungen));
   }
 
   /**
@@ -53,7 +48,7 @@ public record Abrechnungsstand(List<Positionsstand> positionen) {
       final List<Angebotsposition> angebotspositionen,
       final List<Rechnung> rechnungen,
       final long ausgenommen) {
-    return berechne(angebotspositionen, rechnungen, ausgenommen);
+    return berechne(angebotspositionen, AbgerechneteMengen.ohne(rechnungen, ausgenommen));
   }
 
   /** Ob an mindestens einer Position des Angebots noch etwas offen ist (Kriterium 2). */
@@ -67,24 +62,16 @@ public record Abrechnungsstand(List<Positionsstand> positionen) {
   }
 
   private static Abrechnungsstand berechne(
-      final List<Angebotsposition> angebotspositionen,
-      final List<Rechnung> rechnungen,
-      final @Nullable Long ausgenommen) {
-    final Map<Long, BigDecimal> abgerechnet = new HashMap<>();
-    for (final Rechnung rechnung : rechnungen) {
-      if (ausgenommen != null && ausgenommen == rechnung.requireId()) {
-        continue;
-      }
-      for (final Rechnungsposition position : rechnung.positionen()) {
-        abgerechnet.merge(position.angebotPositionId(), position.menge(), BigDecimal::add);
-      }
-    }
+      final List<Angebotsposition> angebotspositionen, final AbgerechneteMengen abgerechnet) {
     return new Abrechnungsstand(
         angebotspositionen.stream()
             .map(
                 position ->
                     new Positionsstand(
-                        position, abgerechnet.getOrDefault(position.requireId(), BigDecimal.ZERO)))
+                        position,
+                        abgerechnet
+                            .jePosition()
+                            .getOrDefault(position.requireId(), BigDecimal.ZERO)))
             .toList());
   }
 }

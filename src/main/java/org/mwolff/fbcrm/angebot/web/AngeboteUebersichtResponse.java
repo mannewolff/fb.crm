@@ -3,6 +3,7 @@ package org.mwolff.fbcrm.angebot.web;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
+import org.jspecify.annotations.Nullable;
 import org.mwolff.fbcrm.angebot.application.AngebotMitFirma;
 import org.mwolff.fbcrm.angebot.domain.Angebot;
 import org.mwolff.fbcrm.angebot.domain.Angebotsstatus;
@@ -29,6 +30,7 @@ public record AngeboteUebersichtResponse(List<Zeile> angebote) {
    * @param firmaId Kennung der Firma
    * @param firmaName Name der Firma
    * @param angebotDatum Datum des Angebots
+   * @param titel Titel des Angebots, {@code null} beim Angebot von vor #314 (Issue #325)
    * @param intern ob das Angebot die eigene interne Arbeit festhaelt (Issue #226)
    * @param status Status des Angebots
    * @param summe Netto-Summe, gerechnet und nicht gespeichert (E5)
@@ -38,6 +40,7 @@ public record AngeboteUebersichtResponse(List<Zeile> angebote) {
       long firmaId,
       String firmaName,
       LocalDate angebotDatum,
+      @Nullable String titel,
       boolean intern,
       Angebotsstatus status,
       BigDecimal summe) {
@@ -49,6 +52,7 @@ public record AngeboteUebersichtResponse(List<Zeile> angebote) {
           angebot.firmaId(),
           zeile.firmaName(),
           angebot.angebotDatum(),
+          angebot.titel(),
           angebot.intern(),
           angebot.status(),
           angebot.summe());

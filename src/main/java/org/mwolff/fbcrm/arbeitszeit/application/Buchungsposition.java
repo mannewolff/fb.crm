@@ -1,13 +1,16 @@
 package org.mwolff.fbcrm.arbeitszeit.application;
 
 import java.time.LocalDate;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Eine Angebotsposition, wie die Zeiterfassung sie nennt (Plan #194, A15, A20).
  *
- * <p>Beide Lesewege dieses Pakets zeigen dieselben Angaben: die Monatsliste an jeder Zeile und die
+ * <p>Beide Lesewege dieses Pakets lesen denselben Begriff: die Monatsliste an jeder Zeile und die
  * Auswahlliste des Dialogs an jedem Eintrag. Darum ein Begriff und nicht zwei — zwei liefen beim
  * ersten Nachziehen auseinander, und die Oberflaeche muesste zwei Formen derselben Aussage lesen.
+ * Nicht jede Angabe erscheint auf beiden Wegen: Den Titel des Angebots zeigt nur die Auswahl des
+ * Dialogs, die Monatsliste nicht (Issue #328; Plan #323, E5).
  *
  * <p><b>Das Angebot und die Firma stehen mit darin</b>, weil die Position allein nichts sagt: Die
  * Zeile der Monatsliste nennt den Kunden (Issue #193, Kriterium 5), und die Auswahlliste gruppiert
@@ -25,6 +28,8 @@ import java.time.LocalDate;
  * @param bezeichnung die Leistung, wie das Angebot sie nennt
  * @param angebotId Kennung des Angebots, zu dem die Position gehoert
  * @param angebotDatum Datum dieses Angebots
+ * @param angebotTitel Titel dieses Angebots, {@code null}, wo es keinen traegt (Issue #328; Plan
+ *     #323, E1)
  * @param intern ob das Angebot die eigene interne Arbeit festhaelt (Kriterium 2 von #207)
  * @param firmaName Name der Firma, an die das Angebot geht
  */
@@ -33,5 +38,6 @@ public record Buchungsposition(
     String bezeichnung,
     long angebotId,
     LocalDate angebotDatum,
+    @Nullable String angebotTitel,
     boolean intern,
     String firmaName) {}

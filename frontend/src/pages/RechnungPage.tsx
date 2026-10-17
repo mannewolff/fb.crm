@@ -504,7 +504,7 @@ function Angaben({ rechnung }: { readonly rechnung: Rechnung }) {
               underline="hover"
               sx={{ fontSize: 13.5, fontWeight: 500 }}
             >
-              Zum Angebot
+              {rechnung.angebotTitel ?? 'Zum Angebot'}
             </Link>
           ),
         },

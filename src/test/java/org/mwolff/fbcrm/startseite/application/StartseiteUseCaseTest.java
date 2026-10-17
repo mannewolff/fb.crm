@@ -153,7 +153,8 @@ class StartseiteUseCaseTest {
           Abrechnungsmodus.FESTPREIS,
           new BigDecimal("5.00"),
           Einheit.STUNDE,
-          BigDecimal.ZERO);
+          BigDecimal.ZERO,
+          Year.of(2026));
 
   private static final Angebotsposition GEWANDELT =
       new Angebotsposition(
@@ -162,7 +163,8 @@ class StartseiteUseCaseTest {
           Abrechnungsmodus.FESTPREIS,
           new BigDecimal("10.00"),
           Einheit.STUNDE,
-          new BigDecimal("90.00"));
+          new BigDecimal("90.00"),
+          Year.of(2026));
 
   private static final Angebotsposition PERSONENTAGE =
       new Angebotsposition(
@@ -171,7 +173,8 @@ class StartseiteUseCaseTest {
           Abrechnungsmodus.AUFWAND,
           new BigDecimal("10.00"),
           Einheit.PERSONENTAG,
-          new BigDecimal("800.00"));
+          new BigDecimal("800.00"),
+          Year.of(2026));
 
   /** Nichts offen: der Betrag, den eine durchweg bezahlte Monatsabrechnung traegt (Issue #284). */
   private static final BigDecimal NICHTS_OFFEN = new BigDecimal("0.00");
@@ -254,7 +257,8 @@ class StartseiteUseCaseTest {
         Abrechnungsmodus.AUFWAND,
         new BigDecimal(menge),
         Einheit.STUNDE,
-        new BigDecimal(einzelpreis));
+        new BigDecimal(einzelpreis),
+        Year.of(2026));
   }
 
   private static AngebotMitFirma angebot(
@@ -275,6 +279,7 @@ class StartseiteUseCaseTest {
             status.intern(),
             status,
             ANGEBOTSDATUM,
+            "Website-Relaunch",
             "Neugestaltung der Website",
             positionen,
             ANGELEGT,

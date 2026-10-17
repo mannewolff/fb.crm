@@ -55,19 +55,37 @@ const NACHGETRAGEN = {
   dokument: true,
 };
 
-/** Ein abrechenbares Angebot der Wahl „Neue Rechnung". */
+/** Ein abrechenbares Angebot der Wahl „Neue Rechnung" — eines von vor #316, ohne Titel. */
 const WAHL = {
   angebotId: 9,
   firmaId: 5,
   firmaName: 'Adler AG',
   angebotDatum: '2026-09-24',
+  titel: null,
   offenerBetrag: 9600,
+};
+
+/**
+ * Zwei Angebote derselben Firma vom selben Tag, beide mit offenem Betrag — der Fall, aus dem der
+ * Titel entstanden ist (Issue #327, Szenario „Rechnung zum richtigen Angebot anlegen").
+ */
+const WAHL_JAVA = {
+  ...WAHL,
+  firmaName: 'IT-Bildungshaus',
+  titel: 'Java-Grundkurs',
+};
+const WAHL_SPRING = {
+  ...WAHL_JAVA,
+  angebotId: 10,
+  titel: 'Spring-Aufbaukurs',
+  offenerBetrag: 4800,
 };
 
 /** Der frische Entwurf, mit dem das Anlegen antwortet — die Seite braucht nur seine Kennung. */
 const NEUER_ENTWURF = {
   id: 7,
   angebotId: 9,
+  angebotTitel: null,
   firmaId: 5,
   firmaName: 'Adler AG',
   rechnungDatum: '2026-10-01',
@@ -377,6 +395,62 @@ describe('RechnungenPage — die Wahl „Neue Rechnung" (#160, Kriterium 2)', ()
     const eintrag = wahl.getByRole('button', { name: /Adler AG/ });
     expect(eintrag).toHaveTextContent('24.09.2026');
     expect(eintrag).toHaveTextContent('9.600,00 €');
+  });
+
+  it('Szenario: Rechnung zum richtigen Angebot anlegen', async () => {
+    // Angenommen beide Angebote haben noch offene Betraege
+    const nutzer = userEvent.setup();
+    fetchNachPfad({
+      [WEG_LISTE]: json(200, { rechnungen: [] }),
+      [WEG_WAHL]: json(200, { angebote: [WAHL_JAVA, WAHL_SPRING] }),
+    });
+
+    // Wenn Manne eine neue Rechnung anlegt und das Angebot waehlt
+    renderSeite();
+    await nutzer.click(await screen.findByRole('button', { name: 'Neue Rechnung' }));
+
+    // Dann zeigt die Auswahl die Angebote „Java-Grundkurs" und „Spring-Aufbaukurs"
+    const wahl = within(await screen.findByRole('dialog'));
+    const java = wahl.getByRole('button', { name: /Java-Grundkurs/ });
+    const spring = wahl.getByRole('button', { name: /Spring-Aufbaukurs/ });
+    expect(java).toHaveTextContent('IT-Bildungshaus');
+    expect(java).toHaveTextContent('24.09.2026');
+    expect(java).toHaveTextContent('9.600,00 €');
+    expect(spring).toHaveTextContent('IT-Bildungshaus');
+    expect(spring).toHaveTextContent('24.09.2026');
+    expect(spring).toHaveTextContent('4.800,00 €');
+  });
+
+  it('laesst die Zeile eines Angebots ohne Titel bei Firma, Datum und Betrag (Issue #327, Kriterium 7)', async () => {
+    const nutzer = userEvent.setup();
+    fetchNachPfad({
+      [WEG_LISTE]: json(200, { rechnungen: [] }),
+      [WEG_WAHL]: json(200, { angebote: [WAHL] }),
+    });
+
+    renderSeite();
+    await nutzer.click(await screen.findByRole('button', { name: 'Neue Rechnung' }));
+
+    const eintrag = within(await screen.findByRole('dialog')).getByRole('button', {
+      name: /Adler AG/,
+    });
+    // Genau Firma, Datum und Betrag — nichts dazwischen.
+    expect(eintrag.textContent).toMatch(/^Adler AG24\.09\.20269\.600,00\s€$/);
+  });
+
+  it('bricht einen langen Titel in der Wahl um, statt ihn zu kuerzen (Issue #327, Kriterium 8)', async () => {
+    const nutzer = userEvent.setup();
+    fetchNachPfad({
+      [WEG_LISTE]: json(200, { rechnungen: [] }),
+      [WEG_WAHL]: json(200, { angebote: [WAHL_JAVA] }),
+    });
+
+    renderSeite();
+    await nutzer.click(await screen.findByRole('button', { name: 'Neue Rechnung' }));
+
+    const titel = within(await screen.findByRole('dialog')).getByText('Java-Grundkurs');
+    expect(titel).toHaveStyle({ overflowWrap: 'anywhere' });
+    expect(titel).not.toHaveStyle({ whiteSpace: 'nowrap' });
   });
 
   it('traegt die Monatswahl ueber der Liste, vorbelegt mit dem laufenden Monat', async () => {

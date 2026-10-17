@@ -9,6 +9,7 @@ import static org.mockito.Mockito.when;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.Year;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -80,7 +81,8 @@ class BuchbarePositionenUseCaseTest {
         modus,
         new BigDecimal("5.00"),
         einheit,
-        new BigDecimal("100.00"));
+        new BigDecimal("100.00"),
+        Year.of(2026));
   }
 
   private static Angebot angebot(
@@ -96,6 +98,7 @@ class BuchbarePositionenUseCaseTest {
         status.intern(),
         status,
         datum,
+        "Website-Relaunch",
         "Wartungsvertrag",
         List.of(positionen),
         Zeitdoppel.FRUEHER,
@@ -222,6 +225,7 @@ class BuchbarePositionenUseCaseTest {
     assertThat(erste.id()).isEqualTo(Zeitdoppel.KONZEPTION_ID);
     assertThat(erste.angebotId()).isEqualTo(Zeitdoppel.ANGEBOT);
     assertThat(erste.angebotDatum()).isEqualTo(LocalDate.of(2026, 11, 1));
+    assertThat(erste.angebotTitel()).isEqualTo("Website-Relaunch");
     assertThat(erste.firmaName()).isEqualTo(Zeitdoppel.FIRMENNAME);
   }
 

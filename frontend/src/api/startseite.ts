@@ -1,5 +1,14 @@
 import { apiJson } from './client';
-import { FORMFEHLER, inHundertsteln, jaNein, liste, objekt, text, zahl } from './verengen';
+import {
+  FORMFEHLER,
+  inHundertsteln,
+  jaNein,
+  liste,
+  objekt,
+  text,
+  textOderNull,
+  zahl,
+} from './verengen';
 import { alsAngebotsstatus } from '../lib/angebotsstatus';
 import type { Angebotsstatus } from '../lib/angebotsstatus';
 import { alsZeitraumart } from '../lib/zeitraum';
@@ -43,6 +52,8 @@ export interface StartseiteAngebotszeile {
   readonly firmaName: string;
   /** Tag (`YYYY-MM-DD`), wie das Backend ein `LocalDate` liefert. */
   readonly angebotDatum: string;
+  /** Titel des Angebots; `null` beim Angebot von vor #316 — dann traegt das Datum den Weg. */
+  readonly angebotTitel: string | null;
   readonly status: Angebotsstatus;
 }
 
@@ -56,6 +67,7 @@ export interface Anteilszeile {
   readonly angebotId: number;
   readonly firmaName: string;
   readonly angebotDatum: string;
+  readonly angebotTitel: string | null;
   /** Sein Anteil am Betrag, netto und in ganzen Cent. */
   readonly nettoInCent: number;
 }
@@ -230,6 +242,7 @@ function parseAngebotszeile(wert: unknown): StartseiteAngebotszeile {
     angebotId: zahl(zeile.angebotId),
     firmaName: text(zeile.firmaName),
     angebotDatum: text(zeile.angebotDatum),
+    angebotTitel: textOderNull(zeile.angebotTitel),
     status: angebotsstatus(zeile.status),
   };
 }
@@ -240,6 +253,7 @@ function parseAnteilszeile(wert: unknown): Anteilszeile {
     angebotId: zahl(zeile.angebotId),
     firmaName: text(zeile.firmaName),
     angebotDatum: text(zeile.angebotDatum),
+    angebotTitel: textOderNull(zeile.angebotTitel),
     nettoInCent: inHundertsteln(zeile.netto),
   };
 }

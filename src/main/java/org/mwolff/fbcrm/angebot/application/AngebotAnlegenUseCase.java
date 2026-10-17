@@ -24,6 +24,10 @@ import org.springframework.transaction.annotation.Transactional;
  * {@link Angebotsstatus#LAEUFT} (Issue #226); Beschreibung und Positionen bekommt das Angebot
  * danach ueber das Aendern.
  *
+ * <p><b>Der Titel kommt schon beim Anlegen herein</b> (Issue #317; #314, Kriterium 2) und nicht
+ * erst ueber das Aendern — anders als Beschreibung und Positionen: Ohne Titel entsteht kein
+ * Angebot. Getrimmt und geprueft wird er im Konstruktor von {@link Angebot} (Plan #315, E1).
+ *
  * <p><b>Die Wahl des Kunden.</b> Die Firma muss es geben und sie darf nicht stillgelegt sein — an
  * eine stillgelegte Firma geht kein neues Angebot. Der Ansprechpartner ist optional und geht durch
  * {@link Ansprechpartnerwahl}. Geprueft wird vor allem anderen: Eine abgewiesene Anlage schreibt
@@ -53,6 +57,7 @@ public class AngebotAnlegenUseCase {
    * Legt an eine Firma ein Angebot an.
    *
    * @param firmaId Kennung der Firma, an die das Angebot geht
+   * @param titel die einzeilige Benennung des Angebots
    * @param ansprechpartnerId Kennung des Ansprechpartners bei dieser Firma, oder {@code null}
    * @param intern ob das Angebot die eigene interne Arbeit festhaelt
    * @throws FirmaNichtGefunden wenn es die Firma nicht gibt
@@ -60,7 +65,10 @@ public class AngebotAnlegenUseCase {
    * @throws AnsprechpartnerNichtWaehlbar wenn der Ansprechpartner nicht zur Wahl steht
    */
   public Angebot anlegen(
-      final long firmaId, final @Nullable Long ansprechpartnerId, final boolean intern) {
+      final long firmaId,
+      final String titel,
+      final @Nullable Long ansprechpartnerId,
+      final boolean intern) {
     final Firma firma = firmen.findById(firmaId).orElseThrow(FirmaNichtGefunden::new);
     if (!firma.aktiv()) {
       throw new FirmaStillgelegt();
@@ -76,6 +84,7 @@ public class AngebotAnlegenUseCase {
             intern,
             intern ? Angebotsstatus.LAEUFT : Angebotsstatus.ANGELEGT,
             heute,
+            titel,
             null,
             List.of(),
             jetzt,

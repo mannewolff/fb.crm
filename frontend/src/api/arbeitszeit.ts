@@ -1,5 +1,5 @@
 import { apiJson, apiOhneInhalt } from './client';
-import { inHundertsteln, jaNein, liste, objekt, text, zahl } from './verengen';
+import { inHundertsteln, jaNein, liste, objekt, text, textOderNull, zahl } from './verengen';
 
 /**
  * Alle Wege der Arbeitszeit: die Monatsliste, die buchbaren Positionen und die drei Schreibwege
@@ -33,6 +33,8 @@ export interface Buchungsposition {
   readonly angebotId: number;
   /** Tag (`YYYY-MM-DD`), wie das Backend ein `LocalDate` liefert. */
   readonly angebotDatum: string;
+  /** Titel des Angebots, `null`, wo es keinen traegt (Issue #328). */
+  readonly angebotTitel: string | null;
   /** Ob die Position zu einem internen Angebot gehoert (Issue #229). */
   readonly intern: boolean;
   readonly firmaName: string;
@@ -108,6 +110,7 @@ function parseBuchungsposition(wert: unknown): Buchungsposition {
     bezeichnung: text(position.bezeichnung),
     angebotId: zahl(position.angebotId),
     angebotDatum: text(position.angebotDatum),
+    angebotTitel: textOderNull(position.angebotTitel),
     intern: jaNein(position.intern),
     firmaName: text(position.firmaName),
   };

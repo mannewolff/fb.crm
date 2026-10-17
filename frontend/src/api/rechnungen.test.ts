@@ -47,6 +47,7 @@ const ZEILE_VERENGT = {
 const ENTWURF = {
   id: 4,
   angebotId: 9,
+  angebotTitel: 'Website-Relaunch',
   firmaId: 5,
   firmaName: 'Adler AG',
   rechnungDatum: '2026-10-01',
@@ -66,6 +67,7 @@ const ENTWURF = {
 const ENTWURF_VERENGT = {
   id: 4,
   angebotId: 9,
+  angebotTitel: 'Website-Relaunch',
   firmaId: 5,
   firmaName: 'Adler AG',
   rechnungDatum: '2026-10-01',
@@ -156,6 +158,7 @@ const WAHL_ZEILE = {
   firmaId: 5,
   firmaName: 'Adler AG',
   angebotDatum: '2026-09-24',
+  titel: 'Website-Relaunch',
   offenerBetrag: 9600,
 };
 
@@ -164,6 +167,7 @@ const WAHL_ZEILE_VERENGT = {
   firmaId: 5,
   firmaName: 'Adler AG',
   angebotDatum: '2026-09-24',
+  titel: 'Website-Relaunch',
   offenerBetragInCent: 960000,
 };
 
@@ -229,6 +233,10 @@ describe('parseRechnung', () => {
     expect(parseRechnung(GESTELLT)).toEqual(GESTELLT_VERENGT);
   });
 
+  it('nimmt eine Rechnung zum Angebot ohne Titel an (Issue #327, Kriterium 7)', () => {
+    expect(parseRechnung({ ...ENTWURF, angebotTitel: null }).angebotTitel).toBeNull();
+  });
+
   it('nimmt eine Rechnung ohne Leistungszeitraum an', () => {
     expect(parseRechnung({ ...ENTWURF, leistungszeitraum: null }).leistungszeitraum).toBeNull();
   });
@@ -250,6 +258,8 @@ describe('parseRechnung', () => {
     ['null', null],
     ['ohne id', { ...ENTWURF, id: '4' }],
     ['ohne angebotId', { ...ENTWURF, angebotId: undefined }],
+    ['ohne angebotTitel', { ...ENTWURF, angebotTitel: undefined }],
+    ['angebotTitel als Zahl', { ...ENTWURF, angebotTitel: 7 }],
     ['ohne firmaId', { ...ENTWURF, firmaId: null }],
     ['ohne Firmenname', { ...ENTWURF, firmaName: 5 }],
     ['ohne Rechnungsdatum', { ...ENTWURF, rechnungDatum: null }],
@@ -337,6 +347,12 @@ describe('parseAbrechenbareAngebote', () => {
     });
   });
 
+  it('verengt eine Zeile zum Angebot ohne Titel (Issue #327, Kriterium 7)', () => {
+    expect(
+      parseAbrechenbareAngebote({ angebote: [{ ...WAHL_ZEILE, titel: null }] }).angebote[0].titel,
+    ).toBeNull();
+  });
+
   it('verengt die leere Wahl', () => {
     expect(parseAbrechenbareAngebote({ angebote: [] })).toEqual({ angebote: [] });
   });
@@ -348,6 +364,7 @@ describe('parseAbrechenbareAngebote', () => {
     ['Zeile ohne firmaId', { angebote: [{ ...WAHL_ZEILE, firmaId: '5' }] }],
     ['Zeile ohne Firmenname', { angebote: [{ ...WAHL_ZEILE, firmaName: null }] }],
     ['Zeile ohne Angebotsdatum', { angebote: [{ ...WAHL_ZEILE, angebotDatum: 7 }] }],
+    ['Zeile ohne Titel', { angebote: [{ ...WAHL_ZEILE, titel: undefined }] }],
     ['Zeile ohne offenen Betrag', { angebote: [{ ...WAHL_ZEILE, offenerBetrag: undefined }] }],
   ])('weist eine Antwort ab: %s', (_fall, rumpf) => {
     expect(() => parseAbrechenbareAngebote(rumpf)).toThrow(TypeError);

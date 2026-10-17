@@ -81,6 +81,8 @@ export interface AbrechenbaresAngebot {
   readonly firmaId: number;
   readonly firmaName: string;
   readonly angebotDatum: string;
+  /** Der Titel des Angebots, oder `null` beim Angebot ohne Titel (Issue #327). */
+  readonly titel: string | null;
   /** Summe der offenen Mengen mal Einzelpreis in ganzen Cent, vom Server gerechnet. */
   readonly offenerBetragInCent: number;
 }
@@ -140,6 +142,8 @@ export interface Belegabsender {
 export interface Rechnung {
   readonly id: number;
   readonly angebotId: number;
+  /** Der Titel des abgerechneten Angebots, oder `null` beim Angebot ohne Titel (Issue #327). */
+  readonly angebotTitel: string | null;
   readonly firmaId: number;
   readonly firmaName: string;
   readonly rechnungDatum: string;
@@ -294,6 +298,7 @@ export function parseRechnung(wert: unknown): Rechnung {
   return {
     id: zahl(rechnung.id),
     angebotId: zahl(rechnung.angebotId),
+    angebotTitel: textOderNull(rechnung.angebotTitel),
     firmaId: zahl(rechnung.firmaId),
     firmaName: text(rechnung.firmaName),
     rechnungDatum: text(rechnung.rechnungDatum),
@@ -339,6 +344,7 @@ function parseWahlZeile(wert: unknown): AbrechenbaresAngebot {
     firmaId: zahl(zeile.firmaId),
     firmaName: text(zeile.firmaName),
     angebotDatum: text(zeile.angebotDatum),
+    titel: textOderNull(zeile.titel),
     offenerBetragInCent: inHundertsteln(zeile.offenerBetrag),
   };
 }

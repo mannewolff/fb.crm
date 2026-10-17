@@ -1,7 +1,6 @@
 package org.mwolff.fbcrm.angebot.web;
 
 import jakarta.validation.Valid;
-import org.jspecify.annotations.Nullable;
 import org.mwolff.fbcrm.angebot.application.AngebotAnlegenUseCase;
 import org.mwolff.fbcrm.angebot.application.AngeboteDerFirmaUseCase;
 import org.mwolff.fbcrm.angebot.application.KundenangabenUseCase;
@@ -57,19 +56,20 @@ public class FirmaAngeboteController {
    * Legt an die Firma ein Angebot an (Kriterium 2).
    *
    * @param firmaId Kennung der Firma
-   * @param anfrage der Rumpf mit dem optionalen Ansprechpartner und dem Kennzeichen; er darf ganz
-   *     fehlen, und ein fehlendes Kennzeichen heisst „an einen Kunden" (Issue #226)
+   * @param anfrage der Rumpf mit dem Titel, dem optionalen Ansprechpartner und dem Kennzeichen; er
+   *     ist Pflicht (Issue #317, E4), und ein fehlendes Kennzeichen heisst „an einen Kunden" (Issue
+   *     #226)
    */
   @PostMapping
   @ResponseStatus(HttpStatus.CREATED)
   public AngebotResponse anlegen(
-      @PathVariable final long firmaId,
-      @Valid @RequestBody(required = false) final @Nullable AngebotAnlegenRequest anfrage) {
+      @PathVariable final long firmaId, @Valid @RequestBody final AngebotAnlegenRequest anfrage) {
     final Angebot angebot =
         anlegenUseCase.anlegen(
             firmaId,
-            anfrage == null ? null : anfrage.ansprechpartnerId(),
-            anfrage != null && Boolean.TRUE.equals(anfrage.intern()));
+            anfrage.titel(),
+            anfrage.ansprechpartnerId(),
+            Boolean.TRUE.equals(anfrage.intern()));
     return AngebotResponse.of(angebot, kundenUseCase.zu(angebot));
   }
 }

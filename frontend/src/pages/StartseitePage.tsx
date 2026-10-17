@@ -12,6 +12,8 @@ import { useEffect, useState } from 'react';
 import type { ChangeEvent, ReactNode } from 'react';
 import { Link as RouterLink, useSearchParams } from 'react-router-dom';
 
+import { forecast } from '../api/forecast';
+import type { Forecast } from '../api/forecast';
 import { startseite } from '../api/startseite';
 import type {
   Anteilszeile,
@@ -21,7 +23,9 @@ import type {
   Startseitenstand,
   Zeitraumart,
 } from '../api/startseite';
+import Angebotsweg from '../components/Angebotsweg';
 import AngebotsstatusChip from '../components/AngebotsstatusChip';
+import Forecasttafel from '../components/Forecasttafel';
 import Karte from '../components/Karte';
 import Kennzahlkachel from '../components/Kennzahlkachel';
 import { useKopfPfad } from '../components/KopfPfad';
@@ -75,6 +79,12 @@ import { ABSTAND_BUEHNE, RADIUS_RUND, ZAHLEN_KLASSE } from '../theme';
  * Kachelreihe traegt Betraege, interne Arbeit traegt keinen Preis. Eine Stundenzahl zwischen vier
  * Euro-Kacheln laese sich wie eine fuenfte Kennzahl in Euro.
  *
+ * <b>Der Forecast hat seinen eigenen Ladeweg</b> (Issue #313; #302 Kriterium 7): Er haengt an keinem
+ * Zeitraum, darum laedt er einmal beim Aufbau und nicht bei jedem Wechsel. Seine Karte steht hinter
+ * den vier Kennzahl-Karten (Plan #303, E8) und <b>ausserhalb</b> der Bedingung auf den
+ * Geschaeftsstand (E15): Sonst verschwaende sie bei jedem Wechsel des Zeitraums, solange der neue
+ * laedt. Die beiden Wege fallen getrennt aus — jeder traegt seine eigene Meldung.
+ *
  * <b>Der Weg liegt auf dem Datum</b>, nicht auf der Zeile — wie in {@link Angebotsliste}: Ein
  * Angebot hat keine Nummer, und ein `tr` mit `onClick` waere fuer Tastatur und Screenreader kein
  * Weg.
@@ -96,10 +106,15 @@ const GRUPPE_MONATE = 'Monate';
 const LAEDT = 'Der Geschäftsstand wird geladen …';
 const AUSFALL = 'Der Geschäftsstand ist gerade nicht zu erreichen. Bitte später erneut versuchen.';
 
+const LAEDT_FORECAST = 'Der Forecast wird geladen …';
+const AUSFALL_FORECAST =
+  'Der Forecast ist gerade nicht zu erreichen. Bitte später erneut versuchen.';
+
 const TITEL_IN_ARBEIT = 'Angebote in Arbeit';
 const TITEL_OFFEN = 'Noch nicht abgerechnet';
 const TITEL_OFFENE_RECHNUNGEN = 'Offene Rechnungen';
 const TITEL_ABGERECHNET = 'Abgerechnet';
+const TITEL_FORECAST = 'Forecast';
 
 /**
  * Was je Art des Zeitraums anders heisst (#273, Kriterien 5 und 7).
@@ -218,6 +233,21 @@ type Stand =
 async function laden(zeitraum: string | null): Promise<Stand> {
   try {
     return { art: 'daten', geschaeft: await startseite(zeitraum ?? undefined) };
+  } catch {
+    return { art: 'fehler' };
+  }
+}
+
+/** Was die Ansicht vom Forecast weiss — getrennt vom Geschaeftsstand (Plan #303, E15). */
+type Forecaststand =
+  | { readonly art: 'laedt' }
+  | { readonly art: 'daten'; readonly forecast: Forecast }
+  | { readonly art: 'fehler' };
+
+/** Holt den Forecast und macht auch aus dem Fehlschlag einen Stand. */
+async function ladenForecast(): Promise<Forecaststand> {
+  try {
+    return { art: 'daten', forecast: await forecast() };
   } catch {
     return { art: 'fehler' };
   }
@@ -364,24 +394,6 @@ function InterneStunden({
   );
 }
 
-/** Der Weg zum Angebot, auf seinem Datum — die Gestalt der Zeilenverweise aller Tafeln. */
-function Angebotsweg({ angebotId, tag }: { readonly angebotId: number; readonly tag: string }) {
-  return (
-    <Box
-      component={RouterLink}
-      to={`/angebote/${String(angebotId)}`}
-      className={ZAHLEN_KLASSE}
-      sx={(theme) => ({
-        color: 'inherit',
-        textDecoration: 'none',
-        '&:hover': { color: theme.vars.palette.kupferwolke.kupfer },
-      })}
-    >
-      {tagWort(tag)}
-    </Box>
-  );
-}
-
 /** Eine Zeile der Angebote in Arbeit: Firma, Angebotsdatum, Status (Kriterium 4). */
 function ArbeitZeile({ zeile }: { readonly zeile: StartseiteAngebotszeile }) {
   return (
@@ -389,8 +401,12 @@ function ArbeitZeile({ zeile }: { readonly zeile: StartseiteAngebotszeile }) {
       <Box component="td" sx={{ fontWeight: 600 }}>
         {zeile.firmaName}
       </Box>
-      <Box component="td" sx={{ fontWeight: 500, whiteSpace: 'nowrap' }}>
-        <Angebotsweg angebotId={zeile.angebotId} tag={zeile.angebotDatum} />
+      <Box component="td" sx={{ fontWeight: 500 }}>
+        <Angebotsweg
+          angebotId={zeile.angebotId}
+          tag={zeile.angebotDatum}
+          titel={zeile.angebotTitel}
+        />
       </Box>
       <Box component="td">
         <AngebotsstatusChip status={zeile.status} />
@@ -406,8 +422,12 @@ function OffenZeile({ zeile }: { readonly zeile: Anteilszeile }) {
       <Box component="td" sx={{ fontWeight: 600 }}>
         {zeile.firmaName}
       </Box>
-      <Box component="td" sx={{ fontWeight: 500, whiteSpace: 'nowrap' }}>
-        <Angebotsweg angebotId={zeile.angebotId} tag={zeile.angebotDatum} />
+      <Box component="td" sx={{ fontWeight: 500 }}>
+        <Angebotsweg
+          angebotId={zeile.angebotId}
+          tag={zeile.angebotDatum}
+          titel={zeile.angebotTitel}
+        />
       </Box>
       <Box
         component="td"
@@ -678,6 +698,25 @@ function Listen({ geschaeft }: { readonly geschaeft: Startseitenstand }) {
   );
 }
 
+/** Die Karte „Forecast": laedt, zeigt die Tafel oder meldet ihren eigenen Ausfall (E15). */
+function ForecastKarte({ stand }: { readonly stand: Forecaststand }) {
+  let inhalt: ReactNode;
+  if (stand.art === 'laedt') {
+    inhalt = (
+      <Typography
+        sx={(theme) => ({ fontSize: 12.5, color: theme.vars.palette.kupferwolke.textSchwach })}
+      >
+        {LAEDT_FORECAST}
+      </Typography>
+    );
+  } else if (stand.art === 'fehler') {
+    inhalt = <Alert severity="error">{AUSFALL_FORECAST}</Alert>;
+  } else {
+    inhalt = <Forecasttafel forecast={stand.forecast} />;
+  }
+  return <Karte titel={TITEL_FORECAST}>{inhalt}</Karte>;
+}
+
 export default function StartseitePage() {
   useKopfPfad(KEIN_WEG, 'Start');
   const [parameter, setzeParameter] = useSearchParams();
@@ -697,6 +736,21 @@ export default function StartseitePage() {
       gueltig = false;
     };
   }, [zeitraum]);
+
+  const [forecaststand, setzeForecaststand] = useState<Forecaststand>({ art: 'laedt' });
+
+  // Ohne `zeitraum` in der Liste: Der Forecast haengt an keiner Zeitraumwahl (#302, Kriterium 7).
+  useEffect(() => {
+    let gueltig = true;
+    void ladenForecast().then((neu) => {
+      if (gueltig) {
+        setzeForecaststand(neu);
+      }
+    });
+    return () => {
+      gueltig = false;
+    };
+  }, []);
 
   let kopfinhalt: ReactNode;
   if (stand.art === 'laedt') {
@@ -744,6 +798,7 @@ export default function StartseitePage() {
         {kopfinhalt}
       </Karte>
       {stand.art === 'daten' ? <Listen geschaeft={stand.geschaeft} /> : null}
+      <ForecastKarte stand={forecaststand} />
     </Box>
   );
 }

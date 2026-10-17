@@ -139,6 +139,7 @@ class JahresabschlussUseCaseTest {
             status.intern(),
             status,
             datum,
+            "Website-Relaunch",
             "Neugestaltung der Website",
             List.of(positionen),
             ANGELEGT,
@@ -154,7 +155,8 @@ class JahresabschlussUseCaseTest {
         Abrechnungsmodus.AUFWAND,
         new BigDecimal(menge),
         Einheit.STUNDE,
-        new BigDecimal(einzelpreis));
+        new BigDecimal(einzelpreis),
+        Year.of(2026));
   }
 
   /* Die Stunden je Position, die die Zeiterfassung fuer das Jahr 2025 nennt (E9). */

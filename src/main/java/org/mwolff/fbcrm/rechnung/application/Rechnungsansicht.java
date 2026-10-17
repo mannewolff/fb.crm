@@ -2,6 +2,7 @@ package org.mwolff.fbcrm.rechnung.application;
 
 import java.math.BigDecimal;
 import java.util.List;
+import org.jspecify.annotations.Nullable;
 import org.mwolff.fbcrm.rechnung.domain.Rechnung;
 
 /**
@@ -20,6 +21,8 @@ import org.mwolff.fbcrm.rechnung.domain.Rechnung;
  * @param rechnung die Rechnung selbst
  * @param firmaId Kennung der Firma, an die die Rechnung geht
  * @param firmaName Name dieser Firma
+ * @param angebotTitel Titel des abgerechneten Angebots, oder {@code null} beim Angebot ohne Titel —
+ *     die Seite der Rechnung nennt ihr Angebot damit (Issue #327)
  * @param steuersatz der Satz in Prozent, mit dem diese Rechnung rechnet
  * @param zeilen je Position des Angebots eine Zeile, in der Reihenfolge des Angebots
  */
@@ -27,6 +30,7 @@ public record Rechnungsansicht(
     Rechnung rechnung,
     long firmaId,
     String firmaName,
+    @Nullable String angebotTitel,
     BigDecimal steuersatz,
     List<Abrechnungszeile> zeilen) {
 

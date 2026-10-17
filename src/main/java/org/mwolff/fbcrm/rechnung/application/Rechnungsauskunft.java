@@ -11,6 +11,7 @@ import org.mwolff.fbcrm.angebot.application.AngebotNichtGefunden;
 import org.mwolff.fbcrm.angebot.domain.AngebotRepository;
 import org.mwolff.fbcrm.firma.application.FirmaNichtGefunden;
 import org.mwolff.fbcrm.firma.domain.FirmaRepository;
+import org.mwolff.fbcrm.rechnung.domain.AbgerechneteMengen;
 import org.mwolff.fbcrm.rechnung.domain.Abrechnungsstand;
 import org.mwolff.fbcrm.rechnung.domain.NachgetrageneRechnung;
 import org.mwolff.fbcrm.rechnung.domain.NachgetrageneRechnungRepository;
@@ -25,15 +26,22 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * Was die Rechnung anderen Modulen ueber ihre gestellten Rechnungen sagt (Plan #208, E5).
  *
- * <p><b>Zwei Tueren nach draussen.</b> {@link #gestellte()} ist die Tuer der Startseite (#206): Sie
- * braucht dreierlei — die Summe der gestellten Rechnungen je Monat (Kriterium 7; Plan #274, E4),
- * die schon abgerechneten Mengen je Angebotsposition (Kriterium 5) und die noch offenen Rechnungen
- * selbst (Issue #285). {@link #gestellteRechnungen()} ist die Tuer des Jahresabschlusses (Plan
- * #288, E4): die gestellten Rechnungen einzeln, je Rechnung mit Steuersatz und Firma, die die
+ * <p><b>Zwei Tueren fuer das Gestellte.</b> {@link #gestellte()} ist die Tuer der Startseite
+ * (#206): Sie braucht dreierlei — die Summe der gestellten Rechnungen je Monat (Kriterium 7; Plan
+ * #274, E4), die schon abgerechneten Mengen je Angebotsposition (Kriterium 5) und die noch offenen
+ * Rechnungen selbst (Issue #285). {@link #gestellteRechnungen()} ist die Tuer des Jahresabschlusses
+ * (Plan #288, E4): die gestellten Rechnungen einzeln, je Rechnung mit Steuersatz und Firma, die die
  * Verdichtung je Monat verliert. Beides geht ueber diese Klasse und nicht ueber {@link
  * RechnungRepository}: Der Port gehoert diesem Modul, und ein fremdes Modul, das ihn selbst
  * aufriefe, muesste den Zustand einer Rechnung, den geltenden Steuersatz, die Rundungsregel und den
  * Weg zum Firmennamen kennen.
+ *
+ * <p><b>Die dritte Tuer</b> ist die des Forecasts (Plan #303, E3): {@link #abgerechneteMengen()}
+ * nennt je Angebotsposition die schon abgerechnete Menge und zaehlt dabei — anders als {@link
+ * #gestellte()} — die Entwuerfe mit. Der Forecast zeigt den Rest des {@link Abrechnungsstand} und
+ * nicht den Umsatz (#302, Kriterium 3); summiert wird darum an derselben Stelle wie dort, in {@link
+ * AbgerechneteMengen}. Was im folgenden Absatz ueber die Beschraenkung auf gestellte Rechnungen
+ * steht, gilt fuer die beiden ersten Tueren.
  *
  * <p><b>Nur gestellte Rechnungen</b> — anders als {@link Abrechnungsstand}, der Entwuerfe
  * mitzaehlt, damit ein zweiter Entwurf dieselbe Menge nicht noch einmal als offen zeigt (#160,
@@ -189,6 +197,21 @@ public class Rechnungsauskunft {
             eigene.stream().map(rechnung -> zeile(rechnung, aktuellerSatz, blick)),
             nachgetragene.stream().map(rechnung -> zeile(rechnung, blick)))
         .toList();
+  }
+
+  /**
+   * Die abgerechneten Mengen je Angebotsposition ueber alle Rechnungen, Entwuerfe wie gestellte
+   * (Plan #303, E3).
+   *
+   * <p>Ein Durchlauf ueber {@link RechnungRepository#findAlle()} ohne Blick auf den Zustand,
+   * verdichtet ueber {@link AbgerechneteMengen#aus(List)} — dieselbe Zaehlweise wie im {@link
+   * Abrechnungsstand}. Nachgetragene Rechnungen beruehren die Mengen nicht: Sie gehoeren zu keinem
+   * Angebot.
+   *
+   * @return je Angebotsposition mit mindestens einer Rechnungszeile die Summe ihrer Mengen
+   */
+  public Map<Long, BigDecimal> abgerechneteMengen() {
+    return AbgerechneteMengen.aus(bestand.findAlle()).jePosition();
   }
 
   /* Die Zeile einer geschriebenen Rechnung — ihr Satz ist der geltende, ihre Firma die des Angebots. */

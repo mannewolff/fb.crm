@@ -55,6 +55,7 @@ class AngebotAnlegenUseCaseTest {
   private static final Instant JETZT = Instant.parse("2026-09-27T22:30:00Z");
   private static final LocalDate HEUTE_IN_BERLIN = LocalDate.of(2026, 9, 28);
   private static final Long PERSON = Long.valueOf(Angebotsdoppel.ANSPRECHPARTNER);
+  private static final String TITEL = "Website-Relaunch";
 
   @Captor private ArgumentCaptor<Angebot> angelegtes;
 
@@ -111,7 +112,7 @@ class AngebotAnlegenUseCaseTest {
 
   private Angebot legeAn(final @Nullable Long ansprechpartnerId, final boolean intern) {
     when(angebote.save(any())).thenAnswer(aufruf -> aufruf.getArgument(0));
-    return useCase.anlegen(Angebotsdoppel.FIRMA, ansprechpartnerId, intern);
+    return useCase.anlegen(Angebotsdoppel.FIRMA, TITEL, ansprechpartnerId, intern);
   }
 
   @Test
@@ -131,6 +132,19 @@ class AngebotAnlegenUseCaseTest {
     assertThat(angelegt.createdAt()).isEqualTo(JETZT);
     assertThat(angelegt.updatedAt()).isEqualTo(JETZT);
     verifyNoInteractions(personen);
+  }
+
+  @Test
+  void anlegen_thenTheStoredAngebotCarriesTheGivenTitle() {
+    // Given — Issue #317: der Titel kommt schon beim Anlegen herein (#314, Kriterium 2).
+    firmaIstAktiv();
+
+    // When
+    legeAn(null);
+
+    // Then
+    verify(angebote).save(angelegtes.capture());
+    assertThat(angelegtes.getValue().titel()).isEqualTo(TITEL);
   }
 
   @Test
@@ -202,7 +216,7 @@ class AngebotAnlegenUseCaseTest {
     when(firmen.findById(Angebotsdoppel.FIRMA)).thenReturn(Optional.empty());
 
     // When / Then
-    assertThatThrownBy(() -> useCase.anlegen(Angebotsdoppel.FIRMA, null, false))
+    assertThatThrownBy(() -> useCase.anlegen(Angebotsdoppel.FIRMA, TITEL, null, false))
         .isInstanceOf(FirmaNichtGefunden.class);
     verify(angebote, never()).save(any());
   }
@@ -213,7 +227,7 @@ class AngebotAnlegenUseCaseTest {
     when(firmen.findById(Angebotsdoppel.FIRMA)).thenReturn(Optional.of(firma(false)));
 
     // When / Then
-    assertThatThrownBy(() -> useCase.anlegen(Angebotsdoppel.FIRMA, null, false))
+    assertThatThrownBy(() -> useCase.anlegen(Angebotsdoppel.FIRMA, TITEL, null, false))
         .isInstanceOf(FirmaStillgelegt.class);
     verify(angebote, never()).save(any());
   }
@@ -225,7 +239,7 @@ class AngebotAnlegenUseCaseTest {
     when(personen.findById(PERSON)).thenReturn(Optional.empty());
 
     // When / Then
-    assertThatThrownBy(() -> useCase.anlegen(Angebotsdoppel.FIRMA, PERSON, false))
+    assertThatThrownBy(() -> useCase.anlegen(Angebotsdoppel.FIRMA, TITEL, PERSON, false))
         .isInstanceOf(AnsprechpartnerNichtWaehlbar.class);
     verify(angebote, never()).save(any());
   }
@@ -238,7 +252,7 @@ class AngebotAnlegenUseCaseTest {
         .thenReturn(Optional.of(person(Angebotsdoppel.FREMDE_FIRMA, true)));
 
     // When / Then
-    assertThatThrownBy(() -> useCase.anlegen(Angebotsdoppel.FIRMA, PERSON, false))
+    assertThatThrownBy(() -> useCase.anlegen(Angebotsdoppel.FIRMA, TITEL, PERSON, false))
         .isInstanceOf(AnsprechpartnerNichtWaehlbar.class);
     verify(angebote, never()).save(any());
   }
@@ -250,7 +264,7 @@ class AngebotAnlegenUseCaseTest {
     when(personen.findById(PERSON)).thenReturn(Optional.of(person(Angebotsdoppel.FIRMA, false)));
 
     // When / Then
-    assertThatThrownBy(() -> useCase.anlegen(Angebotsdoppel.FIRMA, PERSON, false))
+    assertThatThrownBy(() -> useCase.anlegen(Angebotsdoppel.FIRMA, TITEL, PERSON, false))
         .isInstanceOf(AnsprechpartnerNichtWaehlbar.class);
     verify(angebote, never()).save(any());
   }

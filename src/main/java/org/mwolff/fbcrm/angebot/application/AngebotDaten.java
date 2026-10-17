@@ -21,6 +21,8 @@ import org.jspecify.annotations.Nullable;
  *
  * @param angebotDatum Datum des Angebots
  * @param ansprechpartnerId Kennung des Ansprechpartners bei der Firma, oder {@code null}
+ * @param titel die einzeilige Benennung des Angebots; der Aenderungsweg traegt immer einen (Issue
+ *     #317)
  * @param beschreibung der Text des Angebots, oder {@code null}
  * @param intern ob das Angebot danach die eigene interne Arbeit festhaelt
  * @param positionen die vollstaendige Positionsliste in der gewuenschten Reihenfolge
@@ -28,6 +30,7 @@ import org.jspecify.annotations.Nullable;
 public record AngebotDaten(
     LocalDate angebotDatum,
     @Nullable Long ansprechpartnerId,
+    String titel,
     @Nullable String beschreibung,
     boolean intern,
     List<Positionsangabe> positionen) {

@@ -237,7 +237,7 @@ class RechnungStellenIT extends AbstractIntegrationTest {
                 ruf(
                         "/api/firmen/" + firmaId + "/angebote",
                         HttpMethod.POST,
-                        null,
+                        Map.of("titel", "Website-Relaunch"),
                         AngebotResponse.class)
                     .getBody())
             .id();
@@ -267,6 +267,7 @@ class RechnungStellenIT extends AbstractIntegrationTest {
     position.put("einzelpreis", einzelpreis);
     final Map<String, Object> rumpf = new LinkedHashMap<>();
     rumpf.put("angebotDatum", heute.toString());
+    rumpf.put("titel", "Website-Relaunch");
     rumpf.put("ansprechpartnerId", null);
     rumpf.put("beschreibung", "Neugestaltung der Website");
     rumpf.put("positionen", List.of(position));

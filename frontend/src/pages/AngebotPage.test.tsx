@@ -4,7 +4,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import AngebotPage from './AngebotPage';
-import { KopfPfadProvider } from '../components/KopfPfad';
+import KopfPfad, { KopfPfadProvider } from '../components/KopfPfad';
 import { fetchNachPfad, json, leer, problem } from '../test/fetchNachPfad';
 import { renderMitTheme } from '../test/render';
 
@@ -16,6 +16,7 @@ const POSITION = {
   einheit: 'PERSONENTAG',
   einzelpreis: 1000.01,
   betrag: 2500.03,
+  leistungsjahr: '2026',
 };
 
 const ANGEBOT = {
@@ -26,6 +27,7 @@ const ANGEBOT = {
   ansprechpartnerName: 'Eva Adler',
   status: 'ABGEGEBEN',
   angebotDatum: '2026-09-24',
+  titel: 'Neue Website',
   beschreibung: 'Neue Website mit Redaktionssystem',
   intern: false,
   positionen: [POSITION],
@@ -79,6 +81,7 @@ const STUNDEN_POSITION = {
   einheit: 'STUNDE',
   einzelpreis: 120,
   betrag: 2400,
+  leistungsjahr: '2026',
 };
 
 /** Dasselbe Angebot, dessen eine Position Stunden traegt. */
@@ -112,12 +115,14 @@ const STAND_TEIL = { positionen: [STAND_POSITION], rechnungen: [GESTELLTE], ange
 /** Ein bestelltes Angebot — ab diesem Status lässt sich eine Rechnung schreiben. */
 const BESTELLT = { ...ANGEBOT, status: 'BESTELLT' };
 
-const UEBERSCHRIFT = 'Angebot vom 24.09.2026';
+/** Das Angebot traegt einen Titel — er ist seine Ueberschrift (Issue #319, Kriterium 5). */
+const UEBERSCHRIFT = 'Neue Website';
 
-function renderSeite(start = '/angebote/9') {
+function renderSeite(start = '/angebote/9', mitKopf = false) {
   return renderMitTheme(
     <MemoryRouter initialEntries={[start]}>
       <KopfPfadProvider>
+        {mitKopf ? <KopfPfad /> : null}
         <Routes>
           <Route path="/angebote/:angebotId" element={<AngebotPage />} />
           {/* Das Ziel von „Rechnung schreiben" — die Probe liest hier ab, dass der Weg fuehrt. */}
@@ -165,7 +170,7 @@ afterEach(() => {
 });
 
 describe('AngebotPage — was das Angebot zeigt (Issue #127)', () => {
-  it('traegt „Angebot vom <Datum>" als die eine Ueberschrift', async () => {
+  it('traegt den Titel als die eine Ueberschrift', async () => {
     fetchNachPfad({
       ...LEERE_BEREICHE,
       'GET /api/angebote/9': json(200, ANGEBOT),
@@ -175,6 +180,26 @@ describe('AngebotPage — was das Angebot zeigt (Issue #127)', () => {
 
     expect(await screen.findByRole('heading', { level: 1, name: UEBERSCHRIFT })).toBeInTheDocument();
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+  });
+
+  it('Szenario: Angebotsseite mit und ohne Titel — Ueberschrift und Kopfpfad', async () => {
+    for (const [titel, name] of [
+      ['Java-Grundkurs', 'Java-Grundkurs'],
+      [null, 'Angebot vom 15.10.2026'],
+    ] as const) {
+      fetchNachPfad({
+        ...LEERE_BEREICHE,
+        'GET /api/angebote/9': json(200, { ...ANGEBOT, angebotDatum: '2026-10-15', titel }),
+      });
+
+      const { unmount } = renderSeite('/angebote/9', true);
+
+      expect(await screen.findByRole('heading', { level: 1, name })).toBeInTheDocument();
+      const pfad = within(screen.getByRole('navigation', { name: 'Pfad' }));
+      expect(await pfad.findByText(name)).toHaveAttribute('aria-current', 'page');
+      expect(within(screen.getByTestId('angebot-angaben')).getByText('Angebotsdatum')).toBeInTheDocument();
+      unmount();
+    }
   });
 
   it('nennt Firma, Ansprechpartner, Angebotsdatum und Status in den Angaben', async () => {
@@ -260,6 +285,7 @@ describe('AngebotPage — was das Angebot zeigt (Issue #127)', () => {
       'Einheit',
       'Einzelpreis',
       'Betrag',
+      'Jahr',
     ]);
     const zeile = within(screen.getAllByRole('row')[1]);
     expect(zeile.getByText('Konzeption')).toBeInTheDocument();
@@ -268,6 +294,8 @@ describe('AngebotPage — was das Angebot zeigt (Issue #127)', () => {
     expect(zeile.getByText('Personentag')).toBeInTheDocument();
     expect(zeile.getByText('1.000,01 €')).toBeInTheDocument();
     expect(zeile.getByText('2.500,03 €')).toBeInTheDocument();
+    // Die letzte Zelle traegt das Leistungsjahr, und nur das — kein neuer Betrag (Issue #311).
+    expect(zeile.getAllByRole('cell').at(-1)).toHaveTextContent(/^2026$/);
   });
 
   it('nennt die Summe mit dem Hinweis auf die Umsatzsteuer', async () => {
@@ -536,6 +564,7 @@ describe('AngebotPage — der Abrechnungsstand an den Positionen (Issue #187, Kr
       'Einheit',
       'Einzelpreis',
       'Betrag',
+      'Jahr',
     ]);
     const zeile = within(tafel.getAllByRole('row')[1]);
     // 80 von 160: beide Zahlen stehen gleich da, abgerechnet und offen.
@@ -558,6 +587,7 @@ describe('AngebotPage — der Abrechnungsstand an den Positionen (Issue #187, Kr
       'Einheit',
       'Einzelpreis',
       'Betrag',
+      'Jahr',
     ]);
     expect(screen.queryByText('Abgerechnet')).not.toBeInTheDocument();
   });
@@ -623,6 +653,7 @@ describe('AngebotPage — die Spalte „Angefallen" (Issue #193, Kriterien 7, 8,
       'Einheit',
       'Einzelpreis',
       'Betrag',
+      'Jahr',
     ]);
     expect(within(tafel.getAllByRole('row')[1]).getByText('8,00')).toBeInTheDocument();
   });
@@ -644,6 +675,7 @@ describe('AngebotPage — die Spalte „Angefallen" (Issue #193, Kriterien 7, 8,
       'Einheit',
       'Einzelpreis',
       'Betrag',
+      'Jahr',
     ]);
     expect(screen.queryByText('Angefallen')).not.toBeInTheDocument();
   });
@@ -847,6 +879,7 @@ describe('AngebotPage — „Rechnung schreiben" (Issue #187, Kriterium 3)', () 
   const FRISCH = {
     id: 7,
     angebotId: 9,
+    angebotTitel: null,
     firmaId: 5,
     firmaName: 'Adler AG',
     rechnungDatum: '2026-09-30',
@@ -1126,6 +1159,8 @@ describe('AngebotPage — das interne Angebot (Issue #235, Plan #218, E15)', () 
     expect(tafel.queryByText('Stunde')).not.toBeInTheDocument();
     expect(tafel.queryByText('120,00 €')).not.toBeInTheDocument();
     expect(tafel.queryByText('2.400,00 €')).not.toBeInTheDocument();
+    // Die Spalte „Jahr" gehoert allein dem Kundenangebot (Issue #311, E12).
+    expect(tafel.queryByRole('columnheader', { name: 'Jahr' })).not.toBeInTheDocument();
   });
 
   it('laesst die Zelle „Angefallen" leer, solange der Abrechnungsstand fehlt', async () => {

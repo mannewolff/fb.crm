@@ -2,9 +2,12 @@ package org.mwolff.fbcrm.rechnung.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
+import java.time.Year;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -156,6 +159,20 @@ class RechnungLesenUseCaseTest {
   }
 
   @Test
+  void lese_thenTheTitelOfTheReadAngebotComesAlongWithoutAFurtherRead() {
+    // Given — Issue #327: die Seite der Rechnung nennt ihr Angebot beim Titel.
+    gegebenerEntwurf(List.of(Rechnungsdoppel.beratung("40.00")), List.of());
+
+    // When
+    final Rechnungsansicht ansicht = useCase.lese(ENTWURF);
+
+    // Then — der Titel kommt vom schon gelesenen Angebot, kein zweiter Zug in den Bestand.
+    assertThat(ansicht.angebotTitel()).isEqualTo("Website-Relaunch");
+    verify(angebote).findById(Rechnungsdoppel.ANGEBOT);
+    verifyNoMoreInteractions(angebote);
+  }
+
+  @Test
   void lese_whenTheFirmaIsMissing_thenItIsAContradictionInTheBestand() {
     // Given — Firmen werden nie geloescht; fehlt die Firma, stimmt der Bestand nicht.
     when(rechnungen.findById(ENTWURF))
@@ -213,7 +230,8 @@ class RechnungLesenUseCaseTest {
                     Abrechnungsmodus.AUFWAND,
                     new BigDecimal("160.00"),
                     Einheit.STUNDE,
-                    new BigDecimal("120.00")))));
+                    new BigDecimal("120.00"),
+                    Year.of(2026)))));
 
     // When
     final Rechnungsansicht ansicht = useCase.lese(ENTWURF);
