@@ -1,5 +1,6 @@
 package org.mwolff.fbcrm.startseite.web;
 
+import static org.hamcrest.Matchers.nullValue;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -14,6 +15,7 @@ import java.time.Year;
 import java.time.YearMonth;
 import java.util.List;
 import java.util.Optional;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -110,6 +112,14 @@ class StartseiteControllerTest {
 
   private static AngebotMitFirma angebot(
       final long id, final Angebotsstatus status, final String firmaName) {
+    return angebot(id, status, firmaName, "Website-Relaunch");
+  }
+
+  private static AngebotMitFirma angebot(
+      final long id,
+      final Angebotsstatus status,
+      final String firmaName,
+      final @Nullable String titel) {
     return new AngebotMitFirma(
         new Angebot(
             Long.valueOf(id),
@@ -118,7 +128,7 @@ class StartseiteControllerTest {
             status.intern(),
             status,
             ANGEBOTSDATUM,
-            "Website-Relaunch",
+            titel,
             "Neugestaltung der Website",
             List.of(
                 new Angebotsposition(
@@ -184,7 +194,7 @@ class StartseiteControllerTest {
             List.of(OKTOBER, YearMonth.of(2026, 8), YearMonth.of(2025, 12))),
         List.of(
             angebot(BESTELLT_ID, Angebotsstatus.BESTELLT, ADLER),
-            angebot(ERLEDIGT_ID, Angebotsstatus.ERLEDIGT, BUCHE)),
+            angebot(ERLEDIGT_ID, Angebotsstatus.ERLEDIGT, BUCHE, null)),
         new NichtAbgerechnet(
             new BigDecimal("1200.00"),
             new BigDecimal("400.00"),
@@ -240,10 +250,12 @@ class StartseiteControllerTest {
         .andExpect(jsonPath("$.inArbeit[0].angebotId").value(Long.valueOf(BESTELLT_ID)))
         .andExpect(jsonPath("$.inArbeit[0].firmaName").value(ADLER))
         .andExpect(jsonPath("$.inArbeit[0].angebotDatum").exists())
+        .andExpect(jsonPath("$.inArbeit[0].angebotTitel").value("Website-Relaunch"))
         .andExpect(jsonPath("$.inArbeit[0].status").value("BESTELLT"))
         .andExpect(jsonPath("$.inArbeit[1].angebotId").value(Long.valueOf(ERLEDIGT_ID)))
         .andExpect(jsonPath("$.inArbeit[1].firmaName").value(BUCHE))
-        .andExpect(jsonPath("$.inArbeit[1].status").value("ERLEDIGT"));
+        .andExpect(jsonPath("$.inArbeit[1].status").value("ERLEDIGT"))
+        .andExpect(jsonPath("$.inArbeit[1].angebotTitel").value(nullValue()));
   }
 
   @Test
@@ -262,6 +274,8 @@ class StartseiteControllerTest {
             jsonPath("$.nichtAbgerechnet.angebote[0].angebotId").value(Long.valueOf(BESTELLT_ID)))
         .andExpect(jsonPath("$.nichtAbgerechnet.angebote[0].firmaName").value(ADLER))
         .andExpect(jsonPath("$.nichtAbgerechnet.angebote[0].angebotDatum").exists())
+        .andExpect(
+            jsonPath("$.nichtAbgerechnet.angebote[0].angebotTitel").value("Website-Relaunch"))
         .andExpect(jsonPath("$.nichtAbgerechnet.angebote[0].netto").value(1200.00));
   }
 

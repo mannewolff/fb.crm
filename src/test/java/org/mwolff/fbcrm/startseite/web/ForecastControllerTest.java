@@ -1,5 +1,6 @@
 package org.mwolff.fbcrm.startseite.web;
 
+import static org.hamcrest.Matchers.nullValue;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -10,6 +11,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.Year;
 import java.util.List;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -55,6 +57,11 @@ class ForecastControllerTest {
   }
 
   private static Forecastposition position(final String bezeichnung, final String netto) {
+    return position("Website-Relaunch", bezeichnung, netto);
+  }
+
+  private static Forecastposition position(
+      final @Nullable String titel, final String bezeichnung, final String netto) {
     final Angebotsposition position =
         new Angebotsposition(
             Long.valueOf(301L),
@@ -73,7 +80,7 @@ class ForecastControllerTest {
                 false,
                 Angebotsstatus.ANGELEGT,
                 ANGEBOTSDATUM,
-                "Website-Relaunch",
+                titel,
                 "Schulungen 2027",
                 List.of(position),
                 ANGELEGT,
@@ -136,10 +143,31 @@ class ForecastControllerTest {
         .andExpect(jsonPath("$.jahre[0].positionen[0].angebotId").value(Long.valueOf(ANGEBOT_ID)))
         .andExpect(jsonPath("$.jahre[0].positionen[0].firmaName").value(FIRMA))
         .andExpect(jsonPath("$.jahre[0].positionen[0].angebotDatum").exists())
+        .andExpect(jsonPath("$.jahre[0].positionen[0].angebotTitel").value("Website-Relaunch"))
         .andExpect(jsonPath("$.jahre[0].positionen[0].bezeichnung").value("Aufwände Mai 2027"))
         .andExpect(jsonPath("$.jahre[0].positionen[0].netto").value(8100.00))
         .andExpect(jsonPath("$.jahre[0].positionen[1].bezeichnung").value("Aufwände 3 Tage Rest"))
         .andExpect(jsonPath("$.jahre[0].positionen[1].netto").value(1620.00));
+  }
+
+  @Test
+  void forecast_givenAnOfferWithoutTitle_thenItsTitleTravelsAsNull() throws Exception {
+    // Given — Issue #324, Kriterium 7: das Angebot von vor #316 traegt keinen Titel.
+    when(useCase.forecast())
+        .thenReturn(
+            new Forecast(
+                List.of(
+                    new Forecastjahr(
+                        Year.of(2027),
+                        new BigDecimal("0.00"),
+                        new BigDecimal("8100.00"),
+                        List.of(position(null, "Aufwände Mai 2027", "8100.00"))))));
+
+    // When / Then
+    mockMvc
+        .perform(get(PFAD))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.jahre[0].positionen[0].angebotTitel").value(nullValue()));
   }
 
   @Test

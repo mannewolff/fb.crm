@@ -16,12 +16,14 @@ const STAND = {
       angebotId: 11,
       firmaName: 'IT Bildungshaus',
       angebotDatum: '2026-09-24',
+      angebotTitel: 'Java-Grundkurs',
       status: 'BESTELLT',
     },
     {
       angebotId: 9,
       firmaName: 'Werkstatt Nord',
       angebotDatum: '2026-08-03',
+      angebotTitel: null,
       status: 'ERLEDIGT',
     },
   ],
@@ -33,6 +35,7 @@ const STAND = {
         angebotId: 11,
         firmaName: 'IT Bildungshaus',
         angebotDatum: '2026-09-24',
+        angebotTitel: 'Java-Grundkurs',
         netto: 3368.25,
       },
     ],
@@ -152,6 +155,7 @@ describe('parseStartseitenstand', () => {
         angebotId: 11,
         firmaName: 'IT Bildungshaus',
         angebotDatum: '2026-09-24',
+        angebotTitel: 'Java-Grundkurs',
         nettoInCent: 336825,
       },
     ]);
@@ -223,6 +227,27 @@ describe('parseStartseitenstand', () => {
     const kaputt = {
       ...STAND,
       inArbeit: [{ ...STAND.inArbeit[0], status: 'UNTERWEGS' }],
+    };
+
+    expect(() => parseStartseitenstand(kaputt)).toThrow(TypeError);
+  });
+
+  it('scheitert, wo der Titel eines Angebots in Arbeit weder Text noch null ist (Issue #324)', () => {
+    const kaputt = {
+      ...STAND,
+      inArbeit: [{ ...STAND.inArbeit[0], angebotTitel: 42 }],
+    };
+
+    expect(() => parseStartseitenstand(kaputt)).toThrow(TypeError);
+  });
+
+  it('scheitert, wo der Titel eines Anteils weder Text noch null ist (Issue #324)', () => {
+    const kaputt = {
+      ...STAND,
+      nichtAbgerechnet: {
+        ...STAND.nichtAbgerechnet,
+        angebote: [{ ...STAND.nichtAbgerechnet.angebote[0], angebotTitel: 42 }],
+      },
     };
 
     expect(() => parseStartseitenstand(kaputt)).toThrow(TypeError);

@@ -20,6 +20,7 @@ const FORECAST: Forecast = {
           angebotId: 9,
           firmaName: 'Werkstatt Nord',
           angebotDatum: '2026-08-03',
+          angebotTitel: null,
           bezeichnung: 'Schulung',
           nettoInCent: 120000,
         },
@@ -35,6 +36,7 @@ const FORECAST: Forecast = {
           angebotId: 14,
           firmaName: 'IT Bildungshaus',
           angebotDatum: '2026-10-15',
+          angebotTitel: null,
           bezeichnung: 'Aufwände Mai 2027',
           nettoInCent: 810000,
         },
@@ -42,6 +44,7 @@ const FORECAST: Forecast = {
           angebotId: 14,
           firmaName: 'IT Bildungshaus',
           angebotDatum: '2026-10-15',
+          angebotTitel: null,
           bezeichnung: 'Aufwände Juni 2027',
           nettoInCent: 810000,
         },
@@ -57,6 +60,39 @@ function zeige(forecast: Forecast) {
     </MemoryRouter>,
   );
 }
+
+/**
+ * Zwei Angebote an IT Bildungshaus vom selben Tag, unterschieden nur durch ihren Titel — der Anlass
+ * von #322.
+ */
+const ZWEI_AM_SELBEN_TAG: Forecast = {
+  jahre: [
+    {
+      jahr: '2026',
+      zugesagtInCent: 0,
+      angebotenInCent: 300000,
+      summeInCent: 300000,
+      positionen: [
+        {
+          angebotId: 21,
+          firmaName: 'IT Bildungshaus',
+          angebotDatum: '2026-10-15',
+          angebotTitel: 'Java-Grundkurs',
+          bezeichnung: 'Schulungstage',
+          nettoInCent: 150000,
+        },
+        {
+          angebotId: 22,
+          firmaName: 'IT Bildungshaus',
+          angebotDatum: '2026-10-15',
+          angebotTitel: 'Spring-Aufbaukurs',
+          bezeichnung: 'Schulungstage',
+          nettoInCent: 150000,
+        },
+      ],
+    },
+  ],
+};
 
 /** Die Zeile eines Jahres, gefunden ueber ihre Taste. */
 function jahreszeile(jahr: string): HTMLElement {
@@ -128,6 +164,42 @@ describe('Forecasttafel', () => {
     expect(within(zeilen[0]).getByRole('link', { name: '15.10.2026' })).toHaveAttribute(
       'href',
       '/angebote/14',
+    );
+  });
+
+  it('Szenario: Forecast aufgeklappt', async () => {
+    zeige(ZWEI_AM_SELBEN_TAG);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Positionen 2026 anzeigen' }));
+
+    const positionen = screen.getByRole('table', { name: 'Positionen 2026' });
+    const zeilen = within(positionen).getAllByRole('row').slice(1);
+    const angebote = zeilen.map((zeile) => within(zeile).getAllByRole('cell')[1]);
+    expect(angebote.map((zelle) => zelle.textContent)).toEqual([
+      'Java-Grundkurs',
+      'Spring-Aufbaukurs',
+    ]);
+    expect(within(positionen).getByRole('link', { name: 'Java-Grundkurs' })).toHaveAttribute(
+      'href',
+      '/angebote/21',
+    );
+    expect(within(positionen).getByRole('link', { name: 'Spring-Aufbaukurs' })).toHaveAttribute(
+      'href',
+      '/angebote/22',
+    );
+    // Kriterium 8: Ein langer Titel bricht in der Zelle um und wird nicht abgeschnitten (E10).
+    expect(angebote[0]).not.toHaveStyle({ whiteSpace: 'nowrap' });
+  });
+
+  it('zeigt bei einem Angebot ohne Titel weiter das Datum als Weg zum Angebot (Kriterium 7)', async () => {
+    zeige(FORECAST);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Positionen 2026 anzeigen' }));
+
+    const positionen = screen.getByRole('table', { name: 'Positionen 2026' });
+    expect(within(positionen).getByRole('link', { name: '03.08.2026' })).toHaveAttribute(
+      'href',
+      '/angebote/9',
     );
   });
 

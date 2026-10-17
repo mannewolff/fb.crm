@@ -19,6 +19,7 @@ const ANTWORT = {
           angebotId: 9,
           firmaName: 'Werkstatt Nord',
           angebotDatum: '2026-08-03',
+          angebotTitel: null,
           bezeichnung: 'Schulung',
           netto: 1200,
         },
@@ -34,6 +35,7 @@ const ANTWORT = {
           angebotId: 14,
           firmaName: 'IT Bildungshaus',
           angebotDatum: '2026-10-15',
+          angebotTitel: 'Java-Grundkurs',
           bezeichnung: 'Aufwände Mai 2027',
           netto: 8100.25,
         },
@@ -41,6 +43,7 @@ const ANTWORT = {
           angebotId: 14,
           firmaName: 'IT Bildungshaus',
           angebotDatum: '2026-10-15',
+          angebotTitel: 'Java-Grundkurs',
           bezeichnung: 'Aufwände Juni 2027',
           netto: 8100.25,
         },
@@ -68,6 +71,7 @@ describe('parseForecast', () => {
           angebotId: 14,
           firmaName: 'IT Bildungshaus',
           angebotDatum: '2026-10-15',
+          angebotTitel: 'Java-Grundkurs',
           bezeichnung: 'Aufwände Mai 2027',
           nettoInCent: 810025,
         },
@@ -75,12 +79,15 @@ describe('parseForecast', () => {
           angebotId: 14,
           firmaName: 'IT Bildungshaus',
           angebotDatum: '2026-10-15',
+          angebotTitel: 'Java-Grundkurs',
           bezeichnung: 'Aufwände Juni 2027',
           nettoInCent: 810025,
         },
       ],
     });
     expect(gelesen.jahre[0]?.zugesagtInCent).toBe(120000);
+    // Issue #324: das Angebot von vor #316 traegt keinen Titel.
+    expect(gelesen.jahre[0]?.positionen[0]?.angebotTitel).toBeNull();
   });
 
   it('liest „gar nichts offen" als leere Liste (Kriterium 6)', () => {
@@ -129,6 +136,7 @@ describe('parseForecast', () => {
     ['die Kennung des Angebots keine Zahl ist', { angebotId: '9' }],
     ['der Name der Firma fehlt', { firmaName: null }],
     ['das Angebotsdatum keine Zeichenkette ist', { angebotDatum: 20260803 }],
+    ['der Titel des Angebots weder Text noch null ist', { angebotTitel: 42 }],
     ['die Bezeichnung fehlt', { bezeichnung: undefined }],
     ['der Restbetrag drei Nachkommastellen traegt', { netto: 1.005 }],
   ])('scheitert, wo an einer Position %s', (_, aenderung) => {

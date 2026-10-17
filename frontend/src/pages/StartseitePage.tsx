@@ -401,8 +401,12 @@ function ArbeitZeile({ zeile }: { readonly zeile: StartseiteAngebotszeile }) {
       <Box component="td" sx={{ fontWeight: 600 }}>
         {zeile.firmaName}
       </Box>
-      <Box component="td" sx={{ fontWeight: 500, whiteSpace: 'nowrap' }}>
-        <Angebotsweg angebotId={zeile.angebotId} tag={zeile.angebotDatum} />
+      <Box component="td" sx={{ fontWeight: 500 }}>
+        <Angebotsweg
+          angebotId={zeile.angebotId}
+          tag={zeile.angebotDatum}
+          titel={zeile.angebotTitel}
+        />
       </Box>
       <Box component="td">
         <AngebotsstatusChip status={zeile.status} />
@@ -418,8 +422,12 @@ function OffenZeile({ zeile }: { readonly zeile: Anteilszeile }) {
       <Box component="td" sx={{ fontWeight: 600 }}>
         {zeile.firmaName}
       </Box>
-      <Box component="td" sx={{ fontWeight: 500, whiteSpace: 'nowrap' }}>
-        <Angebotsweg angebotId={zeile.angebotId} tag={zeile.angebotDatum} />
+      <Box component="td" sx={{ fontWeight: 500 }}>
+        <Angebotsweg
+          angebotId={zeile.angebotId}
+          tag={zeile.angebotDatum}
+          titel={zeile.angebotTitel}
+        />
       </Box>
       <Box
         component="td"

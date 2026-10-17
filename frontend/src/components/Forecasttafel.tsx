@@ -103,8 +103,12 @@ function Positionszeile({ position }: { readonly position: Forecastposition }) {
       <Box component="td" sx={{ fontWeight: 600 }}>
         {position.firmaName}
       </Box>
-      <Box component="td" sx={{ fontWeight: 500, whiteSpace: 'nowrap' }}>
-        <Angebotsweg angebotId={position.angebotId} tag={position.angebotDatum} />
+      <Box component="td" sx={{ fontWeight: 500 }}>
+        <Angebotsweg
+          angebotId={position.angebotId}
+          tag={position.angebotDatum}
+          titel={position.angebotTitel}
+        />
       </Box>
       <Box component="td">{position.bezeichnung}</Box>
       <Betrag cent={position.nettoInCent} />

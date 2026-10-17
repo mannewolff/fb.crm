@@ -4,6 +4,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.List;
+import org.jspecify.annotations.Nullable;
 import org.mwolff.fbcrm.angebot.application.AngebotMitFirma;
 import org.mwolff.fbcrm.angebot.domain.Angebotsstatus;
 import org.mwolff.fbcrm.rechnung.application.Monatsabrechnung;
@@ -29,10 +30,10 @@ import org.mwolff.fbcrm.startseite.application.Zeitraum;
  * schliessen. Wert und waehlbare Jahre sind Text — genau das, was die Ansicht in die Adresse und in
  * {@code option value} setzt; ein {@code Year} schriebe Jackson als Zahl.
  *
- * <p><b>Von den Angeboten kommen vier Angaben mit, nicht das ganze Angebot.</b> Die Zeile zeigt
- * Firma und Datum, und die Kennung ist der Weg zum Angebot — Positionen, Beschreibung und
- * Zeitstempel braucht die Startseite nicht, und sie mitzusenden hiesse, den Bestand eines fremden
- * Moduls ueber diesen Weg zu veroeffentlichen.
+ * <p><b>Von den Angeboten kommen fuenf Angaben mit, nicht das ganze Angebot.</b> Die Zeile zeigt
+ * Firma und Titel, ohne Titel das Datum (Issue #324), und die Kennung ist der Weg zum Angebot —
+ * Positionen, Beschreibung und Zeitstempel braucht die Startseite nicht, und sie mitzusenden
+ * hiesse, den Bestand eines fremden Moduls ueber diesen Weg zu veroeffentlichen.
  *
  * <p><b>Die Zahl der Angebote in Arbeit steht nicht als Feld darin</b> — die Liste ist die
  * Wahrheit, und die Ansicht zaehlt sie. Bei {@code abgerechnet} ist die Anzahl dagegen ein Feld:
@@ -114,16 +115,23 @@ public record StartseiteResponse(
    * @param angebotId Kennung des Angebots — der Weg dorthin
    * @param firmaName Name der Firma, an die das Angebot geht
    * @param angebotDatum Datum des Angebots
+   * @param angebotTitel Titel des Angebots, oder {@code null} fuer ein Angebot von vor #316 — die
+   *     Ansicht zeigt dann das Datum (Issue #324)
    * @param status „bestellt" oder „erledigt"; die Ansicht unterscheidet die beiden
    */
   public record Angebotszeile(
-      long angebotId, String firmaName, LocalDate angebotDatum, Angebotsstatus status) {
+      long angebotId,
+      String firmaName,
+      LocalDate angebotDatum,
+      @Nullable String angebotTitel,
+      Angebotsstatus status) {
 
     static Angebotszeile of(final AngebotMitFirma zeile) {
       return new Angebotszeile(
           zeile.angebot().requireId(),
           zeile.firmaName(),
           zeile.angebot().angebotDatum(),
+          zeile.angebot().titel(),
           zeile.angebot().status());
     }
   }
@@ -159,10 +167,16 @@ public record StartseiteResponse(
    * @param angebotId Kennung des Angebots — der Weg dorthin
    * @param firmaName Name der Firma, an die das Angebot geht
    * @param angebotDatum Datum des Angebots
+   * @param angebotTitel Titel des Angebots, oder {@code null} fuer ein Angebot von vor #316 — die
+   *     Ansicht zeigt dann das Datum (Issue #324)
    * @param netto sein Anteil am Betrag, netto und auf den Cent
    */
   public record Anteilszeile(
-      long angebotId, String firmaName, LocalDate angebotDatum, BigDecimal netto) {
+      long angebotId,
+      String firmaName,
+      LocalDate angebotDatum,
+      @Nullable String angebotTitel,
+      BigDecimal netto) {
 
     static Anteilszeile of(final Angebotsanteil anteil) {
       final AngebotMitFirma zeile = anteil.angebot();
@@ -170,6 +184,7 @@ public record StartseiteResponse(
           zeile.angebot().requireId(),
           zeile.firmaName(),
           zeile.angebot().angebotDatum(),
+          zeile.angebot().titel(),
           anteil.betrag());
     }
   }

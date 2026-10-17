@@ -40,15 +40,28 @@ const STAND = {
       angebotId: 11,
       firmaName: 'IT Bildungshaus',
       angebotDatum: '2026-09-24',
+      angebotTitel: 'Java-Grundkurs',
       status: 'BESTELLT',
     },
-    { angebotId: 12, firmaName: 'Adler AG', angebotDatum: '2026-09-28', status: 'ERLEDIGT' },
+    {
+      angebotId: 12,
+      firmaName: 'Adler AG',
+      angebotDatum: '2026-09-28',
+      angebotTitel: null,
+      status: 'ERLEDIGT',
+    },
   ],
   nichtAbgerechnet: {
     netto: 1800,
     erfasstImZeitraum: 600,
     angebote: [
-      { angebotId: 11, firmaName: 'IT Bildungshaus', angebotDatum: '2026-09-24', netto: 1800 },
+      {
+        angebotId: 11,
+        firmaName: 'IT Bildungshaus',
+        angebotDatum: '2026-09-24',
+        angebotTitel: 'Java-Grundkurs',
+        netto: 1800,
+      },
     ],
   },
   abgerechnet: {
@@ -94,6 +107,7 @@ const FORECAST_STAND = {
           angebotId: 14,
           firmaName: 'IT Bildungshaus',
           angebotDatum: '2026-10-15',
+          angebotTitel: null,
           bezeichnung: 'Aufwände Mai 2027',
           netto: 8100,
         },
@@ -342,9 +356,10 @@ describe('StartseitePage (Issue #216; #206 Kriterien 1, 3 bis 8)', () => {
     expect(within(tafel).getByText('IT Bildungshaus')).toBeInTheDocument();
     expect(within(tafel).getByText('Bestellt')).toBeInTheDocument();
     expect(within(tafel).getByText('Erledigt')).toBeInTheDocument();
-    expect(within(tafel).getByRole('link', { name: '24.09.2026' })).toHaveAttribute(
+    // Kriterium 7 (Issue #324): Das Angebot ohne Titel fuehrt weiter ueber sein Datum.
+    expect(within(tafel).getByRole('link', { name: '28.09.2026' })).toHaveAttribute(
       'href',
-      '/angebote/11',
+      '/angebote/12',
     );
   });
 
@@ -355,10 +370,55 @@ describe('StartseitePage (Issue #216; #206 Kriterien 1, 3 bis 8)', () => {
 
     const tafel = await screen.findByRole('table', { name: 'Noch nicht abgerechnet' });
     expect(within(tafel).getByText('1.800,00 €')).toBeInTheDocument();
-    expect(within(tafel).getByRole('link', { name: '24.09.2026' })).toHaveAttribute(
+    expect(within(tafel).getByRole('link', { name: 'Java-Grundkurs' })).toHaveAttribute(
       'href',
       '/angebote/11',
     );
+  });
+
+  it('Szenario: Angebotskarten der Startseite', async () => {
+    mitRouten({ [OHNE_MONAT]: json(200, STAND) });
+
+    renderSeite();
+
+    for (const name of ['Angebote in Arbeit', 'Noch nicht abgerechnet']) {
+      const tafel = await screen.findByRole('table', { name });
+      expect(within(tafel).getByRole('link', { name: 'Java-Grundkurs' })).toHaveAttribute(
+        'href',
+        '/angebote/11',
+      );
+      // Kriterium 8: Die Angebotszelle bricht einen langen Titel um, statt ihn abzuschneiden (E10).
+      const zelle = within(tafel)
+        .getAllByRole('cell')
+        .filter((kandidat) => within(kandidat).queryByRole('link', { name: 'Java-Grundkurs' }));
+      expect(zelle).toHaveLength(1);
+      expect(zelle[0]).not.toHaveStyle({ whiteSpace: 'nowrap' });
+    }
+  });
+
+  it('zeigt in beiden Karten ein Angebot ohne Titel weiter mit seinem Datum (Kriterium 7)', async () => {
+    const ohneTitel = {
+      ...STAND,
+      inArbeit: STAND.inArbeit.map((zeile) => ({ ...zeile, angebotTitel: null })),
+      nichtAbgerechnet: {
+        ...STAND.nichtAbgerechnet,
+        angebote: STAND.nichtAbgerechnet.angebote.map((zeile) => ({
+          ...zeile,
+          angebotTitel: null,
+        })),
+      },
+    };
+    mitRouten({ [OHNE_MONAT]: json(200, ohneTitel) });
+
+    renderSeite();
+
+    for (const name of ['Angebote in Arbeit', 'Noch nicht abgerechnet']) {
+      const tafel = await screen.findByRole('table', { name });
+      expect(within(tafel).getByRole('link', { name: '24.09.2026' })).toHaveAttribute(
+        'href',
+        '/angebote/11',
+      );
+    }
   });
 
   it('traegt bei „Abgerechnet" eine weiche Taste auf die Rechnungen', async () => {

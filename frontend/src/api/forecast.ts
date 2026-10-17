@@ -1,5 +1,5 @@
 import { apiJson } from './client';
-import { inHundertsteln, liste, objekt, text, zahl } from './verengen';
+import { inHundertsteln, liste, objekt, text, textOderNull, zahl } from './verengen';
 
 /**
  * Der Forecast der Startseite: was aus Angeboten noch an Umsatz bevorsteht, je Jahr der Leistung
@@ -24,6 +24,8 @@ export interface Forecastposition {
   readonly firmaName: string;
   /** Tag (`YYYY-MM-DD`), wie das Backend ein `LocalDate` liefert. */
   readonly angebotDatum: string;
+  /** Titel des Angebots; `null` beim Angebot von vor #316 — dann traegt das Datum den Weg. */
+  readonly angebotTitel: string | null;
   readonly bezeichnung: string;
   /** Ihr Restbetrag, netto und in ganzen Cent. */
   readonly nettoInCent: number;
@@ -54,6 +56,7 @@ function parsePosition(wert: unknown): Forecastposition {
     angebotId: zahl(zeile.angebotId),
     firmaName: text(zeile.firmaName),
     angebotDatum: text(zeile.angebotDatum),
+    angebotTitel: textOderNull(zeile.angebotTitel),
     bezeichnung: text(zeile.bezeichnung),
     nettoInCent: inHundertsteln(zeile.netto),
   };
