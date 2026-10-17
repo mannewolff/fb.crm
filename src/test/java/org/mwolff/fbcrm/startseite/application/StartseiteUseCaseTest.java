@@ -24,6 +24,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mwolff.fbcrm.angebot.application.AngebotMitFirma;
 import org.mwolff.fbcrm.angebot.application.AngeboteUebersichtUseCase;
+import org.mwolff.fbcrm.angebot.application.Angebotsauswahl;
 import org.mwolff.fbcrm.angebot.domain.Angebot;
 import org.mwolff.fbcrm.angebot.domain.Angebotsposition;
 import org.mwolff.fbcrm.angebot.domain.Angebotsstatus;
@@ -295,7 +296,7 @@ class StartseiteUseCaseTest {
       final Map<Long, BigDecimal> angefallen,
       final Map<Long, BigDecimal> imMonat,
       final Map<Long, BigDecimal> gestellteMengen) {
-    when(uebersicht.angebote(Optional.empty())).thenReturn(angebote);
+    when(uebersicht.angebote(Angebotsauswahl.alle())).thenReturn(angebote);
     when(arbeitszeit.alleAngefallen()).thenReturn(angefallen);
     when(arbeitszeit.alleImZeitraum(OKTOBER.atDay(1), OKTOBER.atEndOfMonth())).thenReturn(imMonat);
     when(rechnungen.gestellte())
@@ -378,7 +379,7 @@ class StartseiteUseCaseTest {
   void stand_thenOnlyGestellteMengenLowerTheBetrag() {
     // Given — zweimal dieselbe Lage: erst ohne gestellte Menge (ein Entwurf ueber die vollen
     // 20 Stunden steht in der Auskunft nicht), dann mit der gestellten Rechnung darueber.
-    when(uebersicht.angebote(Optional.empty()))
+    when(uebersicht.angebote(Angebotsauswahl.alle()))
         .thenReturn(List.of(angebot(1L, Angebotsstatus.BESTELLT, List.of(BERATUNG))));
     when(arbeitszeit.alleAngefallen()).thenReturn(Map.of(BERATUNG_ID, new BigDecimal("20.00")));
     when(arbeitszeit.alleImZeitraum(OKTOBER.atDay(1), OKTOBER.atEndOfMonth())).thenReturn(Map.of());
@@ -487,7 +488,7 @@ class StartseiteUseCaseTest {
 
   /** Stellt die vier Auskuenfte fuer Oktober und August auf demselben Bestand bereit. */
   private void gegebenZweiMonate() {
-    when(uebersicht.angebote(Optional.empty()))
+    when(uebersicht.angebote(Angebotsauswahl.alle()))
         .thenReturn(List.of(angebot(1L, Angebotsstatus.BESTELLT, List.of(BERATUNG))));
     when(arbeitszeit.alleAngefallen()).thenReturn(Map.of(BERATUNG_ID, new BigDecimal("12.00")));
     when(arbeitszeit.alleImZeitraum(OKTOBER.atDay(1), OKTOBER.atEndOfMonth()))
@@ -538,7 +539,7 @@ class StartseiteUseCaseTest {
   @Test
   void stand_withASelectableMonat_thenThatMonatAnswers() {
     // Given — gefragt wird allein der August; er traegt eine Rechnung und steht darum zur Wahl.
-    when(uebersicht.angebote(Optional.empty())).thenReturn(List.of());
+    when(uebersicht.angebote(Angebotsauswahl.alle())).thenReturn(List.of());
     when(arbeitszeit.alleAngefallen()).thenReturn(Map.of());
     when(arbeitszeit.alleImZeitraum(AUGUST.atDay(1), AUGUST.atEndOfMonth())).thenReturn(Map.of());
     when(rechnungen.gestellte())
@@ -569,7 +570,7 @@ class StartseiteUseCaseTest {
   /** Stellt einen leeren Bestand bereit, dessen einzige Vorgaenge die genannten Monate sind. */
   private void gegebenVorgaenge(
       final Map<YearMonth, Monatsabrechnung> jeMonat, final Set<YearMonth> mitArbeitszeit) {
-    when(uebersicht.angebote(Optional.empty())).thenReturn(List.of());
+    when(uebersicht.angebote(Angebotsauswahl.alle())).thenReturn(List.of());
     when(arbeitszeit.alleAngefallen()).thenReturn(Map.of());
     when(arbeitszeit.monateMitEintragImZeitraum(ANFANG_LETZTES_JAHR, ENDE_DIESES_JAHR))
         .thenReturn(mitArbeitszeit);
@@ -808,7 +809,7 @@ class StartseiteUseCaseTest {
   @Test
   void stand_withTheJahr_thenTheErfassteZeitAndTheInternenStundenOfTheJahrCount() {
     // Given — die Stunden des ganzen Jahres, an einer Kunden- und einer internen Position.
-    when(uebersicht.angebote(Optional.empty()))
+    when(uebersicht.angebote(Angebotsauswahl.alle()))
         .thenReturn(
             List.of(
                 angebot(1L, Angebotsstatus.LAEUFT, List.of(EIGENE)),
@@ -831,7 +832,7 @@ class StartseiteUseCaseTest {
   @Test
   void stand_withTheJahr_thenInArbeitAndTheHauptbetragStayAsWithTheMonat() {
     // Given — derselbe Bestand, einmal mit Monats-, einmal mit Jahreswahl (#273, Kriterium 6).
-    when(uebersicht.angebote(Optional.empty()))
+    when(uebersicht.angebote(Angebotsauswahl.alle()))
         .thenReturn(
             List.of(
                 angebot(1L, Angebotsstatus.BESTELLT, List.of(BERATUNG)),
@@ -867,7 +868,7 @@ class StartseiteUseCaseTest {
   @Test
   void stand_withAnEmptyBestand_thenEveryKennzahlIsZeroAndEveryListEmpty() {
     // Given
-    when(uebersicht.angebote(Optional.empty())).thenReturn(List.of());
+    when(uebersicht.angebote(Angebotsauswahl.alle())).thenReturn(List.of());
     when(arbeitszeit.alleAngefallen()).thenReturn(Map.of());
     when(arbeitszeit.alleImZeitraum(OKTOBER.atDay(1), OKTOBER.atEndOfMonth())).thenReturn(Map.of());
     when(rechnungen.gestellte()).thenReturn(new Gestellte(Map.of(), Map.of(), List.of()));
@@ -1028,7 +1029,7 @@ class StartseiteUseCaseTest {
   void stand_withTheJahr_thenAnOffeneRechnungOfTheVorjahrStandsThereToo() {
     // Given — das laufende Jahr ist gewaehlt; die eine offene Rechnung stammt aus dem letzten
     // (Issue #285, Kriterium 2). Waere die Liste nach Zeitraum beschnitten, fehlte sie hier.
-    when(uebersicht.angebote(Optional.empty())).thenReturn(List.of());
+    when(uebersicht.angebote(Angebotsauswahl.alle())).thenReturn(List.of());
     when(arbeitszeit.alleAngefallen()).thenReturn(Map.of());
     when(rechnungen.gestellte())
         .thenReturn(new Gestellte(Map.of(), Map.of(), List.of(OFFENE_AUS_DEM_VORJAHR)));
@@ -1048,7 +1049,7 @@ class StartseiteUseCaseTest {
   @Test
   void stand_withoutAnyOffeneRechnung_thenZeroAndAnEmptyList() {
     // Given — nichts offen: Die Kachel behaelt ihre Gestalt und zeigt 0,00 (Issue #285).
-    when(uebersicht.angebote(Optional.empty())).thenReturn(List.of());
+    when(uebersicht.angebote(Angebotsauswahl.alle())).thenReturn(List.of());
     when(arbeitszeit.alleAngefallen()).thenReturn(Map.of());
     when(arbeitszeit.alleImZeitraum(OKTOBER.atDay(1), OKTOBER.atEndOfMonth())).thenReturn(Map.of());
     when(rechnungen.gestellte()).thenReturn(new Gestellte(Map.of(), Map.of(), List.of()));

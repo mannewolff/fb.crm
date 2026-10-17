@@ -21,7 +21,6 @@ import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -30,6 +29,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mwolff.fbcrm.angebot.application.AngebotMitFirma;
 import org.mwolff.fbcrm.angebot.application.AngeboteUebersichtUseCase;
+import org.mwolff.fbcrm.angebot.application.Angebotsauswahl;
 import org.mwolff.fbcrm.angebot.domain.Angebot;
 import org.mwolff.fbcrm.angebot.domain.Angebotsposition;
 import org.mwolff.fbcrm.angebot.domain.Angebotsstatus;
@@ -170,7 +170,7 @@ class JahresabschlussUseCaseTest {
   private void gegeben(
       final List<GestellteRechnung> gestellte, final List<AngebotMitFirma> angebote) {
     when(rechnungen.gestellteRechnungen()).thenReturn(gestellte);
-    when(uebersicht.angebote(Optional.empty())).thenReturn(angebote);
+    when(uebersicht.angebote(Angebotsauswahl.alle())).thenReturn(angebote);
   }
 
   @Test
@@ -332,7 +332,7 @@ class JahresabschlussUseCaseTest {
 
     // Then — die Uebersicht braucht keine Stunden (E9).
     verify(rechnungen).gestellteRechnungen();
-    verify(uebersicht).angebote(Optional.empty());
+    verify(uebersicht).angebote(Angebotsauswahl.alle());
     verifyNoInteractions(arbeitszeit);
   }
 
@@ -602,7 +602,7 @@ class JahresabschlussUseCaseTest {
 
     // Then — die Stunden in einem Zug vom 1. Januar bis zum 31. Dezember (E9).
     verify(rechnungen).gestellteRechnungen();
-    verify(uebersicht).angebote(Optional.empty());
+    verify(uebersicht).angebote(Angebotsauswahl.alle());
     verify(arbeitszeit).alleImZeitraum(LocalDate.of(2025, 1, 1), LocalDate.of(2025, 12, 31));
   }
 

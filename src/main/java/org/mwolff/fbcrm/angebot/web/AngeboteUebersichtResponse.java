@@ -32,7 +32,8 @@ public record AngeboteUebersichtResponse(List<Zeile> angebote) {
    * @param angebotDatum Datum des Angebots
    * @param titel Titel des Angebots, {@code null} beim Angebot von vor #314 (Issue #325)
    * @param intern ob das Angebot die eigene interne Arbeit festhaelt (Issue #226)
-   * @param status Status des Angebots
+   * @param status Status des Angebots; am stornierten der Status, aus dem storniert wurde
+   * @param storniert ob das Angebot storniert ist (Issue #335)
    * @param summe Netto-Summe, gerechnet und nicht gespeichert (E5)
    */
   public record Zeile(
@@ -43,6 +44,7 @@ public record AngeboteUebersichtResponse(List<Zeile> angebote) {
       @Nullable String titel,
       boolean intern,
       Angebotsstatus status,
+      boolean storniert,
       BigDecimal summe) {
 
     static Zeile of(final AngebotMitFirma zeile) {
@@ -55,6 +57,7 @@ public record AngeboteUebersichtResponse(List<Zeile> angebote) {
           angebot.titel(),
           angebot.intern(),
           angebot.status(),
+          angebot.storniert(),
           angebot.summe());
     }
   }

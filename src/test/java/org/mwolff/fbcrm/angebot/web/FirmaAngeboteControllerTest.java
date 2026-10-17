@@ -137,7 +137,12 @@ class FirmaAngeboteControllerTest {
   void angebote_thenAnswersWithOneRowPerAngebot() throws Exception {
     // Given — Kriterium 7: die Liste in der Reihenfolge des Anwendungsfalls.
     when(liste.angebote(FIRMA))
-        .thenReturn(List.of(angelegt(null), angebot(9L, null, Angebotsstatus.BESTELLT)));
+        .thenReturn(
+            List.of(
+                angelegt(null),
+                // Issue #335: das stornierte Angebot traegt das Kennzeichen an seiner Zeile.
+                angebot(9L, null, Angebotsstatus.BESTELLT)
+                    .storniert("Auftrag zurückgezogen", ANGELEGT)));
 
     // When / Then
     mockMvc
@@ -149,8 +154,10 @@ class FirmaAngeboteControllerTest {
         .andExpect(jsonPath("$.angebote[0].titel").value("Website-Relaunch"))
         .andExpect(jsonPath("$.angebote[0].intern").value(false))
         .andExpect(jsonPath("$.angebote[0].summe").value(2500.03))
+        .andExpect(jsonPath("$.angebote[0].storniert").value(false))
         .andExpect(jsonPath("$.angebote[1].id").value(9))
-        .andExpect(jsonPath("$.angebote[1].status").value("BESTELLT"));
+        .andExpect(jsonPath("$.angebote[1].status").value("BESTELLT"))
+        .andExpect(jsonPath("$.angebote[1].storniert").value(true));
     verifyNoInteractions(kunden);
   }
 

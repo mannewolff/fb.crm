@@ -13,7 +13,6 @@ import java.time.Year;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -21,6 +20,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mwolff.fbcrm.angebot.application.AngebotMitFirma;
 import org.mwolff.fbcrm.angebot.application.AngeboteUebersichtUseCase;
+import org.mwolff.fbcrm.angebot.application.Angebotsauswahl;
 import org.mwolff.fbcrm.angebot.domain.Angebot;
 import org.mwolff.fbcrm.angebot.domain.Angebotsposition;
 import org.mwolff.fbcrm.angebot.domain.Angebotsstatus;
@@ -122,7 +122,7 @@ class ForecastUseCaseTest {
 
   private void gegeben(
       final List<AngebotMitFirma> angebote, final Map<Long, BigDecimal> abgerechnet) {
-    when(uebersicht.angebote(Optional.empty())).thenReturn(angebote);
+    when(uebersicht.angebote(Angebotsauswahl.alle())).thenReturn(angebote);
     when(rechnungen.abgerechneteMengen()).thenReturn(abgerechnet);
   }
 

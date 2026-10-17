@@ -5,12 +5,12 @@ import java.time.Year;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.SortedMap;
 import java.util.TreeMap;
 import java.util.function.Predicate;
 import org.mwolff.fbcrm.angebot.application.AngebotMitFirma;
 import org.mwolff.fbcrm.angebot.application.AngeboteUebersichtUseCase;
+import org.mwolff.fbcrm.angebot.application.Angebotsauswahl;
 import org.mwolff.fbcrm.angebot.domain.Angebotsposition;
 import org.mwolff.fbcrm.angebot.domain.Angebotsstatus;
 import org.mwolff.fbcrm.common.Geldrechnung;
@@ -28,7 +28,7 @@ import org.springframework.transaction.annotation.Transactional;
  * die Kennzahlen holte ihn jeder Wechsel des Zeitraums neu.
  *
  * <p><b>Zwei Zuege und keiner je Angebot.</b> Die Angebote mit den Namen ihrer Firmen kommen in
- * einem ({@link AngeboteUebersichtUseCase#angebote(Optional)}), die abgerechneten Mengen je
+ * einem ({@link AngeboteUebersichtUseCase#angebote(Angebotsauswahl)}), die abgerechneten Mengen je
  * Angebotsposition in einem zweiten ({@link Rechnungsauskunft#abgerechneteMengen()}). Diese Tuer
  * zaehlt Entwuerfe mit — der Forecast zeigt den Rest, der am Angebot unter „Offen" steht, und nicht
  * den Umsatz (Kriterium 3).
@@ -70,7 +70,7 @@ public class ForecastUseCase {
    *     „angeboten" samt den Positionen, aeltestes Jahr zuerst; leer ohne jede offene Position
    */
   public Forecast forecast() {
-    final List<AngebotMitFirma> alle = angebote.angebote(Optional.empty());
+    final List<AngebotMitFirma> alle = angebote.angebote(Angebotsauswahl.alle());
     final Map<Long, BigDecimal> abgerechnet = rechnungen.abgerechneteMengen();
     final SortedMap<Year, List<Forecastposition>> jeJahr = new TreeMap<>();
     for (final AngebotMitFirma zeile : alle) {

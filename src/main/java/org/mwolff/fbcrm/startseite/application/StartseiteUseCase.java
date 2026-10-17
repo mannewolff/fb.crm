@@ -11,6 +11,7 @@ import java.util.Map;
 import java.util.Optional;
 import org.mwolff.fbcrm.angebot.application.AngebotMitFirma;
 import org.mwolff.fbcrm.angebot.application.AngeboteUebersichtUseCase;
+import org.mwolff.fbcrm.angebot.application.Angebotsauswahl;
 import org.mwolff.fbcrm.angebot.domain.Angebotsposition;
 import org.mwolff.fbcrm.angebot.domain.Angebotsstatus;
 import org.mwolff.fbcrm.arbeitszeit.application.Arbeitszeitauskunft;
@@ -28,8 +29,8 @@ import org.springframework.transaction.annotation.Transactional;
  * Die vier Kennzahlen der Startseite (#206; Plan #208, E1; Issue #285).
  *
  * <p><b>Vier Auskuenfte und keine je Angebot.</b> Die Angebote mit den Namen ihrer Firmen kommen in
- * einem Zug ({@link AngeboteUebersichtUseCase#angebote(Optional)}, E2) — mit allen Status, weil
- * Kennzahl 2 sie alle braucht und Kennzahl 1 daraus filtert. Aus der Zeiterfassung kommen drei
+ * einem Zug ({@link AngeboteUebersichtUseCase#angebote(Angebotsauswahl)}, E2) — mit allen Status,
+ * weil Kennzahl 2 sie alle braucht und Kennzahl 1 daraus filtert. Aus der Zeiterfassung kommen drei
  * Zuege ueber alle Angebote ({@link Arbeitszeitauskunft#alleAngefallen()}, {@link
  * Arbeitszeitauskunft#alleImZeitraum(LocalDate, LocalDate)} und {@link
  * Arbeitszeitauskunft#monateMitEintragImZeitraum(LocalDate, LocalDate)}; Plan #208, E3; Plan #274,
@@ -110,7 +111,7 @@ public class StartseiteUseCase {
                 new Zeitraum.Jahr(diesesJahr).bis()));
     final Zeitraum zeitraum =
         gewaehlt.filter(waehlbar::enthaelt).orElse(new Zeitraum.Jahr(diesesJahr));
-    final List<AngebotMitFirma> alle = angebote.angebote(Optional.empty());
+    final List<AngebotMitFirma> alle = angebote.angebote(Angebotsauswahl.alle());
     final Map<Long, BigDecimal> angefallen = arbeitszeit.alleAngefallen();
     final Map<Long, BigDecimal> imZeitraum =
         arbeitszeit.alleImZeitraum(zeitraum.von(), zeitraum.bis());

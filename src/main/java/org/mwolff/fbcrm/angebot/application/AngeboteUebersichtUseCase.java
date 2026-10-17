@@ -7,7 +7,6 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import org.mwolff.fbcrm.angebot.domain.Angebot;
 import org.mwolff.fbcrm.angebot.domain.AngebotRepository;
-import org.mwolff.fbcrm.angebot.domain.Angebotsstatus;
 import org.mwolff.fbcrm.firma.application.FirmaNichtGefunden;
 import org.mwolff.fbcrm.firma.domain.Firma;
 import org.mwolff.fbcrm.firma.domain.FirmaRepository;
@@ -15,11 +14,17 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Die Uebersicht aller Angebote, wahlweise nach Status gefiltert (Issue #127, Kriterium 8).
+ * Die Uebersicht aller Angebote, wahlweise nach Status gefiltert (Issue #127, Kriterium 8) oder auf
+ * die stornierten beschraenkt (Issue #335, Plan #332 E6 und E7).
  *
  * <p>Die Reihenfolge ist die jeder Angebotsliste ({@link Angebotsreihenfolge}). Die Namen der
  * Firmen kommen in <b>einem</b> Aufruf fuer alle beteiligten Firmen; je Zeile nachzufragen waere
  * die bekannte Abfrage-Lawine. Ohne Angebot wird gar nicht gefragt.
+ *
+ * <p><b>Der Status geht in den Bestand, das Storno filtert die Anwendungsschicht</b> ({@link
+ * Angebotsauswahl#passt}): Die Regel, welches Angebot zur Auswahl gehoert, steht an einer Stelle,
+ * und {@code findAlle} kennt nur einen Status je Aufruf — wie beim {@code
+ * BuchbarePositionenUseCase}.
  */
 @Service
 @Transactional(readOnly = true)
@@ -36,12 +41,17 @@ public class AngeboteUebersichtUseCase {
   /**
    * Die Angebote, neueste zuerst, jedes mit dem Namen seiner Firma.
    *
-   * @param status der gesuchte Status, oder leer fuer alle
+   * @param auswahl welche Angebote: {@link Angebotsauswahl#alle()} fuer alle, {@link
+   *     Angebotsauswahl#imStatus} fuer die nicht stornierten in einem Status, {@link
+   *     Angebotsauswahl#stornierte()} fuer jedes stornierte
    * @throws FirmaNichtGefunden wenn es die Firma eines Angebots nicht gibt — Firmen werden nie
    *     geloescht, das waere ein Widerspruch im Bestand
    */
-  public List<AngebotMitFirma> angebote(final Optional<Angebotsstatus> status) {
-    final List<Angebot> gefunden = bestand.findAlle(status);
+  public List<AngebotMitFirma> angebote(final Angebotsauswahl auswahl) {
+    final List<Angebot> gefunden =
+        bestand.findAlle(Optional.ofNullable(auswahl.status())).stream()
+            .filter(auswahl::passt)
+            .toList();
     if (gefunden.isEmpty()) {
       return List.of();
     }
