@@ -272,6 +272,21 @@ class StartseiteUseCaseTest {
       final Angebotsstatus status,
       final List<Angebotsposition> positionen,
       final String firmaName) {
+    return angebot(id, status, false, positionen, firmaName);
+  }
+
+  /* Ein storniertes Angebot: Der Status bleibt der, aus dem storniert wurde (#330, Kriterium 9). */
+  private static AngebotMitFirma storniert(
+      final long id, final Angebotsstatus status, final List<Angebotsposition> positionen) {
+    return angebot(id, status, true, positionen, ADLER);
+  }
+
+  private static AngebotMitFirma angebot(
+      final long id,
+      final Angebotsstatus status,
+      final boolean storniert,
+      final List<Angebotsposition> positionen,
+      final String firmaName) {
     return new AngebotMitFirma(
         new Angebot(
             Long.valueOf(id),
@@ -279,7 +294,7 @@ class StartseiteUseCaseTest {
             null,
             status.intern(),
             status,
-            false,
+            storniert,
             null,
             ANGEBOTSDATUM,
             "Website-Relaunch",
@@ -324,6 +339,50 @@ class StartseiteUseCaseTest {
     assertThat(stand.inArbeit())
         .extracting(zeile -> zeile.angebot().requireId())
         .containsExactly(2L, 4L);
+  }
+
+  @Test
+  void stand_withAStorniertesAngebot_thenItIsMissingFromInArbeit() {
+    // Given — #330, Kriterium 3: ein aus „bestellt" storniertes Angebot neben einem bestellten.
+    gegebenImOktober(
+        List.of(
+            storniert(1L, Angebotsstatus.BESTELLT, List.of()),
+            angebot(2L, Angebotsstatus.BESTELLT, List.of())),
+        Map.of(),
+        Map.of(),
+        Map.of());
+
+    // When
+    final Startseitenstand stand = useCase.stand(IM_OKTOBER);
+
+    // Then
+    assertThat(stand.inArbeit())
+        .extracting(zeile -> zeile.angebot().requireId())
+        .containsExactly(2L);
+  }
+
+  @Test
+  void
+      stand_withAStorniertesAngebotWithGebuchtenUnberechnetenStunden_thenNichtAbgerechnetKeepsThem() {
+    // Given — #330, Kriterium 8 (Plan #332, E11): bestellt ueber 8 Stunden zu 100,00 €, 3 davon
+    // gebucht und nicht berechnet, dann mit „Rest nicht abgerufen" storniert. Das Storno wirkt hier
+    // ausdruecklich nicht.
+    final Angebotsposition rest = stunden(301L, "8.00", "100.00");
+    gegebenImOktober(
+        List.of(storniert(1L, Angebotsstatus.BESTELLT, List.of(rest))),
+        Map.of(301L, new BigDecimal("3.00")),
+        Map.of(301L, new BigDecimal("3.00")),
+        Map.of());
+
+    // When
+    final Startseitenstand stand = useCase.stand(IM_OKTOBER);
+
+    // Then — genau die 3 Stunden, im Hauptbetrag wie in der Zeile des Zeitraums.
+    assertThat(stand.nichtAbgerechnet().betrag()).isEqualByComparingTo("300.00");
+    assertThat(stand.nichtAbgerechnet().erfasstImZeitraum()).isEqualByComparingTo("300.00");
+    assertThat(stand.nichtAbgerechnet().anteile())
+        .extracting(anteil -> anteil.angebot().angebot().requireId(), Angebotsanteil::betrag)
+        .containsExactly(tuple(1L, new BigDecimal("300.00")));
   }
 
   @Test

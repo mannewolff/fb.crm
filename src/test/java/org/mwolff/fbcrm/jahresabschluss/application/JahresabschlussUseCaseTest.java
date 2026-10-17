@@ -56,7 +56,8 @@ import org.mwolff.fbcrm.rechnung.domain.Rechnungszustand;
  *
  * <p>Die Statusmengen ({@code Angebotsblick}), die Prozentrundung ({@code Quote}), die Gruppierung
  * je Steuersatz ({@code Steuerblick}) und die je Firma ({@code Kundenblick}) werden hier
- * mitgeprueft und haben keine eigene Testklasse: Sie sind paket-privat und keine eigene Zusage.
+ * mitgeprueft: Sie sind paket-privat und keine eigene Zusage. Allein das Storno an den Mengen von
+ * {@code Angebotsblick} steht zusaetzlich in {@code AngebotsblickTest} (#330, Kriterium 11).
  *
  * <p>Die Uhr steht fest auf dem 31. Dezember 2026 um 23:30 UTC. In der Geschaeftszone ist das schon
  * der 1. Januar 2027, 00:30 Uhr — das laufende Jahr ist darum 2027 und nicht 2026. Am Nullmeridian
@@ -131,6 +132,20 @@ class JahresabschlussUseCaseTest {
 
   private static AngebotMitFirma angebot(
       final LocalDate datum, final Angebotsstatus status, final Angebotsposition... positionen) {
+    return angebot(datum, status, false, positionen);
+  }
+
+  /* Ein storniertes Angebot: Der Status bleibt der, aus dem storniert wurde (#330, Kriterium 9). */
+  private static AngebotMitFirma storniert(
+      final LocalDate datum, final Angebotsstatus status, final Angebotsposition... positionen) {
+    return angebot(datum, status, true, positionen);
+  }
+
+  private static AngebotMitFirma angebot(
+      final LocalDate datum,
+      final Angebotsstatus status,
+      final boolean storniert,
+      final Angebotsposition[] positionen) {
     return new AngebotMitFirma(
         new Angebot(
             null,
@@ -138,7 +153,7 @@ class JahresabschlussUseCaseTest {
             null,
             status.intern(),
             status,
-            false,
+            storniert,
             null,
             datum,
             "Website-Relaunch",
@@ -669,6 +684,58 @@ class JahresabschlussUseCaseTest {
         .isEqualTo(
             new Angebotsbilanz(
                 1, 0, 1, new BigDecimal("0.0"), new BigDecimal("100.00"), new BigDecimal("0.00")));
+  }
+
+  @Test
+  void abschluss_whenAnAngebotIsStorniertFromAngelegt_thenItCountsNowhere() {
+    // Given — #330, Kriterium 11: neben einem abgegebenen ein aus „angelegt" storniertes.
+    gegeben(
+        List.of(),
+        List.of(
+            angebot(LocalDate.of(2025, 2, 1), Angebotsstatus.ABGEGEBEN, position(1, "1", "100")),
+            storniert(LocalDate.of(2025, 3, 1), Angebotsstatus.ANGELEGT, position(2, "9", "100"))));
+
+    // When / Then — es zaehlt weder als abgegeben noch als angenommen noch als offen.
+    assertThat(useCase.abschluss(Year.of(2025)).angebotsbilanz())
+        .isEqualTo(
+            new Angebotsbilanz(
+                1, 0, 1, new BigDecimal("0.0"), new BigDecimal("100.00"), new BigDecimal("0.00")));
+  }
+
+  @Test
+  void abschluss_whenAnAngebotIsStorniertFromAbgegeben_thenItCountsAsAbgegebenButNotAsAngenommen() {
+    // Given — #330, Kriterium 11: allein ein aus „abgegeben" storniertes Angebot.
+    gegeben(
+        List.of(),
+        List.of(
+            storniert(
+                LocalDate.of(2025, 2, 1), Angebotsstatus.ABGEGEBEN, position(1, "2", "100"))));
+
+    // When / Then — abgegeben ja, angenommen nein, heute offen nein.
+    assertThat(useCase.abschluss(Year.of(2025)).angebotsbilanz())
+        .isEqualTo(
+            new Angebotsbilanz(
+                1, 0, 0, new BigDecimal("0.0"), new BigDecimal("200.00"), new BigDecimal("0.00")));
+  }
+
+  @Test
+  void abschluss_whenAnAngebotIsStorniertFromBestellt_thenItCountsAsAbgegebenAndAngenommen() {
+    // Given — #330, Kriterium 11: allein ein aus „bestellt" storniertes Angebot.
+    gegeben(
+        List.of(),
+        List.of(
+            storniert(LocalDate.of(2025, 2, 1), Angebotsstatus.BESTELLT, position(1, "3", "100"))));
+
+    // When / Then — abgegeben und angenommen, heute offen nein.
+    assertThat(useCase.abschluss(Year.of(2025)).angebotsbilanz())
+        .isEqualTo(
+            new Angebotsbilanz(
+                1,
+                1,
+                0,
+                new BigDecimal("100.0"),
+                new BigDecimal("300.00"),
+                new BigDecimal("300.00")));
   }
 
   @Test

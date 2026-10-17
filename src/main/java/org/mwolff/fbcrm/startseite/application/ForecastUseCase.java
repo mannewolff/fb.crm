@@ -33,11 +33,11 @@ import org.springframework.transaction.annotation.Transactional;
  * zaehlt Entwuerfe mit — der Forecast zeigt den Rest, der am Angebot unter „Offen" steht, und nicht
  * den Umsatz (Kriterium 3).
  *
- * <p><b>Kein Statusfilter</b> (E4): Gefiltert wird {@code !intern} und „an dieser Position ist noch
- * etwas offen"; der Status entscheidet allein die Spalte ({@link #zugesagt}). Nach dem {@code
- * intern}-Filter ist die Statusmenge aus Kriterium 2 genau die Menge aller Kundenstatus, und eine
- * Aufzaehlung, die kein Test kippen kann, waere ein Loch in der Zweig- und Mutationsabdeckung
- * (CLAUDE-java.md §5).
+ * <p><b>Kein Statusfilter</b> (E4): Gefiltert wird {@code !intern}, {@code !storniert} (#330,
+ * Kriterium 2; Plan #332) und „an dieser Position ist noch etwas offen"; der Status entscheidet
+ * allein die Spalte ({@link #zugesagt}). Nach dem {@code intern}-Filter ist die Statusmenge aus
+ * Kriterium 2 genau die Menge aller Kundenstatus, und eine Aufzaehlung, die kein Test kippen kann,
+ * waere ein Loch in der Zweig- und Mutationsabdeckung (CLAUDE-java.md §5).
  *
  * <p><b>Offen ist die Menge, nicht der Betrag</b> (E5): Ob eine Position im Forecast steht, sagt
  * {@link Positionsstand#offenesVorhanden()}. Eine offene Position mit Einzelpreis 0 steht darum mit
@@ -74,8 +74,9 @@ public class ForecastUseCase {
     final Map<Long, BigDecimal> abgerechnet = rechnungen.abgerechneteMengen();
     final SortedMap<Year, List<Forecastposition>> jeJahr = new TreeMap<>();
     for (final AngebotMitFirma zeile : alle) {
-      // Interne Arbeit erscheint nie (#302, Kriterium 2).
-      if (zeile.angebot().intern()) {
+      // Interne Arbeit erscheint nie (#302, Kriterium 2), ein storniertes Angebot mit keiner seiner
+      // Positionen (#330, Kriterium 2) — und ein Jahr, das nur solche truege, entsteht darum nicht.
+      if (zeile.angebot().intern() || zeile.angebot().storniert()) {
         continue;
       }
       for (final Angebotsposition position : zeile.angebot().positionen()) {
