@@ -97,6 +97,8 @@ class BuchbarePositionenUseCaseTest {
         null,
         status.intern(),
         status,
+        false,
+        null,
         datum,
         "Website-Relaunch",
         "Wartungsvertrag",

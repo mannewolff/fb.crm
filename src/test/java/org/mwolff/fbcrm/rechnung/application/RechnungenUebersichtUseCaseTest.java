@@ -136,6 +136,8 @@ class RechnungenUebersichtUseCaseTest {
                     null,
                     false,
                     Angebotsstatus.BESTELLT,
+                    false,
+                    null,
                     Rechnungsdoppel.ANGEBOTSDATUM,
                     "Website-Relaunch",
                     null,

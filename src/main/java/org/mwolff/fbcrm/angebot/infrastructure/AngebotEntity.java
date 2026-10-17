@@ -15,7 +15,7 @@ import org.mwolff.fbcrm.angebot.domain.Angebot;
 import org.mwolff.fbcrm.angebot.domain.Angebotsstatus;
 
 /**
- * Die Zeile der Tabelle {@code angebot} nach {@code V24__angebot_titel.sql}.
+ * Die Zeile der Tabelle {@code angebot} nach {@code V25__angebot_storno.sql}.
  *
  * <p>Firma und Ansprechpartner stehen als blosse Kennungen und nicht als Beziehung: Angebot und
  * Firma sind eigene Wurzeln mit eigenem Lebenszyklus, und eine Beziehung laedt das eine mit dem
@@ -30,6 +30,10 @@ import org.mwolff.fbcrm.angebot.domain.Angebotsstatus;
  * <p>{@code intern} steht als eigene Spalte neben dem Status und wird nicht aus ihm gelesen (Issue
  * #226, E1): Eine Abfrage nach der Art des Angebots soll ohne Aufzaehlung von Statuswerten gehen.
  * Dass beide dasselbe sagen, haelt der CHECK {@code angebot_art_status}.
+ *
+ * <p>{@code storniert} und {@code storno_grund} stehen ebenso neben dem Status und nicht in ihm
+ * (Issue #333, Plan #332 E1): Der Status behaelt den Wert, aus dem storniert wurde. Die Zusagen
+ * dazu halten die vier CHECKs aus {@code V25__angebot_storno.sql}.
  */
 @Entity
 @Table(name = "angebot")
@@ -51,6 +55,12 @@ class AngebotEntity {
   @Enumerated(EnumType.STRING)
   @Column(name = "status", nullable = false, length = 20)
   private Angebotsstatus status;
+
+  @Column(name = "storniert", nullable = false)
+  private boolean storniert;
+
+  @Column(name = "storno_grund", columnDefinition = "text")
+  private @Nullable String stornoGrund;
 
   @Column(name = "angebot_datum", nullable = false)
   private LocalDate angebotDatum;
@@ -98,6 +108,8 @@ class AngebotEntity {
     this.ansprechpartnerId = angebot.ansprechpartnerId();
     this.intern = angebot.intern();
     this.status = angebot.status();
+    this.storniert = angebot.storniert();
+    this.stornoGrund = angebot.stornoGrund();
     this.angebotDatum = angebot.angebotDatum();
     this.titel = angebot.titel();
     this.beschreibung = angebot.beschreibung();
@@ -123,6 +135,14 @@ class AngebotEntity {
 
   Angebotsstatus getStatus() {
     return status;
+  }
+
+  boolean isStorniert() {
+    return storniert;
+  }
+
+  @Nullable String getStornoGrund() {
+    return stornoGrund;
   }
 
   LocalDate getAngebotDatum() {

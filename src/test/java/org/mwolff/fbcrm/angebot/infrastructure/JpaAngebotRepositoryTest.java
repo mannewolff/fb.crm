@@ -120,6 +120,8 @@ class JpaAngebotRepositoryTest {
         8L,
         status.intern(),
         status,
+        false,
+        null,
         ANGEBOTSDATUM,
         TITEL,
         BESCHREIBUNG,
@@ -136,6 +138,8 @@ class JpaAngebotRepositoryTest {
         angebot.ansprechpartnerId(),
         angebot.intern(),
         angebot.status(),
+        angebot.storniert(),
+        angebot.stornoGrund(),
         angebot.angebotDatum(),
         titel,
         angebot.beschreibung(),
@@ -671,5 +675,83 @@ class JpaAngebotRepositoryTest {
     // When / Then
     assertThat(repository.findById(11L))
         .hasValueSatisfying(angebot -> assertThat(angebot.titel()).isNull());
+  }
+
+  @Test
+  void angebotszeile_givenAStornoedAngebot_thenCarriesTheFlagAndTheReason() {
+    // Given — Issue #333: beide Werte gehen in ihre Spalten.
+    final Angebot storniert = angebot(List.of()).storniert("Auftrag zurueckgezogen", GEAENDERT);
+
+    // When
+    final AngebotEntity zeile = AngebotEntity.aus(storniert);
+
+    // Then
+    assertThat(zeile)
+        .satisfies(
+            gelesen -> assertThat(gelesen.isStorniert()).isTrue(),
+            gelesen -> assertThat(gelesen.getStornoGrund()).isEqualTo("Auftrag zurueckgezogen"),
+            gelesen -> assertThat(gelesen.getStatus()).isEqualTo(Angebotsstatus.BESTELLT));
+  }
+
+  @Test
+  void angebotszeile_givenAnAngebotWithoutStorno_thenTheFlagIsUnsetAndTheReasonAbsent() {
+    // When
+    final AngebotEntity zeile = AngebotEntity.aus(angebot(List.of()));
+
+    // Then
+    assertThat(zeile.isStorniert()).isFalse();
+    assertThat(zeile.getStornoGrund()).isNull();
+  }
+
+  @Test
+  void save_givenAStornoedAngebot_thenWritesTheFlagAndTheReasonIntoTheRow() {
+    // Given
+    final Angebot storniert = angebot(List.of()).storniert("Auftrag zurueckgezogen", GEAENDERT);
+    erwarteSchreibenDerZeile(AngebotEntity.aus(storniert));
+
+    // When
+    final Angebot gesichert = repository.save(storniert);
+
+    // Then — hin in die Zeile und zurueck in das Angebot, das der Adapter liefert.
+    verify(angebote).save(gespeicherte.capture());
+    assertThat(gespeicherte.getValue().isStorniert()).isTrue();
+    assertThat(gespeicherte.getValue().getStornoGrund()).isEqualTo("Auftrag zurueckgezogen");
+    assertThat(gesichert.storniert()).isTrue();
+    assertThat(gesichert.stornoGrund()).isEqualTo("Auftrag zurueckgezogen");
+  }
+
+  @Test
+  void findById_givenAStornoedRow_thenTranslatesTheFlagAndTheReasonBack() {
+    // Given — kein Weg zurueck darf ein Storno stillschweigend verlieren.
+    when(angebote.findById(11L))
+        .thenReturn(
+            Optional.of(
+                AngebotEntity.aus(
+                    angebot(List.of()).storniert("vom Kunden abgelehnt", GEAENDERT))));
+    when(positionen.findByAngebot(11L)).thenReturn(List.of());
+
+    // When / Then
+    assertThat(repository.findById(11L))
+        .hasValueSatisfying(
+            angebot -> {
+              assertThat(angebot.storniert()).isTrue();
+              assertThat(angebot.stornoGrund()).isEqualTo("vom Kunden abgelehnt");
+              assertThat(angebot.status()).isEqualTo(Angebotsstatus.BESTELLT);
+            });
+  }
+
+  @Test
+  void findById_givenARowWithoutStorno_thenTheFlagStaysUnsetAndTheReasonAbsent() {
+    // Given
+    when(angebote.findById(11L)).thenReturn(Optional.of(zeile()));
+    when(positionen.findByAngebot(11L)).thenReturn(List.of());
+
+    // When / Then
+    assertThat(repository.findById(11L))
+        .hasValueSatisfying(
+            angebot -> {
+              assertThat(angebot.storniert()).isFalse();
+              assertThat(angebot.stornoGrund()).isNull();
+            });
   }
 }

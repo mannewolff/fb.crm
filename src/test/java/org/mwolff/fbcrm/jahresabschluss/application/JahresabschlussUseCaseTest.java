@@ -138,6 +138,8 @@ class JahresabschlussUseCaseTest {
             null,
             status.intern(),
             status,
+            false,
+            null,
             datum,
             "Website-Relaunch",
             "Neugestaltung der Website",

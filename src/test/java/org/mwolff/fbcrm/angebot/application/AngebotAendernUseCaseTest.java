@@ -276,6 +276,8 @@ class AngebotAendernUseCaseTest {
         angebot.ansprechpartnerId(),
         angebot.intern(),
         angebot.status(),
+        false,
+        null,
         angebot.angebotDatum(),
         angebot.titel(),
         angebot.beschreibung(),

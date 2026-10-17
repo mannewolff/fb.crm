@@ -109,6 +109,8 @@ class ForecastUseCaseTest {
             null,
             status.intern(),
             status,
+            false,
+            null,
             ANGEBOTSDATUM,
             "Website-Relaunch",
             "Schulungen",

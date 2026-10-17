@@ -151,6 +151,8 @@ class AngebotControllerTest {
         8L,
         status.intern(),
         status,
+        false,
+        null,
         ANGEBOTSDATUM,
         titel,
         "Neugestaltung",

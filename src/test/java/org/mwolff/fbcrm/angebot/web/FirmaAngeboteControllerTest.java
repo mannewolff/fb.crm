@@ -105,6 +105,8 @@ class FirmaAngeboteControllerTest {
         ansprechpartnerId,
         status.intern(),
         status,
+        false,
+        null,
         ANGEBOTSDATUM,
         titel,
         null,

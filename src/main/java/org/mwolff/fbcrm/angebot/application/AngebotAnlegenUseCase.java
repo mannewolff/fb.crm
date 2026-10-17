@@ -83,6 +83,8 @@ public class AngebotAnlegenUseCase {
             ansprechpartnerId,
             intern,
             intern ? Angebotsstatus.LAEUFT : Angebotsstatus.ANGELEGT,
+            false,
+            null,
             heute,
             titel,
             null,

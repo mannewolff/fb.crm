@@ -65,6 +65,8 @@ class AngeboteControllerTest {
             null,
             status.intern(),
             status,
+            false,
+            null,
             LocalDate.of(2026, 9, 20),
             titel,
             null,

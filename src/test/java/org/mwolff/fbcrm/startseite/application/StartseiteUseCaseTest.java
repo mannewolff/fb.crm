@@ -278,6 +278,8 @@ class StartseiteUseCaseTest {
             null,
             status.intern(),
             status,
+            false,
+            null,
             ANGEBOTSDATUM,
             "Website-Relaunch",
             "Neugestaltung der Website",

@@ -13,6 +13,7 @@ import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
+import org.mwolff.fbcrm.angebot.application.AngebotStorniert;
 import org.mwolff.fbcrm.angebot.application.StatusGrenzeErreicht;
 import org.mwolff.fbcrm.common.Abrechnungsmodus;
 import org.mwolff.fbcrm.common.Einheit;
@@ -30,6 +31,10 @@ import org.mwolff.fbcrm.common.Einheit;
  *
  * <p><b>Dazu der Titel</b> (Issue #316, Plan #315 E1): nicht leer und hoechstens 200 Zeichen, am
  * Rand von Leerraum befreit, und {@code null} fuer ein Angebot von vor dieser Aenderung.
+ *
+ * <p><b>Dazu das Storno</b> (Issue #333, Plan #332 E1 bis E4, E16): ein Kennzeichen neben dem
+ * Status, gesetzt nur aus „angelegt", „abgegeben" und „bestellt", mit einem freiwilligen Grund, der
+ * nur am stornierten Angebot steht. Solange es storniert ist, steht die Statuskette still.
  */
 class AngebotTest {
 
@@ -87,6 +92,8 @@ class AngebotTest {
         8L,
         status.intern(),
         status,
+        false,
+        null,
         ANGEBOTSDATUM,
         "Website-Relaunch",
         "Neugestaltung der Website",
@@ -102,6 +109,8 @@ class AngebotTest {
         8L,
         false,
         Angebotsstatus.ANGELEGT,
+        false,
+        null,
         ANGEBOTSDATUM,
         titel,
         "Neugestaltung der Website",
@@ -117,6 +126,30 @@ class AngebotTest {
         8L,
         intern,
         status,
+        false,
+        null,
+        ANGEBOTSDATUM,
+        "Website-Relaunch",
+        "Neugestaltung der Website",
+        List.of(KONZEPTION),
+        ANGELEGT,
+        ANGELEGT);
+  }
+
+  /**
+   * Das Angebot mit einem Storno von Hand — Kennzeichen und Grund frei, das Kennzeichen {@code
+   * intern} aus dem Status, damit allein die Invarianten des Stornos greifen.
+   */
+  private static Angebot mitStorno(
+      final Angebotsstatus status, final boolean storniert, final @Nullable String grund) {
+    return new Angebot(
+        7L,
+        3L,
+        8L,
+        status.intern(),
+        status,
+        storniert,
+        grund,
         ANGEBOTSDATUM,
         "Website-Relaunch",
         "Neugestaltung der Website",
@@ -522,5 +555,179 @@ class AngebotTest {
                 angebot(Angebotsstatus.ANGELEGT)
                     .geaendert(ANGEBOTSDATUM, 9L, "   ", null, List.of(), JETZT))
         .isInstanceOf(IllegalArgumentException.class);
+  }
+
+  @ParameterizedTest
+  @EnumSource(
+      value = Angebotsstatus.class,
+      names = {"ANGELEGT", "ABGEGEBEN", "BESTELLT"})
+  void storniert_givenAStatusBeforeTheWorkIsDone_thenFlagSetStatusKeptAndReasonStripped(
+      final Angebotsstatus status) {
+    // Given — #330, Kriterium 1 und 5; E1: der Status behaelt den Wert, aus dem storniert wurde.
+    final Angebot angebot = angebot(status);
+
+    // When
+    final Angebot storniert = angebot.storniert("  vom Kunden abgelehnt \n", JETZT);
+
+    // Then
+    assertThat(storniert)
+        .satisfies(
+            a -> assertThat(a.storniert()).isTrue(),
+            a -> assertThat(a.stornoGrund()).isEqualTo("vom Kunden abgelehnt"),
+            a -> assertThat(a.status()).isEqualTo(status),
+            a -> assertThat(a.intern()).isFalse(),
+            a -> assertThat(a.updatedAt()).isEqualTo(JETZT),
+            a -> assertThat(a.createdAt()).isEqualTo(ANGELEGT),
+            a -> assertThat(a.id()).isEqualTo(7L),
+            a -> assertThat(a.firmaId()).isEqualTo(3L),
+            a -> assertThat(a.ansprechpartnerId()).isEqualTo(8L),
+            a -> assertThat(a.angebotDatum()).isEqualTo(ANGEBOTSDATUM),
+            a -> assertThat(a.titel()).isEqualTo("Website-Relaunch"),
+            a -> assertThat(a.beschreibung()).isEqualTo("Neugestaltung der Website"),
+            a -> assertThat(a.positionen()).containsExactly(KONZEPTION));
+  }
+
+  @Test
+  void storniert_givenNoReason_thenStornoWithoutReason() {
+    // When — E4: der Grund ist freiwillig, null heisst „ohne Grund".
+    final Angebot storniert = angebot(Angebotsstatus.ABGEGEBEN).storniert(null, JETZT);
+
+    // Then
+    assertThat(storniert.storniert()).isTrue();
+    assertThat(storniert.stornoGrund()).isNull();
+  }
+
+  @ParameterizedTest
+  @EnumSource(
+      value = Angebotsstatus.class,
+      names = {"ANGELEGT", "ABGEGEBEN", "BESTELLT"})
+  void stornoZurueckgenommen_thenFlagClearedReasonGoneAndStatusKept(final Angebotsstatus status) {
+    // Given — #330, Kriterium 9: zurueck in genau den Zustand von vorher, ohne Grund.
+    final Angebot storniert = mitStorno(status, true, "Auftrag zurueckgezogen");
+
+    // When
+    final Angebot zurueck = storniert.stornoZurueckgenommen(JETZT);
+
+    // Then
+    assertThat(zurueck)
+        .satisfies(
+            a -> assertThat(a.storniert()).isFalse(),
+            a -> assertThat(a.stornoGrund()).isNull(),
+            a -> assertThat(a.status()).isEqualTo(status),
+            a -> assertThat(a.updatedAt()).isEqualTo(JETZT),
+            a -> assertThat(a.createdAt()).isEqualTo(ANGELEGT),
+            a -> assertThat(a.id()).isEqualTo(7L),
+            a -> assertThat(a.titel()).isEqualTo("Website-Relaunch"),
+            a -> assertThat(a.positionen()).containsExactly(KONZEPTION));
+  }
+
+  @Test
+  void konstruktor_givenAReasonWithoutStorno_thenRejected() {
+    // When / Then — ein Grund steht nur an einem stornierten Angebot.
+    assertThatThrownBy(() -> mitStorno(Angebotsstatus.ABGEGEBEN, false, "vom Kunden abgelehnt"))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("Grund");
+  }
+
+  @ParameterizedTest
+  @EnumSource(
+      value = Angebotsstatus.class,
+      names = {"ERLEDIGT", "ABGERECHNET", "LAEUFT", "ABGESCHLOSSEN"})
+  void konstruktor_givenAStornoInAStatusAfterTheWorkOrOfInternalWork_thenRejected(
+      final Angebotsstatus status) {
+    // When / Then — E3: storniert wird nur aus „angelegt", „abgegeben" und „bestellt"; die
+    // internen Status fallen ueber dieselbe Menge heraus.
+    assertThatThrownBy(() -> mitStorno(status, true, null))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining(status.name());
+  }
+
+  @Test
+  void konstruktor_givenWhitespaceAroundTheReason_thenStripsIt() {
+    // When / Then — E4: Leerraum am Rand gehoert nicht zum Grund.
+    assertThat(
+            mitStorno(Angebotsstatus.BESTELLT, true, "\t Auftrag zurueckgezogen  ").stornoGrund())
+        .isEqualTo("Auftrag zurueckgezogen");
+  }
+
+  @Test
+  void konstruktor_givenNoReason_thenAccepted() {
+    // When / Then — null bleibt erlaubt, auch am stornierten Angebot.
+    assertThat(mitStorno(Angebotsstatus.BESTELLT, true, null).stornoGrund()).isNull();
+  }
+
+  @Test
+  void konstruktor_givenAReasonOfOnlyWhitespace_thenRejected() {
+    // When / Then — E4: dieselbe Zusage wie der CHECK angebot_storno_grund_text.
+    assertThatThrownBy(() -> mitStorno(Angebotsstatus.BESTELLT, true, " \n "))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("2000");
+  }
+
+  @Test
+  void konstruktor_givenAReasonOf2001Characters_thenRejected() {
+    // When / Then — E4: hoechstens 2000 Zeichen, wie der Kommentar am Angebot.
+    assertThatThrownBy(() -> mitStorno(Angebotsstatus.BESTELLT, true, "x".repeat(2001)))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("2000");
+  }
+
+  @Test
+  void konstruktor_givenAReasonOf2000CharactersAfterStripping_thenAccepted() {
+    // Given — die Grenze selbst geht durch, gezaehlt nach dem Abschneiden des Leerraums.
+    final String grund = "x".repeat(2000);
+
+    // When / Then
+    assertThat(mitStorno(Angebotsstatus.BESTELLT, true, " " + grund + " ").stornoGrund())
+        .isEqualTo(grund);
+  }
+
+  @Test
+  void statusWeiter_givenAStornoedOffer_thenRejected() {
+    // Given — E2: die Statuskette steht still, solange das Angebot storniert ist.
+    final Angebot angebot = mitStorno(Angebotsstatus.ABGEGEBEN, true, null);
+
+    // When / Then
+    assertThatThrownBy(() -> angebot.statusWeiter(JETZT)).isInstanceOf(AngebotStorniert.class);
+  }
+
+  @Test
+  void statusZurueck_givenAStornoedOffer_thenRejected() {
+    // Given
+    final Angebot angebot = mitStorno(Angebotsstatus.ABGEGEBEN, true, null);
+
+    // When / Then
+    assertThatThrownBy(() -> angebot.statusZurueck(JETZT)).isInstanceOf(AngebotStorniert.class);
+  }
+
+  @Test
+  void abgerechnet_givenAStornoedOffer_thenRejected() {
+    // Given — E2: auch der stille Sprung beim Stellen der letzten Rechnung bleibt aus.
+    final Angebot angebot = mitStorno(Angebotsstatus.BESTELLT, true, "Auftrag zurueckgezogen");
+
+    // When / Then
+    assertThatThrownBy(() -> angebot.abgerechnet(JETZT)).isInstanceOf(AngebotStorniert.class);
+  }
+
+  @Test
+  void angebotStorniert_thenCarriesTheSentenceOfTheInterface() {
+    // When / Then — E16: der Satz, den der Anwender liest.
+    assertThat(AngebotStorniert.MELDUNG)
+        .isEqualTo("Am stornierten Angebot ändert sich nichts; nimm zuerst das Storno zurück.");
+  }
+
+  @Test
+  void geaendert_givenAStornoedOffer_thenKeepsStornoAndReason() {
+    // Given — die Sperre aus #330, Kriterium 10, steht im Anwendungsfall; das Fachobjekt traegt
+    // das Storno nur weiter.
+    final Angebot angebot = mitStorno(Angebotsstatus.BESTELLT, true, "Auftrag zurueckgezogen");
+
+    // When
+    final Angebot geaendert =
+        angebot.geaendert(ANGEBOTSDATUM, 9L, "Wartung", null, List.of(), JETZT);
+
+    // Then
+    assertThat(geaendert.storniert()).isTrue();
+    assertThat(geaendert.stornoGrund()).isEqualTo("Auftrag zurueckgezogen");
   }
 }
