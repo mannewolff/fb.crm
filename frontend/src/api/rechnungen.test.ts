@@ -378,20 +378,32 @@ describe('parseAngebotsabrechnung', () => {
         positionen: [STAND_ZEILE],
         rechnungen: [STAND_RECHNUNG],
         angefallen: 22,
+        schreibbar: true,
       }),
     ).toEqual({
       positionen: [STAND_ZEILE_VERENGT],
       rechnungen: [STAND_RECHNUNG_VERENGT],
       angefallenInHundertsteln: 2200,
+      schreibbar: true,
     });
   });
 
   it('verengt den leeren Stand', () => {
-    expect(parseAngebotsabrechnung({ positionen: [], rechnungen: [], angefallen: 0 })).toEqual({
+    expect(
+      parseAngebotsabrechnung({ positionen: [], rechnungen: [], angefallen: 0, schreibbar: false }),
+    ).toEqual({
       positionen: [],
       rechnungen: [],
       angefallenInHundertsteln: 0,
+      schreibbar: false,
     });
+  });
+
+  it.each([[true], [false]])('liest schreibbar als %s (Plan #332, E9)', (schreibbar) => {
+    expect(
+      parseAngebotsabrechnung({ positionen: [], rechnungen: [], angefallen: 0, schreibbar })
+        .schreibbar,
+    ).toBe(schreibbar);
   });
 
   it.each([
@@ -399,6 +411,8 @@ describe('parseAngebotsabrechnung', () => {
     ['positionen ist kein Array', { positionen: 3, rechnungen: [], angefallen: 0 }],
     ['rechnungen ist kein Array', { positionen: [], rechnungen: 3, angefallen: 0 }],
     ['ohne Gesamtsumme der Stunden', { positionen: [], rechnungen: [], angefallen: null }],
+    ['ohne schreibbar', { positionen: [], rechnungen: [], angefallen: 0 }],
+    ['schreibbar als Wort', { positionen: [], rechnungen: [], angefallen: 0, schreibbar: 'ja' }],
     ['Position ohne Kennung', { positionen: [{ ...STAND_ZEILE, angebotPositionId: null }], rechnungen: [], angefallen: 0 }],
     ['Position ohne Bezeichnung', { positionen: [{ ...STAND_ZEILE, bezeichnung: 7 }], rechnungen: [], angefallen: 0 }],
     ['Position mit unbekannter Einheit', { positionen: [{ ...STAND_ZEILE, einheit: 'TAG' }], rechnungen: [], angefallen: 0 }],
@@ -543,6 +557,7 @@ describe('die Wege', () => {
         positionen: [STAND_ZEILE],
         rechnungen: [STAND_RECHNUNG],
         angefallen: 22,
+        schreibbar: true,
       }),
     });
 

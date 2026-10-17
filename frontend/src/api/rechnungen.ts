@@ -216,6 +216,11 @@ export interface Angebotsabrechnung {
    * beim ersten Filter der Liste auseinander.
    */
   readonly angefallenInHundertsteln: number;
+  /**
+   * Ob aus dem Angebot jetzt eine neue Rechnung entstehen darf (Plan #332, E9). Die Regel haengt
+   * an Menge und Storno und steht allein im Server; die Oberflaeche rechnet sie nicht nach.
+   */
+  readonly schreibbar: boolean;
 }
 
 /** Eine Angabe der Entwurfsmaske zu genau einer Angebotsposition. */
@@ -388,6 +393,7 @@ export function parseAngebotsabrechnung(wert: unknown): Angebotsabrechnung {
     positionen: liste(antwort.positionen).map(parseAbrechnungsposition),
     rechnungen: liste(antwort.rechnungen).map(parseAngebotRechnungZeile),
     angefallenInHundertsteln: inHundertsteln(antwort.angefallen),
+    schreibbar: jaNein(antwort.schreibbar),
   };
 }
 

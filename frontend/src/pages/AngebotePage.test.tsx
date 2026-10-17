@@ -17,6 +17,7 @@ const JUENGER = {
   titel: null,
   status: 'BESTELLT',
   intern: false,
+  storniert: false,
   summe: 1200,
 };
 
@@ -28,6 +29,7 @@ const AELTER = {
   titel: null,
   status: 'ANGELEGT',
   intern: false,
+  storniert: false,
   summe: 2500.03,
 };
 
@@ -40,6 +42,7 @@ const JAVA = {
   titel: 'Java-Grundkurs',
   status: 'ANGELEGT',
   intern: false,
+  storniert: false,
   summe: 3000,
 };
 
@@ -53,6 +56,7 @@ const INTERN = {
   titel: null,
   status: 'LAEUFT',
   intern: true,
+  storniert: false,
   summe: 0,
 };
 
@@ -163,7 +167,7 @@ describe('AngebotePage — die Uebersicht (Issue #127, Kriterium 8)', () => {
     const nutzer = userEvent.setup();
     const fetchMock = fetchNachPfad({
       'GET /api/angebote': json(200, { angebote: [JUENGER, AELTER] }),
-      'GET /api/angebote?status=BESTELLT': json(200, { angebote: [JUENGER] }),
+      'GET /api/angebote?status=BESTELLT&storniert=false': json(200, { angebote: [JUENGER] }),
     });
 
     renderSeite();
@@ -176,7 +180,7 @@ describe('AngebotePage — die Uebersicht (Issue #127, Kriterium 8)', () => {
     });
     expect(screen.getByRole('link', { name: '26.09.2026' })).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith(
-      '/api/angebote?status=BESTELLT',
+      '/api/angebote?status=BESTELLT&storniert=false',
       expect.objectContaining({ method: 'GET' }),
     );
   });
@@ -184,7 +188,7 @@ describe('AngebotePage — die Uebersicht (Issue #127, Kriterium 8)', () => {
   it('nimmt den Filter aus der Adresse und kehrt mit „alle" zur ganzen Liste zurueck', async () => {
     const nutzer = userEvent.setup();
     fetchNachPfad({
-      'GET /api/angebote?status=BESTELLT': json(200, { angebote: [JUENGER] }),
+      'GET /api/angebote?status=BESTELLT&storniert=false': json(200, { angebote: [JUENGER] }),
       'GET /api/angebote': json(200, { angebote: [JUENGER, AELTER] }),
     });
 
@@ -215,7 +219,7 @@ describe('AngebotePage — die Uebersicht (Issue #127, Kriterium 8)', () => {
     });
     fetchNachPfad({
       'GET /api/angebote': () => alleSpaeter,
-      'GET /api/angebote?status=BESTELLT': json(200, { angebote: [JUENGER] }),
+      'GET /api/angebote?status=BESTELLT&storniert=false': json(200, { angebote: [JUENGER] }),
     });
 
     renderSeite();
@@ -301,7 +305,7 @@ describe('AngebotePage — leer, Ausfall, Laden', () => {
   });
 
   it('sagt es eigens, wenn im gewaehlten Status keines steht', async () => {
-    fetchNachPfad({ 'GET /api/angebote?status=ERLEDIGT': json(200, { angebote: [] }) });
+    fetchNachPfad({ 'GET /api/angebote?status=ERLEDIGT&storniert=false': json(200, { angebote: [] }) });
 
     renderSeite('/angebote?status=ERLEDIGT');
 
@@ -368,7 +372,7 @@ describe('AngebotePage — Kennzeichen intern und Strich in der Summe (Issue #23
     const nutzer = userEvent.setup();
     const fetchMock = fetchNachPfad({
       'GET /api/angebote': json(200, { angebote: [JUENGER, INTERN] }),
-      'GET /api/angebote?status=LAEUFT': json(200, { angebote: [INTERN] }),
+      'GET /api/angebote?status=LAEUFT&storniert=false': json(200, { angebote: [INTERN] }),
     });
 
     renderSeite();
@@ -381,7 +385,7 @@ describe('AngebotePage — Kennzeichen intern und Strich in der Summe (Issue #23
     });
     expect(screen.getByRole('link', { name: '28.09.2026' })).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith(
-      '/api/angebote?status=LAEUFT',
+      '/api/angebote?status=LAEUFT&storniert=false',
       expect.objectContaining({ method: 'GET' }),
     );
   });

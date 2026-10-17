@@ -30,6 +30,8 @@ const ANGEBOT = {
   titel: 'Neue Website',
   beschreibung: 'Neue Website mit Redaktionssystem',
   intern: false,
+  storniert: false,
+  stornoGrund: null,
   positionen: [POSITION],
   summe: 2500.03,
 };
@@ -39,7 +41,7 @@ const ANLAGEN = 'GET /api/angebote/9/anlagen';
 const ABRECHNUNG = 'GET /api/angebote/9/abrechnung';
 
 /** Ein Angebot, zu dem es noch keine Rechnung gibt (Issue #187). */
-const LEERER_STAND = { positionen: [], rechnungen: [], angefallen: 0 };
+const LEERER_STAND = { positionen: [], rechnungen: [], angefallen: 0, schreibbar: false };
 
 /**
  * Die selbstladenden Bereiche mit leerem Bestand — sie stehen in jeder Tabelle dieser Datei.
@@ -110,7 +112,7 @@ const GESTELLTE = {
 };
 
 /** Der Stand einer Teilabrechnung: eine gestellte Rechnung über die Hälfte der Menge. */
-const STAND_TEIL = { positionen: [STAND_POSITION], rechnungen: [GESTELLTE], angefallen: 0 };
+const STAND_TEIL = { positionen: [STAND_POSITION], rechnungen: [GESTELLTE], angefallen: 0, schreibbar: true };
 
 /** Ein bestelltes Angebot — ab diesem Status lässt sich eine Rechnung schreiben. */
 const BESTELLT = { ...ANGEBOT, status: 'BESTELLT' };
@@ -596,7 +598,7 @@ describe('AngebotPage — der Abrechnungsstand an den Positionen (Issue #187, Kr
     fetchNachPfad({
       ...LEERE_BEREICHE,
       // Rechnungen, aber kein Stand zu dieser Position — die Zellen stehen, sie sagen nichts.
-      [ABRECHNUNG]: json(200, { positionen: [], rechnungen: [GESTELLTE], angefallen: 0 }),
+      [ABRECHNUNG]: json(200, { positionen: [], rechnungen: [GESTELLTE], angefallen: 0, schreibbar: false }),
       'GET /api/angebote/9': json(200, ANGEBOT),
     });
 
@@ -618,6 +620,7 @@ describe('AngebotPage — der Abrechnungsstand an den Positionen (Issue #187, Kr
         positionen: [{ ...STAND_POSITION, abgerechnet: 200, offen: 0, ueberschreitung: 40 }],
         rechnungen: [GESTELLTE],
         angefallen: 0,
+        schreibbar: false,
       }),
       'GET /api/angebote/9': json(200, ANGEBOT),
     });
@@ -635,7 +638,7 @@ describe('AngebotPage — die Spalte „Angefallen" (Issue #193, Kriterien 7, 8,
   it('stellt die Spalte an einer buchbaren Position, auch ohne Rechnung', async () => {
     fetchNachPfad({
       ...LEERE_BEREICHE,
-      [ABRECHNUNG]: json(200, { positionen: [STAND_STUNDEN], rechnungen: [], angefallen: 8 }),
+      [ABRECHNUNG]: json(200, { positionen: [STAND_STUNDEN], rechnungen: [], angefallen: 8, schreibbar: true }),
       'GET /api/angebote/9': json(200, ANGEBOT_MIT_STUNDEN),
     });
 
@@ -661,7 +664,7 @@ describe('AngebotPage — die Spalte „Angefallen" (Issue #193, Kriterien 7, 8,
   it('laesst die Spalte weg, wenn keine Position buchbar ist', async () => {
     fetchNachPfad({
       ...LEERE_BEREICHE,
-      [ABRECHNUNG]: json(200, { positionen: [STAND_POSITION], rechnungen: [], angefallen: 0 }),
+      [ABRECHNUNG]: json(200, { positionen: [STAND_POSITION], rechnungen: [], angefallen: 0, schreibbar: true }),
       'GET /api/angebote/9': json(200, ANGEBOT),
     });
 
@@ -687,6 +690,7 @@ describe('AngebotPage — die Spalte „Angefallen" (Issue #193, Kriterien 7, 8,
         positionen: [STAND_POSITION, STAND_STUNDEN],
         rechnungen: [],
         angefallen: 8,
+        schreibbar: true,
       }),
       'GET /api/angebote/9': json(200, {
         ...ANGEBOT,
@@ -712,6 +716,7 @@ describe('AngebotPage — die Spalte „Angefallen" (Issue #193, Kriterien 7, 8,
         positionen: [{ ...STAND_STUNDEN, angefallen: 22 }],
         rechnungen: [],
         angefallen: 22,
+        schreibbar: true,
       }),
       'GET /api/angebote/9': json(200, ANGEBOT_MIT_STUNDEN),
     });
@@ -731,6 +736,7 @@ describe('AngebotPage — die Spalte „Angefallen" (Issue #193, Kriterien 7, 8,
         positionen: [{ ...STAND_STUNDEN, abgerechnet: 20, offen: 0, angefallen: 22 }],
         rechnungen: [GESTELLTE],
         angefallen: 22,
+        schreibbar: false,
       }),
       'GET /api/angebote/9': json(200, { ...ANGEBOT_MIT_STUNDEN, status: 'ABGERECHNET' }),
     });
@@ -749,7 +755,7 @@ describe('AngebotPage — die Koepfe der Zahlenspalten (Issue #286)', () => {
   it('stellt in Positions- und Rechnungstafel den Kopf einer Zahlenspalte rechtsbuendig und die uebrigen links', async () => {
     fetchNachPfad({
       ...LEERE_BEREICHE,
-      [ABRECHNUNG]: json(200, { positionen: [STAND_STUNDEN], rechnungen: [GESTELLTE], angefallen: 8 }),
+      [ABRECHNUNG]: json(200, { positionen: [STAND_STUNDEN], rechnungen: [GESTELLTE], angefallen: 8, schreibbar: true }),
       'GET /api/angebote/9': json(200, ANGEBOT_MIT_STUNDEN),
     });
 
@@ -778,7 +784,7 @@ describe('AngebotPage — die Koepfe der Zahlenspalten (Issue #286)', () => {
   it('stellt in der internen Positionstafel „Angefallen" rechtsbuendig und „Bezeichnung" links', async () => {
     fetchNachPfad({
       ...LEERE_BEREICHE,
-      [ABRECHNUNG]: json(200, { positionen: [STAND_STUNDEN], rechnungen: [], angefallen: 8 }),
+      [ABRECHNUNG]: json(200, { positionen: [STAND_STUNDEN], rechnungen: [], angefallen: 8, schreibbar: false }),
       'GET /api/angebote/9': json(200, { ...ANGEBOT_MIT_STUNDEN, intern: true, status: 'LAEUFT' }),
     });
 
@@ -850,6 +856,7 @@ describe('AngebotPage — der Bereich „Rechnungen" (Issue #187, Kriterium 26)'
           { id: 7, nummer: null, rechnungDatum: '2026-09-30', brutto: 47.6, zustand: 'ENTWURF' },
         ],
         angefallen: 0,
+        schreibbar: true,
       }),
       'GET /api/angebote/9': json(200, ANGEBOT),
     });
@@ -937,6 +944,7 @@ describe('AngebotPage — „Rechnung schreiben" (Issue #187, Kriterium 3)', () 
         positionen: [{ ...STAND_POSITION, abgerechnet: 160, offen: 0 }],
         rechnungen: [GESTELLTE],
         angefallen: 0,
+        schreibbar: false,
       }),
       'GET /api/angebote/9': json(200, BESTELLT),
     });
@@ -1106,7 +1114,7 @@ describe('AngebotPage — das interne Angebot (Issue #235, Plan #218, E15)', () 
   const INTERN = { ...ANGEBOT_MIT_STUNDEN, intern: true, status: 'LAEUFT' };
 
   /** Sein Abrechnungsstand: 8 Stunden angefallen, keine Rechnung — die gibt es intern nie. */
-  const STAND_INTERN = { positionen: [STAND_STUNDEN], rechnungen: [], angefallen: 8 };
+  const STAND_INTERN = { positionen: [STAND_STUNDEN], rechnungen: [], angefallen: 8, schreibbar: false };
 
   /** Die Wege eines laufenden internen Angebots. */
   const INTERNE_WEGE = {
@@ -1189,6 +1197,7 @@ describe('AngebotPage — das interne Angebot (Issue #235, Plan #218, E15)', () 
         positionen: [{ ...STAND_STUNDEN, angefallen: 22 }],
         rechnungen: [],
         angefallen: 22,
+        schreibbar: false,
       }),
       'GET /api/angebote/9': json(200, INTERN),
     });
@@ -1219,7 +1228,7 @@ describe('AngebotPage — das interne Angebot (Issue #235, Plan #218, E15)', () 
   it('haelt am Kundenangebot die Nettosumme mit dem Hinweis auf die Umsatzsteuer', async () => {
     fetchNachPfad({
       ...LEERE_BEREICHE,
-      [ABRECHNUNG]: json(200, { positionen: [STAND_STUNDEN], rechnungen: [], angefallen: 8 }),
+      [ABRECHNUNG]: json(200, { positionen: [STAND_STUNDEN], rechnungen: [], angefallen: 8, schreibbar: true }),
       'GET /api/angebote/9': json(200, ANGEBOT_MIT_STUNDEN),
     });
 

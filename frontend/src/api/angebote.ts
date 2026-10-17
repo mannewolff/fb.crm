@@ -11,7 +11,7 @@ import {
   zahlOderNull,
 } from './verengen';
 import { alsAngebotsstatus } from '../lib/angebotsstatus';
-import type { Angebotsstatus } from '../lib/angebotsstatus';
+import type { Angebotsstatus, Filterwert } from '../lib/angebotsstatus';
 
 /**
  * Die Wege zum Angebot: die Uebersicht aller Angebote, die Liste an der Firma, das Anlegen, das
@@ -57,6 +57,10 @@ import type { Angebotsstatus } from '../lib/angebotsstatus';
  * mehrzeiligen Beschreibung. Herein kommt er an jedem Angebot und an jeder Zeile der Firmenliste,
  * und zwar als `null` an einem Angebot von vor dem Titel — das gibt es im Bestand und bleibt
  * gueltig. Hinaus geht er dagegen immer: Anlegen und Aendern verlangen ihn (Issue #317).
+ *
+ * <b>Das Storno ist ein Kennzeichen neben dem Status, kein Status</b> (Plan #332, E1): Ein
+ * storniertes Angebot behaelt den Status, aus dem es storniert wurde. Herein kommt `storniert` an
+ * jedem Angebot und an jeder Zeile, der Grund nur am Angebot selbst.
  */
 
 /** Wie eine Position abgerechnet wird (`Abrechnungsmodus` im Backend, Kriterium 4). */
@@ -98,6 +102,10 @@ export interface Angebot {
   readonly beschreibung: string | null;
   /** Ob das Angebot die eigene interne Arbeit festhaelt (Issue #226). */
   readonly intern: boolean;
+  /** Ob das Angebot storniert ist; `status` ist dann der Status, aus dem storniert wurde. */
+  readonly storniert: boolean;
+  /** Warum storniert wurde — `null` ohne Grund oder ohne Storno (Plan #332). */
+  readonly stornoGrund: string | null;
   readonly positionen: readonly AngebotPosition[];
   /** Netto-Summe in ganzen Cent, vom Server gerechnet (E5). */
   readonly summeInCent: number;
@@ -112,6 +120,8 @@ export interface AngebotZeile {
   readonly status: Angebotsstatus;
   /** Ob das Angebot die eigene interne Arbeit festhaelt (Issue #226). */
   readonly intern: boolean;
+  /** Ob das Angebot storniert ist (Plan #332). */
+  readonly storniert: boolean;
   readonly summeInCent: number;
 }
 
@@ -126,6 +136,8 @@ export interface AngebotUebersichtZeile {
   readonly status: Angebotsstatus;
   /** Ob das Angebot die eigene interne Arbeit festhaelt (Issue #226). */
   readonly intern: boolean;
+  /** Ob das Angebot storniert ist (Plan #332). */
+  readonly storniert: boolean;
   readonly summeInCent: number;
 }
 
@@ -237,6 +249,8 @@ export function parseAngebot(wert: unknown): Angebot {
     titel: textOderNull(angebot.titel),
     beschreibung: textOderNull(angebot.beschreibung),
     intern: jaNein(angebot.intern),
+    storniert: jaNein(angebot.storniert),
+    stornoGrund: textOderNull(angebot.stornoGrund),
     positionen: liste(angebot.positionen).map(parsePosition),
     summeInCent: inHundertsteln(angebot.summe),
   };
@@ -250,6 +264,7 @@ function parseZeile(wert: unknown): AngebotZeile {
     titel: textOderNull(zeile.titel),
     status: angebotsstatus(zeile.status),
     intern: jaNein(zeile.intern),
+    storniert: jaNein(zeile.storniert),
     summeInCent: inHundertsteln(zeile.summe),
   };
 }
@@ -264,6 +279,7 @@ function parseUebersichtZeile(wert: unknown): AngebotUebersichtZeile {
     titel: textOderNull(zeile.titel),
     status: angebotsstatus(zeile.status),
     intern: jaNein(zeile.intern),
+    storniert: jaNein(zeile.storniert),
     summeInCent: inHundertsteln(zeile.summe),
   };
 }
@@ -275,13 +291,26 @@ export function parseAngeboteUebersicht(wert: unknown): AngeboteUebersicht {
 }
 
 /**
- * Alle Angebote, neueste zuerst, wahlweise nur die in einem Status (Kriterium 8).
+ * Alle Angebote, neueste zuerst, wahlweise nur die zu einem Filterwert (Kriterium 8).
  *
- * @param status der gesuchte Status, oder `null` fuer alle
+ * Die Werte des Filters sind eine Partition (Plan #332, E7): Unter einem Status fragt die
+ * Abfrage nur die nicht stornierten darin (`storniert=false`), unter „Storniert" jedes stornierte
+ * ohne Ruecksicht auf seinen Status (E6, E20).
+ *
+ * @param filterwert der gewaehlte Filterwert, oder `null` fuer alle
  */
-export function angeboteUebersicht(status: Angebotsstatus | null): Promise<AngeboteUebersicht> {
-  const pfad = status === null ? '/api/angebote' : `/api/angebote?status=${status}`;
-  return apiJson(pfad, { methode: 'GET' }, parseAngeboteUebersicht);
+export function angeboteUebersicht(filterwert: Filterwert | null): Promise<AngeboteUebersicht> {
+  return apiJson(uebersichtPfad(filterwert), { methode: 'GET' }, parseAngeboteUebersicht);
+}
+
+function uebersichtPfad(filterwert: Filterwert | null): string {
+  if (filterwert === null) {
+    return '/api/angebote';
+  }
+  if (filterwert === 'STORNIERT') {
+    return '/api/angebote?storniert=true';
+  }
+  return `/api/angebote?status=${filterwert}&storniert=false`;
 }
 
 /** Verengt die Angebotsliste einer Firma oder scheitert. */
@@ -360,4 +389,22 @@ export function angebotStatusWeiter(id: number): Promise<Angebot> {
 /** Schaltet den Status eine Stufe zurueck; die Antwort traegt das Angebot im neuen Status. */
 export function angebotStatusZurueck(id: number): Promise<Angebot> {
   return apiJson(`/api/angebote/${String(id)}/status/zurueck`, { methode: 'POST' }, parseAngebot);
+}
+
+/**
+ * Storniert das Angebot (Plan #332); die Antwort traegt das stornierte Angebot.
+ *
+ * @param grund warum storniert wird, oder `null` ohne Grund
+ */
+export function angebotStornieren(id: number, grund: string | null): Promise<Angebot> {
+  return apiJson(
+    `/api/angebote/${String(id)}/storno`,
+    { methode: 'POST', rumpf: { grund } },
+    parseAngebot,
+  );
+}
+
+/** Nimmt das Storno zurueck; die Antwort traegt das Angebot im Status von vor dem Storno. */
+export function angebotStornoZuruecknehmen(id: number): Promise<Angebot> {
+  return apiJson(`/api/angebote/${String(id)}/storno`, { methode: 'DELETE' }, parseAngebot);
 }

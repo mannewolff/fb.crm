@@ -55,6 +55,7 @@ interface AngebotRoh {
   readonly titel: string | null;
   readonly status: string;
   readonly intern: boolean;
+  readonly storniert: boolean;
   readonly summe: number;
 }
 
@@ -64,6 +65,7 @@ const JUENGER: AngebotRoh = {
   titel: 'Schulung Java',
   status: 'ANGELEGT',
   intern: false,
+  storniert: false,
   summe: 1200,
 };
 
@@ -73,6 +75,7 @@ const AELTER: AngebotRoh = {
   titel: 'Neue Website',
   status: 'BESTELLT',
   intern: false,
+  storniert: false,
   summe: 2500.03,
 };
 
