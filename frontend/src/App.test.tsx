@@ -29,6 +29,7 @@ const ANGEBOT = {
 const RECHNUNG = {
   id: 4,
   angebotId: 9,
+  angebotTitel: null,
   firmaId: 5,
   firmaName: 'Adler AG',
   rechnungDatum: '2026-10-01',

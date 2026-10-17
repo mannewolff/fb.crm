@@ -3,6 +3,7 @@ package org.mwolff.fbcrm.rechnung.web;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
+import org.jspecify.annotations.Nullable;
 import org.mwolff.fbcrm.angebot.domain.Angebot;
 import org.mwolff.fbcrm.rechnung.application.AbrechenbaresAngebot;
 
@@ -29,6 +30,7 @@ public record AbrechenbareAngeboteResponse(List<Zeile> angebote) {
    * @param firmaId Kennung der Firma, an die das Angebot geht
    * @param firmaName Name dieser Firma
    * @param angebotDatum Datum des Angebots
+   * @param titel Titel des Angebots, oder {@code null} beim Angebot ohne Titel (Issue #327)
    * @param offenerBetrag Summe der offenen Mengen mal Einzelpreis, gerechnet
    */
   public record Zeile(
@@ -36,6 +38,7 @@ public record AbrechenbareAngeboteResponse(List<Zeile> angebote) {
       long firmaId,
       String firmaName,
       LocalDate angebotDatum,
+      @Nullable String titel,
       BigDecimal offenerBetrag) {
 
     static Zeile of(final AbrechenbaresAngebot zeile) {
@@ -45,6 +48,7 @@ public record AbrechenbareAngeboteResponse(List<Zeile> angebote) {
           angebot.firmaId(),
           zeile.firmaName(),
           angebot.angebotDatum(),
+          angebot.titel(),
           zeile.offenerBetrag());
     }
   }

@@ -2,6 +2,8 @@ package org.mwolff.fbcrm.rechnung.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
@@ -154,6 +156,20 @@ class RechnungLesenUseCaseTest {
     // Then
     assertThat(ansicht.firmaId()).isEqualTo(Rechnungsdoppel.FIRMA);
     assertThat(ansicht.firmaName()).isEqualTo(Rechnungsdoppel.FIRMENNAME);
+  }
+
+  @Test
+  void lese_thenTheTitelOfTheReadAngebotComesAlongWithoutAFurtherRead() {
+    // Given — Issue #327: die Seite der Rechnung nennt ihr Angebot beim Titel.
+    gegebenerEntwurf(List.of(Rechnungsdoppel.beratung("40.00")), List.of());
+
+    // When
+    final Rechnungsansicht ansicht = useCase.lese(ENTWURF);
+
+    // Then — der Titel kommt vom schon gelesenen Angebot, kein zweiter Zug in den Bestand.
+    assertThat(ansicht.angebotTitel()).isEqualTo("Website-Relaunch");
+    verify(angebote).findById(Rechnungsdoppel.ANGEBOT);
+    verifyNoMoreInteractions(angebote);
   }
 
   @Test

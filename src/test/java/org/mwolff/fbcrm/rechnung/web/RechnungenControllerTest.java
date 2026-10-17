@@ -1,5 +1,6 @@
 package org.mwolff.fbcrm.rechnung.web;
 
+import static org.hamcrest.Matchers.nullValue;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -140,7 +141,24 @@ class RechnungenControllerTest {
         .andExpect(jsonPath("$.angebote[0].firmaId").value(Webdoppel.FIRMA))
         .andExpect(jsonPath("$.angebote[0].firmaName").value(Webdoppel.FIRMENNAME))
         .andExpect(jsonPath("$.angebote[0].angebotDatum").exists())
+        .andExpect(jsonPath("$.angebote[0].titel").value(Webdoppel.TITEL))
         .andExpect(jsonPath("$.angebote[0].offenerBetrag").value(8000.00));
+  }
+
+  @Test
+  void abrechenbareAngebote_withAnAngebotWithoutTitel_thenTitelIsNull() throws Exception {
+    // Given — Issue #327, Kriterium 7: das Angebot von vor #316 traegt keinen Titel.
+    when(abrechenbare.abrechenbare())
+        .thenReturn(
+            List.of(
+                new AbrechenbaresAngebot(
+                    Webdoppel.angebot(null), Webdoppel.FIRMENNAME, new BigDecimal("8000.00"))));
+
+    // When / Then
+    mockMvc
+        .perform(get("/api/rechnungen/abrechenbare-angebote"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.angebote[0].titel").value(nullValue()));
   }
 
   @Test

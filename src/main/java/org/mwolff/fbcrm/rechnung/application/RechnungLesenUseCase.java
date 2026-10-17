@@ -93,6 +93,7 @@ public class RechnungLesenUseCase {
         rechnung,
         angebot.firmaId(),
         kopie == null ? firma.name() : kopie.firma(),
+        angebot.titel(),
         GeltenderSteuersatz.fuer(rechnung, einstellungen.lies().steuersatz()),
         zeilen);
   }

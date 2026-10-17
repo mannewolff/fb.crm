@@ -7,6 +7,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.Year;
 import java.util.List;
+import org.jspecify.annotations.Nullable;
 import org.mwolff.fbcrm.angebot.domain.Angebot;
 import org.mwolff.fbcrm.angebot.domain.Angebotsposition;
 import org.mwolff.fbcrm.angebot.domain.Angebotsstatus;
@@ -38,6 +39,9 @@ final class Webdoppel {
 
   /** Das Angebot, das abgerechnet wird. */
   static final long ANGEBOT = 11L;
+
+  /** Der Titel dieses Angebots. */
+  static final String TITEL = "Website-Relaunch";
 
   /** Die Kennung der Angebotsposition: 160 Stunden zu 100,00 €. */
   static final long BERATUNG_ID = 101L;
@@ -103,6 +107,15 @@ final class Webdoppel {
 
   /** Das bestellte Angebot mit seiner einen Position. */
   static Angebot angebot() {
+    return angebot(TITEL);
+  }
+
+  /**
+   * Dasselbe Angebot mit frei gewaehltem Titel.
+   *
+   * @param titel der Titel, oder {@code null} fuer das Angebot von vor #316
+   */
+  static Angebot angebot(final @Nullable String titel) {
     return new Angebot(
         Long.valueOf(ANGEBOT),
         FIRMA,
@@ -110,7 +123,7 @@ final class Webdoppel {
         false,
         Angebotsstatus.BESTELLT,
         ANGEBOTSDATUM,
-        "Website-Relaunch",
+        titel,
         "Neugestaltung der Website",
         List.of(BERATUNG),
         ANGELEGT,
@@ -181,6 +194,18 @@ final class Webdoppel {
    * @param abgerechnet die Menge aus allen anderen Rechnungen dieses Angebots
    */
   static Rechnungsansicht ansicht(final Rechnung rechnung, final String abgerechnet) {
+    return ansicht(rechnung, abgerechnet, TITEL);
+  }
+
+  /**
+   * Dieselbe Ansicht mit frei gewaehltem Titel des Angebots.
+   *
+   * @param rechnung die Rechnung
+   * @param abgerechnet die Menge aus allen anderen Rechnungen dieses Angebots
+   * @param titel der Titel des Angebots, oder {@code null} fuer das Angebot von vor #316
+   */
+  static Rechnungsansicht ansicht(
+      final Rechnung rechnung, final String abgerechnet, final @Nullable String titel) {
     final BigDecimal fremd = new BigDecimal(abgerechnet);
     final BigDecimal jetzt = rechnung.positionen().getFirst().menge();
     final BigDecimal offen = BigDecimal.ZERO.max(BERATUNG.menge().subtract(fremd));
@@ -188,6 +213,7 @@ final class Webdoppel {
         rechnung,
         FIRMA,
         rechnung.empfaenger() == null ? FIRMENNAME : rechnung.empfaenger().firma(),
+        titel,
         rechnung.steuersatz() == null ? STEUERSATZ : rechnung.steuersatz(),
         List.of(
             new Abrechnungszeile(

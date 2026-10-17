@@ -879,6 +879,7 @@ describe('AngebotPage — „Rechnung schreiben" (Issue #187, Kriterium 3)', () 
   const FRISCH = {
     id: 7,
     angebotId: 9,
+    angebotTitel: null,
     firmaId: 5,
     firmaName: 'Adler AG',
     rechnungDatum: '2026-09-30',

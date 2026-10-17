@@ -55,6 +55,7 @@ const ZEILE_PAUSCHAL = {
 const ENTWURF = {
   id: 4,
   angebotId: 9,
+  angebotTitel: null,
   firmaId: 5,
   firmaName: 'Adler AG',
   rechnungDatum: '2026-10-01',
@@ -220,6 +221,30 @@ describe('RechnungPage — der Kopf (Issue #185)', () => {
       '/angebote/9',
     );
     expect(within(screen.getByTestId('rechnung-angaben')).getByText('Entwurf')).toBeInTheDocument();
+  });
+
+  it('Szenario: Rechnung zum richtigen Angebot anlegen', async () => {
+    // Und auf der Seite der entstandenen Rechnung fuehrt der Titel „Java-Grundkurs" zum Angebot
+    fetchNachPfad({ [WEG]: json(200, { ...ENTWURF, angebotTitel: 'Java-Grundkurs' }) });
+
+    renderSeite();
+
+    expect(await screen.findByRole('link', { name: 'Java-Grundkurs' })).toHaveAttribute(
+      'href',
+      '/angebote/9',
+    );
+    expect(screen.queryByRole('link', { name: 'Zum Angebot' })).not.toBeInTheDocument();
+  });
+
+  it('nennt das Angebot ohne Titel weiter „Zum Angebot" (Issue #327, Kriterium 7)', async () => {
+    fetchNachPfad({ [WEG]: json(200, ENTWURF) });
+
+    renderSeite();
+
+    expect(await screen.findByRole('link', { name: 'Zum Angebot' })).toHaveAttribute(
+      'href',
+      '/angebote/9',
+    );
   });
 
   it('meldet eine Rechnung, die es nicht gibt (404)', async () => {
