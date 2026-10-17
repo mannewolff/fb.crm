@@ -98,6 +98,22 @@ class BuchbarkeitTest {
   }
 
   @Test
+  void buchungZulaessig_givenACancelledOrderedAngebot_thenFalse() {
+    // Given / When / Then — #330, Kriterium 7: auf ein storniertes Angebot wird nicht mehr
+    // gebucht, obwohl es in „bestellt" steht und die Position nach Aufwand in Stunden abrechnet.
+    assertThat(Buchbarkeit.buchungZulaessig(Zeitdoppel.storniertesAngebot(), Zeitdoppel.KONZEPTION))
+        .isFalse();
+  }
+
+  @Test
+  void buchbar_givenACancelledAngebot_thenStillTrue() {
+    // Given / When / Then — Kriterium 7, zweiter Teil: erfasste Stunden bleiben sichtbar, also
+    // haengen „Angefallen" und die Summe der Stunden nicht am Storno.
+    assertThat(Buchbarkeit.buchbar(Zeitdoppel.storniertesAngebot(), Zeitdoppel.KONZEPTION))
+        .isTrue();
+  }
+
+  @Test
   void buchungZulaessig_givenANonBookablePositionInAnOrderedAngebot_thenFalse() {
     // Given / When / Then — der Status allein genuegt nicht; die Position muss buchbar sein.
     assertThat(Buchbarkeit.buchungZulaessig(Zeitdoppel.angebot(), Zeitdoppel.SCHULUNG)).isFalse();

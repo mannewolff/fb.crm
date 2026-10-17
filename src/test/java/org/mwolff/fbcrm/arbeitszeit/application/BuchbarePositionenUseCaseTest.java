@@ -176,6 +176,17 @@ class BuchbarePositionenUseCaseTest {
   }
 
   @Test
+  void positionen_givenACancelledOffer_thenNone() {
+    // Given — #330, Kriterium 7: das stornierte Angebot steht in „bestellt", laesst sich in der
+    // Zeiterfassung aber nicht mehr waehlen.
+    imBestandStehen(Zeitdoppel.storniertesAngebot());
+
+    // When / Then
+    assertThat(useCase.positionen()).isEmpty();
+    verifyNoInteractions(firmen);
+  }
+
+  @Test
   void positionen_givenFinishedInternalWork_thenNone() {
     // Given — ist die interne Arbeit abgeschlossen, erscheinen ihre Positionen nicht mehr in der
     // Positionswahl (Kriterium 5 von #207).

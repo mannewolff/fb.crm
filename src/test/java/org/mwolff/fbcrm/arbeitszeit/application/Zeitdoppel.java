@@ -110,6 +110,27 @@ final class Zeitdoppel {
         FRUEHER);
   }
 
+  /**
+   * Dasselbe Angebot, aus „bestellt" storniert — der einzige Status, aus dem ein Kundenangebot
+   * storniert wird und in dem zuvor gebucht werden durfte (#330, Kriterium 7).
+   */
+  static Angebot storniertesAngebot() {
+    return new Angebot(
+        Long.valueOf(ANGEBOT),
+        FIRMA,
+        null,
+        false,
+        Angebotsstatus.BESTELLT,
+        true,
+        "Auftrag zurückgezogen",
+        TAG.withDayOfMonth(1),
+        "Website-Relaunch",
+        "Neugestaltung der Website",
+        List.of(KONZEPTION, WARTUNG, SCHULUNG),
+        FRUEHER,
+        FRUEHER);
+  }
+
   /** Die Firma des Angebots, wie der Bestand sie fuehrt. */
   static Firma firma() {
     return new Firma(

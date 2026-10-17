@@ -30,6 +30,11 @@ import org.mwolff.fbcrm.common.Einheit;
  * nur die Auswahlliste der Positionen und das Anlegen neuer Eintraege ab — ein alter Eintrag an
  * einem inzwischen abgerechneten oder abgeschlossenen Angebot bleibt aenderbar und loeschbar (A7).
  *
+ * <p><b>Das Storno</b> (#330, Kriterium 7; Plan #332, E14) sperrt nur die Buchung: Am stornierten
+ * Angebot ist sie nicht zulaessig, obwohl der Status „bestellt" erhalten bleibt. „Buchbar" beruehrt
+ * es nicht — daran haengen „Angefallen" und die Summe der Stunden, und die erfassten Stunden
+ * bleiben nach demselben Kriterium sichtbar, aenderbar und loeschbar.
+ *
  * <p>Beide Regeln stehen hier und nur hier, damit zwei Abschriften nicht auseinanderlaufen —
  * dieselbe Ueberlegung wie bei {@code rechnung.application.Abrechenbarkeit}. Die Status sind
  * ausdruecklich aufgezaehlt und nicht ueber die Ordnungszahl von {@link Angebotsstatus} bestimmt:
@@ -59,8 +64,8 @@ public final class Buchbarkeit {
   }
 
   /**
-   * Ob auf diese Position <b>jetzt</b> gebucht werden darf — buchbar und das Angebot im richtigen
-   * Status.
+   * Ob auf diese Position <b>jetzt</b> gebucht werden darf — buchbar, das Angebot im richtigen
+   * Status und nicht storniert.
    *
    * @param angebot das Angebot, zu dem die Position gehoert
    * @param position die Position des Angebots
@@ -70,6 +75,9 @@ public final class Buchbarkeit {
   }
 
   private static boolean statusErlaubtBuchung(final Angebot angebot) {
+    if (angebot.storniert()) {
+      return false;
+    }
     return angebot.intern()
         ? angebot.status() == Angebotsstatus.LAEUFT
         : STATUS.contains(angebot.status());

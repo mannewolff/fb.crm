@@ -8,6 +8,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.time.Clock;
+import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.ZoneOffset;
 import java.util.List;
@@ -60,6 +61,10 @@ class ZeiteintragUseCaseTest {
 
   private void angebotStehtIn(final Angebotsstatus status) {
     when(angebote.findAlle(Optional.empty())).thenReturn(List.of(Zeitdoppel.angebot(status)));
+  }
+
+  private void stornierteAngebote() {
+    when(angebote.findAlle(Optional.empty())).thenReturn(List.of(Zeitdoppel.storniertesAngebot()));
   }
 
   private void keinEintragAmTag() {
@@ -189,6 +194,24 @@ class ZeiteintragUseCaseTest {
     angebotStehtIn(Angebotsstatus.ABGEGEBEN);
 
     // When / Then — die Meldung des Kundenangebots nennt „bestellt oder erledigt" (E22).
+    assertThatExceptionOfType(PositionNichtBuchbar.class)
+        .isThrownBy(() -> anlegen(Zeitdoppel.KONZEPTION_ID, "09:00", "11:00"))
+        .satisfies(
+            fehler ->
+                assertThat(fehler.felder())
+                    .isEqualTo(
+                        Map.of(
+                            PositionNichtBuchbar.FELD,
+                            List.of(PositionNichtBuchbar.MELDUNG_EXTERN))));
+    verify(zeiten, never()).save(any());
+  }
+
+  @Test
+  void anlegen_givenACancelledAngebot_thenReportsItAtTheFieldOfThePosition() {
+    // Given — #330, Kriterium 7: auf ein storniertes Angebot wird keine Arbeitszeit mehr gebucht.
+    stornierteAngebote();
+
+    // When / Then — die Meldung des Kundenangebots nennt das Storno (E16).
     assertThatExceptionOfType(PositionNichtBuchbar.class)
         .isThrownBy(() -> anlegen(Zeitdoppel.KONZEPTION_ID, "09:00", "11:00"))
         .satisfies(
@@ -397,6 +420,56 @@ class ZeiteintragUseCaseTest {
 
     // Then
     assertThat(geaendert.angebotPositionId()).isEqualTo(Zeitdoppel.WARTUNG_ID);
+  }
+
+  @Test
+  void aendern_whenThePositionChangesToOneOfACancelledAngebot_thenReportsIt() {
+    // Given — E14: der Wechsel der Position ist eine neue Buchung auf der Zielposition.
+    eintragGibtEs(konzeption("09:00", "11:00"));
+    stornierteAngebote();
+
+    // When / Then
+    assertThatExceptionOfType(PositionNichtBuchbar.class)
+        .isThrownBy(() -> aendern(Zeitdoppel.WARTUNG_ID, "09:00", "11:00"));
+    verify(zeiten, never()).save(any());
+  }
+
+  @Test
+  void aendern_givenAnEntryOfACancelledAngebot_thenStillChangesDayAndTime() {
+    // Given — E14, Kriterium 7: erfasste Stunden am stornierten Angebot bleiben aenderbar. Die
+    // Position wechselt nicht, also wird „Buchung zulaessig" nicht gefragt.
+    final LocalDate andererTag = Zeitdoppel.TAG.plusDays(1);
+    eintragGibtEs(konzeption("09:00", "11:00"));
+    when(zeiten.findImZeitraum(andererTag, andererTag)).thenReturn(List.of());
+    speichernGibtZurueck();
+
+    // When
+    final Zeiteintrag geaendert =
+        useCase.aendern(
+            EINTRAG,
+            Zeitdoppel.KONZEPTION_ID,
+            andererTag,
+            LocalTime.of(10, 0),
+            LocalTime.of(12, 0));
+
+    // Then
+    assertThat(geaendert.tag()).isEqualTo(andererTag);
+    assertThat(geaendert.von()).isEqualTo(LocalTime.of(10, 0));
+    verify(angebote, never()).findAlle(any());
+  }
+
+  @Test
+  void loeschen_givenAnEntryOfACancelledAngebot_thenTheEntryIsGone() {
+    // Given — E14, Kriterium 7: Loeschen bleibt am stornierten Angebot erlaubt, ohne Blick ins
+    // Angebot.
+    eintragGibtEs(konzeption("09:00", "11:00"));
+
+    // When
+    useCase.loeschen(EINTRAG);
+
+    // Then
+    verify(zeiten).delete(EINTRAG);
+    verify(angebote, never()).findAlle(any());
   }
 
   @Test
