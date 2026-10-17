@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import AngebotPage from './AngebotPage';
 import KopfPfad, { KopfPfadProvider } from '../components/KopfPfad';
-import { fetchNachPfad, json, leer, problem } from '../test/fetchNachPfad';
+import { alsJson, fetchNachPfad, json, leer, problem } from '../test/fetchNachPfad';
 import { renderMitTheme } from '../test/render';
 
 const POSITION = {
@@ -922,19 +922,76 @@ describe('AngebotPage — „Rechnung schreiben" (Issue #187, Kriterium 3)', () 
     expect(kupfertasten().map((taste) => taste.textContent)).toEqual(['Status weiter']);
   });
 
-  it('fehlt bei einem Angebot im Status „angelegt"', async () => {
+  it.each([
+    [true, 'steht'],
+    [false, 'fehlt'],
+  ])(
+    'folgt allein `schreibbar` des Servers (Plan #332, E9): bei %s %s sie, auch mit Offenem',
+    async (schreibbar) => {
+      fetchNachPfad({
+        ...LEERE_BEREICHE,
+        // Derselbe Stand mit Offenem in beiden Faellen — nur das Feld des Servers unterscheidet.
+        [ABRECHNUNG]: json(200, { ...STAND_TEIL, schreibbar }),
+        'GET /api/angebote/9': json(200, BESTELLT),
+      });
+
+      renderSeite();
+      await screen.findByText('0001-2026');
+
+      if (schreibbar) {
+        expect(aktionen().getByRole('button', { name: 'Rechnung schreiben' })).toBeEnabled();
+      } else {
+        expect(
+          aktionen().queryByRole('button', { name: 'Rechnung schreiben' }),
+        ).not.toBeInTheDocument();
+      }
+    },
+  );
+
+  it('steht, wo der Server `schreibbar` meldet, auch ohne offene Menge (Plan #332, E9)', async () => {
     fetchNachPfad({
       ...LEERE_BEREICHE,
-      [ABRECHNUNG]: json(200, STAND_TEIL),
-      'GET /api/angebote/9': json(200, { ...ANGEBOT, status: 'ANGELEGT' }),
+      // Nichts mehr offen, und doch schreibbar: Die Regel kennt Stunden und Storno, die Ansicht nicht.
+      [ABRECHNUNG]: json(200, {
+        positionen: [{ ...STAND_POSITION, abgerechnet: 160, offen: 0 }],
+        rechnungen: [GESTELLTE],
+        angefallen: 0,
+        schreibbar: true,
+      }),
+      'GET /api/angebote/9': json(200, BESTELLT),
     });
 
     renderSeite();
-    await screen.findByText('Noch keine Anlage.');
+    await screen.findByText('0001-2026');
 
+    expect(aktionen().getByRole('button', { name: 'Rechnung schreiben' })).toBeEnabled();
+  });
+
+  it('liest `schreibbar` nach einem Statuswechsel neu — der Status ist Teil der Regel', async () => {
+    const nutzer = userEvent.setup();
+    let staende = 0;
+    fetchNachPfad({
+      ...LEERE_BEREICHE,
+      // Erst „abgegeben" und nicht schreibbar, nach „Status weiter" bestellt und schreibbar.
+      [ABRECHNUNG]: () => {
+        staende += 1;
+        return json(200, { ...STAND_TEIL, schreibbar: staende > 1 })();
+      },
+      'GET /api/angebote/9': json(200, ANGEBOT),
+      'POST /api/angebote/9/status/weiter': json(200, BESTELLT),
+    });
+
+    renderSeite();
+    await screen.findByText('0001-2026');
     expect(
       aktionen().queryByRole('button', { name: 'Rechnung schreiben' }),
     ).not.toBeInTheDocument();
+
+    await nutzer.click(aktionen().getByRole('button', { name: 'Status weiter' }));
+
+    expect(
+      await aktionen().findByRole('button', { name: 'Rechnung schreiben' }),
+    ).toBeEnabled();
   });
 
   it('fehlt, wo an keiner Position mehr etwas offen ist', async () => {
@@ -1313,11 +1370,11 @@ describe('AngebotPage — das interne Angebot (Issue #235, Plan #218, E15)', () 
   });
 
   it.each([['LAEUFT'], ['ABGESCHLOSSEN']])(
-    'kennt in „%s" kein „Rechnung schreiben" — die beiden internen Staende stehen in keiner abrechenbaren Menge',
+    'kennt in „%s" kein „Rechnung schreiben" — die interne Aktionsreihe traegt die Taste nicht',
     async (status) => {
       fetchNachPfad({
         ...LEERE_BEREICHE,
-        // Ein Stand mit Offenem und einer Rechnung: Nur der Status haelt die Taste fern.
+        // Ein schreibbarer Stand mit Offenem: Nur die interne Aktionsreihe haelt die Taste fern.
         [ABRECHNUNG]: json(200, STAND_TEIL),
         'GET /api/angebote/9': json(200, { ...INTERN, status }),
       });
@@ -1332,4 +1389,429 @@ describe('AngebotPage — das interne Angebot (Issue #235, Plan #218, E15)', () 
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     },
   );
+});
+
+describe('AngebotPage — das Storno (Issue #340, Plan #332, E2, E9, E13)', () => {
+  const STORNO = 'POST /api/angebote/9/storno';
+  const RUECKNAHME = 'DELETE /api/angebote/9/storno';
+
+  /** Ein Angebot, storniert aus dem gegebenen Status, mit dem gegebenen Grund. */
+  function storniert(status: string, stornoGrund: string | null) {
+    return { ...ANGEBOT, status, storniert: true, stornoGrund };
+  }
+
+  /** Die Angaben des Angebots. */
+  function angaben() {
+    return within(screen.getByTestId('angebot-angaben'));
+  }
+
+  /** Die Woerter der Chips in den Angaben — Statuschip zuerst, daneben das Storno. */
+  function chipWoerter(): readonly (string | null)[] {
+    return angaben()
+      .getAllByTestId('chip')
+      .map((chip) => chip.textContent);
+  }
+
+  /** Was an den Storno-Weg hinausging, in der Reihenfolge der Aufrufe. */
+  function stornoRuempfe(gemerkt: unknown[]) {
+    return (antwort: unknown) => (rumpf: BodyInit | null) => {
+      gemerkt.push(alsJson(rumpf));
+      return json(200, antwort)();
+    };
+  }
+
+  /**
+   * Waehlt „Stornieren", tippt den Grund (wenn einer gegeben ist) und bestaetigt die Rueckfrage.
+   */
+  async function stornieren(nutzer: ReturnType<typeof userEvent.setup>, grund: string | null) {
+    await nutzer.click(aktionen().getByRole('button', { name: 'Stornieren' }));
+    const dialog = within(await screen.findByRole('dialog'));
+    if (grund !== null) {
+      await nutzer.type(dialog.getByRole('textbox', { name: 'Grund (freiwillig)' }), grund);
+    }
+    await nutzer.click(dialog.getByRole('button', { name: 'Stornieren' }));
+  }
+
+  it('Szenario: Kunde lehnt ein abgegebenes Angebot ab', async () => {
+    const nutzer = userEvent.setup();
+    const ruempfe: unknown[] = [];
+    const fetchMock = fetchNachPfad({
+      ...LEERE_BEREICHE,
+      'GET /api/angebote/9': json(200, ANGEBOT),
+      [STORNO]: stornoRuempfe(ruempfe)(storniert('ABGEGEBEN', 'vom Kunden abgelehnt')),
+    });
+
+    renderSeite();
+    await screen.findByRole('heading', { level: 1, name: UEBERSCHRIFT });
+    await stornieren(nutzer, 'vom Kunden abgelehnt');
+
+    expect(await angaben().findByText('vom Kunden abgelehnt')).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/angebote/9/storno',
+      expect.objectContaining({ method: 'POST' }),
+    );
+    expect(ruempfe).toEqual([{ grund: 'vom Kunden abgelehnt' }]);
+    expect(chipWoerter()).toEqual(['Abgegeben', 'Storniert']);
+    expect(angaben().getByText('Stornogrund')).toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('Szenario: Kunde zieht einen erteilten Auftrag zurück', async () => {
+    const nutzer = userEvent.setup();
+    const ruempfe: unknown[] = [];
+    fetchNachPfad({
+      ...LEERE_BEREICHE,
+      'GET /api/angebote/9': json(200, BESTELLT),
+      [STORNO]: stornoRuempfe(ruempfe)(storniert('BESTELLT', 'Auftrag zurückgezogen')),
+    });
+
+    renderSeite();
+    await screen.findByRole('heading', { level: 1, name: UEBERSCHRIFT });
+    await stornieren(nutzer, 'Auftrag zurückgezogen');
+
+    expect(await angaben().findByText('Auftrag zurückgezogen')).toBeInTheDocument();
+    expect(ruempfe).toEqual([{ grund: 'Auftrag zurückgezogen' }]);
+    // Der Status bleibt „bestellt", das Storno steht daneben (E1, E13).
+    expect(chipWoerter()).toEqual(['Bestellt', 'Storniert']);
+    // Die Statuskette ist eingefroren (E2): allein die Ruecknahme bleibt.
+    expect(aktionen().queryByRole('button', { name: 'Status weiter' })).not.toBeInTheDocument();
+    expect(aktionen().queryByRole('button', { name: 'Status zurück' })).not.toBeInTheDocument();
+    expect(aktionen().getByRole('button', { name: 'Storno zurücknehmen' })).toBeInTheDocument();
+  });
+
+  it('Szenario: Versehentliches Stornieren abbrechen', async () => {
+    const nutzer = userEvent.setup();
+    const fetchMock = fetchNachPfad({
+      ...LEERE_BEREICHE,
+      'GET /api/angebote/9': json(200, ANGEBOT),
+    });
+
+    renderSeite();
+    await screen.findByRole('heading', { level: 1, name: UEBERSCHRIFT });
+    await nutzer.click(aktionen().getByRole('button', { name: 'Stornieren' }));
+    const dialog = within(await screen.findByRole('dialog'));
+    await nutzer.type(dialog.getByRole('textbox', { name: 'Grund (freiwillig)' }), 'versehentlich');
+    // Die Taste, von der die Rueckfrage ausgeht, bleibt stehen, waehrend der Dialog offen ist.
+    expect(
+      within(screen.getByTestId('angebot-aktionen')).getByRole('button', {
+        name: 'Stornieren',
+        hidden: true,
+      }),
+    ).toBeInTheDocument();
+    await nutzer.click(dialog.getByRole('button', { name: 'Abbrechen' }));
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    // Kein Weg zum Server: weder Storno noch sonst ein schreibender Aufruf.
+    for (const [, anfrage] of fetchMock.mock.calls) {
+      expect(anfrage).toEqual(expect.objectContaining({ method: 'GET' }));
+    }
+    expect(chipWoerter()).toEqual(['Abgegeben']);
+    expect(angaben().queryByText('Stornogrund')).not.toBeInTheDocument();
+  });
+
+  it('Szenario: Storno zurücknehmen', async () => {
+    const nutzer = userEvent.setup();
+    const fetchMock = fetchNachPfad({
+      ...LEERE_BEREICHE,
+      'GET /api/angebote/9': json(200, storniert('BESTELLT', 'Auftrag zurückgezogen')),
+      [RUECKNAHME]: json(200, BESTELLT),
+    });
+
+    renderSeite();
+    await screen.findByRole('heading', { level: 1, name: UEBERSCHRIFT });
+    expect(chipWoerter()).toEqual(['Bestellt', 'Storniert']);
+    await nutzer.click(aktionen().getByRole('button', { name: 'Storno zurücknehmen' }));
+
+    // Die Ruecknahme fragt nicht zurueck — sie stellt den Zustand von vorher wieder her.
+    expect(await aktionen().findByRole('button', { name: 'Status weiter' })).toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/angebote/9/storno',
+      expect.objectContaining({ method: 'DELETE' }),
+    );
+    expect(chipWoerter()).toEqual(['Bestellt']);
+    expect(angaben().queryByText('Stornogrund')).not.toBeInTheDocument();
+    expect(angaben().queryByText('Auftrag zurückgezogen')).not.toBeInTheDocument();
+  });
+
+  it('Szenario: Rest eines Auftrags wird nicht abgerufen', async () => {
+    const nutzer = userEvent.setup();
+    const ruempfe: unknown[] = [];
+    // 8 Stunden bestellt, 3 gebucht und nicht berechnet — vor wie nach dem Storno schreibbar.
+    const stand = {
+      positionen: [{ ...STAND_STUNDEN, angeboten: 8, offen: 8, angefallen: 3 }],
+      rechnungen: [],
+      angefallen: 3,
+      schreibbar: true,
+    };
+    const fetchMock = fetchNachPfad({
+      ...LEERE_BEREICHE,
+      [ABRECHNUNG]: json(200, stand),
+      'GET /api/angebote/9': json(200, { ...ANGEBOT_MIT_STUNDEN, status: 'BESTELLT' }),
+      [STORNO]: stornoRuempfe(ruempfe)({
+        ...ANGEBOT_MIT_STUNDEN,
+        status: 'BESTELLT',
+        storniert: true,
+        stornoGrund: 'Rest nicht abgerufen',
+      }),
+    });
+
+    renderSeite();
+    await screen.findByRole('heading', { level: 1, name: UEBERSCHRIFT });
+    await aktionen().findByRole('button', { name: 'Rechnung schreiben' });
+    await stornieren(nutzer, 'Rest nicht abgerufen');
+
+    expect(await angaben().findByText('Rest nicht abgerufen')).toBeInTheDocument();
+    expect(ruempfe).toEqual([{ grund: 'Rest nicht abgerufen' }]);
+    // Nach dem Storno fragt die Ansicht den Abrechnungsstand neu — und er bleibt schreibbar.
+    expect(
+      fetchMock.mock.calls.filter(([weg]) => weg === '/api/angebote/9/abrechnung'),
+    ).toHaveLength(2);
+    expect(aktionen().getByRole('button', { name: 'Rechnung schreiben' })).toBeEnabled();
+    expect(aktionen().getByRole('button', { name: 'Storno zurücknehmen' })).toBeInTheDocument();
+  });
+
+  it('zeigt Chip und Zeile „Stornogrund" nur am stornierten Angebot', async () => {
+    fetchNachPfad({
+      ...LEERE_BEREICHE,
+      'GET /api/angebote/9': json(200, ANGEBOT),
+    });
+
+    renderSeite();
+    await screen.findByRole('heading', { level: 1, name: UEBERSCHRIFT });
+
+    expect(chipWoerter()).toEqual(['Abgegeben']);
+    expect(angaben().queryByText('Stornogrund')).not.toBeInTheDocument();
+  });
+
+  it('laesst am Storno ohne Grund die Zeile „Stornogrund" weg, den Chip nicht', async () => {
+    fetchNachPfad({
+      ...LEERE_BEREICHE,
+      'GET /api/angebote/9': json(200, storniert('ABGEGEBEN', null)),
+    });
+
+    renderSeite();
+    await screen.findByRole('heading', { level: 1, name: UEBERSCHRIFT });
+
+    expect(chipWoerter()).toEqual(['Abgegeben', 'Storniert']);
+    expect(angaben().queryByText('Stornogrund')).not.toBeInTheDocument();
+  });
+
+  it('nennt den Grund in den Angaben nach dem Status', async () => {
+    fetchNachPfad({
+      ...LEERE_BEREICHE,
+      'GET /api/angebote/9': json(200, storniert('ABGEGEBEN', 'vom Kunden abgelehnt')),
+    });
+
+    renderSeite();
+    await screen.findByRole('heading', { level: 1, name: UEBERSCHRIFT });
+
+    expect(angaben().getAllByRole('term').map((teil) => teil.textContent)).toEqual([
+      'Firma',
+      'Ansprechpartner',
+      'Angebotsdatum',
+      'Status',
+      'Stornogrund',
+    ]);
+  });
+
+  it.each([['ANGELEGT'], ['ABGEGEBEN'], ['BESTELLT'], ['ERLEDIGT'], ['ABGERECHNET']])(
+    'traegt am stornierten Angebot aus „%s" allein „Storno zurücknehmen" (E2, Kriterium 10)',
+    async (status) => {
+      fetchNachPfad({
+        ...LEERE_BEREICHE,
+        'GET /api/angebote/9': json(200, storniert(status, 'vom Kunden abgelehnt')),
+      });
+
+      renderSeite();
+      await screen.findByRole('heading', { level: 1, name: UEBERSCHRIFT });
+      await screen.findByText('Noch keine Anlage.');
+
+      expect(aktionen().queryByRole('link', { name: 'Bearbeiten' })).not.toBeInTheDocument();
+      expect(aktionen().queryByRole('button', { name: 'Status weiter' })).not.toBeInTheDocument();
+      expect(aktionen().queryByRole('button', { name: 'Status zurück' })).not.toBeInTheDocument();
+      expect(aktionen().queryByRole('button', { name: 'Stornieren' })).not.toBeInTheDocument();
+      expect(aktionen().getByRole('button', { name: 'Storno zurücknehmen' })).toBeInTheDocument();
+    },
+  );
+
+  it.each([
+    ['ANGELEGT', true],
+    ['ABGEGEBEN', true],
+    ['BESTELLT', true],
+    ['ERLEDIGT', false],
+    ['ABGERECHNET', false],
+  ])('bietet am nicht stornierten Angebot in „%s" „Stornieren": %s', async (status, erwartet) => {
+    fetchNachPfad({
+      ...LEERE_BEREICHE,
+      'GET /api/angebote/9': json(200, { ...ANGEBOT, status }),
+    });
+
+    renderSeite();
+    await screen.findByRole('heading', { level: 1, name: UEBERSCHRIFT });
+
+    expect(aktionen().queryByRole('button', { name: 'Stornieren' }) !== null).toBe(erwartet);
+    expect(
+      aktionen().queryByRole('button', { name: 'Storno zurücknehmen' }),
+    ).not.toBeInTheDocument();
+    expect(aktionen().getByRole('link', { name: 'Bearbeiten' })).toBeInTheDocument();
+    // „Stornieren" ist weich: Die eine Kupfertaste bleibt „Status weiter", wo es sie gibt.
+    expect(kupfertasten().map((taste) => taste.textContent)).not.toContain('Stornieren');
+  });
+
+  it('bietet am internen Angebot kein „Stornieren" — storniert wird nur ein Kundenangebot', async () => {
+    fetchNachPfad({
+      ...LEERE_BEREICHE,
+      'GET /api/angebote/9': json(200, { ...ANGEBOT, intern: true, status: 'LAEUFT' }),
+    });
+
+    renderSeite();
+    await screen.findByRole('heading', { level: 1, name: UEBERSCHRIFT });
+
+    expect(aktionen().queryByRole('button', { name: 'Stornieren' })).not.toBeInTheDocument();
+  });
+
+  it('sendet bei leerem Feld `{"grund":null}`', async () => {
+    const nutzer = userEvent.setup();
+    const ruempfe: unknown[] = [];
+    fetchNachPfad({
+      ...LEERE_BEREICHE,
+      'GET /api/angebote/9': json(200, ANGEBOT),
+      [STORNO]: stornoRuempfe(ruempfe)(storniert('ABGEGEBEN', null)),
+    });
+
+    renderSeite();
+    await screen.findByRole('heading', { level: 1, name: UEBERSCHRIFT });
+    await stornieren(nutzer, null);
+
+    expect(await aktionen().findByRole('button', { name: 'Storno zurücknehmen' })).toBeInTheDocument();
+    expect(ruempfe).toEqual([{ grund: null }]);
+  });
+
+  it('sendet einen Grund aus blossem Leerraum als `null` — der Server nimmt keinen leeren an', async () => {
+    const nutzer = userEvent.setup();
+    const ruempfe: unknown[] = [];
+    fetchNachPfad({
+      ...LEERE_BEREICHE,
+      'GET /api/angebote/9': json(200, ANGEBOT),
+      [STORNO]: stornoRuempfe(ruempfe)(storniert('ABGEGEBEN', null)),
+    });
+
+    renderSeite();
+    await screen.findByRole('heading', { level: 1, name: UEBERSCHRIFT });
+    await stornieren(nutzer, '   ');
+
+    expect(await aktionen().findByRole('button', { name: 'Storno zurücknehmen' })).toBeInTheDocument();
+    expect(ruempfe).toEqual([{ grund: null }]);
+  });
+
+  it('sendet den getippten Grund genau so, wie er dasteht', async () => {
+    const nutzer = userEvent.setup();
+    const ruempfe: unknown[] = [];
+    fetchNachPfad({
+      ...LEERE_BEREICHE,
+      'GET /api/angebote/9': json(200, ANGEBOT),
+      [STORNO]: stornoRuempfe(ruempfe)(storniert('ABGEGEBEN', 'Budget gestrichen')),
+    });
+
+    renderSeite();
+    await screen.findByRole('heading', { level: 1, name: UEBERSCHRIFT });
+    await stornieren(nutzer, 'Budget gestrichen');
+
+    expect(await angaben().findByText('Budget gestrichen')).toBeInTheDocument();
+    expect(ruempfe).toEqual([{ grund: 'Budget gestrichen' }]);
+  });
+
+  it('traegt die bestaetigende Taste der Rueckfrage in Rose, nicht im Kupferverlauf', async () => {
+    const nutzer = userEvent.setup();
+    fetchNachPfad({
+      ...LEERE_BEREICHE,
+      'GET /api/angebote/9': json(200, ANGEBOT),
+    });
+
+    renderSeite();
+    await screen.findByRole('heading', { level: 1, name: UEBERSCHRIFT });
+    await nutzer.click(aktionen().getByRole('button', { name: 'Stornieren' }));
+    const dialog = within(await screen.findByRole('dialog', { name: 'Stornieren' }));
+
+    const ja = dialog.getByRole('button', { name: 'Stornieren' });
+    expect(getComputedStyle(ja).background).not.toContain('linear-gradient');
+    expect(dialog.getByRole('textbox', { name: 'Grund (freiwillig)' })).toHaveValue('');
+  });
+
+  it('beginnt nach dem Abbrechen mit leerem Feld', async () => {
+    const nutzer = userEvent.setup();
+    fetchNachPfad({
+      ...LEERE_BEREICHE,
+      'GET /api/angebote/9': json(200, ANGEBOT),
+    });
+
+    renderSeite();
+    await screen.findByRole('heading', { level: 1, name: UEBERSCHRIFT });
+    await nutzer.click(aktionen().getByRole('button', { name: 'Stornieren' }));
+    const erste = within(await screen.findByRole('dialog'));
+    await nutzer.type(erste.getByRole('textbox', { name: 'Grund (freiwillig)' }), 'Tippfehler');
+    await nutzer.click(erste.getByRole('button', { name: 'Abbrechen' }));
+    await nutzer.click(aktionen().getByRole('button', { name: 'Stornieren' }));
+
+    const zweite = within(await screen.findByRole('dialog'));
+    expect(zweite.getByRole('textbox', { name: 'Grund (freiwillig)' })).toHaveValue('');
+  });
+
+  it('meldet, wenn das Storno nicht durchgeht, und laesst das Angebot unveraendert', async () => {
+    const nutzer = userEvent.setup();
+    fetchNachPfad({
+      ...LEERE_BEREICHE,
+      'GET /api/angebote/9': json(200, ANGEBOT),
+      [STORNO]: problem(409, 'Dieses Angebot lässt sich nicht stornieren.'),
+    });
+
+    renderSeite();
+    await screen.findByRole('heading', { level: 1, name: UEBERSCHRIFT });
+    await stornieren(nutzer, 'vom Kunden abgelehnt');
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Dieses Angebot lässt sich nicht stornieren.',
+    );
+    expect(chipWoerter()).toEqual(['Abgegeben']);
+    expect(aktionen().getByRole('button', { name: 'Stornieren' })).toBeInTheDocument();
+  });
+
+  it('meldet, wenn die Ruecknahme nicht durchgeht, und laesst das Storno stehen', async () => {
+    const nutzer = userEvent.setup();
+    fetchNachPfad({
+      ...LEERE_BEREICHE,
+      'GET /api/angebote/9': json(200, storniert('BESTELLT', 'Auftrag zurückgezogen')),
+      [RUECKNAHME]: problem(409, 'Dieses Angebot ist nicht storniert.'),
+    });
+
+    renderSeite();
+    await screen.findByRole('heading', { level: 1, name: UEBERSCHRIFT });
+    await nutzer.click(aktionen().getByRole('button', { name: 'Storno zurücknehmen' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Dieses Angebot ist nicht storniert.');
+    expect(chipWoerter()).toEqual(['Bestellt', 'Storniert']);
+  });
+});
+
+describe('AngebotPage — Storno ohne Antwort des Servers', () => {
+  it('nennt den Ersatzsatz, wo der Weg gar nicht antwortet', async () => {
+    const nutzer = userEvent.setup();
+    fetchNachPfad({
+      ...LEERE_BEREICHE,
+      // Kein Eintrag fuer den Storno-Weg: Das Doppel scheitert wie ein abgerissenes Netz.
+      'GET /api/angebote/9': json(200, ANGEBOT),
+    });
+
+    renderSeite();
+    await screen.findByRole('heading', { level: 1, name: UEBERSCHRIFT });
+    await nutzer.click(aktionen().getByRole('button', { name: 'Stornieren' }));
+    await nutzer.click(
+      within(await screen.findByRole('dialog')).getByRole('button', { name: 'Stornieren' }),
+    );
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Das Angebot wurde nicht geändert. Bitte später erneut versuchen.',
+    );
+  });
 });
