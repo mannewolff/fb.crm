@@ -229,6 +229,27 @@ class AngebotsanlageUseCaseTest {
   }
 
   @Test
+  void ladeHoch_atAStornoedAngebot_thenStoresObjectAndRow() {
+    // Given — #330, Kriterium 10, zweiter Halbsatz: Anlagen entstehen am Storno weiter.
+    when(angebote.findById(ANGEBOT))
+        .thenReturn(
+            Optional.of(
+                Angebotsdoppel.angebot(ANGEBOT)
+                    .storniert("vom Kunden abgelehnt", Angebotsdoppel.ANGELEGT)));
+    ablegenGibtDenSchluessel();
+    speichernGibtZurueck();
+
+    // When
+    final Angebotsanlage geladen =
+        useCase.ladeHoch(ANGEBOT, "absage.pdf", strom(PDF_INHALT), PDF_INHALT.length);
+
+    // Then
+    assertThat(geladen.angebotId()).isEqualTo(ANGEBOT);
+    assertThat(geladen.dateiName()).isEqualTo("absage.pdf");
+    verify(anlagen).save(geladen);
+  }
+
+  @Test
   void ladeHoch_whenStoringTheObjectFails_thenWritesNoRow() {
     // Given — E9: erst das Objekt, dann die Zeile; scheitert das Objekt, gibt es keine Anlage.
     angebotGibtEs();

@@ -20,7 +20,10 @@ import org.mwolff.fbcrm.angebot.domain.Angebotsstatus;
  * @param ansprechpartnerId Kennung des Ansprechpartners, oder {@code null}
  * @param ansprechpartnerName Name des Ansprechpartners, oder {@code null}
  * @param intern ob das Angebot die eigene interne Arbeit festhaelt (Issue #226)
- * @param status wie weit das Angebot gediehen ist
+ * @param status wie weit das Angebot gediehen ist; am stornierten Angebot der Status, aus dem
+ *     storniert wurde
+ * @param storniert ob das Angebot storniert ist (Issue #334)
+ * @param stornoGrund warum storniert wurde, oder {@code null} — ohne Grund oder ohne Storno
  * @param angebotDatum Datum des Angebots
  * @param titel die einzeilige Benennung des Angebots, oder {@code null} fuer ein Angebot von vor
  *     dieser Aenderung (Issue #316)
@@ -36,6 +39,8 @@ public record AngebotResponse(
     @Nullable String ansprechpartnerName,
     boolean intern,
     Angebotsstatus status,
+    boolean storniert,
+    @Nullable String stornoGrund,
     LocalDate angebotDatum,
     @Nullable String titel,
     @Nullable String beschreibung,
@@ -52,6 +57,8 @@ public record AngebotResponse(
         kunde.ansprechpartnerName(),
         angebot.intern(),
         angebot.status(),
+        angebot.storniert(),
+        angebot.stornoGrund(),
         angebot.angebotDatum(),
         angebot.titel(),
         angebot.beschreibung(),

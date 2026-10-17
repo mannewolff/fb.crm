@@ -7,6 +7,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -33,7 +34,10 @@ import org.mwolff.fbcrm.angebot.application.AngebotDaten;
 import org.mwolff.fbcrm.angebot.application.AngebotLesenUseCase;
 import org.mwolff.fbcrm.angebot.application.AngebotNichtGefunden;
 import org.mwolff.fbcrm.angebot.application.AngebotStatusUseCase;
+import org.mwolff.fbcrm.angebot.application.AngebotStorniert;
+import org.mwolff.fbcrm.angebot.application.AngebotStornoUseCase;
 import org.mwolff.fbcrm.angebot.application.AnsprechpartnerNichtWaehlbar;
+import org.mwolff.fbcrm.angebot.application.KeinStornoVorhanden;
 import org.mwolff.fbcrm.angebot.application.KennzeichenNichtAenderbar;
 import org.mwolff.fbcrm.angebot.application.Kundenangaben;
 import org.mwolff.fbcrm.angebot.application.KundenangabenUseCase;
@@ -41,6 +45,7 @@ import org.mwolff.fbcrm.angebot.application.PositionenNichtWaehlbar;
 import org.mwolff.fbcrm.angebot.application.Positionsangabe;
 import org.mwolff.fbcrm.angebot.application.Positionsangaben;
 import org.mwolff.fbcrm.angebot.application.StatusGrenzeErreicht;
+import org.mwolff.fbcrm.angebot.application.StornoNichtMoeglich;
 import org.mwolff.fbcrm.angebot.domain.Angebot;
 import org.mwolff.fbcrm.angebot.domain.Angebotsposition;
 import org.mwolff.fbcrm.angebot.domain.Angebotsstatus;
@@ -75,6 +80,11 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
  *
  * <p><b>Der Titel ist auf dem Aenderungsweg Pflicht</b> (Issue #317): Er fehlt nicht, ist nicht nur
  * Leerraum und hat hoechstens 200 Zeichen — sonst 400 mit {@code fieldErrors.titel}.
+ *
+ * <p><b>Storno und Ruecknahme</b> (Issue #334, Plan #332 E5, E16): {@code POST} und {@code DELETE}
+ * auf {@code /storno} antworten 200 mit dem neuen Stand samt {@code storniert} und {@code
+ * stornoGrund}; der Grund ist freiwillig und hat hoechstens 2000 Zeichen. Die drei Konflikte sind
+ * 409, je mit ihrem Satz im {@code detail}.
  */
 @ExtendWith(MockitoExtension.class)
 class AngebotControllerTest {
@@ -121,6 +131,7 @@ class AngebotControllerTest {
   @Mock private AngebotLesenUseCase lesen;
   @Mock private AngebotAendernUseCase aendern;
   @Mock private AngebotStatusUseCase statuswechsel;
+  @Mock private AngebotStornoUseCase storno;
   @Mock private KundenangabenUseCase kunden;
 
   @Captor private ArgumentCaptor<AngebotDaten> daten;
@@ -130,7 +141,7 @@ class AngebotControllerTest {
   @BeforeEach
   void baueDenController() {
     final AngebotController controller =
-        new AngebotController(lesen, aendern, statuswechsel, kunden);
+        new AngebotController(lesen, aendern, statuswechsel, storno, kunden);
     // Jede Antwort mit einem Angebot fragt die Namen des Kunden hinzu; die Fehlerwege nicht.
     lenient().when(kunden.zu(any())).thenReturn(new Kundenangaben("Adler AG", "Eva Adler"));
     mockMvc =
@@ -705,5 +716,169 @@ class AngebotControllerTest {
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.fieldErrors.titel").isArray());
     verifyNoInteractions(aendern);
+  }
+
+  /** Das Angebot im Status {@code status}, storniert mit {@code grund}. */
+  private static Angebot storniert(final Angebotsstatus status, final @Nullable String grund) {
+    return angebot(status).storniert(grund, ANGELEGT);
+  }
+
+  @Test
+  void lesen_givenAnAngebotWithoutStorno_thenAnswersWithStornoFalseAndNoGrund() throws Exception {
+    // Given
+    when(lesen.lese(ANGEBOT)).thenReturn(angebot(Angebotsstatus.ABGEGEBEN));
+
+    // When / Then
+    mockMvc
+        .perform(get("/api/angebote/{id}", Long.valueOf(ANGEBOT)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.storniert").value(false))
+        .andExpect(jsonPath("$.stornoGrund").value(nullValue()));
+  }
+
+  @Test
+  void stornieren_withAGrund_thenPassesItOnAndAnswers200WithTheStorno() throws Exception {
+    // Given — #330, Kriterien 1 und 5.
+    when(storno.storniere(ANGEBOT, "vom Kunden abgelehnt"))
+        .thenReturn(storniert(Angebotsstatus.ABGEGEBEN, "vom Kunden abgelehnt"));
+
+    // When / Then
+    mockMvc
+        .perform(
+            post("/api/angebote/{id}/storno", Long.valueOf(ANGEBOT))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"grund\":\"vom Kunden abgelehnt\"}"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.storniert").value(true))
+        .andExpect(jsonPath("$.stornoGrund").value("vom Kunden abgelehnt"))
+        .andExpect(jsonPath("$.status").value("ABGEGEBEN"))
+        .andExpect(jsonPath("$.firmaName").value("Adler AG"));
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"{\"grund\":null}", "{}"})
+  void stornieren_withoutAGrund_thenPassesNullAndAnswers200(final String rumpf) throws Exception {
+    // Given — E4: der Grund ist freiwillig.
+    when(storno.storniere(ANGEBOT, null)).thenReturn(storniert(Angebotsstatus.BESTELLT, null));
+
+    // When / Then
+    mockMvc
+        .perform(
+            post("/api/angebote/{id}/storno", Long.valueOf(ANGEBOT))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(rumpf))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.storniert").value(true))
+        .andExpect(jsonPath("$.stornoGrund").value(nullValue()));
+  }
+
+  @Test
+  void stornieren_withoutABody_thenPassesNullAndAnswers200() throws Exception {
+    // Given — ein ganz fehlender Rumpf heisst ebenfalls „ohne Grund".
+    when(storno.storniere(ANGEBOT, null)).thenReturn(storniert(Angebotsstatus.BESTELLT, null));
+
+    // When / Then
+    mockMvc
+        .perform(post("/api/angebote/{id}/storno", Long.valueOf(ANGEBOT)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.storniert").value(true))
+        .andExpect(jsonPath("$.stornoGrund").value(nullValue()));
+  }
+
+  @Test
+  void stornieren_withAGrundOf2000Characters_thenAnswers200() throws Exception {
+    // Given — genau an der Grenze.
+    final String grund = "x".repeat(2000);
+    when(storno.storniere(ANGEBOT, grund)).thenReturn(storniert(Angebotsstatus.BESTELLT, grund));
+
+    // When / Then
+    mockMvc
+        .perform(
+            post("/api/angebote/{id}/storno", Long.valueOf(ANGEBOT))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"grund\":\"" + grund + "\"}"))
+        .andExpect(status().isOk());
+  }
+
+  @Test
+  void stornieren_withAGrundOf2001Characters_thenAnswers400AtTheGrund() throws Exception {
+    // When / Then — E4: hoechstens 2000 Zeichen; der Anwendungsfall wird gar nicht gefragt.
+    mockMvc
+        .perform(
+            post("/api/angebote/{id}/storno", Long.valueOf(ANGEBOT))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"grund\":\"" + "x".repeat(2001) + "\"}"))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.fieldErrors.grund").isNotEmpty());
+    verifyNoInteractions(storno);
+  }
+
+  @Test
+  void stornieren_whenTheAngebotCannotBeStornoed_thenAnswers409WithItsSentence() throws Exception {
+    // Given — E16, E17.
+    when(storno.storniere(ANGEBOT, null)).thenThrow(new StornoNichtMoeglich());
+
+    // When / Then
+    mockMvc
+        .perform(post("/api/angebote/{id}/storno", Long.valueOf(ANGEBOT)))
+        .andExpect(status().isConflict())
+        .andExpect(
+            jsonPath("$.detail")
+                .value("Aus diesem Zustand lässt sich das Angebot nicht stornieren."));
+  }
+
+  @Test
+  void stornieren_whenTheAngebotIsUnknown_thenAnswers404() throws Exception {
+    // Given
+    when(storno.storniere(ANGEBOT, null)).thenThrow(new AngebotNichtGefunden());
+
+    // When / Then
+    mockMvc
+        .perform(post("/api/angebote/{id}/storno", Long.valueOf(ANGEBOT)))
+        .andExpect(status().isNotFound());
+  }
+
+  @Test
+  void stornoZuruecknehmen_thenAnswers200WithoutStornoAndGrund() throws Exception {
+    // Given — #330, Kriterium 9.
+    when(storno.nimmStornoZurueck(ANGEBOT)).thenReturn(angebot(Angebotsstatus.BESTELLT));
+
+    // When / Then
+    mockMvc
+        .perform(delete("/api/angebote/{id}/storno", Long.valueOf(ANGEBOT)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.storniert").value(false))
+        .andExpect(jsonPath("$.stornoGrund").value(nullValue()))
+        .andExpect(jsonPath("$.status").value("BESTELLT"));
+  }
+
+  @Test
+  void stornoZuruecknehmen_whenThereIsNoStorno_thenAnswers409WithItsSentence() throws Exception {
+    // Given — E16, E17.
+    when(storno.nimmStornoZurueck(ANGEBOT)).thenThrow(new KeinStornoVorhanden());
+
+    // When / Then
+    mockMvc
+        .perform(delete("/api/angebote/{id}/storno", Long.valueOf(ANGEBOT)))
+        .andExpect(status().isConflict())
+        .andExpect(jsonPath("$.detail").value("Dieses Angebot ist nicht storniert."));
+  }
+
+  @Test
+  void aendern_atAStornoedAngebot_thenAnswers409WithItsSentence() throws Exception {
+    // Given — #330, Kriterium 10; E16.
+    when(aendern.aendere(eq(ANGEBOT), any())).thenThrow(new AngebotStorniert());
+
+    // When / Then
+    mockMvc
+        .perform(
+            put("/api/angebote/{id}", Long.valueOf(ANGEBOT))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(RUMPF))
+        .andExpect(status().isConflict())
+        .andExpect(
+            jsonPath("$.detail")
+                .value(
+                    "Am stornierten Angebot ändert sich nichts; nimm zuerst das Storno zurück."));
   }
 }

@@ -95,6 +95,34 @@ class AngebotStatusUseCaseTest {
   }
 
   @Test
+  void weiter_givenAStornoedAngebot_thenRejectsAndWritesNothing() {
+    // Given — Plan #332, E2: die Statuskette steht still, solange das Angebot storniert ist.
+    when(angebote.findById(ANGEBOT))
+        .thenReturn(
+            Optional.of(
+                Angebotsdoppel.angebot(ANGEBOT, Angebotsstatus.ABGEGEBEN).storniert(null, JETZT)));
+
+    // When / Then
+    assertThatThrownBy(() -> useCase.weiter(ANGEBOT)).isInstanceOf(AngebotStorniert.class);
+    verify(angebote).findById(ANGEBOT);
+    verifyNoMoreInteractions(angebote);
+  }
+
+  @Test
+  void zurueck_givenAStornoedAngebot_thenRejectsAndWritesNothing() {
+    // Given — E2, die andere Richtung.
+    when(angebote.findById(ANGEBOT))
+        .thenReturn(
+            Optional.of(
+                Angebotsdoppel.angebot(ANGEBOT, Angebotsstatus.BESTELLT).storniert(null, JETZT)));
+
+    // When / Then
+    assertThatThrownBy(() -> useCase.zurueck(ANGEBOT)).isInstanceOf(AngebotStorniert.class);
+    verify(angebote).findById(ANGEBOT);
+    verifyNoMoreInteractions(angebote);
+  }
+
+  @Test
   void weiter_whenTheAngebotIsUnknown_thenRejects() {
     // Given
     when(angebote.findById(ANGEBOT)).thenReturn(Optional.empty());

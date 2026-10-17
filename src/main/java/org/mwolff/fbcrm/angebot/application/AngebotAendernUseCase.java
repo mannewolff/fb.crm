@@ -72,11 +72,19 @@ import org.springframework.transaction.annotation.Transactional;
  * Angebotsdatum aendert, verschiebt kein Jahr. Die Regel gilt fuer beide Zielarten gleichermassen,
  * damit ein Angebot, das nach innen und zurueck gestellt wird, sein Jahr wiederfindet.
  *
- * <p><b>Die Reihenfolge der Pruefungen</b> ist Absicht: erst das Angebot, dann der Ansprechpartner,
- * die Positionskennungen, die Rechnungsbindung beim Artwechsel, die Bindung der berechneten
- * Positionen, die Angaben nach Zielart und zuletzt die erfasste Arbeitszeit. Die Sperre aus
- * Kriterium 8 ist die gruendlichere Aussage — wer bei bestehender Rechnung umstellen will, soll das
- * erfahren und nicht zuerst vier Feldfehler zu Positionen bekommen, die er gar nicht aendern
+ * <p><b>Am stornierten Angebot aendert sich nichts</b> (#330, Kriterium 10; Issue #334):
+ * Positionen, Titel und Beschreibung bleiben, wie sie zum Storno standen, und die Aenderung weist
+ * mit {@link AngebotStorniert} ab. Kommentare und Anlagen sind davon nicht beruehrt — sie laufen
+ * ueber eigene Anwendungsfaelle und entstehen weiter.
+ *
+ * <p><b>Die Reihenfolge der Pruefungen</b> ist Absicht: erst das Angebot, dann das Storno, dann der
+ * Ansprechpartner, die Positionskennungen, die Rechnungsbindung beim Artwechsel, die Bindung der
+ * berechneten Positionen, die Angaben nach Zielart und zuletzt die erfasste Arbeitszeit. Das Storno
+ * steht vor allen uebrigen, weil es die gruendlichste Aussage ist: Am stornierten Angebot geht gar
+ * keine Aenderung durch, und wer eine versucht, soll das erfahren und nicht zuerst einen Fehler zu
+ * einer Angabe bekommen, deren Korrektur ihm danach nichts nuetzte. Aus demselben Grund steht die
+ * Sperre aus Kriterium 8 vor den Feldpruefungen — wer bei bestehender Rechnung umstellen will, soll
+ * das erfahren und nicht zuerst vier Feldfehler zu Positionen bekommen, die er gar nicht aendern
  * wollte.
  */
 /*
@@ -124,6 +132,7 @@ public class AngebotAendernUseCase {
    * @param angebotId Kennung des Angebots
    * @param daten die eingereichten Angaben samt vollstaendiger Positionsliste
    * @throws AngebotNichtGefunden wenn es das Angebot nicht gibt
+   * @throws AngebotStorniert wenn das Angebot storniert ist (Kriterium 10)
    * @throws AnsprechpartnerNichtWaehlbar wenn der gewaehlte Ansprechpartner nicht zur Wahl steht
    * @throws PositionenNichtWaehlbar wenn eine Positionskennung nicht zu diesem Angebot gehoert oder
    *     zweimal eingereicht wurde
@@ -136,6 +145,9 @@ public class AngebotAendernUseCase {
    */
   public Angebot aendere(final long angebotId, final AngebotDaten daten) {
     final Angebot angebot = angebote.findById(angebotId).orElseThrow(AngebotNichtGefunden::new);
+    if (angebot.storniert()) {
+      throw new AngebotStorniert();
+    }
     wahl.pruefe(angebot.firmaId(), daten.ansprechpartnerId(), angebot.ansprechpartnerId());
     pruefeKennungen(daten.positionen(), angebot.positionen());
     pruefeArt(angebotId, daten.intern(), angebot.intern());

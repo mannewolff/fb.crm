@@ -296,6 +296,18 @@ public record Angebot(
     return mitStorno(false, null, zeitpunkt);
   }
 
+  /**
+   * Ob sich das Angebot jetzt stornieren laesst (Issue #334): Es ist noch nicht storniert (Plan
+   * #332, E17), und sein Status gehoert zu denen, aus denen storniert wird (E3).
+   *
+   * <p>Der Anwendungsfall fragt damit vor {@link #storniert}, damit ein unzulaessiges Storno als
+   * {@code StornoNichtMoeglich} mit lesbarem Satz abweist und nicht als {@link
+   * IllegalArgumentException} des Konstruktors.
+   */
+  public boolean laesstSichStornieren() {
+    return !storniert && stornierbar(status);
+  }
+
   private void pruefeNichtStorniert() {
     if (storniert) {
       throw new AngebotStorniert();

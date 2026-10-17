@@ -627,6 +627,49 @@ class AngebotAendernUseCaseTest {
   }
 
   @ParameterizedTest
+  @EnumSource(
+      value = Angebotsstatus.class,
+      names = {"ANGELEGT", "ABGEGEBEN", "BESTELLT"})
+  void aendere_givenAStornoedAngebot_thenRejectsAndWritesNothing(final Angebotsstatus status) {
+    // Given — #330, Kriterium 10; Issue #334: Positionen, Titel und Beschreibung bleiben.
+    angebotIst(Angebotsdoppel.angebot(ANGEBOT, status).storniert("vom Kunden abgelehnt", JETZT));
+
+    final AngebotDaten aenderung =
+        daten(Angebotsdoppel.ANSPRECHPARTNER, angaben(Angebotsdoppel.KONZEPTION));
+
+    // When / Then
+    assertThatThrownBy(() -> useCase.aendere(ANGEBOT, aenderung))
+        .isInstanceOf(AngebotStorniert.class);
+    verify(angebote).findById(ANGEBOT);
+    verifyNoMoreInteractions(angebote);
+  }
+
+  @Test
+  void aendere_givenAStornoedAngebotAndOtherwiseInvalidData_thenTheStornoComesFirst() {
+    // Given — die Storno-Pruefung steht vor allen uebrigen: ein fremder Ansprechpartner, eine
+    // fremde Positionskennung, eine gebundene Position, die fehlt, ein Artwechsel bei bestehender
+    // Rechnung und eine unvollstaendige Position — jede fuer sich wiese die Aenderung ab.
+    angebotIst(Angebotsdoppel.angebot(ANGEBOT, Angebotsstatus.BESTELLT).storniert(null, JETZT));
+    inEinerRechnung(Angebotsdoppel.SCHULUNG_ID);
+    mitRechnung();
+    mitErfassterZeit(Angebotsdoppel.KONZEPTION_ID);
+    final Positionsangabe unvollstaendig =
+        new Positionsangabe(
+            Angebotsdoppel.FREMDE_POSITION, "Ohne Menge", null, null, null, null, null);
+
+    final AngebotDaten aenderung = daten(ANDERE_PERSON, true, List.of(unvollstaendig));
+
+    // When / Then — und keiner der Ports wird gefragt.
+    assertThatThrownBy(() -> useCase.aendere(ANGEBOT, aenderung))
+        .isInstanceOf(AngebotStorniert.class);
+    verify(angebote).findById(ANGEBOT);
+    verifyNoMoreInteractions(angebote);
+    verifyNoInteractions(personen);
+    assertThat(bindung.gefragt).isEmpty();
+    assertThat(zeitbindung.gefragt).isEmpty();
+  }
+
+  @ParameterizedTest
   @CsvSource({
     "ANGELEGT,LAEUFT",
     "ABGEGEBEN,LAEUFT",

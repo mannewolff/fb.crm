@@ -587,6 +587,31 @@ class AngebotTest {
             a -> assertThat(a.positionen()).containsExactly(KONZEPTION));
   }
 
+  @ParameterizedTest
+  @EnumSource(
+      value = Angebotsstatus.class,
+      names = {"ANGELEGT", "ABGEGEBEN", "BESTELLT"})
+  void laesstSichStornieren_givenAStatusBeforeTheWorkIsDone_thenTrue(final Angebotsstatus status) {
+    // When / Then — Issue #334: dieselbe Statusmenge, die der Konstruktor zulaesst (E3).
+    assertThat(angebot(status).laesstSichStornieren()).isTrue();
+  }
+
+  @ParameterizedTest
+  @EnumSource(
+      value = Angebotsstatus.class,
+      names = {"ERLEDIGT", "ABGERECHNET", "LAEUFT", "ABGESCHLOSSEN"})
+  void laesstSichStornieren_givenAStatusAfterTheWorkOrOfInternalWork_thenFalse(
+      final Angebotsstatus status) {
+    // When / Then
+    assertThat(angebot(status).laesstSichStornieren()).isFalse();
+  }
+
+  @Test
+  void laesstSichStornieren_givenAnAlreadyStornoedOffer_thenFalse() {
+    // When / Then — E17: ein zweites Storno ist kein Uebergang.
+    assertThat(mitStorno(Angebotsstatus.BESTELLT, true, null).laesstSichStornieren()).isFalse();
+  }
+
   @Test
   void storniert_givenNoReason_thenStornoWithoutReason() {
     // When — E4: der Grund ist freiwillig, null heisst „ohne Grund".
