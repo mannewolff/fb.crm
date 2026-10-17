@@ -144,12 +144,12 @@ describe('AngebotePage — die Uebersicht (Issue #127, Kriterium 8)', () => {
     );
   });
 
-  it('bietet im Filter „alle" und die sieben Status an', async () => {
+  it('bietet im Filter „alle", die sieben Status und „Storniert" als letzten an (E19)', async () => {
     fetchNachPfad({ 'GET /api/angebote': json(200, { angebote: [] }) });
 
     renderSeite();
 
-    const filter = await screen.findByRole('combobox', { name: 'Status' });
+    const filter = await screen.findByRole('combobox', { name: 'Filter' });
     expect(filter).toHaveValue('');
     expect(within(filter).getAllByRole('option').map((eintrag) => eintrag.textContent)).toEqual([
       'alle',
@@ -160,6 +160,7 @@ describe('AngebotePage — die Uebersicht (Issue #127, Kriterium 8)', () => {
       'Abgerechnet',
       'Läuft',
       'Abgeschlossen',
+      'Storniert',
     ]);
   });
 
@@ -172,7 +173,7 @@ describe('AngebotePage — die Uebersicht (Issue #127, Kriterium 8)', () => {
 
     renderSeite();
     await screen.findByRole('link', { name: '24.09.2026' });
-    await nutzer.selectOptions(screen.getByRole('combobox', { name: 'Status' }), 'BESTELLT');
+    await nutzer.selectOptions(screen.getByRole('combobox', { name: 'Filter' }), 'BESTELLT');
 
     expect(await screen.findByTestId('adresse')).toHaveTextContent('/angebote?status=BESTELLT');
     await vi.waitFor(() => {
@@ -194,9 +195,9 @@ describe('AngebotePage — die Uebersicht (Issue #127, Kriterium 8)', () => {
 
     renderSeite('/angebote?status=BESTELLT');
 
-    expect(await screen.findByRole('combobox', { name: 'Status' })).toHaveValue('BESTELLT');
+    expect(await screen.findByRole('combobox', { name: 'Filter' })).toHaveValue('BESTELLT');
     await screen.findByRole('link', { name: '26.09.2026' });
-    await nutzer.selectOptions(screen.getByRole('combobox', { name: 'Status' }), '');
+    await nutzer.selectOptions(screen.getByRole('combobox', { name: 'Filter' }), '');
 
     expect(await screen.findByRole('link', { name: '24.09.2026' })).toBeInTheDocument();
     expect(screen.getByTestId('adresse')).toHaveTextContent(/^\/angebote$/);
@@ -223,7 +224,7 @@ describe('AngebotePage — die Uebersicht (Issue #127, Kriterium 8)', () => {
     });
 
     renderSeite();
-    await nutzer.selectOptions(await screen.findByRole('combobox', { name: 'Status' }), 'BESTELLT');
+    await nutzer.selectOptions(await screen.findByRole('combobox', { name: 'Filter' }), 'BESTELLT');
     await screen.findByRole('link', { name: '26.09.2026' });
     liefereAlle(json(200, { angebote: [JUENGER, AELTER] })());
 
@@ -377,7 +378,7 @@ describe('AngebotePage — Kennzeichen intern und Strich in der Summe (Issue #23
 
     renderSeite();
     await screen.findByRole('link', { name: '26.09.2026' });
-    await nutzer.selectOptions(screen.getByRole('combobox', { name: 'Status' }), 'LAEUFT');
+    await nutzer.selectOptions(screen.getByRole('combobox', { name: 'Filter' }), 'LAEUFT');
 
     expect(await screen.findByTestId('adresse')).toHaveTextContent('/angebote?status=LAEUFT');
     await vi.waitFor(() => {
@@ -387,6 +388,74 @@ describe('AngebotePage — Kennzeichen intern und Strich in der Summe (Issue #23
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/angebote?status=LAEUFT&storniert=false',
       expect.objectContaining({ method: 'GET' }),
+    );
+  });
+});
+
+describe('AngebotePage — Storno in der Uebersicht (Plan #332, Kriterium 4)', () => {
+  const STORNIERT = { ...AELTER, status: 'ABGEGEBEN', storniert: true };
+
+  it('zeigt unter „alle" am stornierten Angebot Statuschip und Storniert-Chip, am anderen keinen', async () => {
+    fetchNachPfad({ 'GET /api/angebote': json(200, { angebote: [JUENGER, STORNIERT] }) });
+
+    renderSeite();
+
+    const tafel = within(await screen.findByRole('table', { name: 'Angebote' }));
+    const [, erste, zweite] = tafel.getAllByRole('row');
+    expect(within(erste).queryByText('Storniert')).not.toBeInTheDocument();
+    expect(within(zweite).getByText('Abgegeben')).toBeInTheDocument();
+    const datum = within(zweite).getAllByRole('cell')[1];
+    expect(within(datum).getByText('Storniert')).toBeInTheDocument();
+  });
+
+  it('schreibt die Wahl „Storniert" als status=STORNIERT in die Adresse', async () => {
+    const nutzer = userEvent.setup();
+    const fetchMock = fetchNachPfad({
+      'GET /api/angebote': json(200, { angebote: [JUENGER] }),
+      'GET /api/angebote?storniert=true': json(200, { angebote: [STORNIERT] }),
+    });
+
+    renderSeite();
+    await screen.findByRole('link', { name: '26.09.2026' });
+    await nutzer.selectOptions(screen.getByRole('combobox', { name: 'Filter' }), 'STORNIERT');
+
+    expect(await screen.findByTestId('adresse')).toHaveTextContent('/angebote?status=STORNIERT');
+    expect(await screen.findByRole('link', { name: '24.09.2026' })).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/angebote?storniert=true',
+      expect.objectContaining({ method: 'GET' }),
+    );
+  });
+
+  it('fragt mit status=STORNIERT in der Adresse nach den stornierten', async () => {
+    const fetchMock = fetchNachPfad({
+      'GET /api/angebote?storniert=true': json(200, { angebote: [STORNIERT] }),
+    });
+
+    renderSeite('/angebote?status=STORNIERT');
+
+    expect(await screen.findByRole('combobox', { name: 'Filter' })).toHaveValue('STORNIERT');
+    expect(await screen.findByRole('link', { name: '24.09.2026' })).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith('/api/angebote?storniert=true', expect.anything());
+  });
+
+  it('sagt unter „Storniert" ohne Angebot „Es gibt kein storniertes Angebot."', async () => {
+    fetchNachPfad({ 'GET /api/angebote?storniert=true': json(200, { angebote: [] }) });
+
+    renderSeite('/angebote?status=STORNIERT');
+
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      /^Es gibt kein storniertes Angebot\.$/,
+    );
+  });
+
+  it('sagt ohne Filter und ohne Angebot den ganzen Satz', async () => {
+    fetchNachPfad({ 'GET /api/angebote': json(200, { angebote: [] }) });
+
+    renderSeite();
+
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      /^Es gibt noch kein Angebot\. Angebote entstehen auf der Seite ihrer Firma\.$/,
     );
   });
 });

@@ -14,15 +14,16 @@ import InternChip from '../components/InternChip';
 import Karte from '../components/Karte';
 import { useKopfPfad } from '../components/KopfPfad';
 import type { PfadVerweis } from '../components/KopfPfad';
+import StorniertChip from '../components/StorniertChip';
 import Tafel, { type TafelSpalte } from '../components/Tafel';
-import { ANGEBOTSSTATUS, alsAngebotsstatus, angebotsstatusBild } from '../lib/angebotsstatus';
-import type { Angebotsstatus } from '../lib/angebotsstatus';
+import { FILTERWERTE, alsFilterwert, filterwortZu } from '../lib/angebotsstatus';
+import type { Filterwert } from '../lib/angebotsstatus';
 import { euro } from '../lib/geld';
 import { tagWort } from '../lib/tag';
 import { ABSTAND_BUEHNE, RADIUS_RUND, ZAHLEN_KLASSE } from '../theme';
 
 /**
- * Die Uebersicht aller Angebote, nach Status filterbar (Issue #127, Kriterium 8).
+ * Die Uebersicht aller Angebote, nach Status oder Storno filterbar (Issue #127, Kriterium 8).
  *
  * Aufbau wie die Firmenuebersicht: eine {@link Karte} mit dem Filter im Kopf und einer
  * {@link Tafel} darunter. Eine Kupfertaste gibt es hier nicht — ein Angebot entsteht an seiner
@@ -41,6 +42,10 @@ import { ABSTAND_BUEHNE, RADIUS_RUND, ZAHLEN_KLASSE } from '../theme';
  *       „Summe" steht dann ein Strich, und der haengt am Kennzeichen und nicht an einer 0 vom
  *       Server (Plan #218, E16): Menge und Preis bleiben beim Wechsel extern -> intern erhalten,
  *       eine 0 behauptete, es gaebe sie nicht.</li>
+ *   <li><b>Storno</b> (Plan #332): Der eine Waehler traegt hinter den sieben Status den Wert
+ *       „Storniert"; seine Werte sind eine Partition (E7), darum heisst er „Filter" (E19), und die
+ *       Adresse traegt ihn als `?status=STORNIERT` (E20). Ein storniertes Angebot zeigt den
+ *       `StorniertChip` hinter dem Datum, neben seinem Statuschip (E13).</li>
  *   <li><b>Veraltete Antworten fallen weg</b>: Wer schnell zwischen zwei Filtern wechselt, sieht
  *       die Antwort des letzten, auch wenn die des vorigen spaeter eintrifft.</li>
  * </ul>
@@ -54,7 +59,8 @@ const ALLE = '';
 
 const AUSFALL = 'Die Angebote sind gerade nicht zu erreichen. Bitte später erneut versuchen.';
 const LEER_ALLE = 'Es gibt noch kein Angebot. Angebote entstehen auf der Seite ihrer Firma.';
-const LEER_GEFILTERT = 'In diesem Status gibt es kein Angebot.';
+const LEER_STATUS = 'In diesem Status gibt es kein Angebot.';
+const LEER_STORNIERT = 'Es gibt kein storniertes Angebot.';
 
 const SPALTEN: readonly TafelSpalte[] = [
   'Titel',
@@ -74,9 +80,9 @@ type Stand =
   | { readonly art: 'fehler' };
 
 /** Holt die Uebersicht und macht auch aus dem Fehlschlag einen Stand. */
-async function laden(status: Angebotsstatus | null): Promise<Stand> {
+async function laden(filterwert: Filterwert | null): Promise<Stand> {
   try {
-    return { art: 'daten', uebersicht: await angeboteUebersicht(status) };
+    return { art: 'daten', uebersicht: await angeboteUebersicht(filterwert) };
   } catch {
     return { art: 'fehler' };
   }
@@ -109,6 +115,7 @@ function Zeile({ angebot }: { readonly angebot: AngebotUebersichtZeile }) {
           <span className={ZAHLEN_KLASSE}>{tagWort(angebot.angebotDatum)}</span>
         )}
         {angebot.intern ? <InternChip /> : null}
+        {angebot.storniert ? <StorniertChip /> : null}
       </Box>
       <Box component="td">
         <Box
@@ -137,8 +144,16 @@ function Zeile({ angebot }: { readonly angebot: AngebotUebersichtZeile }) {
   );
 }
 
+/** Der Satz zur Leere — er haengt am Filterwert (E19). */
+function leersatzZu(filterwert: Filterwert | null): string {
+  if (filterwert === null) {
+    return LEER_ALLE;
+  }
+  return filterwert === 'STORNIERT' ? LEER_STORNIERT : LEER_STATUS;
+}
+
 /** Was in der Karte steht: Ladehinweis, Meldung, Satz zur Leere oder die Tafel. */
-function inhaltZu(stand: Stand, status: Angebotsstatus | null): ReactNode {
+function inhaltZu(stand: Stand, filterwert: Filterwert | null): ReactNode {
   if (stand.art === 'laedt') {
     return (
       <Typography
@@ -157,7 +172,7 @@ function inhaltZu(stand: Stand, status: Angebotsstatus | null): ReactNode {
         role="status"
         sx={(theme) => ({ fontSize: 12.5, color: theme.vars.palette.kupferwolke.textMatt })}
       >
-        {status === null ? LEER_ALLE : LEER_GEFILTERT}
+        {leersatzZu(filterwert)}
       </Typography>
     );
   }
@@ -173,13 +188,13 @@ function inhaltZu(stand: Stand, status: Angebotsstatus | null): ReactNode {
 export default function AngebotePage() {
   useKopfPfad(KEIN_WEG, 'Angebote');
   const [parameter, setzeParameter] = useSearchParams();
-  const status = alsAngebotsstatus(parameter.get(PARAM_STATUS));
+  const filterwert = alsFilterwert(parameter.get(PARAM_STATUS));
   const [stand, setzeStand] = useState<Stand>({ art: 'laedt' });
 
   useEffect(() => {
     let gueltig = true;
     setzeStand({ art: 'laedt' });
-    void laden(status).then((neu) => {
+    void laden(filterwert).then((neu) => {
       // Ein juengerer Filter hat diesen Lauf abgeloest; seine Antwort ist die richtige.
       if (gueltig) {
         setzeStand(neu);
@@ -188,7 +203,7 @@ export default function AngebotePage() {
     return () => {
       gueltig = false;
     };
-  }, [status]);
+  }, [filterwert]);
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: ABSTAND_BUEHNE }}>
@@ -199,8 +214,8 @@ export default function AngebotePage() {
           <TextField
             select
             size="small"
-            label="Status"
-            value={status ?? ALLE}
+            label="Filter"
+            value={filterwert ?? ALLE}
             onChange={(ereignis) => {
               const neu = ereignis.target.value;
               // Geschoben statt ersetzt: Der Filter ist eine Handlung, die „zurueck"
@@ -218,15 +233,15 @@ export default function AngebotePage() {
             })}
           >
             <option value={ALLE}>alle</option>
-            {ANGEBOTSSTATUS.map((eintrag) => (
+            {FILTERWERTE.map((eintrag) => (
               <option key={eintrag} value={eintrag}>
-                {angebotsstatusBild(eintrag).wort}
+                {filterwortZu(eintrag)}
               </option>
             ))}
           </TextField>
         }
       >
-        {inhaltZu(stand, status)}
+        {inhaltZu(stand, filterwert)}
       </Karte>
     </Box>
   );
