@@ -23,14 +23,20 @@ import java.util.List;
  * der Ansicht, weil keine Zahl in der Ansicht entsteht (E10): Was die Spalte „Angefallen" addiert
  * zeigt, hat der Server addiert.
  *
+ * <p>Und ob aus dem Angebot jetzt eine Rechnung entstehen darf (Plan #332, E9): Daran haengt die
+ * Taste „Rechnung schreiben". Die Antwort kommt vom Server, weil die Regel mengen- und
+ * stornoabhaengig ist und eine Abschrift in der Ansicht beim ersten Nachziehen auseinanderliefe.
+ *
  * @param positionen je Position des Angebots eine Zeile, in der Reihenfolge des Angebots
  * @param rechnungen die Rechnungen dieses Angebots, neueste zuerst
  * @param angefallen die insgesamt erfassten Stunden ueber alle Positionen, sonst 0
+ * @param schreibbar ob aus dem Angebot jetzt eine neue Rechnung entstehen darf
  */
 public record Angebotsabrechnung(
     List<Positionsabrechnung> positionen,
     List<RechnungMitBetrag> rechnungen,
-    BigDecimal angefallen) {
+    BigDecimal angefallen,
+    boolean schreibbar) {
 
   /** Nimmt die Listen als Kopie: Der Aufrufer darf seine Listen danach weiterverwenden. */
   public Angebotsabrechnung {

@@ -2,6 +2,8 @@ package org.mwolff.fbcrm.rechnung.domain;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Map;
+import org.mwolff.fbcrm.angebot.domain.Angebot;
 import org.mwolff.fbcrm.angebot.domain.Angebotsposition;
 import org.mwolff.fbcrm.common.Geldrechnung;
 
@@ -59,6 +61,43 @@ public record Abrechnungsstand(List<Positionsstand> positionen) {
   /** Der offene Betrag des Angebots: die Summe der offenen Betraege seiner Positionen. */
   public BigDecimal offenerBetrag() {
     return Geldrechnung.summe(positionen.stream().map(Positionsstand::offenerBetrag));
+  }
+
+  /**
+   * Ob aus dem Angebot noch eine neue Rechnung entstehen kann (#330, Kriterium 7; Plan #332, E8).
+   *
+   * <p>Ohne Storno dasselbe wie {@link #etwasOffen()}; am stornierten Angebot zaehlen die nicht
+   * abgerechneten Stunden ({@link Positionsstand#abrechenbareMenge(Angebot, BigDecimal)}).
+   *
+   * @param angebot das Angebot, dessen Positionen dieser Stand traegt
+   * @param angefallen die erfassten Stunden je Positionskennung; eine fehlende Position zaehlt 0
+   */
+  public boolean etwasAbrechenbar(final Angebot angebot, final Map<Long, BigDecimal> angefallen) {
+    return positionen.stream()
+        .anyMatch(stand -> abrechenbar(stand, angebot, angefallen).signum() > 0);
+  }
+
+  /**
+   * Der Betrag, der noch in eine neue Rechnung darf: je Position die abrechenbare Menge mal
+   * Einzelpreis des Angebots, auf den Cent gerundet und danach summiert.
+   *
+   * @param angebot das Angebot, dessen Positionen dieser Stand traegt
+   * @param angefallen die erfassten Stunden je Positionskennung; eine fehlende Position zaehlt 0
+   */
+  public BigDecimal abrechenbarerBetrag(
+      final Angebot angebot, final Map<Long, BigDecimal> angefallen) {
+    return Geldrechnung.summe(
+        positionen.stream()
+            .map(
+                stand ->
+                    Geldrechnung.betrag(
+                        abrechenbar(stand, angebot, angefallen), stand.position().einzelpreis())));
+  }
+
+  private static BigDecimal abrechenbar(
+      final Positionsstand stand, final Angebot angebot, final Map<Long, BigDecimal> angefallen) {
+    return stand.abrechenbareMenge(
+        angebot, angefallen.getOrDefault(stand.position().requireId(), BigDecimal.ZERO));
   }
 
   private static Abrechnungsstand berechne(

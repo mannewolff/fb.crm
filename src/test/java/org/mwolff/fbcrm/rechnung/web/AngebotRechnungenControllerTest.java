@@ -161,7 +161,8 @@ class AngebotRechnungenControllerTest {
                     new RechnungMitBetrag(Webdoppel.entwurf("80.00"), new BigDecimal("9520.00")),
                     new RechnungMitBetrag(
                         Webdoppel.gestellt(6L, "R26-0001", "100.00"), new BigDecimal("10700.00"))),
-                new BigDecimal("182.00")));
+                new BigDecimal("182.00"),
+                true));
 
     // When / Then
     mockMvc
@@ -178,6 +179,7 @@ class AngebotRechnungenControllerTest {
         .andExpect(jsonPath("$.positionen[0].buchbar").value(true))
         .andExpect(jsonPath("$.positionen[0].angefallen").value(182.00))
         .andExpect(jsonPath("$.angefallen").value(182.00))
+        .andExpect(jsonPath("$.schreibbar").value(true))
         .andExpect(jsonPath("$.rechnungen.length()").value(2))
         .andExpect(jsonPath("$.rechnungen[0].id").value(Webdoppel.RECHNUNG))
         .andExpect(jsonPath("$.rechnungen[0].nummer").doesNotExist())

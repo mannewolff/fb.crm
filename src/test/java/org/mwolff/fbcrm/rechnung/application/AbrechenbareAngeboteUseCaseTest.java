@@ -3,6 +3,7 @@ package org.mwolff.fbcrm.rechnung.application;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -10,6 +11,7 @@ import static org.mockito.Mockito.when;
 import java.math.BigDecimal;
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -22,6 +24,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mwolff.fbcrm.angebot.domain.AngebotRepository;
 import org.mwolff.fbcrm.angebot.domain.Angebotsstatus;
+import org.mwolff.fbcrm.arbeitszeit.application.Arbeitszeitauskunft;
 import org.mwolff.fbcrm.firma.application.FirmaNichtGefunden;
 import org.mwolff.fbcrm.firma.domain.FirmaRepository;
 import org.mwolff.fbcrm.rechnung.domain.RechnungRepository;
@@ -32,6 +35,9 @@ import org.mwolff.fbcrm.rechnung.domain.RechnungRepository;
  * <p>Gegenstand sind die beiden Bedingungen: der Status ab „bestellt" und mindestens eine Position,
  * an der noch etwas offen ist. Entwuerfe zaehlen dabei als abgerechnet (Kriterium 6) — ein Angebot,
  * dessen Rest schon in einem Entwurf steht, steht nicht mehr zur Wahl.
+ *
+ * <p>Am <b>stornierten</b> Angebot zaehlen statt der offenen Menge die nicht abgerechneten Stunden
+ * (#330, Kriterium 7, zweiter Satz; Plan #332, E8, E18) — gefragt in einem Zug ueber alle Angebote.
  */
 @ExtendWith(MockitoExtension.class)
 class AbrechenbareAngeboteUseCaseTest {
@@ -39,6 +45,7 @@ class AbrechenbareAngeboteUseCaseTest {
   @Mock private AngebotRepository angebote;
   @Mock private RechnungRepository rechnungen;
   @Mock private FirmaRepository firmen;
+  @Mock private Arbeitszeitauskunft arbeitszeit;
 
   @Captor private ArgumentCaptor<Collection<Long>> gefragteFirmen;
 
@@ -46,7 +53,7 @@ class AbrechenbareAngeboteUseCaseTest {
 
   @BeforeEach
   void baueDenAnwendungsfall() {
-    useCase = new AbrechenbareAngeboteUseCase(angebote, rechnungen, firmen);
+    useCase = new AbrechenbareAngeboteUseCase(angebote, rechnungen, firmen, arbeitszeit);
   }
 
   @ParameterizedTest
@@ -89,7 +96,7 @@ class AbrechenbareAngeboteUseCaseTest {
 
     // Then
     assertThat(zeilen).isEmpty();
-    verifyNoInteractions(rechnungen, firmen);
+    verifyNoInteractions(rechnungen, firmen, arbeitszeit);
   }
 
   @Test
@@ -164,7 +171,7 @@ class AbrechenbareAngeboteUseCaseTest {
 
     // Then
     assertThat(zeilen).isEmpty();
-    verifyNoInteractions(rechnungen, firmen);
+    verifyNoInteractions(rechnungen, firmen, arbeitszeit);
   }
 
   @Test
@@ -176,5 +183,73 @@ class AbrechenbareAngeboteUseCaseTest {
 
     // When / Then
     assertThatThrownBy(() -> useCase.abrechenbare()).isInstanceOf(FirmaNichtGefunden.class);
+  }
+
+  @Test
+  void abrechenbare_withAStorniertesAngebotWithoutNichtAbgerechneteStunden_thenItIsLeftOut() {
+    // Given — 8 Stunden angeboten und alles offen, aber nichts erfasst: am stornierten Angebot
+    // gibt es nichts mehr abzurechnen (#330, Kriterium 7).
+    when(angebote.findAlle(Optional.empty()))
+        .thenReturn(
+            List.of(Rechnungsdoppel.storniert(List.of(Rechnungsdoppel.beratungUeber("8.00")))));
+    when(rechnungen.findAlle()).thenReturn(List.of());
+    when(arbeitszeit.alleAngefallen()).thenReturn(Map.of());
+
+    // When
+    final List<AbrechenbaresAngebot> zeilen = useCase.abrechenbare();
+
+    // Then
+    assertThat(zeilen).isEmpty();
+    verifyNoInteractions(firmen);
+  }
+
+  @Test
+  void abrechenbare_withAStorniertesAngebotWithThreeNichtAbgerechneteStunden_thenTheirBetrag() {
+    // Given — 8 angeboten, 3 erfasst und nicht berechnet: zur Wahl steht es mit 3 x 100,00 €.
+    when(angebote.findAlle(Optional.empty()))
+        .thenReturn(
+            List.of(Rechnungsdoppel.storniert(List.of(Rechnungsdoppel.beratungUeber("8.00")))));
+    when(rechnungen.findAlle()).thenReturn(List.of());
+    when(arbeitszeit.alleAngefallen())
+        .thenReturn(Map.of(Long.valueOf(Rechnungsdoppel.BERATUNG_ID), new BigDecimal("3.00")));
+    when(firmen.findAllById(any()))
+        .thenReturn(List.of(Rechnungsdoppel.firma(Rechnungsdoppel.FIRMA, "Adler AG")));
+
+    // When
+    final List<AbrechenbaresAngebot> zeilen = useCase.abrechenbare();
+
+    // Then
+    assertThat(zeilen)
+        .singleElement()
+        .satisfies(
+            zeile -> assertThat(zeile.angebot().storniert()).isTrue(),
+            zeile -> assertThat(zeile.offenerBetrag()).isEqualByComparingTo("300.00"));
+  }
+
+  @Test
+  void abrechenbare_withSeveralAngebote_thenTheAngefallenenStundenComeInOneZug() {
+    // Given — zwei Angebote, eines storniert: die Stunden kommen trotzdem in einem Aufruf.
+    when(angebote.findAlle(Optional.empty()))
+        .thenReturn(
+            List.of(
+                Rechnungsdoppel.angebot(),
+                Rechnungsdoppel.angebot(
+                        12L, Angebotsstatus.BESTELLT, List.of(Rechnungsdoppel.WARTUNG))
+                    .storniert(Rechnungsdoppel.STORNOGRUND, Rechnungsdoppel.ANGELEGT)));
+    when(rechnungen.findAlle()).thenReturn(List.of());
+    when(arbeitszeit.alleAngefallen())
+        .thenReturn(Map.of(Long.valueOf(Rechnungsdoppel.WARTUNG_ID), new BigDecimal("2.00")));
+    when(firmen.findAllById(any()))
+        .thenReturn(List.of(Rechnungsdoppel.firma(Rechnungsdoppel.FIRMA, "Adler AG")));
+
+    // When
+    final List<AbrechenbaresAngebot> zeilen = useCase.abrechenbare();
+
+    // Then — das stornierte mit 2 x 130,00 €, das andere mit seinem offenen Betrag.
+    assertThat(zeilen)
+        .extracting(AbrechenbaresAngebot::offenerBetrag)
+        .usingElementComparator(BigDecimal::compareTo)
+        .containsExactly(new BigDecimal("17200.00"), new BigDecimal("260.00"));
+    verify(arbeitszeit, times(1)).alleAngefallen();
   }
 }

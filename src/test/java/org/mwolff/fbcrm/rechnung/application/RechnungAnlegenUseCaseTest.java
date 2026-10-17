@@ -4,9 +4,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
@@ -87,6 +87,17 @@ class RechnungAnlegenUseCaseTest {
         .thenReturn(Optional.of(Rechnungsdoppel.angebot(Angebotsstatus.BESTELLT, positionen)));
   }
 
+  /** Das Angebot mit frei gewaehlten Positionen, aus „bestellt" storniert. */
+  private void gegebenesStorniertesAngebot(final List<Angebotsposition> positionen) {
+    when(angebote.findById(Rechnungsdoppel.ANGEBOT))
+        .thenReturn(Optional.of(Rechnungsdoppel.storniert(positionen)));
+  }
+
+  /** Die Stunden, die die Zeiterfassung insgesamt meldet. */
+  private void angefalleneStunden(final Map<Long, BigDecimal> stunden) {
+    when(arbeitszeit.angefallen(Rechnungsdoppel.ANGEBOT)).thenReturn(stunden);
+  }
+
   /** Die Stunden, die die Zeiterfassung fuer den November meldet. */
   private void gemeldeteStunden(final Map<Long, BigDecimal> stunden) {
     when(arbeitszeit.imMonat(Rechnungsdoppel.ANGEBOT, NOVEMBER)).thenReturn(stunden);
@@ -142,7 +153,7 @@ class RechnungAnlegenUseCaseTest {
     assertThatThrownBy(() -> useCase.anlegen(Rechnungsdoppel.ANGEBOT, Optional.of(NOVEMBER)))
         .isInstanceOf(AngebotNichtAbrechenbar.class);
     verify(rechnungen, never()).save(any());
-    verifyNoInteractions(arbeitszeit);
+    verify(arbeitszeit, never()).imMonat(anyLong(), any());
   }
 
   @Test
@@ -167,8 +178,9 @@ class RechnungAnlegenUseCaseTest {
   }
 
   @Test
-  void anlegen_withoutAMonat_thenTheArbeitszeitIsNotAsked() {
-    // Given — ohne Monat entsteht der Entwurf wie bisher, und die Zeiterfassung bleibt aussen vor.
+  void anlegen_withoutAMonat_thenTheStundenOfNoMonatAreAsked() {
+    // Given — ohne Monat entsteht der Entwurf wie bisher; nach den Stunden eines Monats wird nicht
+    // gefragt. Die insgesamt angefallenen fragt das Anlegen seit dem Storno immer (Plan #332, E8).
     when(angebote.findById(Rechnungsdoppel.ANGEBOT))
         .thenReturn(Optional.of(Rechnungsdoppel.angebot()));
     when(rechnungen.findByAngebot(Rechnungsdoppel.ANGEBOT)).thenReturn(List.of());
@@ -177,7 +189,7 @@ class RechnungAnlegenUseCaseTest {
     useCase().anlegen(Rechnungsdoppel.ANGEBOT, Optional.empty());
 
     // Then
-    verifyNoInteractions(arbeitszeit);
+    verify(arbeitszeit, never()).imMonat(anyLong(), any());
   }
 
   @Test
@@ -419,5 +431,90 @@ class RechnungAnlegenUseCaseTest {
         .containsExactly(
             tuple(Rechnungsdoppel.BERATUNG_ID, new BigDecimal("20.00")),
             tuple(Rechnungsdoppel.PAUSCHALE_ID, BigDecimal.ONE));
+  }
+
+  @Test
+  void anlegen_atAStorniertesAngebot_thenTheNichtAbgerechnetenStundenAndNotTheOffeneMenge() {
+    // Given — 8 Stunden angeboten, 3 erfasst und nicht berechnet; der Rest wird nicht abgerufen
+    // (#330, Kriterium 7, zweiter Satz; Szenario „Rest eines Auftrags wird nicht abgerufen").
+    gegebenesStorniertesAngebot(List.of(Rechnungsdoppel.beratungUeber("8.00")));
+    when(rechnungen.findByAngebot(Rechnungsdoppel.ANGEBOT)).thenReturn(List.of());
+    angefalleneStunden(Map.of(Long.valueOf(Rechnungsdoppel.BERATUNG_ID), new BigDecimal("3.00")));
+
+    // When
+    useCase().anlegen(Rechnungsdoppel.ANGEBOT, Optional.empty());
+
+    // Then — 3 und nicht 8.
+    assertThat(angelegt().positionen())
+        .extracting(Rechnungsposition::angebotPositionId, Rechnungsposition::menge)
+        .containsExactly(tuple(Rechnungsdoppel.BERATUNG_ID, new BigDecimal("3.00")));
+  }
+
+  @Test
+  void
+      anlegen_withAMonatAtAStorniertesAngebot_thenANichtBuchbarePositionGetsItsAbrechenbareMenge() {
+    // Given — die Pauschale ist ganz offen, aber auf sie liess sich keine Zeit buchen: am
+    // stornierten Angebot ist von ihr nichts abrechenbar, also fehlt sie (Plan #332, E8).
+    gegebenesStorniertesAngebot(
+        List.of(Rechnungsdoppel.beratungUeber("8.00"), Rechnungsdoppel.PAUSCHALE));
+    when(rechnungen.findByAngebot(Rechnungsdoppel.ANGEBOT)).thenReturn(List.of());
+    angefalleneStunden(
+        Map.of(
+            Long.valueOf(Rechnungsdoppel.BERATUNG_ID),
+            new BigDecimal("3.00"),
+            Long.valueOf(Rechnungsdoppel.PAUSCHALE_ID),
+            new BigDecimal("0.00")));
+    gemeldeteStunden(Map.of(Long.valueOf(Rechnungsdoppel.BERATUNG_ID), new BigDecimal("3.00")));
+
+    // When
+    useCase().anlegen(Rechnungsdoppel.ANGEBOT, Optional.of(NOVEMBER));
+
+    // Then
+    assertThat(angelegt().positionen())
+        .extracting(Rechnungsposition::angebotPositionId, Rechnungsposition::menge)
+        .containsExactly(tuple(Rechnungsdoppel.BERATUNG_ID, new BigDecimal("3.00")));
+  }
+
+  @Test
+  void anlegen_withAMonatAtAStorniertesAngebot_thenTheStundenOfTheMonatStayUncapped() {
+    // Given — 8 angeboten, 5 erfasst, alle im November, 3 davon schon gestellt: abrechenbar sind
+    // noch 2. Die Stunden des Monats bleiben trotzdem ungedeckelt (Issue #193, A11).
+    gegebenesStorniertesAngebot(List.of(Rechnungsdoppel.beratungUeber("8.00")));
+    when(rechnungen.findByAngebot(Rechnungsdoppel.ANGEBOT))
+        .thenReturn(
+            List.of(
+                Rechnungsdoppel.gestellt(
+                    1L, "R26-0001", List.of(Rechnungsdoppel.beratung("3.00")))));
+    angefalleneStunden(Map.of(Long.valueOf(Rechnungsdoppel.BERATUNG_ID), new BigDecimal("5.00")));
+    gemeldeteStunden(Map.of(Long.valueOf(Rechnungsdoppel.BERATUNG_ID), new BigDecimal("5.00")));
+
+    // When
+    useCase().anlegen(Rechnungsdoppel.ANGEBOT, Optional.of(NOVEMBER));
+
+    // Then — 5 und nicht 2.
+    assertThat(angelegt().positionen())
+        .extracting(Rechnungsposition::angebotPositionId, Rechnungsposition::menge)
+        .containsExactly(tuple(Rechnungsdoppel.BERATUNG_ID, new BigDecimal("5.00")));
+  }
+
+  @Test
+  void anlegen_atAStorniertesAngebotWithNothingAbrechenbar_thenItIsRejected() {
+    // Given — alles offen, aber keine Stunde erfasst: am stornierten Angebot kein Entwurf.
+    gegebenesStorniertesAngebot(
+        List.of(Rechnungsdoppel.beratungUeber("8.00"), Rechnungsdoppel.PAUSCHALE));
+    when(rechnungen.findByAngebot(Rechnungsdoppel.ANGEBOT)).thenReturn(List.of());
+    angefalleneStunden(
+        Map.of(
+            Long.valueOf(Rechnungsdoppel.BERATUNG_ID),
+            new BigDecimal("0.00"),
+            Long.valueOf(Rechnungsdoppel.PAUSCHALE_ID),
+            new BigDecimal("0.00")));
+
+    final RechnungAnlegenUseCase useCase = useCase();
+
+    // When / Then — auch mit einem Monat.
+    assertThatThrownBy(() -> useCase.anlegen(Rechnungsdoppel.ANGEBOT, Optional.of(NOVEMBER)))
+        .isInstanceOf(AngebotNichtAbrechenbar.class);
+    verify(rechnungen, never()).save(any());
   }
 }

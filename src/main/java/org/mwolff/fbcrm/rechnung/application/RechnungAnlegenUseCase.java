@@ -61,6 +61,12 @@ import org.springframework.transaction.annotation.Transactional;
  * Stunden stehen</b> (E2): Was angeboten war, ist dann abgerechnet, und eine weitere Rechnung
  * entsteht erst, wenn das Angebot die Mehrarbeit ausweist. Der Server entscheidet, nicht die
  * Auswahlliste der Oberflaeche.
+ *
+ * <p><b>Am stornierten Angebot</b> (#330, Kriterium 7; Plan #332, E8) tritt in beiden Vorbelegungen
+ * und in der Abweisung die abrechenbare Menge aus {@link Abrechenbarkeit} an die Stelle der
+ * offenen: die bis zum Storno erfassten, noch nicht abgerechneten Stunden. Eine Festpreisposition
+ * traegt dort nichts mehr bei. Die Stunden eines gewaehlten Monats bleiben dagegen ungedeckelt, wie
+ * seit Issue #193 — ein Deckel staende an der Monatsvorbelegung allein.
  */
 @Service
 @Transactional
@@ -94,7 +100,7 @@ public class RechnungAnlegenUseCase {
    *     aus den offenen Mengen
    * @throws AngebotNichtGefunden wenn es das Angebot nicht gibt
    * @throws AngebotNichtAbrechenbar wenn das Angebot vor {@code BESTELLT} steht oder an keiner
-   *     seiner Positionen noch etwas offen ist
+   *     seiner Positionen noch etwas abrechenbar ist
    */
   public Rechnung anlegen(final long angebotId, final Optional<YearMonth> monat) {
     final Angebot angebot = angebote.findById(angebotId).orElseThrow(AngebotNichtGefunden::new);
@@ -103,7 +109,8 @@ public class RechnungAnlegenUseCase {
     }
     final Abrechnungsstand stand =
         Abrechnungsstand.fuer(angebot.positionen(), rechnungen.findByAngebot(angebotId));
-    if (!stand.etwasOffen()) {
+    final Map<Long, BigDecimal> angefallen = arbeitszeit.angefallen(angebotId);
+    if (!stand.etwasAbrechenbar(angebot, angefallen)) {
       throw new AngebotNichtAbrechenbar();
     }
     final LocalDate heute = LocalDate.now(clock.withZone(Geschaeftszone.ZONE));
@@ -111,10 +118,12 @@ public class RechnungAnlegenUseCase {
     if (gewaehlt != null) {
       final Map<Long, BigDecimal> stunden = gebuchteStunden(angebot, gewaehlt, stand);
       if (!stunden.isEmpty()) {
-        return schreibe(angebotId, heute, gewaehlt, nachArbeitszeit(angebot, stand, stunden));
+        return schreibe(
+            angebotId, heute, gewaehlt, nachArbeitszeit(angebot, stand, stunden, angefallen));
       }
     }
-    return schreibe(angebotId, heute, YearMonth.from(heute), nachOffenem(stand));
+    return schreibe(
+        angebotId, heute, YearMonth.from(heute), nachOffenem(angebot, stand, angefallen));
   }
 
   /*
@@ -144,30 +153,47 @@ public class RechnungAnlegenUseCase {
   }
 
   /*
-   * Zwei Mengen in einer Liste: die gebuchten Stunden an den buchbaren Positionen und die offene
-   * Menge an allen anderen. Eine buchbare Position ohne Stunden faellt heraus — eine Zeile ueber 0
-   * Stunden waere eine Rechnung ueber nichts.
+   * Zwei Mengen in einer Liste: die gebuchten Stunden an den buchbaren Positionen und die
+   * abrechenbare Menge an allen anderen — ohne Storno die offene. Eine Position ohne Menge faellt
+   * heraus: Eine Zeile ueber 0 waere eine Rechnung ueber nichts.
    */
   private static List<Rechnungsposition> nachArbeitszeit(
-      final Angebot angebot, final Abrechnungsstand stand, final Map<Long, BigDecimal> stunden) {
+      final Angebot angebot,
+      final Abrechnungsstand stand,
+      final Map<Long, BigDecimal> stunden,
+      final Map<Long, BigDecimal> angefallen) {
     final List<Rechnungsposition> positionen = new ArrayList<>();
     for (final Positionsstand positionsstand : stand.positionen()) {
       final Angebotsposition position = positionsstand.position();
       final @Nullable BigDecimal gebucht = stunden.get(position.requireId());
       if (gebucht != null) {
         positionen.add(zeile(position, gebucht));
-      } else if (!Buchbarkeit.buchbar(angebot, position) && positionsstand.offenesVorhanden()) {
-        positionen.add(zeile(position, positionsstand.offen()));
+      } else if (!Buchbarkeit.buchbar(angebot, position)) {
+        abrechenbareZeile(angebot, positionsstand, angefallen).ifPresent(positionen::add);
       }
     }
     return positionen;
   }
 
-  private static List<Rechnungsposition> nachOffenem(final Abrechnungsstand stand) {
+  private static List<Rechnungsposition> nachOffenem(
+      final Angebot angebot, final Abrechnungsstand stand, final Map<Long, BigDecimal> angefallen) {
     return stand.positionen().stream()
-        .filter(Positionsstand::offenesVorhanden)
-        .map(positionsstand -> zeile(positionsstand.position(), positionsstand.offen()))
+        .flatMap(positionsstand -> abrechenbareZeile(angebot, positionsstand, angefallen).stream())
         .toList();
+  }
+
+  /* Die Zeile ueber die abrechenbare Menge der Position, oder keine, wo diese 0 ist. */
+  private static Optional<Rechnungsposition> abrechenbareZeile(
+      final Angebot angebot,
+      final Positionsstand positionsstand,
+      final Map<Long, BigDecimal> angefallen) {
+    final Angebotsposition position = positionsstand.position();
+    final BigDecimal menge =
+        Abrechenbarkeit.abrechenbareMenge(
+            angebot,
+            positionsstand,
+            angefallen.getOrDefault(position.requireId(), BigDecimal.ZERO));
+    return menge.signum() > 0 ? Optional.of(zeile(position, menge)) : Optional.empty();
   }
 
   private static Rechnungsposition zeile(final Angebotsposition position, final BigDecimal menge) {

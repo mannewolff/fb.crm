@@ -33,6 +33,14 @@ import org.springframework.transaction.annotation.Transactional;
  * <p>Dazu die Gesamtsumme der angefallenen Stunden ueber alle Positionen (Issue #231, Kriterium 6
  * von #207; Plan #218, E9, E10) — gerechnet aus den Zeilen, die ohnehin entstanden sind.
  *
+ * <p>Dazu, ob die Taste „Rechnung schreiben" steht ({@code schreibbar}; Plan #332, E9): dieselbe
+ * Bedingung, unter der das Anlegen einen Entwurf zulaesst — der Status aus {@link Abrechenbarkeit}
+ * und etwas Abrechenbares. Am stornierten Angebot sind das die nicht abgerechneten Stunden und
+ * nicht die offene Menge (E8); die Spalte „Offen" zeigt dort trotzdem weiter den offenen Rest, denn
+ * er ist genau die Auskunft, wie viel vom Angebot nie abgerufen wurde (E10). Gerechnet wird mit den
+ * Stunden, wie die Auskunft sie meldet, wie im Anlegen — sonst zeigte die Taste etwas anderes, als
+ * der Server annimmt.
+ *
  * <p>Drei Zuege in den Bestand und keiner je Position — das Angebot bringt seine Positionen mit,
  * die Rechnungen kommen in einem Aufruf, und die Auskunft nennt die Stunden aller Positionen auf
  * einmal. Die Einstellungen kommen dazu, weil ein Entwurf mit dem Satz von jetzt rechnet ({@link
@@ -69,9 +77,10 @@ public class AbrechnungsstandUseCase {
     final List<Rechnung> dazu = rechnungen.findByAngebot(angebotId);
     final BigDecimal aktuellerSatz = einstellungen.lies().steuersatz();
     final Map<Long, BigDecimal> angefallen = arbeitszeit.angefallen(angebotId);
+    final Abrechnungsstand stand = Abrechnungsstand.fuer(angebot.positionen(), dazu);
     final List<Positionsabrechnung> zeilen =
-        Abrechnungsstand.fuer(angebot.positionen(), dazu).positionen().stream()
-            .map(stand -> mitArbeitszeit(angebot, stand, angefallen))
+        stand.positionen().stream()
+            .map(positionsstand -> mitArbeitszeit(angebot, positionsstand, angefallen))
             .toList();
     return new Angebotsabrechnung(
         zeilen,
@@ -83,7 +92,9 @@ public class AbrechnungsstandUseCase {
                         rechnung,
                         rechnung.brutto(GeltenderSteuersatz.fuer(rechnung, aktuellerSatz))))
             .toList(),
-        summeDerStunden(zeilen));
+        summeDerStunden(zeilen),
+        Abrechenbarkeit.STATUS.contains(angebot.status())
+            && stand.etwasAbrechenbar(angebot, angefallen));
   }
 
   /*
