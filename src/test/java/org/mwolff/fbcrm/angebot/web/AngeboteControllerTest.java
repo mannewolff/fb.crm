@@ -1,5 +1,6 @@
 package org.mwolff.fbcrm.angebot.web;
 
+import static org.hamcrest.Matchers.nullValue;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -13,6 +14,7 @@ import java.time.LocalDate;
 import java.time.Year;
 import java.util.List;
 import java.util.Optional;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -51,6 +53,11 @@ class AngeboteControllerTest {
   }
 
   private static AngebotMitFirma zeile(final long id, final Angebotsstatus status) {
+    return zeile(id, status, "Website-Relaunch");
+  }
+
+  private static AngebotMitFirma zeile(
+      final long id, final Angebotsstatus status, final @Nullable String titel) {
     return new AngebotMitFirma(
         new Angebot(
             Long.valueOf(id),
@@ -59,7 +66,7 @@ class AngeboteControllerTest {
             status.intern(),
             status,
             LocalDate.of(2026, 9, 20),
-            "Website-Relaunch",
+            titel,
             null,
             List.of(
                 new Angebotsposition(
@@ -80,7 +87,8 @@ class AngeboteControllerTest {
     // Given
     when(uebersicht.angebote(Optional.empty()))
         .thenReturn(
-            List.of(zeile(12L, Angebotsstatus.BESTELLT), zeile(11L, Angebotsstatus.ANGELEGT)));
+            List.of(
+                zeile(12L, Angebotsstatus.BESTELLT), zeile(11L, Angebotsstatus.ANGELEGT, null)));
 
     // When / Then
     mockMvc
@@ -90,11 +98,14 @@ class AngeboteControllerTest {
         .andExpect(jsonPath("$.angebote[0].id").value(12))
         .andExpect(jsonPath("$.angebote[0].firmaId").value(3))
         .andExpect(jsonPath("$.angebote[0].firmaName").value("Adler AG"))
+        .andExpect(jsonPath("$.angebote[0].titel").value("Website-Relaunch"))
         .andExpect(jsonPath("$.angebote[0].status").value("BESTELLT"))
         .andExpect(jsonPath("$.angebote[0].intern").value(false))
         .andExpect(jsonPath("$.angebote[0].summe").value(2500.03))
         .andExpect(jsonPath("$.angebote[1].id").value(11))
-        .andExpect(jsonPath("$.angebote[1].status").value("ANGELEGT"));
+        .andExpect(jsonPath("$.angebote[1].status").value("ANGELEGT"))
+        // Issue #325: das Angebot von vor #314 traegt keinen Titel, und das steht als null da.
+        .andExpect(jsonPath("$.angebote[1].titel").value(nullValue()));
   }
 
   @Test

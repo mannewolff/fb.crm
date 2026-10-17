@@ -9,6 +9,7 @@ import { Link as RouterLink, useSearchParams } from 'react-router-dom';
 import { angeboteUebersicht } from '../api/angebote';
 import type { AngeboteUebersicht, AngebotUebersichtZeile } from '../api/angebote';
 import AngebotsstatusChip from '../components/AngebotsstatusChip';
+import Angebotsweg from '../components/Angebotsweg';
 import InternChip from '../components/InternChip';
 import Karte from '../components/Karte';
 import { useKopfPfad } from '../components/KopfPfad';
@@ -32,6 +33,9 @@ import { ABSTAND_BUEHNE, RADIUS_RUND, ZAHLEN_KLASSE } from '../theme';
  *       erhalten. Ein unbekannter Wert dort gilt als „alle", statt die Seite scheitern zu lassen.</li>
  *   <li><b>Sortiert und gefiltert wird am Server</b> — die Zeilen stehen in der Reihenfolge der
  *       Antwort, neueste zuerst.</li>
+ *   <li><b>Der Titel steht als erste Spalte</b> (Issue #325) und traegt dann den Weg zum Angebot;
+ *       ohne Titel steht dort der Strich ohne Verweis, und das Datum fuehrt zum Angebot — wie in
+ *       der Tafel der Firmenseite, damit eine Zeile nie zwei Wege zum selben Ziel hat (E3).</li>
  *   <li><b>Das Kennzeichen „Intern" steht hinter dem Datum</b> (Issue #233), in der Spalte, die
  *       das Angebot benennt — keine eigene Spalte, die bei 768 px der Summe den Platz nimmt. In
  *       „Summe" steht dann ein Strich, und der haengt am Kennzeichen und nicht an einer 0 vom
@@ -53,14 +57,15 @@ const LEER_ALLE = 'Es gibt noch kein Angebot. Angebote entstehen auf der Seite i
 const LEER_GEFILTERT = 'In diesem Status gibt es kein Angebot.';
 
 const SPALTEN: readonly TafelSpalte[] = [
+  'Titel',
   'Datum',
   'Firma',
   'Status',
   { beschriftung: 'Summe', zahl: true },
 ];
 
-/** Was in „Summe" steht, wenn es keinen Betrag gibt (Halbgeviertstrich). */
-const OHNE_BETRAG = '\u2013';
+/** Was in „Titel" oder „Summe" steht, wenn es keine Angabe gibt (Halbgeviertstrich). */
+const OHNE_ANGABE = '\u2013';
 
 /** Was die Ansicht gerade weiss. */
 type Stand =
@@ -77,14 +82,17 @@ async function laden(status: Angebotsstatus | null): Promise<Stand> {
   }
 }
 
-/** Eine Zeile der Tafel; das Datum traegt den Weg zum Angebot, der Firmenname den zur Firma. */
+/** Eine Zeile der Tafel; Titel oder Datum traegt den Weg zum Angebot, der Firmenname den zur Firma. */
 function Zeile({ angebot }: { readonly angebot: AngebotUebersichtZeile }) {
-  const wegStil = {
-    color: 'inherit',
-    textDecoration: 'none',
-  } as const;
   return (
     <Box component="tr">
+      <Box component="td" sx={{ overflowWrap: 'anywhere' }}>
+        {angebot.titel === null ? (
+          OHNE_ANGABE
+        ) : (
+          <Angebotsweg angebotId={angebot.id} tag={angebot.angebotDatum} titel={angebot.titel} />
+        )}
+      </Box>
       <Box
         component="td"
         sx={{
@@ -95,17 +103,11 @@ function Zeile({ angebot }: { readonly angebot: AngebotUebersichtZeile }) {
           gap: '8px',
         }}
       >
-        <Box
-          component={RouterLink}
-          to={`/angebote/${String(angebot.id)}`}
-          className={ZAHLEN_KLASSE}
-          sx={(theme) => ({
-            ...wegStil,
-            '&:hover': { color: theme.vars.palette.kupferwolke.kupfer },
-          })}
-        >
-          {tagWort(angebot.angebotDatum)}
-        </Box>
+        {angebot.titel === null ? (
+          <Angebotsweg angebotId={angebot.id} tag={angebot.angebotDatum} titel={null} />
+        ) : (
+          <span className={ZAHLEN_KLASSE}>{tagWort(angebot.angebotDatum)}</span>
+        )}
         {angebot.intern ? <InternChip /> : null}
       </Box>
       <Box component="td">
@@ -113,7 +115,8 @@ function Zeile({ angebot }: { readonly angebot: AngebotUebersichtZeile }) {
           component={RouterLink}
           to={`/firmen/${String(angebot.firmaId)}`}
           sx={(theme) => ({
-            ...wegStil,
+            color: 'inherit',
+            textDecoration: 'none',
             '&:hover': { color: theme.vars.palette.kupferwolke.kupfer },
           })}
         >
@@ -128,7 +131,7 @@ function Zeile({ angebot }: { readonly angebot: AngebotUebersichtZeile }) {
         className={ZAHLEN_KLASSE}
         sx={{ fontWeight: 600, whiteSpace: 'nowrap', textAlign: 'right' }}
       >
-        {angebot.intern ? OHNE_BETRAG : euro(angebot.summeInCent)}
+        {angebot.intern ? OHNE_ANGABE : euro(angebot.summeInCent)}
       </Box>
     </Box>
   );

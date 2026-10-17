@@ -289,6 +289,7 @@ const UEBERSICHT_ZEILE = {
   firmaId: 5,
   firmaName: 'Adler AG',
   angebotDatum: '2026-09-24',
+  titel: 'Neue Website',
   status: 'BESTELLT',
   intern: false,
   summe: 2500.03,
@@ -303,12 +304,20 @@ describe('parseAngeboteUebersicht', () => {
           firmaId: 5,
           firmaName: 'Adler AG',
           angebotDatum: '2026-09-24',
+          titel: 'Neue Website',
           status: 'BESTELLT',
           intern: false,
           summeInCent: 250003,
         },
       ],
     });
+  });
+
+  it('laesst den fehlenden Titel als null durch (Issue #325)', () => {
+    expect(
+      parseAngeboteUebersicht({ angebote: [{ ...UEBERSICHT_ZEILE, titel: null }] }).angebote[0]
+        .titel,
+    ).toBeNull();
   });
 
   it.each([
@@ -318,6 +327,8 @@ describe('parseAngeboteUebersicht', () => {
     ['Zeile ohne firmaId', { angebote: [{ ...UEBERSICHT_ZEILE, firmaId: '5' }] }],
     ['Zeile ohne Firmenname', { angebote: [{ ...UEBERSICHT_ZEILE, firmaName: 5 }] }],
     ['Zeile ohne Angebotsdatum', { angebote: [{ ...UEBERSICHT_ZEILE, angebotDatum: null }] }],
+    ['Zeile mit Titel als Zahl', { angebote: [{ ...UEBERSICHT_ZEILE, titel: 7 }] }],
+    ['Zeile ohne Titel', { angebote: [{ ...UEBERSICHT_ZEILE, titel: undefined }] }],
     ['Zeile mit unbekanntem Status', { angebote: [{ ...UEBERSICHT_ZEILE, status: 'OFFEN' }] }],
     ['Zeile ohne Kennzeichen', { angebote: [{ ...UEBERSICHT_ZEILE, intern: 1 }] }],
     ['Zeile ohne Summe', { angebote: [{ ...UEBERSICHT_ZEILE, summe: undefined }] }],

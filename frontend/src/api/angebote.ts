@@ -121,6 +121,8 @@ export interface AngebotUebersichtZeile {
   readonly firmaId: number;
   readonly firmaName: string;
   readonly angebotDatum: string;
+  /** Der Titel, `null` beim Angebot von vor #314 (Issue #325). */
+  readonly titel: string | null;
   readonly status: Angebotsstatus;
   /** Ob das Angebot die eigene interne Arbeit festhaelt (Issue #226). */
   readonly intern: boolean;
@@ -259,6 +261,7 @@ function parseUebersichtZeile(wert: unknown): AngebotUebersichtZeile {
     firmaId: zahl(zeile.firmaId),
     firmaName: text(zeile.firmaName),
     angebotDatum: text(zeile.angebotDatum),
+    titel: textOderNull(zeile.titel),
     status: angebotsstatus(zeile.status),
     intern: jaNein(zeile.intern),
     summeInCent: inHundertsteln(zeile.summe),
