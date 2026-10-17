@@ -23,6 +23,7 @@ const KONZEPTION = {
   bezeichnung: 'Konzeption',
   angebotId: 11,
   angebotDatum: '2026-09-24',
+  angebotTitel: null,
   intern: false,
   firmaName: 'IT Bildungshaus',
 };
@@ -32,6 +33,7 @@ const SCHULUNG = {
   bezeichnung: 'Schulung',
   angebotId: 12,
   angebotDatum: '2026-09-28',
+  angebotTitel: null,
   intern: false,
   firmaName: 'Adler AG',
 };
@@ -42,6 +44,7 @@ const EIGENE_WEBSEITE = {
   bezeichnung: 'Eigene Webseite',
   angebotId: 41,
   angebotDatum: '2026-09-30',
+  angebotTitel: null,
   intern: true,
   firmaName: 'Manfred Wolff',
 };

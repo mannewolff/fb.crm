@@ -225,6 +225,7 @@ class BuchbarePositionenUseCaseTest {
     assertThat(erste.id()).isEqualTo(Zeitdoppel.KONZEPTION_ID);
     assertThat(erste.angebotId()).isEqualTo(Zeitdoppel.ANGEBOT);
     assertThat(erste.angebotDatum()).isEqualTo(LocalDate.of(2026, 11, 1));
+    assertThat(erste.angebotTitel()).isEqualTo("Website-Relaunch");
     assertThat(erste.firmaName()).isEqualTo(Zeitdoppel.FIRMENNAME);
   }
 

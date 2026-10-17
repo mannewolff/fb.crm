@@ -19,6 +19,7 @@ const POSITION = {
   bezeichnung: 'Konzeption',
   angebotId: 11,
   angebotDatum: '2026-09-24',
+  angebotTitel: null,
   intern: false,
   firmaName: 'IT Bildungshaus',
 };
@@ -133,6 +134,17 @@ describe('parseBuchungspositionen (A15)', () => {
 
   it('scheitert, wo das Kennzeichen der Position kein Wahrheitswert ist', () => {
     expect(() => parseBuchungspositionen([{ ...POSITION, intern: 'ja' }])).toThrow(TypeError);
+  });
+
+  it('liest den Titel des Angebots, wo er steht, und null, wo er fehlt (Issue #328)', () => {
+    expect(parseBuchungspositionen([{ ...POSITION, angebotTitel: 'Java-Grundkurs' }])[0].angebotTitel).toBe(
+      'Java-Grundkurs',
+    );
+    expect(parseBuchungspositionen([POSITION])[0].angebotTitel).toBeNull();
+  });
+
+  it('scheitert, wo der Titel des Angebots kein Text ist', () => {
+    expect(() => parseBuchungspositionen([{ ...POSITION, angebotTitel: 7 }])).toThrow(TypeError);
   });
 
   it('scheitert, wo die Antwort keine Liste ist', () => {

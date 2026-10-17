@@ -424,6 +424,7 @@ class ArbeitszeitControllerIT extends AbstractIntegrationTest {
               assertThat(position.bezeichnung()).isEqualTo("Konzeption");
               assertThat(position.firmaName()).isEqualTo(FIRMA);
               assertThat(position.angebotId()).isEqualTo(angebotId);
+              assertThat(position.angebotTitel()).isEqualTo("Website-Relaunch");
             });
   }
 }

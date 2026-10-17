@@ -247,6 +247,7 @@ class ArbeitszeitMonatUseCaseTest {
     assertThat(position.bezeichnung()).isEqualTo("Konzeption");
     assertThat(position.angebotId()).isEqualTo(Zeitdoppel.ANGEBOT);
     assertThat(position.angebotDatum()).isEqualTo(ERSTER);
+    assertThat(position.angebotTitel()).isEqualTo("Website-Relaunch");
     assertThat(position.firmaName()).isEqualTo(Zeitdoppel.FIRMENNAME);
   }
 

@@ -160,6 +160,10 @@ const INTERN_ZUSATZ = ' — intern';
  * — die Positionen eines Angebots stehen also beieinander ({@code BuchbarePositionenUseCase}). Eine
  * zweite Ordnung hier waere eine zweite Wahrheit ueber dieselbe Liste.
  *
+ * <b>Die Gruppe heisst „<Firma> — <Titel>"</b>, wo das Angebot einen Titel traegt, sonst wie bisher
+ * „<Firma> — Angebot vom <Datum>" (Issue #328; Plan #323, E11): Zwei Angebote derselben Firma vom
+ * selben Tag hiessen sonst gleich. Die Optionen darunter benennen weiter die Position.
+ *
  * <b>Das Kennzeichen „intern" steht als Wort hinten im Gruppennamen</b> (Issue #236, Kriterium 2;
  * Plan #218, E21) — und nicht als Symbol oder {@code InternChip} wie an den uebrigen Fundstellen.
  * Grund: Die Auswahl ist ein natives Select, ihre Gruppen sind {@code optgroup}, und ein
@@ -177,13 +181,18 @@ function gruppiert(positionen: readonly Buchungsposition[]): readonly Gruppe[] {
       gruppen.push({
         angebotId: position.angebotId,
         name:
-          `${position.firmaName} — Angebot vom ${tagWort(position.angebotDatum)}` +
+          `${position.firmaName} — ${angebotsname(position)}` +
           (position.intern ? INTERN_ZUSATZ : ''),
         positionen: [position],
       });
     }
   }
   return gruppen;
+}
+
+/** Wie die Gruppe das Angebot nennt: mit seinem Titel, ohne Titel wie bisher mit seinem Datum. */
+function angebotsname(position: Buchungsposition): string {
+  return position.angebotTitel ?? `Angebot vom ${tagWort(position.angebotDatum)}`;
 }
 
 /** Was ueber den Feldern zur Auswahlliste steht: Ladehinweis, Meldung, Satz zur Leere — oder nichts. */

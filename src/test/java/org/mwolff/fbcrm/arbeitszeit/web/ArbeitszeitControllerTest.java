@@ -1,6 +1,7 @@
 package org.mwolff.fbcrm.arbeitszeit.web;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.nullValue;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -234,7 +235,18 @@ class ArbeitszeitControllerTest {
 
   private static Buchungsposition position() {
     return new Buchungsposition(
-        POSITION, "Konzeption", 11L, LocalDate.of(2026, 11, 1), true, "IT Bildungshaus");
+        POSITION,
+        "Konzeption",
+        11L,
+        LocalDate.of(2026, 11, 1),
+        "Java-Grundkurs",
+        true,
+        "IT Bildungshaus");
+  }
+
+  private static Buchungsposition ohneTitel() {
+    return new Buchungsposition(
+        POSITION, "Konzeption", 11L, LocalDate.of(2026, 11, 1), null, false, "IT Bildungshaus");
   }
 
   private static Arbeitsmonat november() {
@@ -302,7 +314,20 @@ class ArbeitszeitControllerTest {
         .andExpect(jsonPath("$[0].bezeichnung").value("Konzeption"))
         .andExpect(jsonPath("$[0].angebotId").value(11))
         .andExpect(jsonPath("$[0].angebotDatum").exists())
+        .andExpect(jsonPath("$[0].angebotTitel").value("Java-Grundkurs"))
         .andExpect(jsonPath("$[0].intern").value(true))
         .andExpect(jsonPath("$[0].firmaName").value("IT Bildungshaus"));
+  }
+
+  @Test
+  void buchbarePositionen_givenAnOfferWithoutTitle_thenAnswersNullTitle() throws Exception {
+    // Given — Kriterium 7 von #322: ohne Titel bleibt die Auswahl beim Datum.
+    when(buchbare.positionen()).thenReturn(List.of(ohneTitel()));
+
+    // When / Then
+    mockMvc
+        .perform(get(PFAD + "/buchbare-positionen"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$[0].angebotTitel").value(nullValue()));
   }
 }
