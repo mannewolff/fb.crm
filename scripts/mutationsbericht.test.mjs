@@ -3,7 +3,22 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, test } from 'vitest';
 
-import { berichtLesen, nachDateiGruppieren, quote, quoteText } from './mutationsbericht.mjs';
+import {
+  alterInTagen,
+  anlagedatum,
+  berichtLesen,
+  bodyMitStellen,
+  ERGAENZBARE_SPALTEN,
+  kartenbody,
+  kartentitel,
+  nachDateiGruppieren,
+  OFFENE_SPALTEN,
+  ohneBefund,
+  quote,
+  quoteText,
+  stellenAusBody,
+  zuAlt,
+} from './mutationsbericht.mjs';
 
 /** Siehe bump-version.test.mjs: Vitest laeuft mit `frontend` als Arbeitsverzeichnis. */
 const REPO = execFileSync('git', ['rev-parse', '--show-toplevel'], { encoding: 'utf8' }).trim();
@@ -293,5 +308,210 @@ describe('nachDateiGruppieren', () => {
 
   test('ergibt ohne Ueberlebende eine leere Zuordnung', () => {
     expect(nachDateiGruppieren([]).size).toBe(0);
+  });
+});
+
+/** Die Abschnitte eines Bodys, je Ueberschrift `## ` der Text bis zur naechsten. */
+function abschnitte(body) {
+  return body.split(/^(?=## )/m).filter((teil) => teil.startsWith('## '));
+}
+
+function abschnitt(body, ueberschrift) {
+  return abschnitte(body).find((teil) => teil.startsWith(`${ueberschrift}\n`));
+}
+
+const tripel = (zeile, methode = 'm', mutator = 'M') => ({ zeile, methode, mutator });
+
+describe('kartentitel', () => {
+  test('beginnt mit [Task] und nennt den vollen Pfad', () => {
+    const titel = kartentitel(ANGEBOT);
+
+    expect(titel).toBe(`[Task] Mutations-Ueberlebende in ${ANGEBOT}`);
+    expect(titel.startsWith('[Task] ')).toBe(true);
+  });
+});
+
+describe('kartenbody', () => {
+  const stellen = [tripel(27, '<init>', 'NullReturnValsMutator'), tripel(40, 'summe', 'MathMutator')];
+
+  test('hat die vier Abschnitte in der Pflichtreihenfolge, Abhaengigkeiten zuletzt', () => {
+    const body = kartenbody(ANGEBOT, stellen);
+
+    expect(abschnitte(body).map((teil) => teil.split('\n')[0])).toEqual([
+      '## Kontext',
+      '## Aufgabe',
+      '## Akzeptanzkriterium',
+      '## Abhaengigkeiten',
+    ]);
+    expect(abschnitt(body, '## Abhaengigkeiten').trim()).toBe('## Abhaengigkeiten\n\nKeine.');
+  });
+
+  test('traegt im Kontext die Pflichtzeilen und den Satz zum Mutationsgate', () => {
+    const kontext = abschnitt(kartenbody(ANGEBOT, stellen), '## Kontext');
+
+    expect(kontext).toMatch(/^Autor-Modell: kein Modell, erzeugt vom CI-Mutationsgate$/m);
+    expect(kontext).toMatch(/^Aufgabenstufe: \S/m);
+    expect(kontext).toMatch(/^Stufengrund: \S/m);
+    expect(kontext).toMatch(/^Sitzungsumfang: \S/m);
+    expect(kontext).toMatch(/Diese Karte hat das CI-Mutationsgate erzeugt/);
+  });
+
+  test('nennt den Quellpfad in der Aufgabe als Backtick-Token, dazu die Stellen', () => {
+    const aufgabe = abschnitt(kartenbody(ANGEBOT, stellen), '## Aufgabe');
+
+    expect(aufgabe).toContain(`\`${ANGEBOT}\``);
+    expect(aufgabe).toContain('Zeile 27');
+    expect(aufgabe).toContain('Zeile 40');
+  });
+
+  test('stellt das Mutationskommando nur unter die Manuelle Pruefung, nie ins Kriterium', () => {
+    const config = JSON.parse(readFileSync(path.join(REPO, '.claude', 'workflow.config.json'), 'utf8'));
+    const kriterium = abschnitt(kartenbody(ANGEBOT, stellen), '## Akzeptanzkriterium');
+    const [vorManuell, manuell] = kriterium.split('### Manuelle Pruefung');
+
+    expect(vorManuell).toContain(
+      'Ein neuer Test toetet jede unten genannte Stelle; `mvn verify` bleibt gruen.',
+    );
+    expect(vorManuell).not.toContain(config.mutationCommand);
+    expect(manuell.startsWith(' (Mensch, nicht Teil des Session-Abschlusses)\n')).toBe(true);
+    expect(manuell).toContain(config.mutationCommand);
+  });
+
+  test('liefert seine Stellen ueber stellenAusBody unveraendert zurueck', () => {
+    expect(stellenAusBody(kartenbody(ANGEBOT, stellen))).toEqual(stellen);
+  });
+
+  test('sortiert, entdoppelt und laesst die Datei der Stelle weg', () => {
+    const body = kartenbody(ANGEBOT, [
+      { datei: ANGEBOT, ...tripel(40, 'summe', 'MathMutator') },
+      tripel(27, '<init>', 'NullReturnValsMutator'),
+      tripel(40, 'summe', 'MathMutator'),
+    ]);
+
+    expect(stellenAusBody(body)).toEqual(stellen);
+  });
+});
+
+describe('stellenAusBody', () => {
+  test('liest nur die Stellen in der Aufgabe, nicht gleich aussehende Zeilen anderswo', () => {
+    const body = kartenbody('A.java', [tripel(1)]).replace(
+      'Keine.',
+      'Keine.\n\n- Zeile 9, Methode `x`, Mutator `Y`',
+    );
+
+    expect(stellenAusBody(body)).toEqual([tripel(1)]);
+  });
+
+  test('liefert ohne Abschnitt Aufgabe keine Stellen', () => {
+    expect(stellenAusBody('## Kontext\n\nnichts\n')).toEqual([]);
+  });
+});
+
+describe('bodyMitStellen', () => {
+  const body = kartenbody(ANGEBOT, [tripel(10, 'a'), tripel(30, 'c')]);
+
+  test('fuegt eine neue Stelle sortiert ein und verdoppelt eine vorhandene nicht', () => {
+    const ergaenzt = bodyMitStellen(body, [{ datei: ANGEBOT, ...tripel(20, 'b') }, tripel(10, 'a')]);
+
+    expect(stellenAusBody(ergaenzt)).toEqual([tripel(10, 'a'), tripel(20, 'b'), tripel(30, 'c')]);
+  });
+
+  test('laesst jeden anderen Abschnitt Zeichen fuer Zeichen stehen', () => {
+    const ergaenzt = bodyMitStellen(body, [tripel(20, 'b')]);
+    const ohneAufgabe = (text) => abschnitte(text).filter((teil) => !teil.startsWith('## Aufgabe\n'));
+
+    expect(ohneAufgabe(ergaenzt)).toEqual(ohneAufgabe(body));
+    expect(ohneAufgabe(ergaenzt)).toHaveLength(3);
+  });
+
+  test('laesst die uebrigen Zeilen der Aufgabe stehen', () => {
+    const vonHand = body.replace('## Aufgabe\n', '## Aufgabe\n\nVon Hand ergaenzt.\n');
+    const ergaenzt = bodyMitStellen(vonHand, [tripel(20, 'b')]);
+    const zeilenOhneStellen = (text) =>
+      abschnitt(text, '## Aufgabe')
+        .split('\n')
+        .filter((zeile) => !zeile.startsWith('- Zeile '));
+
+    expect(zeilenOhneStellen(ergaenzt)).toEqual(zeilenOhneStellen(vonHand));
+  });
+
+  test('ist ohne neue Stelle der unveraenderte Body', () => {
+    expect(bodyMitStellen(body, [tripel(30, 'c')])).toBe(body);
+  });
+
+  test('wirft, wenn die Aufgabe keine Stellenliste traegt', () => {
+    expect(() => bodyMitStellen('## Aufgabe\n\nfrei\n', [tripel(1)])).toThrow(/Stellenliste/);
+  });
+});
+
+describe('ohneBefund', () => {
+  const karte = [tripel(1), tripel(2)];
+
+  test('ist true, wenn keine aufgefuehrte Stelle mehr gefunden wird', () => {
+    expect(ohneBefund(karte, [{ datei: 'A.java', ...tripel(3) }])).toBe(true);
+    expect(ohneBefund(karte, [])).toBe(true);
+  });
+
+  test('ist false, sobald noch eine aufgefuehrte Stelle gefunden wird', () => {
+    expect(ohneBefund(karte, [tripel(3), { datei: 'A.java', ...tripel(2) }])).toBe(false);
+  });
+
+  test('vergleicht alle drei Teile der Stelle', () => {
+    expect(ohneBefund(karte, [tripel(1, 'n'), tripel(1, 'm', 'N')])).toBe(true);
+  });
+});
+
+describe('anlagedatum', () => {
+  const zeit = '2026-10-01T08:00:00Z';
+
+  test.each([['createdAt'], ['created_at'], ['created']])('liest %s', (feld) => {
+    expect(anlagedatum({ id: 1, [feld]: zeit })).toBe(zeit);
+  });
+
+  test('nimmt den ersten vorhandenen Wert in der Reihenfolge createdAt, created_at, created', () => {
+    expect(anlagedatum({ created_at: 'b', created: 'c' })).toBe('b');
+    expect(anlagedatum({ createdAt: 'a', created_at: 'b', created: 'c' })).toBe('a');
+  });
+
+  test('liefert null, wenn alle drei fehlen', () => {
+    expect(anlagedatum({ id: 1 })).toBeNull();
+    expect(anlagedatum({ createdAt: null })).toBeNull();
+  });
+});
+
+describe('Liegezeit', () => {
+  const anlage = '2026-10-01T08:00:00Z';
+  const tag = 24 * 60 * 60 * 1000;
+  const nach = (ms) => new Date(Date.parse(anlage) + ms);
+
+  test('alterInTagen liefert fuer acht Tage den Wert 8', () => {
+    expect(alterInTagen(anlage, nach(8 * tag))).toBe(8);
+  });
+
+  test('alterInTagen nimmt auch ein Date als Anlage', () => {
+    expect(alterInTagen(new Date(anlage), nach(tag / 2))).toBe(0.5);
+  });
+
+  test('zuAlt ist false bei genau 7 x 24 Stunden', () => {
+    expect(zuAlt(anlage, nach(7 * tag))).toBe(false);
+  });
+
+  test('zuAlt ist true bei 7 x 24 Stunden plus einer Minute', () => {
+    expect(zuAlt(anlage, nach(7 * tag + 60 * 1000))).toBe(true);
+  });
+
+  test('wirft bei einem Anlagedatum, das keine Zeit ist, statt still durchzulassen', () => {
+    expect(() => alterInTagen('gestern', nach(0))).toThrow(/gestern/);
+    expect(() => zuAlt(null, nach(0))).toThrow(/Anlagedatum/);
+  });
+});
+
+describe('Spaltenregel', () => {
+  test('offen sind genau Backlog, Ready und In progress', () => {
+    expect(OFFENE_SPALTEN).toEqual(['BACKLOG', 'READY', 'IN_PROGRESS']);
+  });
+
+  test('ergaenzt wird in den offenen Spalten und in In review', () => {
+    expect(ERGAENZBARE_SPALTEN).toEqual(['BACKLOG', 'READY', 'IN_PROGRESS', 'IN_REVIEW']);
   });
 });

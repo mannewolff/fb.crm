@@ -256,3 +256,201 @@ export function nachDateiGruppieren(ueberlebende) {
   }
   return gruppen;
 }
+
+// ---------------------------------------------------------------------------------------------
+// Die Ueberlebenden-Karte und ihre Liegezeit (Issue #353)
+// ---------------------------------------------------------------------------------------------
+
+/** Offen ist eine Karte in diesen Spalten; nur sie zaehlen fuer die Liegezeit (E11). */
+export const OFFENE_SPALTEN = Object.freeze(['BACKLOG', 'READY', 'IN_PROGRESS']);
+
+/**
+ * In diesen Spalten wird eine vorhandene Karte um neue Stellen ergaenzt statt neu angelegt:
+ * die offenen und In review (E18) — eine Karte im Review ist in Arbeit, nicht erledigt.
+ */
+export const ERGAENZBARE_SPALTEN = Object.freeze([...OFFENE_SPALTEN, 'IN_REVIEW']);
+
+/** Der volle Mutationslauf, `mutationCommand` der Projektkonfiguration (E9). */
+const MUTATIONSLAUF = 'mvn -Ppit -Dskip.frontend=true test';
+
+/** Grenze der Liegezeit: sieben mal 24 Stunden. */
+const LIEGEZEIT_MS = 7 * 24 * 60 * 60 * 1000;
+const TAG_MS = 24 * 60 * 60 * 1000;
+
+/** Eine Zeile der Stellenliste; Methode und Mutator stehen als Backtick-Token. */
+const STELLENZEILE = /^- Zeile (\d+), Methode `([^`]*)`, Mutator `([^`]*)`$/;
+
+function stellenzeile({ zeile, methode, mutator }) {
+  return `- Zeile ${zeile}, Methode \`${methode}\`, Mutator \`${mutator}\``;
+}
+
+/** Sortiert und entdoppelt Stellen und laesst dabei die Datei weg. */
+function tripelListe(stellen) {
+  const eindeutig = [];
+  for (const { zeile, methode, mutator } of stellen) {
+    const tripel = { zeile, methode, mutator };
+    if (!eindeutig.some((vorhanden) => vergleich(vorhanden, tripel) === 0)) {
+      eindeutig.push(tripel);
+    }
+  }
+  return eindeutig.sort(vergleich);
+}
+
+/**
+ * Der Titel der Karte (E8): das Praefix `[Task]`, an dem das Kit die Art der Karte erkennt,
+ * und der repository-relative Quellpfad.
+ *
+ * @param {string} datei repository-relativer Quellpfad
+ * @returns {string}
+ */
+export function kartentitel(datei) {
+  return `[Task] Mutations-Ueberlebende in ${datei}`;
+}
+
+/**
+ * Der Body der Karte im Vier-Abschnitt-Format der Arbeitspakete (E8). Der volle Mutationslauf
+ * steht unter `### Manuelle Pruefung`, nicht im Kriterium (E9): Dort wiese die Formpruefung
+ * des Kits die Karte als I6-Verstoss ab.
+ *
+ * @param {string} datei repository-relativer Quellpfad
+ * @param {{zeile: number, methode: string, mutator: string}[]} stellen
+ * @returns {string}
+ */
+export function kartenbody(datei, stellen) {
+  return [
+    '## Kontext',
+    '',
+    'Diese Karte hat das CI-Mutationsgate erzeugt: In der unten genannten Datei ueberleben',
+    'Mutanten, die kein Test toetet. Weitere Ueberlebende derselben Datei ergaenzt das Gate in',
+    'der Stellenliste.',
+    '',
+    'Autor-Modell: kein Modell, erzeugt vom CI-Mutationsgate',
+    'Aufgabenstufe: leicht',
+    'Stufengrund: Fehlende Tests fuer benannte Stellen einer einzigen Datei.',
+    'Sitzungsumfang: passt — eine Datei, dazu ihre Tests.',
+    '',
+    '## Aufgabe',
+    '',
+    `Fuer \`${datei}\` fehlen Tests, die diese Mutationen toeten:`,
+    '',
+    ...tripelListe(stellen).map(stellenzeile),
+    '',
+    '## Akzeptanzkriterium',
+    '',
+    '- Ein neuer Test toetet jede unten genannte Stelle; `mvn verify` bleibt gruen.',
+    '',
+    '### Manuelle Pruefung (Mensch, nicht Teil des Session-Abschlusses)',
+    '',
+    `- Der volle Mutationslauf \`${MUTATIONSLAUF}\` meldet keine der genannten Stellen mehr.`,
+    '',
+    '## Abhaengigkeiten',
+    '',
+    'Keine.',
+    '',
+  ].join('\n');
+}
+
+/** Anfang und Ende (exklusiv) des Abschnitts `## Aufgabe` in den Zeilen eines Bodys. */
+function aufgabeBereich(zeilen) {
+  const anfang = zeilen.indexOf('## Aufgabe');
+  if (anfang < 0) return [0, 0];
+  const naechster = zeilen.findIndex((zeile, i) => i > anfang && zeile.startsWith('## '));
+  return [anfang + 1, naechster < 0 ? zeilen.length : naechster];
+}
+
+/**
+ * Die Stellen aus der Liste im Abschnitt `## Aufgabe`, als Tripel. Gleich aussehende Zeilen
+ * in anderen Abschnitten zaehlen nicht.
+ *
+ * @param {string} body
+ * @returns {{zeile: number, methode: string, mutator: string}[]}
+ */
+export function stellenAusBody(body) {
+  const zeilen = body.split('\n');
+  const [anfang, ende] = aufgabeBereich(zeilen);
+  return zeilen
+    .slice(anfang, ende)
+    .map((zeile) => STELLENZEILE.exec(zeile))
+    .filter((treffer) => treffer !== null)
+    .map(([, zeile, methode, mutator]) => ({ zeile: Number(zeile), methode, mutator }));
+}
+
+/**
+ * Derselbe Body mit der vereinigten, sortierten und entdoppelten Stellenliste (E12). Ersetzt
+ * wird nur der Block von der ersten bis zur letzten Stellenzeile in `## Aufgabe`; jede andere
+ * Zeile bleibt Zeichen fuer Zeichen stehen.
+ *
+ * @param {string} body der Body einer vorhandenen Karte
+ * @param {{zeile: number, methode: string, mutator: string}[]} stellen neu gefundene Stellen
+ * @returns {string}
+ */
+export function bodyMitStellen(body, stellen) {
+  const zeilen = body.split('\n');
+  const [anfang, ende] = aufgabeBereich(zeilen);
+  const treffer = [];
+  for (let i = anfang; i < ende; i += 1) {
+    if (STELLENZEILE.test(zeilen[i])) treffer.push(i);
+  }
+  if (treffer.length === 0) {
+    throw new Error('Die Karte traegt in ## Aufgabe keine Stellenliste, die sich ergaenzen laesst');
+  }
+  const vereinigt = tripelListe([...stellenAusBody(body), ...stellen]).map(stellenzeile);
+  zeilen.splice(treffer[0], treffer.at(-1) - treffer[0] + 1, ...vereinigt);
+  return zeilen.join('\n');
+}
+
+/**
+ * Ob von den Stellen einer Karte keine mehr gefunden wird — die Karte ist dann „ohne Befund"
+ * und sperrt nicht, auch wenn sie zu lange liegt.
+ *
+ * @param {{zeile: number, methode: string, mutator: string}[]} kartenStellen
+ * @param {{zeile: number, methode: string, mutator: string}[]} gefundeneStellen
+ * @returns {boolean}
+ */
+export function ohneBefund(kartenStellen, gefundeneStellen) {
+  return !kartenStellen.some((karte) =>
+    gefundeneStellen.some((gefunden) => vergleich(karte, gefunden) === 0),
+  );
+}
+
+/**
+ * Das Anlagedatum einer Karte: der erste vorhandene Wert aus `createdAt`, `created_at`,
+ * `created` (E10). Fehlen alle drei, entscheidet der Ablauf ueber Verlaufsweg oder Sperre.
+ *
+ * @param {Record<string, unknown>} karte
+ * @returns {unknown|null}
+ */
+export function anlagedatum(karte) {
+  return karte.createdAt ?? karte.created_at ?? karte.created ?? null;
+}
+
+function zeitpunkt(wert) {
+  const ms = wert instanceof Date ? wert.getTime() : Date.parse(wert);
+  if (Number.isNaN(ms)) {
+    throw new Error(`Anlagedatum ist keine lesbare Zeit: '${wert}'`);
+  }
+  return ms;
+}
+
+/**
+ * Die seit dem Anlegen verstrichene Zeit in Tagen, ungerundet. Ein unlesbares Anlagedatum
+ * wirft: Ein still angenommenes Alter liesse eine zu alte Karte durch.
+ *
+ * @param {string|Date} anlage
+ * @param {Date} jetzt
+ * @returns {number}
+ */
+export function alterInTagen(anlage, jetzt) {
+  return (jetzt.getTime() - zeitpunkt(anlage)) / TAG_MS;
+}
+
+/**
+ * Ob eine Karte zu lange liegt: ab **mehr als** sieben mal 24 Stunden seit dem Anlegen.
+ *
+ * @param {string|Date} anlage
+ * @param {Date} jetzt
+ * @returns {boolean}
+ */
+export function zuAlt(anlage, jetzt) {
+  return jetzt.getTime() - zeitpunkt(anlage) > LIEGEZEIT_MS;
+}
