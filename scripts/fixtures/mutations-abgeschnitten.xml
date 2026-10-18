@@ -1,0 +1,3 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mutations partial="false">
+<mutation detected='true' status='KILLED' numberOfTestsRun='1'><sourceFile>Angebot.java</sourceFile><mutatedClass>org.mwolff.fbcrm.angebot.domain.Angebot</mutatedClass><mutatedMethod>stellen</mutatedMethod><methodDescription>()V</methodDescription><lineNumber>40</lineNumber><mutator>org.pitest.mutationtest.engine.gregor.mutators.MathMutator</mutator><killingTest>AngebotTest</killingTest><description>x</description></mutation>
