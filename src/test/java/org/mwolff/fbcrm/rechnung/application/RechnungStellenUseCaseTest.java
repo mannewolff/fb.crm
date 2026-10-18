@@ -8,6 +8,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -503,6 +504,11 @@ class RechnungStellenUseCaseTest {
     when(eigeneAngaben.lies()).thenReturn(Rechnungsdoppel.eigeneAngaben());
     nummerWirdGezogen(MUSTER_MIT_JAHR, 1);
     schreibenUndDruckenGelingen();
+    // lenient: Am stornierten Angebot fragt der Anwendungsfall die gestellten Rechnungen gar nicht
+    // erst ab. Liefe er doch in die Rechnung, faende er nichts offen und wollte abrechnen (#346).
+    lenient()
+        .when(rechnungen.findByAngebot(Rechnungsdoppel.ANGEBOT))
+        .thenReturn(List.of(gestelltUeber("160.00")));
 
     // When
     final Rechnung gestellt = useCase.stelle(ENTWURF);
@@ -510,5 +516,6 @@ class RechnungStellenUseCaseTest {
     // Then — gestellt ist sie, nur der Sprung auf „abgerechnet" unterbleibt.
     assertThat(gestellt.nummer()).isEqualTo(NUMMER);
     verify(angebote, never()).save(any());
+    verify(rechnungen, never()).findByAngebot(anyLong());
   }
 }
