@@ -644,6 +644,15 @@
                    ueber FANN ausgenommenen Methoden mit, waehrend die verbindliche
                    Zeilen- und Zweigabdeckung von JaCoCo kommt — dort steht sie auf 100 %. -->
               <mutationThreshold>100</mutationThreshold>
+              <!-- XML fuer die maschinelle Auswertung durch scripts/mutationsgate.mjs (Plan #348,
+                   E5); HTML bleibt fuer den Blick von Hand. -->
+              <outputFormats>
+                <param>XML</param>
+                <param>HTML</param>
+              </outputFormats>
+              <!-- Ohne das wechselt der Ordnername mit jedem Lauf, und der feste Pfad
+                   target/pit-reports/mutations.xml existiert nicht (PitBerichtKonfigTest). -->
+              <timestampedReports>false</timestampedReports>
               <timeoutFactor>1.5</timeoutFactor>
               <timeoutConstant>4000</timeoutConstant>
             </configuration>
