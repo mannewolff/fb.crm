@@ -5,8 +5,9 @@
  * Zwei Betriebsarten, die der Workflow in getrennten Jobs ruft (Issue #355):
  * - `--nur-quote` — ohne Board und ohne Token, auf jedem `push`-Lauf (E2).
  * - `--karten` — mit Board, nur auf dem Pruefzweig aus `pushPruefung.zweig` (E2, E21): legt je
- *   betroffener Datei eine Karte an oder ergaenzt die vorhandene (Issue #356). Auf jedem anderen
- *   Zweig berichtet sie bloss, wie `--nur-quote`.
+ *   betroffener Datei eine Karte an oder ergaenzt die vorhandene (Issue #356), prueft die
+ *   Liegezeit der offenen Karten und haengt den Bericht an jede geschriebene Karte (Issue #357).
+ *   Auf jedem anderen Zweig berichtet sie bloss, wie `--nur-quote`.
  *
  * Eine Sperre meldet `main` mit einem Wurf; erst der Einstieg unten schreibt die Meldung nach
  * `stderr` und setzt `process.exitCode = 1` (E19) — ein `process.exit` in `main` risse den
@@ -21,14 +22,19 @@ import { fileURLToPath } from 'node:url';
 import { kanbanClient } from './kanban-client.mjs';
 import {
   ERGAENZBARE_SPALTEN,
+  OFFENE_SPALTEN,
+  alterInTagen,
+  anlagedatum,
   berichtLesen,
   bodyMitStellen,
   kartenbody,
   kartentitel,
   nachDateiGruppieren,
+  ohneBefund,
   quote,
   quoteText,
   stellenAusBody,
+  zuAlt,
 } from './mutationsbericht.mjs';
 
 /** Wo PIT seinen XML-Bericht ablegt, relativ zum Arbeitsverzeichnis (Issue #351). */
@@ -39,6 +45,12 @@ const SPERRSCHWELLE = 0.8;
 const SPERRSCHWELLE_TEXT = '80 %';
 
 const KEINE_QUOTE = 'keine Quote feststellbar, die Veroeffentlichung ist gesperrt';
+
+/** Der Titel einer Ueberlebenden-Karte ohne den Pfad, siehe `kartentitel`. */
+const TITELANFANG = kartentitel('');
+
+/** Hoechstens so viele Verlaufsaufrufe laufen gleichzeitig, wie `listActivityMany` im Kit (E10). */
+const VERLAUF_GLEICHZEITIG = 4;
 
 /** Die versionierte Konfiguration: Pruefzweig und Board-Host. */
 const KONFIG_DATEI = '.claude/workflow.config.json';
@@ -98,6 +110,7 @@ function kartenabschnitt(karten) {
     '',
     ...kartenzeilen('Neu angelegte Karten', karten.angelegt),
     ...kartenzeilen('Ergaenzte Karten', karten.ergaenzt),
+    ...kartenzeilen('Karten ohne Befund', karten.ohneBefund),
   ];
 }
 
@@ -158,8 +171,7 @@ function boardSperre(grund, q) {
  * Legt je betroffener Datei die Karte an oder ergaenzt die vorhandene (E11, E12, E18).
  * Liefert die angelegten und die ergaenzten Karten fuer den Bericht.
  */
-async function kartenSchreiben(client, ueberlebende, stand) {
-  const karten = await client.karten();
+async function kartenSchreiben(client, karten, ueberlebende, stand) {
   const angelegt = [];
   const ergaenzt = [];
   for (const [datei, stellen] of nachDateiGruppieren(ueberlebende)) {
@@ -184,11 +196,94 @@ async function kartenSchreiben(client, ueberlebende, stand) {
 }
 
 /**
+ * Ruft `aufgabe` fuer jedes Element, hoechstens `grenze` Aufrufe gleichzeitig; die Ergebnisse
+ * stehen in der Reihenfolge der Elemente.
+ */
+async function hoechstensGleichzeitig(grenze, elemente, aufgabe) {
+  const ergebnisse = new Array(elemente.length);
+  let naechster = 0;
+  async function arbeiter() {
+    while (naechster < elemente.length) {
+      const i = naechster;
+      naechster += 1;
+      ergebnisse[i] = await aufgabe(elemente[i]);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(grenze, elemente.length) }, arbeiter));
+  return ergebnisse;
+}
+
+/**
+ * Das Anlagedatum der Karte (E10): ihr eigenes Feld, sonst der erste Eintrag ihres Verlaufs,
+ * je Karte hoechstens einmal geholt. Liefert auch der Verlauf keinen Zeitstempel, wirft es —
+ * eine Liegezeit, die sich nicht messen laesst, geht nicht still als frisch durch (Kriterium 8).
+ */
+async function anlageMitVerlauf(client, karte) {
+  const eigenes = anlagedatum(karte);
+  if (eigenes !== null) return eigenes;
+  const verlauf = await client.verlauf(karte.id);
+  const erster = Array.isArray(verlauf) && verlauf.length > 0 ? anlagedatum(verlauf[0]) : null;
+  if (erster === null) {
+    throw new Error(
+      `Karte #${karte.number} hat kein Anlagedatum, und ihr Verlauf liefert keinen Zeitstempel`,
+    );
+  }
+  return erster;
+}
+
+/**
+ * Die Liegezeit der offenen Ueberlebenden-Karten (E11, E18; Kriterien 6, 7, 11). Eine Karte,
+ * deren Stellen saemtlich nicht mehr gefunden werden, ist „ohne Befund": Sie sperrt nicht und
+ * wird weder geschlossen noch verschoben. Liegt mindestens eine andere Karte laenger als
+ * sieben Tage, wirft es mit jeder solchen Karte. Liefert die Karten ohne Befund.
+ */
+async function liegezeitPruefen(client, karten, ueberlebende, jetzt) {
+  const offen = karten.filter(
+    (karte) => karte.title.startsWith(TITELANFANG) && OFFENE_SPALTEN.includes(karte.column),
+  );
+  const anlagen = await hoechstensGleichzeitig(VERLAUF_GLEICHZEITIG, offen, (karte) =>
+    anlageMitVerlauf(client, karte),
+  );
+  const gefunden = nachDateiGruppieren(ueberlebende);
+  const befundlos = [];
+  const zuAlte = [];
+  offen.forEach((karte, i) => {
+    const stellen = gefunden.get(karte.title.slice(TITELANFANG.length)) ?? [];
+    if (ohneBefund(stellenAusBody(karte.body ?? ''), stellen)) {
+      befundlos.push(karte);
+    } else if (zuAlt(anlagen[i], jetzt)) {
+      zuAlte.push(`#${karte.number} seit ${Math.floor(alterInTagen(anlagen[i], jetzt))} Tagen`);
+    }
+  });
+  if (zuAlte.length > 0) {
+    throw new Error(
+      `Ueberlebenden-Karten liegen laenger als die Grenze von sieben Tagen: ${zuAlte.join(', ')}`,
+    );
+  }
+  return befundlos;
+}
+
+/**
+ * Haengt den Bericht an jede in diesem Lauf angelegte oder ergaenzte Karte (E22). Ein
+ * Fehlschlag sperrt mit Grund und Quote.
+ */
+async function berichtKommentieren(client, karten, text, q) {
+  if (karten.ohneBoard !== undefined) return;
+  try {
+    for (const karte of [...karten.angelegt, ...karten.ergaenzt]) {
+      await client.kommentieren(karte.id, text);
+    }
+  } catch (fehler) {
+    throw boardSperre(fehler.message, q);
+  }
+}
+
+/**
  * Der Board-Teil der Betriebsart `--karten`. Ausserhalb des Pruefzweigs wird das Board nicht
  * angefasst (E2) — das Skript prueft den Zweig selbst, auch wenn der Workflow den Job schon
  * darauf begrenzt. Jeder Fehlschlag am Board sperrt mit Grund und Quote.
  */
-async function kartenLauf({ client, config, env, ueberlebende, q }) {
+async function kartenLauf({ client, config, env, jetzt, ueberlebende, q }) {
   let konfig;
   try {
     konfig = config ?? standardConfig();
@@ -204,7 +299,10 @@ async function kartenLauf({ client, config, env, ueberlebende, q }) {
   }
   try {
     const board = client ?? kanbanClient({ fetch: globalThis.fetch, env, konfig });
-    return await kartenSchreiben(board, ueberlebende, env.GITHUB_SHA ?? '');
+    const karten = await board.karten();
+    const geschrieben = await kartenSchreiben(board, karten, ueberlebende, env.GITHUB_SHA ?? '');
+    const befundlos = await liegezeitPruefen(board, karten, ueberlebende, jetzt());
+    return { board, ...geschrieben, ohneBefund: befundlos };
   } catch (fehler) {
     throw boardSperre(fehler.message, q);
   }
@@ -226,6 +324,7 @@ export async function main({
   argv,
   client,
   config,
+  jetzt = () => new Date(),
   lesen = standardLesen,
   melden = standardMelden,
   env = process.env,
@@ -253,12 +352,14 @@ export async function main({
           client,
           config,
           env,
+          jetzt,
           ueberlebende: zaehlung.ueberlebende,
           q,
         })
       : undefined;
 
   const text = berichtstext(zaehlung, q, karten);
+  if (karten !== undefined) await berichtKommentieren(karten.board, karten, text, q);
   melden(text);
   if (env.GITHUB_STEP_SUMMARY) {
     appendFileSync(env.GITHUB_STEP_SUMMARY, `${text}\n`, 'utf8');

@@ -529,6 +529,251 @@ describe('main --karten', () => {
   });
 });
 
+describe('main --karten: Liegezeit und Bericht', () => {
+  const aufPruefzweig = { GITHUB_REF_NAME: PRUEFZWEIG, GITHUB_SHA: 'abc123' };
+
+  const RECHNUNG = 'src/main/java/org/mwolff/fbcrm/rechnung/domain/Rechnung.java';
+
+  /** Eine Ueberlebenden-Karte mit eigener Nummer; `createdAt: undefined` laesst das Feld weg. */
+  function karte(nummer, column, createdAt, { datei = ANGEBOT, stellen = [STELLE_27_TRIPEL] } = {}) {
+    const ergebnis = {
+      id: `intern-${nummer}`,
+      number: nummer,
+      title: kartentitel(datei),
+      body: kartenbody(datei, stellen),
+      column,
+    };
+    if (createdAt !== undefined) ergebnis.createdAt = createdAt;
+    return ergebnis;
+  }
+
+  /** Der Bericht mit 99,9 % und einem zweiten Ueberlebenden in Rechnung.java. */
+  function berichtZweiDateien() {
+    const text = bericht999();
+    const ueberlebend = /<mutation detected='false'.*?<\/mutation>/s.exec(text)[0];
+    const rechnung = ueberlebend
+      .replace('Angebot.java', 'Rechnung.java')
+      .replace('org.mwolff.fbcrm.angebot.domain.Angebot', 'org.mwolff.fbcrm.rechnung.domain.Rechnung');
+    return text.replace(ueberlebend, () => `${ueberlebend}\n${rechnung}`);
+  }
+
+  test('Szenario: Karte liegt zu lange', async () => {
+    // Given: seit acht Tagen offen im Backlog, ihre Stelle steht noch im Bericht
+    const client = board([karte(41, 'BACKLOG', '2026-10-10T12:00:00Z')]);
+
+    // When
+    const { ergebnis, gemeldet } = lauf(['--karten'], {
+      text: bericht999(),
+      env: aufPruefzweig,
+      client,
+    });
+
+    // Then
+    await expect(ergebnis).rejects.toThrow('#41 seit 8 Tagen');
+    await expect(ergebnis).rejects.toThrow('Grenze von sieben Tagen');
+    await expect(ergebnis).rejects.toThrow('99,9 %');
+    expect(gemeldet).toEqual([]);
+    expect(client.kommentieren).not.toHaveBeenCalled();
+  });
+
+  test('liegen zwei Karten zu lange, nennt die Meldung beide mit Nummer und Alter', async () => {
+    // Given
+    const client = board([
+      karte(41, 'BACKLOG', '2026-10-10T12:00:00Z'),
+      karte(42, 'IN_PROGRESS', '2026-10-08T12:00:00Z'),
+    ]);
+
+    // When
+    const { ergebnis } = lauf(['--karten'], { text: bericht999(), env: aufPruefzweig, client });
+
+    // Then
+    await expect(ergebnis).rejects.toThrow('#41 seit 8 Tagen, #42 seit 10 Tagen');
+  });
+
+  test.each([
+    ['genau sieben Tagen', '2026-10-11T12:00:00Z', false],
+    ['sieben Tagen und einer Minute', '2026-10-11T11:59:00Z', true],
+  ])('eine offene Karte vor %s sperrt: %s', async (_art, createdAt, sperrt) => {
+    // Given
+    const client = board([karte(41, 'READY', createdAt)]);
+
+    // When
+    const { ergebnis } = lauf(['--karten'], { text: bericht999(), env: aufPruefzweig, client });
+
+    // Then
+    if (sperrt) {
+      await expect(ergebnis).rejects.toThrow('#41 seit 7 Tagen');
+    } else {
+      await expect(ergebnis).resolves.toContain('99,9 %');
+    }
+  });
+
+  test.each(['IN_REVIEW', 'DONE'])('eine Karte in %s vor acht Tagen sperrt nicht (E18)', async (column) => {
+    // Given
+    const client = board([karte(41, column, '2026-10-10T12:00:00Z')]);
+
+    // When
+    const text = await lauf(['--karten'], { text: bericht999(), env: aufPruefzweig, client })
+      .ergebnis;
+
+    // Then
+    expect(text).toContain('Karten ohne Befund: keine');
+    expect(client.verlauf).not.toHaveBeenCalled();
+  });
+
+  test('eine Karte ohne gefundene Stellen sperrt nicht und steht als ohne Befund im Bericht', async () => {
+    // Given: Rechnung.java hat im Bericht keine Ueberlebenden mehr
+    const alt = karte(43, 'BACKLOG', '2026-10-10T12:00:00Z', {
+      datei: RECHNUNG,
+      stellen: [STELLE_12],
+    });
+    const client = board([alt]);
+
+    // When
+    const text = await lauf(['--karten'], { text: bericht999(), env: aufPruefzweig, client })
+      .ergebnis;
+
+    // Then
+    expect(text).toContain(`Karten ohne Befund (1):\n- #43 ${alt.title}`);
+    expect(client.bodySetzen).not.toHaveBeenCalled();
+    expect(client.stand.find((k) => k.id === 'intern-43')).toEqual(alt);
+    expect(client.kommentieren.mock.calls.map(([id]) => id)).not.toContain('intern-43');
+  });
+
+  test('fehlt das Anlagedatum, gilt der erste Eintrag des Verlaufs, einmal geholt', async () => {
+    // Given: der erste Eintrag ist acht Tage alt, der zweite frisch
+    const client = board([karte(41, 'BACKLOG', undefined)]);
+    client.verlauf.mockResolvedValue([
+      { type: 'CREATED', createdAt: '2026-10-10T12:00:00Z' },
+      { type: 'MOVED', createdAt: '2026-10-17T12:00:00Z' },
+    ]);
+
+    // When
+    const { ergebnis } = lauf(['--karten'], { text: bericht999(), env: aufPruefzweig, client });
+
+    // Then
+    await expect(ergebnis).rejects.toThrow('#41 seit 8 Tagen');
+    expect(client.verlauf).toHaveBeenCalledTimes(1);
+    expect(client.verlauf).toHaveBeenCalledWith('intern-41');
+  });
+
+  test('eine Karte mit Anlagedatum braucht keinen Verlauf', async () => {
+    // Given
+    const client = board([karte(41, 'BACKLOG', '2026-10-17T12:00:00Z')]);
+
+    // When
+    await lauf(['--karten'], { text: bericht999(), env: aufPruefzweig, client }).ergebnis;
+
+    // Then
+    expect(client.verlauf).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    ['leer', []],
+    ['ohne Zeitstempel im ersten Eintrag', [{ type: 'CREATED' }, { createdAt: '2026-10-17T12:00:00Z' }]],
+    ['keine Liste', null],
+  ])('liefert der Verlauf keinen Zeitstempel (%s), sperrt der Lauf mit Nummer, Grund und Quote', async (_art, verlauf) => {
+    // Given
+    const client = board([karte(41, 'BACKLOG', undefined)]);
+    client.verlauf.mockResolvedValue(verlauf);
+
+    // When
+    const { ergebnis, gemeldet } = lauf(['--karten'], {
+      text: bericht999(),
+      env: aufPruefzweig,
+      client,
+    });
+
+    // Then
+    await expect(ergebnis).rejects.toThrow('#41');
+    await expect(ergebnis).rejects.toThrow('kein Anlagedatum');
+    await expect(ergebnis).rejects.toThrow('99,9 %');
+    expect(gemeldet).toEqual([]);
+  });
+
+  test('ein Fehlschlag beim Lesen des Verlaufs sperrt mit Grund und Quote', async () => {
+    // Given
+    const client = board([karte(41, 'BACKLOG', undefined)]);
+    client.verlauf.mockRejectedValue(
+      new Error('Board-Aufruf GET /api/kanban/items/intern-41/activity gescheitert: Status 403'),
+    );
+
+    // When
+    const { ergebnis } = lauf(['--karten'], { text: bericht999(), env: aufPruefzweig, client });
+
+    // Then
+    await expect(ergebnis).rejects.toThrow('Status 403');
+    await expect(ergebnis).rejects.toThrow('99,9 %');
+  });
+
+  test('bei zwanzig Karten ohne Anlagedatum laufen hoechstens vier Verlaufsaufrufe gleichzeitig', async () => {
+    // Given
+    const karten = Array.from({ length: 20 }, (_, i) => karte(100 + i, 'BACKLOG', undefined));
+    const client = board(karten);
+    let offen = 0;
+    let hoechstens = 0;
+    client.verlauf.mockImplementation(async () => {
+      offen += 1;
+      hoechstens = Math.max(hoechstens, offen);
+      await new Promise((fertig) => setTimeout(fertig, 1));
+      offen -= 1;
+      return [{ createdAt: '2026-10-17T12:00:00Z' }];
+    });
+
+    // When
+    await lauf(['--karten'], { text: bericht999(), env: aufPruefzweig, client }).ergebnis;
+
+    // Then
+    expect(client.verlauf).toHaveBeenCalledTimes(20);
+    expect(hoechstens).toBe(4);
+  });
+
+  test('der Bericht geht als Kommentar an jede angelegte und jede ergaenzte Karte, an keine nur gelesene (E22)', async () => {
+    // Given: Rechnung.java wird ergaenzt, Angebot.java neu angelegt, #44 bleibt unberuehrt
+    const ergaenzbar = karte(42, 'READY', '2026-10-17T12:00:00Z', {
+      datei: RECHNUNG,
+      stellen: [STELLE_12],
+    });
+    const gelesen = karte(44, 'IN_REVIEW', '2026-10-17T12:00:00Z', { datei: 'src/main/java/X.java' });
+    const client = board([ergaenzbar, gelesen]);
+
+    // When
+    const text = await lauf(['--karten'], {
+      text: berichtZweiDateien(),
+      env: aufPruefzweig,
+      client,
+    }).ergebnis;
+
+    // Then
+    expect(client.anlegen).toHaveBeenCalledTimes(1);
+    expect(client.bodySetzen).toHaveBeenCalledTimes(1);
+    expect(client.kommentieren.mock.calls).toEqual([
+      ['intern-901', text],
+      ['intern-42', text],
+    ]);
+  });
+
+  test('ein Fehlschlag beim Kommentieren sperrt mit Grund und Quote', async () => {
+    // Given
+    const client = board();
+    client.kommentieren.mockRejectedValue(
+      new Error('Board-Aufruf POST /api/kanban/items/intern-901/comments gescheitert: Status 500'),
+    );
+
+    // When
+    const { ergebnis, gemeldet } = lauf(['--karten'], {
+      text: bericht999(),
+      env: aufPruefzweig,
+      client,
+    });
+
+    // Then
+    await expect(ergebnis).rejects.toThrow('Status 500');
+    await expect(ergebnis).rejects.toThrow('99,9 %');
+    expect(gemeldet).toEqual([]);
+  });
+});
+
 describe('Einstieg', () => {
   test('ohne Bericht im Arbeitsverzeichnis: Exitcode 1, Meldung auf stderr, kein Bericht', () => {
     // Given
