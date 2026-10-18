@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 
+import { kartenbody, kartentitel } from './mutationsbericht.mjs';
 import { BERICHTSPFAD, main } from './mutationsgate.mjs';
 
 /** Siehe bump-version.test.mjs: Vitest laeuft mit `frontend` als Arbeitsverzeichnis. */
@@ -49,8 +50,72 @@ function boardClient() {
   };
 }
 
+/** Der Pruefzweig aus `pushPruefung.zweig` der eingesetzten Konfiguration. */
+const PRUEFZWEIG = 'kit-pruefung';
+
+const KONFIG = { pushPruefung: { zweig: PRUEFZWEIG } };
+
+/** Die Stelle des einen Ueberlebenden aus mutations-99-9.xml. */
+const STELLE_27 =
+  '- Zeile 27, Methode `<init>`, Mutator `org.pitest.mutationtest.engine.gregor.mutators.NullReturnValsMutator`';
+
+/**
+ * Ein Board mit Zustand: `karten` liefert die Karten samt Spalte, `anlegen` legt eine Karte im
+ * Backlog mit fortlaufender Nummer an, `bodySetzen` ersetzt Titel und Body. Jede Methode
+ * schreibt ihre Aufrufe mit.
+ */
+function board(karten = []) {
+  const stand = karten.map((karte) => ({ ...karte }));
+  let naechsteNummer = 900;
+  return {
+    stand,
+    karten: vi.fn(async () => stand.map((karte) => ({ ...karte }))),
+    anlegen: vi.fn(async (title, body) => {
+      naechsteNummer += 1;
+      const karte = {
+        id: `intern-${naechsteNummer}`,
+        number: naechsteNummer,
+        title,
+        body,
+        column: 'BACKLOG',
+        createdAt: '2026-10-18T12:00:00Z',
+      };
+      stand.push(karte);
+      return { ...karte };
+    }),
+    bodySetzen: vi.fn(async (id, title, body) => {
+      const karte = stand.find((vorhanden) => vorhanden.id === id);
+      Object.assign(karte, { title, body });
+      return { ...karte };
+    }),
+    verlauf: vi.fn(),
+    kommentieren: vi.fn(),
+  };
+}
+
+/** Eine Ueberlebenden-Karte fuer Angebot.java mit den gegebenen Stellen. */
+function angebotKarte(column, stellen, weiteres = {}) {
+  return {
+    id: 'intern-41',
+    number: 41,
+    title: kartentitel(ANGEBOT),
+    body: kartenbody(ANGEBOT, stellen),
+    column,
+    createdAt: '2026-10-16T12:00:00Z',
+    ...weiteres,
+  };
+}
+
+const STELLE_12 = { zeile: 12, methode: 'pruefen', mutator: 'org.pitest.Mutator' };
+
+const STELLE_27_TRIPEL = {
+  zeile: 27,
+  methode: '<init>',
+  mutator: 'org.pitest.mutationtest.engine.gregor.mutators.NullReturnValsMutator',
+};
+
 /** Ein Lauf mit eingesetzten Funktionen; `lesen` liefert den Text oder null. */
-function lauf(argv, { text = null, env = {}, client } = {}) {
+function lauf(argv, { text = null, env = {}, client, config = KONFIG } = {}) {
   const gelesen = [];
   const gemeldet = [];
   const ergebnis = main({
@@ -63,6 +128,7 @@ function lauf(argv, { text = null, env = {}, client } = {}) {
     },
     melden: (zeile) => gemeldet.push(zeile),
     env,
+    config,
   });
   return { ergebnis, gelesen, gemeldet };
 }
@@ -175,19 +241,291 @@ describe('main mit anderen Argumenten', () => {
     expect(gelesen).toEqual([]);
   });
 
-  test('--karten wird als noch nicht vorhanden abgewiesen', async () => {
+});
+
+describe('main --karten', () => {
+  const aufPruefzweig = { GITHUB_REF_NAME: PRUEFZWEIG, GITHUB_SHA: 'abc123' };
+
+  test('Szenario: Hohe Quote mit einem Überlebenden', async () => {
+    // Given
+    const client = board();
+
+    // When
+    const { ergebnis, gemeldet } = lauf(['--karten'], {
+      text: bericht999(),
+      env: aufPruefzweig,
+      client,
+    });
+
+    // Then
+    const text = await ergebnis;
+    expect(client.anlegen).toHaveBeenCalledTimes(1);
+    const [titel, body, schluessel] = client.anlegen.mock.calls[0];
+    expect(titel.startsWith('[Task] ')).toBe(true);
+    expect(titel).toBe(kartentitel(ANGEBOT));
+    expect(body).toContain(STELLE_27);
+    expect(typeof schluessel).toBe('string');
+    expect(schluessel).not.toBe('');
+    expect(client.bodySetzen).not.toHaveBeenCalled();
+    expect(text).toContain('99,9 %');
+    expect(text).toContain(`Neu angelegte Karten (1):\n- #901 ${kartentitel(ANGEBOT)}`);
+    expect(text).toContain('Ergaenzte Karten: keine');
+    expect(gemeldet).toEqual([text]);
+  });
+
+  test('Szenario: Neue Überlebende in einer Datei mit offener Karte', async () => {
+    // Given: seit zwei Tagen offen, mit einer anderen Stelle derselben Datei
+    const vorhanden = angebotKarte('BACKLOG', [STELLE_12]);
+    const client = board([vorhanden]);
+
+    // When
+    const text = await lauf(['--karten'], { text: bericht999(), env: aufPruefzweig, client })
+      .ergebnis;
+
+    // Then
+    expect(client.anlegen).not.toHaveBeenCalled();
+    expect(client.bodySetzen).toHaveBeenCalledTimes(1);
+    const [id, titel, body] = client.bodySetzen.mock.calls[0];
+    expect(id).toBe('intern-41');
+    expect(titel).toBe(vorhanden.title);
+    expect(body).toContain('- Zeile 12, Methode `pruefen`, Mutator `org.pitest.Mutator`');
+    expect(body).toContain(STELLE_27);
+    expect(client.stand[0].createdAt).toBe('2026-10-16T12:00:00Z');
+    expect(text).toContain(`Ergaenzte Karten (1):\n- #41 ${vorhanden.title}`);
+    expect(text).toContain('Neu angelegte Karten: keine');
+  });
+
+  test('Szenario: Board nicht erreichbar', async () => {
+    // Given
+    const client = board();
+    client.karten.mockRejectedValue(
+      new Error('Board-Aufruf GET /api/kanban/items gescheitert: Board nicht erreichbar'),
+    );
+
+    // When
+    const { ergebnis, gemeldet } = lauf(['--karten'], {
+      text: bericht999(),
+      env: aufPruefzweig,
+      client,
+    });
+
+    // Then
+    await expect(ergebnis).rejects.toThrow('Board nicht erreichbar');
+    await expect(ergebnis).rejects.toThrow('99,9 %');
+    expect(client.anlegen).not.toHaveBeenCalled();
+    expect(gemeldet).toEqual([]);
+  });
+
+  test('ein Fehlschlag beim Anlegen sperrt mit Grund und Quote', async () => {
+    // Given
+    const client = board();
+    client.anlegen.mockRejectedValue(
+      new Error('Board-Aufruf POST /api/kanban/items gescheitert: Status 500'),
+    );
+
+    // When
+    const { ergebnis, gemeldet } = lauf(['--karten'], {
+      text: bericht999(),
+      env: aufPruefzweig,
+      client,
+    });
+
+    // Then
+    await expect(ergebnis).rejects.toThrow('Status 500');
+    await expect(ergebnis).rejects.toThrow('99,9 %');
+    expect(gemeldet).toEqual([]);
+  });
+
+  test('ein Fehlschlag beim Ergaenzen sperrt mit Grund und Quote', async () => {
+    // Given
+    const client = board([angebotKarte('READY', [STELLE_12])]);
+    client.bodySetzen.mockRejectedValue(
+      new Error('Board-Aufruf PUT /api/kanban/items/intern-41 gescheitert: Status 409'),
+    );
+
+    // When
+    const { ergebnis } = lauf(['--karten'], { text: bericht999(), env: aufPruefzweig, client });
+
+    // Then
+    await expect(ergebnis).rejects.toThrow('Status 409');
+    await expect(ergebnis).rejects.toThrow('99,9 %');
+  });
+
+  test('eine Karte in IN_REVIEW wird ergaenzt, nicht neu angelegt', async () => {
+    // Given
+    const client = board([angebotKarte('IN_REVIEW', [STELLE_12])]);
+
+    // When
+    await lauf(['--karten'], { text: bericht999(), env: aufPruefzweig, client }).ergebnis;
+
+    // Then
+    expect(client.bodySetzen).toHaveBeenCalledTimes(1);
+    expect(client.anlegen).not.toHaveBeenCalled();
+  });
+
+  test('eine Karte in DONE wird nicht ergaenzt, es entsteht eine neue', async () => {
+    // Given
+    const client = board([angebotKarte('DONE', [STELLE_12])]);
+
+    // When
+    await lauf(['--karten'], { text: bericht999(), env: aufPruefzweig, client }).ergebnis;
+
+    // Then
+    expect(client.anlegen).toHaveBeenCalledTimes(1);
+    expect(client.bodySetzen).not.toHaveBeenCalled();
+  });
+
+  test('eine Karte mit anderem Titel zaehlt nicht als Karte der Datei', async () => {
+    // Given: derselbe Pfad, aber ohne das Praefix [Task]
+    const client = board([
+      angebotKarte('BACKLOG', [STELLE_12], { title: `Mutations-Ueberlebende in ${ANGEBOT}` }),
+    ]);
+
+    // When
+    await lauf(['--karten'], { text: bericht999(), env: aufPruefzweig, client }).ergebnis;
+
+    // Then
+    expect(client.anlegen).toHaveBeenCalledTimes(1);
+    expect(client.bodySetzen).not.toHaveBeenCalled();
+  });
+
+  test('stehen alle Stellen schon auf der offenen Karte, gibt es keinen Schreibaufruf', async () => {
+    // Given
+    const client = board([angebotKarte('IN_PROGRESS', [STELLE_27_TRIPEL])]);
+
+    // When
+    const text = await lauf(['--karten'], { text: bericht999(), env: aufPruefzweig, client })
+      .ergebnis;
+
+    // Then
+    expect(client.anlegen).not.toHaveBeenCalled();
+    expect(client.bodySetzen).not.toHaveBeenCalled();
+    expect(text).toContain('Neu angelegte Karten: keine');
+    expect(text).toContain('Ergaenzte Karten: keine');
+  });
+
+  test.each([
+    ['einem anderen Zweig', { GITHUB_REF_NAME: 'main' }],
+    ['unbekanntem Zweig', {}],
+  ])('auf %s ruft der Lauf keine Methode am Client und wirft nicht (E2)', async (_art, env) => {
     // Given
     const client = boardClient();
 
     // When
-    const { ergebnis, gelesen } = lauf(['--karten'], { text: bericht999(), client });
+    const { ergebnis, gemeldet } = lauf(['--karten'], { text: bericht999(), env, client });
 
     // Then
-    await expect(ergebnis).rejects.toThrow('Betriebsart --karten ist noch nicht vorhanden');
-    expect(gelesen).toEqual([]);
+    const text = await ergebnis;
     for (const methode of Object.values(client)) {
       expect(methode).not.toHaveBeenCalled();
     }
+    expect(text).toContain('99,9 %');
+    expect(text).toContain('nicht der Pruefzweig kit-pruefung');
+    expect(gemeldet).toEqual([text]);
+  });
+
+  test('unter der Sperrschwelle sperrt auch --karten, ohne das Board anzufassen', async () => {
+    // Given
+    const client = boardClient();
+
+    // When
+    const { ergebnis } = lauf(['--karten'], {
+      text: bericht('mutations-75.xml'),
+      env: aufPruefzweig,
+      client,
+    });
+
+    // Then
+    await expect(ergebnis).rejects.toThrow('75,0 %');
+    for (const methode of Object.values(client)) {
+      expect(methode).not.toHaveBeenCalled();
+    }
+  });
+
+  test('ohne pushPruefung.zweig in der Konfiguration sperrt der Lauf mit Grund und Quote', async () => {
+    // Given
+    const client = boardClient();
+
+    // When
+    const { ergebnis } = lauf(['--karten'], {
+      text: bericht999(),
+      env: aufPruefzweig,
+      client,
+      config: {},
+    });
+
+    // Then
+    await expect(ergebnis).rejects.toThrow('pushPruefung.zweig');
+    await expect(ergebnis).rejects.toThrow('99,9 %');
+    for (const methode of Object.values(client)) {
+      expect(methode).not.toHaveBeenCalled();
+    }
+  });
+
+  test('zwei Laeufe mit demselben Bericht legen genau eine Karte an, mit demselben Schluessel (E13)', async () => {
+    // Given
+    const client = board();
+
+    // When
+    await lauf(['--karten'], { text: bericht999(), env: aufPruefzweig, client }).ergebnis;
+    await lauf(['--karten'], { text: bericht999(), env: aufPruefzweig, client }).ergebnis;
+
+    // Then
+    expect(client.anlegen).toHaveBeenCalledTimes(1);
+    expect(client.bodySetzen).not.toHaveBeenCalled();
+  });
+
+  test('der Schluessel ist je Datei und Stand stabil und unterscheidet beide', async () => {
+    // Given
+    const schluessel = async (env) => {
+      const client = board();
+      await lauf(['--karten'], { text: bericht999(), env: { ...aufPruefzweig, ...env }, client })
+        .ergebnis;
+      return client.anlegen.mock.calls[0][2];
+    };
+
+    // When
+    const erster = await schluessel({});
+    const zweiter = await schluessel({});
+    const andererStand = await schluessel({ GITHUB_SHA: 'def456' });
+
+    // Then
+    expect(zweiter).toBe(erster);
+    expect(andererStand).not.toBe(erster);
+    expect(erster).toMatch(/^mutationsgate-[0-9a-f]{32}$/);
+  });
+
+  test('ohne eingesetzte Konfiguration sperrt eine fehlende Konfigurationsdatei mit Grund und Quote', async () => {
+    // Given: Vitest laeuft in frontend/, dort liegt keine .claude/workflow.config.json
+    const client = boardClient();
+
+    // When
+    const { ergebnis } = lauf(['--karten'], {
+      text: bericht999(),
+      env: aufPruefzweig,
+      client,
+      config: null,
+    });
+
+    // Then
+    await expect(ergebnis).rejects.toThrow('.claude/workflow.config.json ist nicht lesbar: ENOENT');
+    await expect(ergebnis).rejects.toThrow('99,9 %');
+    for (const methode of Object.values(client)) {
+      expect(methode).not.toHaveBeenCalled();
+    }
+  });
+
+  test('ohne eingesetzten Client sperrt ein fehlendes Token mit Grund und Quote', async () => {
+    // When
+    const { ergebnis } = lauf(['--karten'], {
+      text: bericht999(),
+      env: aufPruefzweig,
+      config: { ...KONFIG, toolbox: { host: 'https://board.example' } },
+    });
+
+    // Then
+    await expect(ergebnis).rejects.toThrow('TBX_TOKEN');
+    await expect(ergebnis).rejects.toThrow('99,9 %');
   });
 });
 
