@@ -156,20 +156,19 @@ describe('Anmeldeseite', () => {
   });
 
   it('deaktiviert den Absendeknopf waehrend der Anfrage', async () => {
-    ohneSitzung(
-      () =>
-        new Promise<Response>((aufloesen) => {
-          setTimeout(() => {
-            aufloesen(kontoAntwort());
-          }, 20);
-        }),
-    );
+    // Die Antwort bleibt offen, bis der Test sie selbst aufloest — kein Rennen gegen die Uhr.
+    let aufloesen!: (antwort: Response) => void;
+    const antwort = new Promise<Response>((weiter) => {
+      aufloesen = weiter;
+    });
+    ohneSitzung(() => antwort);
 
     renderAnmeldeseite();
     await screen.findByLabelText(/^E-Mail-Adresse/);
     await anmeldenMit('geheim');
 
     expect(screen.getByRole('button', { name: 'Anmelden' })).toBeDisabled();
+    aufloesen(kontoAntwort());
     expect(await screen.findByText('Leitstand')).toBeInTheDocument();
   });
 
