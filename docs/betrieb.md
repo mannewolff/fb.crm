@@ -254,3 +254,191 @@ deshalb prüfen, dass Traefik eingehende `X-Forwarded-*`-Köpfe fremder Quellen 
 `forwardedHeaders.insecure`). Sonst setzt ein Angreifer den Kopf selbst und umgeht die
 Zählbremse. Solange das nicht geprüft ist, `FBCRM_TRUSTED_PROXIES` leer lassen: Dann zählen alle
 Anfragen unter Traefiks Adresse — strenger als nötig, aber nicht umgehbar.
+
+## Sicherung
+
+Eine vollständige Sicherung von fb.crm besteht aus drei Teilen: der Datenbank, den abgelegten
+Dokumenten (Anlagen am Angebot, gestellte Rechnungen, Briefpapier) und der Konfiguration mit ihren
+Zugangsdaten. Nur alle drei zusammen lassen sich zurückspielen. Die Befehle laufen im Verzeichnis
+des Checkouts, fb.crm läuft zu Beginn.
+
+**Schritt 1: Verzeichnis anlegen und Version vermerken.** Die Wiederherstellung braucht dieselbe
+Version, auf der fb.crm beim Sichern läuft.
+
+```bash
+mkdir -p sicherung
+git describe --tags > sicherung/version.txt
+```
+
+**Schritt 2: Anwendung anhalten**, damit sich während der Sicherung nichts ändert. Datenbank und
+Objektspeicher laufen weiter.
+
+```bash
+docker compose stop caddy fbcrm-api
+```
+
+**Schritt 3: Datenbank in eine Datei schreiben.**
+
+```bash
+docker compose exec -T postgres pg_dump -U fbcrm -d fbcrm > sicherung/datenbank.sql
+```
+
+Wer `POSTGRES_USER` oder `POSTGRES_DB` in der `.env` geändert hat, setzt dort die eigenen Werte ein.
+
+**Schritt 4: Abgelegte Dokumente kopieren.** Sie liegen im Band `minio_data`, dem Datenverzeichnis
+des Objektspeichers. Den Objektspeicher anhalten und das Verzeichnis herauskopieren:
+
+```bash
+docker compose stop minio
+docker compose cp minio:/data sicherung/minio_data
+```
+
+**Schritt 5: Konfiguration sichern** — die `.env` mit allen Zugangsdaten:
+
+```bash
+cp .env sicherung/env
+```
+
+**Schritt 6: fb.crm wieder starten.**
+
+```bash
+docker compose up -d
+```
+
+**Wo die Sicherung landet.** Die Dateien liegen danach im Verzeichnis `sicherung` des Checkouts:
+`version.txt`, `datenbank.sql`, das Verzeichnis `minio_data` und `env`. Dort darf die Sicherung
+nicht bleiben, denn fällt der Rechner aus, ist sie mit ihm verloren. Das Verzeichnis gehört auf
+einen anderen Rechner oder ein externes Medium, am einfachsten als Archiv:
+
+```bash
+tar czf fbcrm-sicherung-$(date +%F).tar.gz sicherung
+```
+
+**Die Sicherung enthält die Geheimnisse.** In ihr stehen das Signaturgeheimnis der Sitzungen, die
+Passwörter von Datenbank, Objektspeicher und Mailserver und alle Kundendaten. Sie liegt darum nur
+dort, wo auch die `.env` liegen dürfte: verschlüsselt oder an einem Ort, auf den außer dem
+Betreiber niemand Zugriff hat. Nach dem Wegkopieren das Verzeichnis `sicherung` und das Archiv vom
+Rechner löschen.
+
+Das Band `postgres_data` wird nicht als Ganzes kopiert; sein Inhalt steckt vollständig in
+`datenbank.sql`. Die Bänder `caddy_data` und `caddy_config` brauchen keine Sicherung: Caddy holt
+sein Zertifikat nach einer Wiederherstellung selbst neu.
+
+## Wiederherstellung
+
+Dieser Weg spielt eine Sicherung auf einem neuen Rechner zurück, ohne Zugriff auf den alten. Nötig
+sind nur die Dateien aus dem Abschnitt „Sicherung" und ein Rechner, der die Voraussetzungen aus dem
+Abschnitt „Voraussetzungen" erfüllt. Unter eigenem Namen zeigt der DNS-Eintrag der Domain vorher
+auf den neuen Rechner.
+
+**Schritt 1: Projekt auschecken, dieselbe Versionsmarke.** Die Marke steht in `version.txt` der
+Sicherung, etwa `v1.2.0`. `ADRESSE` ist die Adresse, unter der das Projekt bezogen wird:
+
+```bash
+git clone ADRESSE fb-crm
+cd fb-crm
+git checkout v1.2.0
+```
+
+**Schritt 2: Sicherung hineinlegen.** Im Verzeichnis des Checkouts liegt danach ein Verzeichnis
+`sicherung` mit `datenbank.sql`, `minio_data` und `env`. Ein Archiv wird dort ausgepackt, etwa:
+
+```bash
+tar xzf fbcrm-sicherung-2026-10-20.tar.gz
+```
+
+**Schritt 3: `.env` zurücklegen** — vor dem ersten Start, denn PostgreSQL übernimmt Name, Nutzer
+und Passwort der Datenbank nur beim ersten Anlegen seiner Daten:
+
+```bash
+cp sicherung/env .env
+```
+
+**Schritt 4: Bänder anlegen.** Datenbank und Objektspeicher starten, die Anwendung noch nicht;
+Compose legt dabei die Bänder `postgres_data` und `minio_data` leer an:
+
+```bash
+docker compose up -d postgres minio
+```
+
+Weiter, wenn `docker compose ps` beide als `healthy` zeigt.
+
+**Schritt 5: Datenbank einspielen.**
+
+```bash
+docker compose exec -T postgres psql -U fbcrm -d fbcrm -v ON_ERROR_STOP=1 < sicherung/datenbank.sql
+```
+
+Der Befehl muss ohne Fehlermeldung durchlaufen. Wer `POSTGRES_USER` oder `POSTGRES_DB` geändert
+hat, setzt die eigenen Werte ein.
+
+**Schritt 6: Dokumente zurückschreiben.** Den Objektspeicher anhalten, das Datenverzeichnis in das
+Band `minio_data` kopieren und den Dateien den Eigentümer geben, unter dem MinIO läuft:
+
+```bash
+docker compose stop minio
+docker compose cp sicherung/minio_data/. minio:/data
+docker compose run --rm --user 0:0 --entrypoint /usr/bin/chown minio -R 65532:65532 /data
+```
+
+**Schritt 7: Starten.**
+
+```bash
+docker compose up -d --build
+```
+
+Der Start dauert wie beim ersten Mal einige Minuten. Weiter, wenn `docker compose ps` die Zeile von
+`fbcrm-api` als `healthy` zeigt.
+
+**Schritt 8: Prüfen.**
+
+- Mit dem bisherigen Konto anmelden; die Seite „Einrichten" erscheint nicht.
+- Kunden, Angebote mit ihren Anlagen, Rechnungen samt Rechnungsdokument und das Briefpapier
+  öffnen: Alles ist wieder da.
+- Den Mailversand prüfen, wie im Abschnitt „Vergessenes Passwort" beschrieben: Kommt die Mail an,
+  funktioniert er.
+
+Danach das Verzeichnis `sicherung` und das Archiv vom neuen Rechner löschen; sie enthalten die
+Geheimnisse.
+
+## Aktualisierung
+
+Eine **veröffentlichte Version** von fb.crm ist ein Stand mit einer Versionsmarke der Form
+`vX.Y.Z`, etwa `v1.2.0`. Aktualisiert wird von der unmittelbar vorherigen veröffentlichten Version
+auf die neue, indem der Checkout auf die Marke der neuen Version geht. Die Datenbank passt fb.crm
+beim Start selbst an.
+
+**Schritt 1: Ausgangsversion vermerken.**
+
+```bash
+git describe --tags
+```
+
+**Schritt 2: Sichern.** Eine Sicherung anlegen, wie im Abschnitt „Sicherung" beschrieben, und vom
+Rechner wegkopieren. Ohne Sicherung nicht aktualisieren: Sie ist der Weg zurück, falls die neue
+Version nicht hochkommt.
+
+**Schritt 3: Neue Marke auschecken.** Die Marken holen und den Checkout auf die Marke `vX.Y.Z` der
+neuen Version bringen, etwa `v1.3.0`:
+
+```bash
+git fetch --tags
+git checkout v1.3.0
+```
+
+**Schritt 4: Neu bauen und starten.**
+
+```bash
+docker compose up -d --build
+```
+
+Weiter, wenn `docker compose ps` die Zeile von `fbcrm-api` als `healthy` zeigt. Kommt die Anwendung
+nicht hoch, nennt `docker compose logs fbcrm-api` den Grund.
+
+**Schritt 5: Prüfen.**
+
+- Unter der Marke in der Seitenleiste steht die neue Versionsnummer.
+- Kunden, Angebote und Rechnungen sind unverändert da.
+
+**Schritt 6: Ausgangs- und Zielversion vermerken**, etwa „am 2026-10-20 von v1.2.0 auf v1.3.0
+aktualisiert". Der Vermerk sagt beim nächsten Mal, von welcher Version aus aktualisiert wird.
