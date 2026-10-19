@@ -3,6 +3,7 @@ package org.mwolff.fbcrm.rechnung.application;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -146,5 +147,60 @@ class BelegschreibweisenTest {
 
     // Then
     assertThat(zeile).isNull();
+  }
+
+  @Test
+  void einleitungssatz_givenEinenLeistungszeitraum_thenNenntErIhn() {
+    // When
+    final String satz = Belegschreibweisen.einleitungssatz("September 2026");
+
+    // Then
+    assertThat(satz)
+        .isEqualTo("Für meine Leistungen im September 2026 stelle ich Ihnen in Rechnung");
+  }
+
+  @Test
+  void einleitungssatz_givenKeinenLeistungszeitraum_thenStehtErOhneIhn() {
+    // When
+    final String satz = Belegschreibweisen.einleitungssatz(null);
+
+    // Then
+    assertThat(satz).isEqualTo("Für meine Leistungen stelle ich Ihnen in Rechnung");
+  }
+
+  @Test
+  void zahlungssatz_givenEinZahlungszielInTagen_thenNenntErDieTage() {
+    // When
+    final String satz = Belegschreibweisen.zahlungssatz(14);
+
+    // Then
+    assertThat(satz).isEqualTo("Bitte überweisen Sie den Betrag innerhalb von 14 Tagen");
+  }
+
+  @Test
+  void zahlungssatz_givenNullTage_thenIstDerBetragSofortFaellig() {
+    // When
+    final String satz = Belegschreibweisen.zahlungssatz(0);
+
+    // Then
+    assertThat(satz).isEqualTo("Bitte überweisen Sie den Betrag sofort");
+  }
+
+  @Test
+  void ortUndDatum_givenEinenOrt_thenStehtErVorDemDatum() {
+    // When
+    final String zeile = Belegschreibweisen.ortUndDatum("Bremen", LocalDate.of(2026, 9, 8));
+
+    // Then
+    assertThat(zeile).isEqualTo("Bremen, 08.09.2026");
+  }
+
+  @Test
+  void ortUndDatum_givenKeinenOrt_thenStehtNurDasDatum() {
+    // When
+    final String zeile = Belegschreibweisen.ortUndDatum(null, LocalDate.of(2026, 9, 8));
+
+    // Then
+    assertThat(zeile).isEqualTo("08.09.2026");
   }
 }

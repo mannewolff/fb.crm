@@ -335,4 +335,41 @@ class PositionstabelleTest {
     assertThat(tabelle.seite()).isEqualTo(2);
     assertThat(neueBlaetter).containsExactly(2);
   }
+
+  @Test
+  void platzFuer_givenEinenEigenenSatzspiegelFuerFolgeseiten_thenGiltErAbDemZweitenBlatt() {
+    // Given — Folgeseiten beginnen bei 700 und enden bei 600; Seite eins traegt die Kupferwolke.
+    final Satzspiegel folgeseiten = new Satzspiegel(71, 136, 371, 436, 503, 620, 600, 700);
+    final Positionstabelle tabelle =
+        new Positionstabelle(KUPFERWOLKE, folgeseiten, elemente, neueBlaetter::add);
+
+    // When — der erste Block passt auf Seite eins nicht mehr, der zweite reichte auf dem neuen
+    // Blatt unter dessen Untergrenze, obwohl er die der ersten Seite hielte.
+    final int ersterAnfang = tabelle.platzFuer(199, 100);
+    final int zweiterAnfang = tabelle.platzFuer(650, 100);
+
+    // Then
+    assertThat(ersterAnfang).isEqualTo(700);
+    assertThat(zweiterAnfang).isEqualTo(700);
+    assertThat(neueBlaetter).containsExactly(2, 3);
+  }
+
+  @Test
+  void
+      setze_givenEinenEigenenSatzspiegelFuerFolgeseiten_thenBrichtDieTabelleDortAnSeinerGrenzeUm() {
+    // Given — auf Seite eins stehen 20 Positionen. Eine Folgeseite von 700 bis 600 haelt sechs
+    // Zeilen, die letzte Position legt aber die 50 des Summenblocks dazu zurueck.
+    final Satzspiegel folgeseiten = new Satzspiegel(71, 136, 371, 436, 503, 600, 100, 700);
+    final Positionstabelle tabelle =
+        new Positionstabelle(KUPFERWOLKE, folgeseiten, elemente, neueBlaetter::add);
+
+    // When
+    tabelle.setze(daten(positionen(24)), OBEN);
+
+    // Then — Position 21 eroeffnet Seite zwei an ihrer oberen Kante; Position 24 fehlt dort der
+    // Platz fuer sich und den Summenblock, sie steht auf Seite drei.
+    assertThat(text("Stunden Leistung 21").seite()).isEqualTo(2);
+    assertThat(text("Stunden Leistung 21").y()).isEqualTo(689);
+    assertThat(text("Stunden Leistung 24").seite()).isEqualTo(3);
+  }
 }

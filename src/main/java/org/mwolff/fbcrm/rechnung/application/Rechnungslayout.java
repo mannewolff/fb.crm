@@ -1,9 +1,7 @@
 package org.mwolff.fbcrm.rechnung.application;
 
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
-import org.jspecify.annotations.Nullable;
 import org.mwolff.fbcrm.common.Anschrift;
 import org.mwolff.fbcrm.rechnung.domain.Belegabsender;
 
@@ -28,9 +26,9 @@ import org.mwolff.fbcrm.rechnung.domain.Belegabsender;
  *
  * <p><b>Die Tabelle setzt die {@link Positionstabelle}</b> im {@link Satzspiegel} der Vorlage, und
  * die Schreibweisen von Betrag, Zahl und zusammengesetzten Zeilen stehen in {@link
- * Belegschreibweisen} — beides teilt sich die Kupferwolke mit dem Briefbogen (Plan #363, E7). Was
- * hier bleibt, ist allein die Gestaltung der Kupferwolke: Randstreifen, Kopf, Anschrift, Schluss
- * und Fuss.
+ * Belegschreibweisen} — beides teilt sich die Kupferwolke mit dem {@link Briefbogenlayout} (Plan
+ * #363, E7), ebenso die festen Saetze von Anrede bis Gruss. Was hier bleibt, ist allein die
+ * Gestaltung der Kupferwolke: Randstreifen, Kopf, Anschrift, Schluss und Fuss.
  */
 /*
  * PMD.TooManyMethods: Der Satz eines ganzen Dokuments ist eine lange Folge von Schritten, und jeder
@@ -189,17 +187,6 @@ public final class Rechnungslayout {
   /** Eine gewoehnliche Linie. */
   private static final int STRICH = 1;
 
-  // --- Feste Wortlaute ---
-
-  /** Die Anrede der Vorlage; sie nennt keine Person, weil der Beleg an die Firma geht. */
-  private static final String ANREDE = "Sehr geehrte Damen und Herren,";
-
-  /** Der Gruss der Vorlage; eine Unterschrift steht nicht darunter. */
-  private static final String GRUSS = "Mit freundlichen Grüßen";
-
-  /** Das Datum der Vorlage: „28.09.2026". */
-  private static final DateTimeFormatter DATUM = DateTimeFormatter.ofPattern("dd.MM.yyyy");
-
   private final RechnungDruckdaten daten;
 
   private final List<Druckelement> elemente = new ArrayList<>();
@@ -293,47 +280,38 @@ public final class Rechnungslayout {
         nachOben - ABSATZ,
         Belegschreibweisen.gefuellt(Belegschreibweisen.ortszeile(firma), firma.land()));
 
-    rechts(ORT_DATUM, GROESSE_KLEIN, GEDAEMPFT, ortUndDatum(eigene.ort()));
-  }
-
-  private String ortUndDatum(final @Nullable String ort) {
-    final String datum = DATUM.format(daten.rechnungDatum());
-    if (ort == null) {
-      return datum;
-    }
-    return ort + ", " + datum;
+    rechts(
+        ORT_DATUM,
+        GROESSE_KLEIN,
+        GEDAEMPFT,
+        Belegschreibweisen.ortUndDatum(eigene.ort(), daten.rechnungDatum()));
   }
 
   /** Titel, Anrede und der Satz, der die Tabelle ankuendigt. */
   private void einleitung() {
     links(TITEL, Schrift.FETT, GROESSE_TEXT, DUNKEL, "Rechnung " + daten.nummer());
-    links(ANREDE_OBEN, Schrift.NORMAL, GROESSE_TEXT, DUNKEL, ANREDE);
-    links(EINLEITUNG_OBEN, Schrift.NORMAL, GROESSE_TEXT, DUNKEL, einleitungssatz());
-  }
-
-  private String einleitungssatz() {
-    final String zeitraum = daten.leistungszeitraum();
-    if (zeitraum == null) {
-      return "Für meine Leistungen stelle ich Ihnen in Rechnung";
-    }
-    return "Für meine Leistungen im " + zeitraum + " stelle ich Ihnen in Rechnung";
+    links(ANREDE_OBEN, Schrift.NORMAL, GROESSE_TEXT, DUNKEL, Belegschreibweisen.ANREDE);
+    links(
+        EINLEITUNG_OBEN,
+        Schrift.NORMAL,
+        GROESSE_TEXT,
+        DUNKEL,
+        Belegschreibweisen.einleitungssatz(daten.leistungszeitraum()));
   }
 
   /** Zahlungsziel, Gruss und Name; eine Unterschrift steht nicht darunter. */
   private void schluss(final int tabelleUnten) {
     int hoehe = tabelle.platzFuer(tabelleUnten - ABSTAND_NACH_TABELLE, SCHLUSS_HOEHE);
-    links(hoehe, Schrift.NORMAL, GROESSE_TEXT, DUNKEL, zahlungssatz());
+    links(
+        hoehe,
+        Schrift.NORMAL,
+        GROESSE_TEXT,
+        DUNKEL,
+        Belegschreibweisen.zahlungssatz(daten.zahlungszielTage()));
     hoehe -= ABSTAND_GRUSS;
-    links(hoehe, Schrift.NORMAL, GROESSE_TEXT, DUNKEL, GRUSS);
+    links(hoehe, Schrift.NORMAL, GROESSE_TEXT, DUNKEL, Belegschreibweisen.GRUSS);
     hoehe -= ABSTAND_NAME;
     links(hoehe, Schrift.NORMAL, GROESSE_TEXT, DUNKEL, daten.absender().name());
-  }
-
-  private String zahlungssatz() {
-    if (daten.zahlungszielTage() == 0) {
-      return "Bitte überweisen Sie den Betrag sofort";
-    }
-    return "Bitte überweisen Sie den Betrag innerhalb von " + daten.zahlungszielTage() + " Tagen";
   }
 
   /** Der Fuss steht auf jeder Seite; er entsteht, wenn feststeht, wie viele es sind. */

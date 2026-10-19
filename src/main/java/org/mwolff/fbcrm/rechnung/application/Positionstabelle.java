@@ -14,7 +14,9 @@ import org.mwolff.fbcrm.rechnung.application.RechnungDruckdaten.Druckposition;
  * <p>Kupferwolke und Briefbogen setzen die Tabelle nach derselben Regel; was sie unterscheidet,
  * bringen sie mit: ihren {@link Satzspiegel} und einen Rueckruf, der festlegt, was auf einem neuen
  * Blatt zuerst entsteht — bei der Kupferwolke der Randstreifen, auf dem Briefbogen nichts. Der
- * Rueckruf hoert die Nummer des neuen Blattes.
+ * Rueckruf hoert die Nummer des neuen Blattes. Der Briefbogen bringt fuer die Folgeseiten einen
+ * zweiten Satzspiegel mit, weil sie ihren eigenen oberen und unteren Rand tragen; die Kupferwolke
+ * setzt jede Seite im selben.
  *
  * <p>Die Tabelle fuehrt die laufende Seite des ganzen Belegs: Sie ist es, die umbricht, und auch
  * der Block darunter bekommt seinen Platz von ihr ({@link #platzFuer}). Nach dem Satz nennt {@link
@@ -75,7 +77,9 @@ final class Positionstabelle {
   /** Die Wortgrenze, an der ein Positionstext umbrochen wird. */
   private static final Pattern WORTGRENZE = Pattern.compile(" ");
 
-  private final Satzspiegel spiegel;
+  private final Satzspiegel ersteSeite;
+
+  private final Satzspiegel folgeseiten;
 
   private final List<Druckelement> elemente;
 
@@ -92,7 +96,24 @@ final class Positionstabelle {
    */
   Positionstabelle(
       final Satzspiegel spiegel, final List<Druckelement> elemente, final IntConsumer neuesBlatt) {
-    this.spiegel = spiegel;
+    this(spiegel, spiegel, elemente, neuesBlatt);
+  }
+
+  /**
+   * Eine Tabelle, deren Folgeseiten in einem eigenen Satzspiegel stehen.
+   *
+   * @param ersteSeite die Masse auf Seite eins; ihre oberste Grundlinie einer Folgeseite gilt nicht
+   * @param folgeseiten die Masse ab Seite zwei, samt der obersten Grundlinie eines neuen Blattes
+   * @param elemente die Folge des Belegs; die Tabelle haengt an, der Rueckruf darf es auch
+   * @param neuesBlatt was auf einem neuen Blatt zuerst entsteht; er hoert dessen Nummer
+   */
+  Positionstabelle(
+      final Satzspiegel ersteSeite,
+      final Satzspiegel folgeseiten,
+      final List<Druckelement> elemente,
+      final IntConsumer neuesBlatt) {
+    this.ersteSeite = ersteSeite;
+    this.folgeseiten = folgeseiten;
     this.elemente = elemente;
     this.neuesBlatt = neuesBlatt;
   }
@@ -104,6 +125,11 @@ final class Positionstabelle {
    */
   int seite() {
     return laufendeSeite;
+  }
+
+  /** Der Satzspiegel der laufenden Seite. */
+  private Satzspiegel spiegel() {
+    return laufendeSeite == 1 ? ersteSeite : folgeseiten;
   }
 
   /**
@@ -127,7 +153,7 @@ final class Positionstabelle {
       final List<String> zeilen = umbrochen(positionstext(positionen.get(stelle)));
       final int reserve = letzte ? SUMMENBLOCK_HOEHE : 0;
       final int benoetigt = zeilen.size() * ZEILENHOEHE + reserve;
-      if (!haeltDieUntergrenze(hoehe - benoetigt, spiegel.tabelleUntergrenze())) {
+      if (!haeltDieUntergrenze(hoehe - benoetigt, spiegel().tabelleUntergrenze())) {
         senkrechte(rahmenOben, hoehe);
         hoehe = seitenwechsel();
         rahmenOben = hoehe;
@@ -156,19 +182,20 @@ final class Positionstabelle {
    * @return die Grundlinie seiner ersten Zeile
    */
   int platzFuer(final int hoehe, final int tiefe) {
-    if (haeltDieUntergrenze(hoehe - tiefe, spiegel.inhaltUntergrenze())) {
+    if (haeltDieUntergrenze(hoehe - tiefe, spiegel().inhaltUntergrenze())) {
       return hoehe;
     }
     return seitenwechsel();
   }
 
   private void spaltenkoepfe(final int grundlinie) {
-    tabellentext(spiegel.links() + INNENABSTAND, grundlinie, Ausrichtung.LINKS, "Anzahl");
-    tabellentext(spiegel.kantePosition() + INNENABSTAND, grundlinie, Ausrichtung.LINKS, "Position");
+    tabellentext(spiegel().links() + INNENABSTAND, grundlinie, Ausrichtung.LINKS, "Anzahl");
     tabellentext(
-        spiegel.kanteEinzelpreis() + INNENABSTAND, grundlinie, Ausrichtung.LINKS, "Einzelpreis");
+        spiegel().kantePosition() + INNENABSTAND, grundlinie, Ausrichtung.LINKS, "Position");
     tabellentext(
-        spiegel.kanteGesamtpreis() + INNENABSTAND, grundlinie, Ausrichtung.LINKS, "Gesamtpreis");
+        spiegel().kanteEinzelpreis() + INNENABSTAND, grundlinie, Ausrichtung.LINKS, "Einzelpreis");
+    tabellentext(
+        spiegel().kanteGesamtpreis() + INNENABSTAND, grundlinie, Ausrichtung.LINKS, "Gesamtpreis");
   }
 
   /**
@@ -180,23 +207,23 @@ final class Positionstabelle {
       final Druckposition position, final List<String> zeilen, final int oben) {
     final int erste = oben - ZEILENHOEHE + GRUNDLINIE;
     tabellentext(
-        spiegel.kantePosition() - INNENABSTAND,
+        spiegel().kantePosition() - INNENABSTAND,
         erste,
         Ausrichtung.RECHTS,
         Belegschreibweisen.zahl(position.anzahl()));
     tabellentext(
-        spiegel.kanteGesamtpreis() - INNENABSTAND,
+        spiegel().kanteGesamtpreis() - INNENABSTAND,
         erste,
         Ausrichtung.RECHTS,
         Belegschreibweisen.betrag(position.einzelpreis()));
     tabellentext(
-        spiegel.rechts() - INNENABSTAND,
+        spiegel().rechts() - INNENABSTAND,
         erste,
         Ausrichtung.RECHTS,
         Belegschreibweisen.betrag(position.gesamtpreis()));
     int grundlinie = erste;
     for (final String zeile : zeilen) {
-      tabellentext(spiegel.kantePosition() + INNENABSTAND, grundlinie, Ausrichtung.LINKS, zeile);
+      tabellentext(spiegel().kantePosition() + INNENABSTAND, grundlinie, Ausrichtung.LINKS, zeile);
       grundlinie -= ZEILENHOEHE;
     }
     return oben - zeilen.size() * ZEILENHOEHE;
@@ -211,12 +238,12 @@ final class Positionstabelle {
       final int oben, final String beschriftung, final BigDecimal wert, final int staerke) {
     final int unten = oben - ZEILENHOEHE;
     tabellentext(
-        spiegel.kanteEinzelpreis() - INNENABSTAND,
+        spiegel().kanteEinzelpreis() - INNENABSTAND,
         unten + GRUNDLINIE,
         Ausrichtung.RECHTS,
         beschriftung);
     tabellentext(
-        spiegel.rechts() - INNENABSTAND,
+        spiegel().rechts() - INNENABSTAND,
         unten + GRUNDLINIE,
         Ausrichtung.RECHTS,
         Belegschreibweisen.betrag(wert));
@@ -235,7 +262,7 @@ final class Positionstabelle {
   private int seitenwechsel() {
     laufendeSeite++;
     neuesBlatt.accept(laufendeSeite);
-    return spiegel.folgeseiteOben();
+    return spiegel().folgeseiteOben();
   }
 
   // --- Setzhilfen ---
@@ -258,16 +285,16 @@ final class Positionstabelle {
     elemente.add(
         new Druckelement.Linie(
             laufendeSeite,
-            spiegel.links(),
+            spiegel().links(),
             hoehe,
-            spiegel.rechts(),
+            spiegel().rechts(),
             hoehe,
             staerke,
             TABELLENFARBE));
   }
 
   private void senkrechte(final int oben, final int unten) {
-    for (final int kante : spiegel.spaltenkanten()) {
+    for (final int kante : spiegel().spaltenkanten()) {
       elemente.add(
           new Druckelement.Linie(laufendeSeite, kante, unten, kante, oben, STRICH, TABELLENFARBE));
     }
@@ -286,7 +313,7 @@ final class Positionstabelle {
 
   /** Bricht den Text auf die Breite der Spalte „Position" um. */
   private List<String> umbrochen(final String text) {
-    final int spalte = spiegel.positionsbreite() - 2 * INNENABSTAND;
+    final int spalte = spiegel().positionsbreite() - 2 * INNENABSTAND;
     final int hoechstens =
         spalte * ZEICHENBREITE_NENNER / (GROESSE_TABELLE * ZEICHENBREITE_ZAEHLER);
     final List<String> zeilen = new ArrayList<>();

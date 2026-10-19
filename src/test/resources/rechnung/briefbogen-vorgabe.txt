@@ -1,0 +1,39 @@
+S1 Text    x=  57 y= 669 LINKS  NORMAL   7 0/0/0          Max Mustermann · Muster Str. 34a · 28197 Bremen
+S1 Text    x=  57 y= 653 LINKS  NORMAL  11 0/0/0          Franz Mustermann GmbH
+S1 Text    x=  57 y= 640 LINKS  NORMAL  11 0/0/0          Muster-Str. 24
+S1 Text    x=  57 y= 617 LINKS  NORMAL  11 0/0/0          28217 Bremen
+S1 Text    x=  57 y= 604 LINKS  NORMAL  11 0/0/0          Deutschland
+S1 Text    x= 538 y= 563 RECHTS NORMAL   9 0/0/0          Bremen, 28.09.2026
+S1 Text    x=  71 y= 509 LINKS  FETT    11 0/0/0          Rechnung 0003-2026
+S1 Text    x=  71 y= 482 LINKS  NORMAL  11 0/0/0          Sehr geehrte Damen und Herren,
+S1 Text    x=  71 y= 458 LINKS  NORMAL  11 0/0/0          Für meine Leistungen im September 2026 stelle ich Ihnen in Rechnung
+S1 Linie   x=  71 y= 426 bis x= 503 y= 426 staerke 1 0/0/0
+S1 Text    x=  75 y= 413 LINKS  NORMAL  10 0/0/0          Anzahl
+S1 Text    x= 140 y= 413 LINKS  NORMAL  10 0/0/0          Position
+S1 Text    x= 375 y= 413 LINKS  NORMAL  10 0/0/0          Einzelpreis
+S1 Text    x= 440 y= 413 LINKS  NORMAL  10 0/0/0          Gesamtpreis
+S1 Linie   x=  71 y= 408 bis x= 503 y= 408 staerke 2 0/0/0
+S1 Text    x= 132 y= 397 RECHTS NORMAL  10 0/0/0          1
+S1 Text    x= 432 y= 397 RECHTS NORMAL  10 0/0/0          120,00 €
+S1 Text    x= 499 y= 397 RECHTS NORMAL  10 0/0/0          120,00 €
+S1 Text    x= 140 y= 397 LINKS  NORMAL  10 0/0/0          Stunden Leistung 1
+S1 Linie   x=  71 y= 392 bis x= 503 y= 392 staerke 2 0/0/0
+S1 Text    x= 367 y= 381 RECHTS NORMAL  10 0/0/0          Gesamtbetrag netto
+S1 Text    x= 499 y= 381 RECHTS NORMAL  10 0/0/0          120,00 €
+S1 Linie   x=  71 y= 376 bis x= 503 y= 376 staerke 1 0/0/0
+S1 Text    x= 367 y= 365 RECHTS NORMAL  10 0/0/0          + 19% Mehrwertsteuer
+S1 Text    x= 499 y= 365 RECHTS NORMAL  10 0/0/0          22,80 €
+S1 Linie   x=  71 y= 360 bis x= 503 y= 360 staerke 2 0/0/0
+S1 Text    x= 367 y= 349 RECHTS NORMAL  10 0/0/0          Gesamtbetrag brutto
+S1 Text    x= 499 y= 349 RECHTS NORMAL  10 0/0/0          142,80 €
+S1 Linie   x=  71 y= 344 bis x= 503 y= 344 staerke 1 0/0/0
+S1 Linie   x=  71 y= 342 bis x= 503 y= 342 staerke 1 0/0/0
+S1 Linie   x=  71 y= 344 bis x=  71 y= 426 staerke 1 0/0/0
+S1 Linie   x= 136 y= 344 bis x= 136 y= 426 staerke 1 0/0/0
+S1 Linie   x= 371 y= 344 bis x= 371 y= 426 staerke 1 0/0/0
+S1 Linie   x= 436 y= 344 bis x= 436 y= 426 staerke 1 0/0/0
+S1 Linie   x= 503 y= 344 bis x= 503 y= 426 staerke 1 0/0/0
+S1 Text    x=  71 y= 302 LINKS  NORMAL  11 0/0/0          Bitte überweisen Sie den Betrag innerhalb von 10 Tagen
+S1 Text    x=  71 y= 260 LINKS  NORMAL  11 0/0/0          Mit freundlichen Grüßen
+S1 Text    x=  71 y= 244 LINKS  NORMAL  11 0/0/0          Max Mustermann
+S1 Text    x=  71 y=  68 LINKS  NORMAL   8 0/0/0          USt-IdNr. DE 01010101010 · Bankverbindung: MLP Bank Heidelberg · IBAN DE00 1234

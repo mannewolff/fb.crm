@@ -1,6 +1,8 @@
 package org.mwolff.fbcrm.rechnung.application;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
@@ -15,8 +17,21 @@ import org.mwolff.fbcrm.rechnung.domain.Belegabsender;
  * <p>Jedes Layout schreibt sie gleich; darum stehen sie an einer Stelle. <b>Was fehlt, hinterlaesst
  * keine Luecke:</b> Eine Zeile aus freiwilligen Angaben besteht nur aus den gefuellten, und ist
  * keine gefuellt, entsteht keine Zeile — {@code null} statt einer Zeile aus Trennern.
+ *
+ * <p>Auch die festen Saetze des Belegs stehen hier — Anrede, Einleitung, Zahlungsziel und Gruss —,
+ * dazu Ort und Datum: Auf dem Briefbogen bleiben sie, wie sie auf der Kupferwolke sind (fachliche
+ * Quelle #361, Geklaerter Stand 10), und ein zweiter Wortlaut wuerde an einer Stelle altern.
  */
 final class Belegschreibweisen {
+
+  /** Die Anrede; sie nennt keine Person, weil der Beleg an die Firma geht. */
+  static final String ANREDE = "Sehr geehrte Damen und Herren,";
+
+  /** Der Gruss; eine Unterschrift steht nicht darunter. */
+  static final String GRUSS = "Mit freundlichen Grüßen";
+
+  /** Das Datum des Belegs: „28.09.2026". */
+  private static final DateTimeFormatter DATUM = DateTimeFormatter.ofPattern("dd.MM.yyyy");
 
   private Belegschreibweisen() {}
 
@@ -100,5 +115,46 @@ final class Belegschreibweisen {
       return mit("USt-IdNr. ", absender.umsatzsteuerId());
     }
     return mit("Steuernummer ", absender.steuernummer());
+  }
+
+  /**
+   * Der Satz, der die Tabelle ankuendigt; mit Leistungszeitraum nennt er ihn.
+   *
+   * @param leistungszeitraum der Zeitraum der Leistung als Text, oder {@code null}
+   * @return der Einleitungssatz
+   */
+  static String einleitungssatz(final @Nullable String leistungszeitraum) {
+    if (leistungszeitraum == null) {
+      return "Für meine Leistungen stelle ich Ihnen in Rechnung";
+    }
+    return "Für meine Leistungen im " + leistungszeitraum + " stelle ich Ihnen in Rechnung";
+  }
+
+  /**
+   * Der Satz ueber das Zahlungsziel.
+   *
+   * @param zahlungszielTage das Zahlungsziel in Tagen; 0 bedeutet sofort faellig
+   * @return der Zahlungssatz
+   */
+  static String zahlungssatz(final int zahlungszielTage) {
+    if (zahlungszielTage == 0) {
+      return "Bitte überweisen Sie den Betrag sofort";
+    }
+    return "Bitte überweisen Sie den Betrag innerhalb von " + zahlungszielTage + " Tagen";
+  }
+
+  /**
+   * Ort und Datum: „Bremen, 28.09.2026"; ohne Ort nur das Datum.
+   *
+   * @param ort der eigene Ort, oder {@code null}
+   * @param datum das Datum des Belegs
+   * @return die Zeile
+   */
+  static String ortUndDatum(final @Nullable String ort, final LocalDate datum) {
+    final String tag = DATUM.format(datum);
+    if (ort == null) {
+      return tag;
+    }
+    return ort + ", " + tag;
   }
 }
