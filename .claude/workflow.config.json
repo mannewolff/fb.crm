@@ -76,7 +76,9 @@
     ],
     "frontend": [
       "frontend/**",
-      "scripts/**"
+      "scripts/**",
+      "docs/**",
+      "README.md"
     ],
     "doku": [
       "**/*.md",
