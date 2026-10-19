@@ -104,6 +104,9 @@ class RechnungNummerIT extends AbstractIntegrationTest {
     jdbc.execute("DELETE FROM rechnung_nummernkreis");
     jdbc.execute("DELETE FROM rechnung_einstellungen");
     jdbc.execute("INSERT INTO rechnung_einstellungen DEFAULT VALUES");
+    // Ohne Briefpapier, wie es diese Klasse erwartet: Andere Klassen hinterlassen den Briefbogen.
+    jdbc.execute("DELETE FROM briefbogen");
+    jdbc.execute("INSERT INTO briefbogen DEFAULT VALUES");
     jdbc.execute("TRUNCATE outbox_message, password_reset_token, account RESTART IDENTITY CASCADE");
     accounts.save(
         new Account(null, MAIL, "Manne", hasher.hash(PASSWORT), Role.ADMIN, 0, ANGELEGT, ANGELEGT));

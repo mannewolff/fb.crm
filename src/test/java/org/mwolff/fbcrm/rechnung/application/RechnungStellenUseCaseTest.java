@@ -7,6 +7,7 @@ import static org.assertj.core.api.Assertions.catchThrowableOfType;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.lenient;
@@ -45,9 +46,14 @@ import org.mwolff.fbcrm.firma.domain.Firma;
 import org.mwolff.fbcrm.firma.domain.FirmaRepository;
 import org.mwolff.fbcrm.rechnung.domain.Belegabsender;
 import org.mwolff.fbcrm.rechnung.domain.Belegempfaenger;
+import org.mwolff.fbcrm.rechnung.domain.Briefbogen;
+import org.mwolff.fbcrm.rechnung.domain.BriefbogenRepository;
+import org.mwolff.fbcrm.rechnung.domain.Briefpapierblatt;
+import org.mwolff.fbcrm.rechnung.domain.Briefpapierspeicher;
 import org.mwolff.fbcrm.rechnung.domain.DokumentSpeicher;
 import org.mwolff.fbcrm.rechnung.domain.Nummernkreis;
 import org.mwolff.fbcrm.rechnung.domain.Nummernmuster;
+import org.mwolff.fbcrm.rechnung.domain.Randmasse;
 import org.mwolff.fbcrm.rechnung.domain.Rechnung;
 import org.mwolff.fbcrm.rechnung.domain.RechnungRepository;
 import org.mwolff.fbcrm.rechnung.domain.Rechnungseinstellungen;
@@ -68,6 +74,11 @@ import org.springframework.dao.DataIntegrityViolationException;
  * <p>Daneben die Abweisungen, die alle <b>vor</b> dem Zug aus dem Nummernkreis liegen, und der
  * Sprung des Angebots auf „abgerechnet", der nur mit gestellten Rechnungen rechnet: Ein Entwurf
  * kann noch geloescht werden, und dann waere das Angebot zu frueh abgerechnet (Manne, 2026-09-30).
+ *
+ * <p>Beim Schritt „Dokument" waehlt der Anwendungsfall den Satz (Plan #363, E3, E7, E18): Mit
+ * hinterlegtem Briefpapier setzt {@link Briefbogenlayout} und das Briefpapier geht als Untergrund
+ * an den Drucker, ohne setzt {@link Rechnungslayout} wie bisher und der Untergrund ist {@code
+ * null}.
  */
 @ExtendWith(MockitoExtension.class)
 class RechnungStellenUseCaseTest {
@@ -81,6 +92,17 @@ class RechnungStellenUseCaseTest {
   private static final String NUMMER = "0001-2026";
   private static final byte[] PDF = "%PDF-1.7 Rechnung".getBytes(UTF_8);
   private static final String SCHLUESSEL = "rechnung/2/beleg.pdf";
+
+  /** Die Raender aus Kriterium 15 in Zehntel-Millimetern. */
+  private static final Randmasse VORGABE = new Randmasse(250, 200, 985, 200, 200, 200);
+
+  private static final Briefbogen OHNE_BRIEFPAPIER = new Briefbogen(null, true, true, VORGABE);
+
+  private static final Briefbogen MIT_BRIEFPAPIER =
+      new Briefbogen(
+          new Briefpapierblatt("briefpapier/kopf.pdf", "kopf.pdf", 4_321L, 1), true, true, VORGABE);
+
+  private static final byte[] BRIEFPAPIER = "%PDF-1.7 Briefpapier".getBytes(UTF_8);
 
   private static final Anschrift LEER = new Anschrift(null, null, null, null);
 
@@ -96,8 +118,11 @@ class RechnungStellenUseCaseTest {
   @Mock private Rechnungsnummern rechnungsnummern;
   @Mock private Belegdrucker drucker;
   @Mock private DokumentSpeicher dokumente;
+  @Mock private BriefbogenRepository briefboegen;
+  @Mock private Briefpapierspeicher briefpapier;
 
   @Captor private ArgumentCaptor<Rechnung> festgeschrieben;
+  @Captor private ArgumentCaptor<List<Druckelement>> gesetzt;
   @Captor private ArgumentCaptor<Angebot> fortgeschrieben;
 
   private RechnungStellenUseCase useCase;
@@ -115,6 +140,8 @@ class RechnungStellenUseCaseTest {
             rechnungsnummern,
             drucker,
             dokumente,
+            briefboegen,
+            briefpapier,
             Clock.fixed(JETZT, ZoneOffset.UTC));
   }
 
@@ -183,6 +210,11 @@ class RechnungStellenUseCaseTest {
   }
 
   private void schreibenUndDruckenGelingen() {
+    schreibenUndDruckenGelingen(OHNE_BRIEFPAPIER);
+  }
+
+  private void schreibenUndDruckenGelingen(final Briefbogen bogen) {
+    when(briefboegen.lies()).thenReturn(bogen);
     when(rechnungen.saveAndFlush(any())).thenAnswer(aufruf -> aufruf.getArgument(0));
     when(rechnungen.save(any())).thenAnswer(aufruf -> aufruf.getArgument(0));
     when(drucker.drucke(any(), any())).thenReturn(PDF);
@@ -196,10 +228,20 @@ class RechnungStellenUseCaseTest {
    * @param danach die Rechnungen, die das Angebot nach dem Festschreiben traegt
    */
   private Rechnung derWegGelingt(final Rechnung entwurf, final List<Rechnung> danach) {
+    return derWegGelingt(entwurf, danach, OHNE_BRIEFPAPIER);
+  }
+
+  /**
+   * Der ganze Weg auf einem bestimmten Briefbogen.
+   *
+   * @param bogen der Briefbogen, wie der Bestand ihn im Augenblick des Drucks liefert
+   */
+  private Rechnung derWegGelingt(
+      final Rechnung entwurf, final List<Rechnung> danach, final Briefbogen bogen) {
     entwurfLiegt(entwurf);
     angabenSind(Rechnungsdoppel.firma(), Rechnungsdoppel.eigeneAngaben());
     nummerWirdGezogen(MUSTER_MIT_JAHR, 1);
-    schreibenUndDruckenGelingen();
+    schreibenUndDruckenGelingen(bogen);
     when(rechnungen.findByAngebot(Rechnungsdoppel.ANGEBOT)).thenReturn(danach);
     return useCase.stelle(ENTWURF);
   }
@@ -518,5 +560,54 @@ class RechnungStellenUseCaseTest {
     assertThat(gestellt.nummer()).isEqualTo(NUMMER);
     verify(angebote, never()).save(any());
     verify(rechnungen, never()).findByAngebot(anyLong());
+  }
+
+  @Test
+  void stelle_thenTheStepsKeepTheirOrder() {
+    // Given / When — Sperre, Nummer, Festschreibung, Dokument, Angebot; die Abweisungen davor
+    // zeigen die Laeufe oben, die den Nummernkreis gar nicht erst beruehren.
+    derWegGelingt(entwurfUeber("160.00"), List.of(gestelltUeber("160.00")));
+
+    // Then — der Briefbogen wird erst im Schritt „Dokument" gelesen, nach der Festschreibung.
+    final InOrder reihenfolge =
+        inOrder(rechnungen, nummernkreis, briefboegen, drucker, dokumente, angebote);
+    reihenfolge.verify(rechnungen).findByIdMitSperre(ENTWURF);
+    reihenfolge.verify(nummernkreis).ziehe(anyInt());
+    reihenfolge.verify(rechnungen).saveAndFlush(any());
+    reihenfolge.verify(briefboegen).lies();
+    reihenfolge.verify(drucker).drucke(any(), any());
+    reihenfolge.verify(dokumente).lege(anyLong(), any());
+    reihenfolge.verify(rechnungen).save(any());
+    reihenfolge.verify(angebote).save(any());
+  }
+
+  @Test
+  void stelle_givenBriefpapier_thenBriefbogenlayoutUndDerUntergrundGehenAnDenDrucker() {
+    // Given — Szenario „Rechnung auf eigenem Briefpapier".
+    when(briefpapier.lies("briefpapier/kopf.pdf")).thenReturn(BRIEFPAPIER);
+
+    // When
+    derWegGelingt(entwurfUeber("80.00"), List.of(gestelltUeber("80.00")), MIT_BRIEFPAPIER);
+
+    // Then — gesetzt auf dem Briefbogen, das Briefpapier Byte fuer Byte als Untergrund.
+    verify(rechnungen).saveAndFlush(festgeschrieben.capture());
+    verify(drucker).drucke(gesetzt.capture(), eq(BRIEFPAPIER));
+    assertThat(gesetzt.getValue())
+        .isEqualTo(
+            Briefbogenlayout.setze(
+                Rechnungsbeleg.druckdaten(festgeschrieben.getValue()), MIT_BRIEFPAPIER));
+  }
+
+  @Test
+  void stelle_givenKeinBriefpapier_thenRechnungslayoutUndNullGehenAnDenDrucker() {
+    // Given / When — Szenario „Ohne Briefpapier": Schalter und Raender wirken nicht.
+    derWegGelingt(entwurfUeber("80.00"), List.of(gestelltUeber("80.00")), OHNE_BRIEFPAPIER);
+
+    // Then — der Satz der Kupferwolke wie bisher, kein Untergrund, kein Griff in den Speicher.
+    verify(rechnungen).saveAndFlush(festgeschrieben.capture());
+    verify(drucker).drucke(gesetzt.capture(), isNull());
+    assertThat(gesetzt.getValue())
+        .isEqualTo(Rechnungslayout.setze(Rechnungsbeleg.druckdaten(festgeschrieben.getValue())));
+    verifyNoInteractions(briefpapier);
   }
 }

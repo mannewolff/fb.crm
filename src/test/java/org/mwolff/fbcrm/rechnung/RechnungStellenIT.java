@@ -1,11 +1,15 @@
 package org.mwolff.fbcrm.rechnung;
 
+import static java.nio.charset.StandardCharsets.ISO_8859_1;
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -15,9 +19,17 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.pdmodel.PDPage;
+import org.apache.pdfbox.pdmodel.PDPageContentStream;
+import org.apache.pdfbox.pdmodel.common.PDRectangle;
+import org.apache.pdfbox.pdmodel.font.PDType1Font;
+import org.apache.pdfbox.pdmodel.font.Standard14Fonts;
 import org.apache.pdfbox.text.PDFTextStripper;
+import org.apache.pdfbox.text.TextPosition;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -30,19 +42,27 @@ import org.mwolff.fbcrm.auth.domain.PasswordHasher;
 import org.mwolff.fbcrm.auth.domain.Role;
 import org.mwolff.fbcrm.common.Geschaeftszone;
 import org.mwolff.fbcrm.config.MinioProperties;
+import org.mwolff.fbcrm.rechnung.application.Belegdrucker;
+import org.mwolff.fbcrm.rechnung.application.Kupferwolkensatz;
 import org.mwolff.fbcrm.rechnung.domain.DokumentSpeicher;
+import org.mwolff.fbcrm.rechnung.domain.Rechnung;
+import org.mwolff.fbcrm.rechnung.domain.RechnungRepository;
 import org.mwolff.fbcrm.rechnung.domain.Rechnungszustand;
 import org.mwolff.fbcrm.rechnung.web.RechnungResponse;
 import org.mwolff.fbcrm.rechnung.web.RechnungseinstellungenResponse;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.web.client.TestRestTemplate;
+import org.springframework.core.io.ByteArrayResource;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.util.LinkedMultiValueMap;
+import org.springframework.util.MultiValueMap;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.ListObjectsV2Request;
 
@@ -61,6 +81,12 @@ import software.amazon.awssdk.services.s3.model.ListObjectsV2Request;
  *
  * <p>Der Nachweis der Zugangsregel steht hier und nicht nur in {@code AccessRuleIT}: Jeder neue
  * Pfad unter {@code /api} ist ohne Sitzung verschlossen.
+ *
+ * <p>Auf welchem Papier der Beleg entsteht, entscheidet der Briefbogen im Augenblick des Stellens
+ * (Plan #363, E3, E7, E18): Mit hinterlegtem Briefpapier liegt es unter dem Satz, ohne entsteht der
+ * Beleg der Kupferwolke wie bisher. Der Briefbogen wird darum vor jeder Methode auf den Stand der
+ * Migration gesetzt — andere Testklassen der geteilten Datenbank hinterlassen ihn mit Schluesseln,
+ * zu denen es kein Objekt gibt.
  */
 class RechnungStellenIT extends AbstractIntegrationTest {
 
@@ -78,6 +104,18 @@ class RechnungStellenIT extends AbstractIntegrationTest {
   private static final String MUSTER = "{NNNN}-{JJJJ}";
   private static final Duration GEDULD = Duration.ofSeconds(30);
 
+  /** Die Aufschrift des hinterlegten Briefpapiers. */
+  private static final String BRIEFKOPF = "Wolff Software-Architektur";
+
+  /** Der untere Rand der ersten Seite nach Kriterium 15: 20 mm in Punkten. */
+  private static final double UNTERER_RAND = 20 / 25.4 * 72;
+
+  /** Eine Farbe im Inhaltsstrom: drei Anteile und der Operator fuer Fuellung oder Strich. */
+  private static final Pattern FARBE = Pattern.compile("(\\S+ \\S+ \\S+) (?:rg|RG)\\n");
+
+  /** Die Kennung im Trailer: PDFBox bildet sie bei jedem Schreiben aus der Uhrzeit. */
+  private static final Pattern KENNUNG = Pattern.compile("/ID \\[<([0-9A-F]+)> <([0-9A-F]+)>\\]");
+
   private final TestRestTemplate rest;
   private final AccountRepository accounts;
   private final PasswordHasher hasher;
@@ -85,6 +123,8 @@ class RechnungStellenIT extends AbstractIntegrationTest {
   private final DokumentSpeicher dokumente;
   private final S3Client s3;
   private final MinioProperties zugang;
+  private final RechnungRepository rechnungen;
+  private final Belegdrucker drucker;
 
   /**
    * Das Rechnungsdatum und damit das Zaehlerjahr der Nummer (Kriterium 16).
@@ -107,7 +147,9 @@ class RechnungStellenIT extends AbstractIntegrationTest {
       final JdbcTemplate jdbc,
       final DokumentSpeicher dokumente,
       final S3Client s3,
-      final MinioProperties zugang) {
+      final MinioProperties zugang,
+      final RechnungRepository rechnungen,
+      final Belegdrucker drucker) {
     this.rest = rest;
     this.accounts = accounts;
     this.hasher = hasher;
@@ -115,6 +157,8 @@ class RechnungStellenIT extends AbstractIntegrationTest {
     this.dokumente = dokumente;
     this.s3 = s3;
     this.zugang = zugang;
+    this.rechnungen = rechnungen;
+    this.drucker = drucker;
   }
 
   @BeforeEach
@@ -125,6 +169,8 @@ class RechnungStellenIT extends AbstractIntegrationTest {
     jdbc.execute("DELETE FROM rechnung_nummernkreis");
     jdbc.execute("DELETE FROM rechnung_einstellungen");
     jdbc.execute("INSERT INTO rechnung_einstellungen DEFAULT VALUES");
+    jdbc.execute("DELETE FROM briefbogen");
+    jdbc.execute("INSERT INTO briefbogen DEFAULT VALUES");
     jdbc.execute("TRUNCATE outbox_message, password_reset_token, account RESTART IDENTITY CASCADE");
     accounts.save(
         new Account(null, MAIL, "Manne", hasher.hash(PASSWORT), Role.ADMIN, 0, ANGELEGT, ANGELEGT));
@@ -361,6 +407,178 @@ class RechnungStellenIT extends AbstractIntegrationTest {
     }
   }
 
+  /** Ein bestelltes Angebot mit drei Positionen ueber Beratung, Konzeption und Umsetzung. */
+  private long bestelltesAngebotMitDreiPositionen() {
+    final long angebotId = bestelltesAngebot("160.00");
+    final long beratung =
+        Objects.requireNonNull(
+            jdbc.queryForObject(
+                "SELECT id FROM angebot_position WHERE angebot_id = ?",
+                Long.class,
+                Long.valueOf(angebotId)));
+    final List<Map<String, Object>> positionen = new ArrayList<>();
+    positionen.add(angebotsposition(beratung, "Beratung", "160.00"));
+    positionen.add(angebotsposition(null, "Konzeption", "40.00"));
+    positionen.add(angebotsposition(null, "Umsetzung", "80.00"));
+    final Map<String, Object> rumpf = new LinkedHashMap<>();
+    rumpf.put("angebotDatum", heute.toString());
+    rumpf.put("titel", "Website-Relaunch");
+    rumpf.put("ansprechpartnerId", null);
+    rumpf.put("beschreibung", "Neugestaltung der Website");
+    rumpf.put("positionen", positionen);
+    ruf("/api/angebote/" + angebotId, HttpMethod.PUT, rumpf, AngebotResponse.class);
+    return angebotId;
+  }
+
+  private static Map<String, Object> angebotsposition(
+      final @Nullable Long positionId, final String bezeichnung, final String menge) {
+    final Map<String, Object> position = new LinkedHashMap<>();
+    position.put("id", positionId);
+    position.put("bezeichnung", bezeichnung);
+    position.put("abrechnungsmodus", "AUFWAND");
+    position.put("menge", menge);
+    position.put("einheit", "STUNDE");
+    position.put("einzelpreis", STUNDENSATZ);
+    return position;
+  }
+
+  /** Ein Entwurf zum Angebot, in dem jede Zeile die angegebene Menge traegt. */
+  private RechnungResponse entwurfUeberAlleZeilen(final long angebotId, final String menge) {
+    final RechnungResponse entwurf =
+        Objects.requireNonNull(
+            ruf(
+                    "/api/angebote/" + angebotId + "/rechnungen",
+                    HttpMethod.POST,
+                    null,
+                    RechnungResponse.class)
+                .getBody());
+    final List<Map<String, Object>> positionen =
+        entwurf.zeilen().stream()
+            .map(
+                zeile -> {
+                  final Map<String, Object> position = new LinkedHashMap<>();
+                  position.put("angebotPositionId", Long.valueOf(zeile.angebotPositionId()));
+                  position.put("bezeichnung", zeile.bezeichnung());
+                  position.put("menge", menge);
+                  return position;
+                })
+            .toList();
+    final Map<String, Object> rumpf = new LinkedHashMap<>();
+    rumpf.put("rechnungDatum", heute.toString());
+    rumpf.put("leistungszeitraum", ZEITRAUM);
+    rumpf.put("positionen", positionen);
+    return Objects.requireNonNull(
+        ruf("/api/rechnungen/" + entwurf.id(), HttpMethod.PUT, rumpf, RechnungResponse.class)
+            .getBody());
+  }
+
+  /** Ein einseitiges Briefpapier in A4 hochkant mit einer blauen Aufschrift oben links. */
+  private static byte[] briefpapier(final String aufschrift) throws IOException {
+    try (PDDocument dokument = new PDDocument()) {
+      final PDPage blatt = new PDPage(PDRectangle.A4);
+      dokument.addPage(blatt);
+      try (PDPageContentStream inhalt = new PDPageContentStream(dokument, blatt)) {
+        inhalt.setNonStrokingColor(0.1f, 0.2f, 0.6f);
+        inhalt.beginText();
+        inhalt.setFont(new PDType1Font(Standard14Fonts.FontName.HELVETICA_BOLD), 16);
+        inhalt.newLineAtOffset(71, 800);
+        inhalt.showText(aufschrift);
+        inhalt.endText();
+      }
+      final ByteArrayOutputStream ausgabe = new ByteArrayOutputStream();
+      dokument.save(ausgabe);
+      return ausgabe.toByteArray();
+    }
+  }
+
+  private void ladeBriefpapierHoch(final byte[] pdf) {
+    final HttpHeaders dateikopf = new HttpHeaders();
+    dateikopf.setContentType(MediaType.APPLICATION_PDF);
+    final MultiValueMap<String, Object> felder = new LinkedMultiValueMap<>();
+    felder.add(
+        "datei",
+        new HttpEntity<>(
+            new ByteArrayResource(pdf) {
+              @Override
+              public String getFilename() {
+                return "briefpapier.pdf";
+              }
+            },
+            dateikopf));
+    final HttpHeaders kopf = new HttpHeaders();
+    kopf.addAll(sitzung);
+    kopf.setContentType(MediaType.MULTIPART_FORM_DATA);
+    final ResponseEntity<String> antwort =
+        rest.exchange(
+            "/api/briefpapier/datei",
+            HttpMethod.POST,
+            new HttpEntity<>(felder, kopf),
+            String.class);
+    assertThat(antwort.getStatusCode()).isEqualTo(HttpStatus.OK);
+  }
+
+  /** Der abgelegte Beleg, Byte fuer Byte. */
+  private byte[] beleg(final long rechnungId) {
+    return dokumente.lies(Objects.requireNonNull(pdfSchluessel(rechnungId), "pdf_schluessel"));
+  }
+
+  /** Der Inhaltsstrom der ersten Seite: alles, was der Drucker eingedruckt hat. */
+  private static String eingedruckt(final byte[] pdf) throws IOException {
+    try (PDDocument dokument = Loader.loadPDF(pdf);
+        InputStream strom = dokument.getPage(0).getContents()) {
+      return new String(strom.readAllBytes(), ISO_8859_1);
+    }
+  }
+
+  /** Jede Farbe, die der Inhaltsstrom setzt, als ihre drei Anteile. */
+  private static List<String> farben(final String strom) {
+    final List<String> farben = new ArrayList<>();
+    final Matcher treffer = FARBE.matcher(strom);
+    while (treffer.find()) {
+      farben.add(treffer.group(1));
+    }
+    return farben;
+  }
+
+  /**
+   * Die Zeilen der ersten Seite mit dem Abstand ihrer Grundlinie von der unteren Blattkante, in
+   * Punkten.
+   */
+  private static Map<String, Float> grundlinien(final byte[] pdf) throws IOException {
+    final Map<String, Float> zeilen = new LinkedHashMap<>();
+    try (PDDocument dokument = Loader.loadPDF(pdf)) {
+      final float hoehe = dokument.getPage(0).getMediaBox().getHeight();
+      final PDFTextStripper leser =
+          new PDFTextStripper() {
+            @Override
+            protected void writeString(final String text, final List<TextPosition> zeichen) {
+              zeilen.put(text, Float.valueOf(hoehe - zeichen.getFirst().getYDirAdj()));
+            }
+          };
+      leser.setStartPage(1);
+      leser.setEndPage(1);
+      leser.getText(dokument);
+    }
+    return zeilen;
+  }
+
+  /**
+   * Der Beleg mit genullter Kennung im Trailer. Die Kennung behaelt ihre Laenge, damit alle
+   * Verweise im Dokument stehen bleiben; verglichen wird jedes andere Byte.
+   */
+  private static byte[] ohneKennung(final byte[] pdf) {
+    final Matcher kennung = KENNUNG.matcher(new String(pdf, ISO_8859_1));
+    final byte[] genullt = pdf.clone();
+    while (kennung.find()) {
+      for (int gruppe = 1; gruppe <= 2; gruppe++) {
+        for (int stelle = kennung.start(gruppe); stelle < kennung.end(gruppe); stelle++) {
+          genullt[stelle] = '0';
+        }
+      }
+    }
+    return genullt;
+  }
+
   /** Zwei wirklich gleichzeitige Stellen-Aufrufe auf denselben Entwurf. */
   private List<HttpStatusCode> zweiMalGleichzeitig(final long rechnungId) throws Exception {
     final CountDownLatch start = new CountDownLatch(1);
@@ -427,6 +645,71 @@ class RechnungStellenIT extends AbstractIntegrationTest {
         .contains("1.520,00 €")
         .contains("9.520,00 €")
         .contains("Bitte überweisen Sie den Betrag innerhalb von 10 Tagen");
+  }
+
+  @Test
+  void stelle_givenBriefpapierUndSteuerBankZeile_thenRechnungAufEigenemBriefpapier()
+      throws IOException {
+    // Given — Szenario „Rechnung auf eigenem Briefpapier": einseitig, A4 hochkant; die Steuer- und
+    // Bankzeile ist nach der Migration eingeschaltet. Allein die Steuernummer, damit sie in der
+    // Zeile steht und nicht die USt-IdNr. (Kriterium 6).
+    eigeneAngabenSetzen(STEUERNUMMER, null, BANKVERBINDUNG);
+    ladeBriefpapierHoch(briefpapier(BRIEFKOPF));
+    final RechnungResponse entwurf =
+        entwurfUeberAlleZeilen(bestelltesAngebotMitDreiPositionen(), "10.00");
+    assertThat(entwurf.zeilen()).hasSize(3);
+
+    // When
+    final byte[] pdf = beleg(gestellt(entwurf.id()).id());
+
+    // Then — das Briefpapier und darauf, was zur Rechnung gehoert.
+    final String text;
+    try (PDDocument dokument = Loader.loadPDF(pdf)) {
+      assertThat(dokument.getNumberOfPages()).isEqualTo(1);
+      text = new PDFTextStripper().getText(dokument);
+    }
+    assertThat(text)
+        .contains(BRIEFKOPF)
+        .contains(FIRMENNAME, "Hauptstrasse 1", "28195 Bremen")
+        .contains("Rechnung " + nummer(1))
+        .contains("Beratung", "Konzeption", "Umsetzung")
+        .contains("Gesamtbetrag netto", "Gesamtbetrag brutto", "3.570,00 €")
+        .contains("Mit freundlichen Grüßen", EIGENER_NAME);
+
+    // Then — Kopf und Fuss der Kupferwolke fehlen: die Berufsbezeichnung des Kopfes, die
+    // Webadresse aus Kopf und Fuss.
+    assertThat(text).doesNotContain("Softwarearchitekt").doesNotContain("https://example.org");
+
+    // Then — alles Eingedruckte ist schwarz, und keine Flaeche: kein Randstreifen.
+    final String strom = eingedruckt(pdf);
+    assertThat(farben(strom)).isNotEmpty().containsOnly("0 0 0");
+    assertThat(strom).doesNotContain(" re\n");
+
+    // Then — die Steuer- und Bankzeile steht ueber dem unteren Rand, unter allem anderen.
+    final Map<String, Float> zeilen = grundlinien(pdf);
+    final String steuerBank =
+        "Steuernummer " + STEUERNUMMER + " · Bankverbindung: " + BANKVERBINDUNG;
+    assertThat(zeilen).containsKey(steuerBank);
+    final float ueberDemBlattrand = zeilen.get(steuerBank).floatValue();
+    assertThat((double) ueberDemBlattrand).isGreaterThan(UNTERER_RAND);
+    zeilen.remove(steuerBank);
+    assertThat(zeilen.values())
+        .allSatisfy(hoehe -> assertThat(hoehe).isGreaterThan(ueberDemBlattrand));
+  }
+
+  @Test
+  void stelle_givenKeinBriefpapier_thenOhneBriefpapierWieHeute() {
+    // Given — Szenario „Ohne Briefpapier": der Briefbogen steht auf dem Stand der Migration.
+    final RechnungResponse entwurf = entwurfUeber(bestelltesAngebot("160.00"), "80.00");
+
+    // When
+    final long rechnungId = gestellt(entwurf.id()).id();
+
+    // Then — Kriterium 11: derselbe Beleg wie der Druck der Kupferwolke ohne Untergrund, Byte fuer
+    // Byte bis auf die Kennung im Trailer, die PDFBox bei jedem Schreiben neu bildet.
+    final Rechnung gestellt = rechnungen.findById(rechnungId).orElseThrow();
+    final byte[] heute = drucker.drucke(Kupferwolkensatz.von(gestellt), null);
+    assertThat(ohneKennung(beleg(rechnungId))).isEqualTo(ohneKennung(heute));
   }
 
   @Test

@@ -6,24 +6,34 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
+import org.apache.pdfbox.pdmodel.PDPageContentStream;
 import org.apache.pdfbox.pdmodel.common.PDRectangle;
+import org.apache.pdfbox.pdmodel.font.PDType1Font;
+import org.apache.pdfbox.pdmodel.font.Standard14Fonts;
+import org.apache.pdfbox.text.PDFTextStripper;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mwolff.fbcrm.AbstractIntegrationTest;
+import org.mwolff.fbcrm.angebot.web.AngebotResponse;
 import org.mwolff.fbcrm.auth.domain.Account;
 import org.mwolff.fbcrm.auth.domain.AccountRepository;
 import org.mwolff.fbcrm.auth.domain.PasswordHasher;
 import org.mwolff.fbcrm.auth.domain.Role;
+import org.mwolff.fbcrm.common.Geschaeftszone;
 import org.mwolff.fbcrm.rechnung.application.BriefpapierNichtAnnehmbar;
 import org.mwolff.fbcrm.rechnung.domain.Briefpapierspeicher;
 import org.mwolff.fbcrm.rechnung.domain.DokumentSpeicherAusfall;
 import org.mwolff.fbcrm.rechnung.web.BriefbogenResponse;
+import org.mwolff.fbcrm.rechnung.web.RechnungResponse;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.core.io.ByteArrayResource;
@@ -49,6 +59,9 @@ import org.springframework.util.MultiValueMap;
  * <p>Nur hier zu sehen: dass ein ersetztes oder entferntes Briefpapier nach dem Commit wirklich aus
  * dem Objektspeicher verschwunden ist und das neue unter einem eigenen Schluessel liegt. Die PDFs
  * entstehen mit PDFBox, damit der echte Pruefer sie annimmt oder abweist.
+ *
+ * <p>Ebenso nur hier: dass ein ausgetauschtes Briefpapier eine schon gestellte Rechnung nicht
+ * beruehrt und erst die naechste traegt (Kriterium 10).
  *
  * <p>Die eine Zeile wird vor jeder Methode auf den Stand der Migration zurueckgesetzt; die
  * Datenbank der Suite ist geteilt.
@@ -304,6 +317,149 @@ class BriefpapierIT extends AbstractIntegrationTest {
   void entfernen_givenOhneBriefpapier_thenAntwortetMit404() {
     // When / Then
     assertThat(entferne(String.class).getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+  }
+
+  // --- gestellte Rechnungen ---------------------------------------------------------------
+
+  private <T> ResponseEntity<T> ruf(
+      final String pfad,
+      final HttpMethod methode,
+      final @Nullable Object rumpf,
+      final Class<T> typ) {
+    return rest.exchange(pfad, methode, new HttpEntity<>(rumpf, sitzung), typ);
+  }
+
+  /** Ein einseitiges Briefpapier in A4 hochkant mit einer Aufschrift oben links. */
+  private static byte[] briefpapier(final String aufschrift) throws IOException {
+    try (PDDocument dokument = new PDDocument()) {
+      final PDPage blatt = new PDPage(PDRectangle.A4);
+      dokument.addPage(blatt);
+      try (PDPageContentStream inhalt = new PDPageContentStream(dokument, blatt)) {
+        inhalt.beginText();
+        inhalt.setFont(new PDType1Font(Standard14Fonts.FontName.HELVETICA_BOLD), 16);
+        inhalt.newLineAtOffset(71, 800);
+        inhalt.showText(aufschrift);
+        inhalt.endText();
+      }
+      final ByteArrayOutputStream ausgabe = new ByteArrayOutputStream();
+      dokument.save(ausgabe);
+      return ausgabe.toByteArray();
+    }
+  }
+
+  /** Leerer Bestand an Belegen, vollstaendige eigene Angaben und eine Firma mit Anschrift. */
+  private void bereiteDasStellenVor() {
+    jdbc.execute(
+        "TRUNCATE rechnung_position, rechnung, angebot_position, angebot, ansprechpartner, firma"
+            + " RESTART IDENTITY CASCADE");
+    jdbc.execute("DELETE FROM rechnung_nummernkreis");
+    jdbc.execute("DELETE FROM rechnung_einstellungen");
+    jdbc.execute("INSERT INTO rechnung_einstellungen DEFAULT VALUES");
+    final Map<String, Object> eigene = new LinkedHashMap<>();
+    eigene.put("name", "Manfred Wolff");
+    eigene.put("strasse", "Am Deich 2");
+    eigene.put("plz", "28199");
+    eigene.put("ort", "Bremen");
+    eigene.put("steuernummer", "75/123/45678");
+    eigene.put("bankverbindung", "DE02 1203 0000 0000 2020 51");
+    ruf("/api/eigene-angaben", HttpMethod.PUT, eigene, Void.class);
+    final Map<String, Object> firma = new LinkedHashMap<>();
+    firma.put("name", "Adler AG");
+    firma.put("strasse", "Hauptstrasse 1");
+    firma.put("plz", "28195");
+    firma.put("ort", "Bremen");
+    ruf("/api/firmen", HttpMethod.POST, firma, String.class);
+  }
+
+  /** Ein bestelltes Angebot ueber 10 Stunden Beratung, vollstaendig abgerechnet und gestellt. */
+  private long stelleEineRechnung() {
+    final long firmaId =
+        Objects.requireNonNull(jdbc.queryForObject("SELECT id FROM firma", Long.class));
+    final long angebotId =
+        Objects.requireNonNull(
+                ruf(
+                        "/api/firmen/" + firmaId + "/angebote",
+                        HttpMethod.POST,
+                        Map.of("titel", "Beratung"),
+                        AngebotResponse.class)
+                    .getBody())
+            .id();
+    final LocalDate heute = LocalDate.now(Geschaeftszone.ZONE);
+    final Map<String, Object> position = new LinkedHashMap<>();
+    position.put("bezeichnung", "Beratung");
+    position.put("abrechnungsmodus", "AUFWAND");
+    position.put("menge", "10.00");
+    position.put("einheit", "STUNDE");
+    position.put("einzelpreis", "100.00");
+    final Map<String, Object> angebot = new LinkedHashMap<>();
+    angebot.put("angebotDatum", heute.toString());
+    angebot.put("titel", "Beratung");
+    angebot.put("positionen", List.of(position));
+    ruf("/api/angebote/" + angebotId, HttpMethod.PUT, angebot, AngebotResponse.class);
+    ruf("/api/angebote/" + angebotId + "/status/weiter", HttpMethod.POST, null, String.class);
+    ruf("/api/angebote/" + angebotId + "/status/weiter", HttpMethod.POST, null, String.class);
+    final RechnungResponse entwurf =
+        Objects.requireNonNull(
+            ruf(
+                    "/api/angebote/" + angebotId + "/rechnungen",
+                    HttpMethod.POST,
+                    null,
+                    RechnungResponse.class)
+                .getBody());
+    final Map<String, Object> zeile = new LinkedHashMap<>();
+    zeile.put("angebotPositionId", Long.valueOf(entwurf.zeilen().getFirst().angebotPositionId()));
+    zeile.put("bezeichnung", "Beratung");
+    zeile.put("menge", "10.00");
+    final Map<String, Object> rechnung = new LinkedHashMap<>();
+    rechnung.put("rechnungDatum", heute.toString());
+    rechnung.put("leistungszeitraum", "Oktober 2026");
+    rechnung.put("positionen", List.of(zeile));
+    ruf("/api/rechnungen/" + entwurf.id(), HttpMethod.PUT, rechnung, RechnungResponse.class);
+    final ResponseEntity<RechnungResponse> gestellt =
+        ruf(
+            "/api/rechnungen/" + entwurf.id() + "/stellen",
+            HttpMethod.POST,
+            null,
+            RechnungResponse.class);
+    assertThat(gestellt.getStatusCode()).isEqualTo(HttpStatus.OK);
+    return entwurf.id();
+  }
+
+  /** Das Dokument der gestellten Rechnung, wie die Schnittstelle es ausliefert. */
+  private byte[] dokument(final long rechnungId) {
+    return Objects.requireNonNull(
+        ruf("/api/rechnungen/" + rechnungId + "/dokument", HttpMethod.GET, null, byte[].class)
+            .getBody());
+  }
+
+  private static String text(final byte[] pdf) throws IOException {
+    try (PDDocument dokument = Loader.loadPDF(pdf)) {
+      return new PDFTextStripper().getText(dokument);
+    }
+  }
+
+  @Test
+  void ladeHoch_givenGestellteRechnung_thenBriefpapierAendernNachGestellterRechnung()
+      throws IOException {
+    // Given — Szenario „Briefpapier aendern nach gestellter Rechnung".
+    bereiteDasStellenVor();
+    ladeHoch("alt.pdf", briefpapier("Altes Briefpapier"), BriefbogenResponse.class);
+    final long gestellte = stelleEineRechnung();
+    final byte[] vorher = dokument(gestellte);
+    assertThat(text(vorher)).contains("Altes Briefpapier");
+
+    // When
+    final ResponseEntity<BriefbogenResponse> antwort =
+        ladeHoch("neu.pdf", briefpapier("Neues Briefpapier"), BriefbogenResponse.class);
+
+    // Then — Kriterium 10: die gestellte Rechnung ist Byte fuer Byte dieselbe.
+    assertThat(antwort.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(dokument(gestellte)).isEqualTo(vorher);
+
+    // Then — erst die naechste Rechnung traegt das neue Briefpapier.
+    assertThat(text(dokument(stelleEineRechnung())))
+        .contains("Neues Briefpapier")
+        .doesNotContain("Altes Briefpapier");
   }
 
   // --- /probedruck -------------------------------------------------------------------------

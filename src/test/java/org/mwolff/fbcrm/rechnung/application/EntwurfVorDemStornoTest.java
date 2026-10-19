@@ -23,9 +23,13 @@ import org.mwolff.fbcrm.angebot.domain.Angebot;
 import org.mwolff.fbcrm.angebot.domain.AngebotRepository;
 import org.mwolff.fbcrm.eigeneangaben.domain.EigeneAngabenRepository;
 import org.mwolff.fbcrm.firma.domain.FirmaRepository;
+import org.mwolff.fbcrm.rechnung.domain.Briefbogen;
+import org.mwolff.fbcrm.rechnung.domain.BriefbogenRepository;
+import org.mwolff.fbcrm.rechnung.domain.Briefpapierspeicher;
 import org.mwolff.fbcrm.rechnung.domain.DokumentSpeicher;
 import org.mwolff.fbcrm.rechnung.domain.Nummernkreis;
 import org.mwolff.fbcrm.rechnung.domain.Nummernmuster;
+import org.mwolff.fbcrm.rechnung.domain.Randmasse;
 import org.mwolff.fbcrm.rechnung.domain.Rechnung;
 import org.mwolff.fbcrm.rechnung.domain.RechnungRepository;
 import org.mwolff.fbcrm.rechnung.domain.Rechnungseinstellungen;
@@ -63,6 +67,8 @@ class EntwurfVorDemStornoTest {
   @Mock private Rechnungsnummern rechnungsnummern;
   @Mock private Belegdrucker drucker;
   @Mock private DokumentSpeicher dokumente;
+  @Mock private BriefbogenRepository briefboegen;
+  @Mock private Briefpapierspeicher briefpapier;
 
   private static Angebot storniertesAngebot() {
     return Rechnungsdoppel.storniert(List.of(Rechnungsdoppel.beratungUeber("8.00")));
@@ -112,6 +118,8 @@ class EntwurfVorDemStornoTest {
     when(nummernkreis.ziehe(anyInt())).thenReturn(1);
     when(rechnungen.saveAndFlush(any())).thenAnswer(aufruf -> aufruf.getArgument(0));
     when(rechnungen.save(any())).thenAnswer(aufruf -> aufruf.getArgument(0));
+    when(briefboegen.lies())
+        .thenReturn(new Briefbogen(null, true, true, new Randmasse(250, 200, 985, 200, 200, 200)));
     when(drucker.drucke(any(), any())).thenReturn(PDF);
     when(dokumente.lege(ENTWURF, PDF)).thenReturn("rechnungen/2.pdf");
 
@@ -127,6 +135,8 @@ class EntwurfVorDemStornoTest {
                 rechnungsnummern,
                 drucker,
                 dokumente,
+                briefboegen,
+                briefpapier,
                 uhr)
             .stelle(ENTWURF);
 
