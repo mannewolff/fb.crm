@@ -68,6 +68,18 @@ final class Satzbild {
               flaeche.breite(),
               flaeche.hoehe(),
               farbe(flaeche.farbe()));
+      case Druckelement.Schraegtext schraeg ->
+          String.format(
+              Locale.ROOT,
+              "S%d Schraeg x=%4d y=%4d winkel %3d %-7s %2d %-14s %s",
+              schraeg.seite(),
+              schraeg.x(),
+              schraeg.y(),
+              schraeg.winkel(),
+              schraeg.schrift(),
+              schraeg.groesse(),
+              farbe(schraeg.farbe()),
+              schraeg.text());
     };
   }
 

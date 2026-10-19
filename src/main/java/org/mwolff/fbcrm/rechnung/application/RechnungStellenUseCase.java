@@ -168,10 +168,13 @@ public class RechnungStellenUseCase {
     }
   }
 
-  /** Das Dokument entsteht aus der festgeschriebenen Rechnung und haengt sich an sie. */
+  /**
+   * Das Dokument entsteht aus der festgeschriebenen Rechnung und haengt sich an sie. Gedruckt wird
+   * noch ohne Untergrund; die Wahl des Briefbogens folgt mit Plan #363.
+   */
   private Rechnung mitDokument(final Rechnung festgeschrieben) {
     final byte[] pdf =
-        drucker.drucke(Rechnungslayout.setze(Rechnungsbeleg.druckdaten(festgeschrieben)));
+        drucker.drucke(Rechnungslayout.setze(Rechnungsbeleg.druckdaten(festgeschrieben)), null);
     return rechnungen.save(
         festgeschrieben.mitDokument(dokumente.lege(festgeschrieben.requireId(), pdf)));
   }

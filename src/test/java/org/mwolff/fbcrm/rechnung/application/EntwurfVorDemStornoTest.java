@@ -112,7 +112,7 @@ class EntwurfVorDemStornoTest {
     when(nummernkreis.ziehe(anyInt())).thenReturn(1);
     when(rechnungen.saveAndFlush(any())).thenAnswer(aufruf -> aufruf.getArgument(0));
     when(rechnungen.save(any())).thenAnswer(aufruf -> aufruf.getArgument(0));
-    when(drucker.drucke(any())).thenReturn(PDF);
+    when(drucker.drucke(any(), any())).thenReturn(PDF);
     when(dokumente.lege(ENTWURF, PDF)).thenReturn("rechnungen/2.pdf");
 
     // When

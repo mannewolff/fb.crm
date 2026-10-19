@@ -7,6 +7,7 @@ import static org.assertj.core.api.Assertions.catchThrowableOfType;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
@@ -184,7 +185,7 @@ class RechnungStellenUseCaseTest {
   private void schreibenUndDruckenGelingen() {
     when(rechnungen.saveAndFlush(any())).thenAnswer(aufruf -> aufruf.getArgument(0));
     when(rechnungen.save(any())).thenAnswer(aufruf -> aufruf.getArgument(0));
-    when(drucker.drucke(any())).thenReturn(PDF);
+    when(drucker.drucke(any(), any())).thenReturn(PDF);
     when(dokumente.lege(ENTWURF, PDF)).thenReturn(SCHLUESSEL);
   }
 
@@ -422,7 +423,7 @@ class RechnungStellenUseCaseTest {
     // Then — scheitert der Druck, ist keine Nummer verbraucht.
     final InOrder reihenfolge = inOrder(rechnungen, drucker, dokumente);
     reihenfolge.verify(rechnungen).saveAndFlush(any());
-    reihenfolge.verify(drucker).drucke(any());
+    reihenfolge.verify(drucker).drucke(any(), isNull());
     reihenfolge.verify(dokumente).lege(anyLong(), any());
     reihenfolge.verify(rechnungen).save(any());
   }
