@@ -6,11 +6,14 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -25,16 +28,21 @@ import org.mwolff.fbcrm.common.web.GlobalExceptionHandler;
 import org.mwolff.fbcrm.rechnung.application.BriefbogenLesenUseCase;
 import org.mwolff.fbcrm.rechnung.application.BriefbogenPflegenUseCase;
 import org.mwolff.fbcrm.rechnung.application.Briefbogenstand;
+import org.mwolff.fbcrm.rechnung.application.BriefpapierNichtAnnehmbar;
+import org.mwolff.fbcrm.rechnung.application.BriefpapierNichtGefunden;
+import org.mwolff.fbcrm.rechnung.application.BriefpapierUseCase;
 import org.mwolff.fbcrm.rechnung.domain.Briefbogen;
 import org.mwolff.fbcrm.rechnung.domain.BriefbogenRepository;
 import org.mwolff.fbcrm.rechnung.domain.Randmasse;
 import org.springframework.http.MediaType;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 /**
- * Die Uebersetzung zwischen Anwendungsfall und HTTP fuer Stand und Pflege des Briefbogens
- * (fachliche Quelle #361, Kriterien 13, 15 und 16; Plan #363, E1 und E9).
+ * Die Uebersetzung zwischen Anwendungsfall und HTTP fuer Stand und Pflege des Briefbogens und fuer
+ * das Hochladen und Entfernen des Briefpapiers (fachliche Quelle #361, Kriterien 1, 2, 13, 15 und
+ * 16; Plan #363, E1, E5 und E9).
  *
  * <p>Wie {@code RechnungseinstellungenControllerTest} ueber eine schlanke MockMvc-Strecke mit dem
  * echten {@link GlobalExceptionHandler}: Hier ist die <b>Form</b> der Antwort die Aussage. Fuer den
@@ -52,15 +60,18 @@ class BriefbogenControllerTest {
 
   private static final Randmasse EINGESTELLT = new Randmasse(300, 150, 1_000, 250, 180, 220);
 
+  private static final byte[] PDF = "%PDF-1.7\n%%EOF\n".getBytes(StandardCharsets.US_ASCII);
+
   @Mock private BriefbogenLesenUseCase lesen;
   @Mock private BriefbogenPflegenUseCase pflegen;
   @Mock private BriefbogenRepository bestand;
+  @Mock private BriefpapierUseCase briefpapier;
 
   private MockMvc mockMvc;
 
   @BeforeEach
   void baueDenController() {
-    mockMvc = strecke(new BriefbogenController(lesen, pflegen));
+    mockMvc = strecke(new BriefbogenController(lesen, pflegen, briefpapier));
   }
 
   private static MockMvc strecke(final BriefbogenController controller) {
@@ -211,7 +222,8 @@ class BriefbogenControllerTest {
             new BriefbogenController(
                 lesen,
                 new BriefbogenPflegenUseCase(
-                    bestand, Clock.fixed(Instant.parse("2026-10-19T09:30:00Z"), ZoneOffset.UTC))));
+                    bestand, Clock.fixed(Instant.parse("2026-10-19T09:30:00Z"), ZoneOffset.UTC)),
+                briefpapier));
 
     // When / Then
     echt.perform(
@@ -225,5 +237,102 @@ class BriefbogenControllerTest {
                     "Bei den übrigen eingestellten Rändern darf dieser Rand höchstens 70,0 mm"
                         + " betragen."));
     verify(bestand, never()).speichere(any(), any());
+  }
+
+  // --- /datei ------------------------------------------------------------------------------
+
+  @Test
+  void hochladen_thenReichtNameUndBytesDesTeilsDateiWeiterUndAntwortetMitDemStand()
+      throws Exception {
+    // Given
+    when(briefpapier.ladeHoch("kopf.pdf", PDF))
+        .thenReturn(new Briefbogenstand(true, "kopf.pdf", 4_321L, 1, false, true, EINGESTELLT));
+
+    // When / Then
+    final String inhalt =
+        mockMvc
+            .perform(
+                multipart(PFAD + "/datei")
+                    .file(new MockMultipartFile("datei", "kopf.pdf", "text/html", PDF)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.briefpapier").value(true))
+            .andExpect(jsonPath("$.dateiname").value("kopf.pdf"))
+            .andExpect(jsonPath("$.groesse").value(4_321))
+            .andExpect(jsonPath("$.seiten").value(1))
+            .andExpect(jsonPath("$.absenderzeile").value(false))
+            .andExpect(jsonPath("$.links").value(300))
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+
+    // Then
+    assertThat(inhalt).doesNotContainIgnoringCase("schluessel");
+  }
+
+  @Test
+  void hochladen_givenOhneDateinamen_thenReichtEinenLeerenWeiter() throws Exception {
+    // Given — die Saeuberung und der Ersatzname gehoeren dem Anwendungsfall.
+    when(briefpapier.ladeHoch("", PDF))
+        .thenReturn(new Briefbogenstand(true, "briefpapier.pdf", 4_321L, 1, true, true, VORGABE));
+
+    // When / Then
+    mockMvc
+        .perform(
+            multipart(PFAD + "/datei")
+                .file(new MockMultipartFile("datei", null, "application/pdf", PDF)))
+        .andExpect(status().isOk());
+    verify(briefpapier).ladeHoch("", PDF);
+  }
+
+  @Test
+  void hochladen_givenOhneTeilDatei_thenAntwortetMit400() throws Exception {
+    // When / Then
+    mockMvc
+        .perform(
+            multipart(PFAD + "/datei")
+                .file(new MockMultipartFile("anderes", "kopf.pdf", "application/pdf", PDF)))
+        .andExpect(status().isBadRequest());
+    verifyNoInteractions(briefpapier);
+  }
+
+  @Test
+  void hochladen_givenEinAbgewiesenesPdf_thenAntwortetMit422AmFeldDatei() throws Exception {
+    // Given — Szenario „Ungeeignetes PDF".
+    when(briefpapier.ladeHoch(any(), any())).thenThrow(BriefpapierNichtAnnehmbar.falschesFormat());
+
+    // When / Then
+    mockMvc
+        .perform(
+            multipart(PFAD + "/datei")
+                .file(new MockMultipartFile("datei", "quer.pdf", "application/pdf", PDF)))
+        .andExpect(status().isUnprocessableEntity())
+        .andExpect(
+            jsonPath("$.fieldErrors.datei[0]").value(BriefpapierNichtAnnehmbar.MELDUNG_FORMAT));
+  }
+
+  @Test
+  void entfernen_thenAntwortetMitDemStandOhneBriefpapier() throws Exception {
+    // Given
+    when(briefpapier.entferne())
+        .thenReturn(new Briefbogenstand(false, null, null, null, false, true, EINGESTELLT));
+
+    // When / Then — Schalter und Raender bleiben (Kriterium 16).
+    mockMvc
+        .perform(delete(PFAD + "/datei"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.briefpapier").value(false))
+        .andExpect(jsonPath("$.dateiname").isEmpty())
+        .andExpect(jsonPath("$.absenderzeile").value(false))
+        .andExpect(jsonPath("$.steuerBankZeile").value(true))
+        .andExpect(jsonPath("$.folgeUnten").value(220));
+  }
+
+  @Test
+  void entfernen_givenOhneHinterlegtesBriefpapier_thenAntwortetMit404() throws Exception {
+    // Given
+    when(briefpapier.entferne()).thenThrow(new BriefpapierNichtGefunden());
+
+    // When / Then
+    mockMvc.perform(delete(PFAD + "/datei")).andExpect(status().isNotFound());
   }
 }
