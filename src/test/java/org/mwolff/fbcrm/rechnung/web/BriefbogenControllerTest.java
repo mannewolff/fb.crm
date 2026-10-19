@@ -10,6 +10,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -31,9 +33,11 @@ import org.mwolff.fbcrm.rechnung.application.Briefbogenstand;
 import org.mwolff.fbcrm.rechnung.application.BriefpapierNichtAnnehmbar;
 import org.mwolff.fbcrm.rechnung.application.BriefpapierNichtGefunden;
 import org.mwolff.fbcrm.rechnung.application.BriefpapierUseCase;
+import org.mwolff.fbcrm.rechnung.application.ProbedruckUseCase;
 import org.mwolff.fbcrm.rechnung.domain.Briefbogen;
 import org.mwolff.fbcrm.rechnung.domain.BriefbogenRepository;
 import org.mwolff.fbcrm.rechnung.domain.Randmasse;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MockMvc;
@@ -41,8 +45,8 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 /**
  * Die Uebersetzung zwischen Anwendungsfall und HTTP fuer Stand und Pflege des Briefbogens und fuer
- * das Hochladen und Entfernen des Briefpapiers (fachliche Quelle #361, Kriterien 1, 2, 13, 15 und
- * 16; Plan #363, E1, E5 und E9).
+ * das Hochladen und Entfernen des Briefpapiers und den Probedruck (fachliche Quelle #361, Kriterien
+ * 1, 2, 9, 13, 15 und 16; Plan #363, E1, E5, E9 und E14).
  *
  * <p>Wie {@code RechnungseinstellungenControllerTest} ueber eine schlanke MockMvc-Strecke mit dem
  * echten {@link GlobalExceptionHandler}: Hier ist die <b>Form</b> der Antwort die Aussage. Fuer den
@@ -66,12 +70,13 @@ class BriefbogenControllerTest {
   @Mock private BriefbogenPflegenUseCase pflegen;
   @Mock private BriefbogenRepository bestand;
   @Mock private BriefpapierUseCase briefpapier;
+  @Mock private ProbedruckUseCase probedruck;
 
   private MockMvc mockMvc;
 
   @BeforeEach
   void baueDenController() {
-    mockMvc = strecke(new BriefbogenController(lesen, pflegen, briefpapier));
+    mockMvc = strecke(new BriefbogenController(lesen, pflegen, briefpapier, probedruck));
   }
 
   private static MockMvc strecke(final BriefbogenController controller) {
@@ -223,7 +228,8 @@ class BriefbogenControllerTest {
                 lesen,
                 new BriefbogenPflegenUseCase(
                     bestand, Clock.fixed(Instant.parse("2026-10-19T09:30:00Z"), ZoneOffset.UTC)),
-                briefpapier));
+                briefpapier,
+                probedruck));
 
     // When / Then
     echt.perform(
@@ -334,5 +340,35 @@ class BriefbogenControllerTest {
 
     // When / Then
     mockMvc.perform(delete(PFAD + "/datei")).andExpect(status().isNotFound());
+  }
+
+  // --- /probedruck -------------------------------------------------------------------------
+
+  @Test
+  void probedruck_thenAntwortetMitDemPdfAlsAnhang() throws Exception {
+    // Given
+    when(probedruck.drucke()).thenReturn(PDF.clone());
+
+    // When / Then — dieselben strengen Kopfzeilen wie beim Dokument einer Rechnung.
+    mockMvc
+        .perform(get(PFAD + "/probedruck"))
+        .andExpect(status().isOk())
+        .andExpect(content().contentType(MediaType.APPLICATION_PDF))
+        .andExpect(content().bytes(PDF.clone()))
+        .andExpect(
+            header()
+                .string(
+                    HttpHeaders.CONTENT_DISPOSITION,
+                    "attachment; filename=\"Probedruck.pdf\"; filename*=UTF-8''Probedruck.pdf"))
+        .andExpect(header().string("Content-Security-Policy", "sandbox"));
+  }
+
+  @Test
+  void probedruck_givenOhneHinterlegtesBriefpapier_thenAntwortetMit404() throws Exception {
+    // Given — Kriterium 9, zweiter Satz.
+    when(probedruck.drucke()).thenThrow(new BriefpapierNichtGefunden());
+
+    // When / Then
+    mockMvc.perform(get(PFAD + "/probedruck")).andExpect(status().isNotFound());
   }
 }

@@ -6,8 +6,10 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.common.PDRectangle;
@@ -36,9 +38,9 @@ import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 
 /**
- * Stand und Pflege des Briefbogens und das Briefpapier selbst ueber HTTP, mit Sitzung und gegen
- * eine echte PostgreSQL- und MinIO-Instanz (fachliche Quelle #361, Kriterien 1, 2, 13, 15 und 16;
- * Plan #363, E1, E4, E6 und E15).
+ * Stand und Pflege des Briefbogens, das Briefpapier selbst und der Probedruck ueber HTTP, mit
+ * Sitzung und gegen eine echte PostgreSQL- und MinIO-Instanz (fachliche Quelle #361, Kriterien 1,
+ * 2, 9, 13, 15 und 16; Plan #363, E1, E4, E6, E14 und E15).
  *
  * <p>Eine frische Instanz liefert die Vorgaben der Migration und beide Schalter an, ohne einen
  * Schluessel des Objektspeichers; ein {@code PUT} steht anschliessend wirklich im Bestand, und ein
@@ -302,5 +304,47 @@ class BriefpapierIT extends AbstractIntegrationTest {
   void entfernen_givenOhneBriefpapier_thenAntwortetMit404() {
     // When / Then
     assertThat(entferne(String.class).getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+  }
+
+  // --- /probedruck -------------------------------------------------------------------------
+
+  private ResponseEntity<byte[]> probedruck() {
+    return rest.exchange(
+        PFAD + "/probedruck", HttpMethod.GET, new HttpEntity<>(sitzung), byte[].class);
+  }
+
+  private long rechnungen() {
+    return Objects.requireNonNull(jdbc.queryForObject("SELECT count(*) FROM rechnung", Long.class));
+  }
+
+  private List<Map<String, Object>> nummernkreis() {
+    return jdbc.queryForList(
+        "SELECT jahr, naechste_nummer FROM rechnung_nummernkreis ORDER BY jahr");
+  }
+
+  @Test
+  void probedruck_thenKeineRechnungUndKeineNummerVerbraucht() throws IOException {
+    // Given — Szenario „Probedruck vor der ersten Rechnung": ein zweiseitiges Briefpapier.
+    ladeHoch("kopf.pdf", pdf(PDRectangle.A4, PDRectangle.A4), BriefbogenResponse.class);
+    final long rechnungenVorher = rechnungen();
+    final List<Map<String, Object>> nummernVorher = nummernkreis();
+
+    // When
+    final ResponseEntity<byte[]> antwort = probedruck();
+
+    // Then — ein PDF mit Folgeseite, und im Bestand hat sich nichts bewegt.
+    assertThat(antwort.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(antwort.getHeaders().getContentType()).isEqualTo(MediaType.APPLICATION_PDF);
+    try (PDDocument dokument = Loader.loadPDF(Objects.requireNonNull(antwort.getBody()))) {
+      assertThat(dokument.getNumberOfPages()).isGreaterThanOrEqualTo(2);
+    }
+    assertThat(rechnungen()).isEqualTo(rechnungenVorher);
+    assertThat(nummernkreis()).isEqualTo(nummernVorher);
+  }
+
+  @Test
+  void probedruck_givenOhneBriefpapier_thenAntwortetMit404() {
+    // When / Then — Kriterium 9, zweiter Satz.
+    assertThat(probedruck().getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
   }
 }
