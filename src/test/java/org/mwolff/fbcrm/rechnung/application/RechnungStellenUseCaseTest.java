@@ -8,6 +8,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -490,5 +491,31 @@ class RechnungStellenUseCaseTest {
 
     // Then
     verify(angebote, never()).save(any());
+  }
+
+  @Test
+  void stelle_theLastRechnungAtAStorniertesAngebot_thenTheAngebotIsNotAbgerechnet() {
+    // Given — die gestellten Rechnungen decken die 160 Stunden, aber das Angebot ist storniert:
+    // Solange es storniert ist, steht die Statuskette still (Plan #332, E2).
+    entwurfLiegt(entwurfUeber("160.00"));
+    when(angebote.findById(Rechnungsdoppel.ANGEBOT))
+        .thenReturn(Optional.of(Rechnungsdoppel.storniert(List.of(Rechnungsdoppel.BERATUNG))));
+    when(firmen.findById(Rechnungsdoppel.FIRMA)).thenReturn(Optional.of(Rechnungsdoppel.firma()));
+    when(eigeneAngaben.lies()).thenReturn(Rechnungsdoppel.eigeneAngaben());
+    nummerWirdGezogen(MUSTER_MIT_JAHR, 1);
+    schreibenUndDruckenGelingen();
+    // lenient: Am stornierten Angebot fragt der Anwendungsfall die gestellten Rechnungen gar nicht
+    // erst ab. Liefe er doch in die Rechnung, faende er nichts offen und wollte abrechnen (#346).
+    lenient()
+        .when(rechnungen.findByAngebot(Rechnungsdoppel.ANGEBOT))
+        .thenReturn(List.of(gestelltUeber("160.00")));
+
+    // When
+    final Rechnung gestellt = useCase.stelle(ENTWURF);
+
+    // Then — gestellt ist sie, nur der Sprung auf „abgerechnet" unterbleibt.
+    assertThat(gestellt.nummer()).isEqualTo(NUMMER);
+    verify(angebote, never()).save(any());
+    verify(rechnungen, never()).findByAngebot(anyLong());
   }
 }

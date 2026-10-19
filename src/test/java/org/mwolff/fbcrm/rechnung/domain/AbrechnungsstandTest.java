@@ -7,8 +7,11 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.Year;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
+import org.mwolff.fbcrm.angebot.domain.Angebot;
 import org.mwolff.fbcrm.angebot.domain.Angebotsposition;
+import org.mwolff.fbcrm.angebot.domain.Angebotsstatus;
 import org.mwolff.fbcrm.common.Abrechnungsmodus;
 import org.mwolff.fbcrm.common.Einheit;
 
@@ -323,5 +326,111 @@ class AbrechnungsstandTest {
     // When / Then — kaufmaennisch aufgerundet, wie jeder Betrag dieses Projekts.
     assertThat(stand.nichtAbgerechneterBetrag(new BigDecimal("2.50")))
         .isEqualByComparingTo("2500.03");
+  }
+
+  /** Ein bestelltes Angebot an einen Kunden mit den uebergebenen Positionen. */
+  private static Angebot bestellt(final List<Angebotsposition> positionen) {
+    return new Angebot(
+        Long.valueOf(ANGEBOT),
+        5L,
+        null,
+        false,
+        Angebotsstatus.BESTELLT,
+        false,
+        null,
+        RECHNUNGSDATUM,
+        "Website-Relaunch",
+        null,
+        positionen,
+        ANGELEGT,
+        ANGELEGT);
+  }
+
+  /** Dasselbe Angebot, aus „bestellt" storniert (#330, Szenario „Rest eines Auftrags"). */
+  private static Angebot storniert(final List<Angebotsposition> positionen) {
+    return bestellt(positionen).storniert("Rest nicht abgerufen", ANGELEGT);
+  }
+
+  @Test
+  void etwasAbrechenbar_atAnAngebotThatIsNotStorniert_thenItIsTheOffeneStand() {
+    // Given — 80 der 160 Stunden gestellt, die Pauschale unberuehrt; erfasst sind nur 3 Stunden.
+    // Am nicht stornierten Angebot zaehlt die offene Menge, nicht die erfasste (Plan #332, E8).
+    final List<Angebotsposition> positionen = List.of(BERATUNG, PAUSCHALE);
+    final Angebot angebot = bestellt(positionen);
+    final Abrechnungsstand stand =
+        Abrechnungsstand.fuer(
+            positionen,
+            List.of(
+                rechnung(1L, Rechnungszustand.GESTELLT, List.of(abrechnung(KONZEPTION, "80.00")))));
+    final Map<Long, BigDecimal> angefallen = Map.of(Long.valueOf(KONZEPTION), new BigDecimal("3"));
+
+    // When / Then
+    assertThat(stand.etwasAbrechenbar(angebot, angefallen)).isEqualTo(stand.etwasOffen()).isTrue();
+    assertThat(stand.abrechenbarerBetrag(angebot, angefallen))
+        .isEqualByComparingTo(stand.offenerBetrag())
+        .isEqualByComparingTo("9200.00");
+    assertThat(ersterStand(stand).abrechenbareMenge(angebot, new BigDecimal("3")))
+        .isEqualByComparingTo("80");
+  }
+
+  @Test
+  void etwasAbrechenbar_atAFullyAbgerechnetesAngebotThatIsNotStorniert_thenFalse() {
+    // Given — alles abgerechnet; mehr erfasste Stunden machen daraus nichts Abrechenbares.
+    final List<Angebotsposition> positionen = List.of(BERATUNG);
+    final Abrechnungsstand stand =
+        Abrechnungsstand.fuer(
+            positionen,
+            List.of(
+                rechnung(
+                    1L, Rechnungszustand.GESTELLT, List.of(abrechnung(KONZEPTION, "160.00")))));
+    final Map<Long, BigDecimal> angefallen =
+        Map.of(Long.valueOf(KONZEPTION), new BigDecimal("170"));
+
+    // When / Then
+    assertThat(stand.etwasAbrechenbar(bestellt(positionen), angefallen)).isFalse();
+    assertThat(stand.abrechenbarerBetrag(bestellt(positionen), angefallen))
+        .isEqualByComparingTo("0.00");
+  }
+
+  @Test
+  void etwasAbrechenbar_atAStorniertesAngebotWithThreeNichtAbgerechneteStunden_thenExactlyThese() {
+    // Given — 8 Stunden angeboten, 3 erfasst, nichts berechnet (#330, Kriterium 7, zweiter Satz).
+    final List<Angebotsposition> positionen = List.of(beratungUeber("8.00"));
+    final Angebot angebot = storniert(positionen);
+    final Abrechnungsstand stand = Abrechnungsstand.fuer(positionen, List.of());
+    final Map<Long, BigDecimal> angefallen = Map.of(Long.valueOf(KONZEPTION), new BigDecimal("3"));
+
+    // When / Then — 3 Stunden zu 100,00 €, und nicht die 8 offenen.
+    assertThat(stand.etwasAbrechenbar(angebot, angefallen)).isTrue();
+    assertThat(stand.abrechenbarerBetrag(angebot, angefallen)).isEqualByComparingTo("300.00");
+    assertThat(ersterStand(stand).abrechenbareMenge(angebot, new BigDecimal("3")))
+        .isEqualByComparingTo("3");
+    assertThat(ersterStand(stand).offen()).isEqualByComparingTo("8");
+  }
+
+  @Test
+  void etwasAbrechenbar_atAStorniertesAngebotWithoutAnEntryForAPosition_thenItCountsAsZero() {
+    // Given — die Auskunft ueber alle Angebote nennt nur Positionen mit Eintrag.
+    final List<Angebotsposition> positionen = List.of(beratungUeber("8.00"));
+    final Abrechnungsstand stand = Abrechnungsstand.fuer(positionen, List.of());
+
+    // When / Then
+    assertThat(stand.etwasAbrechenbar(storniert(positionen), Map.of())).isFalse();
+    assertThat(stand.abrechenbarerBetrag(storniert(positionen), Map.of()))
+        .isEqualByComparingTo("0.00");
+  }
+
+  @Test
+  void etwasAbrechenbar_atAStorniertesAngebotOfFestpreispositionen_thenNothing() {
+    // Given — auf die Pauschale liess sich keine Zeit buchen; offen ist sie ganz (Plan #332, E8).
+    final List<Angebotsposition> positionen = List.of(PAUSCHALE);
+    final Abrechnungsstand stand = Abrechnungsstand.fuer(positionen, List.of());
+    final Map<Long, BigDecimal> angefallen = Map.of(Long.valueOf(SCHULUNG), new BigDecimal("0.00"));
+
+    // When / Then
+    assertThat(stand.etwasAbrechenbar(storniert(positionen), angefallen)).isFalse();
+    assertThat(stand.abrechenbarerBetrag(storniert(positionen), angefallen))
+        .isEqualByComparingTo("0.00");
+    assertThat(stand.etwasOffen()).isTrue();
   }
 }

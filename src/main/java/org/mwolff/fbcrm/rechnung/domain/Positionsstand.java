@@ -1,6 +1,7 @@
 package org.mwolff.fbcrm.rechnung.domain;
 
 import java.math.BigDecimal;
+import org.mwolff.fbcrm.angebot.domain.Angebot;
 import org.mwolff.fbcrm.angebot.domain.Angebotsposition;
 import org.mwolff.fbcrm.common.Geldrechnung;
 
@@ -85,5 +86,24 @@ public record Positionsstand(Angebotsposition position, BigDecimal abgerechnet) 
    */
   public BigDecimal nichtAbgerechneterBetrag(final BigDecimal angefallen) {
     return Geldrechnung.betrag(nichtAbgerechneteStunden(angefallen), position.einzelpreis());
+  }
+
+  /**
+   * Was von dieser Position noch in eine neue Rechnung darf (#330, Kriterium 7; Plan #332, E8).
+   *
+   * <p>Ohne Storno die offene Menge. Am <b>stornierten</b> Angebot die nicht abgerechneten Stunden:
+   * Der Rest, der nicht mehr kommt, ist gestrichen, die bis zum Storno gebuchte Zeit bleibt
+   * abrechenbar. An einer Position, auf die sich keine Zeit buchen laesst, ist das 0 — ein
+   * storniertes Angebot aus Festpreispositionen laesst keine neue Rechnung mehr zu.
+   *
+   * <p>Die Regel steht hier, weil sie je Position rechnet und {@link Abrechnungsstand} sie ueber
+   * die Positionen summiert (E18). Wo sie greift und wo nicht, sagt {@code
+   * rechnung.application.Abrechenbarkeit}.
+   *
+   * @param angebot das Angebot, zu dem die Position gehoert
+   * @param angefallen die zu dieser Position erfassten Stunden
+   */
+  public BigDecimal abrechenbareMenge(final Angebot angebot, final BigDecimal angefallen) {
+    return angebot.storniert() ? nichtAbgerechneteStunden(angefallen) : offen();
   }
 }

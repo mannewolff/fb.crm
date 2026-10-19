@@ -10,13 +10,15 @@ import org.springframework.web.bind.annotation.ResponseStatus;
  * Auf die gewaehlte Position darf keine Arbeitszeit gebucht werden (Issue #193, Antworten 2, 3 und
  * 5; Plan #194, A6, A7; Plan #218, E22).
  *
- * <p>Vier Lagen, zwei Saetze. Am <b>Angebot an einen Kunden</b> sind es drei: Die Position rechnet
- * nicht nach Aufwand ab, sie zaehlt nicht in Stunden, oder ihr Angebot ist noch nicht bestellt
- * beziehungsweise schon abgerechnet — dafuer steht {@link #MELDUNG_EXTERN}. An der <b>internen
- * Arbeit</b> ist es eine: Sie ist abgeschlossen, und dann wird auf keine ihrer Positionen mehr
- * gebucht; dafuer steht {@link #MELDUNG_INTERN}. Zwei Saetze, weil der erste an der internen Arbeit
- * falsch waere: Dort traegt jede Position Stunden ({@link Buchbarkeit}), und der Satz erscheint am
- * Feld der Positionswahl.
+ * <p>Fuenf Lagen, zwei Saetze. Am <b>Angebot an einen Kunden</b> sind es vier: Die Position rechnet
+ * nicht nach Aufwand ab, sie zaehlt nicht in Stunden, ihr Angebot ist noch nicht bestellt
+ * beziehungsweise schon abgerechnet, oder es ist storniert (Plan #332, E16) — dafuer steht {@link
+ * #MELDUNG_EXTERN}. Das Storno steht eigens im Satz, weil ein storniertes Angebot in „bestellt" die
+ * uebrigen drei Bedingungen erfuellt und der Satz ohne es nachweislich falsch waere. An der
+ * <b>internen Arbeit</b> ist es eine: Sie ist abgeschlossen, und dann wird auf keine ihrer
+ * Positionen mehr gebucht; dafuer steht {@link #MELDUNG_INTERN}. Zwei Saetze, weil der erste an der
+ * internen Arbeit falsch waere: Dort traegt jede Position Stunden ({@link Buchbarkeit}), und der
+ * Satz erscheint am Feld der Positionswahl.
  *
  * <p>Die Meldung nennt die Bedingungen ihrer Art, damit der Anwender weiss, wo er suchen muss;
  * welche von ihnen verletzt ist, verraet sie nicht — die Auswahlliste der Maske zeigt ohnehin nur
@@ -40,7 +42,8 @@ public final class PositionNichtBuchbar extends Feldfehler {
   /** Was der Anwender am Angebot an einen Kunden liest — auch bei unbekannter Kennung. */
   public static final String MELDUNG_EXTERN =
       "Auf diese Position kann keine Arbeitszeit gebucht werden: Sie muss nach Aufwand in Stunden"
-          + " abgerechnet werden, und ihr Angebot muss bestellt oder erledigt sein.";
+          + " abgerechnet werden, und ihr Angebot muss bestellt oder erledigt und"
+          + " nicht storniert sein.";
 
   /** Was der Anwender an der internen Arbeit liest — dort traegt jede Position Stunden. */
   public static final String MELDUNG_INTERN =

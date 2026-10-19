@@ -14,7 +14,7 @@ Ergänzend zu [CLAUDE.md](CLAUDE.md), [CLAUDE-security.md](CLAUDE-security.md) u
 - **Datenbank:** PostgreSQL 16 (Testcontainers in Integrationstests). Objektspeicher: MinIO (S3-kompatibel) für Anhänge an Vorgängen und für die archivierten Dokumente (Angebot, Rechnung, Leistungsnachweis).
 - **Schema-Migration:** Flyway (`src/main/resources/db/migration/`, `V<n>__<beschreibung>.sql`).
 - **Paradigma:** Strenges Test-Driven Development (TDD) nach Kent Beck — **Red → Green → Refactor**.
-- **Qualitätsziel:** 100 % Zeilenabdeckung, 100 % Branch-Abdeckung, 100 % Mutationsabdeckung. Keine Ausnahmen ohne dokumentierte Begründung im Code.
+- **Qualitätsziel:** 100 % Zeilenabdeckung, 100 % Branch-Abdeckung, 100 % Mutationsabdeckung. Keine Ausnahmen ohne dokumentierte Begründung im Code. (Begründete Ausnahme für PIT beim Veröffentlichen: §5.1.)
 - **Lokale Build-Umgebung (macOS/Colima):** Die Integrationstests brauchen Docker über Colima. Zwingend: `DOCKER_HOST=unix://$HOME/.colima/default/docker.sock` und `TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE=/var/run/docker.sock` (sonst scheitert der Ryuk-Container am Socket-Mount) sowie `~/.docker-java.properties` mit `api.version=1.44` (docker-java handelt sonst API 1.32 aus, moderne Daemons verlangen ≥ 1.40).
 
 ### 1.1 Versionsstrategie
@@ -107,19 +107,26 @@ Vor dem Markieren einer Aufgabe als „fertig" ist nachzuweisen:
 
 ## 5. Coverage und Mutationstests
 
-### 5.1 Schwellwerte (Build bricht ab bei Unterschreitung)
+### 5.1 Schwellwerte (Build bricht ab bei Unterschreitung; Ausnahme für PIT beim Veröffentlichen, siehe Absatz darunter)
 
 | Metrik                            | Schwellwert |
 |-----------------------------------|-------------|
 | JaCoCo Line Coverage              | **100 %**   |
 | JaCoCo Branch Coverage            | **100 %**   |
-| PIT Mutation Score                | **100 %**   |
+| PIT Mutation Score                | **100 %** (Sperrschwelle 80 % beim Veröffentlichen) |
 | PIT Test Strength                 | **100 %**   |
 
 JaCoCo (`check`) läuft im Default-`mvn verify`. **PIT läuft bewusst im Maven-Profil `-Ppit`**
 (`mvn -Ppit test`), damit der Standard-Build schnell bleibt — das Profil gehört zu den
 Pflichtchecks vor Abschluss (local-check und CI). Eine separate Test-Strength-Schwelle bietet
 pitest-maven nicht; sie wird über `mutationThreshold=100` miterzwungen und im Report geprüft.
+
+**Ausnahme beim Veröffentlichen (fachliche Anforderung Issue #347, Plan Issue #348):** Beim
+Veröffentlichen nach `main` und beim Release nach `production` sperrt die Mutationsquote erst
+unter 80 %. Jeder dabei durchgelassene Überlebende wird zur `[Task]`-Karte mit dem Titel
+„Mutations-Überlebende in <Datei>" im Backlog, und eine solche offene Karte, die länger als
+sieben Tage liegt, sperrt die nächste Veröffentlichung. Ziel und Schwelle des Laufs von Hand
+bleiben bei 100 % (`mutationThreshold=100` in der `pom.xml`).
 
 ### 5.2 Ausschlussregeln (eng gefasst)
 
@@ -155,7 +162,7 @@ mit Fachlogik existiert ein separater `*Test` oder `*IT`, der diese Logik abdeck
 - `STRONGER`-Gruppe aktiviert.
 - Mindestens: `CONDITIONALS_BOUNDARY`, `INCREMENTS`, `INVERT_NEGS`, `MATH`, `NEGATE_CONDITIONALS`, `VOID_METHOD_CALLS`, `EMPTY_RETURNS`, `FALSE_RETURNS`, `TRUE_RETURNS`, `NULL_RETURNS`, `PRIMITIVE_RETURNS`, `REMOVE_CONDITIONALS`. (Das frühere `RETURN_VALS` existiert in aktuellem PIT nicht mehr — es ist in die `*_RETURNS`-Mutatoren aufgeteilt, die alle aktiv sind.)
 - `timeoutFactor=1.5`, `timeoutConst=4000`.
-- Überlebende Mutanten sind **immer** durch zusätzliche Tests zu töten — nie durch Mutator-Deaktivierung umgangen.
+- Überlebende Mutanten sind **immer** durch zusätzliche Tests zu töten — nie durch Mutator-Deaktivierung umgangen. Ein beim Veröffentlichen durchgelassener Überlebender (§5.1) landet dafür als Karte im Backlog.
 
 ### 5.4 Umgang mit nicht erreichbarer Coverage
 
@@ -167,6 +174,9 @@ Wenn 100 % unmöglich erscheinen, lautet die Antwort **nicht** „Schwellwert se
    existiert unter `common/ExcludeFromJacocoGeneratedReport.java` (Retention CLASS; PIT honoriert
    sie über das `FANN`-Feature in der pit-Profil-Konfiguration) und ist methodengenau
    einzusetzen, nie pauschal.
+
+Die 80 % aus §5.1 sind eine Sperrschwelle beim Veröffentlichen, kein gesenktes Ziel — das Verbot
+„Schwellwert senken" bleibt für das Ziel von 100 % in voller Kraft.
 
 ---
 

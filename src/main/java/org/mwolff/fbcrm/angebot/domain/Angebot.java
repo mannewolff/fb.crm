@@ -5,6 +5,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import org.jspecify.annotations.Nullable;
+import org.mwolff.fbcrm.angebot.application.AngebotStorniert;
 import org.mwolff.fbcrm.angebot.application.StatusGrenzeErreicht;
 import org.mwolff.fbcrm.common.Geldrechnung;
 import org.mwolff.fbcrm.common.Identifiable;
@@ -26,6 +27,12 @@ import org.mwolff.fbcrm.common.Identifiable;
  * Angebots, die Beschreibung der mehrzeilige Text daneben. Ein Angebot von vor dieser Aenderung
  * traegt keinen Titel und bleibt trotzdem gueltig (#314, Kriterium 4).
  *
+ * <p><b>Das Storno</b> (Issue #333, Plan #332 E1): Ein abgelehntes Angebot oder ein
+ * zurueckgezogener Auftrag traegt das Kennzeichen {@link #storniert} neben dem Status, und der
+ * Status behaelt den Wert, aus dem storniert wurde — die Ruecknahme fuehrt genau dorthin zurueck
+ * (#330, Kriterium 9). Solange es storniert ist, steht die Statuskette still (E2): {@link
+ * #statusWeiter}, {@link #statusZurueck} und {@link #abgerechnet} werfen {@link AngebotStorniert}.
+ *
  * <p><b>Nichts Gerechnetes wird gespeichert.</b> {@link #summe()} ist die Summe der gerundeten
  * Positionsbetraege (E5).
  *
@@ -38,7 +45,12 @@ import org.mwolff.fbcrm.common.Identifiable;
  * @param firmaId Kennung der Firma, an die das Angebot geht
  * @param ansprechpartnerId Kennung des Ansprechpartners bei dieser Firma, oder {@code null}
  * @param intern ob das Angebot die eigene interne Arbeit festhaelt und nicht an einen Kunden geht
- * @param status wie weit das Angebot gediehen ist
+ * @param status wie weit das Angebot gediehen ist; am stornierten Angebot der Status, aus dem
+ *     storniert wurde
+ * @param storniert ob das Angebot storniert ist — nur aus {@code ANGELEGT}, {@code ABGEGEBEN} oder
+ *     {@code BESTELLT} (E3)
+ * @param stornoGrund warum storniert wurde, hoechstens 2000 Zeichen und ohne Leerraum am Rand, oder
+ *     {@code null} fuer ein Storno ohne Grund und fuer jedes nicht stornierte Angebot (E4)
  * @param angebotDatum Datum des Angebots; beim Anlegen der Tag der Anlage, danach aenderbar
  * @param titel die einzeilige Benennung des Angebots, hoechstens 200 Zeichen und ohne Leerraum am
  *     Rand, oder {@code null} fuer ein Angebot von vor Issue #316
@@ -53,6 +65,8 @@ public record Angebot(
     @Nullable Long ansprechpartnerId,
     boolean intern,
     Angebotsstatus status,
+    boolean storniert,
+    @Nullable String stornoGrund,
     LocalDate angebotDatum,
     @Nullable String titel,
     @Nullable String beschreibung,
@@ -67,6 +81,12 @@ public record Angebot(
   private static final int TITEL_LAENGE = 200;
 
   /**
+   * Die hoechste Laenge des Storno-Grundes in Zeichen (E4) — dieselbe wie die des Kommentars am
+   * Angebot; die Datenbank haelt sie als CHECK {@code angebot_storno_grund_laenge}.
+   */
+  private static final int STORNO_GRUND_LAENGE = 2000;
+
+  /**
    * Nimmt die Positionen als Kopie: Der Aufrufer darf seine Liste danach weiterverwenden.
    *
    * <p><b>Kennzeichen und Status sagen dasselbe</b> (Issue #226, E3): {@code intern} ist genau dann
@@ -78,8 +98,16 @@ public record Angebot(
    * Leerraum am Rand wird vorher abgeschnitten; {@code null} bleibt erlaubt — ein Angebot von vor
    * dem Titel. Die Datenbank haelt die erste Haelfte als CHECK {@code angebot_titel}.
    *
-   * @throws IllegalArgumentException wenn Kennzeichen und Status nicht zueinander passen oder der
-   *     Titel leer oder laenger als 200 Zeichen ist
+   * <p><b>Das Storno passt zum Status, der Grund zum Storno</b> (Issue #333, E3 und E4): Ein
+   * storniertes Angebot steht in {@code ANGELEGT}, {@code ABGEGEBEN} oder {@code BESTELLT}; dass es
+   * damit nicht intern ist, folgt aus der Bindung von {@code intern} an den Status. Ein Grund steht
+   * nur an einem stornierten Angebot, wird wie der Titel am Rand getrimmt und ist danach nicht leer
+   * und hoechstens 2000 Zeichen lang. Die Datenbank haelt dieselben Zusagen als die vier CHECKs aus
+   * {@code V25__angebot_storno.sql}.
+   *
+   * @throws IllegalArgumentException wenn Kennzeichen und Status nicht zueinander passen, der Titel
+   *     leer oder laenger als 200 Zeichen ist, das Storno nicht zum Status oder der Grund nicht zum
+   *     Storno passt oder der Grund leer oder laenger als 2000 Zeichen ist
    */
   public Angebot {
     if (intern != status.intern()) {
@@ -93,7 +121,41 @@ public record Angebot(
             "Titel muss 1 bis " + TITEL_LAENGE + " Zeichen haben, hat " + titel.length());
       }
     }
+    if (storniert && !stornierbar(status)) {
+      throw new IllegalArgumentException("Aus dem Status " + status + " wird nicht storniert");
+    }
+    stornoGrund = gepruefterStornoGrund(storniert, stornoGrund);
     positionen = List.copyOf(positionen);
+  }
+
+  /*
+   * Die Statusmenge, aus der storniert werden darf, als switch und nicht als Set: Der Compiler
+   * verlangt dann fuer einen neuen Status eine Entscheidung, wie Angebotsstatus es begruendet.
+   */
+  private static boolean stornierbar(final Angebotsstatus status) {
+    return switch (status) {
+      case ANGELEGT, ABGEGEBEN, BESTELLT -> true;
+      case ERLEDIGT, ABGERECHNET, LAEUFT, ABGESCHLOSSEN -> false;
+    };
+  }
+
+  private static @Nullable String gepruefterStornoGrund(
+      final boolean storniert, final @Nullable String grund) {
+    if (grund == null) {
+      return null;
+    }
+    if (!storniert) {
+      throw new IllegalArgumentException("Ein Storno-Grund steht nur an einem stornierten Angebot");
+    }
+    final String getrimmt = grund.strip();
+    if (getrimmt.isEmpty() || getrimmt.length() > STORNO_GRUND_LAENGE) {
+      throw new IllegalArgumentException(
+          "Storno-Grund muss 1 bis "
+              + STORNO_GRUND_LAENGE
+              + " Zeichen haben, hat "
+              + getrimmt.length());
+    }
+    return getrimmt;
   }
 
   /** Die Netto-Summe: die Summe der gerundeten Positionsbetraege, Cent fuer Cent (Kriterium 1). */
@@ -127,6 +189,8 @@ public record Angebot(
         neuerAnsprechpartnerId,
         intern,
         status,
+        storniert,
+        stornoGrund,
         neuesDatum,
         neuerTitel,
         neueBeschreibung,
@@ -139,9 +203,11 @@ public record Angebot(
    * Das Angebot eine Stufe weiter (Kriterium 4).
    *
    * @param zeitpunkt Zeitpunkt des Wechsels
+   * @throws AngebotStorniert wenn das Angebot storniert ist (E2)
    * @throws StatusGrenzeErreicht wenn das Angebot schon abgerechnet ist
    */
   public Angebot statusWeiter(final Instant zeitpunkt) {
+    pruefeNichtStorniert();
     return mitStatus(status.weiter().orElseThrow(StatusGrenzeErreicht::new), zeitpunkt);
   }
 
@@ -149,9 +215,11 @@ public record Angebot(
    * Das Angebot eine Stufe zurueck (Kriterium 4).
    *
    * @param zeitpunkt Zeitpunkt des Wechsels
+   * @throws AngebotStorniert wenn das Angebot storniert ist (E2)
    * @throws StatusGrenzeErreicht wenn das Angebot erst angelegt ist
    */
   public Angebot statusZurueck(final Instant zeitpunkt) {
+    pruefeNichtStorniert();
     return mitStatus(status.zurueck().orElseThrow(StatusGrenzeErreicht::new), zeitpunkt);
   }
 
@@ -166,8 +234,11 @@ public record Angebot(
    * Zeitpunkt: Nichts ist geschehen.
    *
    * @param zeitpunkt Zeitpunkt des Wechsels
+   * @throws AngebotStorniert wenn das Angebot storniert ist — der Sprung ueberschriebe den Status,
+   *     in den die Ruecknahme zurueckfuehren muss (E2)
    */
   public Angebot abgerechnet(final Instant zeitpunkt) {
+    pruefeNichtStorniert();
     return status == Angebotsstatus.ABGERECHNET
         ? this
         : mitStatus(Angebotsstatus.ABGERECHNET, zeitpunkt);
@@ -190,6 +261,69 @@ public record Angebot(
         ansprechpartnerId,
         neuIntern,
         status.fuerArt(neuIntern),
+        storniert,
+        stornoGrund,
+        angebotDatum,
+        titel,
+        beschreibung,
+        positionen,
+        createdAt,
+        zeitpunkt);
+  }
+
+  /**
+   * Das Angebot als storniert — der Status bleibt, wie er ist (Issue #333, E1).
+   *
+   * <p>Ob aus diesem Status storniert werden darf, entscheidet der Konstruktor (E3); getrimmt und
+   * geprueft wird auch der Grund dort (E4).
+   *
+   * @param grund warum storniert wird, oder {@code null} fuer ein Storno ohne Grund
+   * @param zeitpunkt Zeitpunkt des Stornos
+   * @throws IllegalArgumentException wenn aus dem Status nicht storniert werden darf oder der Grund
+   *     leer oder laenger als 2000 Zeichen ist
+   */
+  public Angebot storniert(final @Nullable String grund, final Instant zeitpunkt) {
+    return mitStorno(true, grund, zeitpunkt);
+  }
+
+  /**
+   * Das Angebot ohne Storno und ohne dessen Grund — im Status, aus dem storniert wurde (#330,
+   * Kriterium 9).
+   *
+   * @param zeitpunkt Zeitpunkt der Ruecknahme
+   */
+  public Angebot stornoZurueckgenommen(final Instant zeitpunkt) {
+    return mitStorno(false, null, zeitpunkt);
+  }
+
+  /**
+   * Ob sich das Angebot jetzt stornieren laesst (Issue #334): Es ist noch nicht storniert (Plan
+   * #332, E17), und sein Status gehoert zu denen, aus denen storniert wird (E3).
+   *
+   * <p>Der Anwendungsfall fragt damit vor {@link #storniert}, damit ein unzulaessiges Storno als
+   * {@code StornoNichtMoeglich} mit lesbarem Satz abweist und nicht als {@link
+   * IllegalArgumentException} des Konstruktors.
+   */
+  public boolean laesstSichStornieren() {
+    return !storniert && stornierbar(status);
+  }
+
+  private void pruefeNichtStorniert() {
+    if (storniert) {
+      throw new AngebotStorniert();
+    }
+  }
+
+  private Angebot mitStorno(
+      final boolean neuStorniert, final @Nullable String grund, final Instant zeitpunkt) {
+    return new Angebot(
+        id,
+        firmaId,
+        ansprechpartnerId,
+        intern,
+        status,
+        neuStorniert,
+        grund,
         angebotDatum,
         titel,
         beschreibung,
@@ -205,6 +339,8 @@ public record Angebot(
         ansprechpartnerId,
         intern,
         ziel,
+        storniert,
+        stornoGrund,
         angebotDatum,
         titel,
         beschreibung,

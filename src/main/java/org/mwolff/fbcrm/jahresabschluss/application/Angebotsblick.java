@@ -22,8 +22,9 @@ import org.mwolff.fbcrm.common.Geldrechnung;
  * Bedingung, die kein Test kippen kann — und damit ein Loch in der Zweig- und Mutationsabdeckung
  * (CLAUDE-java.md §5).
  *
- * <p>Paket-privat und ohne eigene Testklasse — die Zerlegung ist keine eigene Zusage, geprueft wird
- * sie ueber {@code JahresabschlussUseCaseTest}.
+ * <p>Paket-privat — die Zerlegung ist keine eigene Zusage, geprueft wird sie ueber {@code
+ * JahresabschlussUseCaseTest}; allein das Storno an den Mengen haelt zusaetzlich {@code
+ * AngebotsblickTest} fest (#330, Kriterium 11).
  */
 final class Angebotsblick {
 
@@ -50,9 +51,22 @@ final class Angebotsblick {
     };
   }
 
-  /** Ob ein Angebot heute noch offen ist: allein der Status „abgegeben" (Kriterium 7). */
-  static boolean offen(final Angebotsstatus status) {
-    return switch (status) {
+  /**
+   * Ob ein Angebot heute noch offen ist: allein der Status „abgegeben" (Kriterium 7), und nie ein
+   * storniertes (#330, Kriterium 11).
+   *
+   * <p><b>Nur diese Menge erfaehrt vom Storno</b> (Plan #332, E12) und nimmt darum das Angebot
+   * statt des Status. Fuer {@link #abgegeben} und {@link #angenommen} faellt Kriterium 11 von
+   * selbst zusammen, weil das stornierte Angebot den Status behaelt, aus dem storniert wurde: aus
+   * „angelegt" zaehlt es nicht, aus „abgegeben" als abgegeben und nicht angenommen, aus „bestellt"
+   * als beides. Ein zusaetzliches {@code storniert} dort waere eine Bedingung, die kein Test kippen
+   * kann — dieselbe Ueberlegung wie bei {@code intern} oben.
+   */
+  static boolean offen(final Angebot angebot) {
+    if (angebot.storniert()) {
+      return false;
+    }
+    return switch (angebot.status()) {
       case ABGEGEBEN -> true;
       case ANGELEGT, BESTELLT, ERLEDIGT, ABGERECHNET, LAEUFT, ABGESCHLOSSEN -> false;
     };
@@ -68,8 +82,7 @@ final class Angebotsblick {
   static Angebotsbilanz bilanz(final List<Angebot> abgegeben) {
     final List<Angebot> angenommen =
         abgegeben.stream().filter(angebot -> angenommen(angebot.status())).toList();
-    final List<Angebot> offen =
-        abgegeben.stream().filter(angebot -> offen(angebot.status())).toList();
+    final List<Angebot> offen = abgegeben.stream().filter(Angebotsblick::offen).toList();
     return new Angebotsbilanz(
         abgegeben.size(),
         angenommen.size(),

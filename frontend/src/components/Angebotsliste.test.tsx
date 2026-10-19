@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 
 import Angebotsliste from './Angebotsliste';
 import type { AngebotZeile } from '../api/angebote';
+import { STORNIERT_WORT } from '../lib/angebotsstatus';
 import { renderMitTheme } from '../test/render';
 import { ZAHLEN_KLASSE } from '../theme';
 
@@ -13,6 +14,7 @@ const JUENGER: AngebotZeile = {
   titel: 'Schulung Java',
   status: 'ANGELEGT',
   intern: false,
+  storniert: false,
   summeInCent: 120000,
 };
 
@@ -22,6 +24,7 @@ const AELTER: AngebotZeile = {
   titel: 'Neue Website',
   status: 'BESTELLT',
   intern: false,
+  storniert: false,
   summeInCent: 250003,
 };
 
@@ -31,6 +34,7 @@ const INTERN: AngebotZeile = {
   titel: 'Eigene Werkzeuge',
   status: 'LAEUFT',
   intern: true,
+  storniert: false,
   summeInCent: 0,
 };
 
@@ -41,6 +45,7 @@ const OHNE_TITEL: AngebotZeile = {
   titel: null,
   status: 'ANGELEGT',
   intern: false,
+  storniert: false,
   summeInCent: 50000,
 };
 
@@ -156,6 +161,7 @@ describe('Angebotsliste — der Titel (Issue #319, Kriterien 4, 6, 7)', () => {
       titel: 'Java-Grundkurs',
       status: 'ANGELEGT',
       intern: false,
+      storniert: false,
       summeInCent: 300000,
     };
     const spring: AngebotZeile = { ...java, id: 22, titel: 'Spring-Aufbaukurs', summeInCent: 400000 };
@@ -213,5 +219,22 @@ describe('Angebotsliste — der Titel (Issue #319, Kriterien 4, 6, 7)', () => {
 
     const ohneTitel = zellen(2)[1];
     expect(within(ohneTitel).getByRole('link', { name: '20.09.2026' })).toHaveClass(ZAHLEN_KLASSE);
+  });
+});
+
+describe('Angebotsliste — storniertes Angebot (Plan #332, E13, Kriterium 4)', () => {
+  it('zeigt am stornierten Angebot den Statuschip und daneben den Chip „Storniert"', () => {
+    renderListe([{ ...AELTER, storniert: true }]);
+
+    const zeile = within(screen.getAllByRole('row')[1]);
+    expect(zeile.getByText('Bestellt')).toBeInTheDocument();
+    expect(zeile.getByText(STORNIERT_WORT)).toBeInTheDocument();
+  });
+
+  it('zeigt am nicht stornierten Angebot keinen Chip „Storniert"', () => {
+    renderListe([{ ...AELTER, storniert: true }, JUENGER]);
+
+    expect(within(screen.getAllByRole('row')[1]).getByText(STORNIERT_WORT)).toBeInTheDocument();
+    expect(within(screen.getAllByRole('row')[2]).queryByText(STORNIERT_WORT)).not.toBeInTheDocument();
   });
 });

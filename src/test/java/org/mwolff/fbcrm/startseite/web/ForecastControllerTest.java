@@ -79,6 +79,8 @@ class ForecastControllerTest {
                 null,
                 false,
                 Angebotsstatus.ANGELEGT,
+                false,
+                null,
                 ANGEBOTSDATUM,
                 titel,
                 "Schulungen 2027",

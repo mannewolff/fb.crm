@@ -179,8 +179,16 @@ public class RechnungStellenUseCase {
   /*
    * Gerechnet wird allein mit den gestellten Rechnungen des Angebots: Ein Entwurf, der den Rest
    * schon traegt, kann noch geloescht werden, und das Angebot waere zu frueh abgerechnet.
+   *
+   * Am stornierten Angebot unterbleibt der Sprung (Plan #332, E2): Solange es storniert ist, steht
+   * die Statuskette still, und die Ruecknahme des Stornos fuehrt in den Status, aus dem storniert
+   * wurde (#330, Kriterium 9). Eine Mengenpruefung gegen das Angebot gibt es beim Stellen weiterhin
+   * nicht (E8) — ein vor dem Storno angelegter Entwurf wird gestellt, wie er ist.
    */
   private void schliesseAngebotAbWennNichtsOffenIst(final Angebot angebot) {
+    if (angebot.storniert()) {
+      return;
+    }
     final List<Rechnung> gestellte =
         rechnungen.findByAngebot(angebot.requireId()).stream()
             .filter(rechnung -> rechnung.zustand().istGestellt())

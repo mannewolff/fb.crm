@@ -24,6 +24,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mwolff.fbcrm.angebot.application.AngebotMitFirma;
 import org.mwolff.fbcrm.angebot.application.AngeboteUebersichtUseCase;
+import org.mwolff.fbcrm.angebot.application.Angebotsauswahl;
 import org.mwolff.fbcrm.angebot.domain.Angebot;
 import org.mwolff.fbcrm.angebot.domain.Angebotsposition;
 import org.mwolff.fbcrm.angebot.domain.Angebotsstatus;
@@ -271,6 +272,21 @@ class StartseiteUseCaseTest {
       final Angebotsstatus status,
       final List<Angebotsposition> positionen,
       final String firmaName) {
+    return angebot(id, status, false, positionen, firmaName);
+  }
+
+  /* Ein storniertes Angebot: Der Status bleibt der, aus dem storniert wurde (#330, Kriterium 9). */
+  private static AngebotMitFirma storniert(
+      final long id, final Angebotsstatus status, final List<Angebotsposition> positionen) {
+    return angebot(id, status, true, positionen, ADLER);
+  }
+
+  private static AngebotMitFirma angebot(
+      final long id,
+      final Angebotsstatus status,
+      final boolean storniert,
+      final List<Angebotsposition> positionen,
+      final String firmaName) {
     return new AngebotMitFirma(
         new Angebot(
             Long.valueOf(id),
@@ -278,6 +294,8 @@ class StartseiteUseCaseTest {
             null,
             status.intern(),
             status,
+            storniert,
+            null,
             ANGEBOTSDATUM,
             "Website-Relaunch",
             "Neugestaltung der Website",
@@ -293,7 +311,7 @@ class StartseiteUseCaseTest {
       final Map<Long, BigDecimal> angefallen,
       final Map<Long, BigDecimal> imMonat,
       final Map<Long, BigDecimal> gestellteMengen) {
-    when(uebersicht.angebote(Optional.empty())).thenReturn(angebote);
+    when(uebersicht.angebote(Angebotsauswahl.alle())).thenReturn(angebote);
     when(arbeitszeit.alleAngefallen()).thenReturn(angefallen);
     when(arbeitszeit.alleImZeitraum(OKTOBER.atDay(1), OKTOBER.atEndOfMonth())).thenReturn(imMonat);
     when(rechnungen.gestellte())
@@ -321,6 +339,50 @@ class StartseiteUseCaseTest {
     assertThat(stand.inArbeit())
         .extracting(zeile -> zeile.angebot().requireId())
         .containsExactly(2L, 4L);
+  }
+
+  @Test
+  void stand_withAStorniertesAngebot_thenItIsMissingFromInArbeit() {
+    // Given — #330, Kriterium 3: ein aus „bestellt" storniertes Angebot neben einem bestellten.
+    gegebenImOktober(
+        List.of(
+            storniert(1L, Angebotsstatus.BESTELLT, List.of()),
+            angebot(2L, Angebotsstatus.BESTELLT, List.of())),
+        Map.of(),
+        Map.of(),
+        Map.of());
+
+    // When
+    final Startseitenstand stand = useCase.stand(IM_OKTOBER);
+
+    // Then
+    assertThat(stand.inArbeit())
+        .extracting(zeile -> zeile.angebot().requireId())
+        .containsExactly(2L);
+  }
+
+  @Test
+  void
+      stand_withAStorniertesAngebotWithGebuchtenUnberechnetenStunden_thenNichtAbgerechnetKeepsThem() {
+    // Given — #330, Kriterium 8 (Plan #332, E11): bestellt ueber 8 Stunden zu 100,00 €, 3 davon
+    // gebucht und nicht berechnet, dann mit „Rest nicht abgerufen" storniert. Das Storno wirkt hier
+    // ausdruecklich nicht.
+    final Angebotsposition rest = stunden(301L, "8.00", "100.00");
+    gegebenImOktober(
+        List.of(storniert(1L, Angebotsstatus.BESTELLT, List.of(rest))),
+        Map.of(301L, new BigDecimal("3.00")),
+        Map.of(301L, new BigDecimal("3.00")),
+        Map.of());
+
+    // When
+    final Startseitenstand stand = useCase.stand(IM_OKTOBER);
+
+    // Then — genau die 3 Stunden, im Hauptbetrag wie in der Zeile des Zeitraums.
+    assertThat(stand.nichtAbgerechnet().betrag()).isEqualByComparingTo("300.00");
+    assertThat(stand.nichtAbgerechnet().erfasstImZeitraum()).isEqualByComparingTo("300.00");
+    assertThat(stand.nichtAbgerechnet().anteile())
+        .extracting(anteil -> anteil.angebot().angebot().requireId(), Angebotsanteil::betrag)
+        .containsExactly(tuple(1L, new BigDecimal("300.00")));
   }
 
   @Test
@@ -376,7 +438,7 @@ class StartseiteUseCaseTest {
   void stand_thenOnlyGestellteMengenLowerTheBetrag() {
     // Given — zweimal dieselbe Lage: erst ohne gestellte Menge (ein Entwurf ueber die vollen
     // 20 Stunden steht in der Auskunft nicht), dann mit der gestellten Rechnung darueber.
-    when(uebersicht.angebote(Optional.empty()))
+    when(uebersicht.angebote(Angebotsauswahl.alle()))
         .thenReturn(List.of(angebot(1L, Angebotsstatus.BESTELLT, List.of(BERATUNG))));
     when(arbeitszeit.alleAngefallen()).thenReturn(Map.of(BERATUNG_ID, new BigDecimal("20.00")));
     when(arbeitszeit.alleImZeitraum(OKTOBER.atDay(1), OKTOBER.atEndOfMonth())).thenReturn(Map.of());
@@ -485,7 +547,7 @@ class StartseiteUseCaseTest {
 
   /** Stellt die vier Auskuenfte fuer Oktober und August auf demselben Bestand bereit. */
   private void gegebenZweiMonate() {
-    when(uebersicht.angebote(Optional.empty()))
+    when(uebersicht.angebote(Angebotsauswahl.alle()))
         .thenReturn(List.of(angebot(1L, Angebotsstatus.BESTELLT, List.of(BERATUNG))));
     when(arbeitszeit.alleAngefallen()).thenReturn(Map.of(BERATUNG_ID, new BigDecimal("12.00")));
     when(arbeitszeit.alleImZeitraum(OKTOBER.atDay(1), OKTOBER.atEndOfMonth()))
@@ -536,7 +598,7 @@ class StartseiteUseCaseTest {
   @Test
   void stand_withASelectableMonat_thenThatMonatAnswers() {
     // Given — gefragt wird allein der August; er traegt eine Rechnung und steht darum zur Wahl.
-    when(uebersicht.angebote(Optional.empty())).thenReturn(List.of());
+    when(uebersicht.angebote(Angebotsauswahl.alle())).thenReturn(List.of());
     when(arbeitszeit.alleAngefallen()).thenReturn(Map.of());
     when(arbeitszeit.alleImZeitraum(AUGUST.atDay(1), AUGUST.atEndOfMonth())).thenReturn(Map.of());
     when(rechnungen.gestellte())
@@ -567,7 +629,7 @@ class StartseiteUseCaseTest {
   /** Stellt einen leeren Bestand bereit, dessen einzige Vorgaenge die genannten Monate sind. */
   private void gegebenVorgaenge(
       final Map<YearMonth, Monatsabrechnung> jeMonat, final Set<YearMonth> mitArbeitszeit) {
-    when(uebersicht.angebote(Optional.empty())).thenReturn(List.of());
+    when(uebersicht.angebote(Angebotsauswahl.alle())).thenReturn(List.of());
     when(arbeitszeit.alleAngefallen()).thenReturn(Map.of());
     when(arbeitszeit.monateMitEintragImZeitraum(ANFANG_LETZTES_JAHR, ENDE_DIESES_JAHR))
         .thenReturn(mitArbeitszeit);
@@ -806,7 +868,7 @@ class StartseiteUseCaseTest {
   @Test
   void stand_withTheJahr_thenTheErfassteZeitAndTheInternenStundenOfTheJahrCount() {
     // Given — die Stunden des ganzen Jahres, an einer Kunden- und einer internen Position.
-    when(uebersicht.angebote(Optional.empty()))
+    when(uebersicht.angebote(Angebotsauswahl.alle()))
         .thenReturn(
             List.of(
                 angebot(1L, Angebotsstatus.LAEUFT, List.of(EIGENE)),
@@ -829,7 +891,7 @@ class StartseiteUseCaseTest {
   @Test
   void stand_withTheJahr_thenInArbeitAndTheHauptbetragStayAsWithTheMonat() {
     // Given — derselbe Bestand, einmal mit Monats-, einmal mit Jahreswahl (#273, Kriterium 6).
-    when(uebersicht.angebote(Optional.empty()))
+    when(uebersicht.angebote(Angebotsauswahl.alle()))
         .thenReturn(
             List.of(
                 angebot(1L, Angebotsstatus.BESTELLT, List.of(BERATUNG)),
@@ -865,7 +927,7 @@ class StartseiteUseCaseTest {
   @Test
   void stand_withAnEmptyBestand_thenEveryKennzahlIsZeroAndEveryListEmpty() {
     // Given
-    when(uebersicht.angebote(Optional.empty())).thenReturn(List.of());
+    when(uebersicht.angebote(Angebotsauswahl.alle())).thenReturn(List.of());
     when(arbeitszeit.alleAngefallen()).thenReturn(Map.of());
     when(arbeitszeit.alleImZeitraum(OKTOBER.atDay(1), OKTOBER.atEndOfMonth())).thenReturn(Map.of());
     when(rechnungen.gestellte()).thenReturn(new Gestellte(Map.of(), Map.of(), List.of()));
@@ -1026,7 +1088,7 @@ class StartseiteUseCaseTest {
   void stand_withTheJahr_thenAnOffeneRechnungOfTheVorjahrStandsThereToo() {
     // Given — das laufende Jahr ist gewaehlt; die eine offene Rechnung stammt aus dem letzten
     // (Issue #285, Kriterium 2). Waere die Liste nach Zeitraum beschnitten, fehlte sie hier.
-    when(uebersicht.angebote(Optional.empty())).thenReturn(List.of());
+    when(uebersicht.angebote(Angebotsauswahl.alle())).thenReturn(List.of());
     when(arbeitszeit.alleAngefallen()).thenReturn(Map.of());
     when(rechnungen.gestellte())
         .thenReturn(new Gestellte(Map.of(), Map.of(), List.of(OFFENE_AUS_DEM_VORJAHR)));
@@ -1046,7 +1108,7 @@ class StartseiteUseCaseTest {
   @Test
   void stand_withoutAnyOffeneRechnung_thenZeroAndAnEmptyList() {
     // Given — nichts offen: Die Kachel behaelt ihre Gestalt und zeigt 0,00 (Issue #285).
-    when(uebersicht.angebote(Optional.empty())).thenReturn(List.of());
+    when(uebersicht.angebote(Angebotsauswahl.alle())).thenReturn(List.of());
     when(arbeitszeit.alleAngefallen()).thenReturn(Map.of());
     when(arbeitszeit.alleImZeitraum(OKTOBER.atDay(1), OKTOBER.atEndOfMonth())).thenReturn(Map.of());
     when(rechnungen.gestellte()).thenReturn(new Gestellte(Map.of(), Map.of(), List.of()));

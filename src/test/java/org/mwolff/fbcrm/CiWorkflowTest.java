@@ -13,6 +13,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import org.assertj.core.api.InstanceOfAssertFactories;
 import org.junit.jupiter.api.Test;
 import org.yaml.snakeyaml.LoaderOptions;
 import org.yaml.snakeyaml.Yaml;
@@ -71,6 +72,17 @@ class CiWorkflowTest {
   }
 
   /**
+   * Ein Job als Abbildung.
+   *
+   * <p>Ungepruefter Cast aus demselben Grund wie bei {@link #workflow()}: Jeder Job ist in einem
+   * gueltigen Workflow eine Abbildung mit Zeichenketten als Schluessel.
+   */
+  @SuppressWarnings("unchecked")
+  private static Map<String, Object> job(final String name) throws IOException {
+    return (Map<String, Object>) jobs().get(name);
+  }
+
+  /**
    * Die Schritte eines Jobs.
    *
    * <p>Ungepruefter Cast aus demselben Grund wie bei {@link #workflow()}: {@code steps} ist in
@@ -78,7 +90,33 @@ class CiWorkflowTest {
    */
   @SuppressWarnings("unchecked")
   private static List<Map<String, Object>> schritte(final String job) throws IOException {
-    return (List<Map<String, Object>>) ((Map<String, Object>) jobs().get(job)).get("steps");
+    return (List<Map<String, Object>>) job(job).get("steps");
+  }
+
+  /** Die Positionen der Schritte eines Jobs, die die genannte {@code id} tragen. */
+  private static List<Integer> positionen(final String job, final String id) throws IOException {
+    final List<Integer> treffer = new ArrayList<>();
+    final List<Map<String, Object>> alle = schritte(job);
+    for (int i = 0; i < alle.size(); i++) {
+      if (id.equals(alle.get(i).get("id"))) {
+        treffer.add(i);
+      }
+    }
+    return treffer;
+  }
+
+  /** Der einzige Schritt eines Jobs mit der genannten {@code id}. */
+  private static Map<String, Object> schritt(final String job, final String id) throws IOException {
+    final List<Integer> treffer = positionen(job, id);
+    assertThat(treffer).as("Job %s traegt genau einen Schritt %s", job, id).hasSize(1);
+    return schritte(job).get(treffer.getFirst());
+  }
+
+  /** Die Schluessel des {@code env}-Felds eines Jobs oder Schritts; leer ohne {@code env}. */
+  @SuppressWarnings("unchecked")
+  private static List<String> envSchluessel(final Map<String, Object> traeger) {
+    final Object env = traeger.get("env");
+    return env == null ? List.of() : new ArrayList<>(((Map<String, Object>) env).keySet());
   }
 
   /** Die Kommandos der Gate-Schritte eines Jobs, in ihrer Reihenfolge. */
@@ -160,9 +198,10 @@ class CiWorkflowTest {
   }
 
   @Test
-  void workflow_givenTheFile_thenHasExactlyTheThreeJobs() throws IOException {
+  void workflow_givenTheFile_thenHasExactlyTheFourJobs() throws IOException {
     // When / Then
-    assertThat(jobs().keySet()).containsExactlyInAnyOrder("verify", "pit", "frontend");
+    assertThat(jobs().keySet())
+        .containsExactlyInAnyOrder("verify", "pit", "frontend", "mutationskarten");
   }
 
   @Test
@@ -242,5 +281,85 @@ class CiWorkflowTest {
     // When / Then — der Workflow braucht nur Lesezugriff; ein Token mit mehr Rechten waere
     // Angriffsflaeche.
     assertThat(abschnitt("permissions")).containsOnly(Map.entry("contents", "read"));
+  }
+
+  @Test
+  void pit_givenTheShorterJobs_thenRunsOnlyAfterThem() throws IOException {
+    // When / Then — ein Stand, der wegen eines roten kuerzeren Jobs nicht hinausgeht, startet
+    // keine Liegezeit (Plan #348, E20).
+    assertThat(job("pit").get("needs"))
+        .asInstanceOf(InstanceOfAssertFactories.LIST)
+        .containsExactlyInAnyOrder("verify", "frontend");
+  }
+
+  @Test
+  void pit_givenAPushRun_thenTheMutationCommandDoesNotDecideByItsExitCode() throws IOException {
+    // When / Then — die Schwelle 100 bleibt im Kommando, entschieden wird am Bericht (E3, E17)
+    assertThat(schritt("pit", "gate-pit"))
+        .containsEntry("continue-on-error", "${{ github.event_name == 'push' }}");
+  }
+
+  @Test
+  void pit_givenAPushRun_thenTheQuotaStepFollowsTheMutationCommandWithoutToken()
+      throws IOException {
+    // Given
+    final int gate = positionen("pit", "gate-pit").getFirst();
+
+    // When
+    final Map<String, Object> quote = schritt("pit", "mutationsquote");
+
+    // Then — auf jedem push-Lauf, ohne Board und ohne Geheimnis (E2, E15)
+    assertThat(positionen("pit", "mutationsquote").getFirst()).isGreaterThan(gate);
+    assertThat(String.valueOf(quote.get("if"))).contains("github.event_name == 'push'");
+    assertThat(quote).doesNotContainKey("env");
+  }
+
+  @Test
+  void mutationskarten_givenTheConfig_thenRunsOnlyOnPushToTheCheckBranch() throws IOException {
+    // Given
+    final String zweig = config().get("pushPruefung").get("zweig").asText();
+
+    // When
+    final Map<String, Object> karten = job("mutationskarten");
+
+    // Then — die Umgebung mit dem Board-Zugang ist auf den Pruefzweig begrenzt (E2, E21)
+    assertThat(zweig).isNotBlank();
+    assertThat(karten.get("needs"))
+        .asInstanceOf(InstanceOfAssertFactories.LIST)
+        .containsExactly("pit");
+    assertThat(karten).containsEntry("environment", "board-schreiben");
+    assertThat(String.valueOf(karten.get("if")))
+        .contains("github.event_name == 'push'")
+        .contains("'" + zweig + "'");
+  }
+
+  @Test
+  void mutationskarten_givenTheBoardStep_thenItCarriesTheTokenAsItsOnlyEnv() throws IOException {
+    // When / Then — das Token steht allein am schreibenden Schritt (E15)
+    assertThat(envSchluessel(schritt("mutationskarten", "mutationskarten")))
+        .containsExactly("TBX_TOKEN");
+    assertThat(job("mutationskarten")).doesNotContainKey("env");
+  }
+
+  @Test
+  void workflow_givenEveryOtherJobAndStep_thenNoneCarriesTheTokenOrAnEnvironment()
+      throws IOException {
+    // When / Then — der eine erlaubte Traeger ist der Schritt mutationskarten im gleichnamigen Job
+    assertThat(workflow()).doesNotContainKeys("env", "environment");
+    for (final String name : jobs().keySet()) {
+      assertThat(envSchluessel(job(name))).as("env am Job %s", name).doesNotContain("TBX_TOKEN");
+      if (!"mutationskarten".equals(name)) {
+        assertThat(job(name)).as("Job %s", name).doesNotContainKey("environment");
+      }
+      for (final Map<String, Object> schritt : schritte(name)) {
+        final boolean erlaubt =
+            "mutationskarten".equals(name) && "mutationskarten".equals(schritt.get("id"));
+        if (!erlaubt) {
+          assertThat(envSchluessel(schritt))
+              .as("env eines Schritts in %s", name)
+              .doesNotContain("TBX_TOKEN");
+        }
+      }
+    }
   }
 }

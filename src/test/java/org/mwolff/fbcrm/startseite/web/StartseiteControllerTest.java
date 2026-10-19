@@ -127,6 +127,8 @@ class StartseiteControllerTest {
             null,
             status.intern(),
             status,
+            false,
+            null,
             ANGEBOTSDATUM,
             titel,
             "Neugestaltung der Website",

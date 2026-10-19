@@ -33,6 +33,8 @@ const ANGEBOT = {
   titel: 'Relaunch',
   beschreibung: 'Neue Website',
   intern: false,
+  storniert: false,
+  stornoGrund: null,
   positionen: [POSITION],
   summe: 2500.03,
 };

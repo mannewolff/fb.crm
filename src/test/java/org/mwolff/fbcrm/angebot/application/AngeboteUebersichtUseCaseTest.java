@@ -20,6 +20,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.mwolff.fbcrm.angebot.domain.Angebot;
 import org.mwolff.fbcrm.angebot.domain.AngebotRepository;
 import org.mwolff.fbcrm.angebot.domain.Angebotsstatus;
 import org.mwolff.fbcrm.common.Anschrift;
@@ -33,6 +34,11 @@ import org.mwolff.fbcrm.firma.domain.FirmaRepository;
  * <p>Gegenstand sind der Filter, die Reihenfolge — neueste zuerst, bei gleichem Datum die hoehere
  * Kennung — und der Name der Firma an jeder Zeile. Die Namen kommen in <b>einem</b> Aufruf fuer
  * alle beteiligten Firmen und nicht je Zeile.
+ *
+ * <p><b>Die Auswahl</b> (Issue #335, Plan #332 E6 und E7): {@code alle()} liefert stornierte und
+ * nicht stornierte Angebote, {@code imStatus} kein storniertes, {@code stornierte()} jedes
+ * stornierte gleich in welchem Status. Der Status geht in den Bestand, das Storno filtert die
+ * Anwendungsschicht.
  */
 @ExtendWith(MockitoExtension.class)
 class AngeboteUebersichtUseCaseTest {
@@ -51,6 +57,12 @@ class AngeboteUebersichtUseCaseTest {
   @BeforeEach
   void baueDenAnwendungsfall() {
     useCase = new AngeboteUebersichtUseCase(angebote, firmen);
+  }
+
+  private static Angebot storniert(
+      final long id, final Angebotsstatus status, final LocalDate datum) {
+    return Angebotsdoppel.angebot(id, Angebotsdoppel.FIRMA, status, datum)
+        .storniert("vom Kunden abgelehnt", ANGELEGT);
   }
 
   private static Firma firma(final long id, final String name) {
@@ -82,7 +94,7 @@ class AngeboteUebersichtUseCaseTest {
                 firma(Angebotsdoppel.FREMDE_FIRMA, "Biber GmbH")));
 
     // When
-    final List<AngebotMitFirma> zeilen = useCase.angebote(Optional.empty());
+    final List<AngebotMitFirma> zeilen = useCase.angebote(Angebotsauswahl.alle());
 
     // Then
     assertThat(zeilen)
@@ -103,7 +115,8 @@ class AngeboteUebersichtUseCaseTest {
     when(firmen.findAllById(any())).thenReturn(List.of(firma(Angebotsdoppel.FIRMA, "Adler AG")));
 
     // When
-    final List<AngebotMitFirma> zeilen = useCase.angebote(Optional.of(Angebotsstatus.BESTELLT));
+    final List<AngebotMitFirma> zeilen =
+        useCase.angebote(Angebotsauswahl.imStatus(Angebotsstatus.BESTELLT));
 
     // Then
     assertThat(zeilen)
@@ -114,12 +127,69 @@ class AngeboteUebersichtUseCaseTest {
   }
 
   @Test
+  void angebote_withAll_thenAnswersStorniertAndOpenAngebote() {
+    // Given — E6: alle() laesst das Storno offen.
+    when(angebote.findAlle(Optional.empty()))
+        .thenReturn(
+            List.of(
+                storniert(1L, Angebotsstatus.ABGEGEBEN, FRUEH),
+                Angebotsdoppel.angebot(2L, Angebotsdoppel.FIRMA, Angebotsstatus.ABGEGEBEN, SPAET)));
+    when(firmen.findAllById(any())).thenReturn(List.of(firma(Angebotsdoppel.FIRMA, "Adler AG")));
+
+    // When
+    final List<AngebotMitFirma> zeilen = useCase.angebote(Angebotsauswahl.alle());
+
+    // Then
+    assertThat(zeilen)
+        .extracting(zeile -> zeile.angebot().requireId(), zeile -> zeile.angebot().storniert())
+        .containsExactly(tuple(2L, false), tuple(1L, true));
+  }
+
+  @Test
+  void angebote_withAStatus_thenLeavesOutAStorniertAngebotInThatStatus() {
+    // Given — E7: ein storniertes Angebot erscheint nicht unter seinem eingefrorenen Status.
+    when(angebote.findAlle(Optional.of(Angebotsstatus.ABGEGEBEN)))
+        .thenReturn(
+            List.of(
+                storniert(1L, Angebotsstatus.ABGEGEBEN, FRUEH),
+                Angebotsdoppel.angebot(2L, Angebotsdoppel.FIRMA, Angebotsstatus.ABGEGEBEN, SPAET)));
+    when(firmen.findAllById(any())).thenReturn(List.of(firma(Angebotsdoppel.FIRMA, "Adler AG")));
+
+    // When
+    final List<AngebotMitFirma> zeilen =
+        useCase.angebote(Angebotsauswahl.imStatus(Angebotsstatus.ABGEGEBEN));
+
+    // Then
+    assertThat(zeilen).extracting(zeile -> zeile.angebot().requireId()).containsExactly(2L);
+  }
+
+  @Test
+  void angebote_withStornierte_thenAnswersStorniertAngeboteFromDifferentStatus() {
+    // Given — E7: „Storniert" zeigt jedes stornierte Angebot ohne Ruecksicht auf seinen Status.
+    when(angebote.findAlle(Optional.empty()))
+        .thenReturn(
+            List.of(
+                storniert(1L, Angebotsstatus.ABGEGEBEN, FRUEH),
+                Angebotsdoppel.angebot(2L, Angebotsdoppel.FIRMA, Angebotsstatus.ABGEGEBEN, SPAET),
+                storniert(3L, Angebotsstatus.BESTELLT, SPAET)));
+    when(firmen.findAllById(any())).thenReturn(List.of(firma(Angebotsdoppel.FIRMA, "Adler AG")));
+
+    // When
+    final List<AngebotMitFirma> zeilen = useCase.angebote(Angebotsauswahl.stornierte());
+
+    // Then
+    assertThat(zeilen)
+        .extracting(zeile -> zeile.angebot().requireId(), zeile -> zeile.angebot().status())
+        .containsExactly(tuple(3L, Angebotsstatus.BESTELLT), tuple(1L, Angebotsstatus.ABGEGEBEN));
+  }
+
+  @Test
   void angebote_whenThereAreNone_thenAnswersEmptyWithoutAskingForFirmen() {
     // Given
     when(angebote.findAlle(Optional.empty())).thenReturn(List.of());
 
     // When / Then
-    assertThat(useCase.angebote(Optional.empty())).isEmpty();
+    assertThat(useCase.angebote(Angebotsauswahl.alle())).isEmpty();
     verifyNoInteractions(firmen);
   }
 
@@ -133,7 +203,7 @@ class AngeboteUebersichtUseCaseTest {
     when(firmen.findAllById(any())).thenReturn(List.of());
 
     // When / Then
-    assertThatThrownBy(() -> useCase.angebote(Optional.empty()))
+    assertThatThrownBy(() -> useCase.angebote(Angebotsauswahl.alle()))
         .isInstanceOf(FirmaNichtGefunden.class);
   }
 }

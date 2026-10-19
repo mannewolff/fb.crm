@@ -8,6 +8,7 @@ import { tagWort } from '../lib/tag';
 import { ZAHLEN_KLASSE } from '../theme';
 import AngebotsstatusChip from './AngebotsstatusChip';
 import InternChip from './InternChip';
+import StorniertChip from './StorniertChip';
 import Tafel, { type TafelSpalte } from './Tafel';
 
 /**
@@ -30,6 +31,8 @@ import Tafel, { type TafelSpalte } from './Tafel';
  *
  * <b>Das Kennzeichen „Intern" steht hinter dem Datum</b> (Issue #233) — in der Spalte, die das
  * Angebot benennt, und nicht in einer sechsten Spalte, die bei 768 px der Summe den Platz nimmt.
+ * Aus demselben Grund steht dort auch der Chip „Storniert" (Plan #332, E13); der Statuschip in
+ * „Status" bleibt, denn ein storniertes Angebot behaelt seinen Status.
  *
  * <b>Der Strich in „Summe" haengt am Kennzeichen, nicht an einer 0 vom Server</b> (Plan #218, E16).
  * Menge und Preis bleiben beim Wechsel extern -> intern erhalten, der Server liefert die
@@ -103,6 +106,7 @@ function Zeile({ angebot }: { readonly angebot: AngebotZeile }) {
           <span className={ZAHLEN_KLASSE}>{datum}</span>
         )}
         {angebot.intern ? <InternChip /> : null}
+        {angebot.storniert ? <StorniertChip /> : null}
       </Box>
       <Box
         component="td"

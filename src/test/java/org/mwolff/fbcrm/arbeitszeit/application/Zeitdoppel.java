@@ -100,6 +100,29 @@ final class Zeitdoppel {
         null,
         status.intern(),
         status,
+        false,
+        null,
+        TAG.withDayOfMonth(1),
+        "Website-Relaunch",
+        "Neugestaltung der Website",
+        List.of(KONZEPTION, WARTUNG, SCHULUNG),
+        FRUEHER,
+        FRUEHER);
+  }
+
+  /**
+   * Dasselbe Angebot, aus „bestellt" storniert — der einzige Status, aus dem ein Kundenangebot
+   * storniert wird und in dem zuvor gebucht werden durfte (#330, Kriterium 7).
+   */
+  static Angebot storniertesAngebot() {
+    return new Angebot(
+        Long.valueOf(ANGEBOT),
+        FIRMA,
+        null,
+        false,
+        Angebotsstatus.BESTELLT,
+        true,
+        "Auftrag zurückgezogen",
         TAG.withDayOfMonth(1),
         "Website-Relaunch",
         "Neugestaltung der Website",

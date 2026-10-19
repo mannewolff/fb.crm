@@ -160,6 +160,8 @@ class JpaAngebotRepository implements AngebotRepository {
         zeile.getAnsprechpartnerId(),
         zeile.isIntern(),
         zeile.getStatus(),
+        zeile.isStorniert(),
+        zeile.getStornoGrund(),
         zeile.getAngebotDatum(),
         zeile.getTitel(),
         zeile.getBeschreibung(),

@@ -11,6 +11,56 @@ bleibt stehen, auch wenn nichts darunter steht.
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-10-18
+
+- chore: v1.1.1
+- CLAUDE-java.md: 80-%-Sperrschwelle als begruendete Ausnahme (Issue #359)
+- CI: Mutationsquote entscheidet statt jeder einzelne Ueberlebende (Issue #358)
+- Mutationsgate, Teil 3: Liegezeit, Karten ohne Befund und Bericht (Issue #357)
+- Mutationsgate, Teil 2: Ueberlebende als Karten anlegen und ergaenzen (Issue #356)
+- Mutationsgate, Teil 1: Quote, Sperrschwelle und Bericht ohne Board (Issue #355)
+- Schmaler Client der Toolbox-API fuer das Mutationsgate (Issue #354)
+- Form der Ueberlebenden-Karte und ihre Liegezeit (Issue #353)
+- PIT-Bericht lesen: Quote, Rundung und Ueberlebende je Datei (Issue #352)
+- PIT schreibt mutations.xml an einen festen Pfad (Issue #351)
+- Storno-Test beim Stellen toetet den letzten PIT-Mutanten (Issue #346)
+- LoginPage-Test haelt die Anmeldeantwort von Hand zurueck (Issue #345)
+- AngebotStatusMigrationIT kennt die Storno-Spalten (Issue #344)
+- Storno am Angebot: die vier Szenarien als Durchstich im Backend (Issue #342)
+- Storno am Angebot: Filterwert Storniert in der Uebersicht aller Angebote (Issue #341)
+- Storno am Angebot: Angebotsansicht mit Chip, Grund, Tasten und Rueckfrage (Issue #340)
+- Storno am Angebot: API-Module, Filterwert und Storniert-Chip (Issue #339)
+- Storno am Angebot: Rechnung nur noch ueber nicht berechnete Stunden (Issue #338)
+- Storno am Angebot: keine neue Arbeitszeit buchen (Issue #337)
+- Storno am Angebot: Forecast, Startseite und Jahresabschluss (Issue #336)
+- Storno am Angebot: Angebotsauswahl und Filter der Uebersicht (Issue #335)
+- Storno am Angebot: Anwendungsfall, Ausnahmen und HTTP-Wege (Issue #334)
+- Storno am Angebot: Kennzeichen, Invarianten, Persistenz und Migration (Issue #333)
+- chore: v1.1.0
+- chore: v1.0.3
+- Titel am Angebot in der Angebotsauswahl der Zeiterfassung (Issue #328)
+- Titel am Angebot in der Wahl der neuen Rechnung und auf der Rechnungsseite (Issue #327)
+- Titel als erste Spalte in der Uebersicht aller Angebote (Issue #325)
+- Titel am Angebot im Forecast und in den Angebotskarten der Startseite (Issue #324)
+- chore: v1.0.2
+- Reparatur: Spalte titel in der erwarteten Spaltenliste (Issue #321)
+- Titel in der Firmentafel und auf der Angebotsseite (Issue #319)
+- Titelfeld im Datenweg und in der Angebotsmaske (Issue #318)
+- Titel pflichtig auf dem Anlege- und dem Aenderungsweg des Angebots (Issue #317)
+- Titel am Angebot: Spalte, Domaene, Bestand und Antworten (Issue #316)
+- chore: v1.0.1
+- Forecast-Karte auf der Startseite (Issue #313)
+- api/forecast.ts und die Forecasttafel (Issue #312)
+- Spalte Jahr in der Positionstafel des Angebots (Issue #311)
+- Feld Leistungsjahr in der Positionsmaske und Vorbelegung in der Angebotsmaske (Issue #310)
+- Angebotsweg nach components ziehen (Issue #309)
+- Weg GET /api/startseite/forecast (Issue #308)
+- ForecastUseCase: die Jahreszeilen rechnen (Issue #307)
+- AbgerechneteMengen als eine Stelle und eine Tuer an der Rechnungsauskunft (Issue #306)
+- Leistungsjahr ueber die Schnittstelle nachgeben (Issue #305)
+- Leistungsjahr an der Angebotsposition: Spalte, Migration und Vorbelegung (Issue #304)
+- Installer 5 installiert und Änderungen im workflow comittet
+
 ## [1.1.0] - 2026-10-17
 
 - chore: v1.0.3

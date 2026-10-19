@@ -16,7 +16,9 @@ import org.mwolff.fbcrm.angebot.domain.Angebotsstatus;
  * @param titel die einzeilige Benennung des Angebots, oder {@code null} fuer ein Angebot von vor
  *     dieser Aenderung (Issue #316)
  * @param intern ob das Angebot die eigene interne Arbeit festhaelt (Issue #226)
- * @param status wie weit das Angebot gediehen ist
+ * @param status wie weit das Angebot gediehen ist; am stornierten der Status, aus dem storniert
+ *     wurde
+ * @param storniert ob das Angebot storniert ist (Issue #335)
  * @param summe die Netto-Summe, gerechnet
  */
 public record AngebotZeileResponse(
@@ -25,6 +27,7 @@ public record AngebotZeileResponse(
     @Nullable String titel,
     boolean intern,
     Angebotsstatus status,
+    boolean storniert,
     BigDecimal summe) {
 
   /** Die Sicht der Liste auf ein Angebot. */
@@ -35,6 +38,7 @@ public record AngebotZeileResponse(
         angebot.titel(),
         angebot.intern(),
         angebot.status(),
+        angebot.storniert(),
         angebot.summe());
   }
 }

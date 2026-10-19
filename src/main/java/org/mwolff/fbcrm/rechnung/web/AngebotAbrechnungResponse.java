@@ -27,21 +27,27 @@ import org.mwolff.fbcrm.rechnung.domain.Rechnungszustand;
  * Intern-Sperre</b>; ein Test in {@code AngebotRechnungenControllerIT} haelt das fest, damit
  * niemand ihn spaeter „aufraeumt".
  *
- * <p>Die Summe rechnet der Server und nicht die Ansicht (E10).
+ * <p>Die Summe rechnet der Server und nicht die Ansicht (E10), und ebenso, ob die Taste „Rechnung
+ * schreiben" steht ({@code schreibbar}; Plan #332, E9).
  *
  * @param positionen je Angebotsposition eine Zeile, in der Reihenfolge des Angebots
  * @param rechnungen die Rechnungen dieses Angebots, neueste zuerst
  * @param angefallen die insgesamt erfassten Stunden ueber alle Positionen, sonst 0
+ * @param schreibbar ob aus dem Angebot jetzt eine neue Rechnung entstehen darf
  */
 public record AngebotAbrechnungResponse(
-    List<Positionszeile> positionen, List<Rechnungszeile> rechnungen, BigDecimal angefallen) {
+    List<Positionszeile> positionen,
+    List<Rechnungszeile> rechnungen,
+    BigDecimal angefallen,
+    boolean schreibbar) {
 
   /** Die Sicht der Oberflaeche auf den Abrechnungsstand. */
   static AngebotAbrechnungResponse of(final Angebotsabrechnung abrechnung) {
     return new AngebotAbrechnungResponse(
         abrechnung.positionen().stream().map(Positionszeile::of).toList(),
         abrechnung.rechnungen().stream().map(Rechnungszeile::of).toList(),
-        abrechnung.angefallen());
+        abrechnung.angefallen(),
+        abrechnung.schreibbar());
   }
 
   /**

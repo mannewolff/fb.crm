@@ -5,6 +5,8 @@ import {
   angebotAnlegen,
   angebotLesen,
   angebotStatusWeiter,
+  angebotStornieren,
+  angebotStornoZuruecknehmen,
   angebotStatusZurueck,
   angeboteDerFirma,
   angeboteUebersicht,
@@ -37,6 +39,8 @@ const ANGEBOT = {
   titel: 'Neue Website',
   beschreibung: null,
   intern: false,
+  storniert: false,
+  stornoGrund: null,
   positionen: [POSITION],
   summe: 2500.03,
 };
@@ -64,6 +68,8 @@ const ANGEBOT_VERENGT = {
   titel: 'Neue Website',
   beschreibung: null,
   intern: false,
+  storniert: false,
+  stornoGrund: null,
   positionen: [POSITION_VERENGT],
   summeInCent: 250003,
 };
@@ -74,6 +80,7 @@ const ZEILE = {
   titel: 'Neue Website',
   status: 'BESTELLT',
   intern: false,
+  storniert: false,
   summe: 2500.03,
 };
 
@@ -127,6 +134,24 @@ describe('parseAngebot', () => {
     expect(parseAngebot({ ...ANGEBOT, beschreibung: 'Neue Website' }).beschreibung).toBe(
       'Neue Website',
     );
+  });
+
+  it('liest Storno und Grund am stornierten Angebot (Plan #332)', () => {
+    const angebot = parseAngebot({
+      ...ANGEBOT,
+      storniert: true,
+      stornoGrund: 'vom Kunden abgelehnt',
+    });
+
+    expect(angebot.storniert).toBe(true);
+    expect(angebot.stornoGrund).toBe('vom Kunden abgelehnt');
+  });
+
+  it('liest den fehlenden Grund als null (Plan #332)', () => {
+    const angebot = parseAngebot({ ...ANGEBOT, storniert: true, stornoGrund: null });
+
+    expect(angebot.storniert).toBe(true);
+    expect(angebot.stornoGrund).toBeNull();
   });
 
   it('liest den Titel (Issue #318)', () => {
@@ -252,10 +277,17 @@ describe('parseFirmaAngebote', () => {
           titel: 'Neue Website',
           status: 'BESTELLT',
           intern: false,
+          storniert: false,
           summeInCent: 250003,
         },
       ],
     });
+  });
+
+  it('liest das Storno an der Zeile (Plan #332)', () => {
+    expect(
+      parseFirmaAngebote({ angebote: [{ ...ZEILE, storniert: true }] }).angebote[0].storniert,
+    ).toBe(true);
   });
 
   it('liest eine Zeile ohne Titel als null (Issue #318)', () => {
@@ -278,6 +310,7 @@ describe('parseFirmaAngebote', () => {
     ['Zeile mit Titel als Zahl', { angebote: [{ ...ZEILE, titel: 7 }] }],
     ['Zeile ohne Titel', { angebote: [{ ...ZEILE, titel: undefined }] }],
     ['Zeile ohne Kennzeichen', { angebote: [{ ...ZEILE, intern: null }] }],
+    ['Zeile ohne Storno', { angebote: [{ ...ZEILE, storniert: undefined }] }],
     ['Zeile ohne Summe', { angebote: [{ ...ZEILE, summe: null }] }],
   ])('weist eine Antwort ab: %s', (_fall, rumpf) => {
     expect(() => parseFirmaAngebote(rumpf)).toThrow(TypeError);
@@ -292,6 +325,7 @@ const UEBERSICHT_ZEILE = {
   titel: 'Neue Website',
   status: 'BESTELLT',
   intern: false,
+  storniert: false,
   summe: 2500.03,
 };
 
@@ -307,10 +341,18 @@ describe('parseAngeboteUebersicht', () => {
           titel: 'Neue Website',
           status: 'BESTELLT',
           intern: false,
+          storniert: false,
           summeInCent: 250003,
         },
       ],
     });
+  });
+
+  it('liest das Storno an der Zeile (Plan #332)', () => {
+    expect(
+      parseAngeboteUebersicht({ angebote: [{ ...UEBERSICHT_ZEILE, storniert: true }] }).angebote[0]
+        .storniert,
+    ).toBe(true);
   });
 
   it('laesst den fehlenden Titel als null durch (Issue #325)', () => {
@@ -331,6 +373,7 @@ describe('parseAngeboteUebersicht', () => {
     ['Zeile ohne Titel', { angebote: [{ ...UEBERSICHT_ZEILE, titel: undefined }] }],
     ['Zeile mit unbekanntem Status', { angebote: [{ ...UEBERSICHT_ZEILE, status: 'OFFEN' }] }],
     ['Zeile ohne Kennzeichen', { angebote: [{ ...UEBERSICHT_ZEILE, intern: 1 }] }],
+    ['Zeile ohne Storno', { angebote: [{ ...UEBERSICHT_ZEILE, storniert: 'ja' }] }],
     ['Zeile ohne Summe', { angebote: [{ ...UEBERSICHT_ZEILE, summe: undefined }] }],
   ])('weist eine Antwort ab: %s', (_fall, rumpf) => {
     expect(() => parseAngeboteUebersicht(rumpf)).toThrow(TypeError);
@@ -350,15 +393,69 @@ describe('die Wege', () => {
     );
   });
 
-  it('holt die Uebersicht nach Status gefiltert', async () => {
+  it('holt unter einem Status nur die nicht stornierten Angebote darin (E6, E7)', async () => {
     const fetchMock = fetchNachPfad({
-      'GET /api/angebote?status=BESTELLT': json(200, { angebote: [] }),
+      'GET /api/angebote?status=ABGEGEBEN&storniert=false': json(200, { angebote: [] }),
     });
 
-    expect((await angeboteUebersicht('BESTELLT')).angebote).toEqual([]);
+    expect((await angeboteUebersicht('ABGEGEBEN')).angebote).toEqual([]);
     expect(fetchMock).toHaveBeenCalledWith(
-      '/api/angebote?status=BESTELLT',
+      '/api/angebote?status=ABGEGEBEN&storniert=false',
       expect.objectContaining({ method: 'GET' }),
+    );
+  });
+
+  it('holt unter „Storniert" jedes stornierte Angebot, ohne Status (E20)', async () => {
+    const fetchMock = fetchNachPfad({
+      'GET /api/angebote?storniert=true': json(200, {
+        angebote: [{ ...UEBERSICHT_ZEILE, storniert: true }],
+      }),
+    });
+
+    expect((await angeboteUebersicht('STORNIERT')).angebote[0].storniert).toBe(true);
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/angebote?storniert=true',
+      expect.objectContaining({ method: 'GET' }),
+    );
+  });
+
+  it('storniert ein Angebot mit Grund (Plan #332)', async () => {
+    const fetchMock = fetchNachPfad({
+      'POST /api/angebote/7/storno': json(200, { ...ANGEBOT, id: 7, storniert: true }),
+    });
+
+    expect((await angebotStornieren(7, 'vom Kunden abgelehnt')).storniert).toBe(true);
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/angebote/7/storno',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ grund: 'vom Kunden abgelehnt' }),
+      }),
+    );
+  });
+
+  it('storniert ein Angebot ohne Grund und schickt null', async () => {
+    const fetchMock = fetchNachPfad({
+      'POST /api/angebote/7/storno': json(200, { ...ANGEBOT, id: 7, storniert: true }),
+    });
+
+    await angebotStornieren(7, null);
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/angebote/7/storno',
+      expect.objectContaining({ method: 'POST', body: JSON.stringify({ grund: null }) }),
+    );
+  });
+
+  it('nimmt das Storno zurueck (Plan #332)', async () => {
+    const fetchMock = fetchNachPfad({
+      'DELETE /api/angebote/7/storno': json(200, { ...ANGEBOT, id: 7 }),
+    });
+
+    expect((await angebotStornoZuruecknehmen(7)).storniert).toBe(false);
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/angebote/7/storno',
+      expect.objectContaining({ method: 'DELETE' }),
     );
   });
 

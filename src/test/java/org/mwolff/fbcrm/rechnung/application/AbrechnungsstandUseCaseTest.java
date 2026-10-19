@@ -13,6 +13,8 @@ import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mwolff.fbcrm.angebot.application.AngebotNichtGefunden;
@@ -42,6 +44,11 @@ import org.mwolff.fbcrm.rechnung.domain.RechnungseinstellungenRepository;
  * die 22 angefallenen Stunden auf 20 angebotene weiter zeigen. Die zweite ist an einer
  * Festpreisposition 0,00, auch wenn die Auskunft dort etwas melden wuerde: Was buchbar ist, steht
  * in {@code Buchbarkeit} und nur dort.
+ *
+ * <p>Und ob die Taste „Rechnung schreiben" steht: {@code schreibbar} (Plan #332, E9). Am
+ * stornierten Angebot haengt sie an den nicht abgerechneten Stunden und nicht an der offenen Menge
+ * (#330, Kriterium 7, zweiter Satz) — die Spalte „Offen" zeigt dort trotzdem weiter den offenen
+ * Rest (E10).
  */
 @ExtendWith(MockitoExtension.class)
 class AbrechnungsstandUseCaseTest {
@@ -275,5 +282,68 @@ class AbrechnungsstandUseCaseTest {
     // Then — kein null und keine Ausnahme, sondern 0.
     assertThat(abrechnung.positionen()).isEmpty();
     assertThat(abrechnung.angefallen()).isEqualByComparingTo("0");
+  }
+
+  @Test
+  void zu_atAnAngebotThatIsNotStorniertWithAnOffeneMenge_thenSchreibbar() {
+    // Given — bestellt, nichts abgerechnet, keine Stunde erfasst: es zaehlt die offene Menge.
+    when(angebote.findById(Rechnungsdoppel.ANGEBOT))
+        .thenReturn(Optional.of(Rechnungsdoppel.angebot()));
+    when(rechnungen.findByAngebot(Rechnungsdoppel.ANGEBOT)).thenReturn(List.of());
+    gegebeneEinstellungen("19.00");
+
+    // When / Then
+    assertThat(useCase.zu(Rechnungsdoppel.ANGEBOT).schreibbar()).isTrue();
+  }
+
+  @ParameterizedTest
+  @EnumSource(
+      value = Angebotsstatus.class,
+      names = {"ANGELEGT", "ABGEGEBEN", "LAEUFT", "ABGESCHLOSSEN"})
+  void zu_atAnAngebotOutsideTheAbrechenbarenStatus_thenNotSchreibbar(final Angebotsstatus status) {
+    // Given — alles offen, aber vor „bestellt" oder interne Arbeit: daraus entsteht keine Rechnung.
+    when(angebote.findById(Rechnungsdoppel.ANGEBOT))
+        .thenReturn(Optional.of(Rechnungsdoppel.angebot(status)));
+    when(rechnungen.findByAngebot(Rechnungsdoppel.ANGEBOT)).thenReturn(List.of());
+    gegebeneEinstellungen("19.00");
+
+    // When / Then
+    assertThat(useCase.zu(Rechnungsdoppel.ANGEBOT).schreibbar()).isFalse();
+  }
+
+  @Test
+  void zu_atAStorniertesAngebotWithoutNichtAbgerechneteStunden_thenNotSchreibbarButStillOffen() {
+    // Given — 8 Stunden angeboten, keine erfasst, storniert.
+    when(angebote.findById(Rechnungsdoppel.ANGEBOT))
+        .thenReturn(
+            Optional.of(Rechnungsdoppel.storniert(List.of(Rechnungsdoppel.beratungUeber("8.00")))));
+    when(rechnungen.findByAngebot(Rechnungsdoppel.ANGEBOT)).thenReturn(List.of());
+    gegebeneEinstellungen("19.00");
+
+    // When
+    final Angebotsabrechnung abrechnung = useCase.zu(Rechnungsdoppel.ANGEBOT);
+
+    // Then — keine Taste, aber „Offen" zeigt weiter die 8 nie abgerufenen Stunden (E10).
+    assertThat(abrechnung.schreibbar()).isFalse();
+    assertThat(abrechnung.positionen().getFirst().stand().offen()).isEqualByComparingTo("8.00");
+  }
+
+  @Test
+  void zu_atAStorniertesAngebotWithThreeNichtAbgerechneteStunden_thenSchreibbar() {
+    // Given — das Szenario „Rest eines Auftrags wird nicht abgerufen": 8 angeboten, 3 erfasst.
+    when(angebote.findById(Rechnungsdoppel.ANGEBOT))
+        .thenReturn(
+            Optional.of(Rechnungsdoppel.storniert(List.of(Rechnungsdoppel.beratungUeber("8.00")))));
+    when(rechnungen.findByAngebot(Rechnungsdoppel.ANGEBOT)).thenReturn(List.of());
+    when(arbeitszeit.angefallen(Rechnungsdoppel.ANGEBOT))
+        .thenReturn(Map.of(Long.valueOf(Rechnungsdoppel.BERATUNG_ID), new BigDecimal("3.00")));
+    gegebeneEinstellungen("19.00");
+
+    // When
+    final Angebotsabrechnung abrechnung = useCase.zu(Rechnungsdoppel.ANGEBOT);
+
+    // Then
+    assertThat(abrechnung.schreibbar()).isTrue();
+    assertThat(abrechnung.positionen().getFirst().stand().offen()).isEqualByComparingTo("8.00");
   }
 }

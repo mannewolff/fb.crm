@@ -7,13 +7,13 @@ import java.time.Year;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.SortedSet;
 import java.util.TreeSet;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import org.mwolff.fbcrm.angebot.application.AngebotMitFirma;
 import org.mwolff.fbcrm.angebot.application.AngeboteUebersichtUseCase;
+import org.mwolff.fbcrm.angebot.application.Angebotsauswahl;
 import org.mwolff.fbcrm.angebot.domain.Angebot;
 import org.mwolff.fbcrm.arbeitszeit.application.Arbeitszeitauskunft;
 import org.mwolff.fbcrm.common.Geldrechnung;
@@ -30,12 +30,12 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * <p><b>Jede Auskunft einmal gefragt.</b> Die gestellten Rechnungen kommen einzeln aus {@link
  * Rechnungsauskunft#gestellteRechnungen()} (E4), die Angebote mit allen Status aus {@link
- * AngeboteUebersichtUseCase#angebote(Optional)}; der Abschluss eines Jahres fragt dazu die Stunden
- * des Jahres in einem Zug aus {@link Arbeitszeitauskunft#alleImZeitraum(LocalDate, LocalDate)}
- * (E9), die Uebersicht braucht keine. Je Jahr zu fragen waere die Abfragelawine, die diese Tueren
- * gerade vermeiden. Dass dabei Angebote und Firmen zweimal geladen werden — einmal fuer den
- * Firmennamen an der Rechnung, einmal hier fuer die Angebotsbilanz —, ist der Preis dafuer, dass
- * der Weg zum Firmennamen im Modul {@code rechnung} bleibt (E6).
+ * AngeboteUebersichtUseCase#angebote(Angebotsauswahl)}; der Abschluss eines Jahres fragt dazu die
+ * Stunden des Jahres in einem Zug aus {@link Arbeitszeitauskunft#alleImZeitraum(LocalDate,
+ * LocalDate)} (E9), die Uebersicht braucht keine. Je Jahr zu fragen waere die Abfragelawine, die
+ * diese Tueren gerade vermeiden. Dass dabei Angebote und Firmen zweimal geladen werden — einmal
+ * fuer den Firmennamen an der Rechnung, einmal hier fuer die Angebotsbilanz —, ist der Preis
+ * dafuer, dass der Weg zum Firmennamen im Modul {@code rechnung} bleibt (E6).
  *
  * <p><b>Welche Jahre erscheinen</b> (#287, Kriterium 1): jedes mit mindestens einer gestellten
  * Rechnung oder einem abgegebenen Angebot, das juengste zuerst (E21). Fuer das laufende Jahr gilt
@@ -84,7 +84,7 @@ public class JahresabschlussUseCase {
         gestellte().stream()
             .collect(Collectors.groupingBy(rechnung -> Year.from(rechnung.rechnungDatum())));
     final Map<Year, List<Angebot>> abgegebeneJeJahr =
-        angebote.angebote(Optional.empty()).stream()
+        angebote.angebote(Angebotsauswahl.alle()).stream()
             .map(AngebotMitFirma::angebot)
             .filter(angebot -> Angebotsblick.abgegeben(angebot.status()))
             .collect(Collectors.groupingBy(Angebotsblick::jahr));
@@ -121,7 +121,7 @@ public class JahresabschlussUseCase {
             .filter(rechnung -> Year.from(rechnung.rechnungDatum()).equals(jahr))
             .toList();
     final List<Angebot> alle =
-        angebote.angebote(Optional.empty()).stream().map(AngebotMitFirma::angebot).toList();
+        angebote.angebote(Angebotsauswahl.alle()).stream().map(AngebotMitFirma::angebot).toList();
     final List<Angebot> abgegeben =
         alle.stream()
             .filter(angebot -> Angebotsblick.abgegeben(angebot.status()))

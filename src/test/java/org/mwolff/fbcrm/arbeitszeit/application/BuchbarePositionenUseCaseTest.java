@@ -97,6 +97,8 @@ class BuchbarePositionenUseCaseTest {
         null,
         status.intern(),
         status,
+        false,
+        null,
         datum,
         "Website-Relaunch",
         "Wartungsvertrag",
@@ -167,6 +169,17 @@ class BuchbarePositionenUseCaseTest {
     // laufende interne Arbeit; „abgegeben", „abgerechnet" und „abgeschlossen" fehlen in der Auswahl
     // (E12, Kriterium 5 von #207).
     imBestandStehen(Zeitdoppel.angebot(status));
+
+    // When / Then
+    assertThat(useCase.positionen()).isEmpty();
+    verifyNoInteractions(firmen);
+  }
+
+  @Test
+  void positionen_givenACancelledOffer_thenNone() {
+    // Given — #330, Kriterium 7: das stornierte Angebot steht in „bestellt", laesst sich in der
+    // Zeiterfassung aber nicht mehr waehlen.
+    imBestandStehen(Zeitdoppel.storniertesAngebot());
 
     // When / Then
     assertThat(useCase.positionen()).isEmpty();

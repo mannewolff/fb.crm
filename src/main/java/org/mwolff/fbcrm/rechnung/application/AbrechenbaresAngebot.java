@@ -12,6 +12,10 @@ import org.mwolff.fbcrm.angebot.domain.Angebot;
  *
  * @param angebot das Angebot, aus dem eine Rechnung entstehen darf
  * @param firmaName Name der Firma, an die das Angebot geht
- * @param offenerBetrag Summe der offenen Mengen mal Einzelpreis, auf den Cent gerundet
+ *     <p>Am stornierten Angebot ist der Betrag der Wert der nicht abgerechneten Stunden und nicht
+ *     der des offenen Rests (#330, Kriterium 7; Plan #332, E8). Der Name des Feldes bleibt, weil
+ *     die Oberflaeche ihn liest: Er nennt, was noch in Rechnung gestellt werden kann.
+ * @param offenerBetrag Summe der abrechenbaren Mengen mal Einzelpreis, je Position auf den Cent
+ *     gerundet — ohne Storno die offenen Mengen
  */
 public record AbrechenbaresAngebot(Angebot angebot, String firmaName, BigDecimal offenerBetrag) {}

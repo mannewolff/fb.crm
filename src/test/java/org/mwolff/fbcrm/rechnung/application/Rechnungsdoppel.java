@@ -120,12 +120,26 @@ final class Rechnungsdoppel {
         null,
         status.intern(),
         status,
+        false,
+        null,
         ANGEBOTSDATUM,
         "Website-Relaunch",
         "Neugestaltung der Website",
         positionen,
         ANGELEGT,
         ANGELEGT);
+  }
+
+  /** Der Grund des Stornos aus dem Szenario „Rest eines Auftrags wird nicht abgerufen" (#330). */
+  static final String STORNOGRUND = "Rest nicht abgerufen";
+
+  /**
+   * Das Angebot mit frei gewaehlten Positionen, aus „bestellt" storniert (Plan #332, E8).
+   *
+   * @param positionen die Positionen des Angebots
+   */
+  static Angebot storniert(final List<Angebotsposition> positionen) {
+    return angebot(Angebotsstatus.BESTELLT, positionen).storniert(STORNOGRUND, ANGELEGT);
   }
 
   /** Ein Rechnungsentwurf auf {@link #ANGEBOT} mit den uebergebenen Positionen. */

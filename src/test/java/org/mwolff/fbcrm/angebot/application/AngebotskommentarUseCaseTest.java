@@ -117,6 +117,25 @@ class AngebotskommentarUseCaseTest {
   }
 
   @Test
+  void schreibe_atAStornoedAngebot_thenStoresTheKommentar() {
+    // Given — #330, Kriterium 10, zweiter Halbsatz: Kommentare entstehen am Storno weiter.
+    when(angebote.findById(ANGEBOT))
+        .thenReturn(
+            Optional.of(
+                Angebotsdoppel.angebot(ANGEBOT)
+                    .storniert("vom Kunden abgelehnt", Angebotsdoppel.ANGELEGT)));
+    speichernGibtZurueck();
+
+    // When
+    final Angebotskommentar geschrieben = useCase.schreibe(ANGEBOT, "Absage per Mail.");
+
+    // Then
+    assertThat(geschrieben.text()).isEqualTo("Absage per Mail.");
+    assertThat(geschrieben.angebotId()).isEqualTo(ANGEBOT);
+    verify(kommentare).save(geschrieben);
+  }
+
+  @Test
   void schreibe_withATextOfOnlyWhitespace_thenRejectsAndWritesNothing() {
     // Given — dieselbe Pruefung wie in FirmaDaten: die Transaktionsgrenze verlaesst sich nicht
     // darauf, dass @NotBlank den Aufruf schon abgewiesen hat (E7).

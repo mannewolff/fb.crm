@@ -11,8 +11,9 @@ import java.util.Map;
 import java.util.Optional;
 import org.mwolff.fbcrm.angebot.application.AngebotMitFirma;
 import org.mwolff.fbcrm.angebot.application.AngeboteUebersichtUseCase;
+import org.mwolff.fbcrm.angebot.application.Angebotsauswahl;
+import org.mwolff.fbcrm.angebot.domain.Angebot;
 import org.mwolff.fbcrm.angebot.domain.Angebotsposition;
-import org.mwolff.fbcrm.angebot.domain.Angebotsstatus;
 import org.mwolff.fbcrm.arbeitszeit.application.Arbeitszeitauskunft;
 import org.mwolff.fbcrm.common.Abrechnungsmodus;
 import org.mwolff.fbcrm.common.Einheit;
@@ -28,8 +29,8 @@ import org.springframework.transaction.annotation.Transactional;
  * Die vier Kennzahlen der Startseite (#206; Plan #208, E1; Issue #285).
  *
  * <p><b>Vier Auskuenfte und keine je Angebot.</b> Die Angebote mit den Namen ihrer Firmen kommen in
- * einem Zug ({@link AngeboteUebersichtUseCase#angebote(Optional)}, E2) — mit allen Status, weil
- * Kennzahl 2 sie alle braucht und Kennzahl 1 daraus filtert. Aus der Zeiterfassung kommen drei
+ * einem Zug ({@link AngeboteUebersichtUseCase#angebote(Angebotsauswahl)}, E2) — mit allen Status,
+ * weil Kennzahl 2 sie alle braucht und Kennzahl 1 daraus filtert. Aus der Zeiterfassung kommen drei
  * Zuege ueber alle Angebote ({@link Arbeitszeitauskunft#alleAngefallen()}, {@link
  * Arbeitszeitauskunft#alleImZeitraum(LocalDate, LocalDate)} und {@link
  * Arbeitszeitauskunft#monateMitEintragImZeitraum(LocalDate, LocalDate)}; Plan #208, E3; Plan #274,
@@ -110,14 +111,14 @@ public class StartseiteUseCase {
                 new Zeitraum.Jahr(diesesJahr).bis()));
     final Zeitraum zeitraum =
         gewaehlt.filter(waehlbar::enthaelt).orElse(new Zeitraum.Jahr(diesesJahr));
-    final List<AngebotMitFirma> alle = angebote.angebote(Optional.empty());
+    final List<AngebotMitFirma> alle = angebote.angebote(Angebotsauswahl.alle());
     final Map<Long, BigDecimal> angefallen = arbeitszeit.alleAngefallen();
     final Map<Long, BigDecimal> imZeitraum =
         arbeitszeit.alleImZeitraum(zeitraum.von(), zeitraum.bis());
     return new Startseitenstand(
         zeitraum,
         waehlbar,
-        alle.stream().filter(zeile -> inArbeit(zeile.angebot().status())).toList(),
+        alle.stream().filter(zeile -> inArbeit(zeile.angebot())).toList(),
         nichtAbgerechnet(alle, angefallen, imZeitraum, gestellte.mengenJePosition()),
         Abrechnungsblick.fuer(gestellte.jeMonat(), zeitraum),
         OffeneRechnungen.aus(gestellte.offene()),
@@ -133,9 +134,15 @@ public class StartseiteUseCase {
    * <p>Die internen Status stehen im false-Zweig, und genau das leistet Kriterium 9 von #207 fuer
    * diese Kennzahl: Ein internes Angebot erscheint nicht unter „Angebote in Arbeit", ohne dass es
    * dafuer eine eigene Bedingung braucht (Plan #218, E17).
+   *
+   * <p>Ein storniertes Angebot ist nie in Arbeit (#330, Kriterium 3; Plan #332). Diese Bedingung
+   * leistet die Statusmenge nicht: Ein aus „bestellt" storniertes Angebot behaelt seinen Status.
    */
-  private static boolean inArbeit(final Angebotsstatus status) {
-    return switch (status) {
+  private static boolean inArbeit(final Angebot angebot) {
+    if (angebot.storniert()) {
+      return false;
+    }
+    return switch (angebot.status()) {
       case BESTELLT, ERLEDIGT -> true;
       case ANGELEGT, ABGEGEBEN, ABGERECHNET, LAEUFT, ABGESCHLOSSEN -> false;
     };
@@ -146,6 +153,11 @@ public class StartseiteUseCase {
    * aufgenommen, wenn er ueber 0 liegt, E11) und der Wert der im Zeitraum erfassten Stunden ueber
    * alle. Beide entstehen je Position gerundet und werden danach addiert (E23); fuer die zweite
    * Zeile gilt dabei kein Deckel und kein Abzug (#206, Kriterium 6).
+   *
+   * Das Storno wirkt hier ausdruecklich nicht (Plan #332, E11): Ein storniertes Angebot steht mit
+   * seinen gebuchten, noch nicht berechneten Stunden weiter hier, bis sie berechnet sind (#330,
+   * Kriterium 8). Ein Storno-Filter "der Einheitlichkeit wegen" nahme dem Freiberufler die Stunden,
+   * die er noch in Rechnung stellen darf.
    */
   private static NichtAbgerechnet nichtAbgerechnet(
       final List<AngebotMitFirma> alle,

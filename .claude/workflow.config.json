@@ -75,7 +75,8 @@
       ".github/**"
     ],
     "frontend": [
-      "frontend/**"
+      "frontend/**",
+      "scripts/**"
     ],
     "doku": [
       "**/*.md",

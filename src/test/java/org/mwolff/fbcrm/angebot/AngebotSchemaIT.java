@@ -2,7 +2,10 @@ package org.mwolff.fbcrm.angebot;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.tuple;
 
+import java.util.List;
+import java.util.Map;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -15,14 +18,16 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.support.TransactionTemplate;
 
 /**
- * Prueft das Schema des Angebots nach {@code V24__angebot_titel.sql} gegen eine echte
+ * Prueft das Schema des Angebots nach {@code V25__angebot_storno.sql} gegen eine echte
  * PostgreSQL-Instanz.
  *
  * <p>Gegenstand sind die Zusagen, die allein die Datenbank haelt: die sieben Status als CHECK, die
  * Bindung von {@code intern} an den Status ({@code angebot_art_status}, Issue #226), der Titel ohne
- * blossen Leerraum ({@code angebot_titel}, Issue #316), die Wertebereiche der Positionen und die
- * Reihenfolge als Schluessel. Gearbeitet wird mit {@link JdbcTemplate} und direkten Anweisungen —
- * der Weg ueber die Entities kaeme an einigen dieser Faelle gar nicht vorbei.
+ * blossen Leerraum ({@code angebot_titel}, Issue #316), die Spalten des Stornos samt Vorbelegung
+ * (Issue #333; ihre vier CHECKs prueft {@code AngebotStornoMigrationIT}), die Wertebereiche der
+ * Positionen und die Reihenfolge als Schluessel. Gearbeitet wird mit {@link JdbcTemplate} und
+ * direkten Anweisungen — der Weg ueber die Entities kaeme an einigen dieser Faelle gar nicht
+ * vorbei.
  *
  * <p><b>Seit {@code V15__angebot_position_kennung.sql} ist die Reihenfolge aufgeschoben
  * eindeutig</b> (Plan #169, E2). Drei Zusagen gehoeren zusammen: {@code pg_constraint} meldet den
@@ -421,5 +426,52 @@ class AngebotSchemaIT extends AbstractIntegrationTest {
 
     // Then
     assertThat(betroffen).isEqualTo(1);
+  }
+
+  @Test
+  void migration_thenTheStornoColumnsExistWithTheirTypes() {
+    // When — Issue #333, E1 und E4: das Kennzeichen ist Pflicht, der Grund freier Text.
+    final List<Map<String, Object>> spalten =
+        jdbc.queryForList(
+            "SELECT column_name, data_type, is_nullable, column_default"
+                + " FROM information_schema.columns WHERE table_schema = 'public'"
+                + " AND table_name = 'angebot' AND column_name IN ('storniert', 'storno_grund')"
+                + " ORDER BY column_name");
+
+    // Then
+    assertThat(spalten)
+        .extracting(
+            spalte -> spalte.get("column_name"),
+            spalte -> spalte.get("data_type"),
+            spalte -> spalte.get("is_nullable"),
+            spalte -> spalte.get("column_default"))
+        .containsExactly(
+            tuple("storniert", "boolean", "NO", "false"),
+            tuple("storno_grund", "text", "YES", null));
+  }
+
+  @Test
+  void angebotStorniert_whenTheColumnsAreOmitted_thenTheRowIsNotStornoedAndHasNoReason() {
+    // Given — jeder Weg ohne Angabe fuehrt zu einem Angebot ohne Storno (V25, DEFAULT false).
+    angebot("BESTELLT");
+
+    // When
+    final Map<String, Object> zeile =
+        jdbc.queryForMap("SELECT storniert, storno_grund FROM angebot LIMIT 1");
+
+    // Then
+    assertThat(zeile).containsEntry("storniert", false).containsEntry("storno_grund", null);
+  }
+
+  @Test
+  void angebotStorniert_givenNoFlag_thenRejectedByTheDatabase() {
+    // When / Then — die Spalte ist NOT NULL; ein ausdruecklicher NULL greift nicht auf das DEFAULT.
+    assertThatThrownBy(
+            () ->
+                jdbc.update(
+                    "INSERT INTO angebot (firma_id, status, storniert, angebot_datum)"
+                        + " VALUES (?, 'ANGELEGT', NULL, DATE '2026-09-20')",
+                    firmaId))
+        .isInstanceOf(DataIntegrityViolationException.class);
   }
 }

@@ -49,7 +49,13 @@ jobs:
       - id: gate-mvn-verify
         run: mvn verify
 
+  # Begruendete Ausnahme von 100 % Mutationsabdeckung (CLAUDE-java.md §5.1, Plan #348): Auf
+  # jedem push-Lauf entscheidet nicht der Exitcode von PIT, sondern die Quote aus dem Bericht —
+  # gesperrt wird erst unter 80 %. mutationThreshold=100 bleibt, ein Lauf von Hand misst weiter
+  # gegen 100 %. Der Job laeuft erst nach den kuerzeren Jobs: Ein Stand, der ohnehin nicht
+  # hinausgeht, startet keine Liegezeit fuer Ueberlebenden-Karten (E20).
   pit:
+    needs: [verify, frontend]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -65,7 +71,46 @@ jobs:
           chmod +x "$RUNNER_TEMP/bin/mvn"
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
       - id: gate-pit
+        continue-on-error: ${{ github.event_name == 'push' }}
         run: mvn -Ppit -Dskip.frontend=true test
+      - uses: actions/setup-node@v4
+        if: github.event_name == 'push'
+        with:
+          node-version-file: frontend/package.json
+      # Liest target/pit-reports/mutations.xml und sperrt unter 80 % oder ohne vollstaendigen
+      # Bericht (E17). Ohne Board und ohne Geheimnis.
+      - id: mutationsquote
+        if: github.event_name == 'push'
+        run: node scripts/mutationsgate.mjs --nur-quote
+      # Der Bericht fuer den Job mutationskarten, der allein das Board beschreibt.
+      - uses: actions/upload-artifact@v4
+        if: github.event_name == 'push'
+        with:
+          name: mutations-bericht
+          path: target/pit-reports/mutations.xml
+          if-no-files-found: error
+
+  # Legt je Datei mit Ueberlebenden eine Karte an oder ergaenzt sie und prueft die Liegezeit.
+  # Nur auf dem Pruefzweig: Die Umgebung board-schreiben ist auf ihn begrenzt (E2, E21), und
+  # das Board-Token steht allein am schreibenden Schritt (E15).
+  mutationskarten:
+    needs: [pit]
+    if: github.event_name == 'push' && github.ref_name == 'kit-pruefung'
+    environment: board-schreiben
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: frontend/package.json
+      - uses: actions/download-artifact@v4
+        with:
+          name: mutations-bericht
+          path: target/pit-reports
+      - id: mutationskarten
+        run: node scripts/mutationsgate.mjs --karten
+        env:
+          TBX_TOKEN: ${{ secrets.TBX_TOKEN }}
 
   frontend:
     runs-on: ubuntu-latest

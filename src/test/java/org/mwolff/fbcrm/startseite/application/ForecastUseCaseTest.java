@@ -13,7 +13,6 @@ import java.time.Year;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -21,6 +20,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mwolff.fbcrm.angebot.application.AngebotMitFirma;
 import org.mwolff.fbcrm.angebot.application.AngeboteUebersichtUseCase;
+import org.mwolff.fbcrm.angebot.application.Angebotsauswahl;
 import org.mwolff.fbcrm.angebot.domain.Angebot;
 import org.mwolff.fbcrm.angebot.domain.Angebotsposition;
 import org.mwolff.fbcrm.angebot.domain.Angebotsstatus;
@@ -29,7 +29,8 @@ import org.mwolff.fbcrm.common.Einheit;
 import org.mwolff.fbcrm.rechnung.application.Rechnungsauskunft;
 
 /**
- * Der Forecast je Jahr (#302, Kriterien 1 bis 7; Plan #303, E1, E4, E5, E6, E13).
+ * Der Forecast je Jahr (#302, Kriterien 1 bis 7; Plan #303, E1, E4, E5, E6, E13) und das Storno
+ * darin (#330, Kriterium 2; Plan #332).
  *
  * <p>Gegenstand sind die Rechenregeln: welche Position im Forecast steht, in welchem Jahr und in
  * welcher Spalte, und mit welchem Betrag. Die beiden Auskuenfte, aus denen das entsteht, sind
@@ -102,6 +103,21 @@ class ForecastUseCaseTest {
       final Angebotsstatus status,
       final String firmaName,
       final Angebotsposition... positionen) {
+    return angebot(id, status, false, firmaName, positionen);
+  }
+
+  /* Ein storniertes Angebot: Der Status bleibt der, aus dem storniert wurde (#330, Kriterium 9). */
+  private static AngebotMitFirma storniert(
+      final long id, final Angebotsstatus status, final Angebotsposition... positionen) {
+    return angebot(id, status, true, ADLER, positionen);
+  }
+
+  private static AngebotMitFirma angebot(
+      final long id,
+      final Angebotsstatus status,
+      final boolean storniert,
+      final String firmaName,
+      final Angebotsposition... positionen) {
     return new AngebotMitFirma(
         new Angebot(
             Long.valueOf(id),
@@ -109,6 +125,8 @@ class ForecastUseCaseTest {
             null,
             status.intern(),
             status,
+            storniert,
+            null,
             ANGEBOTSDATUM,
             "Website-Relaunch",
             "Schulungen",
@@ -120,7 +138,7 @@ class ForecastUseCaseTest {
 
   private void gegeben(
       final List<AngebotMitFirma> angebote, final Map<Long, BigDecimal> abgerechnet) {
-    when(uebersicht.angebote(Optional.empty())).thenReturn(angebote);
+    when(uebersicht.angebote(Angebotsauswahl.alle())).thenReturn(angebote);
     when(rechnungen.abgerechneteMengen()).thenReturn(abgerechnet);
   }
 
@@ -191,6 +209,55 @@ class ForecastUseCaseTest {
 
     // Then
     assertThat(forecast.jahre()).isEmpty();
+  }
+
+  @Test
+  void forecast_thenAStorniertesAngebotCountsNeitherUnderAngebotenNorUnderZugesagt() {
+    // Given — #330, Kriterium 2: je ein aus „abgegeben" und aus „bestellt" storniertes Angebot mit
+    // offener Position im selben Jahr wie ein abgegebenes und ein bestelltes, die weiter zaehlen.
+    gegeben(
+        List.of(
+            storniert(1L, Angebotsstatus.ABGEGEBEN, position(11L, "7.00", "100.00", J2026)),
+            storniert(
+                2L,
+                Angebotsstatus.BESTELLT,
+                position(21L, "8.00", "100.00", J2026),
+                position(22L, "9.00", "100.00", J2026)),
+            angebot(3L, Angebotsstatus.ABGEGEBEN, position(31L, "2.00", "100.00", J2026)),
+            angebot(4L, Angebotsstatus.BESTELLT, position(41L, "3.00", "100.00", J2026))),
+        Map.of());
+
+    // When
+    final Forecast forecast = useCase.forecast();
+
+    // Then — keine Position der stornierten Angebote, in keiner Spalte.
+    assertThat(forecast.jahre())
+        .singleElement()
+        .satisfies(
+            jahr -> {
+              assertThat(jahr.zugesagt()).isEqualTo(geld("300.00"));
+              assertThat(jahr.angeboten()).isEqualTo(geld("200.00"));
+              assertThat(jahr.positionen())
+                  .extracting(zeile -> zeile.position().requireId())
+                  .containsExactly(31L, 41L);
+            });
+  }
+
+  @Test
+  void forecast_thenAYearWithOnlyPositionsOfStornierteAngeboteIsMissing() {
+    // Given — 2027 traegt nur Positionen stornierter Angebote, 2026 eine offene eines bestellten.
+    gegeben(
+        List.of(
+            storniert(1L, Angebotsstatus.ANGELEGT, position(11L, "1.00", "100.00", J2027)),
+            storniert(2L, Angebotsstatus.BESTELLT, position(21L, "8.00", "100.00", J2027)),
+            angebot(3L, Angebotsstatus.BESTELLT, position(31L, "5.00", "100.00", J2026))),
+        Map.of());
+
+    // When
+    final Forecast forecast = useCase.forecast();
+
+    // Then
+    assertThat(forecast.jahre()).extracting(Forecastjahr::jahr).containsExactly(J2026);
   }
 
   @Test

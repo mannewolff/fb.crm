@@ -73,3 +73,36 @@ export function angebotsstatusBild(status: Angebotsstatus): Angebotsstatusbild {
 export function alsAngebotsstatus(wert: unknown): Angebotsstatus | null {
   return ANGEBOTSSTATUS.find((status) => status === wert) ?? null;
 }
+
+/**
+ * Ein Wert des einen Filters der Uebersicht aller Angebote: einer der sieben Status oder
+ * „Storniert" (Plan #332, E7, E19).
+ *
+ * **„Storniert" ist kein Status** (E1): Ein storniertes Angebot behaelt den Status, aus dem es
+ * storniert wurde. Darum ist der Filterwert ein eigener Typ und `BILDER` bleibt bei sieben
+ * Eintraegen. Die Werte sind eine Partition (E7): Unter einem Status stehen nur die nicht
+ * stornierten Angebote, unter `'STORNIERT'` jedes stornierte, gleich in welchem Status.
+ */
+export type Filterwert = Angebotsstatus | 'STORNIERT';
+
+/** Die acht Filterwerte — die sieben Status in ihrer Reihenfolge, „Storniert" am Ende. */
+export const FILTERWERTE: readonly Filterwert[] = [...ANGEBOTSSTATUS, 'STORNIERT'];
+
+/**
+ * Das Wort fuer „storniert" — geteilt von `StorniertChip` und dem Filter, damit beide dieselbe
+ * Zeichenkette zeigen (E19).
+ */
+export const STORNIERT_WORT = 'Storniert';
+
+/**
+ * Verengt einen Wert, etwa aus der Adresse, auf einen der acht Filterwerte, oder `null` — ein
+ * unbekannter Wert bedeutet wie bisher „alle" (E20).
+ */
+export function alsFilterwert(wert: unknown): Filterwert | null {
+  return FILTERWERTE.find((filterwert) => filterwert === wert) ?? null;
+}
+
+/** Das Wort zum Filterwert: fuer einen Status das Wort seines Bilds, sonst {@link STORNIERT_WORT}. */
+export function filterwortZu(wert: Filterwert): string {
+  return wert === 'STORNIERT' ? STORNIERT_WORT : angebotsstatusBild(wert).wort;
+}

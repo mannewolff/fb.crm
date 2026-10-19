@@ -120,6 +120,8 @@ class AngebotPersistenceIT extends AbstractIntegrationTest {
         ansprechpartnerId,
         status.intern(),
         status,
+        false,
+        null,
         ANGEBOTSDATUM,
         TITEL,
         BESCHREIBUNG,
@@ -156,6 +158,8 @@ class AngebotPersistenceIT extends AbstractIntegrationTest {
         angebot.ansprechpartnerId(),
         angebot.intern(),
         angebot.status(),
+        angebot.storniert(),
+        angebot.stornoGrund(),
         angebot.angebotDatum(),
         titel,
         angebot.beschreibung(),
@@ -491,5 +495,65 @@ class AngebotPersistenceIT extends AbstractIntegrationTest {
     // When / Then
     assertThat(gelesen(gespeichert.requireId()))
         .hasValueSatisfying(angebot -> assertThat(angebot.titel()).isNull());
+  }
+
+  @Test
+  void save_givenAStornoWithAReason_thenBothSurviveARoundTripThroughTheDatabase() {
+    // Given — Issue #333: storniert aus „bestellt", mit Grund.
+    final Angebot gespeichert = geschrieben(angebot(List.of(KONZEPTION), Angebotsstatus.BESTELLT));
+
+    // When
+    geschrieben(gespeichert.storniert("Auftrag zurueckgezogen", ANGELEGT));
+
+    // Then — in den Spalten und frisch zurueckgelesen; der Status bleibt der von vorher (E1).
+    assertThat(
+            jdbc.queryForMap(
+                "SELECT storniert, storno_grund, status FROM angebot WHERE id = ?",
+                Long.valueOf(gespeichert.requireId())))
+        .containsEntry("storniert", true)
+        .containsEntry("storno_grund", "Auftrag zurueckgezogen")
+        .containsEntry("status", "BESTELLT");
+    assertThat(gelesen(gespeichert.requireId()))
+        .hasValueSatisfying(
+            angebot -> {
+              assertThat(angebot.storniert()).isTrue();
+              assertThat(angebot.stornoGrund()).isEqualTo("Auftrag zurueckgezogen");
+              assertThat(angebot.status()).isEqualTo(Angebotsstatus.BESTELLT);
+            });
+  }
+
+  @Test
+  void save_givenAWithdrawnStorno_thenTheFlagAndTheReasonAreGone() {
+    // Given — #330, Kriterium 9: nach der Ruecknahme ist der Grund nicht mehr zu sehen.
+    final Angebot storniert =
+        geschrieben(
+            geschrieben(angebot(List.of(KONZEPTION), Angebotsstatus.ABGEGEBEN))
+                .storniert("vom Kunden abgelehnt", ANGELEGT));
+
+    // When
+    geschrieben(storniert.stornoZurueckgenommen(ANGELEGT));
+
+    // Then
+    assertThat(gelesen(storniert.requireId()))
+        .hasValueSatisfying(
+            angebot -> {
+              assertThat(angebot.storniert()).isFalse();
+              assertThat(angebot.stornoGrund()).isNull();
+              assertThat(angebot.status()).isEqualTo(Angebotsstatus.ABGEGEBEN);
+            });
+  }
+
+  @Test
+  void save_givenANewAngebot_thenItIsNotStornoed() {
+    // When
+    final Angebot gespeichert = geschrieben(angebot(List.of(KONZEPTION)));
+
+    // Then
+    assertThat(gelesen(gespeichert.requireId()))
+        .hasValueSatisfying(
+            angebot -> {
+              assertThat(angebot.storniert()).isFalse();
+              assertThat(angebot.stornoGrund()).isNull();
+            });
   }
 }

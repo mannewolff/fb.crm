@@ -21,6 +21,8 @@ const ANGEBOT = {
   titel: 'Neue Website',
   beschreibung: null,
   intern: false,
+  storniert: false,
+  stornoGrund: null,
   positionen: [],
   summe: 0,
 };
