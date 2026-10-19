@@ -1,0 +1,256 @@
+# Betrieb
+
+Dieser Teil der Dokumentation beschreibt, wie man fb.crm auf einem eigenen Rechner einrichtet und
+betreibt: von den Voraussetzungen über den ersten Start und das Konto bis zum Betrieb unter eigenem
+Namen mit Zertifikat und zum Mailversand. Wie man mit fb.crm arbeitet, steht im Teil „Bedienung".
+
+## Voraussetzungen
+
+fb.crm läuft als Verbund von Containern. Nötig sind:
+
+- ein Linux-Rechner mit Docker und Docker Compose (der Befehl `docker compose`),
+- ein Git-Checkout des Projekts auf diesem Rechner; alle Befehle dieses Teils laufen im Verzeichnis
+  des Checkouts,
+- für den Betrieb unter eigenem Namen eine eigene Domain, deren DNS-Eintrag auf den Rechner zeigt,
+  und ein Rechner, der aus dem Internet auf den Ports 80 und 443 erreichbar ist.
+
+Alles Weitere — PostgreSQL, MinIO, die Anwendung und Caddy als Reverse-Proxy, der das Zertifikat
+selbst holt — bringt `docker-compose.yml` mit.
+
+## Konfiguration anlegen
+
+Die Konfiguration steht in der Datei `.env` im Verzeichnis des Checkouts. Sie entsteht aus der
+Vorlage:
+
+```bash
+cp .env.example .env
+```
+
+Für den lokalen Betrieb genügt ein einziger Wert: der Einmal-Schlüssel, mit dem das Konto
+eingerichtet wird. Ohne ihn ist die Einrichtung abgeschaltet.
+
+```bash
+openssl rand -hex 24
+```
+
+Das Ergebnis in `.env` als `FBCRM_BOOTSTRAP_ADMIN_TOKEN=` eintragen. Alle übrigen Werte haben
+Defaults für den lokalen Betrieb; was sie bewirken, steht je Variable in `.env.example`.
+
+**Datenbank- und MinIO-Zugangsdaten:** Leer gelassen gelten bekannte Vorgaben (`fbcrm` für Name,
+Nutzer und Passwort der Datenbank, `fbcrm` und `fbcrm-minio` für MinIO). Auf einem Rechner, der aus
+dem Internet erreichbar ist, eigene Werte setzen:
+
+```
+POSTGRES_PASSWORD=...
+MINIO_ROOT_USER=...
+MINIO_ROOT_PASSWORD=...
+```
+
+Ein Passwort lässt sich wieder mit `openssl rand -hex 24` erzeugen. Diese Werte vor dem ersten
+Start eintragen: PostgreSQL übernimmt `POSTGRES_DB`, `POSTGRES_USER` und `POSTGRES_PASSWORD` nur
+beim ersten Anlegen seiner Daten, eine spätere Änderung greift dort nicht mehr.
+
+**Wer fb.crm unter eigenem Namen betreibt**, trägt jetzt außerdem die Werte aus dem Abschnitt
+„Betrieb unter eigenem Namen" ein — vor dem ersten Start, nicht danach. Dazu gehören die drei
+Pflichtwerte `FBCRM_SESSION_SECRET`, `FBCRM_BASE_URL` und `FBCRM_DEV_MODE=false`.
+
+Compose liest die `.env` beim Erstellen der Container. Darum die Datei vollständig ausfüllen, bevor
+fb.crm das erste Mal startet.
+
+## Starten
+
+```bash
+docker compose up -d --build
+```
+
+Der erste Lauf baut das Image und spielt die Datenbankmigrationen ein; das dauert einige Minuten.
+Caddy startet erst, wenn die Anwendung gesund meldet; bis dahin zeigt `docker compose ps` sie als
+`starting`.
+
+**Gesundheitsprobe:**
+
+```bash
+docker compose ps
+```
+
+Die Zeile von `fbcrm-api` zeigt `healthy`, sobald die Anwendung hochgefahren ist und die Migrationen
+durch sind. Dieselbe Probe, die Docker dafür fährt, lässt sich von Hand aufrufen:
+
+```bash
+docker compose exec fbcrm-api curl -fsS http://localhost:8080/actuator/health
+```
+
+Die Antwort enthält `"status":"UP"`. Kommt die Anwendung nicht hoch, nennt
+`docker compose logs fbcrm-api` den Grund.
+
+## Konto einrichten
+
+fb.crm hat genau ein Konto. Es entsteht einmalig über die Einrichtungsseite.
+
+1. Im Browser die Adresse der Instanz öffnen: lokal `https://localhost`, unter eigenem Namen die
+   eigene Domain. Lokal stellt Caddy ein Zertifikat seiner eigenen Zertifizierungsstelle aus; der
+   Browser warnt davor einmalig.
+2. Eine frische Instanz führt auf die Seite „Einrichten". Dort E-Mail-Adresse, die Wiederholung der
+   E-Mail-Adresse, Anzeigename, Passwort und den Einmal-Schlüssel aus `FBCRM_BOOTSTRAP_ADMIN_TOKEN`
+   eingeben.
+3. „Einrichten" wählen. Danach ist man angemeldet.
+
+Der Schlüssel wirkt nur, solange es noch kein Konto gibt — ein zweiter Aufruf wird abgewiesen.
+
+**Vertippte E-Mail-Adresse:** Eine Profilbearbeitung gibt es nicht, und der Einmal-Schlüssel greift
+nicht mehr, sobald ein Konto existiert. Wer sich bei der Einrichtung in der Adresse vertippt hat,
+ist damit ausgesperrt. Der Weg zurück ist das Löschen der Kontozeile:
+
+```bash
+docker compose exec postgres psql -U fbcrm -d fbcrm -c "DELETE FROM account;"
+```
+
+Danach greift der Schlüssel wieder, und die Einrichtung läuft erneut. Der Befehl entfernt **jedes**
+Konto samt offener Passwort-Reset-Links — nur auf einer frisch eingerichteten Instanz ausführen.
+Wer `POSTGRES_USER` oder `POSTGRES_DB` in der `.env` geändert hat, setzt dort die eigenen Werte ein.
+
+## Betrieb unter eigenem Namen
+
+Unter eigenem Namen liefert der mitgelieferte Caddy fb.crm unter der eigenen Domain aus und holt
+das Zertifikat bei Let's Encrypt selbst. Voraussetzung: Der DNS-Eintrag der Domain zeigt auf den
+Rechner, und die Ports 80 und 443 sind aus dem Internet erreichbar.
+
+**Pflicht vor dem ersten Start von außen.** Sobald fb.crm von außen erreichbar ist, müssen diese
+drei Werte in der `.env` gesetzt sein. Ohne sie läuft fb.crm mit einem öffentlich bekannten
+Signaturgeheimnis, und jeder könnte sich eine gültige Sitzung bauen:
+
+- `FBCRM_SESSION_SECRET` — ein eigenes Signaturgeheimnis für die Sitzungen, erzeugt mit
+  `openssl rand -base64 48`,
+- `FBCRM_BASE_URL` — die öffentliche Adresse der Instanz, etwa `https://crm.example.org`; aus ihr
+  entsteht der Link in der Mail zum Passwort-Reset,
+- `FBCRM_DEV_MODE=false` — schaltet den Entwicklungsmodus ab; danach verweigert fb.crm den Start
+  mit dem voreingestellten Signaturgeheimnis.
+
+Dazu kommen die beiden Werte für Caddy:
+
+- `FBCRM_DOMAIN` — die eigene Domain ohne `https://`, etwa `crm.example.org`,
+- `FBCRM_ACME_EMAIL` — eine Kontaktadresse für Let's Encrypt.
+
+Zusammen sieht das in der `.env` etwa so aus:
+
+```
+FBCRM_SESSION_SECRET=...
+FBCRM_BASE_URL=https://crm.example.org
+FBCRM_DEV_MODE=false
+FBCRM_DOMAIN=crm.example.org
+FBCRM_ACME_EMAIL=admin@example.org
+```
+
+Danach starten, wie im Abschnitt „Starten" beschrieben. Caddy holt das Zertifikat beim ersten
+Aufruf der Domain selbst; der Browser zeigt danach keine Warnung. Den Abschnitt „Konto einrichten"
+dann unter der eigenen Domain durchlaufen.
+
+**Eine Änderung der `.env` wirkt erst nach `docker compose up -d`**, nicht nach
+`docker compose restart`: Compose liest die `.env` beim Erstellen der Container, und `restart`
+behält die Umgebung, mit der ein Container einmal angelegt wurde. Wer die Werte erst nach dem
+ersten Start einträgt, ruft darum
+
+```bash
+docker compose up -d
+```
+
+auf. Compose erstellt dann die betroffenen Container neu.
+
+## Mailversand einrichten
+
+fb.crm verschickt Mails für den Passwort-Reset. **Ohne Mailversand ist kein Passwort-Reset
+möglich:** Wer das Passwort vergisst, bekommt keinen Link. Der Mailversand ist zu Beginn
+abgeschaltet. Eingeschaltet wird er in der `.env`:
+
+- `FBCRM_MAIL_ENABLED=true` — schaltet den Versand ein,
+- `FBCRM_MAIL_FROM` — die Absenderadresse der Mails,
+- `FBCRM_SMTP_HOST` und `FBCRM_SMTP_PORT` — der SMTP-Server des eigenen Mailanbieters,
+- `FBCRM_SMTP_USER` und `FBCRM_SMTP_PASSWORD` — die Zugangsdaten dort; leer, wenn der Server
+  keine Anmeldung verlangt,
+- `FBCRM_SMTP_AUTH` und `FBCRM_SMTP_STARTTLS` — ob der Server Anmeldung beziehungsweise STARTTLS
+  verlangt; leer gilt `true`.
+
+Ein Beispiel für einen Anbieter mit Anmeldung und STARTTLS auf Port 587:
+
+```
+FBCRM_MAIL_ENABLED=true
+FBCRM_MAIL_FROM=crm@example.org
+FBCRM_SMTP_HOST=smtp.example.org
+FBCRM_SMTP_PORT=587
+FBCRM_SMTP_USER=crm@example.org
+FBCRM_SMTP_PASSWORD=...
+```
+
+Der Link in der Mail entsteht aus `FBCRM_BASE_URL`; der Wert muss darum die Adresse sein, unter der
+fb.crm im Browser aufgerufen wird.
+
+**Eine Änderung der `.env` wirkt erst nach `docker compose up -d`**, nicht nach
+`docker compose restart`. Nach dem Eintragen der Mailwerte also:
+
+```bash
+docker compose up -d
+```
+
+Ob der Versand klappt, zeigt der Weg im Abschnitt „Vergessenes Passwort": Kommt die Mail an, ist
+der Mailversand eingerichtet.
+
+**Lokal ausprobieren mit Mailpit:** Lokal gibt es keinen Mailserver. Den Auffangserver Mailpit
+bringt das Profil `dev-mail` mit; er nimmt jede Mail an, stellt keine zu und zeigt sie unter
+`http://localhost:8025`. Dafür in der `.env`:
+
+```
+FBCRM_MAIL_ENABLED=true
+FBCRM_SMTP_AUTH=false
+FBCRM_SMTP_STARTTLS=false
+```
+
+`FBCRM_SMTP_HOST` und `FBCRM_SMTP_PORT` bleiben leer; ihr Default zeigt bereits auf Mailpit. Dann
+mit dem Profil starten:
+
+```bash
+docker compose --profile dev-mail up -d
+```
+
+## Vergessenes Passwort
+
+Wer das Passwort vergessen hat, setzt über die Anmeldeseite ein neues. Der Weg setzt einen
+eingerichteten Mailversand voraus (Abschnitt „Mailversand einrichten").
+
+1. Auf der Seite „Anmelden" den Verweis „Passwort vergessen?" wählen.
+2. Auf der Seite „Passwort vergessen" die E-Mail-Adresse des Kontos eingeben und „Link anfordern"
+   wählen. Die Seite bestätigt die Anfrage — mit derselben Antwort für jede Adresse, ob es zu ihr
+   ein Konto gibt oder nicht.
+3. In der Mail den Link öffnen. Er gilt nur einmal und nur begrenzte Zeit, in der Grundeinstellung
+   eine Stunde.
+4. Auf der Seite „Neues Passwort" das neue Passwort und seine Wiederholung eingeben und „Passwort
+   setzen" wählen.
+
+Danach führt fb.crm auf die Seite „Anmelden" mit dem Hinweis, dass das neue Passwort gesetzt ist;
+dort mit dem neuen Passwort anmelden. Ist der Link verbraucht oder abgelaufen, meldet die Seite das
+und bietet „Neuen Link anfordern" an.
+
+## Hinter einem vorhandenen Traefik
+
+Wer auf dem Rechner bereits einen Traefik betreibt, lässt Caddy weg; TLS terminiert dann Traefik.
+Das Produktions-Overlay `docker-compose.prod.yml` hängt die Anwendung an das externe Netz `web` des
+Traefik und startet Caddy nicht. Aufruf:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+```
+
+Pflicht in der Server-`.env` sind `FBCRM_SESSION_SECRET` (`openssl rand -base64 48`),
+`FBCRM_BASE_URL` und `FBCRM_DOMAIN`; ohne sie bricht schon `docker compose config` ab. Das
+Overlay setzt `FBCRM_DEV_MODE` fest auf `false` — mit dem voreingestellten Secret startet die
+Anwendung dort nicht. Auch hier wirkt eine Änderung der `.env` erst nach dem Aufruf oben, nicht
+nach `docker compose restart`.
+
+**Prüfschritt `X-Forwarded-For`.** Die Anwendung zählt Fehlversuche bei der Anmeldung je
+Absenderadresse. Hinter einem Proxy kennt sie die Adresse nur aus `X-Forwarded-For` — und glaubt
+dem Kopf ausschließlich, wenn die Gegenstelle in `FBCRM_TRUSTED_PROXIES` steht. Traefiks
+Vertrauenskonfiguration liegt nicht in diesem Repository. Vor dem Eintrag der Traefik-Adresse
+deshalb prüfen, dass Traefik eingehende `X-Forwarded-*`-Köpfe fremder Quellen verwirft
+(`forwardedHeaders.trustedIPs` am Entrypoint nicht auf beliebige Quellen gesetzt, kein
+`forwardedHeaders.insecure`). Sonst setzt ein Angreifer den Kopf selbst und umgeht die
+Zählbremse. Solange das nicht geprüft ist, `FBCRM_TRUSTED_PROXIES` leer lassen: Dann zählen alle
+Anfragen unter Traefiks Adresse — strenger als nötig, aber nicht umgehbar.
