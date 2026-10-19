@@ -39,8 +39,8 @@ public final class Briefbogenlayout {
 
   // --- Blatt (A4 in ganzen Punkten) ---
 
-  /** Breite des Blattes. */
-  private static final int BLATT_BREITE = 595;
+  /** Breite des Blattes; an ihr misst auch die Randpruefung den rechten Rand. */
+  static final int BLATT_BREITE = 595;
 
   /** Hoehe des Blattes. */
   private static final int BLATT_HOEHE = 842;
@@ -187,6 +187,19 @@ public final class Briefbogenlayout {
    */
   static List<Druckelement> setze(final Probedruckdaten probe, final Briefbogen bogen) {
     return new Briefbogenlayout(probe.druckdaten(), probe.name(), bogen).gesetzt();
+  }
+
+  /**
+   * Ob auf einer Folgeseite die erste Position der Probe Platz hat — die dritte Bedingung der
+   * Randpruefung (Kriterium 13; E9), gestellt an dieselbe Tabelle, die den Satz umbricht.
+   *
+   * @param probe die Beispieldaten; gemessen wird ihre erste Position
+   * @param bogen die Schalter und Raender, mit denen gesetzt wuerde
+   * @return ob eine Folgeseite diese Position fasst
+   */
+  static boolean folgeseiteFasst(final Probedruckdaten probe, final Briefbogen bogen) {
+    return new Briefbogenlayout(probe.druckdaten(), probe.name(), bogen)
+        .tabelle.passtAufFolgeseite(probe.druckdaten().positionen().getFirst());
   }
 
   private List<Druckelement> gesetzt() {

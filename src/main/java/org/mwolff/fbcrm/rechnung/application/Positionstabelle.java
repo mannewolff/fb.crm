@@ -150,7 +150,7 @@ final class Positionstabelle {
     final List<Druckposition> positionen = daten.positionen();
     for (int stelle = 0; stelle < positionen.size(); stelle++) {
       final boolean letzte = stelle == positionen.size() - 1;
-      final List<String> zeilen = umbrochen(positionstext(positionen.get(stelle)));
+      final List<String> zeilen = umbrochen(positionstext(positionen.get(stelle)), spiegel());
       final int reserve = letzte ? SUMMENBLOCK_HOEHE : 0;
       final int benoetigt = zeilen.size() * ZEILENHOEHE + reserve;
       if (!haeltDieUntergrenze(hoehe - benoetigt, spiegel().tabelleUntergrenze())) {
@@ -186,6 +186,20 @@ final class Positionstabelle {
       return hoehe;
     }
     return seitenwechsel();
+  }
+
+  /**
+   * Ob eine Position oben auf einem neuen Blatt Platz hat, ohne dessen Tabellenuntergrenze zu
+   * reissen — nach derselben Regel, nach der {@link #setze} umbricht. Die Randpruefung stellt diese
+   * Frage fuer die Folgeseite (Plan #363, E9).
+   *
+   * @param position die Position, deren umbrochener Text gemessen wird
+   * @return ob sie unter der obersten Grundlinie eines neuen Blattes ganz Platz hat
+   */
+  boolean passtAufFolgeseite(final Druckposition position) {
+    final int zeilen = umbrochen(positionstext(position), folgeseiten).size();
+    return haeltDieUntergrenze(
+        folgeseiten.folgeseiteOben() - zeilen * ZEILENHOEHE, folgeseiten.tabelleUntergrenze());
   }
 
   private void spaltenkoepfe(final int grundlinie) {
@@ -311,9 +325,9 @@ final class Positionstabelle {
     };
   }
 
-  /** Bricht den Text auf die Breite der Spalte „Position" um. */
-  private List<String> umbrochen(final String text) {
-    final int spalte = spiegel().positionsbreite() - 2 * INNENABSTAND;
+  /** Bricht den Text auf die Breite der Spalte „Position" im genannten Satzspiegel um. */
+  private static List<String> umbrochen(final String text, final Satzspiegel spiegel) {
+    final int spalte = spiegel.positionsbreite() - 2 * INNENABSTAND;
     final int hoechstens =
         spalte * ZEICHENBREITE_NENNER / (GROESSE_TABELLE * ZEICHENBREITE_ZAEHLER);
     final List<String> zeilen = new ArrayList<>();
