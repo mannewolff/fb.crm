@@ -290,3 +290,99 @@ Der Weg zurück ist ein Storno; eine Taste dafür bietet fb.crm bisher nicht.
 
 **Ergebnis:** Die Rechnung steht mit Nummer, Betrag und Zustand „Gestellt" in der Übersicht
 „Rechnungen", in der Karte „Rechnungen" ihres Angebots, und ihr PDF lässt sich herunterladen.
+
+## Startseite
+
+**Zweck:** Die Startseite zeigt den Geschäftsstand auf einen Blick: was in Arbeit ist, was noch
+nicht abgerechnet ist, welche Rechnungen offen sind und was im gewählten Zeitraum abgerechnet
+wurde. Die Zahlen laufen dort aus Angeboten, Arbeitszeit und Rechnungen zusammen; entstanden sind
+sie an diesen Stellen, die Startseite zeigt sie nur.
+
+**Einstieg:** Nach der Anmeldung landet man auf der Startseite „Start" unter der Adresse `/`.
+
+**Geschäftsstand lesen:**
+
+1. Oben einen Zeitraum wählen, einen Monat oder ein ganzes Jahr. Der Zeitraum steht danach in der
+   Adresse.
+2. Die Kennzahlen lesen: „Angebote in Arbeit", „Noch nicht abgerechnet", „Offene Rechnungen" und
+   „Abgerechnet". Unter jeder Kennzahl steht in einer eigenen Karte, woraus sie entstanden ist.
+   „Offene Rechnungen" und „Angebote in Arbeit" zeigen den Stand von heute, unabhängig vom
+   gewählten Zeitraum; „Abgerechnet" zählt nach Rechnungsdatum, nicht nach Zahlungseingang.
+3. Bei einem gewählten Jahr nennt die Karte „Abgerechnet" die Monate des Jahres mit „Rechnungen",
+   „Netto", „Brutto" und „Offen". „Zu den Rechnungen" führt zur Übersicht „Rechnungen".
+4. Die Karte „Forecast" zeigt je Jahr, was „Zugesagt" und was „Angeboten" ist, mit der „Summe".
+   Ein Jahr lässt sich aufklappen und nennt dann die noch offenen Positionen mit ihrem Restbetrag.
+
+**Ergebnis:** Man sieht ohne weiteren Weg, wie das Geschäft im gewählten Zeitraum steht und was
+noch zu erwarten ist.
+
+## Arbeitszeit
+
+**Zweck:** Die Arbeitszeit hält fest, wann an welcher Angebotsposition gearbeitet wurde, über alle
+Angebote hinweg, nach Monaten. Die erfassten Stunden eines Monats belegen später die Mengen einer
+Rechnung vor.
+
+**Einstieg:** In der Schiene unter „Geschäft" „Arbeitszeit" wählen. Die Ansicht zeigt den
+laufenden Monat; „Vorheriger Monat" und „Nächster Monat" neben dem Namen des Monats wechseln ihn.
+
+**Eintrag anlegen:**
+
+1. „Zeit erfassen" wählen.
+2. „Tag", „von", „bis" und die „Position" des Angebots angeben, an der gearbeitet wurde.
+3. „Speichern" wählen.
+
+**Eintrag ändern:** In der Zeile des Eintrags die Zeitspanne wählen; es öffnet sich dieselbe Maske
+mit den bisherigen Werten. Löschen steht im Menü ⋯ der Zeile unter „Löschen".
+
+**Ergebnis:** Der Eintrag steht unter seinem Tag mit „Zeit", „Dauer" und „Position"; Tagessumme
+und Monatssumme rechnen ihn mit.
+
+## Jahresabschlüsse
+
+**Zweck:** Ein Jahresabschluss fasst ein Jahr zusammen: Einnahmen, Umsatzsteuer, Umsatz je Kunde,
+die Bilanz der Angebote und die Arbeitszeit. Er ist eine Auswertung, keine Buchhaltung.
+
+**Einstieg:** In der Schiene unter „Geschäft" „Jahresabschlüsse" wählen. Die Übersicht nennt je
+Jahr „Einnahmen netto", „Rechnungen" und „Annahmequote", das jüngste Jahr zuerst; das laufende
+trägt den Hinweis „läuft noch". Ein Jahr erscheint, sobald es eine gestellte Rechnung oder ein
+abgegebenes Angebot hat.
+
+**Abschluss eines Jahres ansehen:**
+
+1. In der Übersicht das Jahr wählen.
+2. Oben stehen „Einnahmen netto", „Einnahmen brutto" und „Enthaltene Umsatzsteuer". Gezählt wird
+   nach Rechnungsdatum, nicht nach Zahlungseingang.
+3. Darunter folgen die Karten „Rechnungen", „Umsatzsteuer je Steuersatz" (nur bei mehr als einem
+   Steuersatz), „Umsatz je Kunde" mit dem Anteil am Jahresumsatz, „Angebote" mit abgegebenen,
+   angenommenen und offenen Angeboten samt Annahmequote, und „Arbeitszeit" mit Kundenarbeit,
+   internen Projekten und dem Erlös je Stunde.
+
+Lässt sich eine Kennzahl nicht berechnen, steht ein Strich und daneben der Grund.
+
+**Ergebnis:** Man sieht die Zahlen eines Jahres zusammen auf einer Seite.
+
+## Nachgetragene Rechnungen
+
+**Zweck:** Rechnungen, die außerhalb von fb.crm entstanden sind, etwa vor seiner Einführung,
+lassen sich mit ihren Eckdaten nachtragen. So erscheinen sie in der Übersicht, auf der Startseite
+und in den Jahresabschlüssen.
+
+**Einstieg:** In der Schiene unter „Geschäft" „Rechnungen" wählen, dort „Rechnung nachtragen".
+
+**Rechnung nachtragen:**
+
+1. Unter „Kunde suchen" die Firma suchen und unter „Kunde" wählen; auch eine stillgelegte Firma
+   steht zur Wahl.
+2. „Rechnungsnummer", „Rechnungsdatum", „Nettobetrag" und „Bruttobetrag" angeben, die Beträge in
+   Euro, so wie auf der Rechnung.
+3. Optional unter „Originalrechnung (PDF)" das PDF der Rechnung wählen.
+4. „Anlegen" wählen.
+
+**Bearbeiten:** In der Ansicht der nachgetragenen Rechnung „Bearbeiten" wählen, Angaben ändern und
+„Speichern" wählen. Eine neue Datei ersetzt das hinterlegte PDF, „Hinterlegtes PDF entfernen"
+nimmt es heraus. Anders als eine gestellte Rechnung bleibt eine nachgetragene in jedem Zustand
+änderbar und lässt sich über das Menü ⋯ mit „Löschen" entfernen. „Als bezahlt markieren",
+„Abschreiben" und „Zurück auf gestellt" stehen wie bei jeder Rechnung bereit.
+
+**Ergebnis:** Die nachgetragene Rechnung steht in der Übersicht „Rechnungen" und ist dort am
+Zeichen „nachgetragen" neben ihrem Zustand zu erkennen.
