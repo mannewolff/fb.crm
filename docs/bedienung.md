@@ -126,3 +126,167 @@ nicht mehr; sie gilt erst für die nächste Rechnung, die gestellt wird.
 
 **Ergebnis:** Die Einstellungen sind gespeichert, und die Vorschau zeigt die Nummer, die die
 nächste gestellte Rechnung trägt.
+
+## Firmen und Ansprechpartner
+
+**Zweck:** Eine Firma ist der Kunde, an den Angebote und Rechnungen gehen. Sie trägt Name,
+Anschrift und Steuerangaben, dazu ihre Ansprechpartner. Auf der Seite einer Firma laufen ihre
+Angebote zusammen.
+
+**Einstieg:** In der Schiene im Block „Stammdaten" den Eintrag „Firmen" wählen. Die Übersicht
+zeigt die Firmen mit „Firma", „Ort" und „Ansprechpartner". Das Feld „Firmen durchsuchen …"
+schränkt die Liste ein, der Schalter „auch stillgelegte" zeigt auch stillgelegte Firmen an. Ein
+Klick auf den Namen öffnet die Seite der Firma.
+
+**Firma anlegen:**
+
+1. In der Übersicht „Neue Firma" wählen.
+2. Die Felder ausfüllen: „Name" ist Pflicht, dazu „Straße und Hausnummer", „Postleitzahl", „Ort",
+   „Land" (vorbelegt mit „Deutschland"), „Steuernummer" und
+   „Umsatzsteuer-Identifikationsnummer".
+3. „Anlegen" wählen. fb.crm öffnet die Seite der neuen Firma.
+
+Eine Rechnung an die Firma lässt sich erst stellen, wenn Name, Straße und Hausnummer, Postleitzahl
+und Ort eingetragen sind. „Bearbeiten" auf der Seite der Firma öffnet dieselben Felder, „Speichern"
+übernimmt die Änderung.
+
+**Ansprechpartner anlegen und bearbeiten:**
+
+1. Auf der Seite der Firma „Neuer Ansprechpartner" wählen.
+2. Die Felder ausfüllen: „Vorname", „Nachname", „Rolle", „E-Mail-Adresse", „Telefon Festnetz" und
+   „Telefon Mobil".
+3. „Anlegen" wählen. Der Ansprechpartner steht danach in der Karte „Ansprechpartner" der Firma.
+
+Ändern lässt sich ein Ansprechpartner über das Menü ⋯ an seinem Eintrag mit „Bearbeiten"; dort
+steht auch „Stilllegen". Ein stillgelegter Ansprechpartner steht bei neuen Angeboten nicht mehr
+zur Wahl, seine Angaben bleiben erhalten, und „Wieder aktivieren" holt ihn zurück.
+
+**Firma stilllegen:** Auf der Seite der Firma das Menü ⋯ öffnen und „Stilllegen" wählen. fb.crm
+fragt vorher nach: Eine stillgelegte Firma steht nicht mehr zur Auswahl, ihre Angebote bleiben
+erhalten. Die Firma trägt danach den Zustand „Stillgelegt" und erscheint in der Übersicht nur noch
+mit dem Schalter „auch stillgelegte". An einer stillgelegten Firma entsteht kein neues Angebot.
+„Wieder aktivieren" im selben Menü macht den Schritt rückgängig.
+
+**Die Seite der Firma:** Oben stehen Name, Anschrift und Zustand mit den Tasten „Bearbeiten",
+„Neuer Ansprechpartner" und „Angebot anlegen". Darunter folgen die Karten „Ansprechpartner",
+„Stammdaten" mit den Steuerangaben und „Angebote" mit allen Angeboten an diese Firma, jeweils mit
+Titel, Datum, Summe und Status.
+
+**Ergebnis:** Die Firma steht in der Übersicht, und ihre Seite zeigt Ansprechpartner, Stammdaten
+und Angebote an einer Stelle.
+
+## Angebote
+
+**Zweck:** Ein Angebot hält fest, was einer Firma angeboten wird: einen Titel, eine Beschreibung
+und Positionen mit Menge, Einzelpreis und Betrag. Es durchläuft einen Status von „Angelegt" bis
+„Abgerechnet", trägt Kommentare und Anlagen und ist die Grundlage jeder Rechnung.
+
+**Einstieg:** Ein neues Angebot entsteht an seiner Firma: auf der Seite der Firma „Angebot
+anlegen" wählen. Alle Angebote zeigt die Übersicht in der Schiene unter „Geschäft" und „Angebote",
+mit „Titel", „Datum", „Firma", „Status" und „Summe", neueste zuerst. Das Feld „Filter" zeigt nur
+die Angebote eines Status oder die stornierten. Ein Klick auf den Titel öffnet das Angebot.
+
+**Angebot anlegen:**
+
+1. Auf der Seite der Firma „Angebot anlegen" wählen.
+2. Den „Titel" eintragen — er ist Pflicht und höchstens 200 Zeichen lang.
+3. Unter „Ansprechpartner" wahlweise einen der aktiven Ansprechpartner der Firma wählen.
+4. Das Kästchen „Internes Projekt" bleibt für ein Angebot an den Kunden leer.
+5. „Anlegen" wählen. fb.crm öffnet die Maske „Angebot bearbeiten".
+
+**Positionen erfassen:**
+
+1. In der Maske „Angebotsdatum" und wahlweise eine „Beschreibung" eintragen.
+2. In der Karte „Positionen" „Position hinzufügen" wählen.
+3. Je Position „Bezeichnung", „Abrechnung" (Aufwand oder Festpreis), „Menge", „Einheit" (Stunde,
+   Personentag oder Pauschal), „Einzelpreis (netto)" und „Leistungsjahr" eintragen. Die Pfeile an
+   der Position verschieben sie nach oben oder unten, das Papierkorbsymbol löscht sie.
+4. Unter den Positionen rechnet „Summe (netto)" beim Tippen mit.
+5. „Speichern" wählen. Danach steht „Gespeichert." oben in der Maske, und Beträge und Summe stehen
+   so da, wie fb.crm sie gespeichert hat. „Zum Angebot" öffnet die Ansicht des Angebots.
+
+Die Ansicht des Angebots zeigt oben Titel, Angaben und Status, darunter die Beschreibung, die
+Karte „Positionen" mit Menge, Einzelpreis, Betrag und der Nettosumme, die Karte „Rechnungen" sowie
+die Karten „Anlagen" und „Kommentare". „Bearbeiten" führt zurück in die Maske; Positionen lassen
+sich in jedem Status ändern.
+
+**Der Status und sein Weg:** Ein Angebot an den Kunden geht durch die Status „Angelegt",
+„Abgegeben", „Bestellt", „Erledigt" und „Abgerechnet". „Status weiter" setzt es eine Stufe weiter,
+„Status zurück" eine zurück; an den Enden fehlt die jeweilige Taste. Eine Rechnung lässt sich
+schreiben, sobald das Angebot „Bestellt" ist. In „Angelegt", „Abgegeben" und „Bestellt" steht
+außerdem „Stornieren": Nach einer Rückfrage, in der sich ein Grund festhalten lässt, trägt das
+Angebot den Zustand „Storniert" und zählt weder im Forecast noch unter „Angebote in Arbeit"; es
+bleibt mit Positionen, Kommentaren und Anlagen nachlesbar, und „Storno zurücknehmen" stellt es
+wieder her.
+
+**Kommentare:** In der Karte „Kommentare" den Text in das Feld „Neuer Kommentar" schreiben und
+„Kommentar speichern" wählen. Ein Kommentar hat höchstens 2.000 Zeichen und steht danach oben in
+der Liste. Über das Menü ⋯ am Kommentar lässt er sich bearbeiten oder nach einer Rückfrage löschen.
+
+**Anlagen:** In der Karte „Anlagen" „Datei hochladen" wählen und eine Datei auswählen; sie darf
+höchstens 25 MB groß sein. Die Anlage steht danach mit Dateiname und Zeitpunkt in der Liste. Das
+Augensymbol zeigt ein Bild oder ein PDF in einem Fenster an, das Pfeilsymbol lädt die Datei
+herunter, und über das Menü ⋯ lässt sich die Anlage nach einer Rückfrage löschen.
+
+**Ergebnis:** Das Angebot steht mit Titel, Status und seiner Summe in der Übersicht „Angebote" und
+auf der Seite seiner Firma.
+
+## Rechnungen
+
+**Zweck:** Eine Rechnung rechnet ab, was aus einem Angebot geleistet wurde — ganz oder in Teilen.
+Sie entsteht als Entwurf gegen die Positionen des Angebots, bekommt beim Stellen ihre Nummer aus dem
+Nummernkreis und wird damit festgeschrieben. Dazu gehört ein Rechnungsdokument als PDF.
+
+**Einstieg:** An ihrem Angebot: In der Ansicht des Angebots „Rechnung schreiben" wählen. Die Taste
+steht, sobald das Angebot „Bestellt" ist und noch etwas offen hat. Alle Rechnungen zeigt die
+Übersicht in der Schiene unter „Geschäft" und „Rechnungen", mit „Nummer", „Firma",
+„Rechnungsdatum", „Betrag", „Zustand" und „Dokument". Dort führt „Neue Rechnung" ebenfalls zum
+Entwurf: Sie zeigt die abrechenbaren Angebote zur Wahl.
+
+**Entwurf anlegen:**
+
+1. „Rechnung schreiben" am Angebot oder „Neue Rechnung" in der Übersicht wählen.
+2. Unter „Monat der Arbeitszeit" einen Monat wählen, dessen erfasste Stunden die Mengen vorbelegen,
+   oder „ohne Arbeitszeit" — dann übernimmt der Entwurf an jeder Position die offene Menge.
+3. „Anlegen" wählen (in der Übersicht das Angebot wählen). fb.crm öffnet den Entwurf.
+
+**Teilabrechnung gegen die Angebotspositionen:** Der Entwurf zeigt in der Karte „Positionen" jede
+Position des Angebots mit „Leistung", „Einheit", „Einzelpreis", „Angeboten", „Abgerechnet" und
+„Offen". In der Spalte „Jetzt abrechnen" steht, welche Menge diese Rechnung berechnet; eine Menge
+0 lässt die Position aus der Rechnung heraus. So lässt sich ein Angebot über mehrere Rechnungen
+abrechnen. Eine Menge über dem Offenen ist erlaubt und wird an der Zeile als Hinweis gezeigt.
+
+**Beträge prüfen:**
+
+1. In der Karte „Angaben zur Rechnung" „Rechnungsdatum" und „Leistungszeitraum" prüfen; beide sind
+   vorbelegt und Pflicht.
+2. Die Mengen in „Jetzt abrechnen" anpassen. „Betrag" je Zeile sowie die Summen für netto, Steuer
+   und brutto rechnen beim Tippen mit; der Steuersatz kommt aus den Rechnungseinstellungen.
+3. „Speichern" hält den Zwischenstand fest, danach steht „Gespeichert." in der Karte.
+
+Ein Entwurf, aus dem nichts werden soll, verschwindet über das Menü ⋯ mit „Entwurf löschen".
+
+**Rechnung stellen:**
+
+1. „Rechnung stellen" wählen. Die Taste ist gesperrt, solange keine Position eine Menge über 0
+   hat.
+2. fb.crm speichert ungespeicherte Änderungen und fragt nach, mit dem Bruttobetrag der Rechnung.
+3. Die Rückfrage mit „Rechnung stellen" bestätigen.
+
+Fehlen dafür noch eigene Angaben oder Angaben der Firma, nennt fb.crm sie in einer Liste unter
+„Für das Stellen fehlen noch Angaben:", und die Rechnung bleibt Entwurf. Beim Stellen bekommt die
+Rechnung die nächste Nummer aus dem Nummernkreis der Rechnungseinstellungen; keine Nummer wird
+doppelt vergeben. Nummer, Beträge, Steuersatz und Zahlungsziel sind damit festgeschrieben.
+
+**Das Rechnungsdokument:** Die gestellte Rechnung zeigt ihren Beleg mit Nummer, Angaben,
+Positionen und Summen. „Herunterladen" gibt das Rechnungsdokument als PDF heraus, auf dem
+hinterlegten Briefpapier, sonst in der Gestaltung von fb.crm. In der Übersicht „Rechnungen" lädt
+das Symbol in der Spalte „Dokument" dasselbe PDF herunter. Neben „Herunterladen" stehen „Als bezahlt
+markieren" und „Abschreiben" für den Ausgang der Forderung; „Zurück auf gestellt" nimmt beides
+zurück.
+
+**Eine gestellte Rechnung ändert sich nicht mehr:** Sie lässt sich weder bearbeiten noch löschen.
+Der Weg zurück ist ein Storno; eine Taste dafür bietet fb.crm bisher nicht.
+
+**Ergebnis:** Die Rechnung steht mit Nummer, Betrag und Zustand „Gestellt" in der Übersicht
+„Rechnungen", in der Karte „Rechnungen" ihres Angebots, und ihr PDF lässt sich herunterladen.
