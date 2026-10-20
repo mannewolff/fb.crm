@@ -1,11 +1,12 @@
 package org.mwolff.fbcrm.config;
 
+import org.mwolff.fbcrm.common.NumericCodes;
 import org.mwolff.fbcrm.common.SecureTokens;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 /**
- * Die eine Quelle der Einmal-Tokens.
+ * Die eine Quelle der Einmal-Tokens und der Einmalcodes der Anmeldung.
  *
  * <p>{@link SecureTokens} ist bewusst framework-frei und traegt deshalb keine Spring-Annotation;
  * die Bean entsteht hier — wie die Uhr in {@link TimeConfig}. Eine Instanz fuer die ganze Anwendung
@@ -17,5 +18,10 @@ public class TokenConfig {
   @Bean
   public SecureTokens secureTokens() {
     return new SecureTokens();
+  }
+
+  @Bean
+  public NumericCodes numericCodes() {
+    return new NumericCodes();
   }
 }
