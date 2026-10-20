@@ -95,9 +95,9 @@ fbcrm:
     login-code-max-attempts: ${FBCRM_LOGIN_CODE_MAX_ATTEMPTS:5}
     trusted-proxies: ${FBCRM_TRUSTED_PROXIES:}
   # Der Mailversand (MailProperties). Default aus: Wer Mail hinausschicken will, sagt es
-  # ausdruecklich. FBCRM_BASE_URL ist die oeffentliche Adresse der Instanz; aus ihr entsteht der
-  # Link in der Reset-Mail. Aus der Anfrage laesst er sich nicht ableiten — ein aus Kopfzeilen
-  # gebauter Link waere faelschbar (CLAUDE-security.md).
+  # ausdruecklich. FBCRM_BASE_URL ist die oeffentliche Adresse der Instanz; die Mail mit dem
+  # Einmalcode nennt sie als Klartext. Aus der Anfrage laesst sie sich nicht ableiten — eine aus
+  # Kopfzeilen gebaute Adresse waere faelschbar (CLAUDE-security.md).
   mail:
     enabled: ${FBCRM_MAIL_ENABLED:false}
     from: ${FBCRM_MAIL_FROM:no-reply@fbcrm.local}

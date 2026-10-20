@@ -13,10 +13,10 @@ import org.springframework.validation.annotation.Validated;
  * der lokale Stack laeuft ohne Versand, und die Auftraege bleiben im Postausgangsfach liegen, bis
  * der Betreiber einen Mailserver eingerichtet hat.
  *
- * <p>{@code baseUrl} ist die oeffentliche Adresse der Instanz ({@code FBCRM_BASE_URL}). Aus ihr
- * entsteht der Link in der Reset-Mail; die Anwendung kann ihn nicht aus der Anfrage ableiten, weil
- * die Anforderung eines neuen Passworts von einer anderen Stelle kommen kann als der Klick auf den
- * Link — und weil ein aus Kopfzeilen gebauter Link sich faelschen liesse (CLAUDE-security.md).
+ * <p>{@code baseUrl} ist die oeffentliche Adresse der Instanz ({@code FBCRM_BASE_URL}). Die Mail
+ * mit dem Einmalcode nennt sie als Klartext, damit erkennbar ist, zu welcher Instanz der Code
+ * gehoert (Plan #395, E26) — ohne Link, der anmeldet. Die Anwendung leitet sie nicht aus der
+ * Anfrage ab, weil eine aus Kopfzeilen gebaute Adresse sich faelschen liesse (CLAUDE-security.md).
  *
  * @param enabled ob ueberhaupt zugestellt wird
  * @param from Absenderadresse jeder Nachricht dieser Instanz

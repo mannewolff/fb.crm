@@ -267,5 +267,17 @@ describe('Szenarien des Fachplans (E16)', () => {
     expect(sichern).toBeGreaterThanOrEqual(0);
     expect(checkout).toBeGreaterThan(sichern);
     expect(pruefen).toBeGreaterThan(checkout);
+    // Kriterium 8 und 10 (#392): Das Update auf die Anmeldung per Code beendet alle Sitzungen einmal.
+    expect(text.slice(pruefen)).toMatch(/Sitzungen/u);
+    expect(text.slice(pruefen)).toMatch(/Code/u);
+  });
+
+  it('Szenario: Das Konto per Code einrichten, auch ohne Mailversand', () => {
+    const text = abschnitt('betrieb', 'Konto einrichten');
+
+    // Kriterium 6 und 10 (#392): Einrichtung mit Code, ohne Mailversand aus dem Protokoll.
+    expect(text).toMatch(/Code/u);
+    expect(text).toMatch(/Protokoll/u);
+    expect(text).not.toMatch(/Passwort/u);
   });
 });

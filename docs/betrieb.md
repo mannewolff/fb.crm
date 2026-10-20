@@ -90,24 +90,48 @@ fb.crm hat genau ein Konto. Es entsteht einmalig über die Einrichtungsseite.
 1. Im Browser die Adresse der Instanz öffnen: lokal `https://localhost`, unter eigenem Namen die
    eigene Domain. Lokal stellt Caddy ein Zertifikat seiner eigenen Zertifizierungsstelle aus; der
    Browser warnt davor einmalig.
-2. Eine frische Instanz führt auf die Seite „Einrichten". Dort E-Mail-Adresse, die Wiederholung der
-   E-Mail-Adresse, Anzeigename, Passwort und den Einmal-Schlüssel aus `FBCRM_BOOTSTRAP_ADMIN_TOKEN`
-   eingeben.
-3. „Einrichten" wählen. Danach ist man angemeldet.
+2. Eine frische Instanz führt auf die Seite „Einrichten". Dort den Einmal-Schlüssel aus
+   `FBCRM_BOOTSTRAP_ADMIN_TOKEN`, den Anzeigenamen und die E-Mail-Adresse eingeben und „Code
+   anfordern" wählen. Mit falschem Schlüssel weist die Seite die Anfrage ab, und fb.crm verschickt
+   keinen Code.
+3. fb.crm schickt sofort einen sechsstelligen Code. Mit eingeschaltetem Mailversand kommt er per
+   Mail an die eingegebene Adresse; ohne Mailversand steht er im Protokoll des Servers (siehe
+   unten).
+4. Den Code in das Feld „Code" eintippen und „Einrichten" wählen. Erst jetzt entsteht das Konto,
+   und man ist angemeldet.
+
+**Code aus dem Protokoll:** Ist der Mailversand ausgeschaltet, schreibt fb.crm jeden Code in das
+Protokoll des Servers, bei der Einrichtung wie bei jeder späteren Anmeldung. Die Zeile lautet
+„Mailversand ausgeschaltet — Einmalcode … gilt bis …" und zeigt sich mit:
+
+```bash
+docker compose logs fbcrm-api | grep Einmalcode
+```
+
+Ist der Mailversand eingeschaltet, steht kein Code im Protokoll.
+
+Ein Code gilt 10 Minuten und nur einmal. Über „Angaben ändern" geht es zurück zum ersten Schritt,
+dort fordert man einen neuen Code an. Mit eingeschaltetem Mailversand ist die Adresse damit
+bestätigt: Wer sich vertippt, bekommt keinen Code, es entsteht kein Konto, und die Einrichtung
+lässt sich mit der richtigen Adresse wiederholen. Mit dem Code aus dem Protokoll prüft fb.crm die
+Adresse nicht. Angemeldet wird man danach mit einem Code an diese Adresse, wie im Teil „Bedienung"
+unter „Erste Schritte" beschrieben.
 
 Der Schlüssel wirkt nur, solange es noch kein Konto gibt — ein zweiter Aufruf wird abgewiesen.
 
-**Vertippte E-Mail-Adresse:** Eine Profilbearbeitung gibt es nicht, und der Einmal-Schlüssel greift
-nicht mehr, sobald ein Konto existiert. Wer sich bei der Einrichtung in der Adresse vertippt hat,
-ist damit ausgesperrt. Der Weg zurück ist das Löschen der Kontozeile:
+**Verlorenes Postfach:** Jede Anmeldung braucht einen Code an die Adresse des Kontos. Wer den
+Zugang zu diesem Postfach verliert, kommt mit eingeschaltetem Mailversand nicht mehr hinein; eine
+Profilbearbeitung gibt es nicht, und der Einmal-Schlüssel greift nicht mehr, sobald ein Konto
+existiert. Der Weg zurück ist das Löschen der Kontozeile:
 
 ```bash
 docker compose exec postgres psql -U fbcrm -d fbcrm -c "DELETE FROM account;"
 ```
 
-Danach greift der Schlüssel wieder, und die Einrichtung läuft erneut. Der Befehl entfernt **jedes**
-Konto samt offener Passwort-Reset-Links — nur auf einer frisch eingerichteten Instanz ausführen.
-Wer `POSTGRES_USER` oder `POSTGRES_DB` in der `.env` geändert hat, setzt dort die eigenen Werte ein.
+Danach greift der Schlüssel wieder, sofern `FBCRM_BOOTSTRAP_ADMIN_TOKEN` in der `.env` gesetzt ist,
+und die Einrichtung läuft erneut mit der neuen Adresse. Der Befehl entfernt **jedes** Konto und
+beendet damit jede Sitzung; Kunden, Angebote und Rechnungen hängen nicht am Konto und bleiben. Wer
+`POSTGRES_USER` oder `POSTGRES_DB` in der `.env` geändert hat, setzt dort die eigenen Werte ein.
 
 ## Betrieb unter eigenem Namen
 
@@ -121,8 +145,8 @@ Signaturgeheimnis, und jeder könnte sich eine gültige Sitzung bauen:
 
 - `FBCRM_SESSION_SECRET` — ein eigenes Signaturgeheimnis für die Sitzungen, erzeugt mit
   `openssl rand -base64 48`,
-- `FBCRM_BASE_URL` — die öffentliche Adresse der Instanz, etwa `https://crm.example.org`; aus ihr
-  entsteht der Link in der Mail zum Passwort-Reset,
+- `FBCRM_BASE_URL` — die öffentliche Adresse der Instanz, etwa `https://crm.example.org`; die Mail
+  mit dem Code nennt sie als Klartext, damit erkennbar ist, zu welcher Instanz der Code gehört,
 - `FBCRM_DEV_MODE=false` — schaltet den Entwicklungsmodus ab; danach verweigert fb.crm den Start
   mit dem voreingestellten Signaturgeheimnis.
 
@@ -158,9 +182,10 @@ auf. Compose erstellt dann die betroffenen Container neu.
 
 ## Mailversand einrichten
 
-fb.crm verschickt Mails für den Passwort-Reset. **Ohne Mailversand ist kein Passwort-Reset
-möglich:** Wer das Passwort vergisst, bekommt keinen Link. Der Mailversand ist zu Beginn
-abgeschaltet. Eingeschaltet wird er in der `.env`:
+fb.crm verschickt den Code für die Anmeldung und die Einrichtung per Mail. Der Mailversand ist zu
+Beginn abgeschaltet; solange er aus ist, steht jeder Code im Protokoll des Servers (Abschnitt „Konto
+einrichten", „Code aus dem Protokoll"). Der Versand ist damit keine Voraussetzung für den Zugang.
+Eingeschaltet wird er in der `.env`:
 
 - `FBCRM_MAIL_ENABLED=true` — schaltet den Versand ein,
 - `FBCRM_MAIL_FROM` — die Absenderadresse der Mails,
@@ -181,9 +206,6 @@ FBCRM_SMTP_USER=crm@example.org
 FBCRM_SMTP_PASSWORD=...
 ```
 
-Der Link in der Mail entsteht aus `FBCRM_BASE_URL`; der Wert muss darum die Adresse sein, unter der
-fb.crm im Browser aufgerufen wird.
-
 **Eine Änderung der `.env` wirkt erst nach `docker compose up -d`**, nicht nach
 `docker compose restart`. Nach dem Eintragen der Mailwerte also:
 
@@ -191,8 +213,9 @@ fb.crm im Browser aufgerufen wird.
 docker compose up -d
 ```
 
-Ob der Versand klappt, zeigt der Weg im Abschnitt „Vergessenes Passwort": Kommt die Mail an, ist
-der Mailversand eingerichtet.
+Ob der Versand klappt, zeigt die Anmeldung per Code (Teil „Bedienung", „Erste Schritte"): Kommt
+die Mail mit dem Code an, ist der Mailversand eingerichtet. Ab dann steht kein Code mehr im
+Protokoll.
 
 **Lokal ausprobieren mit Mailpit:** Lokal gibt es keinen Mailserver. Den Auffangserver Mailpit
 bringt das Profil `dev-mail` mit; er nimmt jede Mail an, stellt keine zu und zeigt sie unter
@@ -210,24 +233,6 @@ mit dem Profil starten:
 ```bash
 docker compose --profile dev-mail up -d
 ```
-
-## Vergessenes Passwort
-
-Wer das Passwort vergessen hat, setzt über die Anmeldeseite ein neues. Der Weg setzt einen
-eingerichteten Mailversand voraus (Abschnitt „Mailversand einrichten").
-
-1. Auf der Seite „Anmelden" den Verweis „Passwort vergessen?" wählen.
-2. Auf der Seite „Passwort vergessen" die E-Mail-Adresse des Kontos eingeben und „Link anfordern"
-   wählen. Die Seite bestätigt die Anfrage — mit derselben Antwort für jede Adresse, ob es zu ihr
-   ein Konto gibt oder nicht.
-3. In der Mail den Link öffnen. Er gilt nur einmal und nur begrenzte Zeit, in der Grundeinstellung
-   eine Stunde.
-4. Auf der Seite „Neues Passwort" das neue Passwort und seine Wiederholung eingeben und „Passwort
-   setzen" wählen.
-
-Danach führt fb.crm auf die Seite „Anmelden" mit dem Hinweis, dass das neue Passwort gesetzt ist;
-dort mit dem neuen Passwort anmelden. Ist der Link verbraucht oder abgelaufen, meldet die Seite das
-und bietet „Neuen Link anfordern" an.
 
 ## Hinter einem vorhandenen Traefik
 
@@ -395,8 +400,8 @@ Der Start dauert wie beim ersten Mal einige Minuten. Weiter, wenn `docker compos
 - Mit dem bisherigen Konto anmelden; die Seite „Einrichten" erscheint nicht.
 - Kunden, Angebote mit ihren Anlagen, Rechnungen samt Rechnungsdokument und das Briefpapier
   öffnen: Alles ist wieder da.
-- Den Mailversand prüfen, wie im Abschnitt „Vergessenes Passwort" beschrieben: Kommt die Mail an,
-  funktioniert er.
+- Den Mailversand über die Anmeldung per Code prüfen (Teil „Bedienung", „Erste Schritte"): Kommt
+  die Mail mit dem Code an, funktioniert er.
 
 Danach das Verzeichnis `sicherung` und das Archiv vom neuen Rechner löschen; sie enthalten die
 Geheimnisse.
@@ -439,6 +444,11 @@ nicht hoch, nennt `docker compose logs fbcrm-api` den Grund.
 
 - Unter der Marke in der Seitenleiste steht die neue Versionsnummer.
 - Kunden, Angebote und Rechnungen sind unverändert da.
+- Beim Update auf die erste Version mit der Anmeldung per Code enden alle laufenden Sitzungen einmal;
+  E-Mail-Adresse und Anzeigename des Kontos bleiben, wie sie waren. Die nächste Anmeldung läuft
+  per Code an die Adresse des Kontos (Teil „Bedienung", „Erste Schritte"). Ist der Mailversand
+  ausgeschaltet, steht der Code im Protokoll des Servers (Abschnitt „Konto einrichten", „Code aus
+  dem Protokoll").
 
 **Schritt 6: Ausgangs- und Zielversion vermerken**, etwa „am 2026-10-20 von v1.2.0 auf v1.3.0
 aktualisiert". Der Vermerk sagt beim nächsten Mal, von welcher Version aus aktualisiert wird.
