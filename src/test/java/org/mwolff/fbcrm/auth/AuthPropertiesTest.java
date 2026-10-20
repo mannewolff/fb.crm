@@ -34,6 +34,8 @@ class AuthPropertiesTest {
     "fbcrm.auth.login-code-address-window=PT1H",
     "fbcrm.auth.login-code-per-address-daily=10",
     "fbcrm.auth.login-code-daily-window=PT24H",
+    "fbcrm.auth.login-code-ttl=PT10M",
+    "fbcrm.auth.login-code-max-attempts=5",
     "fbcrm.auth.trusted-proxies="
   };
 
@@ -60,6 +62,8 @@ class AuthPropertiesTest {
                 "fbcrm.auth.login-code-address-window=PT2H",
                 "fbcrm.auth.login-code-per-address-daily=7",
                 "fbcrm.auth.login-code-daily-window=PT48H",
+                "fbcrm.auth.login-code-ttl=PT5M",
+                "fbcrm.auth.login-code-max-attempts=3",
                 "fbcrm.auth.trusted-proxies=10.0.0.1,10.0.0.2"))
         .run(
             context ->
@@ -77,6 +81,8 @@ class AuthPropertiesTest {
                             Duration.ofHours(2),
                             7,
                             Duration.ofHours(48),
+                            Duration.ofMinutes(5),
+                            3,
                             List.of("10.0.0.1", "10.0.0.2"))));
   }
 
@@ -143,6 +149,30 @@ class AuthPropertiesTest {
   }
 
   @Test
+  void binding_givenNoLoginCodeTtl_thenTheContextFails() {
+    // When / Then — Kriterium 4 verlangt eine begrenzte Zeit; ohne Angabe gaebe es keine.
+    runner
+        .withPropertyValues(mit("fbcrm.auth.login-code-ttl="))
+        .run(context -> assertThat(context).hasFailed());
+  }
+
+  @Test
+  void binding_givenAMaximumOfZeroFailedAttempts_thenTheContextFails() {
+    // When / Then — 0 liesse jeden Code schon vor der ersten Eingabe verfallen.
+    runner
+        .withPropertyValues(mit("fbcrm.auth.login-code-max-attempts=0"))
+        .run(context -> assertThat(context).hasFailed());
+  }
+
+  @Test
+  void binding_givenAMaximumOfOneFailedAttempt_thenTheContextStarts() {
+    // When / Then — die untere Schranke ist 1, nicht 2.
+    runner
+        .withPropertyValues(mit("fbcrm.auth.login-code-max-attempts=1"))
+        .run(context -> assertThat(context).hasNotFailed());
+  }
+
+  @Test
   void binding_givenAnEmptyTrustedProxyList_thenCarriesNoProxyAtAll() {
     // When / Then — der leere Wert darf keine Adresse ergeben, die keine ist (E9).
     runner
@@ -171,6 +201,8 @@ class AuthPropertiesTest {
             Duration.ofHours(1),
             10,
             Duration.ofHours(24),
+            Duration.ofMinutes(10),
+            5,
             roh);
 
     // Then

@@ -95,6 +95,8 @@ class NoTokenInLogTest {
         Duration.ofHours(1),
         10,
         Duration.ofHours(24),
+        Duration.ofMinutes(10),
+        5,
         List.of());
   }
 

@@ -42,6 +42,8 @@ class SessionTokenCodecTest {
             Duration.ofHours(1),
             10,
             Duration.ofHours(24),
+            Duration.ofMinutes(10),
+            5,
             List.of()),
         Clock.fixed(jetzt, ZoneOffset.UTC));
   }

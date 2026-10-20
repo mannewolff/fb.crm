@@ -57,6 +57,8 @@ class LoginAttemptLimiterTest {
         STUNDEN_FENSTER,
         JE_TAG,
         TAGES_FENSTER,
+        Duration.ofMinutes(10),
+        5,
         List.of());
   }
 

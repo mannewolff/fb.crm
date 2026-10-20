@@ -93,6 +93,9 @@ fbcrm:
     login-code-address-window: ${FBCRM_LOGIN_CODE_ADDRESS_WINDOW:PT1H}
     login-code-per-address-daily: ${FBCRM_LOGIN_CODE_PER_ADDRESS_DAILY:10}
     login-code-daily-window: ${FBCRM_LOGIN_CODE_DAILY_WINDOW:PT24H}
+    # Der Einmalcode (Kriterium 4, E21): 10 Minuten gueltig, nach 5 falschen Eingaben verfallen.
+    login-code-ttl: ${FBCRM_LOGIN_CODE_TTL:PT10M}
+    login-code-max-attempts: ${FBCRM_LOGIN_CODE_MAX_ATTEMPTS:5}
     trusted-proxies: ${FBCRM_TRUSTED_PROXIES:}
   # Der Mailversand (MailProperties). Default aus: Wer Mail hinausschicken will, sagt es
   # ausdruecklich. FBCRM_BASE_URL ist die oeffentliche Adresse der Instanz; aus ihr entsteht der

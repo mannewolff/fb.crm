@@ -15,6 +15,10 @@ class SchemaBaselineIT extends AbstractIntegrationTest {
   private static final String INSERT_ACCOUNT =
       "INSERT INTO account (email, display_name, password_hash, role) VALUES (?, ?, ?, ?)";
 
+  private static final String INSERT_LOGIN_CODE =
+      "INSERT INTO login_code (email, code_hash, expires_at)"
+          + " VALUES (?, ?, now() + interval '10 minutes')";
+
   private static final String INSERT_FIRMA = "INSERT INTO firma (name) VALUES (?)";
 
   private static final String INSERT_ANSPRECHPARTNER =
@@ -30,8 +34,8 @@ class SchemaBaselineIT extends AbstractIntegrationTest {
   @BeforeEach
   void leereFachtabellen() {
     jdbc.execute(
-        "TRUNCATE outbox_message, password_reset_token, account, ansprechpartner, firma"
-            + " RESTART IDENTITY CASCADE");
+        "TRUNCATE outbox_message, password_reset_token, login_code, account, ansprechpartner,"
+            + " firma RESTART IDENTITY CASCADE");
   }
 
   private Long firmaId(final String name) {
@@ -46,11 +50,11 @@ class SchemaBaselineIT extends AbstractIntegrationTest {
         jdbc.queryForObject(
             "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public'"
                 + " AND table_name IN ('account', 'password_reset_token', 'outbox_message',"
-                + " 'firma', 'ansprechpartner')",
+                + " 'firma', 'ansprechpartner', 'login_code')",
             Integer.class);
 
     // Then
-    assertThat(tabellen).isEqualTo(5);
+    assertThat(tabellen).isEqualTo(6);
   }
 
   @Test
@@ -142,6 +146,45 @@ class SchemaBaselineIT extends AbstractIntegrationTest {
                     accountId,
                     "derselbe-hash"))
         .isInstanceOf(DataIntegrityViolationException.class);
+  }
+
+  @Test
+  void loginCode_givenSameAddressInDifferentCase_thenRejectedByTheDatabase() {
+    // Given
+    jdbc.update(INSERT_LOGIN_CODE, "manne@example.org", "hash");
+
+    // When / Then — hoechstens ein Code je Adresse (E1).
+    assertThatThrownBy(() -> jdbc.update(INSERT_LOGIN_CODE, "Manne@Example.ORG", "anderer-hash"))
+        .isInstanceOf(DataIntegrityViolationException.class)
+        .hasMessageContaining("login_code_email_key");
+  }
+
+  @Test
+  void loginCode_whenInsertedWithoutAccount_thenDefaultsToNoFailedAttempts() {
+    // Given — kein Konto: bei der Einrichtung gibt es noch keines (E1).
+    jdbc.update(INSERT_LOGIN_CODE, "neu@example.org", "hash");
+
+    // When
+    final Integer frische =
+        jdbc.queryForObject(
+            "SELECT count(*) FROM login_code WHERE failed_attempts = 0", Integer.class);
+
+    // Then
+    assertThat(frische).isEqualTo(1);
+  }
+
+  @Test
+  void loginCode_givenNegativeFailedAttempts_thenRejectedByTheDatabase() {
+    // When / Then
+    assertThatThrownBy(
+            () ->
+                jdbc.update(
+                    "INSERT INTO login_code (email, code_hash, expires_at, failed_attempts)"
+                        + " VALUES (?, ?, now() + interval '10 minutes', -1)",
+                    "manne@example.org",
+                    "hash"))
+        .isInstanceOf(DataIntegrityViolationException.class)
+        .hasMessageContaining("login_code_failed_attempts_nonnegative");
   }
 
   @Test

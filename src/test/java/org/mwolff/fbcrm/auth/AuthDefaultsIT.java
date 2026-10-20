@@ -11,8 +11,8 @@ import org.springframework.core.io.ClassPathResource;
 import org.springframework.mock.env.MockEnvironment;
 
 /**
- * Die Vorgaben der Zaehlbremse und der Sitzungsdauer, gelesen aus der echten {@code
- * application.yml} (Kriterium 5, Kriterium 9, E21, E27).
+ * Die Vorgaben der Zaehlbremse, des Einmalcodes und der Sitzungsdauer, gelesen aus der echten
+ * {@code application.yml} (Kriterium 4, Kriterium 5, Kriterium 9, E21, E27).
  *
  * <p>{@code AuthPropertiesTest} kann das nicht: Er faehrt einen Kontext mit ausschliesslich selbst
  * gesetzten Werten hoch und liest die {@code application.yml} nie. Gilt eine Vorgabe dort nicht
@@ -65,5 +65,19 @@ class AuthDefaultsIT {
     // When / Then
     assertThat(vorgaben().bind("fbcrm.auth.login-code-daily-window", Duration.class).get())
         .isEqualTo(Duration.ofHours(24));
+  }
+
+  @Test
+  void defaults_thenACodeLastsTenMinutes() throws IOException {
+    // When / Then — Kriterium 4: ein Code gilt 10 Minuten (E21).
+    assertThat(vorgaben().bind("fbcrm.auth.login-code-ttl", Duration.class).get())
+        .isEqualTo(Duration.ofMinutes(10));
+  }
+
+  @Test
+  void defaults_thenACodeExpiresAfterFiveFailedAttempts() throws IOException {
+    // When / Then — Kriterium 4: nach 5 falschen Eingaben verfaellt er (E21).
+    assertThat(vorgaben().bind("fbcrm.auth.login-code-max-attempts", Integer.class).get())
+        .isEqualTo(5);
   }
 }

@@ -53,6 +53,10 @@ import org.springframework.validation.annotation.Validated;
  *     im Fenster der Tagesdecke, ab der die Bremse 429 antwortet (Default {@code 10}, E27)
  * @param loginCodeDailyWindow Zaehlart {@code ADRESSE_TAG}: Zeitfenster der Tagesdecke (Default
  *     {@code PT24H})
+ * @param loginCodeTtl Laufzeit eines Einmalcodes ab seiner Ausstellung (Default {@code PT10M},
+ *     Kriterium 4, E21)
+ * @param loginCodeMaxAttempts Zahl der Fehleingaben, nach der ein Einmalcode verfaellt (Default
+ *     {@code 5}, Kriterium 4, E21)
  * @param trustedProxies Peer-Adressen, deren {@code X-Forwarded-For} gilt
  */
 @ConfigurationProperties(prefix = "fbcrm.auth")
@@ -69,6 +73,8 @@ public record AuthProperties(
     @NotNull Duration loginCodeAddressWindow,
     @Min(1) int loginCodePerAddressDaily,
     @NotNull Duration loginCodeDailyWindow,
+    @NotNull Duration loginCodeTtl,
+    @Min(1) int loginCodeMaxAttempts,
     @DefaultValue @NotNull List<String> trustedProxies) {
 
   /**
