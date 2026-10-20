@@ -1,6 +1,12 @@
 package org.mwolff.fbcrm.auth.application;
 
+import static org.mwolff.fbcrm.auth.infrastructure.LoginAttemptLimiter.Zaehlart.ADRESSE_STUNDE;
+import static org.mwolff.fbcrm.auth.infrastructure.LoginAttemptLimiter.Zaehlart.HERKUNFT;
+
 import java.time.Clock;
+import java.time.Duration;
+import java.util.Collections;
+import java.util.List;
 import java.util.Optional;
 import org.mwolff.fbcrm.auth.AuthProperties;
 import org.mwolff.fbcrm.auth.domain.Account;
@@ -9,6 +15,7 @@ import org.mwolff.fbcrm.auth.domain.SecretHasher;
 import org.mwolff.fbcrm.auth.domain.SessionTokens;
 import org.mwolff.fbcrm.auth.infrastructure.FailedLoginDelay;
 import org.mwolff.fbcrm.auth.infrastructure.LoginAttemptLimiter;
+import org.mwolff.fbcrm.auth.infrastructure.LoginAttemptLimiter.Zaehlart;
 import org.mwolff.fbcrm.common.SecureTokens;
 import org.springframework.stereotype.Service;
 
@@ -70,26 +77,52 @@ public class LoginUseCase {
    * @param email die eingegebene Adresse
    * @param rawPassword das eingegebene Passwort
    * @param clientIp die Absender-Adresse fuer die Zaehlbremse (E9)
-   * @throws TooManyLoginAttempts wenn im Fenster zu viele Fehlversuche stehen
+   * @throws TooManyLoginAttempts wenn im Fenster zu viele Fehlversuche stehen, mit der
+   *     Restwartezeit
    * @throws LoginFailed wenn Adresse oder Passwort nicht stimmen
    */
   public LoginResult login(final String email, final String rawPassword, final String clientIp) {
-    if (!limiter.isAllowed(clientIp, email)) {
-      throw new TooManyLoginAttempts();
+    final Duration warten = wartezeit(clientIp, email);
+    if (!warten.isZero()) {
+      throw new TooManyLoginAttempts(warten);
     }
 
     final Optional<Account> konto = accounts.findByEmail(email);
     final boolean passt =
         hasher.matches(rawPassword, konto.map(Account::passwordHash).orElse(dummyHash));
     if (konto.isEmpty() || !passt) {
-      limiter.recordFailure(clientIp, email);
+      limiter.record(HERKUNFT, clientIp);
+      limiter.record(ADRESSE_STUNDE, email);
       delay.apply();
       throw new LoginFailed();
     }
 
     final Account angemeldet = konto.get();
-    limiter.recordSuccess(clientIp, email);
+    limiter.recordSuccess(clientIp);
     return new LoginResult(angemeldet, cookie(angemeldet));
+  }
+
+  /**
+   * Die Wartezeit der Bremse, null, wenn keine Zaehlart sperrt.
+   *
+   * <p>Bis zur Umstellung auf den Code zaehlt die Passwortanmeldung ihre Fehlversuche je Herkunft
+   * und je Adresse in der Stunde. Sperren beide, gilt die laengere Wartezeit — wer nach der
+   * kuerzeren wiederkaeme, liefe in die zweite Bremse.
+   */
+  private Duration wartezeit(final String clientIp, final String email) {
+    return Collections.max(List.of(sperre(HERKUNFT, clientIp), sperre(ADRESSE_STUNDE, email)));
+  }
+
+  /**
+   * Die Restwartezeit einer Zaehlart, null, wenn sie zulaesst.
+   *
+   * <p>Ist das Fenster zwischen der Frage und der Restwartezeit abgelaufen, ist die Restwartezeit
+   * ebenfalls null — und der Versuch darf durch, weil die Sperre dann tatsaechlich vorbei ist.
+   */
+  private Duration sperre(final Zaehlart art, final String schluessel) {
+    return limiter.isAllowed(art, schluessel)
+        ? Duration.ZERO
+        : limiter.restwartezeit(art, schluessel);
   }
 
   private SessionCookie cookie(final Account konto) {

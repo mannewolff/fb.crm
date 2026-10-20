@@ -70,6 +70,10 @@ class RequestPasswordResetUseCaseTest {
         true,
         10,
         Duration.ofMinutes(15),
+        5,
+        Duration.ofHours(1),
+        10,
+        Duration.ofHours(24),
         List.of());
   }
 

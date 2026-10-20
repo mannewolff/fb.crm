@@ -13,7 +13,9 @@ import org.mwolff.fbcrm.auth.Konten;
 import org.mwolff.fbcrm.auth.domain.AccountRepository;
 import org.mwolff.fbcrm.auth.domain.SecretHasher;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.http.client.ClientHttpRequestFactoryBuilder;
 import org.springframework.boot.test.web.client.TestRestTemplate;
+import org.springframework.boot.web.client.RestTemplateBuilder;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
@@ -228,9 +230,20 @@ class AuthControllerIT extends AbstractIntegrationTest {
 
     private final TestRestTemplate gebremst;
 
+    /**
+     * Ein eigener Client ueber den HTTP-Client des JDK, der eine 429 nicht von selbst wiederholt.
+     *
+     * <p>Der Apache-Client hinter {@link TestRestTemplate} wiederholt eine Antwort 429 einmal und
+     * wartet dafuer, was {@code Retry-After} sagt — seit E14 des Plans #395 also 900 Sekunden je
+     * Probe. Geprueft wird hier die erste Antwort der Bremse, nicht die nach dem Warten.
+     */
     @Autowired
-    Zaehlbremse(final TestRestTemplate gebremst) {
-      this.gebremst = gebremst;
+    Zaehlbremse(final TestRestTemplate kontext) {
+      this.gebremst =
+          new TestRestTemplate(
+              new RestTemplateBuilder()
+                  .rootUri(kontext.getRootUri())
+                  .requestFactoryBuilder(ClientHttpRequestFactoryBuilder.jdk()));
     }
 
     @Test
@@ -255,6 +268,20 @@ class AuthControllerIT extends AbstractIntegrationTest {
 
       // Then
       assertThat(antwort.getStatusCode()).isEqualTo(HttpStatus.TOO_MANY_REQUESTS);
+    }
+
+    @Test
+    void login_givenMoreFailuresThanTheThreshold_thenNamesTheWaitInMessageAndHeader() {
+      // Given — E14: Meldung und Retry-After entstehen im GlobalExceptionHandler, nicht mehr aus
+      // einem festen @ResponseStatus.
+      IntStream.range(0, 2).forEach(unbenutzt -> melde(gebremst, MAIL, "falsches-passwort"));
+
+      // When
+      final ResponseEntity<String> antwort = melde(gebremst, MAIL, "falsches-passwort");
+
+      // Then — die Fehlversuche liegen Sekunden zurueck; aufgerundet bleiben 15 Minuten.
+      assertThat(antwort.getHeaders().getFirst(HttpHeaders.RETRY_AFTER)).isEqualTo("900");
+      assertThat(antwort.getBody()).contains("Bitte in 15 Minuten erneut versuchen.");
     }
   }
 }

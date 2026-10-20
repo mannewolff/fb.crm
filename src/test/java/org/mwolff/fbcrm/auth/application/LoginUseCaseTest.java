@@ -10,6 +10,8 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mwolff.fbcrm.auth.infrastructure.LoginAttemptLimiter.Zaehlart.ADRESSE_STUNDE;
+import static org.mwolff.fbcrm.auth.infrastructure.LoginAttemptLimiter.Zaehlart.HERKUNFT;
 
 import java.time.Clock;
 import java.time.Duration;
@@ -65,6 +67,10 @@ class LoginUseCaseTest {
         true,
         10,
         Duration.ofMinutes(15),
+        5,
+        Duration.ofHours(1),
+        10,
+        Duration.ofHours(24),
         List.of());
   }
 
@@ -87,7 +93,18 @@ class LoginUseCaseTest {
   }
 
   private void erlaubeVersuch() {
-    when(limiter.isAllowed(IP, MAIL)).thenReturn(true);
+    when(limiter.isAllowed(HERKUNFT, IP)).thenReturn(true);
+    when(limiter.isAllowed(ADRESSE_STUNDE, MAIL)).thenReturn(true);
+  }
+
+  private void bremseHerkunft(final Duration rest) {
+    when(limiter.isAllowed(HERKUNFT, IP)).thenReturn(false);
+    when(limiter.restwartezeit(HERKUNFT, IP)).thenReturn(rest);
+  }
+
+  private void bremseAdresse(final Duration rest) {
+    when(limiter.isAllowed(ADRESSE_STUNDE, MAIL)).thenReturn(false);
+    when(limiter.restwartezeit(ADRESSE_STUNDE, MAIL)).thenReturn(rest);
   }
 
   private void kontoVorhanden() {
@@ -172,8 +189,8 @@ class LoginUseCaseTest {
     // When
     useCase.login(MAIL, PASSWORT, IP);
 
-    // Then
-    verify(limiter).recordSuccess(IP, MAIL);
+    // Then — geloescht wird nur die Herkunft; die Adresszaehler bleiben stehen (E3).
+    verify(limiter).recordSuccess(IP);
   }
 
   @Test
@@ -248,8 +265,9 @@ class LoginUseCaseTest {
     // When
     assertThatThrownBy(() -> useCase.login(MAIL, PASSWORT, IP)).isInstanceOf(LoginFailed.class);
 
-    // Then
-    verify(limiter).recordFailure(IP, MAIL);
+    // Then — bis zur Umstellung auf den Code zaehlt der Fehlversuch je Herkunft und je Adresse.
+    verify(limiter).record(HERKUNFT, IP);
+    verify(limiter).record(ADRESSE_STUNDE, MAIL);
   }
 
   @Test
@@ -267,9 +285,93 @@ class LoginUseCaseTest {
   }
 
   @Test
+  void login_givenTheRightCredentials_thenCountsNothing() {
+    // Given
+    erlaubeVersuch();
+    kontoVorhanden();
+    when(hasher.matches(PASSWORT, HASH)).thenReturn(true);
+    when(tokens.encode(anyLong(), anyLong(), any(), any())).thenReturn(TOKEN);
+
+    // When
+    useCase.login(MAIL, PASSWORT, IP);
+
+    // Then
+    verify(limiter, never()).record(any(), anyString());
+  }
+
+  @Test
+  void login_givenTheOriginIsBraked_thenRefusesWithItsRemainingWait() {
+    // Given
+    bremseHerkunft(Duration.ofMinutes(15));
+    when(limiter.isAllowed(ADRESSE_STUNDE, MAIL)).thenReturn(true);
+
+    // When / Then — E14: die Ausnahme traegt die Restwartezeit.
+    assertThatThrownBy(() -> useCase.login(MAIL, PASSWORT, IP))
+        .isInstanceOfSatisfying(
+            TooManyLoginAttempts.class,
+            gebremst -> assertThat(gebremst.restwartezeit()).isEqualTo(Duration.ofMinutes(15)));
+  }
+
+  @Test
+  void login_givenTheAddressIsBraked_thenRefusesWithItsRemainingWait() {
+    // Given
+    when(limiter.isAllowed(HERKUNFT, IP)).thenReturn(true);
+    bremseAdresse(Duration.ofMinutes(42));
+
+    // When / Then
+    assertThatThrownBy(() -> useCase.login(MAIL, PASSWORT, IP))
+        .isInstanceOfSatisfying(
+            TooManyLoginAttempts.class,
+            gebremst -> assertThat(gebremst.restwartezeit()).isEqualTo(Duration.ofMinutes(42)));
+  }
+
+  @Test
+  void login_givenBothAreBraked_thenNamesTheLongerWait() {
+    // Given — wer nach der kuerzeren Zeit wiederkaeme, liefe in die zweite Bremse.
+    bremseHerkunft(Duration.ofMinutes(15));
+    bremseAdresse(Duration.ofMinutes(42));
+
+    // When / Then
+    assertThatThrownBy(() -> useCase.login(MAIL, PASSWORT, IP))
+        .isInstanceOfSatisfying(
+            TooManyLoginAttempts.class,
+            gebremst -> assertThat(gebremst.restwartezeit()).isEqualTo(Duration.ofMinutes(42)));
+  }
+
+  @Test
+  void login_givenBothAreBrakedTheOtherWayRound_thenStillNamesTheLongerWait() {
+    // Given
+    bremseHerkunft(Duration.ofMinutes(42));
+    bremseAdresse(Duration.ofMinutes(15));
+
+    // When / Then
+    assertThatThrownBy(() -> useCase.login(MAIL, PASSWORT, IP))
+        .isInstanceOfSatisfying(
+            TooManyLoginAttempts.class,
+            gebremst -> assertThat(gebremst.restwartezeit()).isEqualTo(Duration.ofMinutes(42)));
+  }
+
+  @Test
+  void login_givenABrakeWhoseWindowRanOutMeanwhile_thenLetsTheAttemptThrough() {
+    // Given — zwischen der Frage und der Restwartezeit ist der letzte Eintrag herausgefallen.
+    bremseHerkunft(Duration.ZERO);
+    when(limiter.isAllowed(ADRESSE_STUNDE, MAIL)).thenReturn(true);
+    kontoVorhanden();
+    when(hasher.matches(PASSWORT, HASH)).thenReturn(true);
+    when(tokens.encode(anyLong(), anyLong(), any(), any())).thenReturn(TOKEN);
+
+    // When
+    final LoginResult ergebnis = useCase.login(MAIL, PASSWORT, IP);
+
+    // Then
+    assertThat(ergebnis.account()).isEqualTo(konto());
+  }
+
+  @Test
   void login_givenTooManyFailuresInTheWindow_thenRefusesBeforeLookingUpTheAccount() {
     // Given
-    when(limiter.isAllowed(IP, MAIL)).thenReturn(false);
+    bremseHerkunft(Duration.ofMinutes(15));
+    bremseAdresse(Duration.ofMinutes(60));
 
     // When / Then
     assertThatThrownBy(() -> useCase.login(MAIL, PASSWORT, IP))
@@ -279,7 +381,8 @@ class LoginUseCaseTest {
   @Test
   void login_givenTooManyFailuresInTheWindow_thenAsksTheRepositoryForNothing() {
     // Given — die Bremse soll die Last abwehren, nicht nur die Antwort aendern.
-    when(limiter.isAllowed(IP, MAIL)).thenReturn(false);
+    bremseHerkunft(Duration.ofMinutes(15));
+    bremseAdresse(Duration.ofMinutes(60));
 
     // When
     assertThatThrownBy(() -> useCase.login(MAIL, PASSWORT, IP))

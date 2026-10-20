@@ -2,16 +2,20 @@ package org.mwolff.fbcrm.common.web;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.time.Duration;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.mwolff.fbcrm.common.Feldfehler;
 import org.mwolff.fbcrm.common.Uploadgrenze;
+import org.mwolff.fbcrm.common.ZuVieleVersuche;
 import org.springframework.beans.TypeMismatchException;
 import org.springframework.core.MethodParameter;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
+import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.mock.http.MockHttpInputMessage;
 import org.springframework.validation.BeanPropertyBindingResult;
@@ -285,6 +289,88 @@ class GlobalExceptionHandlerTest {
     assertThat(problem.getDetail()).isEqualTo(Uploadgrenze.MELDUNG);
   }
 
+  @Test
+  void handleZuVieleVersuche_thenAnswersTooManyRequests() {
+    // Given — E14: Status und Text kommen nicht mehr aus einem festen @ResponseStatus.
+
+    // When
+    final ResponseEntity<ProblemDetail> antwort =
+        handler.handleZuVieleVersuche(new Gebremst(Duration.ofMinutes(12)));
+
+    // Then
+    assertThat(antwort.getStatusCode()).isEqualTo(HttpStatus.TOO_MANY_REQUESTS);
+    assertThat(antwort.getBody()).extracting(ProblemDetail::getStatus).isEqualTo(429);
+  }
+
+  @Test
+  void handleZuVieleVersuche_thenRetryAfterCarriesTheWaitInSeconds() {
+    // When
+    final ResponseEntity<ProblemDetail> antwort =
+        handler.handleZuVieleVersuche(new Gebremst(Duration.ofMinutes(12)));
+
+    // Then
+    assertThat(antwort.getHeaders().getFirst(HttpHeaders.RETRY_AFTER)).isEqualTo("720");
+  }
+
+  @Test
+  void handleZuVieleVersuche_thenTheMessageNamesTheWaitInWholeMinutes() {
+    // When
+    final ResponseEntity<ProblemDetail> antwort =
+        handler.handleZuVieleVersuche(new Gebremst(Duration.ofMinutes(12)));
+
+    // Then — Kriterium 5: die Meldung nennt die Wartezeit.
+    assertThat(antwort.getBody())
+        .extracting(ProblemDetail::getDetail)
+        .isEqualTo("Zu viele Versuche. Bitte in 12 Minuten erneut versuchen.");
+  }
+
+  @Test
+  void handleZuVieleVersuche_givenOneMinute_thenTheMessageSpeaksOfOneMinute() {
+    // When
+    final ResponseEntity<ProblemDetail> antwort =
+        handler.handleZuVieleVersuche(new Gebremst(Duration.ofMinutes(1)));
+
+    // Then
+    assertThat(antwort.getBody())
+        .extracting(ProblemDetail::getDetail)
+        .isEqualTo("Zu viele Versuche. Bitte in einer Minute erneut versuchen.");
+    assertThat(antwort.getHeaders().getFirst(HttpHeaders.RETRY_AFTER)).isEqualTo("60");
+  }
+
+  @Test
+  void handleZuVieleVersuche_givenTheSameWaitFromAnotherCounter_thenTheSameAnswer() {
+    // Given — Kriterium 5: fuer jede Adresse und jede Zaehlart dieselbe Meldung. Die Ausnahme
+    // traegt nichts als die Wartezeit, und darum kann die Antwort auch nichts anderes nennen.
+    final Gebremst herkunft = new Gebremst(Duration.ofMinutes(15));
+    final Gebremst adresse = new AdresseGebremst(Duration.ofMinutes(15));
+
+    // When
+    final ResponseEntity<ProblemDetail> ersteAntwort = handler.handleZuVieleVersuche(herkunft);
+    final ResponseEntity<ProblemDetail> zweiteAntwort = handler.handleZuVieleVersuche(adresse);
+
+    // Then
+    assertThat(zweiteAntwort.getBody()).isEqualTo(ersteAntwort.getBody());
+    assertThat(zweiteAntwort.getHeaders()).isEqualTo(ersteAntwort.getHeaders());
+  }
+
+  @Test
+  void handleZuVieleVersuche_thenTheMessageNamesNeitherTheCounterNorTheAddress() {
+    // When
+    final ResponseEntity<ProblemDetail> antwort =
+        handler.handleZuVieleVersuche(new AdresseGebremst(Duration.ofMinutes(60)));
+
+    // Then
+    assertThat(antwort.getBody())
+        .extracting(ProblemDetail::getDetail)
+        .asString()
+        .contains("60 Minuten")
+        .doesNotContainIgnoringCase("adresse")
+        .doesNotContainIgnoringCase("herkunft")
+        .doesNotContainIgnoringCase("stunde")
+        .doesNotContain("@");
+    assertThat(antwort.getBody().getProperties()).isNull();
+  }
+
   private static MethodArgumentNotValidException validationException(final FieldError... errors)
       throws NoSuchMethodException {
     final BindingResult bindingResult = new BeanPropertyBindingResult(new Object(), "antrag");
@@ -310,6 +396,28 @@ class GlobalExceptionHandlerTest {
   private static final class KontoNichtGefunden extends RuntimeException {
     KontoNichtGefunden(final String message) {
       super(message);
+    }
+  }
+
+  /*
+   * Eine gebremste Lage aus einem beliebigen Fachmodul — nachgebildet aus demselben Grund wie
+   * AngabenFehlen: common darf kein Fachmodul kennen.
+   */
+  private static class Gebremst extends ZuVieleVersuche {
+    Gebremst(final Duration restwartezeit) {
+      super(restwartezeit);
+    }
+  }
+
+  /** Eine zweite Zaehlart, die nichts als ihren Namen anders hat. */
+  private static final class AdresseGebremst extends Gebremst {
+    AdresseGebremst(final Duration restwartezeit) {
+      super(restwartezeit);
+    }
+
+    @Override
+    public String getMessage() {
+      return "Adresse manne@example.org: Stundengrenze";
     }
   }
 }

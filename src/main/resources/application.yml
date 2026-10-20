@@ -83,6 +83,13 @@ fbcrm:
     cookie-secure: ${FBCRM_SESSION_COOKIE_SECURE:true}
     login-max-attempts: ${FBCRM_LOGIN_MAX_ATTEMPTS:10}
     login-attempt-window: ${FBCRM_LOGIN_ATTEMPT_WINDOW:PT15M}
+    # Die Grenzen je Adresse (Kriterium 5, E27): 5 Anforderungen in der Stunde und darueber eine
+    # Tagesdecke von 10 in 24 Stunden, auch fuer Adressen ohne Konto. Die zwei Zeilen darueber
+    # sind die Bremse je Herkunft.
+    login-code-per-address: ${FBCRM_LOGIN_CODE_PER_ADDRESS:5}
+    login-code-address-window: ${FBCRM_LOGIN_CODE_ADDRESS_WINDOW:PT1H}
+    login-code-per-address-daily: ${FBCRM_LOGIN_CODE_PER_ADDRESS_DAILY:10}
+    login-code-daily-window: ${FBCRM_LOGIN_CODE_DAILY_WINDOW:PT24H}
     trusted-proxies: ${FBCRM_TRUSTED_PROXIES:}
   # Der Mailversand (MailProperties). Default aus: Wer Mail hinausschicken will, sagt es
   # ausdruecklich. FBCRM_BASE_URL ist die oeffentliche Adresse der Instanz; aus ihr entsteht der

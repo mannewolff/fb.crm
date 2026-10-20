@@ -33,8 +33,18 @@ import org.springframework.validation.annotation.Validated;
  *     application.yml})
  * @param cookieName Name des Session-Cookies
  * @param cookieSecure ob das Cookie nur ueber HTTPS gesendet wird
- * @param loginMaxAttempts Zahl der Fehlversuche im Fenster, ab der die Anmeldung 429 antwortet
- * @param loginAttemptWindow Zeitfenster, ueber das Fehlversuche gezaehlt werden
+ * @param loginMaxAttempts Zaehlart {@code HERKUNFT}: Zahl der Versuche je Herkunft im Fenster, ab
+ *     der die Bremse 429 antwortet (Default {@code 10})
+ * @param loginAttemptWindow Zaehlart {@code HERKUNFT}: Zeitfenster, ueber das die Versuche je
+ *     Herkunft gezaehlt werden (Default {@code PT15M})
+ * @param loginCodePerAddress Zaehlart {@code ADRESSE_STUNDE}: Zahl der Anforderungen je Adresse im
+ *     Fenster, ab der die Bremse 429 antwortet (Default {@code 5}, Kriterium 5)
+ * @param loginCodeAddressWindow Zaehlart {@code ADRESSE_STUNDE}: Zeitfenster der Grenze je Adresse
+ *     (Default {@code PT1H})
+ * @param loginCodePerAddressDaily Zaehlart {@code ADRESSE_TAG}: Zahl der Anforderungen je Adresse
+ *     im Fenster der Tagesdecke, ab der die Bremse 429 antwortet (Default {@code 10}, E27)
+ * @param loginCodeDailyWindow Zaehlart {@code ADRESSE_TAG}: Zeitfenster der Tagesdecke (Default
+ *     {@code PT24H})
  * @param trustedProxies Peer-Adressen, deren {@code X-Forwarded-For} gilt
  */
 @ConfigurationProperties(prefix = "fbcrm.auth")
@@ -47,6 +57,10 @@ public record AuthProperties(
     boolean cookieSecure,
     @Min(1) int loginMaxAttempts,
     @NotNull Duration loginAttemptWindow,
+    @Min(1) int loginCodePerAddress,
+    @NotNull Duration loginCodeAddressWindow,
+    @Min(1) int loginCodePerAddressDaily,
+    @NotNull Duration loginCodeDailyWindow,
     @DefaultValue @NotNull List<String> trustedProxies) {
 
   /**

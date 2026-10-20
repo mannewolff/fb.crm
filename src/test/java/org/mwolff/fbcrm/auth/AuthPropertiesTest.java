@@ -6,6 +6,8 @@ import java.time.Duration;
 import java.util.List;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.Configuration;
@@ -28,6 +30,10 @@ class AuthPropertiesTest {
     "fbcrm.auth.cookie-secure=true",
     "fbcrm.auth.login-max-attempts=10",
     "fbcrm.auth.login-attempt-window=PT15M",
+    "fbcrm.auth.login-code-per-address=5",
+    "fbcrm.auth.login-code-address-window=PT1H",
+    "fbcrm.auth.login-code-per-address-daily=10",
+    "fbcrm.auth.login-code-daily-window=PT24H",
     "fbcrm.auth.trusted-proxies="
   };
 
@@ -50,6 +56,10 @@ class AuthPropertiesTest {
                 "fbcrm.auth.cookie-secure=false",
                 "fbcrm.auth.login-max-attempts=5",
                 "fbcrm.auth.login-attempt-window=PT1M",
+                "fbcrm.auth.login-code-per-address=3",
+                "fbcrm.auth.login-code-address-window=PT2H",
+                "fbcrm.auth.login-code-per-address-daily=7",
+                "fbcrm.auth.login-code-daily-window=PT48H",
                 "fbcrm.auth.trusted-proxies=10.0.0.1,10.0.0.2"))
         .run(
             context ->
@@ -63,6 +73,10 @@ class AuthPropertiesTest {
                             false,
                             5,
                             Duration.ofMinutes(1),
+                            3,
+                            Duration.ofHours(2),
+                            7,
+                            Duration.ofHours(48),
                             List.of("10.0.0.1", "10.0.0.2"))));
   }
 
@@ -98,6 +112,36 @@ class AuthPropertiesTest {
         .run(context -> assertThat(context).hasFailed());
   }
 
+  @ParameterizedTest
+  @ValueSource(
+      strings = {
+        "fbcrm.auth.login-code-per-address=0",
+        "fbcrm.auth.login-code-per-address-daily=0"
+      })
+  void binding_givenAnAddressLimitBelowOne_thenTheContextFails(final String schalter) {
+    // When / Then — 0 wiese jede Anforderung sofort ab, auch die erste.
+    runner.withPropertyValues(mit(schalter)).run(context -> assertThat(context).hasFailed());
+  }
+
+  @ParameterizedTest
+  @ValueSource(
+      strings = {"fbcrm.auth.login-code-address-window=", "fbcrm.auth.login-code-daily-window="})
+  void binding_givenNoAddressWindow_thenTheContextFails(final String schalter) {
+    // When / Then — ohne Fenster gaebe es keine Grenze, nur einen Zaehler.
+    runner.withPropertyValues(mit(schalter)).run(context -> assertThat(context).hasFailed());
+  }
+
+  @ParameterizedTest
+  @ValueSource(
+      strings = {
+        "fbcrm.auth.login-code-per-address=1",
+        "fbcrm.auth.login-code-per-address-daily=1"
+      })
+  void binding_givenAnAddressLimitOfOne_thenTheContextStarts(final String schalter) {
+    // When / Then — die untere Schranke ist 1, nicht 2.
+    runner.withPropertyValues(mit(schalter)).run(context -> assertThat(context).hasNotFailed());
+  }
+
   @Test
   void binding_givenAnEmptyTrustedProxyList_thenCarriesNoProxyAtAll() {
     // When / Then — der leere Wert darf keine Adresse ergeben, die keine ist (E9).
@@ -123,6 +167,10 @@ class AuthPropertiesTest {
             true,
             10,
             Duration.ofMinutes(15),
+            5,
+            Duration.ofHours(1),
+            10,
+            Duration.ofHours(24),
             roh);
 
     // Then
