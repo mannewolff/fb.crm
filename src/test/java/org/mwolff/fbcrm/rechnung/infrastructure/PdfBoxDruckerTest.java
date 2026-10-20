@@ -11,6 +11,8 @@ import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
 import org.apache.pdfbox.Loader;
+import org.apache.pdfbox.contentstream.operator.Operator;
+import org.apache.pdfbox.pdfparser.PDFStreamParser;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.PDPageContentStream;
@@ -499,6 +501,34 @@ class PdfBoxDruckerTest {
 
     // When / Then
     assertThat(schriftname(pdf)).isEqualTo("Helvetica");
+  }
+
+  @Test
+  void drucke_givenASkewedText_thenItsTextObjectIsClosed() throws IOException {
+    // Given — der schraege Text als letztes Element, damit kein weiteres BT den Block bemerkt.
+    final byte[] pdf =
+        drucker.drucke(
+            List.of(
+                new Druckelement.Schraegtext(1, 150, 300, 45, Schrift.FETT, 96, SCHWARZ, "Muster")),
+            null);
+
+    // When
+    final List<String> operatoren = new ArrayList<>();
+    try (PDDocument dokument = Loader.loadPDF(pdf)) {
+      final PDPage seite = dokument.getPage(0);
+      for (final Object token : new PDFStreamParser(seite).parse()) {
+        if (token instanceof Operator operator) {
+          operatoren.add(operator.getName());
+        }
+      }
+    }
+
+    // Then — nach dem Tj folgt ET, und jedes BT hat sein ET.
+    final int zeige = operatoren.lastIndexOf("Tj");
+    assertThat(zeige).isNotNegative();
+    assertThat(operatoren.subList(zeige + 1, operatoren.size())).contains("ET");
+    assertThat(operatoren.stream().filter("BT"::equals).count())
+        .isEqualTo(operatoren.stream().filter("ET"::equals).count());
   }
 
   /** Sammelt die Zeichen mit ihrer Lage, um Ausrichtung nachzumessen. */

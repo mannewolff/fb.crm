@@ -173,9 +173,9 @@ class CiWorkflowTest {
     return inCi;
   }
 
-  /** Ein Eintrag ohne {@code stufe} gilt als Paketstufe (checks.mjs, Issue #758). */
+  /** Ein Eintrag ohne {@code stage} gilt als Paketstufe (checks.mjs, Issue #758). */
   private static boolean istPaketstufe(final JsonNode check) {
-    return !check.has("stufe") || "paket".equals(check.get("stufe").asText());
+    return !check.has("stage") || "paket".equals(check.get("stage").asText());
   }
 
   /** Das {@code with}-Feld des Schritts, der die genannte Action benutzt. */
@@ -317,7 +317,7 @@ class CiWorkflowTest {
   @Test
   void mutationskarten_givenTheConfig_thenRunsOnlyOnPushToTheCheckBranch() throws IOException {
     // Given
-    final String zweig = config().get("pushPruefung").get("zweig").asText();
+    final String zweig = config().get("pushCheck").get("branch").asText();
 
     // When
     final Map<String, Object> karten = job("mutationskarten");
