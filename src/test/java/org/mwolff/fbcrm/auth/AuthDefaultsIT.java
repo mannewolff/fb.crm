@@ -11,8 +11,8 @@ import org.springframework.core.io.ClassPathResource;
 import org.springframework.mock.env.MockEnvironment;
 
 /**
- * Die Vorgaben der Zaehlbremse, gelesen aus der echten {@code application.yml} (Kriterium 5, E21,
- * E27).
+ * Die Vorgaben der Zaehlbremse und der Sitzungsdauer, gelesen aus der echten {@code
+ * application.yml} (Kriterium 5, Kriterium 9, E21, E27).
  *
  * <p>{@code AuthPropertiesTest} kann das nicht: Er faehrt einen Kontext mit ausschliesslich selbst
  * gesetzten Werten hoch und liest die {@code application.yml} nie. Gilt eine Vorgabe dort nicht
@@ -30,6 +30,13 @@ class AuthDefaultsIT {
         .load("application.yml", new ClassPathResource("application.yml"))
         .forEach(umgebung.getPropertySources()::addLast);
     return Binder.get(umgebung);
+  }
+
+  @Test
+  void defaults_thenASessionLasts30Days() throws IOException {
+    // When / Then — Kriterium 9: 30 Tage ab der letzten Nutzung (E21).
+    assertThat(vorgaben().bind("fbcrm.auth.session-ttl", Duration.class).get())
+        .isEqualTo(Duration.ofDays(30));
   }
 
   @Test

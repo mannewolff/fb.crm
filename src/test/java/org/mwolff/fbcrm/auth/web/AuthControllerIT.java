@@ -25,7 +25,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.TestPropertySource;
 
 /**
- * Anmelden, abmelden und das eigene Konto ueber HTTP (K5, K8, K9, E9).
+ * Anmelden, abmelden und das eigene Konto ueber HTTP (K5, K8, K9, E9, Kriterium 9, E5, E7).
  *
  * <p>Der wichtigste Nachweis steht in {@code login_givenAnUnknownAddress…}: Die Antwort auf eine
  * unbekannte Adresse und die auf ein falsches Passwort duerfen sich in nichts unterscheiden — nicht
@@ -80,9 +80,18 @@ class AuthControllerIT extends AbstractIntegrationTest {
   }
 
   private ResponseEntity<String> mitCookie(final String pfad, final HttpMethod methode) {
+    return mitCookie(pfad, methode, sessionCookie());
+  }
+
+  private ResponseEntity<String> mitCookie(
+      final String pfad, final HttpMethod methode, final String cookie) {
     final HttpHeaders kopf = new HttpHeaders();
-    kopf.add(HttpHeaders.COOKIE, sessionCookie());
+    kopf.add(HttpHeaders.COOKIE, cookie);
     return rest.exchange(pfad, methode, new HttpEntity<>(kopf), String.class);
+  }
+
+  private int generation() {
+    return accounts.findByEmail(MAIL).orElseThrow().sessionGeneration();
   }
 
   @Test
@@ -106,7 +115,7 @@ class AuthControllerIT extends AbstractIntegrationTest {
         .contains("Secure")
         .contains("SameSite=Strict")
         .contains("Path=/")
-        .contains("Max-Age=86400");
+        .contains("Max-Age=2592000");
   }
 
   @Test
@@ -208,6 +217,57 @@ class AuthControllerIT extends AbstractIntegrationTest {
 
     // Then
     assertThat(antwort.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
+  }
+
+  @Test
+  void logout_givenTheSessionCookie_thenIncrementsTheSessionGeneration() {
+    // Given
+    final String cookie = sessionCookie();
+    final int vorher = generation();
+
+    // When
+    mitCookie("/api/auth/logout", HttpMethod.POST, cookie);
+
+    // Then — E7: jedes vorher ausgestellte Token traegt jetzt eine veraltete Generation.
+    assertThat(generation()).isEqualTo(vorher + 1);
+  }
+
+  @Test
+  void logout_givenTheSessionCookie_thenThePreviousTokenIsRejectedImmediately() {
+    // Given
+    final String cookie = sessionCookie();
+    mitCookie("/api/auth/logout", HttpMethod.POST, cookie);
+
+    // When — wer das Cookie aufbewahrt hat, kommt damit nicht mehr hinein (Kriterium 9).
+    final ResponseEntity<String> antwort = mitCookie("/api/auth/me", HttpMethod.GET, cookie);
+
+    // Then
+    assertThat(antwort.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+  }
+
+  @Test
+  void logout_givenTheSessionCookie_thenSetsOnlyTheInvalidatingCookie() {
+    // When — E6: der Filter verlaengert das Abmelden nicht.
+    final ResponseEntity<String> antwort = mitCookie("/api/auth/logout", HttpMethod.POST);
+
+    // Then
+    assertThat(antwort.getHeaders().get(HttpHeaders.SET_COOKIE))
+        .singleElement()
+        .asString()
+        .contains("Max-Age=0");
+  }
+
+  @Test
+  void me_givenTheSessionCookie_thenRenewsTheCookieForTheFullLifetime() {
+    // When — Kriterium 9, E5: jede Nutzung verlaengert die Sitzung.
+    final ResponseEntity<String> antwort = mitCookie("/api/auth/me", HttpMethod.GET);
+
+    // Then
+    assertThat(antwort.getHeaders().getFirst(HttpHeaders.SET_COOKIE))
+        .startsWith("fbcrm_session=")
+        .contains("HttpOnly")
+        .contains("SameSite=Strict")
+        .contains("Max-Age=2592000");
   }
 
   private static HttpHeaders ohneZeitstempel(final ResponseEntity<String> antwort) {

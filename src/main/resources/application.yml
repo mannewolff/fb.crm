@@ -75,7 +75,10 @@ fbcrm:
     bootstrap-token: ${FBCRM_BOOTSTRAP_ADMIN_TOKEN:}
   auth:
     session-secret: ${FBCRM_SESSION_SECRET:}
-    session-ttl: ${FBCRM_SESSION_TTL:P1D}
+    # Laufzeit einer Sitzung ab der letzten Nutzung (Kriterium 9): Jede Anfrage bekommt ein frisches
+    # Cookie. 30 Tage statt „Default eng" aus CLAUDE-security.md — die Begruendung steht in
+    # AuthProperties (E21).
+    session-ttl: ${FBCRM_SESSION_TTL:P30D}
     # Laufzeit eines Reset-Links (K7: „nur begrenzte Zeit"). Deutlich kuerzer als eine Sitzung —
     # der Link liegt in einem Postfach, und ein Postfach wird mitgelesen.
     password-reset-ttl: ${FBCRM_PASSWORD_RESET_TTL:PT1H}

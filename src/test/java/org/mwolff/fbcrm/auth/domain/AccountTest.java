@@ -6,7 +6,7 @@ import java.time.Instant;
 import org.junit.jupiter.api.Test;
 import org.mwolff.fbcrm.auth.Konten;
 
-/** Verhalten des Kontos: Passwortwechsel und Pruefung der Sitzungs-Generation. */
+/** Verhalten des Kontos: Passwortwechsel, naechste Generation und Pruefung der Generation. */
 class AccountTest {
 
   private static final Instant ANGELEGT = Instant.parse("2026-09-01T08:00:00Z");
@@ -80,6 +80,61 @@ class AccountTest {
 
     // Then
     assertThat(bestand.passwordHash()).isEqualTo("alter-hash");
+  }
+
+  @Test
+  void mitNaechsterGeneration_thenIncrementsSessionGeneration() {
+    // Given
+    final Account bestand = kontoMitGeneration(3);
+
+    // When
+    final Account geaendert = bestand.mitNaechsterGeneration(GEAENDERT);
+
+    // Then
+    assertThat(geaendert.sessionGeneration()).isEqualTo(4);
+  }
+
+  @Test
+  void mitNaechsterGeneration_thenStampsTheChangeTime() {
+    // Given
+    final Account bestand = kontoMitGeneration(0);
+
+    // When
+    final Account geaendert = bestand.mitNaechsterGeneration(GEAENDERT);
+
+    // Then
+    assertThat(geaendert.updatedAt()).isEqualTo(GEAENDERT);
+  }
+
+  @Test
+  void mitNaechsterGeneration_thenLeavesEverythingElseUntouched() {
+    // Given
+    final Account bestand = kontoMitGeneration(1);
+
+    // When
+    final Account geaendert = bestand.mitNaechsterGeneration(GEAENDERT);
+
+    // Then
+    assertThat(geaendert)
+        .satisfies(
+            konto -> assertThat(konto.id()).isEqualTo(7L),
+            konto -> assertThat(konto.email()).isEqualTo("manne@example.org"),
+            konto -> assertThat(konto.displayName()).isEqualTo("Manne"),
+            konto -> assertThat(konto.passwordHash()).isEqualTo("alter-hash"),
+            konto -> assertThat(konto.role()).isEqualTo(Role.ADMIN),
+            konto -> assertThat(konto.createdAt()).isEqualTo(ANGELEGT));
+  }
+
+  @Test
+  void mitNaechsterGeneration_thenLeavesTheOriginalUntouched() {
+    // Given
+    final Account bestand = kontoMitGeneration(1);
+
+    // When
+    bestand.mitNaechsterGeneration(GEAENDERT);
+
+    // Then
+    assertThat(bestand.sessionGeneration()).isEqualTo(1);
   }
 
   @Test

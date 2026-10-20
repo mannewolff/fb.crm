@@ -75,9 +75,9 @@ public class AuthController {
   }
 
   @PostMapping("/logout")
-  public ResponseEntity<Void> logout() {
+  public ResponseEntity<Void> logout(@AuthenticationPrincipal final Long accountId) {
     return ResponseEntity.noContent()
-        .header(HttpHeaders.SET_COOKIE, cookies.header(logoutUseCase.logout()))
+        .header(HttpHeaders.SET_COOKIE, cookies.header(logoutUseCase.logout(accountId)))
         .build();
   }
 

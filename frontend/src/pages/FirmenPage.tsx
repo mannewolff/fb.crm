@@ -211,6 +211,7 @@ export default function FirmenPage() {
     if (eingabe === suche) {
       return;
     }
+    // entprellung
     const uhr = setTimeout(() => {
       setzeParameter(
         (alt) => mitParameter(alt, PARAM_SUCHE, eingabe === '' ? null : eingabe),

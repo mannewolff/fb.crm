@@ -21,14 +21,22 @@ import org.springframework.validation.annotation.Validated;
  * hier steht, glaubt die Anwendung dem Kopf {@code X-Forwarded-For} (E9). Ein gefaelschter Kopf
  * hebelte sonst die Zaehlbremse je Absender-IP aus.
  *
+ * <p>{@code sessionTtl} ist bewusst <b>nicht</b> eng: 30 Tage statt der „Default eng, z. B. 8 h"
+ * aus CLAUDE-security.md. Die Abweichung ist begruendet (E21): Jede Neuanmeldung kostet kuenftig
+ * einen Zugriff aufs Postfach, und 30 Tage ab der letzten Nutzung hat der PO entschieden (Kriterium
+ * 9). Getragen wird der laengere Lauf von {@code HttpOnly}, {@code SameSite=Strict}, {@code
+ * Secure}, der kontogebundenen Sitzungs-Generation und ihrem Hochzaehlen beim Abmelden (E7).
+ * Gemessen wird die Laufzeit ab der letzten Nutzung, weil jede Anfrage ein frisches Token bekommt
+ * ({@code SessionAuthenticationFilter}).
+ *
  * <p>{@code passwordResetTtl} steht bewusst neben {@code sessionTtl} und nicht bei den Schaltern
  * des Postausgangsfachs: Wie lange ein Reset-Link gilt, ist eine Frage der Anmeldung, keine der
  * Zustellung. Er ist deutlich kuerzer als eine Sitzung — der Link liegt in einem Postfach, und ein
  * Postfach wird mitgelesen (CLAUDE-security.md).
  *
  * @param sessionSecret Schluessel der HMAC-Signatur; mindestens 32 Zeichen
- * @param sessionTtl Laufzeit eines Session-Tokens (Default {@code P1D} in der {@code
- *     application.yml})
+ * @param sessionTtl Laufzeit eines Session-Tokens ab der letzten Nutzung (Default {@code P30D} in
+ *     der {@code application.yml})
  * @param passwordResetTtl Laufzeit eines Reset-Links (Default {@code PT1H} in der {@code
  *     application.yml})
  * @param cookieName Name des Session-Cookies

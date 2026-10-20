@@ -155,11 +155,11 @@ class AuthControllerTest {
   @Test
   void logout_thenAnswersWithoutContent() {
     // Given
-    when(logoutUseCase.logout())
+    when(logoutUseCase.logout(KONTO_ID))
         .thenReturn(new SessionCookie("fbcrm_session", "", Duration.ZERO, true));
 
     // When
-    final ResponseEntity<Void> antwort = controller.logout();
+    final ResponseEntity<Void> antwort = controller.logout(KONTO_ID);
 
     // Then
     assertThat(antwort.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
@@ -168,11 +168,11 @@ class AuthControllerTest {
   @Test
   void logout_thenInvalidatesTheCookieImmediately() {
     // Given
-    when(logoutUseCase.logout())
+    when(logoutUseCase.logout(KONTO_ID))
         .thenReturn(new SessionCookie("fbcrm_session", "", Duration.ZERO, true));
 
     // When
-    final ResponseEntity<Void> antwort = controller.logout();
+    final ResponseEntity<Void> antwort = controller.logout(KONTO_ID);
 
     // Then — K9: leerer Wert und Max-Age=0.
     assertThat(setCookie(antwort)).startsWith("fbcrm_session=;").contains("Max-Age=0");

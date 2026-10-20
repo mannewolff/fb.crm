@@ -1,5 +1,6 @@
 package org.mwolff.fbcrm.auth.web;
 
+import java.time.Clock;
 import org.mwolff.fbcrm.auth.AuthProperties;
 import org.mwolff.fbcrm.auth.domain.AccountRepository;
 import org.mwolff.fbcrm.auth.domain.SessionTokens;
@@ -45,14 +46,20 @@ public class SecurityConfig {
   private final AuthProperties properties;
   private final SessionTokens tokens;
   private final AccountRepository accounts;
+  private final SessionCookieFactory cookies;
+  private final Clock clock;
 
   public SecurityConfig(
       final AuthProperties properties,
       final SessionTokens tokens,
-      final AccountRepository accounts) {
+      final AccountRepository accounts,
+      final SessionCookieFactory cookies,
+      final Clock clock) {
     this.properties = properties;
     this.tokens = tokens;
     this.accounts = accounts;
+    this.cookies = cookies;
+    this.clock = clock;
   }
 
   /*
@@ -88,7 +95,7 @@ public class SecurityConfig {
             fehler ->
                 fehler.authenticationEntryPoint(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED)))
         .addFilterBefore(
-            new SessionAuthenticationFilter(properties, tokens, accounts),
+            new SessionAuthenticationFilter(properties, tokens, accounts, cookies, clock),
             UsernamePasswordAuthenticationFilter.class)
         .build();
   }

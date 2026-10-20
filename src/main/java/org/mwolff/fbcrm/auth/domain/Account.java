@@ -7,12 +7,13 @@ import org.mwolff.fbcrm.common.Identifiable;
 /**
  * Ein Konto der Instanz.
  *
- * <p>Die <b>Sitzungs-Generation</b> ist der Hebel, mit dem eine Passwortaenderung alle bestehenden
- * Sitzungen beendet: Jedes Session-Token traegt die Generation seiner Ausstellung, und {@link
- * #changePassword} zaehlt sie hoch. Ein Token mit alter Generation gilt danach nicht mehr — auf
- * jedem Geraet, auch dem auslösenden (CLAUDE-security.md).
+ * <p>Die <b>Sitzungs-Generation</b> ist der Hebel, mit dem bestehende Sitzungen enden: Jedes
+ * Session-Token traegt die Generation seiner Ausstellung, und ein Token mit alter Generation gilt
+ * nicht mehr — auf jedem Geraet, auch dem ausloesenden (CLAUDE-security.md). Hochgezaehlt wird sie
+ * an zwei Stellen: {@link #changePassword} beim Neusetzen des Passworts und {@link
+ * #mitNaechsterGeneration} beim Abmelden (E7).
  *
- * <p>Unveraenderlich: {@link #changePassword} liefert ein neues Konto, statt dieses zu aendern. Der
+ * <p>Unveraenderlich: Beide Methoden liefern ein neues Konto, statt dieses zu aendern. Der
  * Zeitpunkt der Aenderung kommt von aussen, weil die Domaene keine Uhr kennt (CLAUDE-java.md §6.2).
  *
  * @param id technische Id — {@code null}, solange das Konto nicht gespeichert ist
@@ -44,6 +45,17 @@ public record Account(
   public Account changePassword(final String neuerHash, final Instant geaendertAm) {
     return new Account(
         id, email, displayName, neuerHash, role, sessionGeneration + 1, createdAt, geaendertAm);
+  }
+
+  /**
+   * Dasselbe Konto mit um eins erhoehter Sitzungs-Generation; jedes vorher ausgestellte
+   * Session-Token gilt danach nicht mehr (E7).
+   *
+   * @param geaendertAm Zeitpunkt der Aenderung
+   */
+  public Account mitNaechsterGeneration(final Instant geaendertAm) {
+    return new Account(
+        id, email, displayName, passwordHash, role, sessionGeneration + 1, createdAt, geaendertAm);
   }
 
   /**

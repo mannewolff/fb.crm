@@ -107,7 +107,7 @@ class SetupControllerIT extends AbstractIntegrationTest {
         .contains("fbcrm_session=")
         .contains("HttpOnly")
         .contains("SameSite=Strict")
-        .contains("Max-Age=86400");
+        .contains("Max-Age=2592000");
   }
 
   @Test
