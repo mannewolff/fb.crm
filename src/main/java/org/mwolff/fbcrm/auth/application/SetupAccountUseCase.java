@@ -8,8 +8,8 @@ import org.mwolff.fbcrm.auth.AuthProperties;
 import org.mwolff.fbcrm.auth.SetupProperties;
 import org.mwolff.fbcrm.auth.domain.Account;
 import org.mwolff.fbcrm.auth.domain.AccountRepository;
-import org.mwolff.fbcrm.auth.domain.PasswordHasher;
 import org.mwolff.fbcrm.auth.domain.Role;
+import org.mwolff.fbcrm.auth.domain.SecretHasher;
 import org.mwolff.fbcrm.auth.domain.SessionTokens;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
@@ -42,7 +42,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class SetupAccountUseCase {
 
   private final AccountRepository accounts;
-  private final PasswordHasher hasher;
+  private final SecretHasher hasher;
   private final SessionTokens tokens;
   private final AuthProperties authProperties;
   private final SetupProperties setupProperties;
@@ -50,7 +50,7 @@ public class SetupAccountUseCase {
 
   public SetupAccountUseCase(
       final AccountRepository accounts,
-      final PasswordHasher hasher,
+      final SecretHasher hasher,
       final SessionTokens tokens,
       final AuthProperties authProperties,
       final SetupProperties setupProperties,

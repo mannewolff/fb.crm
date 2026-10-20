@@ -21,10 +21,10 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mwolff.fbcrm.auth.domain.Account;
 import org.mwolff.fbcrm.auth.domain.AccountRepository;
-import org.mwolff.fbcrm.auth.domain.PasswordHasher;
 import org.mwolff.fbcrm.auth.domain.PasswordResetToken;
 import org.mwolff.fbcrm.auth.domain.PasswordResetTokenRepository;
 import org.mwolff.fbcrm.auth.domain.Role;
+import org.mwolff.fbcrm.auth.domain.SecretHasher;
 import org.mwolff.fbcrm.common.SecureTokens;
 
 /**
@@ -49,7 +49,7 @@ class ConfirmPasswordResetUseCaseTest {
 
   @Mock private AccountRepository accounts;
   @Mock private PasswordResetTokenRepository resetTokens;
-  @Mock private PasswordHasher hasher;
+  @Mock private SecretHasher hasher;
 
   @Captor private ArgumentCaptor<Account> gespeichertesKonto;
   @Captor private ArgumentCaptor<PasswordResetToken> gespeicherterToken;

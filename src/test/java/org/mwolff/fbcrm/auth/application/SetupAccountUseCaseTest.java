@@ -22,8 +22,8 @@ import org.mwolff.fbcrm.auth.AuthProperties;
 import org.mwolff.fbcrm.auth.SetupProperties;
 import org.mwolff.fbcrm.auth.domain.Account;
 import org.mwolff.fbcrm.auth.domain.AccountRepository;
-import org.mwolff.fbcrm.auth.domain.PasswordHasher;
 import org.mwolff.fbcrm.auth.domain.Role;
+import org.mwolff.fbcrm.auth.domain.SecretHasher;
 import org.mwolff.fbcrm.auth.domain.SessionTokens;
 import org.springframework.dao.DataIntegrityViolationException;
 
@@ -49,7 +49,7 @@ class SetupAccountUseCaseTest {
   private static final long KONTO_ID = 1L;
 
   @Mock private AccountRepository accounts;
-  @Mock private PasswordHasher hasher;
+  @Mock private SecretHasher hasher;
   @Mock private SessionTokens tokens;
 
   private static AuthProperties schalter() {

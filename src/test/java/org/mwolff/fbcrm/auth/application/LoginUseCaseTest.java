@@ -23,8 +23,8 @@ import org.mockito.ArgumentCaptor;
 import org.mwolff.fbcrm.auth.AuthProperties;
 import org.mwolff.fbcrm.auth.domain.Account;
 import org.mwolff.fbcrm.auth.domain.AccountRepository;
-import org.mwolff.fbcrm.auth.domain.PasswordHasher;
 import org.mwolff.fbcrm.auth.domain.Role;
+import org.mwolff.fbcrm.auth.domain.SecretHasher;
 import org.mwolff.fbcrm.auth.domain.SessionTokens;
 import org.mwolff.fbcrm.auth.infrastructure.FailedLoginDelay;
 import org.mwolff.fbcrm.auth.infrastructure.LoginAttemptLimiter;
@@ -49,7 +49,7 @@ class LoginUseCaseTest {
   private static final String TOKEN = "token.signatur";
 
   private final AccountRepository accounts = mock(AccountRepository.class);
-  private final PasswordHasher hasher = mock(PasswordHasher.class);
+  private final SecretHasher hasher = mock(SecretHasher.class);
   private final SessionTokens tokens = mock(SessionTokens.class);
   private final LoginAttemptLimiter limiter = mock(LoginAttemptLimiter.class);
   private final FailedLoginDelay delay = mock(FailedLoginDelay.class);

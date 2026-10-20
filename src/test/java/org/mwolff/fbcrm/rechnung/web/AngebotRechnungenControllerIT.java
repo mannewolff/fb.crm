@@ -18,8 +18,8 @@ import org.mwolff.fbcrm.angebot.web.AngebotPositionResponse;
 import org.mwolff.fbcrm.angebot.web.AngebotResponse;
 import org.mwolff.fbcrm.auth.domain.Account;
 import org.mwolff.fbcrm.auth.domain.AccountRepository;
-import org.mwolff.fbcrm.auth.domain.PasswordHasher;
 import org.mwolff.fbcrm.auth.domain.Role;
+import org.mwolff.fbcrm.auth.domain.SecretHasher;
 import org.mwolff.fbcrm.common.Geschaeftszone;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.web.client.TestRestTemplate;
@@ -85,7 +85,7 @@ class AngebotRechnungenControllerIT extends AbstractIntegrationTest {
 
   private final TestRestTemplate rest;
   private final AccountRepository accounts;
-  private final PasswordHasher hasher;
+  private final SecretHasher hasher;
   private final JdbcTemplate jdbc;
 
   private HttpHeaders sitzung = new HttpHeaders();
@@ -101,7 +101,7 @@ class AngebotRechnungenControllerIT extends AbstractIntegrationTest {
   AngebotRechnungenControllerIT(
       final TestRestTemplate rest,
       final AccountRepository accounts,
-      final PasswordHasher hasher,
+      final SecretHasher hasher,
       final JdbcTemplate jdbc) {
     this.rest = rest;
     this.accounts = accounts;

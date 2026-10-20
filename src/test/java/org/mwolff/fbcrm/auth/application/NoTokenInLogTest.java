@@ -29,10 +29,10 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.mwolff.fbcrm.auth.AuthProperties;
 import org.mwolff.fbcrm.auth.domain.Account;
 import org.mwolff.fbcrm.auth.domain.AccountRepository;
-import org.mwolff.fbcrm.auth.domain.PasswordHasher;
 import org.mwolff.fbcrm.auth.domain.PasswordResetToken;
 import org.mwolff.fbcrm.auth.domain.PasswordResetTokenRepository;
 import org.mwolff.fbcrm.auth.domain.Role;
+import org.mwolff.fbcrm.auth.domain.SecretHasher;
 import org.mwolff.fbcrm.common.SecureTokens;
 import org.mwolff.fbcrm.mail.MailProperties;
 import org.mwolff.fbcrm.mail.OutboxProperties;
@@ -66,7 +66,7 @@ class NoTokenInLogTest {
 
   @Mock private AccountRepository accounts;
   @Mock private PasswordResetTokenRepository resetTokens;
-  @Mock private PasswordHasher hasher;
+  @Mock private SecretHasher hasher;
   @Mock private OutboxRepository outbox;
   @Mock private MailGateway gateway;
 

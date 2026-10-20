@@ -5,11 +5,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 import org.junit.jupiter.api.Test;
 
 /** Passwort-Hashing mit Argon2id (CLAUDE-security.md). */
-class Argon2PasswordHasherTest {
+class Argon2SecretHasherTest {
 
   private static final String PASSWORT = "ein-hinreichend-langes-passwort";
 
-  private final Argon2PasswordHasher hasher = new Argon2PasswordHasher();
+  private final Argon2SecretHasher hasher = new Argon2SecretHasher();
 
   @Test
   void hash_givenTheSamePasswordTwice_thenProducesDifferentHashes() {

@@ -20,8 +20,8 @@ import org.mwolff.fbcrm.angebot.web.AngebotResponse;
 import org.mwolff.fbcrm.angebot.web.FirmaAngeboteResponse;
 import org.mwolff.fbcrm.auth.domain.Account;
 import org.mwolff.fbcrm.auth.domain.AccountRepository;
-import org.mwolff.fbcrm.auth.domain.PasswordHasher;
 import org.mwolff.fbcrm.auth.domain.Role;
+import org.mwolff.fbcrm.auth.domain.SecretHasher;
 import org.mwolff.fbcrm.common.Geschaeftszone;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.web.client.TestRestTemplate;
@@ -60,7 +60,7 @@ class AngebotIT extends AbstractIntegrationTest {
 
   private final TestRestTemplate rest;
   private final AccountRepository accounts;
-  private final PasswordHasher hasher;
+  private final SecretHasher hasher;
   private final JdbcTemplate jdbc;
   private final Clock clock;
 
@@ -73,7 +73,7 @@ class AngebotIT extends AbstractIntegrationTest {
   AngebotIT(
       final TestRestTemplate rest,
       final AccountRepository accounts,
-      final PasswordHasher hasher,
+      final SecretHasher hasher,
       final JdbcTemplate jdbc,
       final Clock clock) {
     this.rest = rest;

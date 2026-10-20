@@ -4,9 +4,9 @@ import java.time.Clock;
 import java.time.Instant;
 import org.mwolff.fbcrm.auth.domain.Account;
 import org.mwolff.fbcrm.auth.domain.AccountRepository;
-import org.mwolff.fbcrm.auth.domain.PasswordHasher;
 import org.mwolff.fbcrm.auth.domain.PasswordResetToken;
 import org.mwolff.fbcrm.auth.domain.PasswordResetTokenRepository;
+import org.mwolff.fbcrm.auth.domain.SecretHasher;
 import org.mwolff.fbcrm.common.SecureTokens;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -31,14 +31,14 @@ public class ConfirmPasswordResetUseCase {
 
   private final AccountRepository accounts;
   private final PasswordResetTokenRepository resetTokens;
-  private final PasswordHasher hasher;
+  private final SecretHasher hasher;
   private final SecureTokens tokens;
   private final Clock clock;
 
   public ConfirmPasswordResetUseCase(
       final AccountRepository accounts,
       final PasswordResetTokenRepository resetTokens,
-      final PasswordHasher hasher,
+      final SecretHasher hasher,
       final SecureTokens tokens,
       final Clock clock) {
     this.accounts = accounts;

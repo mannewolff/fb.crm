@@ -5,7 +5,7 @@ import java.util.Optional;
 import org.mwolff.fbcrm.auth.AuthProperties;
 import org.mwolff.fbcrm.auth.domain.Account;
 import org.mwolff.fbcrm.auth.domain.AccountRepository;
-import org.mwolff.fbcrm.auth.domain.PasswordHasher;
+import org.mwolff.fbcrm.auth.domain.SecretHasher;
 import org.mwolff.fbcrm.auth.domain.SessionTokens;
 import org.mwolff.fbcrm.auth.infrastructure.FailedLoginDelay;
 import org.mwolff.fbcrm.auth.infrastructure.LoginAttemptLimiter;
@@ -29,7 +29,7 @@ import org.springframework.stereotype.Service;
 public class LoginUseCase {
 
   private final AccountRepository accounts;
-  private final PasswordHasher hasher;
+  private final SecretHasher hasher;
   private final SessionTokens tokens;
   private final LoginAttemptLimiter limiter;
   private final FailedLoginDelay delay;
@@ -48,7 +48,7 @@ public class LoginUseCase {
 
   public LoginUseCase(
       final AccountRepository accounts,
-      final PasswordHasher hasher,
+      final SecretHasher hasher,
       final SessionTokens tokens,
       final LoginAttemptLimiter limiter,
       final FailedLoginDelay delay,

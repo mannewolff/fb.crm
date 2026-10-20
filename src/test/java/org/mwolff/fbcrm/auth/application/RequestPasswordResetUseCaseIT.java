@@ -11,8 +11,8 @@ import org.junit.jupiter.api.Test;
 import org.mwolff.fbcrm.AbstractIntegrationTest;
 import org.mwolff.fbcrm.auth.domain.Account;
 import org.mwolff.fbcrm.auth.domain.AccountRepository;
-import org.mwolff.fbcrm.auth.domain.PasswordHasher;
 import org.mwolff.fbcrm.auth.domain.Role;
+import org.mwolff.fbcrm.auth.domain.SecretHasher;
 import org.mwolff.fbcrm.mail.application.EnqueueMailUseCase;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -35,7 +35,7 @@ class RequestPasswordResetUseCaseIT extends AbstractIntegrationTest {
   private final RequestPasswordResetUseCase anforderung;
   private final EnqueueMailUseCase postausgang;
   private final AccountRepository accounts;
-  private final PasswordHasher hasher;
+  private final SecretHasher hasher;
   private final JdbcTemplate jdbc;
 
   @Autowired
@@ -43,7 +43,7 @@ class RequestPasswordResetUseCaseIT extends AbstractIntegrationTest {
       final RequestPasswordResetUseCase anforderung,
       final EnqueueMailUseCase postausgang,
       final AccountRepository accounts,
-      final PasswordHasher hasher,
+      final SecretHasher hasher,
       final JdbcTemplate jdbc) {
     this.anforderung = anforderung;
     this.postausgang = postausgang;

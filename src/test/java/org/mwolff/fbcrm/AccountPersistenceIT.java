@@ -10,8 +10,8 @@ import org.mwolff.fbcrm.auth.application.LoginResult;
 import org.mwolff.fbcrm.auth.application.LoginUseCase;
 import org.mwolff.fbcrm.auth.domain.Account;
 import org.mwolff.fbcrm.auth.domain.AccountRepository;
-import org.mwolff.fbcrm.auth.domain.PasswordHasher;
 import org.mwolff.fbcrm.auth.domain.Role;
+import org.mwolff.fbcrm.auth.domain.SecretHasher;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.builder.SpringApplicationBuilder;
 import org.springframework.context.ConfigurableApplicationContext;
@@ -32,12 +32,12 @@ class AccountPersistenceIT extends AbstractIntegrationTest {
   private static final String NEUES_GEHEIMNIS = "ein-zweites-geheimnis-mit-genug-zeichen-drin";
 
   private final AccountRepository accounts;
-  private final PasswordHasher hasher;
+  private final SecretHasher hasher;
   private final JdbcTemplate jdbc;
 
   @Autowired
   AccountPersistenceIT(
-      final AccountRepository accounts, final PasswordHasher hasher, final JdbcTemplate jdbc) {
+      final AccountRepository accounts, final SecretHasher hasher, final JdbcTemplate jdbc) {
     this.accounts = accounts;
     this.hasher = hasher;
     this.jdbc = jdbc;
