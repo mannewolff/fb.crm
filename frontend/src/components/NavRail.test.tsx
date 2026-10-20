@@ -228,6 +228,8 @@ describe('NavRail', () => {
   it.each([
     ['/administration', 'Administration'],
     ['/dokumentation', 'Dokumentation'],
+    // Auch ein Teil der Dokumentation laesst „Dokumentation" aktiv stehen (Plan #378, E6).
+    ['/dokumentation/betrieb', 'Dokumentation'],
     ['/firmen', 'Firmen'],
     // Auch die Detailansicht einer Firma laesst „Firmen" aktiv stehen (Plan-Review Fund 3).
     ['/firmen/7', 'Firmen'],

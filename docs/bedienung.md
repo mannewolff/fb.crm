@@ -37,7 +37,9 @@ neben der Marke verkleinert die Schiene auf ihre Symbole.
 
 **Diese Dokumentation in fb.crm:** Im Fuß der Schiene „Dokumentation" wählen. Die Dokumentation
 ist nur nach der Anmeldung erreichbar; wer nicht angemeldet ist, kommt zuerst auf die Seite
-„Anmelden". Im Projekt liegt derselbe Text als Datei unter `docs/`.
+„Anmelden". Zuerst erscheint der Teil „Bedienung"; oben rechts wechselt man zum Teil „Betrieb"
+und zurück. Die Karte „Inhalt" führt jeden Abschnitt des gezeigten Teils auf, ein Klick springt zu
+ihm. Im Projekt liegt derselbe Text als Datei unter `docs/`.
 
 **Ergebnis:** Man ist angemeldet, sieht die Startseite und findet jeden Bereich über die Schiene.
 
