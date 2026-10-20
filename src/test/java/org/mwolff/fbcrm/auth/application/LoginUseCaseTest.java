@@ -21,9 +21,9 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mwolff.fbcrm.auth.AuthProperties;
+import org.mwolff.fbcrm.auth.Konten;
 import org.mwolff.fbcrm.auth.domain.Account;
 import org.mwolff.fbcrm.auth.domain.AccountRepository;
-import org.mwolff.fbcrm.auth.domain.Role;
 import org.mwolff.fbcrm.auth.domain.SecretHasher;
 import org.mwolff.fbcrm.auth.domain.SessionTokens;
 import org.mwolff.fbcrm.auth.infrastructure.FailedLoginDelay;
@@ -69,7 +69,7 @@ class LoginUseCaseTest {
   }
 
   private static Account konto() {
-    return new Account(KONTO_ID, MAIL, "Manne", HASH, Role.ADMIN, GENERATION, JETZT, JETZT);
+    return Konten.gespeichert(KONTO_ID, MAIL, HASH, GENERATION, JETZT);
   }
 
   @BeforeEach

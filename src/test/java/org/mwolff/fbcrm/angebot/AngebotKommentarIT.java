@@ -12,9 +12,8 @@ import org.mwolff.fbcrm.AbstractIntegrationTest;
 import org.mwolff.fbcrm.angebot.web.AngebotKommentarResponse;
 import org.mwolff.fbcrm.angebot.web.AngebotKommentareResponse;
 import org.mwolff.fbcrm.angebot.web.AngebotResponse;
-import org.mwolff.fbcrm.auth.domain.Account;
+import org.mwolff.fbcrm.auth.Konten;
 import org.mwolff.fbcrm.auth.domain.AccountRepository;
-import org.mwolff.fbcrm.auth.domain.Role;
 import org.mwolff.fbcrm.auth.domain.SecretHasher;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.web.client.TestRestTemplate;
@@ -74,8 +73,7 @@ class AngebotKommentarIT extends AbstractIntegrationTest {
                 jdbc.queryForObject("SELECT id FROM firma WHERE name = ?", Long.class, FIRMA))
             .longValue();
     jdbc.execute("TRUNCATE outbox_message, password_reset_token, account RESTART IDENTITY CASCADE");
-    accounts.save(
-        new Account(null, MAIL, "Manne", hasher.hash(PASSWORT), Role.ADMIN, 0, ANGELEGT, ANGELEGT));
+    accounts.save(Konten.neu(MAIL, hasher.hash(PASSWORT), ANGELEGT));
     sitzung = angemeldeterKopf();
   }
 

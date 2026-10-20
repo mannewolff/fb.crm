@@ -9,9 +9,8 @@ import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mwolff.fbcrm.AbstractIntegrationTest;
-import org.mwolff.fbcrm.auth.domain.Account;
+import org.mwolff.fbcrm.auth.Konten;
 import org.mwolff.fbcrm.auth.domain.AccountRepository;
-import org.mwolff.fbcrm.auth.domain.Role;
 import org.mwolff.fbcrm.auth.domain.SecretHasher;
 import org.mwolff.fbcrm.mail.application.EnqueueMailUseCase;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -56,9 +55,7 @@ class RequestPasswordResetUseCaseIT extends AbstractIntegrationTest {
   void legeDasAdminKontoAn() {
     jdbc.execute("TRUNCATE outbox_message, password_reset_token, account RESTART IDENTITY CASCADE");
     final Instant jetzt = Instant.parse("2026-09-18T10:00:00Z");
-    accounts.save(
-        new Account(
-            null, MAIL, "Manne", hasher.hash("richtiges-passwort"), Role.ADMIN, 0, jetzt, jetzt));
+    accounts.save(Konten.neu(MAIL, hasher.hash("richtiges-passwort"), jetzt));
   }
 
   private List<Map<String, Object>> postausgangsfach() {

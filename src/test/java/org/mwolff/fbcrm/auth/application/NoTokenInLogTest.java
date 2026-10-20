@@ -27,11 +27,11 @@ import org.mockito.Captor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mwolff.fbcrm.auth.AuthProperties;
+import org.mwolff.fbcrm.auth.Konten;
 import org.mwolff.fbcrm.auth.domain.Account;
 import org.mwolff.fbcrm.auth.domain.AccountRepository;
 import org.mwolff.fbcrm.auth.domain.PasswordResetToken;
 import org.mwolff.fbcrm.auth.domain.PasswordResetTokenRepository;
-import org.mwolff.fbcrm.auth.domain.Role;
 import org.mwolff.fbcrm.auth.domain.SecretHasher;
 import org.mwolff.fbcrm.common.SecureTokens;
 import org.mwolff.fbcrm.mail.MailProperties;
@@ -99,7 +99,7 @@ class NoTokenInLogTest {
   }
 
   private static Account konto() {
-    return new Account(KONTO_ID, MAIL, "Manne", "hash", Role.ADMIN, 0, JETZT, JETZT);
+    return Konten.gespeichert(KONTO_ID, MAIL, "hash", 0, JETZT);
   }
 
   @BeforeEach

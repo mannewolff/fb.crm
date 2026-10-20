@@ -21,9 +21,9 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mwolff.fbcrm.auth.AuthProperties;
+import org.mwolff.fbcrm.auth.Konten;
 import org.mwolff.fbcrm.auth.domain.Account;
 import org.mwolff.fbcrm.auth.domain.AccountRepository;
-import org.mwolff.fbcrm.auth.domain.Role;
 import org.mwolff.fbcrm.auth.domain.SessionTokens;
 import org.mwolff.fbcrm.auth.infrastructure.SessionTokenCodec;
 import org.springframework.mock.web.MockFilterChain;
@@ -74,15 +74,8 @@ class SessionAuthenticationFilterTest {
   }
 
   private static Account konto(final int sessionGeneration) {
-    return new Account(
-        KONTO_ID,
-        "manne@example.org",
-        "Manne",
-        "hash",
-        Role.ADMIN,
-        sessionGeneration,
-        AUSGESTELLT,
-        AUSGESTELLT);
+    return Konten.gespeichert(
+        KONTO_ID, "manne@example.org", "hash", sessionGeneration, AUSGESTELLT);
   }
 
   private static String token(final String geheimnis, final long generation) {

@@ -26,11 +26,11 @@ import org.mockito.Captor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mwolff.fbcrm.auth.AuthProperties;
+import org.mwolff.fbcrm.auth.Konten;
 import org.mwolff.fbcrm.auth.domain.Account;
 import org.mwolff.fbcrm.auth.domain.AccountRepository;
 import org.mwolff.fbcrm.auth.domain.PasswordResetToken;
 import org.mwolff.fbcrm.auth.domain.PasswordResetTokenRepository;
-import org.mwolff.fbcrm.auth.domain.Role;
 import org.mwolff.fbcrm.common.SecureTokens;
 import org.mwolff.fbcrm.mail.MailProperties;
 import org.mwolff.fbcrm.mail.application.EnqueueMailUseCase;
@@ -74,7 +74,7 @@ class RequestPasswordResetUseCaseTest {
   }
 
   private static Account konto() {
-    return new Account(KONTO_ID, MAIL, "Manne", "hash", Role.ADMIN, 3, JETZT, JETZT);
+    return Konten.gespeichert(KONTO_ID, MAIL, "hash", 3, JETZT);
   }
 
   @BeforeEach

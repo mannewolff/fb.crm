@@ -11,9 +11,8 @@ import java.util.Objects;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mwolff.fbcrm.AbstractIntegrationTest;
-import org.mwolff.fbcrm.auth.domain.Account;
+import org.mwolff.fbcrm.auth.Konten;
 import org.mwolff.fbcrm.auth.domain.AccountRepository;
-import org.mwolff.fbcrm.auth.domain.Role;
 import org.mwolff.fbcrm.auth.domain.SecretHasher;
 import org.mwolff.fbcrm.common.Geschaeftszone;
 import org.mwolff.fbcrm.rechnung.domain.Rechnungszustand;
@@ -83,8 +82,7 @@ class StartseiteControllerIT extends AbstractIntegrationTest {
         "TRUNCATE arbeitszeit, rechnung_position, rechnung, angebot_position, angebot,"
             + " ansprechpartner, firma RESTART IDENTITY CASCADE");
     jdbc.execute("TRUNCATE outbox_message, password_reset_token, account RESTART IDENTITY CASCADE");
-    accounts.save(
-        new Account(null, MAIL, "Manne", hasher.hash(PASSWORT), Role.ADMIN, 0, ANGELEGT, ANGELEGT));
+    accounts.save(Konten.neu(MAIL, hasher.hash(PASSWORT), ANGELEGT));
     sitzung = angemeldeterKopf();
   }
 

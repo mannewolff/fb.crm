@@ -19,6 +19,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mwolff.fbcrm.auth.AuthProperties;
+import org.mwolff.fbcrm.auth.Konten;
 import org.mwolff.fbcrm.auth.SetupProperties;
 import org.mwolff.fbcrm.auth.domain.Account;
 import org.mwolff.fbcrm.auth.domain.AccountRepository;
@@ -82,15 +83,7 @@ class SetupAccountUseCaseTest {
         .thenAnswer(
             aufruf -> {
               final Account uebergeben = aufruf.getArgument(0);
-              return new Account(
-                  KONTO_ID,
-                  uebergeben.email(),
-                  uebergeben.displayName(),
-                  uebergeben.passwordHash(),
-                  uebergeben.role(),
-                  uebergeben.sessionGeneration(),
-                  uebergeben.createdAt(),
-                  uebergeben.updatedAt());
+              return Konten.mitId(KONTO_ID, uebergeben);
             });
     when(tokens.encode(KONTO_ID, 0L, JETZT, Duration.ofDays(1))).thenReturn(TOKEN);
     return einrichtung(SCHLUESSEL);

@@ -12,9 +12,8 @@ import org.junit.jupiter.api.Test;
 import org.mwolff.fbcrm.AbstractIntegrationTest;
 import org.mwolff.fbcrm.angebot.domain.Angebotsstatus;
 import org.mwolff.fbcrm.angebot.web.AngeboteUebersichtResponse;
-import org.mwolff.fbcrm.auth.domain.Account;
+import org.mwolff.fbcrm.auth.Konten;
 import org.mwolff.fbcrm.auth.domain.AccountRepository;
-import org.mwolff.fbcrm.auth.domain.Role;
 import org.mwolff.fbcrm.auth.domain.SecretHasher;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.web.client.TestRestTemplate;
@@ -69,8 +68,7 @@ class AngeboteUebersichtIT extends AbstractIntegrationTest {
     angebot(biber, "BESTELLT", "2026-09-25", "Java-Grundkurs");
     angebot(adler, "BESTELLT", "2026-09-22", null);
     jdbc.execute("TRUNCATE outbox_message, password_reset_token, account RESTART IDENTITY CASCADE");
-    accounts.save(
-        new Account(null, MAIL, "Manne", hasher.hash(PASSWORT), Role.ADMIN, 0, ANGELEGT, ANGELEGT));
+    accounts.save(Konten.neu(MAIL, hasher.hash(PASSWORT), ANGELEGT));
     sitzung = angemeldeterKopf();
   }
 

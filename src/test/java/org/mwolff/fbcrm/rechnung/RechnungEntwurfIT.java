@@ -13,9 +13,8 @@ import org.junit.jupiter.api.Test;
 import org.mwolff.fbcrm.AbstractIntegrationTest;
 import org.mwolff.fbcrm.angebot.domain.Angebotsstatus;
 import org.mwolff.fbcrm.angebot.web.AngebotResponse;
-import org.mwolff.fbcrm.auth.domain.Account;
+import org.mwolff.fbcrm.auth.Konten;
 import org.mwolff.fbcrm.auth.domain.AccountRepository;
-import org.mwolff.fbcrm.auth.domain.Role;
 import org.mwolff.fbcrm.auth.domain.SecretHasher;
 import org.mwolff.fbcrm.rechnung.domain.Rechnungszustand;
 import org.mwolff.fbcrm.rechnung.web.AngebotAbrechnungResponse;
@@ -87,8 +86,7 @@ class RechnungEntwurfIT extends AbstractIntegrationTest {
                 jdbc.queryForObject("SELECT id FROM firma WHERE name = ?", Long.class, "Adler AG"))
             .longValue();
     jdbc.execute("TRUNCATE outbox_message, password_reset_token, account RESTART IDENTITY CASCADE");
-    accounts.save(
-        new Account(null, MAIL, "Manne", hasher.hash(PASSWORT), Role.ADMIN, 0, ANGELEGT, ANGELEGT));
+    accounts.save(Konten.neu(MAIL, hasher.hash(PASSWORT), ANGELEGT));
     sitzung = angemeldeterKopf();
   }
 

@@ -8,8 +8,8 @@ import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mwolff.fbcrm.AbstractIntegrationTest;
+import org.mwolff.fbcrm.auth.Konten;
 import org.mwolff.fbcrm.auth.domain.Account;
-import org.mwolff.fbcrm.auth.domain.Role;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -29,7 +29,7 @@ class JpaAccountRepositoryIT extends AbstractIntegrationTest {
   }
 
   private static Account neuesKonto(final String email) {
-    return new Account(null, email, "Manne", "hash", Role.ADMIN, 0, ANGELEGT, ANGELEGT);
+    return Konten.neu(email, "hash", ANGELEGT);
   }
 
   @BeforeEach

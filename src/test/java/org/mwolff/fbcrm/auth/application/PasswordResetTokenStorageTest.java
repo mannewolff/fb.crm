@@ -19,11 +19,10 @@ import org.mockito.Captor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mwolff.fbcrm.auth.AuthProperties;
-import org.mwolff.fbcrm.auth.domain.Account;
+import org.mwolff.fbcrm.auth.Konten;
 import org.mwolff.fbcrm.auth.domain.AccountRepository;
 import org.mwolff.fbcrm.auth.domain.PasswordResetToken;
 import org.mwolff.fbcrm.auth.domain.PasswordResetTokenRepository;
-import org.mwolff.fbcrm.auth.domain.Role;
 import org.mwolff.fbcrm.common.SecureTokens;
 import org.mwolff.fbcrm.mail.MailProperties;
 import org.mwolff.fbcrm.mail.application.EnqueueMailUseCase;
@@ -78,8 +77,7 @@ class PasswordResetTokenStorageTest {
             new MailProperties(true, "no-reply@fbcrm.local", "https://crm.example.org"),
             Clock.fixed(JETZT, ZoneOffset.UTC));
     when(accounts.findByEmail(MAIL))
-        .thenReturn(
-            Optional.of(new Account(KONTO_ID, MAIL, "Manne", "hash", Role.ADMIN, 0, JETZT, JETZT)));
+        .thenReturn(Optional.of(Konten.gespeichert(KONTO_ID, MAIL, "hash", 0, JETZT)));
     anforderung.request(MAIL);
   }
 

@@ -19,11 +19,11 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.mwolff.fbcrm.auth.Konten;
 import org.mwolff.fbcrm.auth.domain.Account;
 import org.mwolff.fbcrm.auth.domain.AccountRepository;
 import org.mwolff.fbcrm.auth.domain.PasswordResetToken;
 import org.mwolff.fbcrm.auth.domain.PasswordResetTokenRepository;
-import org.mwolff.fbcrm.auth.domain.Role;
 import org.mwolff.fbcrm.auth.domain.SecretHasher;
 import org.mwolff.fbcrm.common.SecureTokens;
 
@@ -59,15 +59,7 @@ class ConfirmPasswordResetUseCaseTest {
   private ConfirmPasswordResetUseCase einloesung;
 
   private static Account konto() {
-    return new Account(
-        KONTO_ID,
-        "manne@example.org",
-        "Manne",
-        "alter-hash",
-        Role.ADMIN,
-        3,
-        AUSGESTELLT,
-        AUSGESTELLT);
+    return Konten.gespeichert(KONTO_ID, "manne@example.org", "alter-hash", 3, AUSGESTELLT);
   }
 
   private PasswordResetToken token(final Instant benutztAm, final Instant ablauf) {

@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.time.Instant;
 import org.junit.jupiter.api.Test;
+import org.mwolff.fbcrm.auth.Konten;
 
 /** Verhalten des Kontos: Passwortwechsel und Pruefung der Sitzungs-Generation. */
 class AccountTest {
@@ -12,8 +13,7 @@ class AccountTest {
   private static final Instant GEAENDERT = Instant.parse("2026-09-18T12:00:00Z");
 
   private static Account kontoMitGeneration(final int generation) {
-    return new Account(
-        7L, "manne@example.org", "Manne", "alter-hash", Role.ADMIN, generation, ANGELEGT, ANGELEGT);
+    return Konten.gespeichert(7L, "manne@example.org", "alter-hash", generation, ANGELEGT);
   }
 
   @Test

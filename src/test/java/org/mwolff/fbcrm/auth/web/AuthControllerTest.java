@@ -12,6 +12,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.mwolff.fbcrm.auth.Konten;
 import org.mwolff.fbcrm.auth.application.ConfirmPasswordResetUseCase;
 import org.mwolff.fbcrm.auth.application.GetCurrentAccountUseCase;
 import org.mwolff.fbcrm.auth.application.LoginResult;
@@ -20,7 +21,6 @@ import org.mwolff.fbcrm.auth.application.LogoutUseCase;
 import org.mwolff.fbcrm.auth.application.RequestPasswordResetUseCase;
 import org.mwolff.fbcrm.auth.application.SessionCookie;
 import org.mwolff.fbcrm.auth.domain.Account;
-import org.mwolff.fbcrm.auth.domain.Role;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -72,7 +72,7 @@ class AuthControllerTest {
   }
 
   private static Account konto() {
-    return new Account(KONTO_ID, MAIL, "Manne", "hash", Role.ADMIN, 3, JETZT, JETZT);
+    return Konten.gespeichert(KONTO_ID, MAIL, "hash", 3, JETZT);
   }
 
   private static LoginRequest anfrage() {

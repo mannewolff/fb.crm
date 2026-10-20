@@ -14,6 +14,7 @@ import org.mockito.Captor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.mwolff.fbcrm.auth.Konten;
 import org.mwolff.fbcrm.auth.domain.Account;
 import org.mwolff.fbcrm.auth.domain.Role;
 
@@ -40,8 +41,7 @@ class JpaAccountRepositoryTest {
   }
 
   private static Account konto(final Long id) {
-    return new Account(
-        id, "manne@example.org", "Manne", "hash", Role.ADMIN, 2, ANGELEGT, GEAENDERT);
+    return Konten.gespeichert(id, "manne@example.org", "hash", 2, ANGELEGT, GEAENDERT);
   }
 
   @Test
