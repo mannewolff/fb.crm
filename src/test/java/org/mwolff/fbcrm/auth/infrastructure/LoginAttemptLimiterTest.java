@@ -434,6 +434,75 @@ class LoginAttemptLimiterTest {
     assertThat(limiter.trackedCounters()).isEqualTo(1);
   }
 
+  @Test
+  void zaehleAnforderung_givenNothingCounted_thenLetsTheRequestThrough() {
+    // When / Then — null heisst: keine Sperre, die Anforderung ist gezaehlt.
+    assertThat(limiter.zaehleAnforderung(IP, MAIL)).isZero();
+  }
+
+  @Test
+  void zaehleAnforderung_givenAnAcceptedRequest_thenCountsItInAllThreeKinds() {
+    // When
+    limiter.zaehleAnforderung(IP, MAIL);
+
+    // Then — eine Restwartezeit hat nur ein Zaehler, in dem etwas steht.
+    assertThat(limiter.restwartezeit(HERKUNFT, IP)).isEqualTo(HERKUNFT_FENSTER);
+    assertThat(limiter.restwartezeit(ADRESSE_STUNDE, MAIL)).isEqualTo(STUNDEN_FENSTER);
+    assertThat(limiter.restwartezeit(ADRESSE_TAG, MAIL)).isEqualTo(TAGES_FENSTER);
+  }
+
+  @Test
+  void zaehleAnforderung_givenFiveRequestsForOneAddress_thenRefusesTheSixthWithTheRemainingWait() {
+    // Given — Kriterium 5: fuenf Anforderungen je Adresse und Stunde.
+    IntStream.range(0, JE_STUNDE).forEach(unbenutzt -> limiter.zaehleAnforderung(IP, MAIL));
+
+    // When / Then
+    assertThat(limiter.zaehleAnforderung(IP, MAIL)).isEqualTo(STUNDEN_FENSTER);
+  }
+
+  @Test
+  void zaehleAnforderung_givenARefusedRequest_thenCountsItNowhere() {
+    // Given — fuenf angenommene und fuenf abgewiesene Anforderungen fuer dieselbe Adresse.
+    IntStream.range(0, 2 * JE_STUNDE).forEach(unbenutzt -> limiter.zaehleAnforderung(IP, MAIL));
+
+    // When / Then — zaehlten die abgewiesenen mit, stuende die Tagesdecke schon bei zehn, und die
+    // genannte Wartezeit waere falsch: Nach ihr stuenden noch immer zu viele Eintraege im Fenster.
+    assertThat(limiter.isAllowed(ADRESSE_TAG, MAIL)).isTrue();
+    assertThat(limiter.isAllowed(HERKUNFT, IP)).isTrue();
+  }
+
+  @Test
+  void zaehleAnforderung_givenTenRequestsFromOneOrigin_thenRefusesTheEleventhForAnyAddress() {
+    // Given — zehn Adressen, jede einmal, von derselben Stelle aus.
+    IntStream.range(0, JE_HERKUNFT)
+        .forEach(nummer -> limiter.zaehleAnforderung(IP, nummer + "@example.org"));
+
+    // When / Then
+    assertThat(limiter.zaehleAnforderung(IP, ANDERE_MAIL)).isEqualTo(HERKUNFT_FENSTER);
+  }
+
+  @Test
+  void zaehleAnforderung_givenTheOriginAndTheHourFull_thenNamesTheLongerWait() {
+    // Given — die Herkunft ist nach 15 Minuten wieder frei, die Adresse erst nach einer Stunde.
+    IntStream.range(0, JE_STUNDE).forEach(unbenutzt -> limiter.zaehleAnforderung(IP, MAIL));
+    IntStream.range(0, JE_STUNDE).forEach(unbenutzt -> limiter.zaehleAnforderung(IP, ANDERE_MAIL));
+
+    // When / Then
+    assertThat(limiter.zaehleAnforderung(IP, MAIL)).isEqualTo(STUNDEN_FENSTER);
+  }
+
+  @Test
+  void zaehleAnforderung_givenTheHourAndTheDayFull_thenNamesTheLongerWait() {
+    // Given — fuenf jetzt, fuenf eine Stunde spaeter: die Stunde ist voll, der Tag ebenso.
+    IntStream.range(0, JE_STUNDE).forEach(unbenutzt -> limiter.zaehleAnforderung(IP, MAIL));
+    uhr.springe(STUNDEN_FENSTER);
+    IntStream.range(0, JE_STUNDE).forEach(unbenutzt -> limiter.zaehleAnforderung(IP, MAIL));
+    uhr.springe(Duration.ofMinutes(30));
+
+    // When / Then — die Stunde gaebe nach 30 Minuten frei, die Tagesdecke erst nach 22,5 Stunden.
+    assertThat(limiter.zaehleAnforderung(IP, MAIL)).isEqualTo(Duration.ofMinutes(1350));
+  }
+
   /** Eine Uhr, die auf Zuruf springt — ohne zu warten. */
   private static final class BeweglicheUhr extends Clock {
 

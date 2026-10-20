@@ -4,18 +4,27 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.clearInvocations;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mwolff.fbcrm.auth.infrastructure.LoginAttemptLimiter.Zaehlart.ADRESSE_STUNDE;
+import static org.mwolff.fbcrm.auth.infrastructure.LoginAttemptLimiter.Zaehlart.ADRESSE_TAG;
+import static org.mwolff.fbcrm.auth.infrastructure.LoginAttemptLimiter.Zaehlart.HERKUNFT;
 
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.stream.IntStream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mwolff.fbcrm.auth.AuthProperties;
@@ -26,6 +35,7 @@ import org.mwolff.fbcrm.auth.domain.AccountRepository;
 import org.mwolff.fbcrm.auth.domain.Role;
 import org.mwolff.fbcrm.auth.domain.SecretHasher;
 import org.mwolff.fbcrm.auth.domain.SessionTokens;
+import org.mwolff.fbcrm.auth.infrastructure.LoginAttemptLimiter;
 import org.springframework.dao.DataIntegrityViolationException;
 
 /**
@@ -36,6 +46,12 @@ import org.springframework.dao.DataIntegrityViolationException;
  * den Leerstring nimmt aber genau die leere Eingabe an — die Zusage waere ins Gegenteil verkehrt.
  * Der zweite ist das <b>Wettrennen</b>: Kommt die Abweisung der Datenbank, muss sie aussehen wie
  * „Konto existiert bereits", sonst verriete der Unterschied, welcher der beiden Riegel griff.
+ *
+ * <p>Fuer die Anforderung des Codes laeuft die Zaehlbremse <b>echt</b> und bespitzelt: Nur so
+ * laesst sich zeigen, dass gezaehlt wird, bevor der Schluessel geprueft ist, und dass die sechste
+ * Anforderung in der Stunde auch mit falschem Schluessel an der Bremse endet (Kriterium 6, letzter
+ * Satz zu Kriterium 5). Die Ausstellung ist gemockt: Sie ist der einzige Weg zu einem
+ * Zustellauftrag, und was sie dabei tut, weist {@code RequestLoginCodeUseCaseTest} nach.
  */
 @ExtendWith(MockitoExtension.class)
 class SetupAccountUseCaseTest {
@@ -48,10 +64,16 @@ class SetupAccountUseCaseTest {
   private static final String TOKEN = "nutzlast.signatur";
   private static final Instant JETZT = Instant.parse("2026-09-18T10:00:00Z");
   private static final long KONTO_ID = 1L;
+  private static final String IP = "203.0.113.7";
+  private static final String FALSCH = "falscher-schluessel";
 
   @Mock private AccountRepository accounts;
   @Mock private SecretHasher hasher;
   @Mock private SessionTokens tokens;
+  @Mock private RequestLoginCodeUseCase ausstellung;
+
+  private final LoginAttemptLimiter zaehler =
+      spy(new LoginAttemptLimiter(schalter(), Clock.fixed(JETZT, ZoneOffset.UTC)));
 
   private static AuthProperties schalter() {
     return new AuthProperties(
@@ -76,6 +98,8 @@ class SetupAccountUseCaseTest {
         accounts,
         hasher,
         tokens,
+        zaehler,
+        ausstellung,
         schalter(),
         new SetupProperties(konfigurierterSchluessel),
         Clock.fixed(JETZT, ZoneOffset.UTC));
@@ -345,5 +369,125 @@ class SetupAccountUseCaseTest {
 
     // When / Then
     assertThat(einrichtung(SCHLUESSEL).isInitialized()).isFalse();
+  }
+
+  /** Fuenf Anforderungen, die jede an ihrem Riegel abgewiesen werden — nicht an der Bremse. */
+  private static void fordereFuenfmalAn(final SetupAccountUseCase einrichtung, final String key) {
+    IntStream.range(0, 5)
+        .forEach(
+            unbenutzt ->
+                assertThatExceptionOfType(SetupRefused.class)
+                    .isThrownBy(() -> einrichtung.requestCode(MAIL, NAME, key, IP)));
+  }
+
+  @Test
+  void requestCode_givenTheRightKeyOnAFreshInstance_thenIssuesACodeToTheEnteredAddress() {
+    // Given — ein Konto gibt es noch nicht, darum geht der Anzeigename mit (E8).
+    when(accounts.existsAnyAdmin()).thenReturn(false);
+    final SetupAccountUseCase einrichtung = einrichtung(SCHLUESSEL);
+
+    // When
+    einrichtung.requestCode(MAIL, NAME, SCHLUESSEL, IP);
+
+    // Then
+    verify(ausstellung).ausstellen(MAIL, NAME);
+  }
+
+  @Test
+  void requestCode_givenTheRightKeyOnAFreshInstance_thenCreatesNoAccountYet() {
+    // Given — erst der richtige Code legt das Konto an (Kriterium 6).
+    when(accounts.existsAnyAdmin()).thenReturn(false);
+    final SetupAccountUseCase einrichtung = einrichtung(SCHLUESSEL);
+
+    // When
+    einrichtung.requestCode(MAIL, NAME, SCHLUESSEL, IP);
+
+    // Then
+    verify(accounts, never()).save(any(Account.class));
+  }
+
+  @Test
+  void requestCode_givenAWrongKey_thenRefusesAndIssuesNoCode() {
+    // Given — Kriterium 6: mit falschem Schluessel verschickt fb.crm keinen Code.
+    final SetupAccountUseCase einrichtung = einrichtung(SCHLUESSEL);
+
+    // When
+    assertThatExceptionOfType(SetupRefused.class)
+        .isThrownBy(() -> einrichtung.requestCode(MAIL, NAME, FALSCH, IP));
+
+    // Then
+    verify(ausstellung, never()).ausstellen(anyString(), anyString());
+  }
+
+  @Test
+  void requestCode_givenAnEmptyConfiguredKey_thenRefusesAnEmptyInputAsWell() {
+    // Given — E5: „leer = deaktiviert" gilt auch fuer die Anforderung des Codes.
+    final SetupAccountUseCase einrichtung = einrichtung("");
+
+    // When
+    assertThatExceptionOfType(SetupRefused.class)
+        .isThrownBy(() -> einrichtung.requestCode(MAIL, NAME, "", IP));
+
+    // Then
+    verify(ausstellung, never()).ausstellen(anyString(), anyString());
+  }
+
+  @Test
+  void requestCode_givenAnInstanceThatAlreadyHasAnAdmin_thenRefusesAndIssuesNoCode() {
+    // Given — der Einmal-Schluessel wirkt genau einmal, auch fuer die Anforderung.
+    when(accounts.existsAnyAdmin()).thenReturn(true);
+    final SetupAccountUseCase einrichtung = einrichtung(SCHLUESSEL);
+
+    // When
+    assertThatExceptionOfType(SetupRefused.class)
+        .isThrownBy(() -> einrichtung.requestCode(MAIL, NAME, SCHLUESSEL, IP));
+
+    // Then
+    verify(ausstellung, never()).ausstellen(anyString(), anyString());
+  }
+
+  @Test
+  void requestCode_givenAWrongKey_thenHasCountedInAllThreeKindsBeforeTheCheck() {
+    // Given — ein vor dem Zaehlen gepruefter Schluessel liesse die Einrichtungsseite ungebremst.
+    final SetupAccountUseCase einrichtung = einrichtung(SCHLUESSEL);
+    final InOrder reihenfolge = inOrder(zaehler, ausstellung);
+
+    // When
+    assertThatExceptionOfType(SetupRefused.class)
+        .isThrownBy(() -> einrichtung.requestCode(MAIL, NAME, FALSCH, IP));
+
+    // Then
+    reihenfolge.verify(zaehler).record(HERKUNFT, IP);
+    reihenfolge.verify(zaehler).record(ADRESSE_STUNDE, MAIL);
+    reihenfolge.verify(zaehler).record(ADRESSE_TAG, MAIL);
+  }
+
+  @Test
+  void requestCode_givenFiveRequestsWithAWrongKey_thenRefusesTheSixthAtTheBrakeWithTheWait() {
+    // Given — Kriterium 6: die Grenzen aus Kriterium 5 gelten auch fuer die Einrichtungsseite.
+    final SetupAccountUseCase einrichtung = einrichtung(SCHLUESSEL);
+    fordereFuenfmalAn(einrichtung, FALSCH);
+
+    // When / Then
+    assertThatExceptionOfType(TooManyLoginAttempts.class)
+        .isThrownBy(() -> einrichtung.requestCode(MAIL, NAME, FALSCH, IP))
+        .satisfies(gebremst -> assertThat(gebremst.restwartezeit()).isEqualTo(Duration.ofHours(1)));
+  }
+
+  @Test
+  void requestCode_givenTheLimitReached_thenLooksNeitherAtTheInstanceNorIssues() {
+    // Given — fuenf Anforderungen an einer schon eingerichteten Instanz.
+    when(accounts.existsAnyAdmin()).thenReturn(true);
+    final SetupAccountUseCase einrichtung = einrichtung(SCHLUESSEL);
+    fordereFuenfmalAn(einrichtung, SCHLUESSEL);
+    clearInvocations(accounts);
+
+    // When
+    assertThatExceptionOfType(TooManyLoginAttempts.class)
+        .isThrownBy(() -> einrichtung.requestCode(MAIL, NAME, SCHLUESSEL, IP));
+
+    // Then
+    verify(accounts, never()).existsAnyAdmin();
+    verify(ausstellung, never()).ausstellen(anyString(), anyString());
   }
 }

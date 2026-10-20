@@ -10,6 +10,8 @@ import java.time.Instant;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mwolff.fbcrm.auth.Konten;
@@ -215,5 +217,36 @@ class AuthControllerTest {
 
     // Then
     verify(confirmReset).confirm(TOKEN, PASSWORT);
+  }
+
+  /*
+   * Die beiden Adressen stehen fuer die des Kontos und eine ohne Konto. Der Controller weiss davon
+   * nichts — eben darum muss die Antwort fuer beide dieselbe sein (E13, E17).
+   */
+  @ParameterizedTest(name = "POST /api/auth/code fuer {0} antwortet 202 ohne Rumpf")
+  @ValueSource(strings = {MAIL, "fremd@example.org"})
+  void requestCode_forAnyAddress_thenAnswersAcceptedWithoutBody(final String adresse) {
+    // Given
+    when(clientIp.resolve(any(MockHttpServletRequest.class))).thenReturn(IP);
+
+    // When
+    final ResponseEntity<Void> antwort =
+        controller.requestCode(new LoginCodeRequest(adresse), new MockHttpServletRequest());
+
+    // Then — 202 statt 200: angenommen ist der Auftrag, zugestellt noch nicht.
+    assertThat(antwort).isEqualTo(ResponseEntity.accepted().build());
+    assertThat(antwort.hasBody()).isFalse();
+  }
+
+  @Test
+  void requestCode_thenPassesAddressAndOrigin() {
+    // Given
+    when(clientIp.resolve(any(MockHttpServletRequest.class))).thenReturn(IP);
+
+    // When
+    controller.requestCode(new LoginCodeRequest(MAIL), new MockHttpServletRequest());
+
+    // Then — die Herkunft braucht die Zaehlbremse (Kriterium 5).
+    verify(loginUseCase).codeAnfordern(MAIL, IP);
   }
 }

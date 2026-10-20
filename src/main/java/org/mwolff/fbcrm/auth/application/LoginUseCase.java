@@ -16,11 +16,12 @@ import org.mwolff.fbcrm.auth.domain.SessionTokens;
 import org.mwolff.fbcrm.auth.infrastructure.FailedLoginDelay;
 import org.mwolff.fbcrm.auth.infrastructure.LoginAttemptLimiter;
 import org.mwolff.fbcrm.auth.infrastructure.LoginAttemptLimiter.Zaehlart;
+import org.mwolff.fbcrm.common.NumericCodes;
 import org.mwolff.fbcrm.common.SecureTokens;
 import org.springframework.stereotype.Service;
 
 /**
- * Anmelden mit E-Mail-Adresse und Passwort (K5).
+ * Anmelden mit E-Mail-Adresse und Passwort (K5) und einen Code fuer die Anmeldung anfordern (E8).
  *
  * <p>Der Fehlerfall ist der interessante: Eine unbekannte Adresse und ein falsches Passwort fuehren
  * zur selben {@link LoginFailed} und dauern gleich lang. Dafuer wird auch bei unbekannter Adresse
@@ -30,7 +31,8 @@ import org.springframework.stereotype.Service;
  * <p><b>Bewusst ohne {@code @Transactional}:</b> Der Anwendungsfall liest genau einmal, und bei
  * einem Fehlschlag haelt er den Thread bis zu 800 ms an ({@link FailedLoginDelay}). Eine
  * Transaktion um das Ganze hielte waehrenddessen eine Datenbankverbindung fest, ohne etwas zu
- * schuetzen.
+ * schuetzen. Die Anforderung des Codes braucht ebenfalls keine: Die Ausstellung bringt ihre eigene
+ * mit.
  */
 @Service
 public class LoginUseCase {
@@ -40,6 +42,8 @@ public class LoginUseCase {
   private final SessionTokens tokens;
   private final LoginAttemptLimiter limiter;
   private final FailedLoginDelay delay;
+  private final RequestLoginCodeUseCase ausstellung;
+  private final NumericCodes codes;
   private final AuthProperties properties;
   private final Clock clock;
 
@@ -59,6 +63,8 @@ public class LoginUseCase {
       final SessionTokens tokens,
       final LoginAttemptLimiter limiter,
       final FailedLoginDelay delay,
+      final RequestLoginCodeUseCase ausstellung,
+      final NumericCodes codes,
       final AuthProperties properties,
       final Clock clock) {
     this.accounts = accounts;
@@ -66,6 +72,8 @@ public class LoginUseCase {
     this.tokens = tokens;
     this.limiter = limiter;
     this.delay = delay;
+    this.ausstellung = ausstellung;
+    this.codes = codes;
     this.properties = properties;
     this.clock = clock;
     this.dummyHash = hasher.hash(new SecureTokens().newToken());
@@ -100,6 +108,44 @@ public class LoginUseCase {
     final Account angemeldet = konto.get();
     limiter.recordSuccess(clientIp);
     return new LoginResult(angemeldet, cookie(angemeldet));
+  }
+
+  /**
+   * Fordert einen Code fuer die Anmeldung an — mit derselben Antwort fuer jede Adresse (E13).
+   *
+   * <p><b>Zuerst wird gezaehlt</b>, erst danach nach dem Konto gesehen (E8). Andersherum waere die
+   * sechste Anforderung in der Stunde die Auskunft darueber, ob es das Konto gibt: Nur die Adresse
+   * des Kontos liefe in die Bremse. Eine abgewiesene Anforderung stellt nichts aus, der bisherige
+   * Code gilt weiter (E12).
+   *
+   * <p><b>Ohne Konto</b> entsteht weder eine Zeile noch eine Mail (Kriterium 3), aber derselbe
+   * Rechenaufwand: Die Ausstellung rechnet einen Argon2-Durchlauf, also rechnet ihn auch die
+   * unbekannte Adresse — gegen einen erzeugten und sofort verworfenen Code. Ohne ihn waere die
+   * Laufzeit der Antwort ein von aussen messbares Orakel auf das Konto.
+   *
+   * <p>Der Code geht an die Adresse, die das Konto traegt, nicht an die eingegebene: Gefunden wird
+   * ohne Ruecksicht auf die Schreibweise, zugestellt wird an die eine bekannte Adresse.
+   *
+   * @param email die eingegebene Adresse
+   * @param clientIp die Absender-Adresse fuer die Zaehlbremse (E9)
+   * @throws TooManyLoginAttempts wenn eine Zaehlart sperrt, mit der Restwartezeit — fuer jede
+   *     Adresse gleich
+   */
+  public void codeAnfordern(final String email, final String clientIp) {
+    final Duration warten = limiter.zaehleAnforderung(clientIp, email);
+    if (!warten.isZero()) {
+      throw new TooManyLoginAttempts(warten);
+    }
+    accounts
+        .findByEmail(email)
+        .ifPresentOrElse(
+            konto -> ausstellung.ausstellen(konto.email(), konto.displayName()),
+            this::rechneWieEineAusstellung);
+  }
+
+  /** Ein Argon2-Durchlauf, dessen Ergebnis niemand braucht — allein die Rechenzeit zaehlt (E13). */
+  private void rechneWieEineAusstellung() {
+    hasher.hash(codes.newCode());
   }
 
   /**

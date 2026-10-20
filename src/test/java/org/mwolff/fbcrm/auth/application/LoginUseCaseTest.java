@@ -2,15 +2,23 @@ package org.mwolff.fbcrm.auth.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.catchThrowable;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.contains;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.clearInvocations;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.mwolff.fbcrm.auth.infrastructure.LoginAttemptLimiter.Zaehlart.ADRESSE_STUNDE;
+import static org.mwolff.fbcrm.auth.infrastructure.LoginAttemptLimiter.Zaehlart.ADRESSE_TAG;
 import static org.mwolff.fbcrm.auth.infrastructure.LoginAttemptLimiter.Zaehlart.HERKUNFT;
 
 import java.time.Clock;
@@ -19,27 +27,42 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.IntStream;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mwolff.fbcrm.auth.AuthProperties;
 import org.mwolff.fbcrm.auth.Konten;
 import org.mwolff.fbcrm.auth.domain.Account;
 import org.mwolff.fbcrm.auth.domain.AccountRepository;
+import org.mwolff.fbcrm.auth.domain.LoginCode;
+import org.mwolff.fbcrm.auth.domain.LoginCodeRepository;
 import org.mwolff.fbcrm.auth.domain.SecretHasher;
 import org.mwolff.fbcrm.auth.domain.SessionTokens;
 import org.mwolff.fbcrm.auth.infrastructure.FailedLoginDelay;
 import org.mwolff.fbcrm.auth.infrastructure.LoginAttemptLimiter;
+import org.mwolff.fbcrm.common.NumericCodes;
+import org.mwolff.fbcrm.mail.MailProperties;
+import org.mwolff.fbcrm.mail.application.EnqueueMailUseCase;
 
 /**
- * Anmelden (K5) — und vor allem, was beim Fehlschlag <b>nicht</b> nach aussen dringt.
+ * Anmelden (K5) und einen Code anfordern (E8, E13) — und vor allem, was dabei <b>nicht</b> nach
+ * aussen dringt.
  *
  * <p>Die Mocks sind hier von Hand gesetzt statt ueber {@code @InjectMocks}: Der Anwendungsfall
  * rechnet seinen Dummy-Hash schon im Konstruktor, und der muss feststehen, bevor er entsteht.
+ *
+ * <p>Fuer die Anforderung des Codes laufen Ausstellung und Zaehlbremse <b>echt</b>; gemockt sind
+ * nur ihre Raender — der Bestand der Codes, der Postausgang und der Hasher. Erst so laesst sich
+ * zeigen, dass die Adresse des Kontos und die unbekannte Adresse gleich viel rechnen (E13) und dass
+ * die sechste Anforderung in der Stunde fuer beide gleich abgewiesen wird (Kriterium 5).
  */
 class LoginUseCaseTest {
 
   private static final String MAIL = "manne@example.org";
+  private static final String FREMD = "fremd@example.org";
   private static final String PASSWORT = "richtiges-passwort";
   private static final String HASH = "argon2-hash-des-kontos";
   private static final String DUMMY_HASH = "argon2-hash-ohne-konto";
@@ -55,6 +78,14 @@ class LoginUseCaseTest {
   private final SessionTokens tokens = mock(SessionTokens.class);
   private final LoginAttemptLimiter limiter = mock(LoginAttemptLimiter.class);
   private final FailedLoginDelay delay = mock(FailedLoginDelay.class);
+  private final LoginCodeRepository loginCodes = mock(LoginCodeRepository.class);
+  private final EnqueueMailUseCase postausgang = mock(EnqueueMailUseCase.class);
+  private final Clock uhr = Clock.fixed(JETZT, ZoneOffset.UTC);
+
+  /**
+   * Die echte Zaehlbremse der Anforderungen, bespitzelt, damit sich das Zaehlen nachweisen laesst.
+   */
+  private final LoginAttemptLimiter zaehler = spy(new LoginAttemptLimiter(schalter(), uhr));
 
   private LoginUseCase useCase;
 
@@ -80,18 +111,54 @@ class LoginUseCaseTest {
     return Konten.gespeichert(KONTO_ID, MAIL, HASH, GENERATION, JETZT);
   }
 
+  /** Die echte Ausstellung; gemockt sind nur Bestand, Postausgang und Hasher. */
+  private RequestLoginCodeUseCase ausstellung() {
+    return new RequestLoginCodeUseCase(
+        loginCodes,
+        hasher,
+        new NumericCodes(),
+        postausgang,
+        schalter(),
+        new MailProperties(true, "no-reply@fbcrm.local", "https://crm.example.org"),
+        uhr);
+  }
+
+  private LoginUseCase anwendungsfall(final LoginAttemptLimiter bremse) {
+    return new LoginUseCase(
+        accounts,
+        hasher,
+        tokens,
+        bremse,
+        delay,
+        ausstellung(),
+        new NumericCodes(),
+        schalter(),
+        uhr);
+  }
+
   @BeforeEach
   void baueDenAnwendungsfall() {
     when(hasher.hash(anyString())).thenReturn(DUMMY_HASH);
-    useCase =
-        new LoginUseCase(
-            accounts,
-            hasher,
-            tokens,
-            limiter,
-            delay,
-            schalter(),
-            Clock.fixed(JETZT, ZoneOffset.UTC));
+    useCase = anwendungsfall(limiter);
+  }
+
+  /**
+   * Der Anwendungsfall fuer die Anforderung des Codes: mit echter Zaehlbremse und ohne die Spuren
+   * seines Konstruktors — der rechnet einmal den Dummy-Hash, und der zaehlt hier nicht mit.
+   */
+  private LoginUseCase anforderung() {
+    when(loginCodes.save(any(LoginCode.class))).thenAnswer(aufruf -> aufruf.getArgument(0));
+    final LoginUseCase anforderung = anwendungsfall(zaehler);
+    clearInvocations(hasher);
+    return anforderung;
+  }
+
+  private static void fordereFuenfmalAn(final LoginUseCase anforderung, final String email) {
+    IntStream.range(0, 5).forEach(unbenutzt -> anforderung.codeAnfordern(email, IP));
+  }
+
+  private void kontoUnbekannt(final String email) {
+    when(accounts.findByEmail(email)).thenReturn(Optional.empty());
   }
 
   private void erlaubeVersuch() {
@@ -118,8 +185,7 @@ class LoginUseCaseTest {
   }
 
   private LoginUseCase nochEinAnwendungsfall() {
-    return new LoginUseCase(
-        accounts, hasher, tokens, limiter, delay, schalter(), Clock.fixed(JETZT, ZoneOffset.UTC));
+    return anwendungsfall(limiter);
   }
 
   @Test
@@ -392,5 +458,145 @@ class LoginUseCaseTest {
 
     // Then
     verify(accounts, never()).findByEmail(MAIL);
+  }
+
+  @Test
+  @DisplayName("Szenario: Unbekannte Adresse")
+  void szenarioUnbekannteAdresse_thenSameAnswerAndNoMail() {
+    // Given — zu MAIL gibt es das Konto, zu FREMD keines.
+    final LoginUseCase anforderung = anforderung();
+    kontoVorhanden();
+    kontoUnbekannt(FREMD);
+
+    // When
+    final Throwable fuerDasKonto = catchThrowable(() -> anforderung.codeAnfordern(MAIL, IP));
+    final Throwable ohneKonto = catchThrowable(() -> anforderung.codeAnfordern(FREMD, IP));
+
+    // Then — dieselbe Antwort: Beide enden ohne Ausnahme und ohne Rueckgabe (Kriterium 3).
+    assertThat(ohneKonto).isEqualTo(fuerDasKonto).isNull();
+    verify(postausgang, never()).enqueue(eq(FREMD), anyString(), anyString());
+    verify(loginCodes, never()).deleteByEmail(FREMD);
+    final ArgumentCaptor<LoginCode> zeilen = ArgumentCaptor.forClass(LoginCode.class);
+    verify(loginCodes).save(zeilen.capture());
+    assertThat(zeilen.getAllValues()).extracting(LoginCode::email).containsExactly(MAIL);
+    verify(zaehler, times(2)).record(HERKUNFT, IP);
+    verify(zaehler).record(ADRESSE_STUNDE, FREMD);
+    verify(zaehler).record(ADRESSE_TAG, FREMD);
+  }
+
+  @Test
+  void codeAnfordern_givenTheAddressOfTheAccount_thenSendsTheCodeWithTheNameOfTheAccount() {
+    // Given
+    final LoginUseCase anforderung = anforderung();
+    kontoVorhanden();
+
+    // When
+    anforderung.codeAnfordern(MAIL, IP);
+
+    // Then
+    verify(postausgang).enqueue(eq(MAIL), anyString(), contains("Hallo Manne,"));
+  }
+
+  @Test
+  void codeAnfordern_givenTheAddressInAnotherSpelling_thenSendsToTheStoredAddressOfTheAccount() {
+    // Given — gefunden wird ohne Ruecksicht auf die Schreibweise; die Mail geht an die Adresse,
+    // die das Konto traegt, nicht an die eingegebene.
+    final LoginUseCase anforderung = anforderung();
+    when(accounts.findByEmail("Manne@Example.org")).thenReturn(Optional.of(konto()));
+
+    // When
+    anforderung.codeAnfordern("Manne@Example.org", IP);
+
+    // Then
+    verify(postausgang).enqueue(eq(MAIL), anyString(), anyString());
+  }
+
+  @Test
+  void codeAnfordern_givenTheAddressOfTheAccount_thenHashesExactlyOnce() {
+    // Given
+    final LoginUseCase anforderung = anforderung();
+    kontoVorhanden();
+
+    // When
+    anforderung.codeAnfordern(MAIL, IP);
+
+    // Then — E13: ein Argon2-Durchlauf, der des ausgestellten Codes.
+    verify(hasher, times(1)).hash(anyString());
+  }
+
+  @Test
+  void codeAnfordern_givenAnUnknownAddress_thenHashesExactlyOnceAGeneratedCode() {
+    // Given
+    final LoginUseCase anforderung = anforderung();
+    kontoUnbekannt();
+    final ArgumentCaptor<String> gehasht = ArgumentCaptor.forClass(String.class);
+
+    // When
+    anforderung.codeAnfordern(MAIL, IP);
+
+    // Then — E13: derselbe Rechenaufwand wie fuer das Konto, gegen einen verworfenen Code.
+    verify(hasher, times(1)).hash(gehasht.capture());
+    assertThat(gehasht.getValue()).matches("\\d{6}");
+  }
+
+  @Test
+  void codeAnfordern_thenCountsBeforeItLooksUpTheAccount() {
+    // Given — andersherum waere der sechste Versuch die Auskunft ueber das Konto (E8).
+    final LoginUseCase anforderung = anforderung();
+    kontoUnbekannt();
+    final InOrder reihenfolge = inOrder(zaehler, accounts);
+
+    // When
+    anforderung.codeAnfordern(MAIL, IP);
+
+    // Then
+    reihenfolge.verify(zaehler).record(HERKUNFT, IP);
+    reihenfolge.verify(zaehler).record(ADRESSE_STUNDE, MAIL);
+    reihenfolge.verify(zaehler).record(ADRESSE_TAG, MAIL);
+    reihenfolge.verify(accounts).findByEmail(MAIL);
+  }
+
+  @Test
+  void codeAnfordern_givenFiveRequestsForAnUnknownAddress_thenRefusesTheSixthWithTheWait() {
+    // Given — Kriterium 5: auch fuer Adressen ohne Konto.
+    final LoginUseCase anforderung = anforderung();
+    kontoUnbekannt();
+    fordereFuenfmalAn(anforderung, MAIL);
+
+    // When / Then
+    assertThatThrownBy(() -> anforderung.codeAnfordern(MAIL, IP))
+        .isInstanceOfSatisfying(
+            TooManyLoginAttempts.class,
+            gebremst -> assertThat(gebremst.restwartezeit()).isEqualTo(Duration.ofHours(1)));
+  }
+
+  @Test
+  void codeAnfordern_givenFiveRequestsForTheAccount_thenRefusesTheSixthWithTheSameWait() {
+    // Given — dieselbe Abweisung wie fuer die unbekannte Adresse, sonst verriete sie das Konto.
+    final LoginUseCase anforderung = anforderung();
+    kontoVorhanden();
+    fordereFuenfmalAn(anforderung, MAIL);
+
+    // When / Then
+    assertThatThrownBy(() -> anforderung.codeAnfordern(MAIL, IP))
+        .isInstanceOfSatisfying(
+            TooManyLoginAttempts.class,
+            gebremst -> assertThat(gebremst.restwartezeit()).isEqualTo(Duration.ofHours(1)));
+  }
+
+  @Test
+  void codeAnfordern_givenTheLimitReached_thenNeitherLooksUpNorHashesNorIssues() {
+    // Given — eine abgewiesene Anforderung laesst den bisherigen Code gueltig (E12).
+    final LoginUseCase anforderung = anforderung();
+    kontoVorhanden();
+    fordereFuenfmalAn(anforderung, MAIL);
+    clearInvocations(accounts, hasher, loginCodes, postausgang);
+
+    // When
+    assertThatThrownBy(() -> anforderung.codeAnfordern(MAIL, IP))
+        .isInstanceOf(TooManyLoginAttempts.class);
+
+    // Then
+    verifyNoInteractions(accounts, hasher, loginCodes, postausgang);
   }
 }

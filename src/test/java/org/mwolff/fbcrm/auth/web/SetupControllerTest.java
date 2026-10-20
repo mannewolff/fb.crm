@@ -1,12 +1,16 @@
 package org.mwolff.fbcrm.auth.web;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.time.Duration;
 import java.time.Instant;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mwolff.fbcrm.auth.Konten;
@@ -17,14 +21,15 @@ import org.mwolff.fbcrm.auth.domain.Account;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.mock.web.MockHttpServletRequest;
 
 /**
  * Die Uebersetzung zwischen Einrichtung und HTTP.
  *
  * <p>Der Controller entscheidet nichts: Ob der Schluessel stimmt und ob die Instanz noch frei ist,
  * beantwortet {@code SetupAccountUseCase}. Hier wird nur nachgewiesen, dass der Erfolg dasselbe
- * Session-Cookie setzt wie das Anmelden (K3) und dass die Statusauskunft genau ein Feld traegt
- * (E11).
+ * Session-Cookie setzt wie das Anmelden (K3), dass die Statusauskunft genau ein Feld traegt (E11)
+ * und dass die Anforderung des Codes fuer jede Adresse mit 202 ohne Rumpf antwortet (E13, E17).
  */
 @ExtendWith(MockitoExtension.class)
 class SetupControllerTest {
@@ -35,11 +40,13 @@ class SetupControllerTest {
   private static final String TOKEN = "nutzlast.signatur";
   private static final Instant JETZT = Instant.parse("2026-09-18T10:00:00Z");
   private static final long KONTO_ID = 1L;
+  private static final String IP = "203.0.113.7";
 
   @Mock private SetupAccountUseCase setup;
+  @Mock private ClientIpResolver clientIp;
 
   private SetupController controller() {
-    return new SetupController(setup, new SessionCookieFactory());
+    return new SetupController(setup, clientIp, new SessionCookieFactory());
   }
 
   private static SetupRequest anfrage() {
@@ -104,5 +111,35 @@ class SetupControllerTest {
 
     // When / Then
     assertThat(controller().status()).isEqualTo(new SetupStatusResponse(false));
+  }
+
+  @ParameterizedTest(name = "POST /api/setup/code fuer {0} antwortet 202 ohne Rumpf")
+  @ValueSource(strings = {MAIL, "fremd@example.org"})
+  void requestCode_forAnyAddress_thenAnswersAcceptedWithoutBody(final String adresse) {
+    // Given
+    when(clientIp.resolve(any(MockHttpServletRequest.class))).thenReturn(IP);
+
+    // When
+    final ResponseEntity<Void> antwort =
+        controller()
+            .requestCode(
+                new SetupCodeRequest(adresse, "Manne", SCHLUESSEL), new MockHttpServletRequest());
+
+    // Then
+    assertThat(antwort).isEqualTo(ResponseEntity.accepted().build());
+    assertThat(antwort.hasBody()).isFalse();
+  }
+
+  @Test
+  void requestCode_thenPassesAddressNameKeyAndOrigin() {
+    // Given
+    when(clientIp.resolve(any(MockHttpServletRequest.class))).thenReturn(IP);
+
+    // When
+    controller()
+        .requestCode(new SetupCodeRequest(MAIL, "Manne", SCHLUESSEL), new MockHttpServletRequest());
+
+    // Then — die Herkunft braucht die Zaehlbremse (Kriterium 6, letzter Satz zu Kriterium 5).
+    verify(setup).requestCode(MAIL, "Manne", SCHLUESSEL, IP);
   }
 }

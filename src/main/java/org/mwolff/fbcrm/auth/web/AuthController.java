@@ -31,6 +31,10 @@ import org.springframework.web.bind.annotation.RestController;
  * „Einrichtung" {@link SessionCookieFactory}: Auch die Einrichtung eroeffnet eine Sitzung (K3), und
  * zwei Bauplaene fuer dasselbe Cookie liefen frueher oder spaeter auseinander.
  *
+ * <p><b>Die Anforderung des Codes</b> ist ohne Sitzung erreichbar: Der Code ist der Weg in die
+ * Sitzung. Sie antwortet fuer jede Adresse gleich (E13) und sagt nicht, ob der Mailversand laeuft
+ * (E17).
+ *
  * <p><b>Die drei Wege des Passwort-Resets</b> sind ohne Sitzung erreichbar ({@link
  * SecurityConfig}); wer sein Passwort vergessen hat, kann keine vorweisen. Was sie schuetzt, ist
  * der Einmal-Token, den ausschliesslich der Besitzer des Postfachs bekommt.
@@ -72,6 +76,19 @@ public class AuthController {
     return ResponseEntity.ok()
         .header(HttpHeaders.SET_COOKIE, cookies.header(ergebnis.cookie()))
         .body(AccountResponse.of(ergebnis.account()));
+  }
+
+  /**
+   * Fordert einen Code fuer die Anmeldung an — mit derselben Antwort fuer jede Adresse (E13, E17).
+   *
+   * <p>202 ohne Rumpf: Angenommen ist der Auftrag, zugestellt noch nicht. Ob es zu der Adresse ein
+   * Konto gibt und ob ueberhaupt eine Mail hinausgeht, sagt die Antwort nicht.
+   */
+  @PostMapping("/code")
+  public ResponseEntity<Void> requestCode(
+      @Valid @RequestBody final LoginCodeRequest anfrage, final HttpServletRequest request) {
+    loginUseCase.codeAnfordern(anfrage.email(), clientIp.resolve(request));
+    return ResponseEntity.accepted().build();
   }
 
   @PostMapping("/logout")

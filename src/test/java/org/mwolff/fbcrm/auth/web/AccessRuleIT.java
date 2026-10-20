@@ -40,13 +40,19 @@ class AccessRuleIT extends AbstractIntegrationTest {
    * <p>Die Pfade des Passwort-Resets stehen hier aus genau demselben Grund: Wer sein Passwort
    * vergessen hat, kann keine Sitzung vorweisen — sonst braeuchte er den Weg nicht. Was sie
    * schuetzt, ist der Einmal-Token, den ausschliesslich der Besitzer des Postfachs bekommt (K7).
+   *
+   * <p>Die beiden Anforderungen des Codes stehen hier, weil der Code der Weg in die Sitzung ist:
+   * Wer ihn anfordert, hat noch keine. Was sie schuetzt, ist die Zaehlbremse, die vor jeder anderen
+   * Pruefung zaehlt, und auf der Einrichtungsseite zusaetzlich der Einmal-Schluessel (E8).
    */
   private static final Set<String> OFFEN =
       Set.of(
           "/api/auth/login",
+          "/api/auth/code",
           "/api/auth/password-reset",
           "/api/auth/password-reset/confirm",
           "/api/setup",
+          "/api/setup/code",
           "/api/setup/status",
           "/error");
 
@@ -98,7 +104,9 @@ class AccessRuleIT extends AbstractIntegrationTest {
   @ParameterizedTest(name = "POST {0} ohne Sitzung ist erreichbar — {1}")
   @CsvSource({
     "/api/auth/login, ohne diesen Pfad koennte sich niemand jemals anmelden",
+    "/api/auth/code, wer einen Code anfordert, hat noch keine Sitzung",
     "/api/setup, ohne diesen Pfad waere eine frische Instanz nie einzurichten",
+    "/api/setup/code, eine frische Instanz hat kein Konto und damit keine Sitzung",
     "/api/auth/password-reset, wer sein Passwort vergessen hat, hat keine Sitzung (K7)",
     "/api/auth/password-reset/confirm, der Reset selbst kommt vor jeder Anmeldung (K7)"
   })

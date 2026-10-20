@@ -3,6 +3,7 @@ package org.mwolff.fbcrm.auth.application;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import org.mwolff.fbcrm.auth.AuthProperties;
 import org.mwolff.fbcrm.auth.SetupProperties;
@@ -11,6 +12,7 @@ import org.mwolff.fbcrm.auth.domain.AccountRepository;
 import org.mwolff.fbcrm.auth.domain.Role;
 import org.mwolff.fbcrm.auth.domain.SecretHasher;
 import org.mwolff.fbcrm.auth.domain.SessionTokens;
+import org.mwolff.fbcrm.auth.infrastructure.LoginAttemptLimiter;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -37,6 +39,12 @@ import org.springframework.transaction.annotation.Transactional;
  * eindeutige Index {@code account_single_admin} aus {@code V1__baseline.sql}: Er steht auf dem
  * konstanten Ausdruck {@code (true)} und traegt damit fuer jede ADMIN-Zeile denselben Schluessel.
  * Seine Verletzung wird hier in dieselbe Abweisung uebersetzt wie „Konto existiert bereits".
+ *
+ * <p><b>Der Code der Einrichtung</b> (E8, E1). Mit richtigem Schluessel auf freier Instanz geht
+ * sofort ein Code an die eingegebene Adresse; das Konto entsteht erst mit dem richtigen Code. Auch
+ * hier wird <b>zuerst gezaehlt</b> und erst danach der Schluessel geprueft: Ein vor dem Zaehlen
+ * gepruefter Schluessel liesse die Einrichtungsseite ungebremst (Kriterium 6, letzter Satz zu
+ * Kriterium 5).
  */
 @Service
 public class SetupAccountUseCase {
@@ -44,6 +52,8 @@ public class SetupAccountUseCase {
   private final AccountRepository accounts;
   private final SecretHasher hasher;
   private final SessionTokens tokens;
+  private final LoginAttemptLimiter limiter;
+  private final RequestLoginCodeUseCase ausstellung;
   private final AuthProperties authProperties;
   private final SetupProperties setupProperties;
   private final Clock clock;
@@ -52,12 +62,16 @@ public class SetupAccountUseCase {
       final AccountRepository accounts,
       final SecretHasher hasher,
       final SessionTokens tokens,
+      final LoginAttemptLimiter limiter,
+      final RequestLoginCodeUseCase ausstellung,
       final AuthProperties authProperties,
       final SetupProperties setupProperties,
       final Clock clock) {
     this.accounts = accounts;
     this.hasher = hasher;
     this.tokens = tokens;
+    this.limiter = limiter;
+    this.ausstellung = ausstellung;
     this.authProperties = authProperties;
     this.setupProperties = setupProperties;
     this.clock = clock;
@@ -95,6 +109,34 @@ public class SetupAccountUseCase {
 
     final Account angelegt = speichere(neu);
     return new LoginResult(angelegt, cookie(angelegt, jetzt));
+  }
+
+  /**
+   * Fordert den Code der Einrichtung an (E8).
+   *
+   * <p>Ohne {@code @Transactional}: Die Ausstellung bringt ihre eigene Transaktion mit, und davor
+   * wird nur gezaehlt und einmal gelesen.
+   *
+   * @param email die Adresse, an die der Code geht und unter der das Konto entstehen soll
+   * @param displayName der Anzeigename, mit dem die Mail anredet
+   * @param presentedKey der vorgelegte Einmal-Schluessel
+   * @param clientIp die Absender-Adresse fuer die Zaehlbremse
+   * @throws TooManyLoginAttempts wenn eine Zaehlart sperrt — vor jeder Pruefung des Schluessels
+   * @throws SetupRefused wenn der Schluessel nicht stimmt oder die Instanz schon eingerichtet ist
+   */
+  public void requestCode(
+      final String email,
+      final String displayName,
+      final String presentedKey,
+      final String clientIp) {
+    final Duration warten = limiter.zaehleAnforderung(clientIp, email);
+    if (!warten.isZero()) {
+      throw new TooManyLoginAttempts(warten);
+    }
+    if (!schluesselStimmt(presentedKey) || accounts.existsAnyAdmin()) {
+      throw new SetupRefused();
+    }
+    ausstellung.ausstellen(email, displayName);
   }
 
   /**

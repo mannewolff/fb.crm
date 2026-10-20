@@ -4,6 +4,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -37,6 +38,14 @@ import org.springframework.stereotype.Component;
  * <p>Der Bestand waechst nicht unbegrenzt: Jeder Lesezugriff wirft abgelaufene Eintraege weg und
  * entfernt den Schluessel, sobald nichts mehr im Fenster steht.
  */
+/*
+ * PMD.TooManyMethods: Mit der Zaehlregel der Code-Anforderung (E8) sind es zwoelf Methoden, die
+ * Schwelle der Regel liegt bei zehn. Die Regel gehoert hierher und nicht in jeden der beiden
+ * Anwendungsfaelle, die einen Code anfordern: Dort stuende sie zweimal, und genau ihre Reihenfolge —
+ * erst pruefen, dann in allen drei Zaehlarten zaehlen, abgewiesen nie — ist die Zusage aus
+ * Kriterium 5. Sie in eine eigene Klasse abzuspalten, verschoebe die Zahl, ohne etwas zu klaeren.
+ */
+@SuppressWarnings("PMD.TooManyMethods")
 @Component
 public class LoginAttemptLimiter {
 
@@ -64,6 +73,43 @@ public class LoginAttemptLimiter {
           zusammen.add(clock.instant());
           return List.copyOf(zusammen);
         });
+  }
+
+  /**
+   * Zaehlt eine Code-Anforderung — oder liefert die Wartezeit, wenn eine Zaehlart sperrt (E8).
+   *
+   * <p>Eine Anforderung zaehlt in allen drei Zaehlarten zugleich: je Herkunft, je Adresse in der
+   * Stunde und je Adresse am Tag. Sperrt eine davon, wird <b>nichts</b> gezaehlt und die laengste
+   * Restwartezeit geliefert — wer nach der kuerzeren wiederkaeme, liefe in die naechste Bremse.
+   * Eine abgewiesene Anforderung zaehlt nicht mit: Sonst stuenden nach der genannten Wartezeit noch
+   * immer zu viele Eintraege im Fenster, und die Meldung naennte eine falsche Zeit (E14).
+   *
+   * <p>Ob es zu der Adresse ein Konto gibt oder der Einmal-Schluessel stimmt, weiss die Bremse
+   * nicht; sie wird <b>vor</b> diesen Pruefungen gefragt, damit die Grenze fuer jede Adresse gleich
+   * gilt (Kriterium 5).
+   *
+   * @param clientIp die Absender-Adresse der Anforderung
+   * @param email die Adresse, fuer die ein Code angefordert wird
+   * @return null, wenn die Anforderung gezaehlt ist, sonst die Restwartezeit
+   */
+  public Duration zaehleAnforderung(final String clientIp, final String email) {
+    final Duration warten =
+        Collections.max(
+            List.of(
+                sperre(Zaehlart.HERKUNFT, clientIp),
+                sperre(Zaehlart.ADRESSE_STUNDE, email),
+                sperre(Zaehlart.ADRESSE_TAG, email)));
+    if (warten.isZero()) {
+      record(Zaehlart.HERKUNFT, clientIp);
+      record(Zaehlart.ADRESSE_STUNDE, email);
+      record(Zaehlart.ADRESSE_TAG, email);
+    }
+    return warten;
+  }
+
+  /** Die Restwartezeit einer Zaehlart, null, wenn sie zulaesst. */
+  private Duration sperre(final Zaehlart art, final String schluessel) {
+    return isAllowed(art, schluessel) ? Duration.ZERO : restwartezeit(art, schluessel);
   }
 
   /**
