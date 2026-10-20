@@ -2,6 +2,7 @@ package org.mwolff.fbcrm.auth.infrastructure;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -11,6 +12,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
+import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -107,5 +109,16 @@ class JpaLoginCodeRepositoryTest {
 
     // Then
     verify(jpa).deleteByEmailIgnoreCase(ADRESSE);
+  }
+
+  @Test
+  void deleteByEmail_thenWritesTheDeletionBeforeAnyFollowingInsert() {
+    // When — ein Code mit IDENTITY-Id wird sofort geschrieben, das Loeschen sonst erst beim Flush.
+    repository.deleteByEmail(ADRESSE);
+
+    // Then
+    final InOrder reihenfolge = inOrder(jpa);
+    reihenfolge.verify(jpa).deleteByEmailIgnoreCase(ADRESSE);
+    reihenfolge.verify(jpa).flush();
   }
 }

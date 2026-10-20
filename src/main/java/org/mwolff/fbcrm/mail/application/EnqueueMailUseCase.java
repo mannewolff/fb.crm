@@ -14,8 +14,8 @@ import org.springframework.transaction.annotation.Transactional;
  * Transaktion des Aufrufers — wird die zurueckgerollt, verschwindet er mit ihr. Ohne diesen Riegel
  * waere „in derselben Transaktion" eine Zusage, die jeder spaetere Aufrufer versehentlich brechen
  * koennte, ohne dass etwas anschlaegt: Der Auftrag entstuende in einer eigenen Transaktion, und die
- * Mail ginge zu einem Reset-Token hinaus, das es nie gab. Mit ihm scheitert ein Aufruf ausserhalb
- * einer Transaktion sofort und sichtbar.
+ * Mail ginge mit einem Code der Anmeldung hinaus, den es nie gab. Mit ihm scheitert ein Aufruf
+ * ausserhalb einer Transaktion sofort und sichtbar.
  */
 @Service
 public class EnqueueMailUseCase {

@@ -31,8 +31,8 @@ import org.springframework.transaction.annotation.Transactional;
  * pruefen kann. Dass beide dasselbe Ziel haben, ist Absicht.
  *
  * <p>Das Protokoll nennt ausschliesslich die Id des Auftrags — nie Empfaenger, Betreff oder Rumpf.
- * Der Rumpf einer Reset-Mail traegt den Link, und ein Log-Archiv ueberlebt die Stunde, die er gilt,
- * bei weitem ({@code NoTokenInLogTest}, CLAUDE-security.md).
+ * Der Rumpf einer Mail traegt den Code der Anmeldung, und ein Log-Archiv ueberlebt die Minuten, die
+ * er gilt, bei weitem ({@code NoTokenInLogTest}, CLAUDE-security.md).
  */
 @Component
 @ConditionalOnProperty(name = "fbcrm.outbox.enabled", havingValue = "true")

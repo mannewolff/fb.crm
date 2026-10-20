@@ -25,9 +25,15 @@ class JpaLoginCodeRepository implements LoginCodeRepository {
     return toDomain(jpa.save(toEntity(code)));
   }
 
+  /*
+   * Das Loeschen wird sofort geschrieben. Hibernate fuehrte es sonst erst beim Flush aus, eine
+   * neue Zeile mit IDENTITY-Id dagegen sofort — und die stiesse in derselben Transaktion an den
+   * Index login_code_email_key, solange die alte Zeile noch steht (RequestLoginCodeUseCaseIT).
+   */
   @Override
   public void deleteByEmail(final String email) {
     jpa.deleteByEmailIgnoreCase(email);
+    jpa.flush();
   }
 
   private static LoginCode toDomain(final LoginCodeEntity zeile) {
