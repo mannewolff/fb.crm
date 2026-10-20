@@ -29,16 +29,9 @@ import org.springframework.validation.annotation.Validated;
  * Gemessen wird die Laufzeit ab der letzten Nutzung, weil jede Anfrage ein frisches Token bekommt
  * ({@code SessionAuthenticationFilter}).
  *
- * <p>{@code passwordResetTtl} steht bewusst neben {@code sessionTtl} und nicht bei den Schaltern
- * des Postausgangsfachs: Wie lange ein Reset-Link gilt, ist eine Frage der Anmeldung, keine der
- * Zustellung. Er ist deutlich kuerzer als eine Sitzung — der Link liegt in einem Postfach, und ein
- * Postfach wird mitgelesen (CLAUDE-security.md).
- *
  * @param sessionSecret Schluessel der HMAC-Signatur; mindestens 32 Zeichen
  * @param sessionTtl Laufzeit eines Session-Tokens ab der letzten Nutzung (Default {@code P30D} in
  *     der {@code application.yml})
- * @param passwordResetTtl Laufzeit eines Reset-Links (Default {@code PT1H} in der {@code
- *     application.yml})
  * @param cookieName Name des Session-Cookies
  * @param cookieSecure ob das Cookie nur ueber HTTPS gesendet wird
  * @param loginMaxAttempts Zaehlart {@code HERKUNFT}: Zahl der Versuche je Herkunft im Fenster, ab
@@ -64,7 +57,6 @@ import org.springframework.validation.annotation.Validated;
 public record AuthProperties(
     @NotBlank @Size(min = 32) String sessionSecret,
     @NotNull Duration sessionTtl,
-    @NotNull Duration passwordResetTtl,
     @NotBlank String cookieName,
     boolean cookieSecure,
     @Min(1) int loginMaxAttempts,

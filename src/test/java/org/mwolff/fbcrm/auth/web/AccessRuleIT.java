@@ -37,10 +37,6 @@ class AccessRuleIT extends AbstractIntegrationTest {
    * frische Instanz hat kein Konto, also kann niemand eine Sitzung vorweisen. Was sie schuetzt, ist
    * nicht die Zugangsregel, sondern der Einmal-Schluessel und das vorhandene Konto (K3, E5, E11).
    *
-   * <p>Die Pfade des Passwort-Resets stehen hier aus genau demselben Grund: Wer sein Passwort
-   * vergessen hat, kann keine Sitzung vorweisen — sonst braeuchte er den Weg nicht. Was sie
-   * schuetzt, ist der Einmal-Token, den ausschliesslich der Besitzer des Postfachs bekommt (K7).
-   *
    * <p>Die beiden Anforderungen des Codes stehen hier, weil der Code der Weg in die Sitzung ist:
    * Wer ihn anfordert, hat noch keine. Was sie schuetzt, ist die Zaehlbremse, die vor jeder anderen
    * Pruefung zaehlt, und auf der Einrichtungsseite zusaetzlich der Einmal-Schluessel (E8).
@@ -49,8 +45,6 @@ class AccessRuleIT extends AbstractIntegrationTest {
       Set.of(
           "/api/auth/login",
           "/api/auth/code",
-          "/api/auth/password-reset",
-          "/api/auth/password-reset/confirm",
           "/api/setup",
           "/api/setup/code",
           "/api/setup/status",
@@ -99,16 +93,14 @@ class AccessRuleIT extends AbstractIntegrationTest {
    *
    * <p>Der Grund steht je Zeile dabei: ohne offenen Anmeldepfad koennte sich niemand jemals
    * anmelden, ohne offenen Einrichtungspfad waere eine frische Instanz nie einzurichten, und wer
-   * sein Passwort vergessen hat, kann keine Sitzung vorweisen (K7).
+   * einen Code anfordert, hat noch keine Sitzung.
    */
   @ParameterizedTest(name = "POST {0} ohne Sitzung ist erreichbar — {1}")
   @CsvSource({
     "/api/auth/login, ohne diesen Pfad koennte sich niemand jemals anmelden",
     "/api/auth/code, wer einen Code anfordert, hat noch keine Sitzung",
     "/api/setup, ohne diesen Pfad waere eine frische Instanz nie einzurichten",
-    "/api/setup/code, eine frische Instanz hat kein Konto und damit keine Sitzung",
-    "/api/auth/password-reset, wer sein Passwort vergessen hat, hat keine Sitzung (K7)",
-    "/api/auth/password-reset/confirm, der Reset selbst kommt vor jeder Anmeldung (K7)"
+    "/api/setup/code, eine frische Instanz hat kein Konto und damit keine Sitzung"
   })
   void anOpenEndpoint_withoutASession_thenIsReachable(final String pfad, final String grund) {
     // When
@@ -125,17 +117,6 @@ class AccessRuleIT extends AbstractIntegrationTest {
 
     // Then
     assertThat(antwort).isEqualTo(HttpStatus.OK);
-  }
-
-  @Test
-  void passwordResetCheck_withoutASession_thenIsReachable() {
-    // When — die Voranfrage entscheidet, ob ein Formular erscheint (E24); sie kommt vor jeder
-    // Anmeldung.
-    final HttpStatus antwort =
-        status("/api/auth/password-reset/ein-token-das-es-nie-gab", HttpMethod.GET);
-
-    // Then
-    assertThat(antwort).isEqualTo(HttpStatus.GONE);
   }
 
   @Test

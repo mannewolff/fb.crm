@@ -10,11 +10,11 @@ import org.mwolff.fbcrm.common.Identifiable;
  * <p>Die <b>Sitzungs-Generation</b> ist der Hebel, mit dem bestehende Sitzungen enden: Jedes
  * Session-Token traegt die Generation seiner Ausstellung, und ein Token mit alter Generation gilt
  * nicht mehr — auf jedem Geraet, auch dem ausloesenden (CLAUDE-security.md). Hochgezaehlt wird sie
- * an zwei Stellen: {@link #changePassword} beim Neusetzen des Passworts und {@link
- * #mitNaechsterGeneration} beim Abmelden (E7).
+ * mit {@link #mitNaechsterGeneration} beim Abmelden (E7).
  *
- * <p>Unveraenderlich: Beide Methoden liefern ein neues Konto, statt dieses zu aendern. Der
- * Zeitpunkt der Aenderung kommt von aussen, weil die Domaene keine Uhr kennt (CLAUDE-java.md §6.2).
+ * <p>Unveraenderlich: {@link #mitNaechsterGeneration} liefert ein neues Konto, statt dieses zu
+ * aendern. Der Zeitpunkt der Aenderung kommt von aussen, weil die Domaene keine Uhr kennt
+ * (CLAUDE-java.md §6.2).
  *
  * @param id technische Id — {@code null}, solange das Konto nicht gespeichert ist
  * @param email Anmeldeadresse; eindeutig ohne Ruecksicht auf Gross- und Kleinschreibung
@@ -35,17 +35,6 @@ public record Account(
     Instant createdAt,
     Instant updatedAt)
     implements Identifiable {
-
-  /**
-   * Das Konto mit neuem Passwort-Hash und um eins erhoehter Sitzungs-Generation.
-   *
-   * @param neuerHash der Argon2id-Hash des neuen Passworts
-   * @param geaendertAm Zeitpunkt der Aenderung
-   */
-  public Account changePassword(final String neuerHash, final Instant geaendertAm) {
-    return new Account(
-        id, email, displayName, neuerHash, role, sessionGeneration + 1, createdAt, geaendertAm);
-  }
 
   /**
    * Dasselbe Konto mit um eins erhoehter Sitzungs-Generation; jedes vorher ausgestellte

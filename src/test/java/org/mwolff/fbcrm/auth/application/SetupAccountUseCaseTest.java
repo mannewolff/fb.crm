@@ -79,7 +79,6 @@ class SetupAccountUseCaseTest {
     return new AuthProperties(
         "geheimnis-mit-mindestens-32-zeichen-laenge",
         Duration.ofDays(1),
-        Duration.ofHours(1),
         "fbcrm_session",
         true,
         10,

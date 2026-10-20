@@ -1,10 +1,9 @@
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
-import Link from '@mui/material/Link';
 import TextField from '@mui/material/TextField';
 import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
-import { Link as RouterLink, useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 import { setupStatus } from '../api/auth';
 import { ApiError } from '../api/client';
@@ -86,14 +85,7 @@ export default function LoginPage() {
   };
 
   return (
-    <AuthCard
-      titel="Anmelden"
-      fuss={
-        <Link component={RouterLink} to="/passwort-vergessen" underline="hover">
-          Passwort vergessen?
-        </Link>
-      }
-    >
+    <AuthCard titel="Anmelden">
       <Box
         component="form"
         onSubmit={(ereignis: FormEvent<HTMLFormElement>) => {

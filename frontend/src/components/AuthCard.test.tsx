@@ -70,12 +70,12 @@ describe('AuthCard', () => {
 
   it('nimmt Nebenwege in den Fuss auf', () => {
     renderMitTheme(
-      <AuthCard titel="Anmelden" fuss={<a href="/passwort-vergessen">Passwort vergessen?</a>}>
+      <AuthCard titel="Anmelden" fuss={<a href="/einrichten">Zur Einrichtung</a>}>
         <p>Formular</p>
       </AuthCard>,
     );
 
-    expect(screen.getByRole('link', { name: 'Passwort vergessen?' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Zur Einrichtung' })).toBeInTheDocument();
   });
 
   it('bleibt ohne Nebenwege vollstaendig', () => {

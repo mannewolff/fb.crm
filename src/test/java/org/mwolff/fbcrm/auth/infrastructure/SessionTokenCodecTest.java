@@ -33,7 +33,6 @@ class SessionTokenCodecTest {
         new AuthProperties(
             geheimnis,
             LAUFZEIT,
-            Duration.ofHours(1),
             "fbcrm_session",
             true,
             10,

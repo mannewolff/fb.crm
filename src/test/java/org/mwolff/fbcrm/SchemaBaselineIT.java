@@ -34,7 +34,7 @@ class SchemaBaselineIT extends AbstractIntegrationTest {
   @BeforeEach
   void leereFachtabellen() {
     jdbc.execute(
-        "TRUNCATE outbox_message, password_reset_token, login_code, account, ansprechpartner,"
+        "TRUNCATE outbox_message, login_code, account, ansprechpartner,"
             + " firma RESTART IDENTITY CASCADE");
   }
 
@@ -49,12 +49,25 @@ class SchemaBaselineIT extends AbstractIntegrationTest {
     final Integer tabellen =
         jdbc.queryForObject(
             "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public'"
-                + " AND table_name IN ('account', 'password_reset_token', 'outbox_message',"
-                + " 'firma', 'ansprechpartner', 'login_code')",
+                + " AND table_name IN ('account', 'outbox_message', 'firma', 'ansprechpartner',"
+                + " 'login_code')",
             Integer.class);
 
     // Then
-    assertThat(tabellen).isEqualTo(6);
+    assertThat(tabellen).isEqualTo(5);
+  }
+
+  @Test
+  void flyway_thenThePasswordResetTableIsGone() {
+    // When — V28 baut die Tabelle des entfallenen Passwort-Resets ab (Issue #404).
+    final Integer tabellen =
+        jdbc.queryForObject(
+            "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public'"
+                + " AND table_name = 'password_reset_token'",
+            Integer.class);
+
+    // Then
+    assertThat(tabellen).isZero();
   }
 
   @Test
@@ -122,29 +135,6 @@ class SchemaBaselineIT extends AbstractIntegrationTest {
     // When / Then
     assertThatThrownBy(
             () -> jdbc.update(INSERT_ACCOUNT, "dritte@example.org", "Dritte", "hash", "ROOT"))
-        .isInstanceOf(DataIntegrityViolationException.class);
-  }
-
-  @Test
-  void passwordResetToken_givenSameHashTwice_thenRejectedByTheDatabase() {
-    // Given
-    jdbc.update(INSERT_ACCOUNT, "manne@example.org", "Manne", "hash", "USER");
-    final Long accountId =
-        jdbc.queryForObject("SELECT id FROM account WHERE email = 'manne@example.org'", Long.class);
-    jdbc.update(
-        "INSERT INTO password_reset_token (account_id, token_hash, expires_at)"
-            + " VALUES (?, ?, now() + interval '1 hour')",
-        accountId,
-        "derselbe-hash");
-
-    // When / Then
-    assertThatThrownBy(
-            () ->
-                jdbc.update(
-                    "INSERT INTO password_reset_token (account_id, token_hash, expires_at)"
-                        + " VALUES (?, ?, now() + interval '1 hour')",
-                    accountId,
-                    "derselbe-hash"))
         .isInstanceOf(DataIntegrityViolationException.class);
   }
 

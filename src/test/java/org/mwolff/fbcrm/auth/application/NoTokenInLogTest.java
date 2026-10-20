@@ -1,6 +1,8 @@
 package org.mwolff.fbcrm.auth.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.AdditionalAnswers.returnsFirstArg;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -12,12 +14,13 @@ import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.LoggerContext;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
+import java.io.Serial;
+import java.security.SecureRandom;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.List;
-import java.util.Optional;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -27,13 +30,10 @@ import org.mockito.Captor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mwolff.fbcrm.auth.AuthProperties;
-import org.mwolff.fbcrm.auth.Konten;
-import org.mwolff.fbcrm.auth.domain.Account;
-import org.mwolff.fbcrm.auth.domain.AccountRepository;
-import org.mwolff.fbcrm.auth.domain.PasswordResetToken;
-import org.mwolff.fbcrm.auth.domain.PasswordResetTokenRepository;
+import org.mwolff.fbcrm.auth.domain.LoginCode;
+import org.mwolff.fbcrm.auth.domain.LoginCodeRepository;
 import org.mwolff.fbcrm.auth.domain.SecretHasher;
-import org.mwolff.fbcrm.common.SecureTokens;
+import org.mwolff.fbcrm.common.NumericCodes;
 import org.mwolff.fbcrm.mail.MailProperties;
 import org.mwolff.fbcrm.mail.OutboxProperties;
 import org.mwolff.fbcrm.mail.application.EnqueueMailUseCase;
@@ -46,47 +46,46 @@ import org.slf4j.LoggerFactory;
 import org.springframework.mail.MailSendException;
 
 /**
- * Der gesamte Reset-Weg schreibt weder Token noch Token-Hash ins Log (CLAUDE-security.md).
+ * Die Anforderung eines Codes schreibt ihn ins Protokoll genau dann, wenn der Mailversand
+ * ausgeschaltet ist — und seinen Hash nie (Kriterium 7, CLAUDE-security.md).
  *
- * <p>Ein Log-Archiv ueberlebt die Stunde, die ein Reset-Link gilt, bei weitem — und es wird von
- * mehr Menschen gelesen als die Datenbank. Steht der Link dort, ist er dort so lange gueltig, wie
- * er ueberhaupt gilt.
+ * <p>Ein Log-Archiv ueberlebt die zehn Minuten, die ein Code gilt, bei weitem — und es wird von
+ * mehr Menschen gelesen als die Datenbank. Mit eingeschaltetem Versand ist das Postfach der einzige
+ * Weg zum Code; stuende er auch im Protokoll, waere es ein zweiter. Mit ausgeschaltetem Versand ist
+ * das Protokoll dagegen der einzige Weg, und dort muss er stehen.
  *
- * <p>Geprueft wird der Weg an seiner gefaehrlichsten Stelle: beim <b>gescheiterten</b>
- * Zustellversuch. Nur dort schreibt die Anwendung ueberhaupt etwas ueber eine einzelne Nachricht,
- * und genau dort waere die Versuchung am groessten, „zur Fehlersuche" den Rumpf mitzugeben.
+ * <p>Mitgeschrieben wird am <b>Wurzel-Logger</b>, nicht an der Klasse: So faellt auch eine Zeile
+ * auf, die ein anderer Baustein unterwegs schreibt. Den eingeschalteten Versand prueft der Test an
+ * seiner gefaehrlichsten Stelle, dem <b>gescheiterten</b> Zustellversuch: Nur dort schreibt die
+ * Anwendung ueberhaupt etwas ueber eine einzelne Nachricht, und genau dort waere die Versuchung am
+ * groessten, „zur Fehlersuche" den Rumpf mitzugeben.
  */
 @ExtendWith(MockitoExtension.class)
 class NoTokenInLogTest {
 
   private static final String MAIL = "manne@example.org";
-  private static final String LINK_ANFANG = "https://crm.example.org/passwort-neu?token=";
-  private static final Instant JETZT = Instant.parse("2026-09-18T10:00:00Z");
-  private static final long KONTO_ID = 11L;
+  private static final String NAME = "Manne";
+  private static final String CODE = "042424";
+  private static final String HASH = "$argon2id$v=19$m=19456,t=2,p=1$salz$hash-des-codes";
+  private static final Instant JETZT = Instant.parse("2026-10-20T10:00:00Z");
 
-  @Mock private AccountRepository accounts;
-  @Mock private PasswordResetTokenRepository resetTokens;
+  @Mock private LoginCodeRepository loginCodes;
   @Mock private SecretHasher hasher;
   @Mock private OutboxRepository outbox;
   @Mock private MailGateway gateway;
 
-  @Captor private ArgumentCaptor<PasswordResetToken> gespeicherterToken;
   @Captor private ArgumentCaptor<OutboxMessage> eingestellterAuftrag;
 
-  private final SecureTokens tokens = new SecureTokens();
   private final ListAppender<ILoggingEvent> mitgeschrieben = new ListAppender<>();
   private final Clock uhr = Clock.fixed(JETZT, ZoneOffset.UTC);
 
   private ch.qos.logback.classic.Logger wurzel;
   private @org.jspecify.annotations.Nullable Level vorherigeStufe;
-  private String token = "";
-  private String hash = "";
 
   private static AuthProperties schalter() {
     return new AuthProperties(
         "geheimnis-mit-mindestens-32-zeichen-laenge",
-        Duration.ofDays(1),
-        Duration.ofHours(1),
+        Duration.ofDays(30),
         "fbcrm_session",
         true,
         10,
@@ -100,12 +99,21 @@ class NoTokenInLogTest {
         List.of());
   }
 
-  private static MailProperties mailSchalter() {
-    return new MailProperties(true, "no-reply@fbcrm.local", "https://crm.example.org");
+  private static MailProperties mailSchalter(final boolean versand) {
+    return new MailProperties(versand, "no-reply@fbcrm.local", "https://crm.example.org");
   }
 
-  private static Account konto() {
-    return Konten.gespeichert(KONTO_ID, MAIL, "hash", 0, JETZT);
+  /** Eine Zufallsquelle, die immer {@link #CODE} zieht. */
+  private static NumericCodes festerCode() {
+    return new NumericCodes(
+        new SecureRandom() {
+          @Serial private static final long serialVersionUID = 1L;
+
+          @Override
+          public int nextInt(final int schranke) {
+            return Integer.parseInt(CODE);
+          }
+        });
   }
 
   @BeforeEach
@@ -129,32 +137,25 @@ class NoTokenInLogTest {
     mitgeschrieben.stop();
   }
 
-  /** Schritt 1: ein neues Passwort anfordern. Danach stehen {@code token} und {@code hash} fest. */
-  private OutboxMessage fordereAn() {
-    when(accounts.findByEmail(MAIL)).thenReturn(Optional.of(konto()));
-    new RequestPasswordResetUseCase(
-            accounts,
-            resetTokens,
+  /** Fordert einen Code an — ohne Transaktion, die Protokollzeile entsteht darum sofort. */
+  private void fordereAn(final boolean versand) {
+    when(hasher.hash(CODE)).thenReturn(HASH);
+    when(loginCodes.save(any(LoginCode.class))).then(returnsFirstArg());
+    new RequestLoginCodeUseCase(
+            loginCodes,
+            hasher,
+            festerCode(),
             new EnqueueMailUseCase(outbox, uhr),
-            tokens,
             schalter(),
-            mailSchalter(),
+            mailSchalter(versand),
             uhr)
-        .request(MAIL);
-
-    verify(resetTokens).save(gespeicherterToken.capture());
-    verify(outbox).save(eingestellterAuftrag.capture());
-    final OutboxMessage auftrag = eingestellterAuftrag.getValue();
-    final int anfang = auftrag.body().indexOf(LINK_ANFANG) + LINK_ANFANG.length();
-    token = auftrag.body().substring(anfang, auftrag.body().indexOf('\n', anfang));
-    hash = gespeicherterToken.getValue().tokenHash();
-    return auftrag;
+        .ausstellen(MAIL, NAME);
   }
 
-  /**
-   * Schritt 2: der Zustellversuch scheitert — der einzige Weg, auf dem etwas protokolliert wird.
-   */
-  private void stelleErfolglosZu(final OutboxMessage auftrag) {
+  /** Der Zustellversuch scheitert — nur dann protokolliert die Anwendung etwas ueber die Mail. */
+  private void stelleErfolglosZu() {
+    verify(outbox).save(eingestellterAuftrag.capture());
+    final OutboxMessage auftrag = eingestellterAuftrag.getValue();
     when(outbox.findDue(eq(JETZT), anyInt(), anyInt()))
         .thenReturn(
             List.of(
@@ -171,21 +172,13 @@ class NoTokenInLogTest {
         .when(gateway)
         .send(anyString(), anyString(), anyString());
     new OutboxDispatcher(
-            outbox, gateway, new OutboxProperties(true, 5000L, 8, 7), mailSchalter(), uhr)
+            outbox, gateway, new OutboxProperties(true, 5000L, 8, 7), mailSchalter(true), uhr)
         .dispatch();
   }
 
-  /** Schritt 3: den Link einloesen. */
-  private void loeseEin() {
-    when(resetTokens.findByTokenHash(hash)).thenReturn(Optional.of(gespeicherterToken.getValue()));
-    when(accounts.findById(KONTO_ID)).thenReturn(Optional.of(konto()));
-    new ConfirmPasswordResetUseCase(accounts, resetTokens, hasher, tokens, uhr)
-        .confirm(token, "neues-sicheres-passwort");
-  }
-
-  private void gesamterResetWeg() {
-    stelleErfolglosZu(fordereAn());
-    loeseEin();
+  private void fordereAnMitVersand() {
+    fordereAn(true);
+    stelleErfolglosZu();
   }
 
   private String protokoll() {
@@ -195,38 +188,48 @@ class NoTokenInLogTest {
   }
 
   @Test
-  void resetPath_thenNeverWritesTheTokenIntoTheLog() {
+  void anforderung_withMailEnabled_thenNeverWritesTheCodeIntoTheLog() {
     // When
-    gesamterResetWeg();
+    fordereAnMitVersand();
 
-    // Then
-    assertThat(protokoll()).doesNotContain(token);
+    // Then — der Code steckte im Rumpf des Auftrags, den der Zustellversuch in der Hand hatte.
+    assertThat(eingestellterAuftrag.getValue().body()).contains(CODE);
+    assertThat(protokoll()).doesNotContain(CODE);
   }
 
   @Test
-  void resetPath_thenNeverWritesTheTokenHashIntoTheLog() {
-    // When — auch der Hash gehoert nicht ins Log: er ist der Schluessel der Tabelle.
-    gesamterResetWeg();
+  void anforderung_withMailEnabled_thenNeverWritesTheCodeHashIntoTheLog() {
+    // When — auch der Hash gehoert nicht ins Log: Sechs Ziffern sind aus ihm schnell erraten.
+    fordereAnMitVersand();
 
     // Then
-    assertThat(protokoll()).doesNotContain(hash);
+    assertThat(protokoll()).doesNotContain(HASH);
   }
 
   @Test
-  void resetPath_thenNeverWritesTheResetLinkIntoTheLog() {
-    // When — der Rumpf traegt den Link; er darf auch nicht als Ganzes hineingeraten.
-    gesamterResetWeg();
-
-    // Then
-    assertThat(protokoll()).doesNotContain(LINK_ANFANG);
-  }
-
-  @Test
-  void resetPath_givenAFailedDelivery_thenStillReportsThatSomethingWentWrong() {
+  void anforderung_withMailEnabled_givenAFailedDelivery_thenStillReportsThatSomethingWentWrong() {
     // When — Schweigen waere die falsche Loesung: Der Betreiber muss den Fehlschlag sehen.
-    gesamterResetWeg();
+    fordereAnMitVersand();
 
     // Then
     assertThat(protokoll()).contains("Zustellauftrag 7");
+  }
+
+  @Test
+  void anforderung_withMailDisabled_thenWritesTheCodeIntoTheLog() {
+    // When — ohne Versand ist das Protokoll der einzige Weg zum Code.
+    fordereAn(false);
+
+    // Then
+    assertThat(protokoll()).contains(CODE);
+  }
+
+  @Test
+  void anforderung_withMailDisabled_thenNeverWritesTheCodeHashIntoTheLog() {
+    // When
+    fordereAn(false);
+
+    // Then
+    assertThat(protokoll()).doesNotContain(HASH);
   }
 }

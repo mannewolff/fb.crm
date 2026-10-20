@@ -94,9 +94,7 @@ describe('Anmeldeseite', () => {
 
     expect(screen.queryByText(/registr/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/konto anlegen/i)).not.toBeInTheDocument();
-    const nebenwege = screen.getAllByRole('link');
-    expect(nebenwege).toHaveLength(1);
-    expect(nebenwege[0]).toHaveAttribute('href', '/passwort-vergessen');
+    expect(screen.queryAllByRole('link')).toHaveLength(0);
   });
 
   it('fuehrt nach erfolgreicher Anmeldung in die Anwendung', async () => {

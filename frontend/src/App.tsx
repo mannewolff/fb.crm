@@ -8,8 +8,6 @@ import ProtectedRoute from './routes/ProtectedRoute';
 // Route-Level Lazy Loading ist Pflicht fuer alle Top-Level-Routen (CLAUDE-react.md).
 const LoginPage = lazy(async () => import('./pages/LoginPage'));
 const SetupPage = lazy(async () => import('./pages/SetupPage'));
-const ForgotPasswordPage = lazy(async () => import('./pages/ForgotPasswordPage'));
-const ResetPasswordPage = lazy(async () => import('./pages/ResetPasswordPage'));
 const FirmenPage = lazy(async () => import('./pages/FirmenPage'));
 const FirmaMaske = lazy(async () => import('./pages/FirmaMaske'));
 const FirmaPage = lazy(async () => import('./pages/FirmaPage'));
@@ -31,8 +29,8 @@ const StartseitePage = lazy(async () => import('./pages/StartseitePage'));
 const DokumentationPage = lazy(async () => import('./pages/DokumentationPage'));
 
 /**
- * Der Routenbaum. Offen sind die Anmeldeseite, die Einrichtung und die beiden Seiten zum
- * Passwort; alles andere liegt hinter der Sitzung.
+ * Der Routenbaum. Offen sind die Anmeldeseite und die Einrichtung; alles andere liegt hinter
+ * der Sitzung.
  *
  * Die geschuetzten Adressen teilen sich einen Rahmen ({@link AppShell}): Er steht einmal um
  * das `Outlet` und bleibt beim Wechsel zwischen ihnen stehen, statt je Ansicht neu zu entstehen.
@@ -58,8 +56,6 @@ export default function App() {
         <Routes>
           <Route path="/anmelden" element={<LoginPage />} />
           <Route path="/einrichten" element={<SetupPage />} />
-          <Route path="/passwort-vergessen" element={<ForgotPasswordPage />} />
-          <Route path="/passwort-neu" element={<ResetPasswordPage />} />
           <Route
             element={
               <ProtectedRoute>

@@ -44,7 +44,7 @@ class AccountPersistenceIT extends AbstractIntegrationTest {
 
   @BeforeEach
   void legeDasAdminKontoAn() {
-    jdbc.execute("TRUNCATE outbox_message, password_reset_token, account RESTART IDENTITY CASCADE");
+    jdbc.execute("TRUNCATE outbox_message, account RESTART IDENTITY CASCADE");
     final Instant jetzt = Instant.parse("2026-09-18T10:00:00Z");
     accounts.save(Konten.neu(MAIL, hasher.hash(PASSWORT), jetzt));
   }

@@ -65,7 +65,7 @@ class ForecastControllerIT extends AbstractIntegrationTest {
     jdbc.execute(
         "TRUNCATE arbeitszeit, rechnung_position, rechnung, angebot_position, angebot,"
             + " ansprechpartner, firma RESTART IDENTITY CASCADE");
-    jdbc.execute("TRUNCATE outbox_message, password_reset_token, account RESTART IDENTITY CASCADE");
+    jdbc.execute("TRUNCATE outbox_message, account RESTART IDENTITY CASCADE");
     accounts.save(Konten.neu(MAIL, hasher.hash(PASSWORT), ANGELEGT));
     sitzung = angemeldeterKopf();
   }

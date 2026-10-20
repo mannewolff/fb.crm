@@ -43,8 +43,9 @@ public class RequestLoginCodeUseCase {
    * Der Text der Mail.
    *
    * <p>Die Adresse der Instanz steht als Klartext auf einer eigenen Zeile und fuehrt zu keiner
-   * Seite, die anmeldet (E26). Die Platzhalter werden ersetzt, nicht formatiert — aus demselben
-   * Grund wie in {@link RequestPasswordResetUseCase}.
+   * Seite, die anmeldet (E26). Die Platzhalter werden ersetzt, nicht formatiert: Ein Format-String
+   * mit {@code %s} zwaenge zu {@code %n} als Zeilenende (SpotBugs), und das waere auf einem
+   * Windows-Server ein {@code \r\n} im Rumpf einer Mail, die ihre Zeilenenden selbst mitbringt.
    */
   private static final String VORLAGE =
       """

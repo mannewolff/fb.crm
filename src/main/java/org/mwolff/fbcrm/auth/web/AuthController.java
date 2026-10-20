@@ -2,26 +2,21 @@ package org.mwolff.fbcrm.auth.web;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
-import org.mwolff.fbcrm.auth.application.ConfirmPasswordResetUseCase;
 import org.mwolff.fbcrm.auth.application.GetCurrentAccountUseCase;
 import org.mwolff.fbcrm.auth.application.LoginResult;
 import org.mwolff.fbcrm.auth.application.LoginUseCase;
 import org.mwolff.fbcrm.auth.application.LogoutUseCase;
-import org.mwolff.fbcrm.auth.application.RequestPasswordResetUseCase;
 import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Anmelden, abmelden, das eigene Konto lesen und den Weg zurueck ins Konto (K7).
+ * Anmelden, abmelden, einen Code anfordern und das eigene Konto lesen.
  *
  * <p>Der Controller entscheidet nichts: Er nimmt die Eingaben, holt die Absender-Adresse fuer die
  * Zaehlbremse, delegiert und uebersetzt das Ergebnis in Statuscode und Cookie (CLAUDE-java.md
@@ -34,10 +29,6 @@ import org.springframework.web.bind.annotation.RestController;
  * <p><b>Die Anforderung des Codes</b> ist ohne Sitzung erreichbar: Der Code ist der Weg in die
  * Sitzung. Sie antwortet fuer jede Adresse gleich (E13) und sagt nicht, ob der Mailversand laeuft
  * (E17).
- *
- * <p><b>Die drei Wege des Passwort-Resets</b> sind ohne Sitzung erreichbar ({@link
- * SecurityConfig}); wer sein Passwort vergessen hat, kann keine vorweisen. Was sie schuetzt, ist
- * der Einmal-Token, den ausschliesslich der Besitzer des Postfachs bekommt.
  */
 @RestController
 @RequestMapping("/api/auth")
@@ -46,8 +37,6 @@ public class AuthController {
   private final LoginUseCase loginUseCase;
   private final LogoutUseCase logoutUseCase;
   private final GetCurrentAccountUseCase currentAccount;
-  private final RequestPasswordResetUseCase requestReset;
-  private final ConfirmPasswordResetUseCase confirmReset;
   private final ClientIpResolver clientIp;
   private final SessionCookieFactory cookies;
 
@@ -55,15 +44,11 @@ public class AuthController {
       final LoginUseCase loginUseCase,
       final LogoutUseCase logoutUseCase,
       final GetCurrentAccountUseCase currentAccount,
-      final RequestPasswordResetUseCase requestReset,
-      final ConfirmPasswordResetUseCase confirmReset,
       final ClientIpResolver clientIp,
       final SessionCookieFactory cookies) {
     this.loginUseCase = loginUseCase;
     this.logoutUseCase = logoutUseCase;
     this.currentAccount = currentAccount;
-    this.requestReset = requestReset;
-    this.confirmReset = confirmReset;
     this.clientIp = clientIp;
     this.cookies = cookies;
   }
@@ -101,36 +86,5 @@ public class AuthController {
   @GetMapping("/me")
   public AccountResponse me(@AuthenticationPrincipal final Long accountId) {
     return AccountResponse.of(currentAccount.byId(accountId));
-  }
-
-  /**
-   * Fordert einen Reset-Link an — mit derselben Antwort fuer jede formal gueltige Adresse (K7).
-   *
-   * <p>202 statt 200: Angenommen ist der Auftrag, zugestellt noch nicht. Ob ueberhaupt etwas
-   * hinausgeht, sagt die Antwort nicht; genau das ist die Zusage.
-   */
-  @PostMapping("/password-reset")
-  @ResponseStatus(HttpStatus.ACCEPTED)
-  public void requestPasswordReset(@Valid @RequestBody final PasswordResetRequest anfrage) {
-    requestReset.request(anfrage.email());
-  }
-
-  /**
-   * Sagt der Seite, ob sie ein Formular zeigen darf (K7, E24).
-   *
-   * <p>Ohne Nebenwirkung: Der Token bleibt danach einloesbar. Ein gueltiger Link ergibt 204, ein
-   * verbrauchter, abgelaufener oder erfundener 410 — und die Seite zeigt eine Meldung.
-   */
-  @GetMapping("/password-reset/{token}")
-  @ResponseStatus(HttpStatus.NO_CONTENT)
-  public void checkPasswordResetToken(@PathVariable final String token) {
-    confirmReset.ensureRedeemable(token);
-  }
-
-  /** Loest den Link ein und setzt das neue Passwort (K6, K7). */
-  @PostMapping("/password-reset/confirm")
-  @ResponseStatus(HttpStatus.NO_CONTENT)
-  public void confirmPasswordReset(@Valid @RequestBody final PasswordResetConfirmRequest anfrage) {
-    confirmReset.confirm(anfrage.token(), anfrage.password());
   }
 }

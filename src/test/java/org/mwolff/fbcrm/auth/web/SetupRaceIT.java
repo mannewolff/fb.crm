@@ -48,7 +48,7 @@ class SetupRaceIT extends AbstractIntegrationTest {
 
   @BeforeEach
   void leereDieDatenbank() {
-    jdbc.execute("TRUNCATE outbox_message, password_reset_token, account RESTART IDENTITY CASCADE");
+    jdbc.execute("TRUNCATE outbox_message, account RESTART IDENTITY CASCADE");
   }
 
   /** Beide Aufrufe warten auf dieselbe Startsperre und laufen danach wirklich nebenlaeufig. */

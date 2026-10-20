@@ -6,7 +6,7 @@ import java.time.Instant;
 import org.junit.jupiter.api.Test;
 import org.mwolff.fbcrm.auth.Konten;
 
-/** Verhalten des Kontos: Passwortwechsel, naechste Generation und Pruefung der Generation. */
+/** Verhalten des Kontos: naechste Generation und Pruefung der Generation. */
 class AccountTest {
 
   private static final Instant ANGELEGT = Instant.parse("2026-09-01T08:00:00Z");
@@ -14,72 +14,6 @@ class AccountTest {
 
   private static Account kontoMitGeneration(final int generation) {
     return Konten.gespeichert(7L, "manne@example.org", "alter-hash", generation, ANGELEGT);
-  }
-
-  @Test
-  void changePassword_thenIncrementsSessionGeneration() {
-    // Given
-    final Account bestand = kontoMitGeneration(3);
-
-    // When
-    final Account geaendert = bestand.changePassword("neuer-hash", GEAENDERT);
-
-    // Then
-    assertThat(geaendert.sessionGeneration()).isEqualTo(4);
-  }
-
-  @Test
-  void changePassword_thenCarriesTheNewHash() {
-    // Given
-    final Account bestand = kontoMitGeneration(0);
-
-    // When
-    final Account geaendert = bestand.changePassword("neuer-hash", GEAENDERT);
-
-    // Then
-    assertThat(geaendert.passwordHash()).isEqualTo("neuer-hash");
-  }
-
-  @Test
-  void changePassword_thenStampsTheChangeTime() {
-    // Given
-    final Account bestand = kontoMitGeneration(0);
-
-    // When
-    final Account geaendert = bestand.changePassword("neuer-hash", GEAENDERT);
-
-    // Then
-    assertThat(geaendert.updatedAt()).isEqualTo(GEAENDERT);
-  }
-
-  @Test
-  void changePassword_thenLeavesIdentityRoleAndCreationUntouched() {
-    // Given
-    final Account bestand = kontoMitGeneration(1);
-
-    // When
-    final Account geaendert = bestand.changePassword("neuer-hash", GEAENDERT);
-
-    // Then
-    assertThat(geaendert)
-        .satisfies(
-            konto -> assertThat(konto.id()).isEqualTo(7L),
-            konto -> assertThat(konto.email()).isEqualTo("manne@example.org"),
-            konto -> assertThat(konto.displayName()).isEqualTo("Manne"),
-            konto -> assertThat(konto.role()).isEqualTo(Role.ADMIN),
-            konto -> assertThat(konto.createdAt()).isEqualTo(ANGELEGT));
-  }
-
-  @Test
-  void changePassword_thenLeavesTheOriginalUntouched() {
-    // Given
-    final Account bestand = kontoMitGeneration(1);
-
-    // When
-    bestand.changePassword("neuer-hash", GEAENDERT);
-
-    // Then
-    assertThat(bestand.passwordHash()).isEqualTo("alter-hash");
   }
 
   @Test

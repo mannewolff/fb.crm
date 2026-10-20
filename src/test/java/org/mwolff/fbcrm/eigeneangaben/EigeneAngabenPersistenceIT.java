@@ -68,7 +68,7 @@ class EigeneAngabenPersistenceIT extends AbstractIntegrationTest {
   void stelleDenStandDerMigrationHerUndMeldeAn() {
     jdbc.execute("DELETE FROM eigene_angaben");
     jdbc.execute("INSERT INTO eigene_angaben DEFAULT VALUES");
-    jdbc.execute("TRUNCATE outbox_message, password_reset_token, account RESTART IDENTITY CASCADE");
+    jdbc.execute("TRUNCATE outbox_message, account RESTART IDENTITY CASCADE");
     accounts.save(Konten.neu(MAIL, hasher.hash(PASSWORT), ANGELEGT));
     sitzung = angemeldeterKopf();
   }

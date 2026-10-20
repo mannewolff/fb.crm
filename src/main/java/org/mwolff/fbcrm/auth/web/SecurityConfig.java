@@ -82,7 +82,7 @@ public class SecurityConfig {
                 pfade
                     .requestMatchers(HttpMethod.POST, "/api/auth/login", "/api/auth/code")
                     .permitAll()
-                    .requestMatchers("/api/auth/password-reset/**", "/api/setup/**")
+                    .requestMatchers("/api/setup/**")
                     .permitAll()
                     .requestMatchers("/actuator/health")
                     .permitAll()

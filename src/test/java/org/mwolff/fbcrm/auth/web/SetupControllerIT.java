@@ -68,7 +68,7 @@ class SetupControllerIT extends AbstractIntegrationTest {
 
   @BeforeEach
   void leereDieDatenbank() {
-    jdbc.execute("TRUNCATE outbox_message, password_reset_token, account RESTART IDENTITY CASCADE");
+    jdbc.execute("TRUNCATE outbox_message, account RESTART IDENTITY CASCADE");
   }
 
   private ResponseEntity<String> einrichtungMitDemRichtigenSchluessel() {

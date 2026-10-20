@@ -115,7 +115,7 @@ class AngebotRechnungenControllerIT extends AbstractIntegrationTest {
             + " ansprechpartner, firma RESTART IDENTITY CASCADE");
     jdbc.execute("DELETE FROM rechnung_einstellungen");
     jdbc.execute("INSERT INTO rechnung_einstellungen DEFAULT VALUES");
-    jdbc.execute("TRUNCATE outbox_message, password_reset_token, account RESTART IDENTITY CASCADE");
+    jdbc.execute("TRUNCATE outbox_message, account RESTART IDENTITY CASCADE");
     accounts.save(Konten.neu(MAIL, hasher.hash(PASSWORT), ANGELEGT));
     sitzung = angemeldeterKopf();
     jdbc.update("INSERT INTO firma (name) VALUES (?)", FIRMA);

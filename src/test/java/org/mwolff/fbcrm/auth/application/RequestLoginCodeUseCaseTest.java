@@ -116,7 +116,6 @@ class RequestLoginCodeUseCaseTest {
     return new AuthProperties(
         "geheimnis-mit-mindestens-32-zeichen-laenge",
         Duration.ofDays(30),
-        Duration.ofHours(1),
         "fbcrm_session",
         true,
         10,

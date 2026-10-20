@@ -34,7 +34,7 @@ class JpaAccountRepositoryIT extends AbstractIntegrationTest {
 
   @BeforeEach
   void leereFachtabellen() {
-    jdbc.execute("TRUNCATE outbox_message, password_reset_token, account RESTART IDENTITY CASCADE");
+    jdbc.execute("TRUNCATE outbox_message, account RESTART IDENTITY CASCADE");
   }
 
   @Test
@@ -126,12 +126,12 @@ class JpaAccountRepositoryIT extends AbstractIntegrationTest {
   }
 
   @Test
-  void save_givenAChangedPassword_thenStoresTheHigherSessionGeneration() {
+  void save_givenTheNextGeneration_thenStoresTheHigherSessionGeneration() {
     // Given
     final Account gesichert = repository.save(neuesKonto("manne@example.org"));
 
     // When
-    repository.save(gesichert.changePassword("neuer-hash", Instant.parse("2026-09-18T12:00:00Z")));
+    repository.save(gesichert.mitNaechsterGeneration(Instant.parse("2026-09-18T12:00:00Z")));
 
     // Then
     assertThat(repository.findById(gesichert.requireId()))

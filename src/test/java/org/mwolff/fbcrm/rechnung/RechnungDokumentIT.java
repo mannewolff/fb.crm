@@ -86,7 +86,7 @@ class RechnungDokumentIT extends AbstractIntegrationTest {
     // Ohne Briefpapier, wie es diese Klasse erwartet: Andere Klassen hinterlassen den Briefbogen.
     jdbc.execute("DELETE FROM briefbogen");
     jdbc.execute("INSERT INTO briefbogen DEFAULT VALUES");
-    jdbc.execute("TRUNCATE outbox_message, password_reset_token, account RESTART IDENTITY CASCADE");
+    jdbc.execute("TRUNCATE outbox_message, account RESTART IDENTITY CASCADE");
     accounts.save(Konten.neu(MAIL, hasher.hash(PASSWORT), ANGELEGT));
     sitzung = angemeldeterKopf();
     eigeneAngabenSetzen("75/123/45678", "DE02 1203 0000 0000 2020 51");

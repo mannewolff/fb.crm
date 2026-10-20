@@ -69,7 +69,6 @@ class SessionAuthenticationFilterTest {
     return new AuthProperties(
         geheimnis,
         LAUFZEIT,
-        Duration.ofHours(1),
         COOKIE_NAME,
         true,
         10,
