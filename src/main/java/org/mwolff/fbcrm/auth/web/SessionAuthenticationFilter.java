@@ -34,8 +34,8 @@ import org.springframework.web.filter.OncePerRequestFilter;
  * Signatur passt, seine Laufzeit ist nicht abgelaufen — und die Sitzungs-Generation im Token ist
  * die, die das Konto <b>jetzt</b> traegt. Deshalb wird das Konto je Anfrage ueber den
  * Primaerschluessel geladen und nicht zwischengespeichert (E3): Ein Cache verzoegerte genau die
- * Wirkung, um derentwillen es die Generation gibt — ein neu gesetztes Passwort und das Abmelden
- * beenden jede bestehende Sitzung sofort (K8, E7, CLAUDE-security.md).
+ * Wirkung, um derentwillen es die Generation gibt — das Abmelden beendet jede bestehende Sitzung
+ * sofort (K8, E7, CLAUDE-security.md), ebenso das Update auf die Anmeldung per Code (E18).
  *
  * <p>Scheitert einer der vier Punkte, setzt der Filter schlicht keine Authentifizierung und laesst
  * die Kette weiterlaufen. Die Antwort erzeugt dann der {@code AuthenticationEntryPoint} der {@link

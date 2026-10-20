@@ -19,7 +19,6 @@ import org.mwolff.fbcrm.common.Identifiable;
  * @param id technische Id — {@code null}, solange das Konto nicht gespeichert ist
  * @param email Anmeldeadresse; eindeutig ohne Ruecksicht auf Gross- und Kleinschreibung
  * @param displayName Anzeigename in der Oberflaeche
- * @param passwordHash Argon2id-Hash; nie das Passwort selbst
  * @param role Rolle des Kontos
  * @param sessionGeneration Generation, gegen die ein Session-Token geprueft wird
  * @param createdAt Zeitpunkt der Anlage
@@ -29,7 +28,6 @@ public record Account(
     @Nullable Long id,
     String email,
     String displayName,
-    String passwordHash,
     Role role,
     int sessionGeneration,
     Instant createdAt,
@@ -43,8 +41,7 @@ public record Account(
    * @param geaendertAm Zeitpunkt der Aenderung
    */
   public Account mitNaechsterGeneration(final Instant geaendertAm) {
-    return new Account(
-        id, email, displayName, passwordHash, role, sessionGeneration + 1, createdAt, geaendertAm);
+    return new Account(id, email, displayName, role, sessionGeneration + 1, createdAt, geaendertAm);
   }
 
   /**

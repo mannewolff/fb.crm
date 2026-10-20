@@ -20,10 +20,10 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
  * Die Zugangsregel der Anwendung (K1).
  *
  * <p>Offen ohne Sitzung ist eine kurze, abschliessende Liste: die Anmeldung selbst und die
- * Anforderung ihres Codes, der Passwort-Reset, die Einrichtung der frischen Instanz samt ihrem
- * Code, {@code /actuator/health} — und alles, was keine Schnittstelle ist, also die statischen
- * Dateien und der SPA-Fallback (E20). Jeder andere Pfad unter {@code /api} oder {@code /actuator}
- * verlangt eine Sitzung.
+ * Anforderung ihres Codes, die Einrichtung der frischen Instanz samt ihrem Code, {@code
+ * /actuator/health} — und alles, was keine Schnittstelle ist, also die statischen Dateien und der
+ * SPA-Fallback (E20). Jeder andere Pfad unter {@code /api} oder {@code /actuator} verlangt eine
+ * Sitzung.
  *
  * <p><b>Kein CSRF-Synchronizer-Token.</b> Das Session-Cookie traegt {@code SameSite=Strict} und
  * wird deshalb nie bei einem Aufruf gesendet, der von einer fremden Seite ausgeht — damit faellt

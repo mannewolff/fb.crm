@@ -37,7 +37,7 @@ import org.springframework.mock.web.MockHttpServletRequest;
 class AuthControllerTest {
 
   private static final String MAIL = "manne@example.org";
-  private static final String PASSWORT = "richtiges-passwort";
+  private static final String CODE = "042424";
   private static final String TOKEN = "token.signatur";
   private static final String IP = "203.0.113.7";
   private static final Instant JETZT = Instant.parse("2026-09-18T10:00:00Z");
@@ -64,11 +64,11 @@ class AuthControllerTest {
   }
 
   private static Account konto() {
-    return Konten.gespeichert(KONTO_ID, MAIL, "hash", 3, JETZT);
+    return Konten.gespeichert(KONTO_ID, MAIL, 3, JETZT);
   }
 
   private static LoginRequest anfrage() {
-    return new LoginRequest(MAIL, PASSWORT);
+    return new LoginRequest(MAIL, CODE);
   }
 
   private String setCookie(final ResponseEntity<?> antwort) {
@@ -77,7 +77,7 @@ class AuthControllerTest {
 
   private ResponseEntity<AccountResponse> meldeAn(final SessionCookie cookie) {
     when(clientIp.resolve(any(MockHttpServletRequest.class))).thenReturn(IP);
-    when(loginUseCase.login(MAIL, PASSWORT, IP)).thenReturn(new LoginResult(konto(), cookie));
+    when(loginUseCase.login(MAIL, CODE, IP)).thenReturn(new LoginResult(konto(), cookie));
     return controller.login(anfrage(), new MockHttpServletRequest());
   }
 

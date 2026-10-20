@@ -41,7 +41,6 @@ class JpaAccountRepository implements AccountRepository {
         zeile.getId(),
         zeile.getEmail(),
         zeile.getDisplayName(),
-        zeile.getPasswordHash(),
         zeile.getRole(),
         zeile.getSessionGeneration(),
         zeile.getCreatedAt(),

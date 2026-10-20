@@ -28,9 +28,6 @@ class AccountEntity {
   @Column(name = "display_name", nullable = false, length = 200)
   private String displayName;
 
-  @Column(name = "password_hash", nullable = false, length = 255)
-  private String passwordHash;
-
   @Enumerated(EnumType.STRING)
   @Column(name = "role", nullable = false, length = 32)
   private Role role;
@@ -59,8 +56,8 @@ class AccountEntity {
    * <p>Die Zeile holt sich ihren Stand selbst, statt ihn als Liste von acht Parametern zu bekommen:
    * Der Adapter nennt dann am Aufruf nur noch, <i>was</i> abgebildet wird, und ein neues Feld des
    * Kontos landet hier und nicht zusaetzlich in jeder Aufrufstelle. Das waehrt gerade hier, wo
-   * Passwort-Hash, Rolle und Sitzungs-Generation nebeneinander stehen: Kein Aufruf kann sie
-   * vertauschen, den keiner mehr liest.
+   * Rolle und Sitzungs-Generation nebeneinander stehen: Kein Aufruf kann sie vertauschen, den
+   * keiner mehr liest.
    *
    * @param account das Konto, dessen Stand die Zeile tragen soll
    * @return die Zeile; ihre Kennung ist die des Kontos und damit {@code null}, solange das Konto
@@ -74,7 +71,6 @@ class AccountEntity {
     this.id = account.id();
     this.email = account.email();
     this.displayName = account.displayName();
-    this.passwordHash = account.passwordHash();
     this.role = account.role();
     this.sessionGeneration = account.sessionGeneration();
     this.createdAt = account.createdAt();
@@ -91,10 +87,6 @@ class AccountEntity {
 
   String getDisplayName() {
     return displayName;
-  }
-
-  String getPasswordHash() {
-    return passwordHash;
   }
 
   Role getRole() {

@@ -20,6 +20,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.IntStream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -32,14 +33,17 @@ import org.mwolff.fbcrm.auth.Konten;
 import org.mwolff.fbcrm.auth.SetupProperties;
 import org.mwolff.fbcrm.auth.domain.Account;
 import org.mwolff.fbcrm.auth.domain.AccountRepository;
+import org.mwolff.fbcrm.auth.domain.LoginCode;
+import org.mwolff.fbcrm.auth.domain.LoginCodeRepository;
 import org.mwolff.fbcrm.auth.domain.Role;
 import org.mwolff.fbcrm.auth.domain.SecretHasher;
 import org.mwolff.fbcrm.auth.domain.SessionTokens;
+import org.mwolff.fbcrm.auth.infrastructure.FailedLoginDelay;
 import org.mwolff.fbcrm.auth.infrastructure.LoginAttemptLimiter;
 import org.springframework.dao.DataIntegrityViolationException;
 
 /**
- * Die Einrichtung der frischen Instanz (E5, K3).
+ * Die Einrichtung der frischen Instanz per Einmal-Schluessel und Code (E5, E9, K3).
  *
  * <p>Zwei Faelle tragen dieses Paket. Der erste ist der <b>leere konfigurierte Schluessel</b>:
  * {@code docker-compose.yml} Z. 47 f. sagt „leer = deaktiviert" zu. Ein konstanter Vergleich gegen
@@ -51,15 +55,16 @@ import org.springframework.dao.DataIntegrityViolationException;
  * laesst sich zeigen, dass gezaehlt wird, bevor der Schluessel geprueft ist, und dass die sechste
  * Anforderung in der Stunde auch mit falschem Schluessel an der Bremse endet (Kriterium 6, letzter
  * Satz zu Kriterium 5). Die Ausstellung ist gemockt: Sie ist der einzige Weg zu einem
- * Zustellauftrag, und was sie dabei tut, weist {@code RequestLoginCodeUseCaseTest} nach.
+ * Zustellauftrag, und was sie dabei tut, weist {@code RequestLoginCodeUseCaseTest} nach. Die
+ * Einloesung des Codes laeuft echt, gemockt sind nur der Bestand der Codes und der Hasher.
  */
 @ExtendWith(MockitoExtension.class)
 class SetupAccountUseCaseTest {
 
   private static final String MAIL = "manne@example.org";
   private static final String NAME = "Manne";
-  private static final String PASSWORT = "sicheres-passwort";
-  private static final String HASH = "$argon2id$v=19$dummy";
+  private static final String CODE = "042424";
+  private static final String HASH = "$argon2id$v=19$hash-des-codes";
   private static final String SCHLUESSEL = "einmal-schluessel-der-einrichtung";
   private static final String TOKEN = "nutzlast.signatur";
   private static final Instant JETZT = Instant.parse("2026-09-18T10:00:00Z");
@@ -71,6 +76,8 @@ class SetupAccountUseCaseTest {
   @Mock private SecretHasher hasher;
   @Mock private SessionTokens tokens;
   @Mock private RequestLoginCodeUseCase ausstellung;
+  @Mock private LoginCodeRepository loginCodes;
+  @Mock private FailedLoginDelay delay;
 
   private final LoginAttemptLimiter zaehler =
       spy(new LoginAttemptLimiter(schalter(), Clock.fixed(JETZT, ZoneOffset.UTC)));
@@ -95,19 +102,30 @@ class SetupAccountUseCaseTest {
   private SetupAccountUseCase einrichtung(final String konfigurierterSchluessel) {
     return new SetupAccountUseCase(
         accounts,
-        hasher,
         tokens,
         zaehler,
+        delay,
         ausstellung,
+        new CodeEinloesung(
+            loginCodes, hasher, zaehler, schalter(), Clock.fixed(JETZT, ZoneOffset.UTC)),
         schalter(),
         new SetupProperties(konfigurierterSchluessel),
         Clock.fixed(JETZT, ZoneOffset.UTC));
   }
 
-  /** Der vollstaendig vorbereitete Erfolgsfall: kein Konto, Hash und Token liegen bereit. */
+  /** Zu MAIL liegt ein frischer Code der Einrichtung, und der eingegebene stimmt. */
+  private void codeStimmt() {
+    when(loginCodes.findByEmail(MAIL))
+        .thenReturn(Optional.of(LoginCode.ausgestellt(MAIL, HASH, JETZT, Duration.ofMinutes(10))));
+    when(hasher.matches(CODE, HASH)).thenReturn(true);
+  }
+
+  /**
+   * Der vollstaendig vorbereitete Erfolgsfall: kein Konto, der Code stimmt, das Token liegt bereit.
+   */
   private SetupAccountUseCase frischeInstanz() {
     when(accounts.existsAnyAdmin()).thenReturn(false);
-    when(hasher.hash(PASSWORT)).thenReturn(HASH);
+    codeStimmt();
     when(accounts.save(any(Account.class)))
         .thenAnswer(
             aufruf -> {
@@ -119,7 +137,7 @@ class SetupAccountUseCaseTest {
   }
 
   private static LoginResult richteEin(final SetupAccountUseCase einrichtung) {
-    return einrichtung.initialize(MAIL, NAME, PASSWORT, SCHLUESSEL);
+    return einrichtung.initialize(MAIL, NAME, CODE, SCHLUESSEL, IP);
   }
 
   private Account gespeichertesKonto() {
@@ -141,15 +159,88 @@ class SetupAccountUseCaseTest {
   }
 
   @Test
-  void initialize_givenTheRightKeyOnAFreshInstance_thenStoresOnlyTheHashOfThePassword() {
+  void initialize_givenTheRightCode_thenUsesItUp() {
     // Given
     final SetupAccountUseCase einrichtung = frischeInstanz();
 
     // When
     richteEin(einrichtung);
 
+    // Then — der Code der Einrichtung gilt nur einmal (Kriterium 4).
+    verify(loginCodes).deleteByEmail(MAIL);
+  }
+
+  @Test
+  void initialize_givenAWrongCode_thenFailsLikeALoginAndCreatesNoAccount() {
+    // Given — fuer den falschen Code hilft derselbe Schritt wie bei der Anmeldung: ein neuer Code.
+    when(accounts.existsAnyAdmin()).thenReturn(false);
+    when(loginCodes.findByEmail(MAIL))
+        .thenReturn(Optional.of(LoginCode.ausgestellt(MAIL, HASH, JETZT, Duration.ofMinutes(10))));
+    when(hasher.matches(CODE, HASH)).thenReturn(false);
+    final SetupAccountUseCase einrichtung = einrichtung(SCHLUESSEL);
+
+    // When
+    assertThatExceptionOfType(LoginFailed.class).isThrownBy(() -> richteEin(einrichtung));
+
     // Then
-    assertThat(gespeichertesKonto().passwordHash()).isEqualTo(HASH);
+    verify(accounts, never()).save(any(Account.class));
+    verify(delay).apply();
+  }
+
+  @Test
+  void initialize_givenNoCodeForTheAddress_thenFailsAndCreatesNoAccount() {
+    // Given — vertippte Adresse: Zu der richtigen ging nie ein Code (Kriterium 6).
+    when(accounts.existsAnyAdmin()).thenReturn(false);
+    when(loginCodes.findByEmail(MAIL)).thenReturn(Optional.empty());
+    final SetupAccountUseCase einrichtung = einrichtung(SCHLUESSEL);
+
+    // When
+    assertThatExceptionOfType(LoginFailed.class).isThrownBy(() -> richteEin(einrichtung));
+
+    // Then
+    verify(accounts, never()).save(any(Account.class));
+  }
+
+  @Test
+  void initialize_givenAWrongKey_thenNeverLooksAtTheCode() {
+    // Given — ein falscher Schluessel endet wie bisher, ohne den Code anzuruehren.
+    final SetupAccountUseCase einrichtung = einrichtung(SCHLUESSEL);
+
+    // When
+    assertThatExceptionOfType(SetupRefused.class)
+        .isThrownBy(() -> einrichtung.initialize(MAIL, NAME, CODE, FALSCH, IP));
+
+    // Then
+    verify(loginCodes, never()).findByEmail(anyString());
+    verify(delay, never()).apply();
+  }
+
+  @Test
+  void initialize_givenAWrongKey_thenHasCountedTheInputAtTheOrigin() {
+    // Given — ein vor dem Zaehlen gepruefter Schluessel liesse die Bestaetigung ungebremst.
+    final SetupAccountUseCase einrichtung = einrichtung(SCHLUESSEL);
+
+    // When
+    assertThatExceptionOfType(SetupRefused.class)
+        .isThrownBy(() -> einrichtung.initialize(MAIL, NAME, CODE, FALSCH, IP));
+
+    // Then
+    verify(zaehler).record(HERKUNFT, IP);
+  }
+
+  @Test
+  void initialize_givenTenInputsFromTheOrigin_thenRefusesAtTheBrakeBeforeTheKey() {
+    // Given — Kriterium 6: die Bremse je Herkunft gilt auch fuer die Einrichtungsseite.
+    final SetupAccountUseCase einrichtung = einrichtung(SCHLUESSEL);
+    IntStream.range(0, 10)
+        .forEach(
+            unbenutzt ->
+                assertThatExceptionOfType(SetupRefused.class)
+                    .isThrownBy(() -> einrichtung.initialize(MAIL, NAME, CODE, FALSCH, IP)));
+
+    // When / Then
+    assertThatExceptionOfType(TooManyLoginAttempts.class)
+        .isThrownBy(() -> einrichtung.initialize(MAIL, NAME, CODE, FALSCH, IP));
   }
 
   @Test
@@ -224,7 +315,7 @@ class SetupAccountUseCaseTest {
 
     // When / Then
     assertThatExceptionOfType(SetupRefused.class)
-        .isThrownBy(() -> einrichtung.initialize(MAIL, NAME, PASSWORT, "falscher-schluessel"));
+        .isThrownBy(() -> einrichtung.initialize(MAIL, NAME, CODE, FALSCH, IP));
   }
 
   @Test
@@ -234,7 +325,7 @@ class SetupAccountUseCaseTest {
 
     // When
     assertThatExceptionOfType(SetupRefused.class)
-        .isThrownBy(() -> einrichtung.initialize(MAIL, NAME, PASSWORT, "falscher-schluessel"));
+        .isThrownBy(() -> einrichtung.initialize(MAIL, NAME, CODE, FALSCH, IP));
 
     // Then
     verify(accounts, never()).save(any(Account.class));
@@ -247,7 +338,7 @@ class SetupAccountUseCaseTest {
 
     // When / Then
     assertThatExceptionOfType(SetupRefused.class)
-        .isThrownBy(() -> einrichtung.initialize(MAIL, NAME, PASSWORT, "einmal-schluessel"));
+        .isThrownBy(() -> einrichtung.initialize(MAIL, NAME, CODE, "einmal-schluessel", IP));
   }
 
   @Test
@@ -258,7 +349,7 @@ class SetupAccountUseCaseTest {
 
     // When / Then
     assertThatExceptionOfType(SetupRefused.class)
-        .isThrownBy(() -> einrichtung.initialize(MAIL, NAME, PASSWORT, ""));
+        .isThrownBy(() -> einrichtung.initialize(MAIL, NAME, CODE, "", IP));
   }
 
   @Test
@@ -268,7 +359,7 @@ class SetupAccountUseCaseTest {
 
     // When / Then
     assertThatExceptionOfType(SetupRefused.class)
-        .isThrownBy(() -> einrichtung.initialize(MAIL, NAME, PASSWORT, "irgendwas"));
+        .isThrownBy(() -> einrichtung.initialize(MAIL, NAME, CODE, "irgendwas", IP));
   }
 
   @Test
@@ -278,7 +369,7 @@ class SetupAccountUseCaseTest {
 
     // When
     assertThatExceptionOfType(SetupRefused.class)
-        .isThrownBy(() -> einrichtung.initialize(MAIL, NAME, PASSWORT, ""));
+        .isThrownBy(() -> einrichtung.initialize(MAIL, NAME, CODE, "", IP));
 
     // Then
     verify(accounts, never()).save(any(Account.class));
@@ -312,7 +403,7 @@ class SetupAccountUseCaseTest {
     // Given — zwei gleichzeitige Aufrufe mit verschiedenen Adressen kommen beide durch
     // existsAnyAdmin; was sie trennt, ist account_single_admin auf Ebene der Datenbank.
     when(accounts.existsAnyAdmin()).thenReturn(false);
-    when(hasher.hash(PASSWORT)).thenReturn(HASH);
+    codeStimmt();
     when(accounts.save(any(Account.class)))
         .thenThrow(new DataIntegrityViolationException("account_single_admin"));
     final SetupAccountUseCase einrichtung = einrichtung(SCHLUESSEL);
@@ -325,7 +416,7 @@ class SetupAccountUseCaseTest {
   void initialize_givenALostRaceAgainstTheUniqueIndex_thenNeverIssuesASession() {
     // Given
     when(accounts.existsAnyAdmin()).thenReturn(false);
-    when(hasher.hash(PASSWORT)).thenReturn(HASH);
+    codeStimmt();
     when(accounts.save(any(Account.class)))
         .thenThrow(new DataIntegrityViolationException("account_single_admin"));
     final SetupAccountUseCase einrichtung = einrichtung(SCHLUESSEL);
@@ -341,7 +432,7 @@ class SetupAccountUseCaseTest {
   void initialize_givenALostRaceAgainstTheUniqueIndex_thenNeverCarriesTheDatabaseTextOutwards() {
     // Given — der Text der Datenbank nennt Tabelle und Index; er gehoert nicht in die Antwort.
     when(accounts.existsAnyAdmin()).thenReturn(false);
-    when(hasher.hash(PASSWORT)).thenReturn(HASH);
+    codeStimmt();
     when(accounts.save(any(Account.class)))
         .thenThrow(new DataIntegrityViolationException("account_single_admin"));
     final SetupAccountUseCase einrichtung = einrichtung(SCHLUESSEL);

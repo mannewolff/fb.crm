@@ -22,12 +22,10 @@ public final class Konten {
    * Ein frisches, noch nicht gespeichertes Konto mit Generation 0.
    *
    * @param email Anmeldeadresse
-   * @param passwordHash gesetzter Passwort-Hash
    * @param zeitpunkt Anlage und letzte Aenderung
    */
-  public static Account neu(
-      final String email, final String passwordHash, final Instant zeitpunkt) {
-    return gespeichert(null, email, passwordHash, 0, zeitpunkt, zeitpunkt);
+  public static Account neu(final String email, final Instant zeitpunkt) {
+    return gespeichert(null, email, 0, zeitpunkt, zeitpunkt);
   }
 
   /**
@@ -35,17 +33,12 @@ public final class Konten {
    *
    * @param id technische Id
    * @param email Anmeldeadresse
-   * @param passwordHash gesetzter Passwort-Hash
    * @param generation Sitzungs-Generation
    * @param zeitpunkt Anlage und letzte Aenderung
    */
   public static Account gespeichert(
-      final @Nullable Long id,
-      final String email,
-      final String passwordHash,
-      final int generation,
-      final Instant zeitpunkt) {
-    return gespeichert(id, email, passwordHash, generation, zeitpunkt, zeitpunkt);
+      final @Nullable Long id, final String email, final int generation, final Instant zeitpunkt) {
+    return gespeichert(id, email, generation, zeitpunkt, zeitpunkt);
   }
 
   /**
@@ -53,7 +46,6 @@ public final class Konten {
    *
    * @param id technische Id
    * @param email Anmeldeadresse
-   * @param passwordHash gesetzter Passwort-Hash
    * @param generation Sitzungs-Generation
    * @param angelegt Zeitpunkt der Anlage
    * @param geaendert Zeitpunkt der letzten Aenderung
@@ -61,11 +53,10 @@ public final class Konten {
   public static Account gespeichert(
       final @Nullable Long id,
       final String email,
-      final String passwordHash,
       final int generation,
       final Instant angelegt,
       final Instant geaendert) {
-    return baue(id, email, ANZEIGENAME, passwordHash, Role.ADMIN, generation, angelegt, geaendert);
+    return baue(id, email, ANZEIGENAME, Role.ADMIN, generation, angelegt, geaendert);
   }
 
   /**
@@ -79,7 +70,6 @@ public final class Konten {
         id,
         vorlage.email(),
         vorlage.displayName(),
-        vorlage.passwordHash(),
         vorlage.role(),
         vorlage.sessionGeneration(),
         vorlage.createdAt(),
@@ -90,11 +80,10 @@ public final class Konten {
       final @Nullable Long id,
       final String email,
       final String displayName,
-      final String passwordHash,
       final Role role,
       final int generation,
       final Instant angelegt,
       final Instant geaendert) {
-    return new Account(id, email, displayName, passwordHash, role, generation, angelegt, geaendert);
+    return new Account(id, email, displayName, role, generation, angelegt, geaendert);
   }
 }

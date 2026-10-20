@@ -41,7 +41,7 @@ class JpaAccountRepositoryTest {
   }
 
   private static Account konto(final Long id) {
-    return Konten.gespeichert(id, "manne@example.org", "hash", 2, ANGELEGT, GEAENDERT);
+    return Konten.gespeichert(id, "manne@example.org", 2, ANGELEGT, GEAENDERT);
   }
 
   @Test
@@ -59,7 +59,6 @@ class JpaAccountRepositoryTest {
             zeile -> assertThat(zeile.getId()).isNull(),
             zeile -> assertThat(zeile.getEmail()).isEqualTo("manne@example.org"),
             zeile -> assertThat(zeile.getDisplayName()).isEqualTo("Manne"),
-            zeile -> assertThat(zeile.getPasswordHash()).isEqualTo("hash"),
             zeile -> assertThat(zeile.getRole()).isEqualTo(Role.ADMIN),
             zeile -> assertThat(zeile.getSessionGeneration()).isEqualTo(2),
             zeile -> assertThat(zeile.getCreatedAt()).isEqualTo(ANGELEGT),

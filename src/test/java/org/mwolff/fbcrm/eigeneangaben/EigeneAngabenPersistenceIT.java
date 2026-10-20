@@ -10,6 +10,7 @@ import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mwolff.fbcrm.AbstractIntegrationTest;
+import org.mwolff.fbcrm.auth.Anmeldung;
 import org.mwolff.fbcrm.auth.Konten;
 import org.mwolff.fbcrm.auth.domain.AccountRepository;
 import org.mwolff.fbcrm.auth.domain.SecretHasher;
@@ -40,7 +41,6 @@ class EigeneAngabenPersistenceIT extends AbstractIntegrationTest {
 
   private static final String PFAD = "/api/eigene-angaben";
   private static final String MAIL = "manne@example.org";
-  private static final String PASSWORT = "richtiges-passwort";
   private static final Instant ANGELEGT = Instant.parse("2026-09-01T08:00:00Z");
   private static final String BERUFSBEZEICHNUNG = "Freiberuflicher Softwareentwickler";
   private static final String WEBADRESSE = "https://mwolff.org";
@@ -69,18 +69,8 @@ class EigeneAngabenPersistenceIT extends AbstractIntegrationTest {
     jdbc.execute("DELETE FROM eigene_angaben");
     jdbc.execute("INSERT INTO eigene_angaben DEFAULT VALUES");
     jdbc.execute("TRUNCATE outbox_message, account RESTART IDENTITY CASCADE");
-    accounts.save(Konten.neu(MAIL, hasher.hash(PASSWORT), ANGELEGT));
-    sitzung = angemeldeterKopf();
-  }
-
-  private HttpHeaders angemeldeterKopf() {
-    final ResponseEntity<String> anmeldung =
-        rest.postForEntity(
-            "/api/auth/login", Map.of("email", MAIL, "password", PASSWORT), String.class);
-    final String gesetzt = String.valueOf(anmeldung.getHeaders().getFirst(HttpHeaders.SET_COOKIE));
-    final HttpHeaders kopf = new HttpHeaders();
-    kopf.add(HttpHeaders.COOKIE, gesetzt.substring(0, gesetzt.indexOf(';')));
-    return kopf;
+    accounts.save(Konten.neu(MAIL, ANGELEGT));
+    sitzung = Anmeldung.perCode(rest, jdbc, hasher, MAIL);
   }
 
   private <T> ResponseEntity<T> ruf(

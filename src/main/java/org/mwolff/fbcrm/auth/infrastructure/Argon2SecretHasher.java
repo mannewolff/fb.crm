@@ -6,7 +6,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 
 /**
- * Hashing eines Geheimnisses (Einmalcode, bis zur Umstellung noch Passwort) mit Argon2id.
+ * Hashing eines Geheimnisses — des Einmalcodes der Anmeldung — mit Argon2id.
  *
  * <p>Die Parameter kommen aus {@link Argon2PasswordEncoder#defaultsForSpringSecurity_v5_8()} und
  * werden bewusst nicht selbst gewaehlt (CLAUDE-security.md); jeder Hash traegt sein eigenes Salt,

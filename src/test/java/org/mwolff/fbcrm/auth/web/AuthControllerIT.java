@@ -9,6 +9,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.mwolff.fbcrm.AbstractIntegrationTest;
+import org.mwolff.fbcrm.auth.Anmeldung;
 import org.mwolff.fbcrm.auth.Konten;
 import org.mwolff.fbcrm.auth.domain.AccountRepository;
 import org.mwolff.fbcrm.auth.domain.SecretHasher;
@@ -25,16 +26,19 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.TestPropertySource;
 
 /**
- * Anmelden, abmelden und das eigene Konto ueber HTTP (K5, K8, K9, E9, Kriterium 9, E5, E7).
+ * Anmelden per Code, abmelden und das eigene Konto ueber HTTP (K8, K9, E9, Kriterium 3, 9, E5, E7).
  *
  * <p>Der wichtigste Nachweis steht in {@code login_givenAnUnknownAddress…}: Die Antwort auf eine
- * unbekannte Adresse und die auf ein falsches Passwort duerfen sich in nichts unterscheiden — nicht
- * im Status, nicht im Rumpf, nicht in den Kopfzeilen (K5).
+ * unbekannte Adresse und die auf einen falschen Code duerfen sich in nichts unterscheiden — nicht
+ * im Status, nicht im Rumpf, nicht in den Kopfzeilen (Kriterium 3).
+ *
+ * <p>Der Code wird hier hinterlegt statt angefordert ({@code Anmeldung}); den Weg ueber Mail und
+ * Protokoll weisen {@code AnmeldungPerCodeIT} und {@code NoTokenInLogTest} nach.
  */
 class AuthControllerIT extends AbstractIntegrationTest {
 
   static final String MAIL = "manne@example.org";
-  static final String PASSWORT = "richtiges-passwort";
+  static final String FALSCH = "999999";
 
   private final TestRestTemplate rest;
   private final AccountRepository accounts;
@@ -53,24 +57,31 @@ class AuthControllerIT extends AbstractIntegrationTest {
     this.jdbc = jdbc;
   }
 
-  static Map<String, String> zugang(final String email, final String passwort) {
-    return Map.of("email", email, "password", passwort);
-  }
-
   static ResponseEntity<String> melde(
-      final TestRestTemplate rest, final String email, final String passwort) {
-    return rest.postForEntity("/api/auth/login", zugang(email, passwort), String.class);
+      final TestRestTemplate rest, final String email, final String code) {
+    return rest.postForEntity(
+        "/api/auth/login", Map.of("email", email, "code", code), String.class);
   }
 
   @BeforeEach
   void legeDasAdminKontoAn() {
-    jdbc.execute("TRUNCATE outbox_message, account RESTART IDENTITY CASCADE");
+    jdbc.execute("TRUNCATE outbox_message, login_code, account RESTART IDENTITY CASCADE");
     final Instant jetzt = Instant.parse("2026-09-18T10:00:00Z");
-    accounts.save(Konten.neu(MAIL, hasher.hash(PASSWORT), jetzt));
+    accounts.save(Konten.neu(MAIL, jetzt));
+  }
+
+  private String code() {
+    return Anmeldung.hinterlegeCode(jdbc, hasher, MAIL);
   }
 
   private ResponseEntity<String> anmeldung() {
-    return melde(rest, MAIL, PASSWORT);
+    return melde(rest, MAIL, code());
+  }
+
+  /** Ein falscher Code zur Adresse des Kontos — zu der ein richtiger hinterlegt ist. */
+  private ResponseEntity<String> falscherCode() {
+    code();
+    return melde(rest, MAIL, FALSCH);
   }
 
   private String sessionCookie() {
@@ -95,7 +106,7 @@ class AuthControllerIT extends AbstractIntegrationTest {
   }
 
   @Test
-  void login_givenTheRightCredentials_thenAnswersOk() {
+  void login_givenTheRightCode_thenAnswersOk() {
     // When
     final ResponseEntity<String> antwort = anmeldung();
 
@@ -104,7 +115,7 @@ class AuthControllerIT extends AbstractIntegrationTest {
   }
 
   @Test
-  void login_givenTheRightCredentials_thenSetsAHardenedSessionCookie() {
+  void login_givenTheRightCode_thenSetsAHardenedSessionCookie() {
     // When
     final ResponseEntity<String> antwort = anmeldung();
 
@@ -119,7 +130,7 @@ class AuthControllerIT extends AbstractIntegrationTest {
   }
 
   @Test
-  void login_givenTheRightCredentials_thenAnswersWithTheAccount() {
+  void login_givenTheRightCode_thenAnswersWithTheAccount() {
     // When
     final ResponseEntity<String> antwort = anmeldung();
 
@@ -128,54 +139,52 @@ class AuthControllerIT extends AbstractIntegrationTest {
   }
 
   @Test
-  void login_givenTheRightCredentials_thenNeverLeaksThePasswordHash() {
+  void login_givenTheRightCode_thenNeverLeaksAHash() {
     // When
     final ResponseEntity<String> antwort = anmeldung();
 
     // Then
-    assertThat(antwort.getBody()).doesNotContain("passwordHash").doesNotContain("$argon2");
+    assertThat(antwort.getBody()).doesNotContain("Hash").doesNotContain("$argon2");
   }
 
   @Test
-  void login_givenAWrongPassword_thenAnswersUnauthorized() {
+  void login_givenAWrongCode_thenAnswersUnauthorized() {
     // When
-    final ResponseEntity<String> antwort = melde(rest, MAIL, "falsches-passwort");
+    final ResponseEntity<String> antwort = falscherCode();
 
     // Then
     assertThat(antwort.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
   }
 
   @Test
-  void login_givenAnUnknownAddress_thenAnswersExactlyLikeAWrongPassword() {
+  void login_givenAnUnknownAddress_thenAnswersExactlyLikeAWrongCode() {
     // Given
-    final ResponseEntity<String> falschesPasswort = melde(rest, MAIL, "falsches-passwort");
+    final ResponseEntity<String> falsch = falscherCode();
 
     // When
-    final ResponseEntity<String> unbekannteAdresse =
-        melde(rest, "fremd@example.org", "falsches-passwort");
+    final ResponseEntity<String> unbekannteAdresse = melde(rest, "fremd@example.org", FALSCH);
 
-    // Then — K5: Status und Rumpf sind nicht unterscheidbar.
-    assertThat(unbekannteAdresse.getStatusCode()).isEqualTo(falschesPasswort.getStatusCode());
-    assertThat(unbekannteAdresse.getBody()).isEqualTo(falschesPasswort.getBody());
+    // Then — Kriterium 3: Status und Rumpf sind nicht unterscheidbar.
+    assertThat(unbekannteAdresse.getStatusCode()).isEqualTo(falsch.getStatusCode());
+    assertThat(unbekannteAdresse.getBody()).isEqualTo(falsch.getBody());
   }
 
   @Test
-  void login_givenAnUnknownAddress_thenCarriesTheSameHeadersAsAWrongPassword() {
+  void login_givenAnUnknownAddress_thenCarriesTheSameHeadersAsAWrongCode() {
     // Given
-    final ResponseEntity<String> falschesPasswort = melde(rest, MAIL, "falsches-passwort");
+    final ResponseEntity<String> falsch = falscherCode();
 
     // When
-    final ResponseEntity<String> unbekannteAdresse =
-        melde(rest, "fremd@example.org", "falsches-passwort");
+    final ResponseEntity<String> unbekannteAdresse = melde(rest, "fremd@example.org", FALSCH);
 
-    // Then — K5: auch keine Kopfzeile verraet den Unterschied.
-    assertThat(ohneZeitstempel(unbekannteAdresse)).isEqualTo(ohneZeitstempel(falschesPasswort));
+    // Then — Kriterium 3: auch keine Kopfzeile verraet den Unterschied.
+    assertThat(ohneZeitstempel(unbekannteAdresse)).isEqualTo(ohneZeitstempel(falsch));
   }
 
   @Test
   void login_givenAFailedAttempt_thenSetsNoCookieAtAll() {
     // When
-    final ResponseEntity<String> antwort = melde(rest, MAIL, "falsches-passwort");
+    final ResponseEntity<String> antwort = falscherCode();
 
     // Then
     assertThat(antwort.getHeaders().get(HttpHeaders.SET_COOKIE)).isNull();
@@ -184,7 +193,7 @@ class AuthControllerIT extends AbstractIntegrationTest {
   @Test
   void login_givenAnAddressThatIsNoAddress_thenAnswersBadRequest() {
     // When — die Form prueft Bean Validation, nicht der Anwendungsfall.
-    final ResponseEntity<String> antwort = melde(rest, "keine-adresse", PASSWORT);
+    final ResponseEntity<String> antwort = melde(rest, "keine-adresse", FALSCH);
 
     // Then
     assertThat(antwort.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
@@ -309,22 +318,22 @@ class AuthControllerIT extends AbstractIntegrationTest {
     @Test
     void login_givenMoreFailuresThanTheThreshold_thenAnswersTooManyRequests() {
       // Given
-      IntStream.range(0, 2).forEach(unbenutzt -> melde(gebremst, MAIL, "falsches-passwort"));
+      IntStream.range(0, 2).forEach(unbenutzt -> melde(gebremst, MAIL, FALSCH));
 
       // When
-      final ResponseEntity<String> antwort = melde(gebremst, MAIL, "falsches-passwort");
+      final ResponseEntity<String> antwort = melde(gebremst, MAIL, FALSCH);
 
       // Then
       assertThat(antwort.getStatusCode()).isEqualTo(HttpStatus.TOO_MANY_REQUESTS);
     }
 
     @Test
-    void login_givenMoreFailuresThanTheThreshold_thenEvenTheRightPasswordIsRefused() {
+    void login_givenMoreFailuresThanTheThreshold_thenEvenTheRightCodeIsRefused() {
       // Given — die Bremse greift vor der Pruefung, sonst waere sie keine.
-      IntStream.range(0, 2).forEach(unbenutzt -> melde(gebremst, MAIL, "falsches-passwort"));
+      IntStream.range(0, 2).forEach(unbenutzt -> melde(gebremst, MAIL, FALSCH));
 
       // When
-      final ResponseEntity<String> antwort = melde(gebremst, MAIL, PASSWORT);
+      final ResponseEntity<String> antwort = melde(gebremst, MAIL, code());
 
       // Then
       assertThat(antwort.getStatusCode()).isEqualTo(HttpStatus.TOO_MANY_REQUESTS);
@@ -334,10 +343,10 @@ class AuthControllerIT extends AbstractIntegrationTest {
     void login_givenMoreFailuresThanTheThreshold_thenNamesTheWaitInMessageAndHeader() {
       // Given — E14: Meldung und Retry-After entstehen im GlobalExceptionHandler, nicht mehr aus
       // einem festen @ResponseStatus.
-      IntStream.range(0, 2).forEach(unbenutzt -> melde(gebremst, MAIL, "falsches-passwort"));
+      IntStream.range(0, 2).forEach(unbenutzt -> melde(gebremst, MAIL, FALSCH));
 
       // When
-      final ResponseEntity<String> antwort = melde(gebremst, MAIL, "falsches-passwort");
+      final ResponseEntity<String> antwort = melde(gebremst, MAIL, FALSCH);
 
       // Then — die Fehlversuche liegen Sekunden zurueck; aufgerundet bleiben 15 Minuten.
       assertThat(antwort.getHeaders().getFirst(HttpHeaders.RETRY_AFTER)).isEqualTo("900");

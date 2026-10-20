@@ -59,8 +59,7 @@ class LogoutUseCaseTest {
   private void kontoMitGeneration(final int generation) {
     when(accounts.findById(KONTO_ID))
         .thenReturn(
-            Optional.of(
-                Konten.gespeichert(KONTO_ID, "manne@example.org", "hash", generation, ANGELEGT)));
+            Optional.of(Konten.gespeichert(KONTO_ID, "manne@example.org", generation, ANGELEGT)));
   }
 
   private Account gespeichertes() {

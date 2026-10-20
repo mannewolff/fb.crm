@@ -1,12 +1,7 @@
 package org.mwolff.fbcrm.auth.application;
 
-import static org.mwolff.fbcrm.auth.infrastructure.LoginAttemptLimiter.Zaehlart.ADRESSE_STUNDE;
-import static org.mwolff.fbcrm.auth.infrastructure.LoginAttemptLimiter.Zaehlart.HERKUNFT;
-
 import java.time.Clock;
 import java.time.Duration;
-import java.util.Collections;
-import java.util.List;
 import java.util.Optional;
 import org.mwolff.fbcrm.auth.AuthProperties;
 import org.mwolff.fbcrm.auth.domain.Account;
@@ -15,24 +10,24 @@ import org.mwolff.fbcrm.auth.domain.SecretHasher;
 import org.mwolff.fbcrm.auth.domain.SessionTokens;
 import org.mwolff.fbcrm.auth.infrastructure.FailedLoginDelay;
 import org.mwolff.fbcrm.auth.infrastructure.LoginAttemptLimiter;
-import org.mwolff.fbcrm.auth.infrastructure.LoginAttemptLimiter.Zaehlart;
 import org.mwolff.fbcrm.common.NumericCodes;
-import org.mwolff.fbcrm.common.SecureTokens;
 import org.springframework.stereotype.Service;
 
 /**
- * Anmelden mit E-Mail-Adresse und Passwort (K5) und einen Code fuer die Anmeldung anfordern (E8).
+ * Anmelden mit E-Mail-Adresse und Code (Kriterium 2) und einen Code fuer die Anmeldung anfordern
+ * (E8).
  *
- * <p>Der Fehlerfall ist der interessante: Eine unbekannte Adresse und ein falsches Passwort fuehren
- * zur selben {@link LoginFailed} und dauern gleich lang. Dafuer wird auch bei unbekannter Adresse
- * ein Argon2-Durchlauf gegen einen Dummy-Hash gerechnet — ohne ihn antwortete die Instanz auf
- * unbekannte Adressen messbar frueher und verriete damit, welche Adressen sie kennt.
+ * <p>Der Fehlerfall ist der interessante: Eine unbekannte Adresse, ein falscher, ein abgelaufener
+ * und ein verbrauchter Code fuehren zur selben {@link LoginFailed} und dauern gleich lang (E13,
+ * Kriterium 3). Den gleichen Rechenaufwand stellt {@link CodeEinloesung} her, die Verzoegerung
+ * danach {@link FailedLoginDelay}.
  *
- * <p><b>Bewusst ohne {@code @Transactional}:</b> Der Anwendungsfall liest genau einmal, und bei
- * einem Fehlschlag haelt er den Thread bis zu 800 ms an ({@link FailedLoginDelay}). Eine
- * Transaktion um das Ganze hielte waehrenddessen eine Datenbankverbindung fest, ohne etwas zu
- * schuetzen. Die Anforderung des Codes braucht ebenfalls keine: Die Ausstellung bringt ihre eigene
- * mit.
+ * <p><b>Bewusst ohne {@code @Transactional}:</b> Bei einem Fehlschlag haelt der Anwendungsfall den
+ * Thread bis zu 800 ms an, und eine Transaktion um das Ganze hielte waehrenddessen eine
+ * Datenbankverbindung fest. Vor allem aber muss die gezaehlte Fehleingabe bestehen bleiben: Eine
+ * Transaktion, die mit {@link LoginFailed} zurueckrollt, naehme sie wieder weg, und der Code
+ * verfiele nie. Jeder Schreibzugriff auf den Bestand bringt darum seine eigene Transaktion mit. Die
+ * Anforderung des Codes braucht ebenfalls keine: Die Ausstellung bringt ihre eigene mit.
  */
 @Service
 public class LoginUseCase {
@@ -43,20 +38,17 @@ public class LoginUseCase {
   private final LoginAttemptLimiter limiter;
   private final FailedLoginDelay delay;
   private final RequestLoginCodeUseCase ausstellung;
+  private final CodeEinloesung einloesung;
   private final NumericCodes codes;
   private final AuthProperties properties;
   private final Clock clock;
 
-  /**
-   * Gegen diesen Hash wird geprueft, wenn es die Adresse nicht gibt.
-   *
-   * <p>Er entsteht einmal beim Hochfahren aus einem frischen Zufallswert. Was dahintersteckt, ist
-   * bedeutungslos und nirgends gueltig — gebraucht wird allein die Rechenzeit des Verfahrens. Darum
-   * steht hier auch kein fester Wert: Der waere ein Passwort im Quellcode, und dieselbe Rechenzeit
-   * kostet ein zufaelliger genauso.
+  /*
+   * PMD.ExcessiveParameterList: Zehn Mitspieler, weil Anmelden und Anfordern sich Bremse, Konten und
+   * Rechenaufwand teilen. Getrennt stuende die Regel „erst zaehlen, dann nach dem Konto sehen" in
+   * zwei Klassen, und genau ihre Gleichheit auf beiden Wegen ist die Zusage aus E13.
    */
-  private final String dummyHash;
-
+  @SuppressWarnings("PMD.ExcessiveParameterList")
   public LoginUseCase(
       final AccountRepository accounts,
       final SecretHasher hasher,
@@ -64,6 +56,7 @@ public class LoginUseCase {
       final LoginAttemptLimiter limiter,
       final FailedLoginDelay delay,
       final RequestLoginCodeUseCase ausstellung,
+      final CodeEinloesung einloesung,
       final NumericCodes codes,
       final AuthProperties properties,
       final Clock clock) {
@@ -73,40 +66,35 @@ public class LoginUseCase {
     this.limiter = limiter;
     this.delay = delay;
     this.ausstellung = ausstellung;
+    this.einloesung = einloesung;
     this.codes = codes;
     this.properties = properties;
     this.clock = clock;
-    this.dummyHash = hasher.hash(new SecureTokens().newToken());
   }
 
   /**
-   * Meldet ein Konto an.
+   * Meldet ein Konto mit dem Code aus der Mail oder dem Protokoll an.
+   *
+   * <p>Die Bremse je Herkunft greift vor allem anderen und zaehlt jede Eingabe (Kriterium 5). Erst
+   * nach einem eingeloesten Code wird nach dem Konto gesehen: Ein Code ohne Konto — etwa der einer
+   * noch laufenden Einrichtung — meldet niemanden an und endet in derselben Abweisung.
    *
    * @param email die eingegebene Adresse
-   * @param rawPassword das eingegebene Passwort
+   * @param code der eingegebene Code
    * @param clientIp die Absender-Adresse fuer die Zaehlbremse (E9)
-   * @throws TooManyLoginAttempts wenn im Fenster zu viele Fehlversuche stehen, mit der
-   *     Restwartezeit
-   * @throws LoginFailed wenn Adresse oder Passwort nicht stimmen
+   * @throws TooManyLoginAttempts wenn die Herkunft gesperrt ist, mit der Restwartezeit
+   * @throws LoginFailed wenn der Code nicht stimmt, abgelaufen oder verbraucht ist oder es zu der
+   *     Adresse kein Konto gibt — fuer jeden Fall dieselbe
    */
-  public LoginResult login(final String email, final String rawPassword, final String clientIp) {
-    final Duration warten = wartezeit(clientIp, email);
-    if (!warten.isZero()) {
-      throw new TooManyLoginAttempts(warten);
-    }
-
-    final Optional<Account> konto = accounts.findByEmail(email);
-    final boolean passt =
-        hasher.matches(rawPassword, konto.map(Account::passwordHash).orElse(dummyHash));
-    if (konto.isEmpty() || !passt) {
-      limiter.record(HERKUNFT, clientIp);
-      limiter.record(ADRESSE_STUNDE, email);
+  public LoginResult login(final String email, final String code, final String clientIp) {
+    einloesung.bremse(clientIp);
+    final Optional<Account> konto =
+        einloesung.loese(email, code, clientIp) ? accounts.findByEmail(email) : Optional.empty();
+    if (konto.isEmpty()) {
       delay.apply();
       throw new LoginFailed();
     }
-
     final Account angemeldet = konto.get();
-    limiter.recordSuccess(clientIp);
     return new LoginResult(angemeldet, cookie(angemeldet));
   }
 
@@ -146,29 +134,6 @@ public class LoginUseCase {
   /** Ein Argon2-Durchlauf, dessen Ergebnis niemand braucht — allein die Rechenzeit zaehlt (E13). */
   private void rechneWieEineAusstellung() {
     hasher.hash(codes.newCode());
-  }
-
-  /**
-   * Die Wartezeit der Bremse, null, wenn keine Zaehlart sperrt.
-   *
-   * <p>Bis zur Umstellung auf den Code zaehlt die Passwortanmeldung ihre Fehlversuche je Herkunft
-   * und je Adresse in der Stunde. Sperren beide, gilt die laengere Wartezeit — wer nach der
-   * kuerzeren wiederkaeme, liefe in die zweite Bremse.
-   */
-  private Duration wartezeit(final String clientIp, final String email) {
-    return Collections.max(List.of(sperre(HERKUNFT, clientIp), sperre(ADRESSE_STUNDE, email)));
-  }
-
-  /**
-   * Die Restwartezeit einer Zaehlart, null, wenn sie zulaesst.
-   *
-   * <p>Ist das Fenster zwischen der Frage und der Restwartezeit abgelaufen, ist die Restwartezeit
-   * ebenfalls null — und der Versuch darf durch, weil die Sperre dann tatsaechlich vorbei ist.
-   */
-  private Duration sperre(final Zaehlart art, final String schluessel) {
-    return limiter.isAllowed(art, schluessel)
-        ? Duration.ZERO
-        : limiter.restwartezeit(art, schluessel);
   }
 
   private SessionCookie cookie(final Account konto) {

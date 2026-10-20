@@ -26,7 +26,12 @@ import org.springframework.test.context.TestPropertySource;
  * den Pfad kennt. Ein zweites Feld — Version, Adresse des Betreibers, Zeitpunkt der Einrichtung —
  * waere eine Auskunft an jeden Scanner im Netz.
  */
-@TestPropertySource(properties = "fbcrm.setup.bootstrap-token=" + SetupControllerIT.SCHLUESSEL)
+@TestPropertySource(
+    properties = {
+      "fbcrm.setup.bootstrap-token=" + SetupControllerIT.SCHLUESSEL,
+      "fbcrm.mail.enabled=true",
+      "fbcrm.auth.login-max-attempts=1000"
+    })
 class SetupStatusIT extends AbstractIntegrationTest {
 
   private static final ObjectMapper JSON = new ObjectMapper();
@@ -42,7 +47,7 @@ class SetupStatusIT extends AbstractIntegrationTest {
 
   @BeforeEach
   void leereDieDatenbank() {
-    jdbc.execute("TRUNCATE outbox_message, account RESTART IDENTITY CASCADE");
+    SetupControllerIT.leere(jdbc);
   }
 
   private ResponseEntity<String> status() {
@@ -54,13 +59,7 @@ class SetupStatusIT extends AbstractIntegrationTest {
   }
 
   private void richteEin() {
-    SetupControllerIT.richteEin(
-        rest,
-        SetupControllerIT.rumpf(
-            SetupControllerIT.MAIL,
-            SetupControllerIT.MAIL,
-            SetupControllerIT.PASSWORT,
-            SetupControllerIT.SCHLUESSEL));
+    SetupControllerIT.richteVollstaendigEin(rest, jdbc, SetupControllerIT.MAIL);
   }
 
   @Test

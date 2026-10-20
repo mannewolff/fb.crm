@@ -16,7 +16,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Anmelden, abmelden, einen Code anfordern und das eigene Konto lesen.
+ * Einen Code anfordern, mit ihm anmelden, abmelden und das eigene Konto lesen.
  *
  * <p>Der Controller entscheidet nichts: Er nimmt die Eingaben, holt die Absender-Adresse fuer die
  * Zaehlbremse, delegiert und uebersetzt das Ergebnis in Statuscode und Cookie (CLAUDE-java.md
@@ -57,7 +57,7 @@ public class AuthController {
   public ResponseEntity<AccountResponse> login(
       @Valid @RequestBody final LoginRequest anfrage, final HttpServletRequest request) {
     final LoginResult ergebnis =
-        loginUseCase.login(anfrage.email(), anfrage.password(), clientIp.resolve(request));
+        loginUseCase.login(anfrage.email(), anfrage.code(), clientIp.resolve(request));
     return ResponseEntity.ok()
         .header(HttpHeaders.SET_COOKIE, cookies.header(ergebnis.cookie()))
         .body(AccountResponse.of(ergebnis.account()));

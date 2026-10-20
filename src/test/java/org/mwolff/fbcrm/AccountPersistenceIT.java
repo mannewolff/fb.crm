@@ -6,6 +6,7 @@ import java.time.Instant;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mwolff.fbcrm.auth.Anmeldung;
 import org.mwolff.fbcrm.auth.Konten;
 import org.mwolff.fbcrm.auth.application.LoginResult;
 import org.mwolff.fbcrm.auth.application.LoginUseCase;
@@ -26,7 +27,6 @@ import org.springframework.jdbc.core.JdbcTemplate;
 class AccountPersistenceIT extends AbstractIntegrationTest {
 
   private static final String MAIL = "manne@example.org";
-  private static final String PASSWORT = "richtiges-passwort";
   private static final String IP = "203.0.113.7";
   private static final String NEUES_GEHEIMNIS = "ein-zweites-geheimnis-mit-genug-zeichen-drin";
 
@@ -46,7 +46,7 @@ class AccountPersistenceIT extends AbstractIntegrationTest {
   void legeDasAdminKontoAn() {
     jdbc.execute("TRUNCATE outbox_message, account RESTART IDENTITY CASCADE");
     final Instant jetzt = Instant.parse("2026-09-18T10:00:00Z");
-    accounts.save(Konten.neu(MAIL, hasher.hash(PASSWORT), jetzt));
+    accounts.save(Konten.neu(MAIL, jetzt));
   }
 
   /**
@@ -74,11 +74,19 @@ class AccountPersistenceIT extends AbstractIntegrationTest {
                 .toArray(String[]::new));
   }
 
+  /**
+   * Ein Code, wie ihn die Anforderung hinterliesse — er gilt in jeder Instanz gegen diese
+   * Datenbank.
+   */
+  private String code() {
+    return Anmeldung.hinterlegeCode(jdbc, hasher, MAIL);
+  }
+
   @Test
   void login_afterRestartingTheInstance_thenTheSameAccountSignsIn() {
     // When
     try (ConfigurableApplicationContext neu = neueInstanz()) {
-      final LoginResult ergebnis = neu.getBean(LoginUseCase.class).login(MAIL, PASSWORT, IP);
+      final LoginResult ergebnis = neu.getBean(LoginUseCase.class).login(MAIL, code(), IP);
 
       // Then
       assertThat(ergebnis.account().email()).isEqualTo(MAIL);
@@ -89,7 +97,7 @@ class AccountPersistenceIT extends AbstractIntegrationTest {
   void login_afterRestartingTheInstance_thenTheDisplayNameSurvived() {
     // When
     try (ConfigurableApplicationContext neu = neueInstanz()) {
-      final LoginResult ergebnis = neu.getBean(LoginUseCase.class).login(MAIL, PASSWORT, IP);
+      final LoginResult ergebnis = neu.getBean(LoginUseCase.class).login(MAIL, code(), IP);
 
       // Then
       assertThat(ergebnis.account().displayName()).isEqualTo("Manne");

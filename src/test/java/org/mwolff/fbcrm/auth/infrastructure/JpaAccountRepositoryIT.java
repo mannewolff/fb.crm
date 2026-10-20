@@ -29,7 +29,7 @@ class JpaAccountRepositoryIT extends AbstractIntegrationTest {
   }
 
   private static Account neuesKonto(final String email) {
-    return Konten.neu(email, "hash", ANGELEGT);
+    return Konten.neu(email, ANGELEGT);
   }
 
   @BeforeEach

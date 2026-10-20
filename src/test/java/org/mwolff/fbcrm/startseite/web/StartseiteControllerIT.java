@@ -6,11 +6,11 @@ import static org.assertj.core.api.Assertions.tuple;
 import java.time.Instant;
 import java.time.Year;
 import java.time.YearMonth;
-import java.util.Map;
 import java.util.Objects;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mwolff.fbcrm.AbstractIntegrationTest;
+import org.mwolff.fbcrm.auth.Anmeldung;
 import org.mwolff.fbcrm.auth.Konten;
 import org.mwolff.fbcrm.auth.domain.AccountRepository;
 import org.mwolff.fbcrm.auth.domain.SecretHasher;
@@ -53,7 +53,6 @@ import org.springframework.jdbc.core.JdbcTemplate;
 class StartseiteControllerIT extends AbstractIntegrationTest {
 
   private static final String MAIL = "manne@example.org";
-  private static final String PASSWORT = "richtiges-passwort";
   private static final Instant ANGELEGT = Instant.parse("2026-11-01T08:00:00Z");
   private static final String PFAD = "/api/startseite";
 
@@ -82,18 +81,8 @@ class StartseiteControllerIT extends AbstractIntegrationTest {
         "TRUNCATE arbeitszeit, rechnung_position, rechnung, angebot_position, angebot,"
             + " ansprechpartner, firma RESTART IDENTITY CASCADE");
     jdbc.execute("TRUNCATE outbox_message, account RESTART IDENTITY CASCADE");
-    accounts.save(Konten.neu(MAIL, hasher.hash(PASSWORT), ANGELEGT));
-    sitzung = angemeldeterKopf();
-  }
-
-  private HttpHeaders angemeldeterKopf() {
-    final ResponseEntity<String> anmeldung =
-        rest.postForEntity(
-            "/api/auth/login", Map.of("email", MAIL, "password", PASSWORT), String.class);
-    final String gesetzt = String.valueOf(anmeldung.getHeaders().getFirst(HttpHeaders.SET_COOKIE));
-    final HttpHeaders kopf = new HttpHeaders();
-    kopf.add(HttpHeaders.COOKIE, gesetzt.substring(0, gesetzt.indexOf(';')));
-    return kopf;
+    accounts.save(Konten.neu(MAIL, ANGELEGT));
+    sitzung = Anmeldung.perCode(rest, jdbc, hasher, MAIL);
   }
 
   private <T> ResponseEntity<T> ruf(final String pfad, final Class<T> typ) {

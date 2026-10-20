@@ -18,6 +18,7 @@ import org.mwolff.fbcrm.angebot.domain.Angebotsstatus;
 import org.mwolff.fbcrm.angebot.web.AngebotPositionResponse;
 import org.mwolff.fbcrm.angebot.web.AngebotResponse;
 import org.mwolff.fbcrm.angebot.web.FirmaAngeboteResponse;
+import org.mwolff.fbcrm.auth.Anmeldung;
 import org.mwolff.fbcrm.auth.Konten;
 import org.mwolff.fbcrm.auth.domain.AccountRepository;
 import org.mwolff.fbcrm.auth.domain.SecretHasher;
@@ -53,7 +54,6 @@ import org.springframework.jdbc.core.JdbcTemplate;
 class AngebotIT extends AbstractIntegrationTest {
 
   private static final String MAIL = "manne@example.org";
-  private static final String PASSWORT = "richtiges-passwort";
   private static final Instant ANGELEGT = Instant.parse("2026-09-01T08:00:00Z");
   private static final String TITEL = "Website-Relaunch";
 
@@ -90,8 +90,8 @@ class AngebotIT extends AbstractIntegrationTest {
     ansprechpartnerId = ansprechpartner(firmaId, "Adler");
     fremderAnsprechpartnerId = ansprechpartner(firma("Biber GmbH"), "Biber");
     jdbc.execute("TRUNCATE outbox_message, account RESTART IDENTITY CASCADE");
-    accounts.save(Konten.neu(MAIL, hasher.hash(PASSWORT), ANGELEGT));
-    sitzung = angemeldeterKopf();
+    accounts.save(Konten.neu(MAIL, ANGELEGT));
+    sitzung = Anmeldung.perCode(rest, jdbc, hasher, MAIL);
   }
 
   private long firma(final String name) {
@@ -110,16 +110,6 @@ class AngebotIT extends AbstractIntegrationTest {
             jdbc.queryForObject(
                 "SELECT id FROM ansprechpartner WHERE nachname = ?", Long.class, nachname))
         .longValue();
-  }
-
-  private HttpHeaders angemeldeterKopf() {
-    final ResponseEntity<String> anmeldung =
-        rest.postForEntity(
-            "/api/auth/login", Map.of("email", MAIL, "password", PASSWORT), String.class);
-    final String gesetzt = String.valueOf(anmeldung.getHeaders().getFirst(HttpHeaders.SET_COOKIE));
-    final HttpHeaders kopf = new HttpHeaders();
-    kopf.add(HttpHeaders.COOKIE, gesetzt.substring(0, gesetzt.indexOf(';')));
-    return kopf;
   }
 
   private <T> ResponseEntity<T> ruf(

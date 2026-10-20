@@ -40,13 +40,20 @@ public class SetupController {
     this.cookies = cookies;
   }
 
-  /** Richtet ein und meldet den Betreiber im selben Zug an (K3). */
+  /**
+   * Bestaetigt die Einrichtung mit dem Code, legt das Konto an und meldet den Betreiber im selben
+   * Zug an (K3, E9).
+   */
   @PostMapping
   public ResponseEntity<AccountResponse> initialize(
-      @Valid @RequestBody final SetupRequest anfrage) {
+      @Valid @RequestBody final SetupRequest anfrage, final HttpServletRequest request) {
     final LoginResult ergebnis =
         einrichtung.initialize(
-            anfrage.email(), anfrage.displayName(), anfrage.password(), anfrage.bootstrapToken());
+            anfrage.email(),
+            anfrage.displayName(),
+            anfrage.code(),
+            anfrage.bootstrapToken(),
+            clientIp.resolve(request));
     return ResponseEntity.ok()
         .header(HttpHeaders.SET_COOKIE, cookies.header(ergebnis.cookie()))
         .body(AccountResponse.of(ergebnis.account()));

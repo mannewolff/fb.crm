@@ -46,29 +46,30 @@ import org.mwolff.fbcrm.auth.infrastructure.LoginAttemptLimiter;
 import org.mwolff.fbcrm.common.NumericCodes;
 import org.mwolff.fbcrm.mail.MailProperties;
 import org.mwolff.fbcrm.mail.application.EnqueueMailUseCase;
+import org.springframework.core.annotation.AnnotatedElementUtils;
+import org.springframework.web.bind.annotation.ResponseStatus;
 
 /**
- * Anmelden (K5) und einen Code anfordern (E8, E13) — und vor allem, was dabei <b>nicht</b> nach
- * aussen dringt.
+ * Anmelden per Code (Kriterium 2 bis 4) und einen Code anfordern (E8, E13) — und vor allem, was
+ * dabei <b>nicht</b> nach aussen dringt.
  *
- * <p>Die Mocks sind hier von Hand gesetzt statt ueber {@code @InjectMocks}: Der Anwendungsfall
- * rechnet seinen Dummy-Hash schon im Konstruktor, und der muss feststehen, bevor er entsteht.
- *
- * <p>Fuer die Anforderung des Codes laufen Ausstellung und Zaehlbremse <b>echt</b>; gemockt sind
- * nur ihre Raender — der Bestand der Codes, der Postausgang und der Hasher. Erst so laesst sich
- * zeigen, dass die Adresse des Kontos und die unbekannte Adresse gleich viel rechnen (E13) und dass
- * die sechste Anforderung in der Stunde fuer beide gleich abgewiesen wird (Kriterium 5).
+ * <p>Ausstellung, Einloesung und Zaehlbremse laufen <b>echt</b>; gemockt sind nur ihre Raender —
+ * der Bestand der Konten und der Codes, der Postausgang, der Hasher und die Verzoegerung. Erst so
+ * laesst sich zeigen, dass die Adresse des Kontos und die unbekannte Adresse gleich viel rechnen
+ * (E13) und dass die sechste Anforderung in der Stunde fuer beide gleich abgewiesen wird (Kriterium
+ * 5). Wie die Einloesung mit der Zeile des Codes umgeht, weist {@code CodeEinloesungTest} nach.
  */
 class LoginUseCaseTest {
 
   private static final String MAIL = "manne@example.org";
   private static final String FREMD = "fremd@example.org";
-  private static final String PASSWORT = "richtiges-passwort";
-  private static final String HASH = "argon2-hash-des-kontos";
+  private static final String CODE = "042424";
+  private static final String HASH = "argon2-hash-des-codes";
   private static final String DUMMY_HASH = "argon2-hash-ohne-konto";
   private static final String IP = "203.0.113.7";
   private static final Instant JETZT = Instant.parse("2026-09-18T10:00:00Z");
   private static final Duration LAUFZEIT = Duration.ofDays(1);
+  private static final Duration CODE_LAUFZEIT = Duration.ofMinutes(10);
   private static final long KONTO_ID = 42L;
   private static final int GENERATION = 3;
   private static final String TOKEN = "token.signatur";
@@ -76,15 +77,12 @@ class LoginUseCaseTest {
   private final AccountRepository accounts = mock(AccountRepository.class);
   private final SecretHasher hasher = mock(SecretHasher.class);
   private final SessionTokens tokens = mock(SessionTokens.class);
-  private final LoginAttemptLimiter limiter = mock(LoginAttemptLimiter.class);
   private final FailedLoginDelay delay = mock(FailedLoginDelay.class);
   private final LoginCodeRepository loginCodes = mock(LoginCodeRepository.class);
   private final EnqueueMailUseCase postausgang = mock(EnqueueMailUseCase.class);
   private final Clock uhr = Clock.fixed(JETZT, ZoneOffset.UTC);
 
-  /**
-   * Die echte Zaehlbremse der Anforderungen, bespitzelt, damit sich das Zaehlen nachweisen laesst.
-   */
+  /** Die echte Zaehlbremse, bespitzelt, damit sich das Zaehlen nachweisen laesst. */
   private final LoginAttemptLimiter zaehler = spy(new LoginAttemptLimiter(schalter(), uhr));
 
   private LoginUseCase useCase;
@@ -101,13 +99,13 @@ class LoginUseCaseTest {
         Duration.ofHours(1),
         10,
         Duration.ofHours(24),
-        Duration.ofMinutes(10),
+        CODE_LAUFZEIT,
         5,
         List.of());
   }
 
   private static Account konto() {
-    return Konten.gespeichert(KONTO_ID, MAIL, HASH, GENERATION, JETZT);
+    return Konten.gespeichert(KONTO_ID, MAIL, GENERATION, JETZT);
   }
 
   /** Die echte Ausstellung; gemockt sind nur Bestand, Postausgang und Hasher. */
@@ -122,14 +120,16 @@ class LoginUseCaseTest {
         uhr);
   }
 
-  private LoginUseCase anwendungsfall(final LoginAttemptLimiter bremse) {
+  /** Der Anwendungsfall; die Einloesung des Codes liest die Zeit von der genannten Uhr. */
+  private LoginUseCase anwendungsfall(final Clock einloeseUhr) {
     return new LoginUseCase(
         accounts,
         hasher,
         tokens,
-        bremse,
+        zaehler,
         delay,
         ausstellung(),
+        new CodeEinloesung(loginCodes, hasher, zaehler, schalter(), einloeseUhr),
         new NumericCodes(),
         schalter(),
         uhr);
@@ -138,18 +138,9 @@ class LoginUseCaseTest {
   @BeforeEach
   void baueDenAnwendungsfall() {
     when(hasher.hash(anyString())).thenReturn(DUMMY_HASH);
-    useCase = anwendungsfall(limiter);
-  }
-
-  /**
-   * Der Anwendungsfall fuer die Anforderung des Codes: mit echter Zaehlbremse und ohne die Spuren
-   * seines Konstruktors — der rechnet einmal den Dummy-Hash, und der zaehlt hier nicht mit.
-   */
-  private LoginUseCase anforderung() {
     when(loginCodes.save(any(LoginCode.class))).thenAnswer(aufruf -> aufruf.getArgument(0));
-    final LoginUseCase anforderung = anwendungsfall(zaehler);
+    useCase = anwendungsfall(uhr);
     clearInvocations(hasher);
-    return anforderung;
   }
 
   private static void fordereFuenfmalAn(final LoginUseCase anforderung, final String email) {
@@ -160,85 +151,53 @@ class LoginUseCaseTest {
     when(accounts.findByEmail(email)).thenReturn(Optional.empty());
   }
 
-  private void erlaubeVersuch() {
-    when(limiter.isAllowed(HERKUNFT, IP)).thenReturn(true);
-    when(limiter.isAllowed(ADRESSE_STUNDE, MAIL)).thenReturn(true);
-  }
-
-  private void bremseHerkunft(final Duration rest) {
-    when(limiter.isAllowed(HERKUNFT, IP)).thenReturn(false);
-    when(limiter.restwartezeit(HERKUNFT, IP)).thenReturn(rest);
-  }
-
-  private void bremseAdresse(final Duration rest) {
-    when(limiter.isAllowed(ADRESSE_STUNDE, MAIL)).thenReturn(false);
-    when(limiter.restwartezeit(ADRESSE_STUNDE, MAIL)).thenReturn(rest);
-  }
-
   private void kontoVorhanden() {
     when(accounts.findByEmail(MAIL)).thenReturn(Optional.of(konto()));
   }
 
   private void kontoUnbekannt() {
-    when(accounts.findByEmail(MAIL)).thenReturn(Optional.empty());
+    kontoUnbekannt(MAIL);
   }
 
-  private LoginUseCase nochEinAnwendungsfall() {
-    return anwendungsfall(limiter);
+  /** Zu MAIL liegt ein frischer Code, dessen Hash HASH ist. */
+  private void codeLiegtVor() {
+    when(loginCodes.findByEmail(MAIL))
+        .thenReturn(Optional.of(LoginCode.ausgestellt(MAIL, HASH, JETZT, CODE_LAUFZEIT)));
+  }
+
+  private void codeStimmt() {
+    codeLiegtVor();
+    when(hasher.matches(CODE, HASH)).thenReturn(true);
+  }
+
+  private void codeFalsch() {
+    codeLiegtVor();
+    when(hasher.matches(CODE, HASH)).thenReturn(false);
   }
 
   @Test
-  void construction_givenTheUseCase_thenHashesOneNonEmptyValueExactlyOnce() {
-    // Given — der Anwendungsfall ist in baueDenAnwendungsfall() schon entstanden.
-    final ArgumentCaptor<String> gehasht = ArgumentCaptor.forClass(String.class);
-
-    // When / Then — ein Argon2-Durchlauf beim Hochfahren, nicht einer je Anmeldung. Welcher Wert
-    // es ist, steht nirgends: Er ist bedeutungslos, gebraucht wird allein die Rechenzeit.
-    verify(hasher).hash(gehasht.capture());
-    assertThat(gehasht.getValue()).isNotBlank();
-  }
-
-  @Test
-  void construction_givenASecondUseCase_thenItsDummyHashRestsOnItsOwnRandomValue() {
+  void login_givenTheRightCode_thenReturnsTheAccount() {
     // Given
-    final ArgumentCaptor<String> gehasht = ArgumentCaptor.forClass(String.class);
-
-    // When
-    nochEinAnwendungsfall();
-
-    // Then — zwei Instanzen, zwei verschiedene Werte. Eine Konstante im Quellcode waere hier
-    // zweimal derselbe Wert und stuende als Passwort in einem oeffentlichen Repository.
-    verify(hasher, times(2)).hash(gehasht.capture());
-    assertThat(gehasht.getAllValues())
-        .doesNotHaveDuplicates()
-        .allSatisfy(wert -> assertThat(wert).isNotBlank());
-  }
-
-  @Test
-  void login_givenTheRightCredentials_thenReturnsTheAccount() {
-    // Given
-    erlaubeVersuch();
     kontoVorhanden();
-    when(hasher.matches(PASSWORT, HASH)).thenReturn(true);
+    codeStimmt();
     when(tokens.encode(KONTO_ID, GENERATION, JETZT, LAUFZEIT)).thenReturn(TOKEN);
 
     // When
-    final LoginResult ergebnis = useCase.login(MAIL, PASSWORT, IP);
+    final LoginResult ergebnis = useCase.login(MAIL, CODE, IP);
 
     // Then
     assertThat(ergebnis.account()).isEqualTo(konto());
   }
 
   @Test
-  void login_givenTheRightCredentials_thenPutsTheFreshTokenIntoTheCookie() {
+  void login_givenTheRightCode_thenPutsTheFreshTokenIntoTheCookie() {
     // Given
-    erlaubeVersuch();
     kontoVorhanden();
-    when(hasher.matches(PASSWORT, HASH)).thenReturn(true);
+    codeStimmt();
     when(tokens.encode(KONTO_ID, GENERATION, JETZT, LAUFZEIT)).thenReturn(TOKEN);
 
     // When
-    final LoginResult ergebnis = useCase.login(MAIL, PASSWORT, IP);
+    final LoginResult ergebnis = useCase.login(MAIL, CODE, IP);
 
     // Then — Name, Laufzeit und Secure-Merkmal kommen aus den Schaltern (E4).
     assertThat(ergebnis.cookie())
@@ -246,224 +205,187 @@ class LoginUseCaseTest {
   }
 
   @Test
-  void login_givenTheRightCredentials_thenClearsTheAttemptCounters() {
-    // Given
-    erlaubeVersuch();
+  void login_givenTheRightCode_thenUsesItUp() {
+    // Given — Kriterium 4: der Code gilt nur einmal.
     kontoVorhanden();
-    when(hasher.matches(PASSWORT, HASH)).thenReturn(true);
+    codeStimmt();
     when(tokens.encode(anyLong(), anyLong(), any(), any())).thenReturn(TOKEN);
 
     // When
-    useCase.login(MAIL, PASSWORT, IP);
+    useCase.login(MAIL, CODE, IP);
 
-    // Then — geloescht wird nur die Herkunft; die Adresszaehler bleiben stehen (E3).
-    verify(limiter).recordSuccess(IP);
+    // Then
+    verify(loginCodes).deleteByEmail(MAIL);
   }
 
   @Test
-  void login_givenTheRightCredentials_thenDoesNotDelayTheAnswer() {
+  void login_givenTheRightCode_thenDoesNotDelayTheAnswer() {
     // Given
-    erlaubeVersuch();
     kontoVorhanden();
-    when(hasher.matches(PASSWORT, HASH)).thenReturn(true);
+    codeStimmt();
     when(tokens.encode(anyLong(), anyLong(), any(), any())).thenReturn(TOKEN);
 
     // When
-    useCase.login(MAIL, PASSWORT, IP);
+    useCase.login(MAIL, CODE, IP);
 
     // Then
     verify(delay, never()).apply();
   }
 
   @Test
-  void login_givenAWrongPassword_thenFails() {
+  void login_givenTheRightCode_thenClearsTheCounterOfTheOriginButNotThoseOfTheAddress() {
     // Given
-    erlaubeVersuch();
     kontoVorhanden();
-    when(hasher.matches(PASSWORT, HASH)).thenReturn(false);
-
-    // When / Then
-    assertThatThrownBy(() -> useCase.login(MAIL, PASSWORT, IP)).isInstanceOf(LoginFailed.class);
-  }
-
-  @Test
-  void login_givenAnUnknownAddress_thenFailsWithTheSameException() {
-    // Given — K5: kein anderer Typ, keine andere Meldung als beim falschen Passwort.
-    erlaubeVersuch();
-    kontoUnbekannt();
-    when(hasher.matches(PASSWORT, DUMMY_HASH)).thenReturn(false);
-
-    // When / Then
-    assertThatThrownBy(() -> useCase.login(MAIL, PASSWORT, IP)).isInstanceOf(LoginFailed.class);
-  }
-
-  @Test
-  void login_givenAnUnknownAddress_thenStillSpendsTheTimeOfAHashCheck() {
-    // Given — ohne den Dummy-Hash antwortete die Instanz auf unbekannte Adressen frueher (K5).
-    erlaubeVersuch();
-    kontoUnbekannt();
-    when(hasher.matches(PASSWORT, DUMMY_HASH)).thenReturn(false);
+    codeStimmt();
+    when(tokens.encode(anyLong(), anyLong(), any(), any())).thenReturn(TOKEN);
 
     // When
-    assertThatThrownBy(() -> useCase.login(MAIL, PASSWORT, IP)).isInstanceOf(LoginFailed.class);
+    useCase.login(MAIL, CODE, IP);
 
-    // Then
-    verify(hasher).matches(PASSWORT, DUMMY_HASH);
+    // Then — geloescht wird nur die Herkunft; die Adresszaehler bleiben stehen (E3).
+    verify(zaehler).recordSuccess(IP);
+    verify(zaehler, never()).record(eq(ADRESSE_STUNDE), anyString());
   }
 
   @Test
-  void login_givenAnUnknownAddressWhoseDummyHashMatches_thenStillFails() {
-    // Given — selbst wenn der Dummy-Hash je passte, entsteht daraus keine Sitzung.
-    erlaubeVersuch();
-    kontoUnbekannt();
-    when(hasher.matches(PASSWORT, DUMMY_HASH)).thenReturn(true);
+  void login_givenAWrongCode_thenFails() {
+    // Given
+    kontoVorhanden();
+    codeFalsch();
 
     // When / Then
-    assertThatThrownBy(() -> useCase.login(MAIL, PASSWORT, IP)).isInstanceOf(LoginFailed.class);
+    assertThatThrownBy(() -> useCase.login(MAIL, CODE, IP)).isInstanceOf(LoginFailed.class);
   }
 
   @Test
-  void login_givenAWrongPassword_thenCountsTheFailure() {
+  void login_givenAWrongCode_thenDelaysTheAnswer() {
     // Given
-    erlaubeVersuch();
     kontoVorhanden();
-    when(hasher.matches(PASSWORT, HASH)).thenReturn(false);
+    codeFalsch();
 
     // When
-    assertThatThrownBy(() -> useCase.login(MAIL, PASSWORT, IP)).isInstanceOf(LoginFailed.class);
-
-    // Then — bis zur Umstellung auf den Code zaehlt der Fehlversuch je Herkunft und je Adresse.
-    verify(limiter).record(HERKUNFT, IP);
-    verify(limiter).record(ADRESSE_STUNDE, MAIL);
-  }
-
-  @Test
-  void login_givenAWrongPassword_thenDelaysTheAnswer() {
-    // Given
-    erlaubeVersuch();
-    kontoVorhanden();
-    when(hasher.matches(PASSWORT, HASH)).thenReturn(false);
-
-    // When
-    assertThatThrownBy(() -> useCase.login(MAIL, PASSWORT, IP)).isInstanceOf(LoginFailed.class);
+    assertThatThrownBy(() -> useCase.login(MAIL, CODE, IP)).isInstanceOf(LoginFailed.class);
 
     // Then
     verify(delay).apply();
   }
 
   @Test
-  void login_givenTheRightCredentials_thenCountsNothing() {
+  void login_givenAWrongCode_thenNeitherLooksUpTheAccountNorIssuesASession() {
     // Given
-    erlaubeVersuch();
     kontoVorhanden();
-    when(hasher.matches(PASSWORT, HASH)).thenReturn(true);
-    when(tokens.encode(anyLong(), anyLong(), any(), any())).thenReturn(TOKEN);
+    codeFalsch();
 
     // When
-    useCase.login(MAIL, PASSWORT, IP);
+    assertThatThrownBy(() -> useCase.login(MAIL, CODE, IP)).isInstanceOf(LoginFailed.class);
 
     // Then
-    verify(limiter, never()).record(any(), anyString());
+    verify(accounts, never()).findByEmail(anyString());
+    verify(tokens, never()).encode(anyLong(), anyLong(), any(), any());
   }
 
   @Test
-  void login_givenTheOriginIsBraked_thenRefusesWithItsRemainingWait() {
-    // Given
-    bremseHerkunft(Duration.ofMinutes(15));
-    when(limiter.isAllowed(ADRESSE_STUNDE, MAIL)).thenReturn(true);
+  void login_givenAnUnknownAddress_thenFailsWithTheSameMessageAfterTheSameHashCheck() {
+    // Given — Kriterium 3: kein anderer Typ, keine andere Meldung als beim falschen Code.
+    kontoVorhanden();
+    codeFalsch();
+    final Throwable falscherCode = catchThrowable(() -> useCase.login(MAIL, CODE, IP));
+    when(loginCodes.findByEmail(FREMD)).thenReturn(Optional.empty());
 
-    // When / Then — E14: die Ausnahme traegt die Restwartezeit.
-    assertThatThrownBy(() -> useCase.login(MAIL, PASSWORT, IP))
+    // When
+    final Throwable unbekannt = catchThrowable(() -> useCase.login(FREMD, CODE, IP));
+
+    // Then — E13: auch hier ein Argon2-Vergleich, gegen den Wegwerf-Hash.
+    assertThat(unbekannt).isInstanceOf(LoginFailed.class).hasMessage(falscherCode.getMessage());
+    verify(hasher).matches(CODE, DUMMY_HASH);
+    verify(delay, times(2)).apply();
+  }
+
+  @Test
+  void login_givenARightCodeWithoutAnAccount_thenFails() {
+    // Given — etwa der Code einer laufenden Einrichtung: Er meldet niemanden an.
+    kontoUnbekannt();
+    codeStimmt();
+
+    // When / Then
+    assertThatThrownBy(() -> useCase.login(MAIL, CODE, IP)).isInstanceOf(LoginFailed.class);
+    verify(delay).apply();
+  }
+
+  @Test
+  void login_thenCountsTheInputAtTheOriginBeforeTheCodeIsLookedAt() {
+    // Given — Kriterium 5: Eingaben zaehlen je Herkunft, die gescheiterten wie die gelungenen.
+    kontoVorhanden();
+    codeFalsch();
+    final InOrder reihenfolge = inOrder(zaehler, loginCodes);
+
+    // When
+    assertThatThrownBy(() -> useCase.login(MAIL, CODE, IP)).isInstanceOf(LoginFailed.class);
+
+    // Then
+    reihenfolge.verify(zaehler).record(HERKUNFT, IP);
+    reihenfolge.verify(loginCodes).findByEmail(MAIL);
+  }
+
+  @Test
+  void login_givenTenFailedInputsFromTheOrigin_thenRefusesWithTheWaitBeforeLookingAtTheCode() {
+    // Given — die Bremse greift vor der Pruefung, sonst waere sie keine.
+    kontoVorhanden();
+    codeFalsch();
+    IntStream.range(0, 10)
+        .forEach(
+            unbenutzt ->
+                assertThatThrownBy(() -> useCase.login(MAIL, CODE, IP))
+                    .isInstanceOf(LoginFailed.class));
+    clearInvocations(loginCodes, hasher);
+
+    // When / Then
+    assertThatThrownBy(() -> useCase.login(MAIL, CODE, IP))
         .isInstanceOfSatisfying(
             TooManyLoginAttempts.class,
             gebremst -> assertThat(gebremst.restwartezeit()).isEqualTo(Duration.ofMinutes(15)));
+    verifyNoInteractions(loginCodes, hasher);
   }
 
   @Test
-  void login_givenTheAddressIsBraked_thenRefusesWithItsRemainingWait() {
-    // Given
-    when(limiter.isAllowed(HERKUNFT, IP)).thenReturn(true);
-    bremseAdresse(Duration.ofMinutes(42));
-
-    // When / Then
-    assertThatThrownBy(() -> useCase.login(MAIL, PASSWORT, IP))
-        .isInstanceOfSatisfying(
-            TooManyLoginAttempts.class,
-            gebremst -> assertThat(gebremst.restwartezeit()).isEqualTo(Duration.ofMinutes(42)));
-  }
-
-  @Test
-  void login_givenBothAreBraked_thenNamesTheLongerWait() {
-    // Given — wer nach der kuerzeren Zeit wiederkaeme, liefe in die zweite Bremse.
-    bremseHerkunft(Duration.ofMinutes(15));
-    bremseAdresse(Duration.ofMinutes(42));
-
-    // When / Then
-    assertThatThrownBy(() -> useCase.login(MAIL, PASSWORT, IP))
-        .isInstanceOfSatisfying(
-            TooManyLoginAttempts.class,
-            gebremst -> assertThat(gebremst.restwartezeit()).isEqualTo(Duration.ofMinutes(42)));
-  }
-
-  @Test
-  void login_givenBothAreBrakedTheOtherWayRound_thenStillNamesTheLongerWait() {
-    // Given
-    bremseHerkunft(Duration.ofMinutes(42));
-    bremseAdresse(Duration.ofMinutes(15));
-
-    // When / Then
-    assertThatThrownBy(() -> useCase.login(MAIL, PASSWORT, IP))
-        .isInstanceOfSatisfying(
-            TooManyLoginAttempts.class,
-            gebremst -> assertThat(gebremst.restwartezeit()).isEqualTo(Duration.ofMinutes(42)));
-  }
-
-  @Test
-  void login_givenABrakeWhoseWindowRanOutMeanwhile_thenLetsTheAttemptThrough() {
-    // Given — zwischen der Frage und der Restwartezeit ist der letzte Eintrag herausgefallen.
-    bremseHerkunft(Duration.ZERO);
-    when(limiter.isAllowed(ADRESSE_STUNDE, MAIL)).thenReturn(true);
+  @DisplayName("Szenario: Abgelaufener Code")
+  void szenarioAbgelaufenerCode_thenRejectedWithTheHintToRequestANewOne() {
+    // Given — ein Code, angefordert vor mehr als login-code-ttl: Die Uhr der Einloesung ist um mehr
+    // als die Laufzeit vorgestellt.
     kontoVorhanden();
-    when(hasher.matches(PASSWORT, HASH)).thenReturn(true);
-    when(tokens.encode(anyLong(), anyLong(), any(), any())).thenReturn(TOKEN);
+    useCase.codeAnfordern(MAIL, IP);
+    final ArgumentCaptor<LoginCode> ausgestellt = ArgumentCaptor.forClass(LoginCode.class);
+    verify(loginCodes).save(ausgestellt.capture());
+    final ArgumentCaptor<String> mailtext = ArgumentCaptor.forClass(String.class);
+    verify(postausgang).enqueue(eq(MAIL), anyString(), mailtext.capture());
+    final String code =
+        mailtext
+            .getValue()
+            .lines()
+            .filter(zeile -> zeile.matches("\\d{6}"))
+            .findFirst()
+            .orElseThrow();
+    when(loginCodes.findByEmail(MAIL)).thenReturn(Optional.of(ausgestellt.getValue()));
+    when(hasher.matches(code, ausgestellt.getValue().codeHash())).thenReturn(true);
+    final LoginUseCase spaeter = anwendungsfall(Clock.offset(uhr, CODE_LAUFZEIT.plusSeconds(1)));
 
     // When
-    final LoginResult ergebnis = useCase.login(MAIL, PASSWORT, IP);
+    final Throwable abgewiesen = catchThrowable(() -> spaeter.login(MAIL, code, IP));
 
-    // Then
-    assertThat(ergebnis.account()).isEqualTo(konto());
-  }
-
-  @Test
-  void login_givenTooManyFailuresInTheWindow_thenRefusesBeforeLookingUpTheAccount() {
-    // Given
-    bremseHerkunft(Duration.ofMinutes(15));
-    bremseAdresse(Duration.ofMinutes(60));
-
-    // When / Then
-    assertThatThrownBy(() -> useCase.login(MAIL, PASSWORT, IP))
-        .isInstanceOf(TooManyLoginAttempts.class);
-  }
-
-  @Test
-  void login_givenTooManyFailuresInTheWindow_thenAsksTheRepositoryForNothing() {
-    // Given — die Bremse soll die Last abwehren, nicht nur die Antwort aendern.
-    bremseHerkunft(Duration.ofMinutes(15));
-    bremseAdresse(Duration.ofMinutes(60));
-
-    // When
-    assertThatThrownBy(() -> useCase.login(MAIL, PASSWORT, IP))
-        .isInstanceOf(TooManyLoginAttempts.class);
-
-    // Then
-    verify(accounts, never()).findByEmail(MAIL);
+    // Then — abgewiesen, und die Meldung sagt, was zu tun ist (Kriterium 4).
+    assertThat(abgewiesen).isInstanceOf(LoginFailed.class);
+    assertThat(
+            AnnotatedElementUtils.findMergedAnnotation(abgewiesen.getClass(), ResponseStatus.class))
+        .extracting(ResponseStatus::reason)
+        .asString()
+        .contains("neuen Code anfordern");
   }
 
   @Test
   @DisplayName("Szenario: Unbekannte Adresse")
   void szenarioUnbekannteAdresse_thenSameAnswerAndNoMail() {
     // Given — zu MAIL gibt es das Konto, zu FREMD keines.
-    final LoginUseCase anforderung = anforderung();
+    final LoginUseCase anforderung = useCase;
     kontoVorhanden();
     kontoUnbekannt(FREMD);
 
@@ -486,7 +408,7 @@ class LoginUseCaseTest {
   @Test
   void codeAnfordern_givenTheAddressOfTheAccount_thenSendsTheCodeWithTheNameOfTheAccount() {
     // Given
-    final LoginUseCase anforderung = anforderung();
+    final LoginUseCase anforderung = useCase;
     kontoVorhanden();
 
     // When
@@ -500,7 +422,7 @@ class LoginUseCaseTest {
   void codeAnfordern_givenTheAddressInAnotherSpelling_thenSendsToTheStoredAddressOfTheAccount() {
     // Given — gefunden wird ohne Ruecksicht auf die Schreibweise; die Mail geht an die Adresse,
     // die das Konto traegt, nicht an die eingegebene.
-    final LoginUseCase anforderung = anforderung();
+    final LoginUseCase anforderung = useCase;
     when(accounts.findByEmail("Manne@Example.org")).thenReturn(Optional.of(konto()));
 
     // When
@@ -513,7 +435,7 @@ class LoginUseCaseTest {
   @Test
   void codeAnfordern_givenTheAddressOfTheAccount_thenHashesExactlyOnce() {
     // Given
-    final LoginUseCase anforderung = anforderung();
+    final LoginUseCase anforderung = useCase;
     kontoVorhanden();
 
     // When
@@ -526,7 +448,7 @@ class LoginUseCaseTest {
   @Test
   void codeAnfordern_givenAnUnknownAddress_thenHashesExactlyOnceAGeneratedCode() {
     // Given
-    final LoginUseCase anforderung = anforderung();
+    final LoginUseCase anforderung = useCase;
     kontoUnbekannt();
     final ArgumentCaptor<String> gehasht = ArgumentCaptor.forClass(String.class);
 
@@ -541,7 +463,7 @@ class LoginUseCaseTest {
   @Test
   void codeAnfordern_thenCountsBeforeItLooksUpTheAccount() {
     // Given — andersherum waere der sechste Versuch die Auskunft ueber das Konto (E8).
-    final LoginUseCase anforderung = anforderung();
+    final LoginUseCase anforderung = useCase;
     kontoUnbekannt();
     final InOrder reihenfolge = inOrder(zaehler, accounts);
 
@@ -558,7 +480,7 @@ class LoginUseCaseTest {
   @Test
   void codeAnfordern_givenFiveRequestsForAnUnknownAddress_thenRefusesTheSixthWithTheWait() {
     // Given — Kriterium 5: auch fuer Adressen ohne Konto.
-    final LoginUseCase anforderung = anforderung();
+    final LoginUseCase anforderung = useCase;
     kontoUnbekannt();
     fordereFuenfmalAn(anforderung, MAIL);
 
@@ -572,7 +494,7 @@ class LoginUseCaseTest {
   @Test
   void codeAnfordern_givenFiveRequestsForTheAccount_thenRefusesTheSixthWithTheSameWait() {
     // Given — dieselbe Abweisung wie fuer die unbekannte Adresse, sonst verriete sie das Konto.
-    final LoginUseCase anforderung = anforderung();
+    final LoginUseCase anforderung = useCase;
     kontoVorhanden();
     fordereFuenfmalAn(anforderung, MAIL);
 
@@ -586,7 +508,7 @@ class LoginUseCaseTest {
   @Test
   void codeAnfordern_givenTheLimitReached_thenNeitherLooksUpNorHashesNorIssues() {
     // Given — eine abgewiesene Anforderung laesst den bisherigen Code gueltig (E12).
-    final LoginUseCase anforderung = anforderung();
+    final LoginUseCase anforderung = useCase;
     kontoVorhanden();
     fordereFuenfmalAn(anforderung, MAIL);
     clearInvocations(accounts, hasher, loginCodes, postausgang);

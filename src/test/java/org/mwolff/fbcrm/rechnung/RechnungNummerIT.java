@@ -19,6 +19,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mwolff.fbcrm.AbstractIntegrationTest;
 import org.mwolff.fbcrm.angebot.web.AngebotResponse;
+import org.mwolff.fbcrm.auth.Anmeldung;
 import org.mwolff.fbcrm.auth.Konten;
 import org.mwolff.fbcrm.auth.domain.AccountRepository;
 import org.mwolff.fbcrm.auth.domain.SecretHasher;
@@ -55,7 +56,6 @@ import org.springframework.jdbc.core.JdbcTemplate;
 class RechnungNummerIT extends AbstractIntegrationTest {
 
   private static final String MAIL = "manne@example.org";
-  private static final String PASSWORT = "richtiges-passwort";
   private static final Instant ANGELEGT = Instant.parse("2026-09-01T08:00:00Z");
 
   private static final String STUNDENSATZ = "100.00";
@@ -107,20 +107,10 @@ class RechnungNummerIT extends AbstractIntegrationTest {
     jdbc.execute("DELETE FROM briefbogen");
     jdbc.execute("INSERT INTO briefbogen DEFAULT VALUES");
     jdbc.execute("TRUNCATE outbox_message, account RESTART IDENTITY CASCADE");
-    accounts.save(Konten.neu(MAIL, hasher.hash(PASSWORT), ANGELEGT));
-    sitzung = angemeldeterKopf();
+    accounts.save(Konten.neu(MAIL, ANGELEGT));
+    sitzung = Anmeldung.perCode(rest, jdbc, hasher, MAIL);
     eigeneAngabenSetzen("75/123/45678");
     firmaId = firmaAnlegen();
-  }
-
-  private HttpHeaders angemeldeterKopf() {
-    final ResponseEntity<String> anmeldung =
-        rest.postForEntity(
-            "/api/auth/login", Map.of("email", MAIL, "password", PASSWORT), String.class);
-    final String gesetzt = String.valueOf(anmeldung.getHeaders().getFirst(HttpHeaders.SET_COOKIE));
-    final HttpHeaders kopf = new HttpHeaders();
-    kopf.add(HttpHeaders.COOKIE, gesetzt.substring(0, gesetzt.indexOf(';')));
-    return kopf;
   }
 
   private <T> ResponseEntity<T> ruf(

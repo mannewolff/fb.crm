@@ -13,7 +13,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 class SchemaBaselineIT extends AbstractIntegrationTest {
 
   private static final String INSERT_ACCOUNT =
-      "INSERT INTO account (email, display_name, password_hash, role) VALUES (?, ?, ?, ?)";
+      "INSERT INTO account (email, display_name, role) VALUES (?, ?, ?)";
 
   private static final String INSERT_LOGIN_CODE =
       "INSERT INTO login_code (email, code_hash, expires_at)"
@@ -97,11 +97,10 @@ class SchemaBaselineIT extends AbstractIntegrationTest {
   @Test
   void accountSingleAdmin_givenSecondAdminWithDifferentEmail_thenRejectedByTheDatabase() {
     // Given
-    jdbc.update(INSERT_ACCOUNT, "erste@example.org", "Erste", "hash", "ADMIN");
+    jdbc.update(INSERT_ACCOUNT, "erste@example.org", "Erste", "ADMIN");
 
     // When / Then
-    assertThatThrownBy(
-            () -> jdbc.update(INSERT_ACCOUNT, "zweite@example.org", "Zweite", "hash", "ADMIN"))
+    assertThatThrownBy(() -> jdbc.update(INSERT_ACCOUNT, "zweite@example.org", "Zweite", "ADMIN"))
         .isInstanceOf(DataIntegrityViolationException.class)
         .hasMessageContaining("account_single_admin");
   }
@@ -109,11 +108,10 @@ class SchemaBaselineIT extends AbstractIntegrationTest {
   @Test
   void accountSingleAdmin_givenSecondAccountWithRoleUser_thenAccepted() {
     // Given
-    jdbc.update(INSERT_ACCOUNT, "erste@example.org", "Erste", "hash", "ADMIN");
+    jdbc.update(INSERT_ACCOUNT, "erste@example.org", "Erste", "ADMIN");
 
     // When
-    final int betroffen =
-        jdbc.update(INSERT_ACCOUNT, "zweite@example.org", "Zweite", "hash", "USER");
+    final int betroffen = jdbc.update(INSERT_ACCOUNT, "zweite@example.org", "Zweite", "USER");
 
     // Then
     assertThat(betroffen).isEqualTo(1);
@@ -122,19 +120,17 @@ class SchemaBaselineIT extends AbstractIntegrationTest {
   @Test
   void accountEmail_givenSameAddressInDifferentCase_thenRejectedByTheDatabase() {
     // Given
-    jdbc.update(INSERT_ACCOUNT, "manne@example.org", "Manne", "hash", "USER");
+    jdbc.update(INSERT_ACCOUNT, "manne@example.org", "Manne", "USER");
 
     // When / Then
-    assertThatThrownBy(
-            () -> jdbc.update(INSERT_ACCOUNT, "Manne@Example.ORG", "Manne", "hash", "USER"))
+    assertThatThrownBy(() -> jdbc.update(INSERT_ACCOUNT, "Manne@Example.ORG", "Manne", "USER"))
         .isInstanceOf(DataIntegrityViolationException.class);
   }
 
   @Test
   void accountRole_givenUnknownRole_thenRejectedByTheDatabase() {
     // When / Then
-    assertThatThrownBy(
-            () -> jdbc.update(INSERT_ACCOUNT, "dritte@example.org", "Dritte", "hash", "ROOT"))
+    assertThatThrownBy(() -> jdbc.update(INSERT_ACCOUNT, "dritte@example.org", "Dritte", "ROOT"))
         .isInstanceOf(DataIntegrityViolationException.class);
   }
 

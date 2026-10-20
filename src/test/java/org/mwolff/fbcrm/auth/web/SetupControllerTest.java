@@ -35,7 +35,7 @@ import org.springframework.mock.web.MockHttpServletRequest;
 class SetupControllerTest {
 
   private static final String MAIL = "manne@example.org";
-  private static final String PASSWORT = "sicheres-passwort";
+  private static final String CODE = "042424";
   private static final String SCHLUESSEL = "einmal-schluessel";
   private static final String TOKEN = "nutzlast.signatur";
   private static final Instant JETZT = Instant.parse("2026-09-18T10:00:00Z");
@@ -50,19 +50,20 @@ class SetupControllerTest {
   }
 
   private static SetupRequest anfrage() {
-    return new SetupRequest(MAIL, MAIL, "Manne", PASSWORT, SCHLUESSEL);
+    return new SetupRequest(SCHLUESSEL, "Manne", MAIL, CODE);
   }
 
   private static Account konto() {
-    return Konten.gespeichert(KONTO_ID, MAIL, "hash", 0, JETZT);
+    return Konten.gespeichert(KONTO_ID, MAIL, 0, JETZT);
   }
 
   private ResponseEntity<AccountResponse> richteEin() {
-    when(setup.initialize(MAIL, "Manne", PASSWORT, SCHLUESSEL))
+    when(clientIp.resolve(any(MockHttpServletRequest.class))).thenReturn(IP);
+    when(setup.initialize(MAIL, "Manne", CODE, SCHLUESSEL, IP))
         .thenReturn(
             new LoginResult(
                 konto(), new SessionCookie("fbcrm_session", TOKEN, Duration.ofDays(1), true)));
-    return controller().initialize(anfrage());
+    return controller().initialize(anfrage(), new MockHttpServletRequest());
   }
 
   @Test

@@ -87,8 +87,7 @@ class SessionAuthenticationFilterTest {
   }
 
   private static Account konto(final int sessionGeneration) {
-    return Konten.gespeichert(
-        KONTO_ID, "manne@example.org", "hash", sessionGeneration, AUSGESTELLT);
+    return Konten.gespeichert(KONTO_ID, "manne@example.org", sessionGeneration, AUSGESTELLT);
   }
 
   private static String token(final String geheimnis, final long generation) {

@@ -13,7 +13,7 @@ class AccountTest {
   private static final Instant GEAENDERT = Instant.parse("2026-09-18T12:00:00Z");
 
   private static Account kontoMitGeneration(final int generation) {
-    return Konten.gespeichert(7L, "manne@example.org", "alter-hash", generation, ANGELEGT);
+    return Konten.gespeichert(7L, "manne@example.org", generation, ANGELEGT);
   }
 
   @Test
@@ -54,7 +54,6 @@ class AccountTest {
             konto -> assertThat(konto.id()).isEqualTo(7L),
             konto -> assertThat(konto.email()).isEqualTo("manne@example.org"),
             konto -> assertThat(konto.displayName()).isEqualTo("Manne"),
-            konto -> assertThat(konto.passwordHash()).isEqualTo("alter-hash"),
             konto -> assertThat(konto.role()).isEqualTo(Role.ADMIN),
             konto -> assertThat(konto.createdAt()).isEqualTo(ANGELEGT));
   }

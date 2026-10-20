@@ -27,7 +27,7 @@ class GetCurrentAccountUseCaseTest {
   @InjectMocks private GetCurrentAccountUseCase useCase;
 
   private static Account konto() {
-    return Konten.gespeichert(KONTO_ID, "manne@example.org", "hash", 3, JETZT);
+    return Konten.gespeichert(KONTO_ID, "manne@example.org", 3, JETZT);
   }
 
   @Test
