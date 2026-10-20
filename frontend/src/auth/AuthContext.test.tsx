@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -32,7 +32,7 @@ function fetchLiefertVerzoegert(bauen: () => Response) {
 
 /** Spiegelt den Sitzungszustand und bietet die beiden Wege daraus an. */
 function Spiegel() {
-  const { sitzung, anmelden, einrichten, abmelden } = useAuth();
+  const { sitzung, codeAnfordern, anmelden, einrichten, abmelden } = useAuth();
   return (
     <div>
       <p>Zustand: {sitzung.status}</p>
@@ -40,7 +40,15 @@ function Spiegel() {
       <button
         type="button"
         onClick={() => {
-          void anmelden('info@mwolff.org', 'geheim');
+          void codeAnfordern('info@mwolff.org');
+        }}
+      >
+        Code anfordern
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          void anmelden('info@mwolff.org', '123456');
         }}
       >
         anmelden
@@ -49,11 +57,10 @@ function Spiegel() {
         type="button"
         onClick={() => {
           void einrichten({
-            email: 'info@mwolff.org',
-            emailRepeat: 'info@mwolff.org',
-            displayName: 'Manfred Wolff',
-            password: 'geheim-genug',
             bootstrapToken: 'einmal',
+            displayName: 'Manfred Wolff',
+            email: 'info@mwolff.org',
+            code: '123456',
           });
         }}
       >
@@ -142,6 +149,23 @@ describe('AuthProvider', () => {
     expect(await screen.findByText('Zustand: angemeldet')).toBeInTheDocument();
     expect(screen.getByText('Konto: Manfred Wolff')).toBeInTheDocument();
     expect(fetchMock).toHaveBeenLastCalledWith('/api/auth/login', expect.anything());
+  });
+
+  it('bleibt beim Anfordern eines Codes abgemeldet', async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response(null, { status: 401 }))
+      .mockResolvedValueOnce(new Response(null, { status: 202 }));
+    const nutzer = userEvent.setup();
+
+    renderSpiegel();
+    await screen.findByText('Zustand: abgemeldet');
+    await nutzer.click(screen.getByRole('button', { name: 'Code anfordern' }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenLastCalledWith('/api/auth/code', expect.anything());
+    });
+    expect(screen.getByText('Zustand: abgemeldet')).toBeInTheDocument();
   });
 
   it('ist nach dem Einrichten angemeldet — die Einrichtung meldet den Betreiber an (K3)', async () => {

@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  codeAnfordern,
+  einrichtungCodeAnfordern,
   login,
   logout,
   me,
@@ -60,15 +62,47 @@ describe('parseSetupStatus', () => {
 });
 
 describe('Aufrufe', () => {
-  it('meldet mit Adresse und Passwort an', async () => {
+  it('fordert einen Code fuer die Adresse an', async () => {
+    const fetchMock = fetchLiefert(() => new Response(null, { status: 202 }));
+
+    await expect(codeAnfordern('info@mwolff.org')).resolves.toBeUndefined();
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/auth/code',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ email: 'info@mwolff.org' }),
+      }),
+    );
+  });
+
+  it('meldet mit Adresse und Code an', async () => {
     const fetchMock = fetchLiefert(() => jsonAntwort(KONTO));
 
-    await expect(login('info@mwolff.org', 'geheim')).resolves.toEqual(KONTO);
+    await expect(login('info@mwolff.org', '123456')).resolves.toEqual(KONTO);
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/auth/login',
       expect.objectContaining({
         method: 'POST',
-        body: JSON.stringify({ email: 'info@mwolff.org', password: 'geheim' }),
+        body: JSON.stringify({ email: 'info@mwolff.org', code: '123456' }),
+      }),
+    );
+  });
+
+  it('fordert den Code der Einrichtung mit Schluessel, Anzeigename und Adresse an', async () => {
+    const fetchMock = fetchLiefert(() => new Response(null, { status: 202 }));
+
+    await expect(
+      einrichtungCodeAnfordern('einmal', 'Manfred Wolff', 'info@mwolff.org'),
+    ).resolves.toBeUndefined();
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/setup/code',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({
+          email: 'info@mwolff.org',
+          displayName: 'Manfred Wolff',
+          bootstrapToken: 'einmal',
+        }),
       }),
     );
   });
@@ -96,11 +130,10 @@ describe('Aufrufe', () => {
   it('richtet die Instanz ein und liefert das angemeldete Konto', async () => {
     const fetchMock = fetchLiefert(() => jsonAntwort(KONTO));
     const eingaben = {
-      email: 'info@mwolff.org',
-      emailRepeat: 'info@mwolff.org',
-      displayName: 'Manfred Wolff',
-      password: 'geheim-genug',
       bootstrapToken: 'einmal',
+      displayName: 'Manfred Wolff',
+      email: 'info@mwolff.org',
+      code: '123456',
     };
 
     await expect(setup(eingaben)).resolves.toEqual(KONTO);
@@ -114,7 +147,7 @@ describe('Aufrufe', () => {
     fetchLiefert(() => jsonAntwort({ initialized: true }));
 
     await expect(
-      setup({ email: 'a@b.de', emailRepeat: 'a@b.de', displayName: 'A', password: 'x', bootstrapToken: 'y' }),
+      setup({ bootstrapToken: 'y', displayName: 'A', email: 'a@b.de', code: '123456' }),
     ).rejects.toThrow(TypeError);
   });
 

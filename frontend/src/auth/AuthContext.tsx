@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 
 import type { Einrichtung, Konto } from '../api/auth';
-import { login, logout, me, setup } from '../api/auth';
+import { codeAnfordern, login, logout, me, setup } from '../api/auth';
 
 /**
  * Der Sitzungszustand der Oberflaeche.
@@ -20,7 +20,9 @@ export type Sitzung =
 
 export interface AuthWert {
   readonly sitzung: Sitzung;
-  readonly anmelden: (email: string, passwort: string) => Promise<void>;
+  /** Fordert einen Code an; die Sitzung bleibt dabei, wie sie ist. */
+  readonly codeAnfordern: (email: string) => Promise<void>;
+  readonly anmelden: (email: string, code: string) => Promise<void>;
   /** Richtet die Instanz ein; die Einrichtung meldet den Betreiber zugleich an (K3). */
   readonly einrichten: (eingaben: Einrichtung) => Promise<void>;
   readonly abmelden: () => Promise<void>;
@@ -56,8 +58,9 @@ export function AuthProvider({ children }: { readonly children: ReactNode }) {
   const wert = useMemo<AuthWert>(
     () => ({
       sitzung,
-      anmelden: async (email: string, passwort: string) => {
-        setSitzung({ status: 'angemeldet', konto: await login(email, passwort) });
+      codeAnfordern,
+      anmelden: async (email: string, code: string) => {
+        setSitzung({ status: 'angemeldet', konto: await login(email, code) });
       },
       einrichten: async (eingaben: Einrichtung) => {
         setSitzung({ status: 'angemeldet', konto: await setup(eingaben) });

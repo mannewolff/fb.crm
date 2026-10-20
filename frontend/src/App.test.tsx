@@ -187,7 +187,7 @@ describe('App', () => {
     await nutzer.click(screen.getByRole('button', { name: 'zurueck' }));
 
     expect(await screen.findByLabelText(/^E-Mail-Adresse/)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Anmelden' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Code anfordern' })).toBeInTheDocument();
   });
 
   it('zeigt „/firmen/5/angebote/neu" als Maske im Rahmen — nachgeladen', async () => {

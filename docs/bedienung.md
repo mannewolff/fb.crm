@@ -13,15 +13,20 @@ man diese Dokumentation in fb.crm findet.
 **Einstieg:** Im Browser die Adresse der eigenen Instanz öffnen, etwa `https://localhost` oder die
 eigene Domain. Wer nicht angemeldet ist, landet auf der Seite „Anmelden".
 
-**Anmelden:**
+**Anmelden:** Angemeldet wird man mit einem Code, den fb.crm per Mail an die Adresse des Kontos
+schickt.
 
-1. Im Feld „E-Mail-Adresse" die Adresse des Kontos eingeben.
-2. Im Feld „Passwort" das Passwort eingeben.
-3. „Anmelden" wählen.
+1. Im Feld „E-Mail-Adresse" die Adresse des Kontos eingeben und „Code anfordern" wählen.
+2. Die Seite zeigt nun das Feld „Code" und den Hinweis, dass ein Code unterwegs ist, falls es zu
+   dieser Adresse ein Konto gibt. Der Hinweis lautet für jede Adresse gleich; er verrät nicht, ob
+   es das Konto gibt.
+3. Den sechsstelligen Code aus der Mail in das Feld „Code" eintippen und „Anmelden" wählen.
 
-Danach öffnet fb.crm die Startseite. Sind Adresse oder Passwort falsch, meldet die Seite „E-Mail-Adresse
-oder Passwort ist falsch." Wer das Passwort vergessen hat, wählt „Passwort vergessen?" und bekommt
-eine Mail mit einem Verweis, über den sich ein neues Passwort setzen lässt.
+Danach ist man angemeldet und sieht die Startseite. Ein Code gilt 10 Minuten und nur einmal. Ist
+er falsch, abgelaufen oder schon benutzt, meldet die Seite „Der Code ist falsch, abgelaufen oder
+schon benutzt. Bitte einen neuen Code anfordern." Über „Andere Adresse" geht es zurück zum ersten
+Schritt, dort fordert man einen neuen Code an oder korrigiert die Adresse. Ist der Mailversand
+ausgeschaltet, steht der Code im Protokoll des Servers (siehe Teil „Betrieb").
 
 **Aufbau der Oberfläche:** Links steht die Schiene mit der Marke oben, rechts der Inhaltsbereich
 mit der gewählten Ansicht. Die Schiene trägt zwei Blöcke:

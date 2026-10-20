@@ -4,7 +4,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { AuthProvider } from '../auth/AuthContext';
-import { fetchNachPfad, json, leer, problem } from '../test/fetchNachPfad';
+import { alsJson, fetchNachPfad, json, leer, problem } from '../test/fetchNachPfad';
 import type { Routen } from '../test/fetchNachPfad';
 import { renderMitTheme } from '../test/render';
 import SetupPage from './SetupPage';
@@ -34,77 +34,134 @@ function renderEinrichtung() {
   );
 }
 
-async function ausfuellen({
-  email = 'info@mwolff.org',
-  wiederholung = 'info@mwolff.org',
-  passwort = 'geheim-genug',
-} = {}) {
+async function angabenAbsenden({ email = 'info@mwolff.org' } = {}) {
   const nutzer = userEvent.setup();
-  await nutzer.type(await screen.findByLabelText(/^E-Mail-Adresse/), email);
-  await nutzer.type(screen.getByLabelText(/^Wiederholung der E-Mail-Adresse/), wiederholung);
+  await nutzer.type(await screen.findByLabelText(/^Einmal-Schlüssel/), 'einmal');
   await nutzer.type(screen.getByLabelText(/^Anzeigename/), 'Manfred Wolff');
-  await nutzer.type(screen.getByLabelText(/^Passwort/), passwort);
-  await nutzer.type(screen.getByLabelText(/^Einmal-Schlüssel/), 'einmal');
+  await nutzer.type(screen.getByLabelText(/^E-Mail-Adresse/), email);
+  await nutzer.click(screen.getByRole('button', { name: 'Code anfordern' }));
+}
+
+async function codeAbsenden(code = '123456') {
+  const nutzer = userEvent.setup();
+  await nutzer.type(await screen.findByLabelText(/^Code/), code);
   await nutzer.click(screen.getByRole('button', { name: 'Einrichten' }));
 }
 
-function setupAufrufe(fetchMock: ReturnType<typeof frisch>) {
-  return fetchMock.mock.calls.filter(([ziel]) => ziel === '/api/setup');
+/** Beide Schritte in einem Zug: Angaben, dann Code. */
+async function einrichtenMitCode() {
+  await angabenAbsenden();
+  await codeAbsenden();
+}
+
+/**
+ * Kein Feld vom Typ `password` (Kriterium 1). Jedes Feld der Seite ist beschriftet (jsx-a11y), also
+ * findet die Suche ueber die Beschriftung auch ein Passwortfeld, das keine Rolle `textbox` hat.
+ */
+function keinPasswortfeld() {
+  const felder = screen.queryAllByLabelText(/./);
+  expect(felder.length).toBeGreaterThan(0);
+  for (const feld of felder) {
+    expect(feld).not.toHaveAttribute('type', 'password');
+  }
+}
+
+function aufrufe(fetchMock: ReturnType<typeof frisch>, pfad: string) {
+  return fetchMock.mock.calls.filter(([ziel]) => ziel === pfad);
 }
 
 afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe('Einrichtungsseite', () => {
-  it('beschriftet jedes Feld sichtbar und zuordenbar', async () => {
+describe('Einrichtungsseite, Schritt Angaben', () => {
+  it('fragt Schluessel, Anzeigename und Adresse, jedes Feld sichtbar beschriftet', async () => {
     frisch();
 
     renderEinrichtung();
 
-    expect(await screen.findByLabelText(/^E-Mail-Adresse/)).toHaveAttribute('type', 'email');
-    expect(screen.getByLabelText(/^Wiederholung der E-Mail-Adresse/)).toHaveAttribute('type', 'email');
+    expect(await screen.findByLabelText(/^Einmal-Schlüssel/)).toBeInTheDocument();
     expect(screen.getByLabelText(/^Anzeigename/)).toBeInTheDocument();
-    expect(screen.getByLabelText(/^Passwort/)).toHaveAttribute('type', 'password');
-    expect(screen.getByLabelText(/^Einmal-Schlüssel/)).toBeInTheDocument();
+    expect(screen.getByLabelText(/^E-Mail-Adresse/)).toHaveAttribute('type', 'email');
+    expect(screen.getAllByRole('textbox')).toHaveLength(3);
   });
 
-  it('meldet eine abweichende Wiederholung am Feld und schickt nichts ab (E6)', async () => {
-    const fetchMock = frisch();
+  it('hat kein Passwortfeld und keine Wiederholung der Adresse (E15)', async () => {
+    frisch();
 
     renderEinrichtung();
-    await ausfuellen({ wiederholung: 'info@mwolf.org' });
+    await screen.findByLabelText(/^Einmal-Schlüssel/);
 
-    const feld = screen.getByLabelText(/^Wiederholung der E-Mail-Adresse/);
-    expect(feld).toHaveAccessibleDescription(/stimmt nicht mit der E-Mail-Adresse überein/);
-    expect(feld).toHaveAttribute('aria-invalid', 'true');
-    expect(setupAufrufe(fetchMock)).toHaveLength(0);
+    keinPasswortfeld();
+    expect(screen.queryByLabelText(/Wiederholung/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/passwort/i)).not.toBeInTheDocument();
   });
 
-  it('nimmt eine Wiederholung in anderer Gross- und Kleinschreibung an, wie der Server', async () => {
-    const fetchMock = frisch({ 'POST /api/setup': json(200, KONTO) });
+  it('fordert den Code mit den drei Angaben an und zeigt dann Codefeld und Hinweis', async () => {
+    let rumpf: unknown = null;
+    const fetchMock = frisch({
+      'POST /api/setup/code': (gesendet) => {
+        rumpf = alsJson(gesendet);
+        return leer(202)();
+      },
+    });
 
     renderEinrichtung();
-    await ausfuellen({ wiederholung: 'Info@MWolff.org' });
+    await angabenAbsenden();
 
-    expect(await screen.findByText('Leitstand')).toBeInTheDocument();
-    expect(setupAufrufe(fetchMock)).toHaveLength(1);
+    const codefeld = await screen.findByLabelText(/^Code/);
+    expect(codefeld).toHaveAttribute('inputmode', 'numeric');
+    expect(codefeld).toHaveAttribute('autocomplete', 'one-time-code');
+    expect(codefeld).toHaveAttribute('maxlength', '6');
+    expect(codefeld).toHaveFocus();
+    expect(screen.getByRole('status')).toHaveTextContent(/Code ist unterwegs/);
+    expect(rumpf).toEqual({
+      email: 'info@mwolff.org',
+      displayName: 'Manfred Wolff',
+      bootstrapToken: 'einmal',
+    });
+    expect(aufrufe(fetchMock, '/api/setup')).toHaveLength(0);
+    keinPasswortfeld();
   });
 
-  it('zeigt die Meldung des Servers zu einem kurzen Passwort am Feld (K6, E26)', async () => {
+  it('sagt bei abgewiesenem Schluessel nicht, woran es lag, und bleibt beim ersten Schritt', async () => {
+    frisch({ 'POST /api/setup/code': leer(403) });
+
+    renderEinrichtung();
+    await angabenAbsenden();
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Die Einrichtung wurde abgelehnt. Bitte den Einmal-Schlüssel prüfen.',
+    );
+    expect(screen.queryByLabelText(/^Code/)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Code anfordern' })).toBeEnabled();
+  });
+
+  it('zeigt die Meldung des Servers zu einem Feld am Feld', async () => {
     frisch({
-      'POST /api/setup': problem(400, 'Ungueltige Eingabe', {
-        password: ['muss mindestens 8 Zeichen lang sein'],
+      'POST /api/setup/code': problem(400, 'Ungueltige Eingabe', {
+        email: ['muss eine gueltige E-Mail-Adresse sein'],
       }),
     });
 
     renderEinrichtung();
-    await ausfuellen({ passwort: 'sieben7' });
+    await angabenAbsenden({ email: 'info@mwolff' });
 
-    expect(await screen.findByLabelText(/^Passwort/)).toHaveAccessibleDescription(
-      'muss mindestens 8 Zeichen lang sein',
+    expect(await screen.findByLabelText(/^E-Mail-Adresse/)).toHaveAccessibleDescription(
+      'muss eine gueltige E-Mail-Adresse sein',
     );
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('sagt ohne technische Einzelheiten, wenn die Schnittstelle nicht antwortet', async () => {
+    frisch();
+
+    renderEinrichtung();
+    await angabenAbsenden();
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Die Einrichtung ist gerade nicht möglich. Bitte später erneut versuchen.',
+    );
   });
 
   it('zeigt bei eingerichteter Instanz eine Meldung statt des Formulars (K3)', async () => {
@@ -130,44 +187,83 @@ describe('Einrichtungsseite', () => {
 
     expect(await screen.findByLabelText(/^Einmal-Schlüssel/)).toBeInTheDocument();
   });
+});
 
-  it('fuehrt nach der Einrichtung angemeldet auf die Startadresse (K3)', async () => {
-    frisch({ 'POST /api/setup': json(200, KONTO) });
+describe('Einrichtungsseite, Schritt Code', () => {
+  it('legt mit dem Code das Konto an und fuehrt angemeldet auf die Startadresse (K3)', async () => {
+    let rumpf: unknown = null;
+    frisch({
+      'POST /api/setup/code': leer(202),
+      'POST /api/setup': (gesendet) => {
+        rumpf = alsJson(gesendet);
+        return json(200, KONTO)();
+      },
+    });
 
     renderEinrichtung();
-    await ausfuellen();
+    await einrichtenMitCode();
 
     expect(await screen.findByText('Leitstand')).toBeInTheDocument();
+    expect(rumpf).toEqual({
+      bootstrapToken: 'einmal',
+      displayName: 'Manfred Wolff',
+      email: 'info@mwolff.org',
+      code: '123456',
+    });
   });
 
-  it('sagt bei abgewiesenem Schluessel nicht, woran es lag', async () => {
-    frisch({ 'POST /api/setup': leer(403) });
+  it('nennt die Meldung des Servers zu einem falschen Code und gibt den Knopf wieder frei', async () => {
+    frisch({
+      'POST /api/setup/code': leer(202),
+      'POST /api/setup': problem(
+        401,
+        'Der Code ist falsch, abgelaufen oder schon benutzt. Bitte einen neuen Code anfordern.',
+      ),
+    });
 
     renderEinrichtung();
-    await ausfuellen();
+    await einrichtenMitCode();
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/Bitte einen neuen Code anfordern/);
+    expect(screen.getByRole('button', { name: 'Einrichten' })).toBeEnabled();
+  });
+
+  it('sagt auch im zweiten Schritt bei abgewiesenem Schluessel nicht, woran es lag', async () => {
+    frisch({ 'POST /api/setup/code': leer(202), 'POST /api/setup': leer(403) });
+
+    renderEinrichtung();
+    await einrichtenMitCode();
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'Die Einrichtung wurde abgelehnt. Bitte den Einmal-Schlüssel prüfen.',
     );
   });
 
-  it('reicht eine andere Meldung des Servers ohne Feldbezug durch', async () => {
-    frisch({ 'POST /api/setup': problem(500, 'Gerade nicht moeglich.') });
+  it('zeigt die Meldung des Servers zum Code am Codefeld', async () => {
+    frisch({
+      'POST /api/setup/code': leer(202),
+      'POST /api/setup': problem(400, 'Ungueltige Eingabe', { code: ['darf nicht leer sein'] }),
+    });
 
     renderEinrichtung();
-    await ausfuellen();
+    await einrichtenMitCode();
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('Gerade nicht moeglich.');
+    expect(await screen.findByLabelText(/^Code/)).toHaveAccessibleDescription(
+      'darf nicht leer sein',
+    );
   });
 
-  it('sagt ohne technische Einzelheiten, wenn die Schnittstelle nicht antwortet', async () => {
-    frisch();
+  it('fuehrt mit „Angaben ändern" zurueck und behaelt die Eingaben', async () => {
+    frisch({ 'POST /api/setup/code': leer(202) });
+    const nutzer = userEvent.setup();
 
     renderEinrichtung();
-    await ausfuellen();
+    await angabenAbsenden();
+    await screen.findByLabelText(/^Code/);
+    await nutzer.click(screen.getByRole('button', { name: 'Angaben ändern' }));
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      'Die Einrichtung ist gerade nicht möglich. Bitte später erneut versuchen.',
-    );
+    expect(screen.getByLabelText(/^E-Mail-Adresse/)).toHaveValue('info@mwolff.org');
+    expect(screen.getByLabelText(/^Anzeigename/)).toHaveValue('Manfred Wolff');
+    expect(screen.queryByLabelText(/^Code/)).not.toBeInTheDocument();
   });
 });
