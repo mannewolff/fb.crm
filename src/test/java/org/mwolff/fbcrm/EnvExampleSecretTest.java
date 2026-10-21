@@ -79,7 +79,7 @@ class EnvExampleSecretTest {
 
   @Test
   void erkennung_givenABase64Key_thenFlagsIt() {
-    // Given — die Form von openssl rand -base64 48 (README): 64 Zeichen, 6 Bit je Zeichen
+    // Given — die Form von openssl rand -base64 48 (docs/betrieb.md): 64 Zeichen, 6 Bit je Zeichen
     final String schluessel = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
     // When / Then
@@ -88,7 +88,7 @@ class EnvExampleSecretTest {
 
   @Test
   void erkennung_givenAHexToken_thenFlagsIt() {
-    // Given — die Form von openssl rand -hex 24 (README): 48 Zeichen, 4 Bit je Zeichen
+    // Given — die Form von openssl rand -hex 24 (docs/betrieb.md): 48 Zeichen, 4 Bit je Zeichen
     final String schluessel = "0123456789abcdef".repeat(3);
 
     // When / Then

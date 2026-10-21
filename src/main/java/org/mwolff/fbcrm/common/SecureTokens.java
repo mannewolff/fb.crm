@@ -7,7 +7,7 @@ import java.security.SecureRandom;
 import java.util.Base64;
 
 /**
- * Einmal-Tokens fuer E-Mail-Verifikation, Passwort-Reset und Bootstrap-Admin.
+ * Nicht ratbare Zufallswerte, etwa als Wegwerf-Geheimnis fuer den Vergleichs-Hash der Anmeldung.
  *
  * <p>Erzeugt werden 256 Bit aus {@link SecureRandom}, ausgegeben als Base64url ohne
  * Auffuellzeichen. Gespeichert wird nie das Token selbst, sondern sein SHA-256-Hash; verglichen

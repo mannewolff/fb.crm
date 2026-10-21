@@ -70,6 +70,8 @@ Das Folgende ist die **Soll-Struktur**. Sie steht hier, damit jedes Arbeitspaket
 /
 ├── CLAUDE*.md                          # Guide-Familie (Workflow-Guide unter .claude/)
 ├── mini-crm-spezifikation.pdf          # fachliche Spezifikation (Quelle des Projektziels)
+├── docs/betrieb.md                     # Dokumentation, Teil „Betrieb": Einrichten, Sichern, Aktualisieren
+├── docs/bedienung.md                   # Dokumentation, Teil „Bedienung"; beide zeigt fb.crm unter „Dokumentation"
 ├── docs/entwurf-kupferwolke.html       # Gestaltungsvorlage „Kupferwolke" (siehe CLAUDE-design.md)
 ├── pom.xml                             # Maven-Konfiguration (inkl. frontend-maven-plugin)
 ├── Dockerfile, docker-compose.yml      # Multi-Stage-Image + lokale Composition (Postgres, MinIO, Caddy)
@@ -115,6 +117,12 @@ cd frontend && npm run build            # tsc + vite build
 cd frontend && npm run lint             # ESLint + jsx-a11y
 cd frontend && npm test                 # Vitest
 ```
+
+**Dokumentation nachziehen.** Ändert eine Aufgabe sichtbar etwas an Betrieb oder Bedienung, zieht sie die
+betroffene Stelle in `docs/betrieb.md` oder `docs/bedienung.md` im selben Commit nach, und ihr
+Akzeptanzkriterium nennt die nachgezogene Stelle (Abschnitt und Datei) — die Abnahme prüft genau diese
+Stelle. Die Wächter in `frontend/src/lib/dokumentation.test.ts` laufen dabei auch dann, wenn der Commit
+nur die Dokumentation berührt.
 
 Verfahren, Reporting-Format und detaillierte Schritte → [CLAUDE-workflow.md](.claude/CLAUDE-workflow.md).
 

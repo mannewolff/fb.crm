@@ -28,6 +28,17 @@ public abstract class AbstractIntegrationTest {
   private static final String TEST_SESSION_SECRET =
       "test-geheimnis-mit-mindestens-32-zeichen-laenge";
 
+  /**
+   * Die Grenzen je Adresse, fuer die Suite ausser Kraft gesetzt.
+   *
+   * <p>Alle {@code *IT} teilen sich einen Anwendungskontext und damit eine Zaehlbremse im Speicher,
+   * und fast alle melden sich unter derselben Adresse an. Eine gelungene Anmeldung loescht die
+   * Adresszaehler nicht (E3 des Plans #395): Mit den Vorgaben von 5 in der Stunde entschiede sonst
+   * die Reihenfolge der Testklassen, ob eine spaete Anmeldung mit 429 scheitert. Die Grenzen selbst
+   * weist {@code LoginAttemptLimiterTest} nach, ihre Vorgaben {@code AuthDefaultsIT}.
+   */
+  private static final int GRENZE_JE_ADRESSE = 1_000;
+
   /** Der Eimer der Suite. Die Anwendung legt ihn beim Start selbst an (S3Config). */
   private static final String TEST_BUCKET = "fbcrm-test";
 
@@ -93,5 +104,7 @@ public abstract class AbstractIntegrationTest {
     registry.add("fbcrm.minio.access-key", MINIO::getUserName);
     registry.add("fbcrm.minio.secret-key", MINIO::getPassword);
     registry.add("fbcrm.minio.bucket", () -> TEST_BUCKET);
+    registry.add("fbcrm.auth.login-code-per-address", () -> GRENZE_JE_ADRESSE);
+    registry.add("fbcrm.auth.login-code-per-address-daily", () -> GRENZE_JE_ADRESSE);
   }
 }

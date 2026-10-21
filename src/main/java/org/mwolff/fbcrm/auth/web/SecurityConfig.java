@@ -1,5 +1,6 @@
 package org.mwolff.fbcrm.auth.web;
 
+import java.time.Clock;
 import org.mwolff.fbcrm.auth.AuthProperties;
 import org.mwolff.fbcrm.auth.domain.AccountRepository;
 import org.mwolff.fbcrm.auth.domain.SessionTokens;
@@ -18,10 +19,11 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 /**
  * Die Zugangsregel der Anwendung (K1).
  *
- * <p>Offen ohne Sitzung ist eine kurze, abschliessende Liste: die Anmeldung selbst, der
- * Passwort-Reset, die Einrichtung der frischen Instanz, {@code /actuator/health} — und alles, was
- * keine Schnittstelle ist, also die statischen Dateien und der SPA-Fallback (E20). Jeder andere
- * Pfad unter {@code /api} oder {@code /actuator} verlangt eine Sitzung.
+ * <p>Offen ohne Sitzung ist eine kurze, abschliessende Liste: die Anmeldung selbst und die
+ * Anforderung ihres Codes, die Einrichtung der frischen Instanz samt ihrem Code, {@code
+ * /actuator/health} — und alles, was keine Schnittstelle ist, also die statischen Dateien und der
+ * SPA-Fallback (E20). Jeder andere Pfad unter {@code /api} oder {@code /actuator} verlangt eine
+ * Sitzung.
  *
  * <p><b>Kein CSRF-Synchronizer-Token.</b> Das Session-Cookie traegt {@code SameSite=Strict} und
  * wird deshalb nie bei einem Aufruf gesendet, der von einer fremden Seite ausgeht — damit faellt
@@ -45,14 +47,20 @@ public class SecurityConfig {
   private final AuthProperties properties;
   private final SessionTokens tokens;
   private final AccountRepository accounts;
+  private final SessionCookieFactory cookies;
+  private final Clock clock;
 
   public SecurityConfig(
       final AuthProperties properties,
       final SessionTokens tokens,
-      final AccountRepository accounts) {
+      final AccountRepository accounts,
+      final SessionCookieFactory cookies,
+      final Clock clock) {
     this.properties = properties;
     this.tokens = tokens;
     this.accounts = accounts;
+    this.cookies = cookies;
+    this.clock = clock;
   }
 
   /*
@@ -72,9 +80,9 @@ public class SecurityConfig {
         .authorizeHttpRequests(
             pfade ->
                 pfade
-                    .requestMatchers(HttpMethod.POST, "/api/auth/login")
+                    .requestMatchers(HttpMethod.POST, "/api/auth/login", "/api/auth/code")
                     .permitAll()
-                    .requestMatchers("/api/auth/password-reset/**", "/api/setup/**")
+                    .requestMatchers("/api/setup/**")
                     .permitAll()
                     .requestMatchers("/actuator/health")
                     .permitAll()
@@ -88,7 +96,7 @@ public class SecurityConfig {
             fehler ->
                 fehler.authenticationEntryPoint(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED)))
         .addFilterBefore(
-            new SessionAuthenticationFilter(properties, tokens, accounts),
+            new SessionAuthenticationFilter(properties, tokens, accounts, cookies, clock),
             UsernamePasswordAuthenticationFilter.class)
         .build();
   }

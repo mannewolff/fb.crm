@@ -3,6 +3,7 @@ package org.mwolff.fbcrm.rechnung.infrastructure;
 import java.io.IOException;
 import org.apache.pdfbox.pdmodel.PDPageContentStream;
 import org.apache.pdfbox.pdmodel.font.PDFont;
+import org.apache.pdfbox.util.Matrix;
 import org.mwolff.fbcrm.rechnung.application.Ausrichtung;
 import org.mwolff.fbcrm.rechnung.application.Druckelement;
 import org.mwolff.fbcrm.rechnung.application.Farbe;
@@ -12,9 +13,10 @@ import org.mwolff.fbcrm.rechnung.application.Schrift;
  * Zeichnet die Druckelemente einer Seite in deren Inhaltsstrom.
  *
  * <p>Der Umgang mit der Bibliothek, Element fuer Element: Farbe setzen, Rechteck fuellen, Strich
- * ziehen, Text ausgeben. Entschieden wird hier nichts ueber den Beleg — was wo steht, hat der Satz
- * gerechnet. Die einzige eigene Rechnung ist die Breite eines rechtsbuendigen Textes: Sie steht nur
- * der Schrift zur Verfuegung, und die hat allein der Drucker.
+ * ziehen, Text ausgeben, schraegen Text ueber eine Drehmatrix setzen. Entschieden wird hier nichts
+ * ueber den Beleg — was wo steht, hat der Satz gerechnet. Die einzige eigene Rechnung ist die
+ * Breite eines rechtsbuendigen Textes: Sie steht nur der Schrift zur Verfuegung, und die hat allein
+ * der Drucker.
  */
 final class Seitenzeichner {
 
@@ -56,6 +58,7 @@ final class Seitenzeichner {
       case Druckelement.Flaeche flaeche -> zeichneFlaeche(flaeche);
       case Druckelement.Linie linie -> zeichneLinie(linie);
       case Druckelement.Text text -> schreibeText(text);
+      case Druckelement.Schraegtext schraeg -> schreibeSchraeg(schraeg);
     }
   }
 
@@ -75,13 +78,28 @@ final class Seitenzeichner {
   }
 
   private void schreibeText(final Druckelement.Text text) throws IOException {
-    final PDFont schrift = text.schrift() == Schrift.FETT ? fett : normal;
+    final PDFont schrift = schnitt(text.schrift());
     final String darstellbar = WinAnsiText.darstellbar(text.text());
     setzeFuellfarbe(text.farbe());
     inhalt.beginText();
     inhalt.setFont(schrift, text.groesse());
     inhalt.newLineAtOffset(text.x() - versatz(text, schrift, darstellbar), text.y());
     inhalt.showText(darstellbar);
+    inhalt.endText();
+  }
+
+  /**
+   * Die Textmatrix dreht die Grundlinie um den Ankerpunkt und verschiebt sie zugleich dorthin; so
+   * steht der Text gedreht, ohne dass der Rest der Seite davon beruehrt wird.
+   */
+  private void schreibeSchraeg(final Druckelement.Schraegtext schraeg) throws IOException {
+    final PDFont schrift = schnitt(schraeg.schrift());
+    setzeFuellfarbe(schraeg.farbe());
+    inhalt.beginText();
+    inhalt.setFont(schrift, schraeg.groesse());
+    inhalt.setTextMatrix(
+        Matrix.getRotateInstance(Math.toRadians(schraeg.winkel()), schraeg.x(), schraeg.y()));
+    inhalt.showText(WinAnsiText.darstellbar(schraeg.text()));
     inhalt.endText();
   }
 
@@ -96,6 +114,10 @@ final class Seitenzeichner {
       return 0f;
     }
     return breite(schrift, darstellbar, text.groesse());
+  }
+
+  private PDFont schnitt(final Schrift schrift) {
+    return schrift == Schrift.FETT ? fett : normal;
   }
 
   private void setzeFuellfarbe(final Farbe farbe) throws IOException {

@@ -71,16 +71,15 @@ jobs:
           chmod +x "$RUNNER_TEMP/bin/mvn"
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
       - id: gate-pit
-        continue-on-error: ${{ github.event_name == 'push' }}
+        continue-on-error: true
         run: mvn -Ppit -Dskip.frontend=true test
       - uses: actions/setup-node@v4
-        if: github.event_name == 'push'
         with:
           node-version-file: frontend/package.json
       # Liest target/pit-reports/mutations.xml und sperrt unter 80 % oder ohne vollstaendigen
-      # Bericht (E17). Ohne Board und ohne Geheimnis.
+      # Bericht (E17). Auf jedem Lauf, push wie pull_request (Issue #390). Ohne Board und
+      # ohne Geheimnis.
       - id: mutationsquote
-        if: github.event_name == 'push'
         run: node scripts/mutationsgate.mjs --nur-quote
       # Der Bericht fuer den Job mutationskarten, der allein das Board beschreibt.
       - uses: actions/upload-artifact@v4

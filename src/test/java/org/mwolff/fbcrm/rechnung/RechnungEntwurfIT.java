@@ -13,10 +13,10 @@ import org.junit.jupiter.api.Test;
 import org.mwolff.fbcrm.AbstractIntegrationTest;
 import org.mwolff.fbcrm.angebot.domain.Angebotsstatus;
 import org.mwolff.fbcrm.angebot.web.AngebotResponse;
-import org.mwolff.fbcrm.auth.domain.Account;
+import org.mwolff.fbcrm.auth.Anmeldung;
+import org.mwolff.fbcrm.auth.Konten;
 import org.mwolff.fbcrm.auth.domain.AccountRepository;
-import org.mwolff.fbcrm.auth.domain.PasswordHasher;
-import org.mwolff.fbcrm.auth.domain.Role;
+import org.mwolff.fbcrm.auth.domain.SecretHasher;
 import org.mwolff.fbcrm.rechnung.domain.Rechnungszustand;
 import org.mwolff.fbcrm.rechnung.web.AngebotAbrechnungResponse;
 import org.mwolff.fbcrm.rechnung.web.RechnungResponse;
@@ -50,13 +50,12 @@ import org.springframework.jdbc.core.JdbcTemplate;
 class RechnungEntwurfIT extends AbstractIntegrationTest {
 
   private static final String MAIL = "manne@example.org";
-  private static final String PASSWORT = "richtiges-passwort";
   private static final Instant ANGELEGT = Instant.parse("2026-09-01T08:00:00Z");
   private static final String STUNDENSATZ = "100.00";
 
   private final TestRestTemplate rest;
   private final AccountRepository accounts;
-  private final PasswordHasher hasher;
+  private final SecretHasher hasher;
   private final JdbcTemplate jdbc;
 
   private HttpHeaders sitzung = new HttpHeaders();
@@ -66,7 +65,7 @@ class RechnungEntwurfIT extends AbstractIntegrationTest {
   RechnungEntwurfIT(
       final TestRestTemplate rest,
       final AccountRepository accounts,
-      final PasswordHasher hasher,
+      final SecretHasher hasher,
       final JdbcTemplate jdbc) {
     this.rest = rest;
     this.accounts = accounts;
@@ -86,20 +85,9 @@ class RechnungEntwurfIT extends AbstractIntegrationTest {
         Objects.requireNonNull(
                 jdbc.queryForObject("SELECT id FROM firma WHERE name = ?", Long.class, "Adler AG"))
             .longValue();
-    jdbc.execute("TRUNCATE outbox_message, password_reset_token, account RESTART IDENTITY CASCADE");
-    accounts.save(
-        new Account(null, MAIL, "Manne", hasher.hash(PASSWORT), Role.ADMIN, 0, ANGELEGT, ANGELEGT));
-    sitzung = angemeldeterKopf();
-  }
-
-  private HttpHeaders angemeldeterKopf() {
-    final ResponseEntity<String> anmeldung =
-        rest.postForEntity(
-            "/api/auth/login", Map.of("email", MAIL, "password", PASSWORT), String.class);
-    final String gesetzt = String.valueOf(anmeldung.getHeaders().getFirst(HttpHeaders.SET_COOKIE));
-    final HttpHeaders kopf = new HttpHeaders();
-    kopf.add(HttpHeaders.COOKIE, gesetzt.substring(0, gesetzt.indexOf(';')));
-    return kopf;
+    jdbc.execute("TRUNCATE outbox_message, account RESTART IDENTITY CASCADE");
+    accounts.save(Konten.neu(MAIL, ANGELEGT));
+    sitzung = Anmeldung.perCode(rest, jdbc, hasher, MAIL);
   }
 
   private <T> ResponseEntity<T> ruf(

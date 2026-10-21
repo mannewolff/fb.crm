@@ -8,9 +8,6 @@ import ProtectedRoute from './routes/ProtectedRoute';
 // Route-Level Lazy Loading ist Pflicht fuer alle Top-Level-Routen (CLAUDE-react.md).
 const LoginPage = lazy(async () => import('./pages/LoginPage'));
 const SetupPage = lazy(async () => import('./pages/SetupPage'));
-const ForgotPasswordPage = lazy(async () => import('./pages/ForgotPasswordPage'));
-const ResetPasswordPage = lazy(async () => import('./pages/ResetPasswordPage'));
-const EmptyPanel = lazy(async () => import('./pages/EmptyPanel'));
 const FirmenPage = lazy(async () => import('./pages/FirmenPage'));
 const FirmaMaske = lazy(async () => import('./pages/FirmaMaske'));
 const FirmaPage = lazy(async () => import('./pages/FirmaPage'));
@@ -28,22 +25,25 @@ const AdministrationPage = lazy(async () => import('./pages/AdministrationPage')
 const JahresabschluessePage = lazy(async () => import('./pages/JahresabschluessePage'));
 const JahresabschlussPage = lazy(async () => import('./pages/JahresabschlussPage'));
 const StartseitePage = lazy(async () => import('./pages/StartseitePage'));
+// Ein Stueck fuer beide Teile der Dokumentation: Der Wechsel laedt nichts nach (Plan #378, E11).
+const DokumentationPage = lazy(async () => import('./pages/DokumentationPage'));
 
 /**
- * Der Routenbaum. Offen sind die Anmeldeseite, die Einrichtung und die beiden Seiten zum
- * Passwort; alles andere liegt hinter der Sitzung.
+ * Der Routenbaum. Offen sind die Anmeldeseite und die Einrichtung; alles andere liegt hinter
+ * der Sitzung.
  *
  * Die geschuetzten Adressen teilen sich einen Rahmen ({@link AppShell}): Er steht einmal um
  * das `Outlet` und bleibt beim Wechsel zwischen ihnen stehen, statt je Ansicht neu zu entstehen.
- * `/` traegt die Startseite mit dem Geschaeftsstand (Issue #216); `/dokumentation` ist der
- * letzte Weg auf das leere Panel. `/firmen`, `/eigene-angaben` und `/administration` tragen die
- * fachlichen Ansichten. Ein Angebot
+ * `/` traegt die Startseite mit dem Geschaeftsstand (Issue #216). `/firmen`, `/eigene-angaben`
+ * und `/administration` tragen die fachlichen Ansichten. Ein Angebot
  * entsteht an der Firma (`/firmen/:id/angebote/neu`) und steht danach unter
  * `/angebote/:angebotId` — es braucht seine Firma nicht in der Adresse, denn es kennt sie
  * selbst (Issue #126). Dasselbe gilt fuer die Rechnung: Sie entsteht an ihrem Angebot und steht
  * danach unter `/rechnungen/:rechnungId`, die Liste aller Rechnungen unter `/rechnungen`
  * (Issue #184). Die Arbeitszeit steht quer dazu unter `/arbeitszeit` — sie haengt an keinem
- * einzelnen Angebot, sondern zeigt einen Monat ueber alle (Issue #193).
+ * einzelnen Angebot, sondern zeigt einen Monat ueber alle (Issue #193). Die Dokumentation steht
+ * unter `/dokumentation` mit dem Teil „Bedienung" und unter `/dokumentation/betrieb` mit dem Teil
+ * „Betrieb" — beide aus einer Seite (Issue #387).
  *
  * Die unbekannte Adresse bekommt keine eigene Ansicht: Mit Sitzung fuehrt sie auf die
  * Startadresse, ohne Sitzung uebernimmt {@link ProtectedRoute} und fuehrt auf die
@@ -56,8 +56,6 @@ export default function App() {
         <Routes>
           <Route path="/anmelden" element={<LoginPage />} />
           <Route path="/einrichten" element={<SetupPage />} />
-          <Route path="/passwort-vergessen" element={<ForgotPasswordPage />} />
-          <Route path="/passwort-neu" element={<ResetPasswordPage />} />
           <Route
             element={
               <ProtectedRoute>
@@ -108,7 +106,10 @@ export default function App() {
             />
             <Route path="/eigene-angaben" element={<EigeneAngabenMaske />} />
             <Route path="/administration" element={<AdministrationPage />} />
-            <Route path="/dokumentation" element={<EmptyPanel />} />
+            {/* Ein Teil der Dokumentation ist ein eigenes Gegenstueck und steht im Pfad
+                (Plan #378, E6); einen unbekannten Teil fuehrt die Seite auf `/dokumentation`. */}
+            <Route path="/dokumentation" element={<DokumentationPage />} />
+            <Route path="/dokumentation/:teil" element={<DokumentationPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         </Routes>

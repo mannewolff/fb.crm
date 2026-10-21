@@ -13,6 +13,7 @@ import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mwolff.fbcrm.AbstractIntegrationTest;
+import org.mwolff.fbcrm.auth.Anmeldung;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.http.HttpStatus;
@@ -31,8 +32,17 @@ import org.springframework.test.context.TestPropertySource;
  *
  * <p>Ein Test, der beide Aufrufe mit derselben Adresse fuehrte, waere gruen, ohne diesen Index zu
  * beruehren — und uebersaehe damit genau die Luecke, die er schliessen soll.
+ *
+ * <p>Seit der Einrichtung per Code fordert jeder der beiden Faeden zuerst seinen eigenen Code an.
+ * Ohne ihn scheiterte jede Bestaetigung schon am Code, und der Test pruefte das Wettrennen nicht
+ * mehr. Die Anforderungen laufen vor der Startsperre; nebenlaeufig ist allein die Bestaetigung.
  */
-@TestPropertySource(properties = "fbcrm.setup.bootstrap-token=" + SetupControllerIT.SCHLUESSEL)
+@TestPropertySource(
+    properties = {
+      "fbcrm.setup.bootstrap-token=" + SetupControllerIT.SCHLUESSEL,
+      "fbcrm.mail.enabled=true",
+      "fbcrm.auth.login-max-attempts=1000"
+    })
 class SetupRaceIT extends AbstractIntegrationTest {
 
   private static final Duration GEDULD = Duration.ofSeconds(30);
@@ -48,15 +58,22 @@ class SetupRaceIT extends AbstractIntegrationTest {
 
   @BeforeEach
   void leereDieDatenbank() {
-    jdbc.execute("TRUNCATE outbox_message, password_reset_token, account RESTART IDENTITY CASCADE");
+    SetupControllerIT.leere(jdbc);
   }
 
-  /** Beide Aufrufe warten auf dieselbe Startsperre und laufen danach wirklich nebenlaeufig. */
+  /**
+   * Beide Faeden fordern ihren Code an, warten danach auf dieselbe Startsperre und bestaetigen dann
+   * wirklich nebenlaeufig.
+   */
   private List<HttpStatus> gleichzeitigEinrichten() throws Exception {
+    final CountDownLatch bereit = new CountDownLatch(2);
     final CountDownLatch start = new CountDownLatch(1);
     try (ExecutorService pool = Executors.newFixedThreadPool(2)) {
-      final Future<HttpStatus> erster = pool.submit(() -> richteEin(start, "erster@example.org"));
-      final Future<HttpStatus> zweiter = pool.submit(() -> richteEin(start, "zweiter@example.org"));
+      final Future<HttpStatus> erster =
+          pool.submit(() -> richteEin(bereit, start, "erster@example.org"));
+      final Future<HttpStatus> zweiter =
+          pool.submit(() -> richteEin(bereit, start, "zweiter@example.org"));
+      assertThat(bereit.await(GEDULD.toSeconds(), TimeUnit.SECONDS)).isTrue();
       start.countDown();
       return List.of(
           erster.get(GEDULD.toSeconds(), TimeUnit.SECONDS),
@@ -64,13 +81,16 @@ class SetupRaceIT extends AbstractIntegrationTest {
     }
   }
 
-  private HttpStatus richteEin(final CountDownLatch start, final String email) throws Exception {
+  private HttpStatus richteEin(
+      final CountDownLatch bereit, final CountDownLatch start, final String email)
+      throws Exception {
+    SetupControllerIT.fordereCodeAn(rest, email, SetupControllerIT.SCHLUESSEL);
+    final String code = Anmeldung.codeAusDemPostausgang(jdbc, email);
+    bereit.countDown();
     start.await();
     final ResponseEntity<String> antwort =
         SetupControllerIT.richteEin(
-            rest,
-            SetupControllerIT.rumpf(
-                email, email, SetupControllerIT.PASSWORT, SetupControllerIT.SCHLUESSEL));
+            rest, SetupControllerIT.rumpf(email, code, SetupControllerIT.SCHLUESSEL));
     return HttpStatus.valueOf(antwort.getStatusCode().value());
   }
 

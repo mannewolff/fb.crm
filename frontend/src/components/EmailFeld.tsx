@@ -9,7 +9,8 @@ interface EmailFeldProps {
   readonly feldFehler: FieldErrors;
   /**
    * Was der Browser vorschlagen soll: `email` beim Einrichten des Kontos, `username` dort, wo die
-   * Adresse das Konto bezeichnet (Passwort vergessen) — so findet der Passwortmanager den Eintrag.
+   * Adresse das Konto bezeichnet (etwa bei der Anmeldung) — so findet der Passwortmanager den
+   * Eintrag.
    */
   readonly autoComplete: 'email' | 'username';
 }

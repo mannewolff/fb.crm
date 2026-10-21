@@ -12,6 +12,8 @@ import org.apache.pdfbox.pdmodel.common.PDRectangle;
 import org.apache.pdfbox.pdmodel.font.PDFont;
 import org.apache.pdfbox.pdmodel.font.PDType1Font;
 import org.apache.pdfbox.pdmodel.font.Standard14Fonts;
+import org.apache.pdfbox.pdmodel.graphics.form.PDFormXObject;
+import org.jspecify.annotations.Nullable;
 import org.mwolff.fbcrm.common.ExcludeFromJacocoGeneratedReport;
 import org.mwolff.fbcrm.rechnung.application.Belegdrucker;
 import org.mwolff.fbcrm.rechnung.application.Druckelement;
@@ -22,13 +24,16 @@ import org.springframework.stereotype.Component;
  *
  * <p>Absichtlich duenn: Der Drucker entscheidet nichts ueber den Beleg, er schreibt die Elemente
  * weg, die der Satz gerechnet hat. Was hier stehen bleibt, ist das Dokument — Schriften einmal
- * laden, Seiten anlegen, die Elemente einer Seite in ihrer Tiefe ordnen. Gezeichnet wird von {@link
- * Seitenzeichner}.
+ * laden, Seiten anlegen, den Untergrund unterlegen, die Elemente einer Seite in ihrer Tiefe ordnen.
+ * Gezeichnet wird von {@link Seitenzeichner}.
+ *
+ * <p>Der Untergrund, das hinterlegte Briefpapier, kommt aus {@link Briefpapieruntergrund} und steht
+ * als erstes im Inhaltsstrom jeder Seite (Plan #363, E3). So liegt er ohne weiteres Zutun unter
+ * allem, was der Satz gerechnet hat, und der Beleg wird in einem Durchgang geschrieben.
  *
  * <p>Geschrieben wird mit Helvetica aus den 14 Standardschriften: keine Schriftdatei im Abbild,
  * kein Einbetten, und die Umlaute und das Eurozeichen des deutschen Belegs deckt ihre
- * WinAnsi-Kodierung ab (siehe {@link WinAnsiText}). Die Gestaltung im eigenen Erscheinungsbild ist
- * Nicht-Ziel der fachlichen Quelle.
+ * WinAnsi-Kodierung ab (siehe {@link WinAnsiText}).
  */
 @Component
 class PdfBoxDrucker implements Belegdrucker {
@@ -41,23 +46,29 @@ class PdfBoxDrucker implements Belegdrucker {
    */
   @Override
   @ExcludeFromJacocoGeneratedReport
-  public byte[] drucke(final List<Druckelement> elemente) {
+  public byte[] drucke(final List<Druckelement> elemente, final byte @Nullable [] briefpapier) {
     try {
-      return geschrieben(elemente);
+      return geschrieben(elemente, briefpapier);
     } catch (final IOException nichtErreichbar) {
       throw new UncheckedIOException("Das Beleg-PDF liess sich nicht schreiben.", nichtErreichbar);
     }
   }
 
-  private static byte[] geschrieben(final List<Druckelement> elemente) throws IOException {
-    try (PDDocument dokument = new PDDocument()) {
+  private static byte[] geschrieben(
+      final List<Druckelement> elemente, final byte @Nullable [] briefpapier) throws IOException {
+    // Das Briefpapier bleibt offen, bis der Beleg geschrieben ist: Seine Blaetter sind als
+    // Formulare in den Beleg uebernommen.
+    try (PDDocument dokument = new PDDocument();
+        @Nullable PDDocument vorlage = Briefpapieruntergrund.geoeffnet(briefpapier)) {
+      final Briefpapieruntergrund untergrund = Briefpapieruntergrund.aus(dokument, vorlage);
       // Einmal je Dokument und nicht je Element: Der erste Zugriff auf eine Standardschrift baut
       // den Schriftzwischenspeicher von PDFBox auf, und das dauert.
       final PDFont normal = new PDType1Font(Standard14Fonts.FontName.HELVETICA);
       final PDFont fett = new PDType1Font(Standard14Fonts.FontName.HELVETICA_BOLD);
       final int seiten = elemente.stream().mapToInt(Druckelement::seite).max().orElse(1);
       for (int seite = 1; seite <= seiten; seite++) {
-        schreibeSeite(dokument, elementeDerSeite(elemente, seite), normal, fett);
+        schreibeSeite(
+            dokument, untergrund.fuer(seite), elementeDerSeite(elemente, seite), normal, fett);
       }
       final ByteArrayOutputStream ausgabe = new ByteArrayOutputStream();
       dokument.save(ausgabe);
@@ -67,8 +78,9 @@ class PdfBoxDrucker implements Belegdrucker {
 
   /**
    * Die Elemente der Seite in der Tiefe, in der sie gezeichnet werden: erst die Flaechen, dann die
-   * Linien, dann der Text. Andersherum deckte eine Flaeche zu, was unter ihr liegt. Innerhalb einer
-   * Art bleibt die Reihenfolge des Satzes erhalten, weil {@code sorted} stabil ist.
+   * Linien, dann der Text. Andersherum deckte eine Flaeche zu, was unter ihr liegt. Zuoberst der
+   * schraege Text: Das Muster eines Probedrucks soll auf jeder Seite durchgehend zu sehen sein.
+   * Innerhalb einer Art bleibt die Reihenfolge des Satzes erhalten, weil {@code sorted} stabil ist.
    */
   private static List<Druckelement> elementeDerSeite(
       final List<Druckelement> elemente, final int seite) {
@@ -83,11 +95,13 @@ class PdfBoxDrucker implements Belegdrucker {
       case Druckelement.Flaeche _ -> 0;
       case Druckelement.Linie _ -> 1;
       case Druckelement.Text _ -> 2;
+      case Druckelement.Schraegtext _ -> 3;
     };
   }
 
   private static void schreibeSeite(
       final PDDocument dokument,
+      final @Nullable PDFormXObject unterlage,
       final List<Druckelement> elemente,
       final PDFont normal,
       final PDFont fett)
@@ -95,6 +109,9 @@ class PdfBoxDrucker implements Belegdrucker {
     final PDPage blatt = new PDPage(PDRectangle.A4);
     dokument.addPage(blatt);
     try (PDPageContentStream inhalt = new PDPageContentStream(dokument, blatt)) {
+      if (unterlage != null) {
+        inhalt.drawForm(unterlage);
+      }
       final Seitenzeichner zeichner = new Seitenzeichner(inhalt, normal, fett);
       for (final Druckelement element : elemente) {
         zeichner.zeichne(element);

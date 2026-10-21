@@ -20,7 +20,7 @@ import org.mwolff.fbcrm.mail.domain.OutboxRepository;
  *
  * <p>Der Anwendungsfall schickt nichts — er legt eine Zeile an. Dass er das <b>innerhalb</b> der
  * aufrufenden Transaktion tut, erzwingt {@code Propagation.MANDATORY}; nachgewiesen wird das gegen
- * einen echten Transaktionsmanager in {@code RequestPasswordResetUseCaseIT}.
+ * einen echten Transaktionsmanager in {@code RequestLoginCodeUseCaseIT}.
  */
 @ExtendWith(MockitoExtension.class)
 class EnqueueMailUseCaseTest {

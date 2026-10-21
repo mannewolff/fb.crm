@@ -9,6 +9,7 @@ import { eigeneAngabenLesen, eigeneAngabenPflegen } from '../api/eigeneAngaben';
 import type { EigeneAngaben } from '../api/eigeneAngaben';
 import type { FieldErrors } from '../api/client';
 import AnschriftFelder from '../components/AnschriftFelder';
+import BriefbogenKarte from '../components/BriefbogenKarte';
 import Karte from '../components/Karte';
 import { useKopfPfad } from '../components/KopfPfad';
 import type { PfadVerweis } from '../components/KopfPfad';
@@ -32,6 +33,10 @@ import { ABSTAND_BUEHNE } from '../theme';
  *
  * Die Karte traegt die **eine `h1` der Ansicht** (`titelEbene={1}`): Es gibt hier keine Kopfkarte,
  * unter der sie stehen koennte, und eine Ansicht ohne `h1` liesse den Screenreader ohne Einstieg.
+ *
+ * Unter dem Formular steht die Karte „Briefpapier" ({@link BriefbogenKarte}, fachliche Quelle
+ * #361, Punkt 11 des geklaerten Stands). Sie laedt und speichert selbst und traegt eine `h2` — die
+ * `h1` bleibt die eine dieser Karte.
  *
  * „Abbrechen" ist hier ein **Schalter, kein Weg**: Ueber „Eigene Angaben" liegt keine Ebene, auf
  * die es fuehren koennte — bei der Firma ist das die Detailansicht. Es nimmt die Aenderungen
@@ -324,6 +329,7 @@ export default function EigeneAngabenMaske() {
           nichtBereit(stand)
         )}
       </Karte>
+      <BriefbogenKarte />
     </Box>
   );
 }

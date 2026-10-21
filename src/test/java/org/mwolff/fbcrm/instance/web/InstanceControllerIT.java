@@ -12,10 +12,10 @@ import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mwolff.fbcrm.AbstractIntegrationTest;
-import org.mwolff.fbcrm.auth.domain.Account;
+import org.mwolff.fbcrm.auth.Anmeldung;
+import org.mwolff.fbcrm.auth.Konten;
 import org.mwolff.fbcrm.auth.domain.AccountRepository;
-import org.mwolff.fbcrm.auth.domain.PasswordHasher;
-import org.mwolff.fbcrm.auth.domain.Role;
+import org.mwolff.fbcrm.auth.domain.SecretHasher;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.http.HttpEntity;
@@ -39,18 +39,17 @@ class InstanceControllerIT extends AbstractIntegrationTest {
   private static final ObjectMapper JSON = new ObjectMapper();
 
   private static final String MAIL = "manne@example.org";
-  private static final String PASSWORT = "richtiges-passwort";
 
   private final TestRestTemplate rest;
   private final AccountRepository accounts;
-  private final PasswordHasher hasher;
+  private final SecretHasher hasher;
   private final JdbcTemplate jdbc;
 
   @Autowired
   InstanceControllerIT(
       final TestRestTemplate rest,
       final AccountRepository accounts,
-      final PasswordHasher hasher,
+      final SecretHasher hasher,
       final JdbcTemplate jdbc) {
     this.rest = rest;
     this.accounts = accounts;
@@ -60,23 +59,13 @@ class InstanceControllerIT extends AbstractIntegrationTest {
 
   @BeforeEach
   void legeDasKontoAn() {
-    jdbc.execute("TRUNCATE outbox_message, password_reset_token, account RESTART IDENTITY CASCADE");
+    jdbc.execute("TRUNCATE outbox_message, account RESTART IDENTITY CASCADE");
     final Instant jetzt = Instant.parse("2026-09-18T10:00:00Z");
-    accounts.save(
-        new Account(null, MAIL, "Manne", hasher.hash(PASSWORT), Role.ADMIN, 0, jetzt, jetzt));
-  }
-
-  private String sessionCookie() {
-    final ResponseEntity<String> anmeldung =
-        rest.postForEntity(
-            "/api/auth/login", Map.of("email", MAIL, "password", PASSWORT), String.class);
-    final String gesetzt = String.valueOf(anmeldung.getHeaders().getFirst(HttpHeaders.SET_COOKIE));
-    return gesetzt.substring(0, gesetzt.indexOf(';'));
+    accounts.save(Konten.neu(MAIL, jetzt));
   }
 
   private ResponseEntity<String> mitSitzung() {
-    final HttpHeaders kopf = new HttpHeaders();
-    kopf.add(HttpHeaders.COOKIE, sessionCookie());
+    final HttpHeaders kopf = Anmeldung.perCode(rest, jdbc, hasher, MAIL);
     return rest.exchange("/api/instance", HttpMethod.GET, new HttpEntity<>(kopf), String.class);
   }
 

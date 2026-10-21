@@ -6,7 +6,7 @@ import java.time.Instant;
 /**
  * Port auf das Ausstellen und Pruefen von Session-Tokens.
  *
- * <p>Er existiert aus demselben Grund wie {@link PasswordHasher}: Anwendungsschicht und
+ * <p>Er existiert aus demselben Grund wie {@link SecretHasher}: Anwendungsschicht und
  * Weboberflaeche uebersetzen gegen diesen Namen, nicht gegen das Format (CLAUDE-java.md §6.1).
  * Welches Format dahintersteht, entscheidet die Infrastruktur — heute {@code
  * base64url(payload).base64url(hmacSha256)}.

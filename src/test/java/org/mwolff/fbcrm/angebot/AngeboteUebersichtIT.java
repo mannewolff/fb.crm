@@ -4,7 +4,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.tuple;
 
 import java.time.Instant;
-import java.util.Map;
 import java.util.Objects;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.BeforeEach;
@@ -12,10 +11,10 @@ import org.junit.jupiter.api.Test;
 import org.mwolff.fbcrm.AbstractIntegrationTest;
 import org.mwolff.fbcrm.angebot.domain.Angebotsstatus;
 import org.mwolff.fbcrm.angebot.web.AngeboteUebersichtResponse;
-import org.mwolff.fbcrm.auth.domain.Account;
+import org.mwolff.fbcrm.auth.Anmeldung;
+import org.mwolff.fbcrm.auth.Konten;
 import org.mwolff.fbcrm.auth.domain.AccountRepository;
-import org.mwolff.fbcrm.auth.domain.PasswordHasher;
-import org.mwolff.fbcrm.auth.domain.Role;
+import org.mwolff.fbcrm.auth.domain.SecretHasher;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.http.HttpEntity;
@@ -35,12 +34,11 @@ import org.springframework.jdbc.core.JdbcTemplate;
 class AngeboteUebersichtIT extends AbstractIntegrationTest {
 
   private static final String MAIL = "manne@example.org";
-  private static final String PASSWORT = "richtiges-passwort";
   private static final Instant ANGELEGT = Instant.parse("2026-09-01T08:00:00Z");
 
   private final TestRestTemplate rest;
   private final AccountRepository accounts;
-  private final PasswordHasher hasher;
+  private final SecretHasher hasher;
   private final JdbcTemplate jdbc;
 
   private HttpHeaders sitzung = new HttpHeaders();
@@ -51,7 +49,7 @@ class AngeboteUebersichtIT extends AbstractIntegrationTest {
   AngeboteUebersichtIT(
       final TestRestTemplate rest,
       final AccountRepository accounts,
-      final PasswordHasher hasher,
+      final SecretHasher hasher,
       final JdbcTemplate jdbc) {
     this.rest = rest;
     this.accounts = accounts;
@@ -68,10 +66,9 @@ class AngeboteUebersichtIT extends AbstractIntegrationTest {
     angebot(adler, "ANGELEGT", "2026-09-20", null);
     angebot(biber, "BESTELLT", "2026-09-25", "Java-Grundkurs");
     angebot(adler, "BESTELLT", "2026-09-22", null);
-    jdbc.execute("TRUNCATE outbox_message, password_reset_token, account RESTART IDENTITY CASCADE");
-    accounts.save(
-        new Account(null, MAIL, "Manne", hasher.hash(PASSWORT), Role.ADMIN, 0, ANGELEGT, ANGELEGT));
-    sitzung = angemeldeterKopf();
+    jdbc.execute("TRUNCATE outbox_message, account RESTART IDENTITY CASCADE");
+    accounts.save(Konten.neu(MAIL, ANGELEGT));
+    sitzung = Anmeldung.perCode(rest, jdbc, hasher, MAIL);
   }
 
   private long firma(final String name) {
@@ -90,16 +87,6 @@ class AngeboteUebersichtIT extends AbstractIntegrationTest {
         status,
         datum,
         titel);
-  }
-
-  private HttpHeaders angemeldeterKopf() {
-    final ResponseEntity<String> anmeldung =
-        rest.postForEntity(
-            "/api/auth/login", Map.of("email", MAIL, "password", PASSWORT), String.class);
-    final String gesetzt = String.valueOf(anmeldung.getHeaders().getFirst(HttpHeaders.SET_COOKIE));
-    final HttpHeaders kopf = new HttpHeaders();
-    kopf.add(HttpHeaders.COOKIE, gesetzt.substring(0, gesetzt.indexOf(';')));
-    return kopf;
   }
 
   private <T> ResponseEntity<T> hole(final String pfad, final Class<T> typ) {

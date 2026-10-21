@@ -50,10 +50,10 @@ function boardClient() {
   };
 }
 
-/** Der Pruefzweig aus `pushPruefung.zweig` der eingesetzten Konfiguration. */
+/** Der Pruefzweig aus `pushCheck.branch` der eingesetzten Konfiguration. */
 const PRUEFZWEIG = 'kit-pruefung';
 
-const KONFIG = { pushPruefung: { zweig: PRUEFZWEIG } };
+const KONFIG = { pushCheck: { branch: PRUEFZWEIG } };
 
 /** Die Stelle des einen Ueberlebenden aus mutations-99-9.xml. */
 const STELLE_27 =
@@ -442,7 +442,7 @@ describe('main --karten', () => {
     }
   });
 
-  test('ohne pushPruefung.zweig in der Konfiguration sperrt der Lauf mit Grund und Quote', async () => {
+  test('ohne pushCheck.branch in der Konfiguration sperrt der Lauf mit Grund und Quote', async () => {
     // Given
     const client = boardClient();
 
@@ -455,11 +455,31 @@ describe('main --karten', () => {
     });
 
     // Then
-    await expect(ergebnis).rejects.toThrow('pushPruefung.zweig');
+    await expect(ergebnis).rejects.toThrow('pushCheck.branch');
     await expect(ergebnis).rejects.toThrow('99,9 %');
     for (const methode of Object.values(client)) {
       expect(methode).not.toHaveBeenCalled();
     }
+  });
+
+  test('mit der echten Projekt-Config findet der Lauf den Pruefzweig und schreibt ans Board', async () => {
+    // Given: die versionierte Config — benennt ein Kit-Update den Schluessel um, faellt das hier auf
+    const config = JSON.parse(
+      readFileSync(path.join(REPO, '.claude', 'workflow.config.json'), 'utf8'),
+    );
+    const client = board();
+
+    // When
+    const { ergebnis } = lauf(['--karten'], {
+      text: bericht999(),
+      env: aufPruefzweig,
+      client,
+      config,
+    });
+
+    // Then
+    await expect(ergebnis).resolves.toContain('99,9 %');
+    expect(client.anlegen).toHaveBeenCalledTimes(1);
   });
 
   test('zwei Laeufe mit demselben Bericht legen genau eine Karte an, mit demselben Schluessel (E13)', async () => {

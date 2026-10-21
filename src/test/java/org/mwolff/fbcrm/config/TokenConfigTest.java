@@ -3,6 +3,7 @@ package org.mwolff.fbcrm.config;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import org.junit.jupiter.api.Test;
+import org.mwolff.fbcrm.common.NumericCodes;
 import org.mwolff.fbcrm.common.SecureTokens;
 
 /**
@@ -20,5 +21,14 @@ class TokenConfigTest {
 
     // When / Then — die Zufallsquelle der Plattform, nicht eine feste Zeichenkette.
     assertThat(tokens.newToken()).isNotEqualTo(tokens.newToken());
+  }
+
+  @Test
+  void numericCodes_thenProducesSixDigitCodes() {
+    // Given
+    final NumericCodes codes = new TokenConfig().numericCodes();
+
+    // When / Then
+    assertThat(codes.newCode()).hasSize(6).containsOnlyDigits();
   }
 }

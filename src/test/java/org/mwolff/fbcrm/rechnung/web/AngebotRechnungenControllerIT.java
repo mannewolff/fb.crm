@@ -16,10 +16,10 @@ import org.junit.jupiter.api.Test;
 import org.mwolff.fbcrm.AbstractIntegrationTest;
 import org.mwolff.fbcrm.angebot.web.AngebotPositionResponse;
 import org.mwolff.fbcrm.angebot.web.AngebotResponse;
-import org.mwolff.fbcrm.auth.domain.Account;
+import org.mwolff.fbcrm.auth.Anmeldung;
+import org.mwolff.fbcrm.auth.Konten;
 import org.mwolff.fbcrm.auth.domain.AccountRepository;
-import org.mwolff.fbcrm.auth.domain.PasswordHasher;
-import org.mwolff.fbcrm.auth.domain.Role;
+import org.mwolff.fbcrm.auth.domain.SecretHasher;
 import org.mwolff.fbcrm.common.Geschaeftszone;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.web.client.TestRestTemplate;
@@ -61,7 +61,6 @@ import org.springframework.jdbc.core.JdbcTemplate;
 class AngebotRechnungenControllerIT extends AbstractIntegrationTest {
 
   private static final String MAIL = "manne@example.org";
-  private static final String PASSWORT = "richtiges-passwort";
   private static final Instant ANGELEGT = Instant.parse("2026-10-01T08:00:00Z");
 
   private static final String FIRMA = "IT Bildungshaus";
@@ -85,7 +84,7 @@ class AngebotRechnungenControllerIT extends AbstractIntegrationTest {
 
   private final TestRestTemplate rest;
   private final AccountRepository accounts;
-  private final PasswordHasher hasher;
+  private final SecretHasher hasher;
   private final JdbcTemplate jdbc;
 
   private HttpHeaders sitzung = new HttpHeaders();
@@ -101,7 +100,7 @@ class AngebotRechnungenControllerIT extends AbstractIntegrationTest {
   AngebotRechnungenControllerIT(
       final TestRestTemplate rest,
       final AccountRepository accounts,
-      final PasswordHasher hasher,
+      final SecretHasher hasher,
       final JdbcTemplate jdbc) {
     this.rest = rest;
     this.accounts = accounts;
@@ -116,10 +115,9 @@ class AngebotRechnungenControllerIT extends AbstractIntegrationTest {
             + " ansprechpartner, firma RESTART IDENTITY CASCADE");
     jdbc.execute("DELETE FROM rechnung_einstellungen");
     jdbc.execute("INSERT INTO rechnung_einstellungen DEFAULT VALUES");
-    jdbc.execute("TRUNCATE outbox_message, password_reset_token, account RESTART IDENTITY CASCADE");
-    accounts.save(
-        new Account(null, MAIL, "Manne", hasher.hash(PASSWORT), Role.ADMIN, 0, ANGELEGT, ANGELEGT));
-    sitzung = angemeldeterKopf();
+    jdbc.execute("TRUNCATE outbox_message, account RESTART IDENTITY CASCADE");
+    accounts.save(Konten.neu(MAIL, ANGELEGT));
+    sitzung = Anmeldung.perCode(rest, jdbc, hasher, MAIL);
     jdbc.update("INSERT INTO firma (name) VALUES (?)", FIRMA);
     firmaId =
         Objects.requireNonNull(
@@ -145,16 +143,6 @@ class AngebotRechnungenControllerIT extends AbstractIntegrationTest {
     schulungId = kennung(mitPositionen.positionen().get(1));
     ruf("/api/angebote/" + angebotId + "/status/weiter", HttpMethod.POST, null, String.class);
     ruf("/api/angebote/" + angebotId + "/status/weiter", HttpMethod.POST, null, String.class);
-  }
-
-  private HttpHeaders angemeldeterKopf() {
-    final ResponseEntity<String> anmeldung =
-        rest.postForEntity(
-            "/api/auth/login", Map.of("email", MAIL, "password", PASSWORT), String.class);
-    final String gesetzt = String.valueOf(anmeldung.getHeaders().getFirst(HttpHeaders.SET_COOKIE));
-    final HttpHeaders kopf = new HttpHeaders();
-    kopf.add(HttpHeaders.COOKIE, gesetzt.substring(0, gesetzt.indexOf(';')));
-    return kopf;
   }
 
   private <T> ResponseEntity<T> ruf(

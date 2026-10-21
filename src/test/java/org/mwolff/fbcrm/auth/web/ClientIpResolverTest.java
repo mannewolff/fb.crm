@@ -26,11 +26,16 @@ class ClientIpResolverTest {
         new AuthProperties(
             "geheimnis-mit-mindestens-32-zeichen-laenge",
             Duration.ofDays(1),
-            Duration.ofHours(1),
             "fbcrm_session",
             true,
             10,
             Duration.ofMinutes(15),
+            5,
+            Duration.ofHours(1),
+            10,
+            Duration.ofHours(24),
+            Duration.ofMinutes(10),
+            5,
             List.of(vertrauenswuerdig)));
   }
 

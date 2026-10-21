@@ -15,6 +15,10 @@ import org.mwolff.fbcrm.firma.domain.FirmaRepository;
 import org.mwolff.fbcrm.rechnung.domain.Abrechnungsstand;
 import org.mwolff.fbcrm.rechnung.domain.Belegabsender;
 import org.mwolff.fbcrm.rechnung.domain.Belegempfaenger;
+import org.mwolff.fbcrm.rechnung.domain.Briefbogen;
+import org.mwolff.fbcrm.rechnung.domain.BriefbogenRepository;
+import org.mwolff.fbcrm.rechnung.domain.Briefpapierblatt;
+import org.mwolff.fbcrm.rechnung.domain.Briefpapierspeicher;
 import org.mwolff.fbcrm.rechnung.domain.DokumentSpeicher;
 import org.mwolff.fbcrm.rechnung.domain.Nummernkreis;
 import org.mwolff.fbcrm.rechnung.domain.Nummernmuster;
@@ -45,7 +49,11 @@ import org.springframework.transaction.annotation.Transactional;
  *   <li><b>Erst die gestellte Rechnung, dann ihr Dokument.</b> Entstuende das Dokument vorher,
  *       muesste die Nummer danach geschrieben werden, und ein fehlgeschlagener Druck risse eine
  *       Luecke in den Nummernkreis. So liegt im schlechten Fall ein Objekt ohne Rechnung im
- *       Speicher — eine Waise, die niemanden stoert (siehe {@code V18__rechnung.sql}).
+ *       Speicher — eine Waise, die niemanden stoert (siehe {@code V18__rechnung.sql}). Erst zum
+ *       Dokument wird der Briefbogen gelesen: Er wird nicht festgeschrieben, sondern wirkt im
+ *       Augenblick des Drucks (Plan #363, E2). Das fertige Dokument erzeugt danach niemand neu —
+ *       ein spaeter getauschtes Briefpapier beruehrt es nicht (fachliche Quelle #361, Kriterium
+ *       10).
  *   <li><b>Der Sprung des Angebots zum Schluss</b>, gerechnet allein mit den <b>gestellten</b>
  *       Rechnungen: „Abgerechnet" heisst, dass die Rechnungen gestellt sind; ein Entwurf kann noch
  *       geloescht werden (Manne, 2026-09-30; Kriterium 27). Gestellt heisst dabei jeder Zustand
@@ -57,6 +65,14 @@ import org.springframework.transaction.annotation.Transactional;
  */
 @Service
 @Transactional
+/*
+ * PMD.CouplingBetweenObjects: Aus demselben Grund wie die Ausnahme am Konstruktor — das Stellen
+ * ist der Schritt, an dem alle Angaben eines Belegs zusammenkommen. Mit dem Briefbogen (Plan #363,
+ * E3) kennt die Klasse auch dessen Bestand, das hinterlegte Blatt und den Speicher seiner Bytes.
+ * Den Satz samt Wahl des Papiers in eine eigene Klasse zu ziehen, verschoebe die Kopplung, ohne
+ * sie zu loesen: Die Reihenfolge Festschreibung, Dokument, Angebot bleibt hier.
+ */
+@SuppressWarnings("PMD.CouplingBetweenObjects")
 public class RechnungStellenUseCase {
 
   private final RechnungRepository rechnungen;
@@ -68,16 +84,20 @@ public class RechnungStellenUseCase {
   private final Rechnungsnummern rechnungsnummern;
   private final Belegdrucker drucker;
   private final DokumentSpeicher dokumente;
+  private final BriefbogenRepository briefboegen;
+  private final Briefpapierspeicher briefpapier;
   private final Clock clock;
 
   /*
-   * PMD.ExcessiveParameterList: Zehn Mitspieler, und keiner davon ist zu entbehren: der Bestand der
-   * Rechnungen, das Angebot und seine Firma fuer die Kopie des Empfaengers, die eigenen Angaben fuer
-   * die des Absenders, die Einstellungen, der Nummernkreis und die Rechnungsnummern fuer die Nummer
-   * (#254, Kriterium 5), Drucker und Speicher fuer das Dokument und die Uhr fuer den Zeitpunkt. Sie
-   * zu Gruppen zusammenzufassen verschoebe die Zahl, ohne etwas zu klaeren: Das Stellen ist der
-   * Schritt, an dem alle Angaben eines Belegs zusammenkommen. Die Ausnahme steht am Konstruktor,
-   * die Regel bleibt im Regelsatz scharf.
+   * PMD.ExcessiveParameterList: Zwoelf Mitspieler, und keiner davon ist zu entbehren: der Bestand
+   * der Rechnungen, das Angebot und seine Firma fuer die Kopie des Empfaengers, die eigenen Angaben
+   * fuer die des Absenders, die Einstellungen, der Nummernkreis und die Rechnungsnummern fuer die
+   * Nummer (#254, Kriterium 5), Drucker und Speicher fuer das Dokument, das BriefbogenRepository
+   * fuer Schalter, Raender und das hinterlegte Blatt und der Briefpapierspeicher fuer dessen Bytes
+   * als Untergrund (Plan #363, E3) und die Uhr fuer den Zeitpunkt. Sie zu Gruppen zusammenzufassen
+   * verschoebe die Zahl, ohne etwas zu klaeren: Das Stellen ist der Schritt, an dem alle Angaben
+   * eines Belegs zusammenkommen. Die Ausnahme steht am Konstruktor, die Regel bleibt im Regelsatz
+   * scharf.
    */
   @SuppressWarnings("PMD.ExcessiveParameterList")
   RechnungStellenUseCase(
@@ -90,6 +110,8 @@ public class RechnungStellenUseCase {
       final Rechnungsnummern rechnungsnummern,
       final Belegdrucker drucker,
       final DokumentSpeicher dokumente,
+      final BriefbogenRepository briefboegen,
+      final Briefpapierspeicher briefpapier,
       final Clock clock) {
     this.rechnungen = rechnungen;
     this.angebote = angebote;
@@ -100,6 +122,8 @@ public class RechnungStellenUseCase {
     this.rechnungsnummern = rechnungsnummern;
     this.drucker = drucker;
     this.dokumente = dokumente;
+    this.briefboegen = briefboegen;
+    this.briefpapier = briefpapier;
     this.clock = clock;
   }
 
@@ -168,10 +192,21 @@ public class RechnungStellenUseCase {
     }
   }
 
-  /** Das Dokument entsteht aus der festgeschriebenen Rechnung und haengt sich an sie. */
+  /**
+   * Das Dokument entsteht aus der festgeschriebenen Rechnung und haengt sich an sie (Plan #363, E3,
+   * E7, E18). Mit hinterlegtem Briefpapier setzt {@link Briefbogenlayout}, und das Briefpapier
+   * liegt als Untergrund darunter; ohne setzt {@link Rechnungslayout} wie bisher, ohne Untergrund —
+   * Schalter und Raender des Briefbogens wirken dann nicht (fachliche Quelle #361, Kriterium 11).
+   */
   private Rechnung mitDokument(final Rechnung festgeschrieben) {
+    final RechnungDruckdaten daten = Rechnungsbeleg.druckdaten(festgeschrieben);
+    final Briefbogen bogen = briefboegen.lies();
+    final Briefpapierblatt blatt = bogen.blatt();
     final byte[] pdf =
-        drucker.drucke(Rechnungslayout.setze(Rechnungsbeleg.druckdaten(festgeschrieben)));
+        blatt == null
+            ? drucker.drucke(Rechnungslayout.setze(daten), null)
+            : drucker.drucke(
+                Briefbogenlayout.setze(daten, bogen), briefpapier.lies(blatt.schluessel()));
     return rechnungen.save(
         festgeschrieben.mitDokument(dokumente.lege(festgeschrieben.requireId(), pdf)));
   }

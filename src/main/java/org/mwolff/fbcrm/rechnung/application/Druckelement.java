@@ -74,4 +74,23 @@ public sealed interface Druckelement {
    */
   record Flaeche(int seite, int x, int y, int breite, int hoehe, Farbe farbe)
       implements Druckelement {}
+
+  /**
+   * Ein Textstueck, um seinen Ankerpunkt gedreht, etwa das „Muster“ quer ueber einen Probedruck.
+   *
+   * <p>Der Drucker legt es ueber Flaeche, Linie und Text, damit es auf jeder Seite durchgehend zu
+   * sehen ist.
+   *
+   * @param seite Nummer der Seite, ab 1
+   * @param x Abstand des Ankerpunkts vom linken Blattrand in Punkten; dort beginnt die Grundlinie
+   * @param y Abstand des Ankerpunkts vom unteren Blattrand in Punkten
+   * @param winkel Drehung der Grundlinie gegen die Waagerechte in Grad, gegen den Uhrzeigersinn
+   * @param schrift Schnitt, in dem der Text gesetzt wird
+   * @param groesse Schriftgroesse in Punkten
+   * @param farbe Farbe der Zeichen
+   * @param text der Text, in einer Zeile
+   */
+  record Schraegtext(
+      int seite, int x, int y, int winkel, Schrift schrift, int groesse, Farbe farbe, String text)
+      implements Druckelement {}
 }

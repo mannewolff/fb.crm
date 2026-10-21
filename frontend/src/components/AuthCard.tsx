@@ -19,7 +19,7 @@ const KARTE_BREITE = 380;
 export interface AuthCardProps {
   readonly titel: string;
   readonly children: ReactNode;
-  /** Nebenwege unter dem Formular, etwa „Passwort vergessen?". */
+  /** Nebenwege unter dem Formular, etwa ein Verweis auf die Einrichtung. */
   readonly fuss?: ReactNode;
 }
 

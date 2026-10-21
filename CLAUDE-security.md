@@ -25,18 +25,18 @@ Verbindliche Sicherheits-Regeln für Spring-Boot-Backend und React-Frontend. Die
 
 ### Session-Cookie — Sicherheitsmodell
 
-**Soll:** Nach dem Login setzt das Backend ein **signiertes, zustandsloses Session-Cookie**. Der Cookie-Wert ist per HMAC (`AuthProperties.sessionSecret`) signiert; es gibt **keine** Server-Session und **kein** Token im JS-zugänglichen Storage. Ein externer Identity-Provider (Keycloak/OIDC) wird bewusst nicht eingesetzt.
+**Soll:** Nach der Anmeldung per Einmalcode setzt das Backend ein **signiertes, zustandsloses Session-Cookie**. Der Cookie-Wert ist per HMAC (`AuthProperties.sessionSecret`) signiert; es gibt **keine** Server-Session und **kein** Token im JS-zugänglichen Storage. Ein externer Identity-Provider (Keycloak/OIDC) wird bewusst nicht eingesetzt.
 
 **Eigenschaften des Cookies:**
 - `HttpOnly` — per JavaScript nicht lesbar; ein XSS kann das Session-Token nicht exfiltrieren.
 - `SameSite=Strict` — wird nie cross-site gesendet; damit ist der zustandslose Cookie-Ansatz CSRF-resistent, ein CSRF-Synchronizer-Token entfällt bewusst. Diese Entscheidung steht begründet in der `SecurityConfig`.
 - `Secure` (Default `true` über `AuthProperties.cookieSecure`; TLS terminiert der Caddy-Reverse-Proxy) — nur über HTTPS.
-- Begrenzte Gültigkeit über `AuthProperties.sessionTtl`; abgelaufene/ungültige Cookies werden vom `SessionAuthenticationFilter` mit `401` abgewiesen.
-- **Sitzungs-Generation** — das Token trägt die kontogebundene Generation seiner Ausstellung; weicht sie von der aktuellen Generation des Kontos ab, gilt das Token nicht mehr. Ein **Passwort-Reset zählt die Generation hoch und beendet damit alle Sitzungen des Kontos** — auf jedem Gerät, auch dem auslösenden. Wer sich mit dem alten Passwort angemeldet hatte, verliert den Zugang in dem Moment, in dem der rechtmäßige Besitzer ein neues Passwort vergibt. Das bloße Anfordern eines Resets beendet noch nichts; erst das Einlösen des Einmal-Tokens zählt hoch.
+- Begrenzte Gültigkeit über `AuthProperties.sessionTtl`, gezählt ab der letzten Nutzung: Jede Anfrage verlängert die Sitzung (`SessionAuthenticationFilter`); abgelaufene/ungültige Cookies werden mit `401` abgewiesen. Default 30 Tage — die begründete Abweichung vom engen Default unter „Authentifizierung & Tokens".
+- **Sitzungs-Generation** — das Token trägt die kontogebundene Generation seiner Ausstellung; weicht sie von der aktuellen Generation des Kontos ab, gilt das Token nicht mehr. **Abmelden zählt die Generation hoch und beendet damit sofort alle Sitzungen des Kontos** — auch ein vorher abgegriffenes Token gilt danach nicht mehr, obwohl seine Laufzeit noch nicht um ist. Bei einem Konto und einer Person ist „alle Sitzungen" dasselbe wie „diese Sitzung" (CLAUDE.md, *Betriebsform*).
 
-**Passwörter:** ausschließlich über Spring Securitys `PasswordEncoder` (**Argon2id**, `Argon2PasswordEncoder.defaultsForSpringSecurity_v5_8()`) gehasht — nie im Klartext gespeichert, übertragen oder geloggt.
+**Anmeldung per Einmalcode:** Ein Passwort gibt es nicht. Wer sich anmeldet, gibt die Adresse des Kontos ein und bekommt einen sechsstelligen Code (`NumericCodes`, `SecureRandom`). Der Code gilt kurz (`AuthProperties.loginCodeTtl`, Default 10 min) und nur einmal, ein neuer ersetzt den alten, nach `loginCodeMaxAttempts` (Default 5) falschen Eingaben verfällt er. Gespeichert wird nur sein **Argon2id**-Hash (`SecretHasher`, `Argon2PasswordEncoder.defaultsForSpringSecurity_v5_8()`) — ein schneller Hash wäre bei 10⁶ Vorbildern offline in Sekunden umgekehrt. Der Code geht genau einen Weg: mit eingeschaltetem Mailversand per Mail, sonst ins Serverprotokoll, **nie beides** — die Protokollzeile nennt die Adresse nicht. Die Mail trägt nur den Code und die Adresse der Instanz als Klartext, **keinen Link, der direkt anmeldet**. Anforderung und Eingabe antworten für eine unbekannte Adresse genauso wie für die des Kontos (keine Konto-Enumeration), auch im Zeitverhalten. Gebremst wird je Adresse (`loginCodePerAddress` je `loginCodeAddressWindow`) und je Herkunft (`loginMaxAttempts` je `loginAttemptWindow`); die Abweisung nennt die Wartezeit, für jede Adresse gleich.
 
-**Einrichtung / Passwort-Reset:** Eine Registrierung gibt es nicht (CLAUDE.md, *Betriebsform*). Das eine Konto entsteht einmalig über einen Bootstrap-Token (Einrichtung); der Passwort-Reset läuft über ein einmaliges, zeitlich begrenztes, nicht ratbares Token (`SecureTokens`), per Mail zugestellt.
+**Einrichtung:** Eine Registrierung gibt es nicht (CLAUDE.md, *Betriebsform*). Das eine Konto entsteht einmalig über einen Bootstrap-Token: Mit richtigem Token geht ein Code an die eingegebene Adresse, und erst seine Eingabe legt das Konto an. Der Bootstrap-Token wirkt nur, solange kein Konto existiert.
 
 ### Input & XSS
 
@@ -97,9 +97,9 @@ Verbindliche Sicherheits-Regeln für Spring-Boot-Backend und React-Frontend. Die
 
 ### Authentifizierung & Tokens (falls eingeführt)
 
-- **Passwort-Hashing** über `BCryptPasswordEncoder` (Spring Security), Standard-Strength oder höher.
+- **Hashing von Geheimnissen** (in fb.crm: Einmalcode der Anmeldung) über Spring Securitys `Argon2PasswordEncoder` (**Argon2id**, `defaultsForSpringSecurity_v5_8()`) oder stärker; ein Passwort gibt es in fb.crm nicht.
 - **Token-Generierung** kryptographisch sicher (`SecureRandom`), in der DB ausschließlich der Hash gespeichert (`SHA-256` oder besser).
-- **TTL** konfigurierbar über `@ConfigurationProperties`, Default eng (z. B. 8 h).
+- **TTL** konfigurierbar über `@ConfigurationProperties`, Default eng (z. B. 8 h). **Begründete Abweichung in fb.crm:** Die Sitzung gilt per Default 30 Tage ab der letzten Nutzung (`fbcrm.auth.session-ttl: P30D`, Plan #395, E21). Mit dem Code per Mail kostet jede Neuanmeldung einen Postfachzugriff, und 30 Tage sind die vom PO entschiedene Grenze. Den längeren Lauf tragen `HttpOnly`, `SameSite=Strict`, `Secure`, die kontogebundene Sitzungs-Generation und ihr Hochzählen beim Abmelden. Der Einmalcode selbst bleibt eng (10 min).
 - Abgelaufene Tokens regelmäßig löschen (`@Scheduled` mit klar definiertem Cron).
 - Brute-Force-Schutz: Failed-Login-Delay (zufällig 200–800 ms via `Thread.sleep` in einem dedizierten Use-Case) und Rate Limiting an der API-Grenze.
 - Auth-Verhalten ist mit Spring-Security-Integration-Tests abgedeckt — nicht nur Happy-Path.

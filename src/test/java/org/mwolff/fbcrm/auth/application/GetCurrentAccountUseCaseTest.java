@@ -11,9 +11,9 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.mwolff.fbcrm.auth.Konten;
 import org.mwolff.fbcrm.auth.domain.Account;
 import org.mwolff.fbcrm.auth.domain.AccountRepository;
-import org.mwolff.fbcrm.auth.domain.Role;
 
 /** Das Konto der laufenden Sitzung. */
 @ExtendWith(MockitoExtension.class)
@@ -27,7 +27,7 @@ class GetCurrentAccountUseCaseTest {
   @InjectMocks private GetCurrentAccountUseCase useCase;
 
   private static Account konto() {
-    return new Account(KONTO_ID, "manne@example.org", "Manne", "hash", Role.ADMIN, 3, JETZT, JETZT);
+    return Konten.gespeichert(KONTO_ID, "manne@example.org", 3, JETZT);
   }
 
   @Test

@@ -4,7 +4,7 @@
  *
  * Zwei Betriebsarten, die der Workflow in getrennten Jobs ruft (Issue #355):
  * - `--nur-quote` — ohne Board und ohne Token, auf jedem `push`-Lauf (E2).
- * - `--karten` — mit Board, nur auf dem Pruefzweig aus `pushPruefung.zweig` (E2, E21): legt je
+ * - `--karten` — mit Board, nur auf dem Pruefzweig aus `pushCheck.branch` (E2, E21): legt je
  *   betroffener Datei eine Karte an oder ergaenzt die vorhandene (Issue #356), prueft die
  *   Liegezeit der offenen Karten und haengt den Bericht an jede geschriebene Karte (Issue #357).
  *   Auf jedem anderen Zweig berichtet sie bloss, wie `--nur-quote`.
@@ -290,9 +290,9 @@ async function kartenLauf({ client, config, env, jetzt, ueberlebende, q }) {
   } catch (fehler) {
     throw boardSperre(`${KONFIG_DATEI} ist nicht lesbar: ${fehler.code ?? fehler.message}`, q);
   }
-  const zweig = konfig?.pushPruefung?.zweig;
+  const zweig = konfig?.pushCheck?.branch;
   if (typeof zweig !== 'string' || zweig === '') {
-    throw boardSperre(`Kein Pruefzweig: ${KONFIG_DATEI} nennt kein Feld pushPruefung.zweig`, q);
+    throw boardSperre(`Kein Pruefzweig: ${KONFIG_DATEI} nennt kein Feld pushCheck.branch`, q);
   }
   if (env.GITHUB_REF_NAME !== zweig) {
     return { ohneBoard: `nicht der Pruefzweig ${zweig}, das Board bleibt unberuehrt` };

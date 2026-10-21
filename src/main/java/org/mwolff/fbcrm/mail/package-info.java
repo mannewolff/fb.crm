@@ -8,8 +8,8 @@
  *
  * <p>{@code MailProperties} und {@code OutboxProperties} liegen hier und nicht in einer der
  * Schichten, weil mehrere von ihnen lesen — die Anwendungsschicht nichts, die Infrastruktur den
- * Takt, die Grenzen und die Absenderadresse, und der Passwort-Reset im Modul {@code auth} die
- * oeffentliche Adresse fuer den Link.
+ * Takt, die Grenzen und die Absenderadresse, und die Ausgabe des Einmalcodes im Modul {@code auth}
+ * den Schalter und die oeffentliche Adresse fuer den Mailtext.
  */
 @NullMarked
 package org.mwolff.fbcrm.mail;

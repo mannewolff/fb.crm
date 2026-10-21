@@ -47,9 +47,17 @@ export function parseSetupStatus(wert: unknown): SetupStatus {
   return { initialized: wert.initialized };
 }
 
-/** Meldet an; die Sitzung kommt als HttpOnly-Cookie zurueck, nicht als Token. */
-export function login(email: string, password: string): Promise<Konto> {
-  return apiJson('/api/auth/login', { methode: 'POST', rumpf: { email, password } }, parseMe);
+/**
+ * Fordert einen Code fuer die Anmeldung an. Die Antwort ist fuer jede Adresse dieselbe (202 ohne
+ * Rumpf) — ob es zu ihr ein Konto gibt, erfaehrt die Oberflaeche nicht (E13, E17).
+ */
+export function codeAnfordern(email: string): Promise<void> {
+  return apiOhneInhalt('/api/auth/code', { methode: 'POST', rumpf: { email } });
+}
+
+/** Meldet mit dem Code an; die Sitzung kommt als HttpOnly-Cookie zurueck, nicht als Token. */
+export function login(email: string, code: string): Promise<Konto> {
+  return apiJson('/api/auth/login', { methode: 'POST', rumpf: { email, code } }, parseMe);
 }
 
 /** Meldet ab; das Cookie wird serverseitig geleert. */
@@ -67,48 +75,36 @@ export function setupStatus(): Promise<SetupStatus> {
   return apiJson('/api/setup/status', { methode: 'GET' }, parseSetupStatus);
 }
 
-/** Die Eingaben der Einrichtung — die Felder von `SetupRequest` im Backend. */
-export interface Einrichtung {
-  readonly email: string;
-  readonly emailRepeat: string;
-  readonly displayName: string;
-  readonly password: string;
-  readonly bootstrapToken: string;
+/**
+ * Fordert den Code der Einrichtung an — die Felder von `SetupCodeRequest` im Backend. Ein falscher
+ * Schluessel endet in 403 wie bisher; sonst 202 ohne Rumpf.
+ */
+export function einrichtungCodeAnfordern(
+  bootstrapToken: string,
+  displayName: string,
+  email: string,
+): Promise<void> {
+  return apiOhneInhalt('/api/setup/code', {
+    methode: 'POST',
+    rumpf: { email, displayName, bootstrapToken },
+  });
 }
 
 /**
- * Richtet die Instanz ein (K3). Die Antwort ist das angelegte Konto, und die Sitzung kommt wie
+ * Die Eingaben der Einrichtung — die Felder von `SetupRequest` im Backend. Ein Passwort und eine
+ * Wiederholung der Adresse gibt es nicht mehr (E15): Den Vertipper faengt der Code ab.
+ */
+export interface Einrichtung {
+  readonly bootstrapToken: string;
+  readonly displayName: string;
+  readonly email: string;
+  readonly code: string;
+}
+
+/**
+ * Richtet die Instanz mit dem Code ein (K3). Die Antwort ist das angelegte Konto, und die Sitzung kommt wie
  * beim Anmelden als HttpOnly-Cookie mit — der Betreiber ist danach angemeldet.
  */
 export function setup(eingaben: Einrichtung): Promise<Konto> {
   return apiJson('/api/setup', { methode: 'POST', rumpf: eingaben }, parseMe);
-}
-
-/**
- * Fordert einen Reset-Link an. Die Antwort (202) sagt bewusst nichts darueber, ob es zu der
- * Adresse ein Konto gibt (K7) — deshalb gibt es hier auch nichts zu verengen.
- */
-export function requestPasswordReset(email: string): Promise<void> {
-  return apiOhneInhalt('/api/auth/password-reset', { methode: 'POST', rumpf: { email } });
-}
-
-/**
- * Prueft, ob ein Reset-Link noch einloesbar ist (E24): 204 heisst ja, jeder andere Status
- * scheitert als `ApiError`. Ohne Nebenwirkung — der Link bleibt danach gueltig.
- *
- * Der Token steht im Pfad und wird kodiert: Er kommt aus der Adresszeile, und ein `/` oder `?`
- * darin fuehrte die Anfrage sonst an einen anderen Endpunkt.
- */
-export function checkResetToken(token: string): Promise<void> {
-  return apiOhneInhalt(`/api/auth/password-reset/${encodeURIComponent(token)}`, {
-    methode: 'GET',
-  });
-}
-
-/** Loest den Link ein und setzt das neue Passwort (K6, K7). */
-export function confirmPasswordReset(token: string, password: string): Promise<void> {
-  return apiOhneInhalt('/api/auth/password-reset/confirm', {
-    methode: 'POST',
-    rumpf: { token, password },
-  });
 }

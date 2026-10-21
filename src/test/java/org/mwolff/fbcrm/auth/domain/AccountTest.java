@@ -4,61 +4,49 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.time.Instant;
 import org.junit.jupiter.api.Test;
+import org.mwolff.fbcrm.auth.Konten;
 
-/** Verhalten des Kontos: Passwortwechsel und Pruefung der Sitzungs-Generation. */
+/** Verhalten des Kontos: naechste Generation und Pruefung der Generation. */
 class AccountTest {
 
   private static final Instant ANGELEGT = Instant.parse("2026-09-01T08:00:00Z");
   private static final Instant GEAENDERT = Instant.parse("2026-09-18T12:00:00Z");
 
   private static Account kontoMitGeneration(final int generation) {
-    return new Account(
-        7L, "manne@example.org", "Manne", "alter-hash", Role.ADMIN, generation, ANGELEGT, ANGELEGT);
+    return Konten.gespeichert(7L, "manne@example.org", generation, ANGELEGT);
   }
 
   @Test
-  void changePassword_thenIncrementsSessionGeneration() {
+  void mitNaechsterGeneration_thenIncrementsSessionGeneration() {
     // Given
     final Account bestand = kontoMitGeneration(3);
 
     // When
-    final Account geaendert = bestand.changePassword("neuer-hash", GEAENDERT);
+    final Account geaendert = bestand.mitNaechsterGeneration(GEAENDERT);
 
     // Then
     assertThat(geaendert.sessionGeneration()).isEqualTo(4);
   }
 
   @Test
-  void changePassword_thenCarriesTheNewHash() {
+  void mitNaechsterGeneration_thenStampsTheChangeTime() {
     // Given
     final Account bestand = kontoMitGeneration(0);
 
     // When
-    final Account geaendert = bestand.changePassword("neuer-hash", GEAENDERT);
-
-    // Then
-    assertThat(geaendert.passwordHash()).isEqualTo("neuer-hash");
-  }
-
-  @Test
-  void changePassword_thenStampsTheChangeTime() {
-    // Given
-    final Account bestand = kontoMitGeneration(0);
-
-    // When
-    final Account geaendert = bestand.changePassword("neuer-hash", GEAENDERT);
+    final Account geaendert = bestand.mitNaechsterGeneration(GEAENDERT);
 
     // Then
     assertThat(geaendert.updatedAt()).isEqualTo(GEAENDERT);
   }
 
   @Test
-  void changePassword_thenLeavesIdentityRoleAndCreationUntouched() {
+  void mitNaechsterGeneration_thenLeavesEverythingElseUntouched() {
     // Given
     final Account bestand = kontoMitGeneration(1);
 
     // When
-    final Account geaendert = bestand.changePassword("neuer-hash", GEAENDERT);
+    final Account geaendert = bestand.mitNaechsterGeneration(GEAENDERT);
 
     // Then
     assertThat(geaendert)
@@ -71,15 +59,15 @@ class AccountTest {
   }
 
   @Test
-  void changePassword_thenLeavesTheOriginalUntouched() {
+  void mitNaechsterGeneration_thenLeavesTheOriginalUntouched() {
     // Given
     final Account bestand = kontoMitGeneration(1);
 
     // When
-    bestand.changePassword("neuer-hash", GEAENDERT);
+    bestand.mitNaechsterGeneration(GEAENDERT);
 
     // Then
-    assertThat(bestand.passwordHash()).isEqualTo("alter-hash");
+    assertThat(bestand.sessionGeneration()).isEqualTo(1);
   }
 
   @Test

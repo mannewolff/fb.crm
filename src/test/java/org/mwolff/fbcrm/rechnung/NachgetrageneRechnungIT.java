@@ -14,10 +14,10 @@ import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mwolff.fbcrm.AbstractIntegrationTest;
-import org.mwolff.fbcrm.auth.domain.Account;
+import org.mwolff.fbcrm.auth.Anmeldung;
+import org.mwolff.fbcrm.auth.Konten;
 import org.mwolff.fbcrm.auth.domain.AccountRepository;
-import org.mwolff.fbcrm.auth.domain.PasswordHasher;
-import org.mwolff.fbcrm.auth.domain.Role;
+import org.mwolff.fbcrm.auth.domain.SecretHasher;
 import org.mwolff.fbcrm.common.Geschaeftszone;
 import org.mwolff.fbcrm.rechnung.domain.DokumentSpeicher;
 import org.mwolff.fbcrm.rechnung.web.NachtragResponse;
@@ -48,7 +48,6 @@ import org.springframework.util.MultiValueMap;
 class NachgetrageneRechnungIT extends AbstractIntegrationTest {
 
   private static final String MAIL = "manne@example.org";
-  private static final String PASSWORT = "richtiges-passwort";
   private static final Instant ANGELEGT = Instant.parse("2026-09-01T08:00:00Z");
   private static final String FIRMA = "Adler AG";
   private static final String PFAD = "/api/nachgetragene-rechnungen";
@@ -60,7 +59,7 @@ class NachgetrageneRechnungIT extends AbstractIntegrationTest {
 
   private final TestRestTemplate rest;
   private final AccountRepository accounts;
-  private final PasswordHasher hasher;
+  private final SecretHasher hasher;
   private final JdbcTemplate jdbc;
   private final DokumentSpeicher speicher;
 
@@ -74,7 +73,7 @@ class NachgetrageneRechnungIT extends AbstractIntegrationTest {
   NachgetrageneRechnungIT(
       final TestRestTemplate rest,
       final AccountRepository accounts,
-      final PasswordHasher hasher,
+      final SecretHasher hasher,
       final JdbcTemplate jdbc,
       final DokumentSpeicher speicher) {
     this.rest = rest;
@@ -92,20 +91,9 @@ class NachgetrageneRechnungIT extends AbstractIntegrationTest {
         Objects.requireNonNull(
                 jdbc.queryForObject("SELECT id FROM firma WHERE name = ?", Long.class, FIRMA))
             .longValue();
-    jdbc.execute("TRUNCATE outbox_message, password_reset_token, account RESTART IDENTITY CASCADE");
-    accounts.save(
-        new Account(null, MAIL, "Manne", hasher.hash(PASSWORT), Role.ADMIN, 0, ANGELEGT, ANGELEGT));
-    sitzung = angemeldeterKopf();
-  }
-
-  private HttpHeaders angemeldeterKopf() {
-    final ResponseEntity<String> anmeldung =
-        rest.postForEntity(
-            "/api/auth/login", Map.of("email", MAIL, "password", PASSWORT), String.class);
-    final String gesetzt = String.valueOf(anmeldung.getHeaders().getFirst(HttpHeaders.SET_COOKIE));
-    final HttpHeaders kopf = new HttpHeaders();
-    kopf.add(HttpHeaders.COOKIE, gesetzt.substring(0, gesetzt.indexOf(';')));
-    return kopf;
+    jdbc.execute("TRUNCATE outbox_message, account RESTART IDENTITY CASCADE");
+    accounts.save(Konten.neu(MAIL, ANGELEGT));
+    sitzung = Anmeldung.perCode(rest, jdbc, hasher, MAIL);
   }
 
   private <T> ResponseEntity<T> ruf(

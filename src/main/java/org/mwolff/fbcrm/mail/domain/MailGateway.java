@@ -3,8 +3,8 @@ package org.mwolff.fbcrm.mail.domain;
 /**
  * Port auf den Weg einer Nachricht nach draussen.
  *
- * <p>Er existiert aus demselben Grund wie {@code PasswordHasher}: Der Hintergrundjob uebersetzt
- * gegen diesen Namen, nicht gegen ein Mail-Framework (CLAUDE-java.md §6.1). Was dahintersteht,
+ * <p>Er existiert aus demselben Grund wie {@code SecretHasher}: Der Hintergrundjob uebersetzt gegen
+ * diesen Namen, nicht gegen ein Mail-Framework (CLAUDE-java.md §6.1). Was dahintersteht,
  * entscheidet die Infrastruktur — heute SMTP ueber {@code JavaMailSender}.
  *
  * <p>Die Absenderadresse steht bewusst <b>nicht</b> in der Signatur: Sie ist eine Eigenschaft der

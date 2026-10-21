@@ -1,5 +1,6 @@
 package org.mwolff.fbcrm.auth.web;
 
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.mwolff.fbcrm.auth.application.LoginResult;
 import org.mwolff.fbcrm.auth.application.SetupAccountUseCase;
@@ -18,7 +19,7 @@ import org.springframework.web.bind.annotation.RestController;
  * ueberhaupt noch frei ist, beantwortet {@code SetupAccountUseCase}; die Form der Eingaben prueft
  * Bean Validation (CLAUDE-java.md §6.3).
  *
- * <p>Beide Pfade sind ohne Sitzung erreichbar ({@link SecurityConfig}) — eine frische Instanz hat
+ * <p>Alle Pfade sind ohne Sitzung erreichbar ({@link SecurityConfig}) — eine frische Instanz hat
  * kein Konto, also kann niemand eine vorweisen. Was sie schuetzt, ist der Einmal-Schluessel und die
  * Tatsache, dass es danach ein Konto gibt.
  */
@@ -27,24 +28,52 @@ import org.springframework.web.bind.annotation.RestController;
 public class SetupController {
 
   private final SetupAccountUseCase einrichtung;
+  private final ClientIpResolver clientIp;
   private final SessionCookieFactory cookies;
 
   public SetupController(
-      final SetupAccountUseCase einrichtung, final SessionCookieFactory cookies) {
+      final SetupAccountUseCase einrichtung,
+      final ClientIpResolver clientIp,
+      final SessionCookieFactory cookies) {
     this.einrichtung = einrichtung;
+    this.clientIp = clientIp;
     this.cookies = cookies;
   }
 
-  /** Richtet ein und meldet den Betreiber im selben Zug an (K3). */
+  /**
+   * Bestaetigt die Einrichtung mit dem Code, legt das Konto an und meldet den Betreiber im selben
+   * Zug an (K3, E9).
+   */
   @PostMapping
   public ResponseEntity<AccountResponse> initialize(
-      @Valid @RequestBody final SetupRequest anfrage) {
+      @Valid @RequestBody final SetupRequest anfrage, final HttpServletRequest request) {
     final LoginResult ergebnis =
         einrichtung.initialize(
-            anfrage.email(), anfrage.displayName(), anfrage.password(), anfrage.bootstrapToken());
+            anfrage.email(),
+            anfrage.displayName(),
+            anfrage.code(),
+            anfrage.bootstrapToken(),
+            clientIp.resolve(request));
     return ResponseEntity.ok()
         .header(HttpHeaders.SET_COOKIE, cookies.header(ergebnis.cookie()))
         .body(AccountResponse.of(ergebnis.account()));
+  }
+
+  /**
+   * Fordert den Code der Einrichtung an (E8) — 202 ohne Rumpf, fuer jede Adresse gleich (E17).
+   *
+   * <p>Ein falscher Schluessel oder eine schon eingerichtete Instanz enden in derselben Abweisung
+   * wie bisher; die Zaehlbremse greift vor beidem.
+   */
+  @PostMapping("/code")
+  public ResponseEntity<Void> requestCode(
+      @Valid @RequestBody final SetupCodeRequest anfrage, final HttpServletRequest request) {
+    einrichtung.requestCode(
+        anfrage.email(),
+        anfrage.displayName(),
+        anfrage.bootstrapToken(),
+        clientIp.resolve(request));
+    return ResponseEntity.accepted().build();
   }
 
   /** Sagt der noch unangemeldeten Oberflaeche, ob die Instanz schon eingerichtet ist (E11). */

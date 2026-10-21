@@ -10,17 +10,17 @@ import java.time.Instant;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.mwolff.fbcrm.auth.application.ConfirmPasswordResetUseCase;
+import org.mwolff.fbcrm.auth.Konten;
 import org.mwolff.fbcrm.auth.application.GetCurrentAccountUseCase;
 import org.mwolff.fbcrm.auth.application.LoginResult;
 import org.mwolff.fbcrm.auth.application.LoginUseCase;
 import org.mwolff.fbcrm.auth.application.LogoutUseCase;
-import org.mwolff.fbcrm.auth.application.RequestPasswordResetUseCase;
 import org.mwolff.fbcrm.auth.application.SessionCookie;
 import org.mwolff.fbcrm.auth.domain.Account;
-import org.mwolff.fbcrm.auth.domain.Role;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -37,7 +37,7 @@ import org.springframework.mock.web.MockHttpServletRequest;
 class AuthControllerTest {
 
   private static final String MAIL = "manne@example.org";
-  private static final String PASSWORT = "richtiges-passwort";
+  private static final String CODE = "042424";
   private static final String TOKEN = "token.signatur";
   private static final String IP = "203.0.113.7";
   private static final Instant JETZT = Instant.parse("2026-09-18T10:00:00Z");
@@ -46,8 +46,6 @@ class AuthControllerTest {
   @Mock private LoginUseCase loginUseCase;
   @Mock private LogoutUseCase logoutUseCase;
   @Mock private GetCurrentAccountUseCase currentAccount;
-  @Mock private RequestPasswordResetUseCase requestReset;
-  @Mock private ConfirmPasswordResetUseCase confirmReset;
   @Mock private ClientIpResolver clientIp;
 
   private AuthController controller;
@@ -62,21 +60,15 @@ class AuthControllerTest {
   void baueDenController() {
     controller =
         new AuthController(
-            loginUseCase,
-            logoutUseCase,
-            currentAccount,
-            requestReset,
-            confirmReset,
-            clientIp,
-            new SessionCookieFactory());
+            loginUseCase, logoutUseCase, currentAccount, clientIp, new SessionCookieFactory());
   }
 
   private static Account konto() {
-    return new Account(KONTO_ID, MAIL, "Manne", "hash", Role.ADMIN, 3, JETZT, JETZT);
+    return Konten.gespeichert(KONTO_ID, MAIL, 3, JETZT);
   }
 
   private static LoginRequest anfrage() {
-    return new LoginRequest(MAIL, PASSWORT);
+    return new LoginRequest(MAIL, CODE);
   }
 
   private String setCookie(final ResponseEntity<?> antwort) {
@@ -85,7 +77,7 @@ class AuthControllerTest {
 
   private ResponseEntity<AccountResponse> meldeAn(final SessionCookie cookie) {
     when(clientIp.resolve(any(MockHttpServletRequest.class))).thenReturn(IP);
-    when(loginUseCase.login(MAIL, PASSWORT, IP)).thenReturn(new LoginResult(konto(), cookie));
+    when(loginUseCase.login(MAIL, CODE, IP)).thenReturn(new LoginResult(konto(), cookie));
     return controller.login(anfrage(), new MockHttpServletRequest());
   }
 
@@ -155,11 +147,11 @@ class AuthControllerTest {
   @Test
   void logout_thenAnswersWithoutContent() {
     // Given
-    when(logoutUseCase.logout())
+    when(logoutUseCase.logout(KONTO_ID))
         .thenReturn(new SessionCookie("fbcrm_session", "", Duration.ZERO, true));
 
     // When
-    final ResponseEntity<Void> antwort = controller.logout();
+    final ResponseEntity<Void> antwort = controller.logout(KONTO_ID);
 
     // Then
     assertThat(antwort.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
@@ -168,11 +160,11 @@ class AuthControllerTest {
   @Test
   void logout_thenInvalidatesTheCookieImmediately() {
     // Given
-    when(logoutUseCase.logout())
+    when(logoutUseCase.logout(KONTO_ID))
         .thenReturn(new SessionCookie("fbcrm_session", "", Duration.ZERO, true));
 
     // When
-    final ResponseEntity<Void> antwort = controller.logout();
+    final ResponseEntity<Void> antwort = controller.logout(KONTO_ID);
 
     // Then — K9: leerer Wert und Max-Age=0.
     assertThat(setCookie(antwort)).startsWith("fbcrm_session=;").contains("Max-Age=0");
@@ -190,30 +182,34 @@ class AuthControllerTest {
     assertThat(antwort).isEqualTo(new AccountResponse(KONTO_ID, "Manne", MAIL));
   }
 
-  @Test
-  void requestPasswordReset_thenPassesOnlyTheAddress() {
-    // When — der Controller entscheidet nichts; ob die Adresse bekannt ist, sieht er nie (K7).
-    controller.requestPasswordReset(new PasswordResetRequest(MAIL));
+  /*
+   * Die beiden Adressen stehen fuer die des Kontos und eine ohne Konto. Der Controller weiss davon
+   * nichts — eben darum muss die Antwort fuer beide dieselbe sein (E13, E17).
+   */
+  @ParameterizedTest(name = "POST /api/auth/code fuer {0} antwortet 202 ohne Rumpf")
+  @ValueSource(strings = {MAIL, "fremd@example.org"})
+  void requestCode_forAnyAddress_thenAnswersAcceptedWithoutBody(final String adresse) {
+    // Given
+    when(clientIp.resolve(any(MockHttpServletRequest.class))).thenReturn(IP);
 
-    // Then
-    verify(requestReset).request(MAIL);
+    // When
+    final ResponseEntity<Void> antwort =
+        controller.requestCode(new LoginCodeRequest(adresse), new MockHttpServletRequest());
+
+    // Then — 202 statt 200: angenommen ist der Auftrag, zugestellt noch nicht.
+    assertThat(antwort).isEqualTo(ResponseEntity.accepted().build());
+    assertThat(antwort.hasBody()).isFalse();
   }
 
   @Test
-  void checkPasswordResetToken_thenAsksWhetherTheLinkIsStillValid() {
+  void requestCode_thenPassesAddressAndOrigin() {
+    // Given
+    when(clientIp.resolve(any(MockHttpServletRequest.class))).thenReturn(IP);
+
     // When
-    controller.checkPasswordResetToken(TOKEN);
+    controller.requestCode(new LoginCodeRequest(MAIL), new MockHttpServletRequest());
 
-    // Then — E24: die Voranfrage prueft, sie loest nicht ein.
-    verify(confirmReset).ensureRedeemable(TOKEN);
-  }
-
-  @Test
-  void confirmPasswordReset_thenPassesTokenAndNewPassword() {
-    // When
-    controller.confirmPasswordReset(new PasswordResetConfirmRequest(TOKEN, PASSWORT));
-
-    // Then
-    verify(confirmReset).confirm(TOKEN, PASSWORT);
+    // Then — die Herkunft braucht die Zaehlbremse (Kriterium 5).
+    verify(loginUseCase).codeAnfordern(MAIL, IP);
   }
 }

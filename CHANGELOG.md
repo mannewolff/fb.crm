@@ -11,6 +11,31 @@ bleibt stehen, auch wenn nichts darunter steht.
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-10-20
+
+- chore: v1.2.1
+- Ansicht Dokumentation unter /dokumentation (Issue #387)
+- Dokumentation ins Frontend: Rohtexte, Waechter, Regel und Image (Issue #386)
+- Dokumenttext: Markdown-Bloecke als Kupferwolke-Bausteine (Issue #385)
+- Teil Betrieb: Sicherung, Wiederherstellung, Aktualisierung (Issue #384)
+- Teil Betrieb: Einrichten und betreiben, README zieht um (Issue #383)
+- Teil Bedienung: Startseite, Arbeitszeit, Jahresabschluesse, Nachtraege (Issue #382)
+- Teil Bedienung: Firmen, Angebote, Rechnungen (Issue #381)
+- Teil Bedienung: Einstieg, eigene Angaben, Rechnungseinstellungen (Issue #380)
+- Markdown-Leser fuer die Dokumentation (Issue #379)
+- Karte Briefpapier bei den eigenen Angaben (Issue #376)
+- RechnungStellenUseCase druckt auf dem Briefbogen (Issue #375)
+- Probedruck mit Beispieldaten und schraegem Muster (Issue #374)
+- Briefpapier hochladen, ersetzen und entfernen (Issue #373)
+- Briefbogen lesen und pflegen: GET und PUT auf /api/briefpapier (Issue #372)
+- Randgrenzen: passt, passt nicht und der groesste zulaessige Wert (Issue #371)
+- Briefbogenlayout: der Satz auf dem eigenen Briefpapier (Issue #370)
+- Briefpapier im Objektspeicher ablegen (Issue #368)
+- Briefpapier pruefen und reinigen (Issue #367)
+- Untergrund und Schraegtext im Belegdrucker (Issue #366)
+- Positionstabelle und Belegschreibweisen aus Rechnungslayout herausloesen (Issue #365)
+- Briefbogen: Tabelle, Domaene und Ablage der Zeile (Issue #364)
+
 ## [1.2.0] - 2026-10-18
 
 - chore: v1.1.1

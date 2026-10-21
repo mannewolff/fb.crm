@@ -10,8 +10,8 @@ import org.springframework.stereotype.Component;
  * Zufaellige Verzoegerung nach einer fehlgeschlagenen Anmeldung (CLAUDE-security.md).
  *
  * <p>Sie deckt zu, was die Laufzeit sonst verraet: Ein Konto, das es nicht gibt, spart sonst einen
- * Argon2-Durchlauf und antwortet messbar frueher als ein falsches Passwort. Der Dummy-Hash in
- * {@code LoginUseCase} gleicht die Rechenzeit an, diese Verzoegerung streut den Rest.
+ * Argon2-Durchlauf und antwortet messbar frueher als ein falscher Code. Der Wegwerf-Hash in {@code
+ * CodeEinloesung} gleicht die Rechenzeit an, diese Verzoegerung streut den Rest.
  *
  * <p>Die Zufallsquelle steckt im Konstruktor, damit der Test sie ersetzen kann.
  */

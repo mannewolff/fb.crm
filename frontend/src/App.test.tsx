@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, useNavigate } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -165,6 +165,8 @@ describe('App', () => {
     ],
     ['fuehrt „/eigene-angaben" ohne Sitzung auf die Anmeldeseite', '/eigene-angaben'],
     ['fuehrt „/administration“ ohne Sitzung auf die Anmeldeseite', '/administration'],
+    ['fuehrt „/dokumentation" ohne Sitzung auf die Anmeldeseite', '/dokumentation'],
+    ['fuehrt „/dokumentation/betrieb" ohne Sitzung auf die Anmeldeseite', '/dokumentation/betrieb'],
   ])('%s', async (_name, pfad) => {
     ohneSitzung();
 
@@ -185,7 +187,7 @@ describe('App', () => {
     await nutzer.click(screen.getByRole('button', { name: 'zurueck' }));
 
     expect(await screen.findByLabelText(/^E-Mail-Adresse/)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Anmelden' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Code anfordern' })).toBeInTheDocument();
   });
 
   it('zeigt „/firmen/5/angebote/neu" als Maske im Rahmen — nachgeladen', async () => {
@@ -428,7 +430,7 @@ describe('App', () => {
     expect(screen.getByRole('navigation', { name: 'Hauptnavigation' })).toBeInTheDocument();
   });
 
-  it('zeigt „/" als Startseite im Rahmen und nicht mehr das leere Panel', async () => {
+  it('zeigt „/" als Startseite im Rahmen', async () => {
     fensterbreite(1440);
     fetchNachPfad({
       'GET /api/auth/me': json(200, KONTO),
@@ -441,20 +443,36 @@ describe('App', () => {
     expect(
       await screen.findByRole('heading', { level: 1, name: 'Start' }),
     ).toBeInTheDocument();
-    expect(screen.queryByTestId('leeres-panel')).not.toBeInTheDocument();
     expect(screen.getByRole('navigation', { name: 'Hauptnavigation' })).toBeInTheDocument();
   });
 
-  it('zeigt „/dokumentation" weiter das leere Panel', async () => {
+  it('Szenario: Dokumentation in fb.crm lesen — hinter der Sitzung, aus der Seitenleiste', async () => {
     fensterbreite(1440);
     fetchNachPfad({
       'GET /api/auth/me': json(200, KONTO),
       'GET /api/instance': json(200, { version: '0.1.3' }),
+      'GET /api/startseite': json(200, STARTSEITENSTAND),
     });
+    const nutzer = userEvent.setup();
 
-    renderApp(['/dokumentation'], 0);
+    renderApp(['/'], 0);
+    const schiene = await screen.findByRole('navigation', { name: 'Hauptnavigation' });
+    await nutzer.click(within(schiene).getByRole('link', { name: 'Dokumentation' }));
 
-    expect(await screen.findByTestId('leeres-panel')).toBeInTheDocument();
-    expect(screen.getByRole('navigation', { name: 'Hauptnavigation' })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Bedienung' }),
+    ).toBeInTheDocument();
+    await nutzer.click(
+      within(screen.getByRole('navigation', { name: 'Teile der Dokumentation' })).getByRole(
+        'link',
+        { name: 'Betrieb' },
+      ),
+    );
+    expect(screen.getByRole('heading', { level: 1, name: 'Betrieb' })).toBeInTheDocument();
+    expect(
+      within(screen.getByRole('navigation', { name: 'Inhalt' })).getByRole('link', {
+        name: 'Sicherung',
+      }),
+    ).toHaveAttribute('href', '#sicherung');
   });
 });

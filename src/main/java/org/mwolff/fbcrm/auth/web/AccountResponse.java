@@ -6,8 +6,8 @@ import org.mwolff.fbcrm.auth.domain.Account;
  * Das angemeldete Konto, so wie die Oberflaeche es braucht.
  *
  * <p>Drei Felder, mehr nicht: Aus dem Anzeigenamen baut die Oberflaeche das Kuerzel im Nutzer-Mal
- * (K13, E12). Der Passwort-Hash, die Rolle und die Sitzungs-Generation gehen niemanden etwas an und
- * stehen deshalb nicht drin.
+ * (K13, E12). Die Rolle und die Sitzungs-Generation gehen niemanden etwas an und stehen deshalb
+ * nicht drin.
  *
  * @param id technische Id des Kontos
  * @param displayName Anzeigename

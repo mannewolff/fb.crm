@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { EigeneAngaben } from '../api/eigeneAngaben';
 import KopfPfad, { KopfPfadProvider } from '../components/KopfPfad';
 import { fetchNachPfad, json, leer, problem } from '../test/fetchNachPfad';
+import type { Routen } from '../test/fetchNachPfad';
 import { renderMitTheme } from '../test/render';
 import EigeneAngabenMaske from './EigeneAngabenMaske';
 
@@ -43,6 +44,30 @@ const LEER: EigeneAngaben = {
 const PFAD = 'GET /api/eigene-angaben';
 const SCHREIBEN = 'PUT /api/eigene-angaben';
 
+/** Der Stand des Briefbogens, den die Karte „Briefpapier" unter dem Formular selbst liest. */
+const BRIEFBOGEN = {
+  briefpapier: false,
+  dateiname: null,
+  groesse: null,
+  seiten: null,
+  absenderzeile: true,
+  steuerBankZeile: true,
+  links: 250,
+  rechts: 200,
+  inhaltOben: 985,
+  unten: 200,
+  folgeOben: 200,
+  folgeUnten: 200,
+};
+
+/**
+ * Das fetch-Doppel der Maske samt dem Leseweg der Karte „Briefpapier" — sie laedt bei jeder Probe
+ * mit, und ein fehlender Weg waere ein Aufruf ins Leere.
+ */
+function fetchMaske(routen: Routen) {
+  return fetchNachPfad({ 'GET /api/briefpapier': json(200, BRIEFBOGEN), ...routen });
+}
+
 function renderMaske() {
   return renderMitTheme(
     <MemoryRouter initialEntries={['/eigene-angaben']}>
@@ -68,7 +93,7 @@ afterEach(() => {
 
 describe('EigeneAngabenMaske', () => {
   it('zeigt nach dem Laden die vorhandenen Werte in ihren Feldern', async () => {
-    fetchNachPfad({ [PFAD]: json(200, ANGABEN) });
+    fetchMaske({ [PFAD]: json(200, ANGABEN) });
 
     renderMaske();
 
@@ -87,7 +112,7 @@ describe('EigeneAngabenMaske', () => {
   });
 
   it('laesst auf einer frischen Instanz jedes Feld leer — kein Platzhalter im Feld', async () => {
-    fetchNachPfad({ [PFAD]: json(200, LEER) });
+    fetchMaske({ [PFAD]: json(200, LEER) });
 
     renderMaske();
 
@@ -96,8 +121,24 @@ describe('EigeneAngabenMaske', () => {
     expect(feld('Webadresse')).toHaveValue('');
   });
 
+  it('traegt unter dem Formular die Karte „Briefpapier" und weiter genau eine h1', async () => {
+    fetchMaske({ [PFAD]: json(200, ANGABEN) });
+
+    renderMaske();
+    await screen.findByRole('textbox', { name: 'Name' });
+
+    const karte = await screen.findByRole('heading', { name: 'Briefpapier' });
+    expect(karte.tagName).toBe('H2');
+    expect(await screen.findByRole('textbox', { name: 'Linker Rand (mm)' })).toHaveValue('25,0');
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+    // Unter dem Formular: Die Karte folgt der Speichern-Taste im Dokument.
+    expect(
+      speichern().compareDocumentPosition(karte) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
   it('meldet sich mit „Eigene Angaben" im Kopf und traegt genau eine h1', async () => {
-    fetchNachPfad({ [PFAD]: json(200, ANGABEN) });
+    fetchMaske({ [PFAD]: json(200, ANGABEN) });
 
     renderMaske();
     await screen.findByRole('textbox', { name: 'Name' });
@@ -112,21 +153,23 @@ describe('EigeneAngabenMaske', () => {
     );
   });
 
-  it('gibt jedem Eingabefeld eine Beschriftung', async () => {
-    fetchNachPfad({ [PFAD]: json(200, ANGABEN) });
+  it('gibt jedem Eingabefeld eine Beschriftung — auch denen der Karte „Briefpapier"', async () => {
+    fetchMaske({ [PFAD]: json(200, ANGABEN) });
 
     renderMaske();
     await screen.findByRole('textbox', { name: 'Name' });
+    await screen.findByRole('textbox', { name: 'Linker Rand (mm)' });
 
+    // Zwoelf Felder der eigenen Angaben, sechs Raender des Briefbogens.
     const felder = screen.getAllByRole('textbox');
-    expect(felder).toHaveLength(12);
+    expect(felder).toHaveLength(18);
     for (const eingabe of felder) {
       expect(eingabe).toHaveAccessibleName();
     }
   });
 
   it('fuehrt die Webadresse nur als Text und nicht als Verweis', async () => {
-    fetchNachPfad({ [PFAD]: json(200, ANGABEN) });
+    fetchMaske({ [PFAD]: json(200, ANGABEN) });
 
     renderMaske();
     await screen.findByRole('textbox', { name: 'Name' });
@@ -137,7 +180,7 @@ describe('EigeneAngabenMaske', () => {
 
   it('schickt die geaenderten Angaben mit PUT und meldet den Erfolg', async () => {
     const nutzer = userEvent.setup();
-    const fetchMock = fetchNachPfad({
+    const fetchMock = fetchMaske({
       [PFAD]: json(200, ANGABEN),
       [SCHREIBEN]: leer(204),
     });
@@ -159,7 +202,7 @@ describe('EigeneAngabenMaske', () => {
 
   it('schickt ein geleertes Feld als null und nicht als Leerstring', async () => {
     const nutzer = userEvent.setup();
-    const fetchMock = fetchNachPfad({
+    const fetchMock = fetchMaske({
       [PFAD]: json(200, ANGABEN),
       [SCHREIBEN]: leer(204),
     });
@@ -187,7 +230,7 @@ describe('EigeneAngabenMaske', () => {
 
   it('haengt die Meldung des Servers an ihr Feld', async () => {
     const nutzer = userEvent.setup();
-    fetchNachPfad({
+    fetchMaske({
       [PFAD]: json(200, ANGABEN),
       [SCHREIBEN]: problem(400, 'Die Eingabe ist nicht gültig.', {
         plz: ['Die Postleitzahl ist zu lang.'],
@@ -208,7 +251,7 @@ describe('EigeneAngabenMaske', () => {
 
   it('meldet einen Fehlschlag ohne Feldbezug als Stoerung ueber dem Formular', async () => {
     const nutzer = userEvent.setup();
-    fetchNachPfad({ [PFAD]: json(200, ANGABEN), [SCHREIBEN]: leer(503) });
+    fetchMaske({ [PFAD]: json(200, ANGABEN), [SCHREIBEN]: leer(503) });
 
     renderMaske();
     await screen.findByRole('textbox', { name: 'Name' });
@@ -225,7 +268,7 @@ describe('EigeneAngabenMaske', () => {
     // Ueber „Eigene Angaben" gibt es keine Ebene, auf die „Abbrechen" fuehren koennte — es
     // verwirft daher die Aenderungen an der Stelle (E2).
     const nutzer = userEvent.setup();
-    fetchNachPfad({ [PFAD]: json(200, ANGABEN), [SCHREIBEN]: leer(503) });
+    fetchMaske({ [PFAD]: json(200, ANGABEN), [SCHREIBEN]: leer(503) });
 
     renderMaske();
     await nutzer.clear(await screen.findByRole('textbox', { name: 'Ort' }));
@@ -241,7 +284,7 @@ describe('EigeneAngabenMaske', () => {
 
   it('nimmt nach dem Speichern auf den neuen Stand zurueck, nicht auf den geladenen', async () => {
     const nutzer = userEvent.setup();
-    fetchNachPfad({ [PFAD]: json(200, ANGABEN), [SCHREIBEN]: leer(204) });
+    fetchMaske({ [PFAD]: json(200, ANGABEN), [SCHREIBEN]: leer(204) });
 
     renderMaske();
     await nutzer.clear(await screen.findByRole('textbox', { name: 'Ort' }));
@@ -255,7 +298,7 @@ describe('EigeneAngabenMaske', () => {
   });
 
   it('zeigt waehrend des Ladens einen Hinweis statt eines leeren Formulars', () => {
-    fetchNachPfad({ [PFAD]: json(200, ANGABEN) });
+    fetchMaske({ [PFAD]: json(200, ANGABEN) });
 
     renderMaske();
 
@@ -264,7 +307,7 @@ describe('EigeneAngabenMaske', () => {
   });
 
   it('meldet einen Ausfall beim Laden und zeigt kein Formular', async () => {
-    fetchNachPfad({ [PFAD]: leer(503) });
+    fetchMaske({ [PFAD]: leer(503) });
 
     renderMaske();
 
@@ -273,13 +316,15 @@ describe('EigeneAngabenMaske', () => {
         'Die eigenen Angaben sind gerade nicht zu erreichen. Bitte später erneut versuchen.',
       ),
     ).toBeInTheDocument();
-    expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
+    // Die Karte „Briefpapier" laedt fuer sich; vom Formular der eigenen Angaben steht nichts da.
+    expect(screen.queryByRole('textbox', { name: 'Name' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Speichern' })).not.toBeInTheDocument();
   });
 
   it('sperrt die Absendetaste, solange das Speichern laeuft', async () => {
     const nutzer = userEvent.setup();
     let loese: (() => void) | undefined;
-    fetchNachPfad({
+    fetchMaske({
       [PFAD]: json(200, ANGABEN),
       [SCHREIBEN]: () =>
         new Promise<Response>((fertig) => {

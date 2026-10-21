@@ -173,9 +173,9 @@ class CiWorkflowTest {
     return inCi;
   }
 
-  /** Ein Eintrag ohne {@code stufe} gilt als Paketstufe (checks.mjs, Issue #758). */
+  /** Ein Eintrag ohne {@code stage} gilt als Paketstufe (checks.mjs, Issue #758). */
   private static boolean istPaketstufe(final JsonNode check) {
-    return !check.has("stufe") || "paket".equals(check.get("stufe").asText());
+    return !check.has("stage") || "paket".equals(check.get("stage").asText());
   }
 
   /** Das {@code with}-Feld des Schritts, der die genannte Action benutzt. */
@@ -293,31 +293,31 @@ class CiWorkflowTest {
   }
 
   @Test
-  void pit_givenAPushRun_thenTheMutationCommandDoesNotDecideByItsExitCode() throws IOException {
-    // When / Then — die Schwelle 100 bleibt im Kommando, entschieden wird am Bericht (E3, E17)
-    assertThat(schritt("pit", "gate-pit"))
-        .containsEntry("continue-on-error", "${{ github.event_name == 'push' }}");
+  void pit_givenAnyRun_thenTheMutationCommandDoesNotDecideByItsExitCode() throws IOException {
+    // When / Then — die Schwelle 100 bleibt im Kommando, entschieden wird am Bericht (E3, E17),
+    // push wie pull_request (Issue #390)
+    assertThat(schritt("pit", "gate-pit")).containsEntry("continue-on-error", true);
   }
 
   @Test
-  void pit_givenAPushRun_thenTheQuotaStepFollowsTheMutationCommandWithoutToken()
-      throws IOException {
+  void pit_givenAnyRun_thenTheQuotaStepFollowsTheMutationCommandWithoutToken() throws IOException {
     // Given
     final int gate = positionen("pit", "gate-pit").getFirst();
 
     // When
     final Map<String, Object> quote = schritt("pit", "mutationsquote");
 
-    // Then — auf jedem push-Lauf, ohne Board und ohne Geheimnis (E2, E15)
+    // Then — auf jedem Lauf, push wie pull_request, ohne Board und ohne Geheimnis
+    // (E2, E15, Issue #390)
     assertThat(positionen("pit", "mutationsquote").getFirst()).isGreaterThan(gate);
-    assertThat(String.valueOf(quote.get("if"))).contains("github.event_name == 'push'");
+    assertThat(quote).doesNotContainKey("if");
     assertThat(quote).doesNotContainKey("env");
   }
 
   @Test
   void mutationskarten_givenTheConfig_thenRunsOnlyOnPushToTheCheckBranch() throws IOException {
     // Given
-    final String zweig = config().get("pushPruefung").get("zweig").asText();
+    final String zweig = config().get("pushCheck").get("branch").asText();
 
     // When
     final Map<String, Object> karten = job("mutationskarten");

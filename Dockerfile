@@ -16,6 +16,10 @@ WORKDIR /build/frontend
 COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci
 COPY frontend/ ./
+# Die Dokumentation kommt als Rohtext-Import aus docs/ (frontend/src/lib/dokumentation.ts) — ohne
+# diese Zeile bricht der Bau hier, waehrend er auf dem Entwicklungsrechner gruen bleibt. Nur die
+# Markdown-Dateien: docs/ traegt auch die Rechnungsvorlage und die Gestaltungsvorlage.
+COPY docs/*.md /build/docs/
 RUN npm run build
 
 # --- 2. Backend ----------------------------------------------------------------------------------

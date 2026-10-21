@@ -8,8 +8,8 @@ import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mwolff.fbcrm.AbstractIntegrationTest;
+import org.mwolff.fbcrm.auth.Konten;
 import org.mwolff.fbcrm.auth.domain.Account;
-import org.mwolff.fbcrm.auth.domain.Role;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -29,12 +29,12 @@ class JpaAccountRepositoryIT extends AbstractIntegrationTest {
   }
 
   private static Account neuesKonto(final String email) {
-    return new Account(null, email, "Manne", "hash", Role.ADMIN, 0, ANGELEGT, ANGELEGT);
+    return Konten.neu(email, ANGELEGT);
   }
 
   @BeforeEach
   void leereFachtabellen() {
-    jdbc.execute("TRUNCATE outbox_message, password_reset_token, account RESTART IDENTITY CASCADE");
+    jdbc.execute("TRUNCATE outbox_message, account RESTART IDENTITY CASCADE");
   }
 
   @Test
@@ -126,12 +126,12 @@ class JpaAccountRepositoryIT extends AbstractIntegrationTest {
   }
 
   @Test
-  void save_givenAChangedPassword_thenStoresTheHigherSessionGeneration() {
+  void save_givenTheNextGeneration_thenStoresTheHigherSessionGeneration() {
     // Given
     final Account gesichert = repository.save(neuesKonto("manne@example.org"));
 
     // When
-    repository.save(gesichert.changePassword("neuer-hash", Instant.parse("2026-09-18T12:00:00Z")));
+    repository.save(gesichert.mitNaechsterGeneration(Instant.parse("2026-09-18T12:00:00Z")));
 
     // Then
     assertThat(repository.findById(gesichert.requireId()))

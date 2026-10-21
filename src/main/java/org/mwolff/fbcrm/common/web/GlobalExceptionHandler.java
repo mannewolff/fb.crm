@@ -1,5 +1,6 @@
 package org.mwolff.fbcrm.common.web;
 
+import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -7,12 +8,15 @@ import java.util.stream.Collectors;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.fbcrm.common.Feldfehler;
 import org.mwolff.fbcrm.common.Uploadgrenze;
+import org.mwolff.fbcrm.common.ZuVieleVersuche;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.TypeMismatchException;
 import org.springframework.core.annotation.AnnotatedElementUtils;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
+import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.ErrorResponse;
@@ -139,6 +143,26 @@ public class GlobalExceptionHandler {
     return ProblemDetail.forStatusAndDetail(HttpStatus.PAYLOAD_TOO_LARGE, Uploadgrenze.MELDUNG);
   }
 
+  /**
+   * Eine Bremse hat gegriffen (E14 des Plans #395).
+   *
+   * <p>Status 429, eine Meldung mit der Wartezeit in ganzen Minuten und der Kopf {@code
+   * Retry-After} in Sekunden. Beide entstehen allein aus der Wartezeit: Die Meldung ist fuer jede
+   * Adresse und jede Zaehlart dieselbe und nennt keine von beiden (Kriterium 5 der fachlichen
+   * Quelle #392). Auch {@code getMessage()} der Ausnahme geht bewusst nicht in die Antwort.
+   *
+   * <p>{@code Retry-After} rechnet aus denselben ganzen Minuten wie die Meldung, damit Kopf und
+   * Text nicht auseinanderlaufen.
+   */
+  @ExceptionHandler(ZuVieleVersuche.class)
+  public ResponseEntity<ProblemDetail> handleZuVieleVersuche(final ZuVieleVersuche exception) {
+    final long minuten = exception.restwartezeit().toMinutes();
+    return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+        .header(HttpHeaders.RETRY_AFTER, Long.toString(Duration.ofMinutes(minuten).toSeconds()))
+        .body(
+            ProblemDetail.forStatusAndDetail(HttpStatus.TOO_MANY_REQUESTS, wartemeldung(minuten)));
+  }
+
   @ExceptionHandler(Exception.class)
   public ProblemDetail handleUnexpected(final Exception exception) {
     // Spring meldet eigene Lagen (404, 405, 415, …) ueber ErrorResponse und bringt den
@@ -154,6 +178,11 @@ public class GlobalExceptionHandler {
       return ProblemDetail.forStatusAndDetail(HttpStatus.INTERNAL_SERVER_ERROR, GENERIC_DETAIL);
     }
     return ProblemDetail.forStatusAndDetail(status.code(), detailOf(exception, status));
+  }
+
+  private static String wartemeldung(final long minuten) {
+    final String dauer = minuten == 1 ? "einer Minute" : minuten + " Minuten";
+    return "Zu viele Versuche. Bitte in " + dauer + " erneut versuchen.";
   }
 
   private static String messageOf(final FieldError error) {
