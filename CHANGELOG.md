@@ -11,6 +11,50 @@ bleibt stehen, auch wenn nichts darunter steht.
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-10-20
+
+- chore: v1.3.2
+- Dokumentation, .env-Vorlage und Leitfaden auf den Code ziehen (Issue #407)
+- Anmelde- und Einrichtungsseite in zwei Schritten (Issue #406)
+- Anmeldung und Einrichtung per Code, Passwort entfernt (Issue #405)
+- Passwort-Reset abraeumen: Tabelle, Wege, Seiten (Issue #404)
+- Code anfordern: zwei Wege, zwei Endpunkte, gleiche Antwort (Issue #403)
+- Einmalcode ausstellen: Mail oder Protokoll, nie beides (Issue #402)
+- Tabelle login_code mit Datensatz und Persistenz (Issue #401)
+- Sitzung 30 Tage ab der letzten Nutzung, Abmelden beendet sofort (Issue #400)
+- Zaehlbremse mit drei Zaehlarten und Wartezeit in der Meldung (Issue #399)
+- Testhelfer Konten fuer den Datensatz des Kontos (Issue #398)
+- SecretHasher statt PasswordHasher (Issue #397)
+- Sechsstelliger Einmalcode aus SecureRandom (Issue #396)
+- chore: v1.3.1
+- mutationsgate.mjs liest den Prüfzweig aus pushCheck.branch (Issue #394)
+- Mutationsquote 80 % auch am Pull Request (Issue #390)
+- Test fuer endText() beim schraegen Text im Seitenzeichner (Issue #389)
+- Änderungen durch install.mjs Version 5.4.0
+- chore: v1.3.0
+- chore: v1.2.1
+- Ansicht Dokumentation unter /dokumentation (Issue #387)
+- Dokumentation ins Frontend: Rohtexte, Waechter, Regel und Image (Issue #386)
+- Dokumenttext: Markdown-Bloecke als Kupferwolke-Bausteine (Issue #385)
+- Teil Betrieb: Sicherung, Wiederherstellung, Aktualisierung (Issue #384)
+- Teil Betrieb: Einrichten und betreiben, README zieht um (Issue #383)
+- Teil Bedienung: Startseite, Arbeitszeit, Jahresabschluesse, Nachtraege (Issue #382)
+- Teil Bedienung: Firmen, Angebote, Rechnungen (Issue #381)
+- Teil Bedienung: Einstieg, eigene Angaben, Rechnungseinstellungen (Issue #380)
+- Markdown-Leser fuer die Dokumentation (Issue #379)
+- Karte Briefpapier bei den eigenen Angaben (Issue #376)
+- RechnungStellenUseCase druckt auf dem Briefbogen (Issue #375)
+- Probedruck mit Beispieldaten und schraegem Muster (Issue #374)
+- Briefpapier hochladen, ersetzen und entfernen (Issue #373)
+- Briefbogen lesen und pflegen: GET und PUT auf /api/briefpapier (Issue #372)
+- Randgrenzen: passt, passt nicht und der groesste zulaessige Wert (Issue #371)
+- Briefbogenlayout: der Satz auf dem eigenen Briefpapier (Issue #370)
+- Briefpapier im Objektspeicher ablegen (Issue #368)
+- Briefpapier pruefen und reinigen (Issue #367)
+- Untergrund und Schraegtext im Belegdrucker (Issue #366)
+- Positionstabelle und Belegschreibweisen aus Rechnungslayout herausloesen (Issue #365)
+- Briefbogen: Tabelle, Domaene und Ablage der Zeile (Issue #364)
+
 ## [1.3.0] - 2026-10-20
 
 - chore: v1.2.1
