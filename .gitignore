@@ -21,3 +21,11 @@ frontend/coverage/
 /fbcrm.dump
 *.dump
 /anhaenge/
+
+chain.sh
+check.sh
+checkrun.sh
+doctor.sh
+runner.sh
+update-all.sh
+update.sh
