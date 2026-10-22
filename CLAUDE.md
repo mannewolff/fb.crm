@@ -32,9 +32,9 @@ Diese Datei ist der Einstiegspunkt für alle Engineering-Regeln in diesem Projek
 
 **Ziel:** **fb.crm** — ein self-hostbares Mini-CRM für Freiberufler nach [`mini-crm-spezifikation.pdf`](mini-crm-spezifikation.pdf). Seit dem Rückschnitt vom 2026-09-30 ist die Kette kurz: **Kunde** (Firma mit Ansprechpartnern) → **Angebot** (Positionen, Status, Kommentare, Anlagen) → **Rechnung** (Teilabrechnung gegen die Angebotspositionen, Nummernkreis, Festschreibung beim Stellen, PDF nach Vorlage). Auftrag, Vorgang und Pipeline aus der Spezifikation sind bewusst entfallen. Was die Spezifikation darüber hinaus beschreibt (etwa Zeiterfassung, Zahlungseingang, Auswertungen), entsteht nur über eine eigene Idee. UI im Stil eines Dashboards: linke Navigation, rechter Inhaltsbereich.
 
-**Betriebsform: ein Rechner, ein Mandant, eine Person.** fb.crm hat genau ein Konto. Es gibt keinen Mehrbenutzerbetrieb, keine Mandanten und keine Rollen mit unterschiedlichen Rechten, und die Anwendung schützt sich nicht gegen gleichzeitiges Bearbeiten desselben Datensatzes (Entscheidung Manne, 2026-10-01, Idee #139). Technisch Zwingendes bleibt: Der Nummernkreis der Rechnung vergibt mit Zeilensperre keine Nummer doppelt.
+**Betriebsform: eine Firma, ein Mandant, mehrere Personen** (Fachplan #409, Idee #408). Die frühere Betriebsform „ein Rechner, ein Mandant, eine Person“ (Idee #139) ist aufgehoben. Jede Person meldet sich mit einem eigenen Konto an; ein C-Level legt die Konten an, vergibt die Rolle und legt Konten still. Es gibt drei Rollen: **C-Level** darf alles, **Employee** alles Fachliche ohne Kontenverwaltung und Einstellungen, **ReadOnly** nur lesen. Es bleibt immer mindestens ein aktiver C-Level. Die Anwendung schützt sich noch nicht gegen gleichzeitiges Bearbeiten desselben Datensatzes (folgt mit #411). Technisch Zwingendes bleibt: Der Nummernkreis der Rechnung vergibt mit Zeilensperre keine Nummer doppelt.
 
-**Nicht im Umfang** (Kapitel 01 der Spezifikation): Buchhaltung, Umsatzsteuervoranmeldung und Steuererklärung; Kalender, Aufgabenverwaltung und Terminplanung; automatischer Abgleich von Kontoumsätzen; Mehrbenutzerbetrieb, Rollen und Rechte (siehe *Betriebsform*).
+**Nicht im Umfang** (Kapitel 01 der Spezifikation): Buchhaltung, Umsatzsteuervoranmeldung und Steuererklärung; Kalender, Aufgabenverwaltung und Terminplanung; automatischer Abgleich von Kontoumsätzen; mehrere Mandanten und Rechte je Firma (siehe *Betriebsform*). Dass Mehrbenutzerbetrieb und Rollen dazugehören, ist eine bewusste Abweichung von Kapitel 01 der Spezifikation; das PDF bleibt unverändert.
 
 **Stack:**
 
@@ -58,7 +58,7 @@ Diese Datei ist der Einstiegspunkt für alle Engineering-Regeln in diesem Projek
 
 **Verbindung Frontend↔Backend:** Im Dev leitet der Vite-Dev-Server (`:5173`) `/api/*` an Spring Boot auf `:8080` weiter. In Produktion serviert Spring Boot den React-Build aus `classpath:/static/` (SPA-Forwarding über eine eigene Web-Konfiguration in `config/`); davor liegt Caddy als Reverse-Proxy mit TLS. Eine Origin, kein CORS.
 
-**Identity / Auth:** Authentifizierung ist projekteigen — kein externer Identity-Provider. Das eine Konto entsteht einmalig per Bootstrap-Token (Einrichtung), danach gibt es Anmelden, Abmelden und Passwort-Reset per Einmal-Token/Mail, sowie signierte, zustandslose Session-Tokens (HttpOnly-Cookie) mit kontogebundener Sitzungs-Generation; Passwörter mit Argon2id. Eine Registrierung gibt es nicht. Das Konto trägt die Rolle `ADMIN` (`auth.domain.Role`, einziger Wert); weitere Rollen sind nicht vorgesehen (*Betriebsform*). Regeln dazu: [CLAUDE-security.md](CLAUDE-security.md).
+**Identity / Auth:** Authentifizierung ist projekteigen — kein externer Identity-Provider. Das erste Konto entsteht einmalig per Bootstrap-Token (Einrichtung) und ist C-Level; weitere Konten legt ein C-Level in fb.crm an. Es gibt Anmelden, Abmelden und Passwort-Reset per Einmal-Token/Mail, sowie signierte, zustandslose Session-Tokens (HttpOnly-Cookie) mit kontogebundener Sitzungs-Generation; Passwörter mit Argon2id. Eine Registrierung gibt es nicht. Jedes Konto trägt eine der drei Rollen C-Level, Employee oder ReadOnly (`auth.domain.Role`, *Betriebsform*); die Zugangsregel der API setzt sie durch, die Oberfläche führt nur. Regeln dazu: [CLAUDE-security.md](CLAUDE-security.md).
 
 ---
 
@@ -154,7 +154,7 @@ Keine kurzfristige Bequemlichkeit rechtfertigt unsicheren, untypisierten oder sc
 
 ---
 
-**TL;DR:** fb.crm ist ein Mini-CRM für Freiberufler — Kunde, Angebot, Rechnung; ein Rechner, ein Mandant, eine Person. Java 25 + Spring Boot 3 (TDD-pflichtig, 100 % Coverage) auf PostgreSQL 16 + MinIO. React 18 + TypeScript strict + MUI im Erscheinungsbild „Kupferwolke". Eigenes Session-Auth mit genau einem Konto. Sicherheit > Korrektheit > Komfort. Vor jedem Push: `mvn verify` und `npm run build`/`lint`/`test` grün. Plan-Mode und Board-Issues sind verbindlich (siehe Workflow).
+**TL;DR:** fb.crm ist ein Mini-CRM für Freiberufler — Kunde, Angebot, Rechnung; eine Firma, ein Mandant, mehrere Personen mit den Rollen C-Level, Employee, ReadOnly. Java 25 + Spring Boot 3 (TDD-pflichtig, 100 % Coverage) auf PostgreSQL 16 + MinIO. React 18 + TypeScript strict + MUI im Erscheinungsbild „Kupferwolke". Eigenes Session-Auth mit einem Konto je Person. Sicherheit > Korrektheit > Komfort. Vor jedem Push: `mvn verify` und `npm run build`/`lint`/`test` grün. Plan-Mode und Board-Issues sind verbindlich (siehe Workflow).
 
 ## Gedächtnis (Obsidian-Vault)
 

@@ -32,11 +32,11 @@ Verbindliche Sicherheits-Regeln für Spring-Boot-Backend und React-Frontend. Die
 - `SameSite=Strict` — wird nie cross-site gesendet; damit ist der zustandslose Cookie-Ansatz CSRF-resistent, ein CSRF-Synchronizer-Token entfällt bewusst. Diese Entscheidung steht begründet in der `SecurityConfig`.
 - `Secure` (Default `true` über `AuthProperties.cookieSecure`; TLS terminiert der Caddy-Reverse-Proxy) — nur über HTTPS.
 - Begrenzte Gültigkeit über `AuthProperties.sessionTtl`, gezählt ab der letzten Nutzung: Jede Anfrage verlängert die Sitzung (`SessionAuthenticationFilter`); abgelaufene/ungültige Cookies werden mit `401` abgewiesen. Default 30 Tage — die begründete Abweichung vom engen Default unter „Authentifizierung & Tokens".
-- **Sitzungs-Generation** — das Token trägt die kontogebundene Generation seiner Ausstellung; weicht sie von der aktuellen Generation des Kontos ab, gilt das Token nicht mehr. **Abmelden zählt die Generation hoch und beendet damit sofort alle Sitzungen des Kontos** — auch ein vorher abgegriffenes Token gilt danach nicht mehr, obwohl seine Laufzeit noch nicht um ist. Bei einem Konto und einer Person ist „alle Sitzungen" dasselbe wie „diese Sitzung" (CLAUDE.md, *Betriebsform*).
+- **Sitzungs-Generation** — das Token trägt die kontogebundene Generation seiner Ausstellung; weicht sie von der aktuellen Generation des Kontos ab, gilt das Token nicht mehr. **Abmelden zählt die Generation hoch und beendet damit sofort alle Sitzungen des Kontos** — auch ein vorher abgegriffenes Token gilt danach nicht mehr, obwohl seine Laufzeit noch nicht um ist.
 
 **Anmeldung per Einmalcode:** Ein Passwort gibt es nicht. Wer sich anmeldet, gibt die Adresse des Kontos ein und bekommt einen sechsstelligen Code (`NumericCodes`, `SecureRandom`). Der Code gilt kurz (`AuthProperties.loginCodeTtl`, Default 10 min) und nur einmal, ein neuer ersetzt den alten, nach `loginCodeMaxAttempts` (Default 5) falschen Eingaben verfällt er. Gespeichert wird nur sein **Argon2id**-Hash (`SecretHasher`, `Argon2PasswordEncoder.defaultsForSpringSecurity_v5_8()`) — ein schneller Hash wäre bei 10⁶ Vorbildern offline in Sekunden umgekehrt. Der Code geht genau einen Weg: mit eingeschaltetem Mailversand per Mail, sonst ins Serverprotokoll, **nie beides** — die Protokollzeile nennt die Adresse nicht. Die Mail trägt nur den Code und die Adresse der Instanz als Klartext, **keinen Link, der direkt anmeldet**. Anforderung und Eingabe antworten für eine unbekannte Adresse genauso wie für die des Kontos (keine Konto-Enumeration), auch im Zeitverhalten. Gebremst wird je Adresse (`loginCodePerAddress` je `loginCodeAddressWindow`) und je Herkunft (`loginMaxAttempts` je `loginAttemptWindow`); die Abweisung nennt die Wartezeit, für jede Adresse gleich.
 
-**Einrichtung:** Eine Registrierung gibt es nicht (CLAUDE.md, *Betriebsform*). Das eine Konto entsteht einmalig über einen Bootstrap-Token: Mit richtigem Token geht ein Code an die eingegebene Adresse, und erst seine Eingabe legt das Konto an. Der Bootstrap-Token wirkt nur, solange kein Konto existiert.
+**Einrichtung:** Eine Registrierung gibt es nicht (CLAUDE.md, *Betriebsform*). Das erste Konto entsteht einmalig über einen Bootstrap-Token und ist C-Level: Mit richtigem Token geht ein Code an die eingegebene Adresse, und erst seine Eingabe legt das Konto an. Der Bootstrap-Token wirkt nur, solange kein Konto existiert. Weitere Konten legt ein C-Level in fb.crm an (Fachplan #409).
 
 ### Input & XSS
 
@@ -48,6 +48,7 @@ Verbindliche Sicherheits-Regeln für Spring-Boot-Backend und React-Frontend. Die
 
 - UI-Elemente, die nur Eingeloggte sehen sollen, prüfen Auth-Status — **diese Checks sind kein Ersatz** für die serverseitige Prüfung in Spring.
 - Defensiv: alles, was sensitive Daten oder Aktionen ermöglicht, hängt nicht allein an einem UI-State-Flag.
+- Rollen: Die Zugangsregel der API setzt die Rechte je Rolle durch — C-Level alles, Employee alles Fachliche ohne Kontenverwaltung und Einstellungen, ReadOnly nur lesen (Plan #414, A2). Die Oberfläche blendet nicht erlaubte Aktionen nur aus und führt damit; sie ist keine Schranke.
 
 ### Error Messages
 
