@@ -22,16 +22,18 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.TestPropertySource;
 
 /**
- * Das Wettrennen zweier gleichzeitiger Einrichtungsaufrufe (E5).
+ * Das Wettrennen zweier gleichzeitiger Einrichtungsaufrufe (E5; Plan #414, A5 und E12).
  *
- * <p>Die beiden Aufrufe tragen <b>verschiedene</b> Adressen. Genau das macht den Fall scharf: Beide
- * kommen durch die Existenzpruefung im Anwendungsfall, und beide kommen durch den eindeutigen Index
- * auf {@code lower(email)} — der sieht zwei verschiedene Schluessel. Was sie trennt, ist allein der
- * partielle eindeutige Index {@code account_single_admin} aus {@code V1__baseline.sql}, der fuer
- * jede ADMIN-Zeile denselben konstanten Schluessel traegt.
+ * <p>Die beiden Aufrufe tragen <b>verschiedene</b> Adressen. Beide kommen durch die
+ * Existenzpruefung im Anwendungsfall und beide durch den eindeutigen Index auf {@code
+ * lower(email)}. Bis V30 trennte sie der Index {@code account_single_admin}; er trug die Zusage
+ * „genau ein Konto", die mit mehreren Konten entfaellt. Seitdem enden zwei gleichzeitige Aufrufe
+ * mit richtigem Einmal-Schluessel in einem oder zwei C-Level-Konten desselben Betreibers — fachlich
+ * erlaubt (A5).
  *
- * <p>Ein Test, der beide Aufrufe mit derselben Adresse fuehrte, waere gruen, ohne diesen Index zu
- * beruehren — und uebersaehe damit genau die Luecke, die er schliessen soll.
+ * <p>Was der Test festhaelt, ist die neue Zusage: Nach dem Wettrennen ist die Instanz eingerichtet,
+ * jedes entstandene Konto ist ein aktives C-Level-Konto, und ein dritter Aufruf wird abgewiesen —
+ * der Schluessel wirkt danach nicht mehr.
  *
  * <p>Seit der Einrichtung per Code fordert jeder der beiden Faeden zuerst seinen eigenen Code an.
  * Ohne ihn scheiterte jede Bestaetigung schon am Code, und der Test pruefte das Wettrennen nicht
@@ -98,33 +100,57 @@ class SetupRaceIT extends AbstractIntegrationTest {
     return Objects.requireNonNull(jdbc.queryForObject("SELECT count(*) FROM account", Long.class));
   }
 
+  private long aktiveCLevel() {
+    return Objects.requireNonNull(
+        jdbc.queryForObject(
+            "SELECT count(*) FROM account WHERE role = 'C_LEVEL' AND aktiv", Long.class));
+  }
+
   @Test
-  void initialize_givenTwoConcurrentCallsWithDifferentAddresses_thenCreatesExactlyOneAccount()
+  void initialize_givenTwoConcurrentCallsWithDifferentAddresses_thenTheInstanceIsInitialized()
       throws Exception {
     // When
     gleichzeitigEinrichten();
 
-    // Then — der partielle Index laesst genau eine ADMIN-Zeile zu.
-    assertThat(konten()).isEqualTo(1);
-  }
-
-  @Test
-  void initialize_givenTwoConcurrentCallsWithDifferentAddresses_thenExactlyOneSucceeds()
-      throws Exception {
-    // When
-    final List<HttpStatus> ausgang = gleichzeitigEinrichten();
-
     // Then
-    assertThat(ausgang).filteredOn(HttpStatus.OK::equals).hasSize(1);
+    final ResponseEntity<String> stand = rest.getForEntity("/api/setup/status", String.class);
+    assertThat(stand.getBody()).contains("\"initialized\":true");
   }
 
   @Test
-  void initialize_givenTwoConcurrentCallsWithDifferentAddresses_thenTheLoserGetsTheUsualRefusal()
+  void initialize_givenTwoConcurrentCallsWithDifferentAddresses_thenAtLeastOneSucceeds()
       throws Exception {
     // When
     final List<HttpStatus> ausgang = gleichzeitigEinrichten();
 
-    // Then — dieselbe Abweisung wie „Konto existiert bereits"; die Datenbankmeldung bleibt drinnen.
-    assertThat(ausgang).filteredOn(HttpStatus.FORBIDDEN::equals).hasSize(1);
+    // Then — wer verliert, bekommt die uebliche Abweisung; mehr als OK oder 403 gibt es nicht.
+    assertThat(ausgang)
+        .contains(HttpStatus.OK)
+        .allMatch(status -> status == HttpStatus.OK || status == HttpStatus.FORBIDDEN);
+  }
+
+  @Test
+  void initialize_givenTwoConcurrentCallsWithDifferentAddresses_thenEveryAccountIsAnActiveCLevel()
+      throws Exception {
+    // When
+    final List<HttpStatus> ausgang = gleichzeitigEinrichten();
+
+    // Then — so viele Konten wie gelungene Aufrufe, und jedes ist C-Level und aktiv.
+    assertThat(konten())
+        .isEqualTo(ausgang.stream().filter(HttpStatus.OK::equals).count())
+        .isEqualTo(aktiveCLevel());
+  }
+
+  @Test
+  void requestCode_afterTheRace_thenAThirdCallIsRefused() throws Exception {
+    // Given
+    gleichzeitigEinrichten();
+
+    // When
+    final ResponseEntity<String> dritter =
+        SetupControllerIT.fordereCodeAn(rest, "dritter@example.org", SetupControllerIT.SCHLUESSEL);
+
+    // Then — der Einmal-Schluessel wirkt danach nicht mehr.
+    assertThat(dritter.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
   }
 }

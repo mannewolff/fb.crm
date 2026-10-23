@@ -5,6 +5,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -95,42 +97,81 @@ class SchemaBaselineIT extends AbstractIntegrationTest {
   }
 
   @Test
-  void accountSingleAdmin_givenSecondAdminWithDifferentEmail_thenRejectedByTheDatabase() {
-    // Given
-    jdbc.update(INSERT_ACCOUNT, "erste@example.org", "Erste", "ADMIN");
-
-    // When / Then
-    assertThatThrownBy(() -> jdbc.update(INSERT_ACCOUNT, "zweite@example.org", "Zweite", "ADMIN"))
-        .isInstanceOf(DataIntegrityViolationException.class)
-        .hasMessageContaining("account_single_admin");
-  }
-
-  @Test
-  void accountSingleAdmin_givenSecondAccountWithRoleUser_thenAccepted() {
-    // Given
-    jdbc.update(INSERT_ACCOUNT, "erste@example.org", "Erste", "ADMIN");
+  void accountRole_givenASecondCLevelWithDifferentEmail_thenAccepted() {
+    // Given — E12: der Index „genau ein Admin" ist mit V30 entfallen, mehrere C-Level sind erlaubt.
+    jdbc.update(INSERT_ACCOUNT, "erste@example.org", "Erste", "C_LEVEL");
 
     // When
-    final int betroffen = jdbc.update(INSERT_ACCOUNT, "zweite@example.org", "Zweite", "USER");
+    final int betroffen = jdbc.update(INSERT_ACCOUNT, "zweite@example.org", "Zweite", "C_LEVEL");
 
     // Then
     assertThat(betroffen).isEqualTo(1);
   }
 
   @Test
+  void accountRole_givenEachOfTheThreeRoles_thenAccepted() {
+    // When
+    final int betroffen =
+        jdbc.update(INSERT_ACCOUNT, "chefin@example.org", "Chefin", "C_LEVEL")
+            + jdbc.update(INSERT_ACCOUNT, "anna@example.org", "Anna", "EMPLOYEE")
+            + jdbc.update(INSERT_ACCOUNT, "leser@example.org", "Leser", "READ_ONLY");
+
+    // Then
+    assertThat(betroffen).isEqualTo(3);
+  }
+
+  @Test
   void accountEmail_givenSameAddressInDifferentCase_thenRejectedByTheDatabase() {
     // Given
-    jdbc.update(INSERT_ACCOUNT, "manne@example.org", "Manne", "USER");
+    jdbc.update(INSERT_ACCOUNT, "manne@example.org", "Manne", "C_LEVEL");
 
     // When / Then
-    assertThatThrownBy(() -> jdbc.update(INSERT_ACCOUNT, "Manne@Example.ORG", "Manne", "USER"))
-        .isInstanceOf(DataIntegrityViolationException.class);
+    assertThatThrownBy(() -> jdbc.update(INSERT_ACCOUNT, "Manne@Example.ORG", "Manne", "C_LEVEL"))
+        .isInstanceOf(DataIntegrityViolationException.class)
+        .hasMessageContaining("account_email_key");
   }
 
   @Test
   void accountRole_givenUnknownRole_thenRejectedByTheDatabase() {
     // When / Then
     assertThatThrownBy(() -> jdbc.update(INSERT_ACCOUNT, "dritte@example.org", "Dritte", "ROOT"))
+        .isInstanceOf(DataIntegrityViolationException.class)
+        .hasMessageContaining("account_role_known");
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"ADMIN", "USER"})
+  void accountRole_givenAFormerRoleName_thenRejectedByTheDatabase(final String alterName) {
+    // When / Then — A4: ein CHECK, der die alten Namen noch zuliesse, liesse sie wieder entstehen.
+    assertThatThrownBy(() -> jdbc.update(INSERT_ACCOUNT, "alt@example.org", "Alt", alterName))
+        .isInstanceOf(DataIntegrityViolationException.class)
+        .hasMessageContaining("account_role_known");
+  }
+
+  @Test
+  void accountAktiv_givenNoValue_thenANewAccountIsActive() {
+    // Given
+    jdbc.update(INSERT_ACCOUNT, "manne@example.org", "Manne", "C_LEVEL");
+
+    // When
+    final Boolean aktiv =
+        jdbc.queryForObject(
+            "SELECT aktiv FROM account WHERE email = ?", Boolean.class, "manne@example.org");
+
+    // Then
+    assertThat(aktiv).isTrue();
+  }
+
+  @Test
+  void accountAktiv_givenNull_thenRejectedByTheDatabase() {
+    // When / Then
+    assertThatThrownBy(
+            () ->
+                jdbc.update(
+                    "INSERT INTO account (email, display_name, role, aktiv) VALUES (?, ?, ?, NULL)",
+                    "manne@example.org",
+                    "Manne",
+                    "C_LEVEL"))
         .isInstanceOf(DataIntegrityViolationException.class);
   }
 

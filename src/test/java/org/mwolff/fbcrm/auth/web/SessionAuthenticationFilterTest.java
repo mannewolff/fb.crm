@@ -182,7 +182,7 @@ class SessionAuthenticationFilterTest {
             a ->
                 assertThat(a.getAuthorities())
                     .extracting(GrantedAuthority::getAuthority)
-                    .containsExactly("ROLE_ADMIN"));
+                    .containsExactly("ROLE_C_LEVEL"));
   }
 
   @Test

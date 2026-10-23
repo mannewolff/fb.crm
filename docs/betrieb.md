@@ -449,6 +449,10 @@ nicht hoch, nennt `docker compose logs fbcrm-api` den Grund.
   per Code an die Adresse des Kontos (Teil „Bedienung", „Erste Schritte"). Ist der Mailversand
   ausgeschaltet, steht der Code im Protokoll des Servers (Abschnitt „Konto einrichten", „Code aus
   dem Protokoll").
+- Beim Update auf die erste Version mit mehreren Konten und Rollen enden alle laufenden Sitzungen
+  ebenfalls einmal, weil die Rollen neu sind. Das bisherige Konto ist danach ein C-Level-Konto mit
+  unveränderter E-Mail-Adresse und unverändertem Anzeigenamen; die nächste Anmeldung läuft wie
+  gewohnt per Code.
 
 **Schritt 6: Ausgangs- und Zielversion vermerken**, etwa „am 2026-10-20 von v1.2.0 auf v1.3.0
 aktualisiert". Der Vermerk sagt beim nächsten Mal, von welcher Version aus aktualisiert wird.

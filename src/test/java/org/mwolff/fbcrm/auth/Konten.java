@@ -11,6 +11,9 @@ import org.mwolff.fbcrm.auth.domain.Role;
  * <p>Zweck: eine Stelle statt vierzig, wenn der Datensatz {@link Account} sich aendert. Jeder Test,
  * der ein Konto braucht, holt es hier; nur diese Datei ruft den Konstruktor. Der Helfer kennt keine
  * Uhr — die Zeitpunkte kommen als Parameter (CLAUDE-java.md §6.2).
+ *
+ * <p>Ohne Angabe ist ein Konto C-Level und aktiv, wie das erste Konto der Einrichtung; {@link #mit}
+ * nimmt Rolle und Zustand als Parameter (Plan #414, E12).
  */
 public final class Konten {
 
@@ -56,7 +59,27 @@ public final class Konten {
       final int generation,
       final Instant angelegt,
       final Instant geaendert) {
-    return baue(id, email, ANZEIGENAME, Role.ADMIN, generation, angelegt, geaendert);
+    return baue(id, email, ANZEIGENAME, Role.C_LEVEL, true, generation, angelegt, geaendert);
+  }
+
+  /**
+   * Ein Konto mit Rolle und Zustand, angelegt und zuletzt geaendert zum selben Zeitpunkt.
+   *
+   * @param id technische Id
+   * @param email Anmeldeadresse
+   * @param role Rolle des Kontos
+   * @param aktiv ob das Konto aktiv ist; {@code false} heisst stillgelegt
+   * @param generation Sitzungs-Generation
+   * @param zeitpunkt Anlage und letzte Aenderung
+   */
+  public static Account mit(
+      final @Nullable Long id,
+      final String email,
+      final Role role,
+      final boolean aktiv,
+      final int generation,
+      final Instant zeitpunkt) {
+    return baue(id, email, ANZEIGENAME, role, aktiv, generation, zeitpunkt, zeitpunkt);
   }
 
   /**
@@ -71,6 +94,7 @@ public final class Konten {
         vorlage.email(),
         vorlage.displayName(),
         vorlage.role(),
+        vorlage.aktiv(),
         vorlage.sessionGeneration(),
         vorlage.createdAt(),
         vorlage.updatedAt());
@@ -81,9 +105,10 @@ public final class Konten {
       final String email,
       final String displayName,
       final Role role,
+      final boolean aktiv,
       final int generation,
       final Instant angelegt,
       final Instant geaendert) {
-    return new Account(id, email, displayName, role, generation, angelegt, geaendert);
+    return new Account(id, email, displayName, role, aktiv, generation, angelegt, geaendert);
   }
 }

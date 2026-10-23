@@ -124,7 +124,7 @@ class SetupAccountUseCaseTest {
    * Der vollstaendig vorbereitete Erfolgsfall: kein Konto, der Code stimmt, das Token liegt bereit.
    */
   private SetupAccountUseCase frischeInstanz() {
-    when(accounts.existsAnyAdmin()).thenReturn(false);
+    when(accounts.existsAnyAccount()).thenReturn(false);
     codeStimmt();
     when(accounts.save(any(Account.class)))
         .thenAnswer(
@@ -147,15 +147,27 @@ class SetupAccountUseCaseTest {
   }
 
   @Test
-  void initialize_givenTheRightKeyOnAFreshInstance_thenCreatesAnAdminAccount() {
+  void initialize_givenTheRightKeyOnAFreshInstance_thenCreatesACLevelAccount() {
     // Given
     final SetupAccountUseCase einrichtung = frischeInstanz();
 
     // When
     richteEin(einrichtung);
 
-    // Then — die Rolle ist der ganze Zweck des Einmal-Schluessels.
-    assertThat(gespeichertesKonto().role()).isEqualTo(Role.ADMIN);
+    // Then — das erste Konto ist C-Level, ohne dass jemand nach einer Rolle fragt (#409, 2).
+    assertThat(gespeichertesKonto().role()).isEqualTo(Role.C_LEVEL);
+  }
+
+  @Test
+  void initialize_givenTheRightKeyOnAFreshInstance_thenCreatesAnActiveAccount() {
+    // Given
+    final SetupAccountUseCase einrichtung = frischeInstanz();
+
+    // When
+    richteEin(einrichtung);
+
+    // Then
+    assertThat(gespeichertesKonto().aktiv()).isTrue();
   }
 
   @Test
@@ -173,7 +185,7 @@ class SetupAccountUseCaseTest {
   @Test
   void initialize_givenAWrongCode_thenFailsLikeALoginAndCreatesNoAccount() {
     // Given — fuer den falschen Code hilft derselbe Schritt wie bei der Anmeldung: ein neuer Code.
-    when(accounts.existsAnyAdmin()).thenReturn(false);
+    when(accounts.existsAnyAccount()).thenReturn(false);
     when(loginCodes.findByEmail(MAIL))
         .thenReturn(Optional.of(LoginCode.ausgestellt(MAIL, HASH, JETZT, Duration.ofMinutes(10))));
     when(hasher.matches(CODE, HASH)).thenReturn(false);
@@ -190,7 +202,7 @@ class SetupAccountUseCaseTest {
   @Test
   void initialize_givenNoCodeForTheAddress_thenFailsAndCreatesNoAccount() {
     // Given — vertippte Adresse: Zu der richtigen ging nie ein Code (Kriterium 6).
-    when(accounts.existsAnyAdmin()).thenReturn(false);
+    when(accounts.existsAnyAccount()).thenReturn(false);
     when(loginCodes.findByEmail(MAIL)).thenReturn(Optional.empty());
     final SetupAccountUseCase einrichtung = einrichtung(SCHLUESSEL);
 
@@ -376,9 +388,9 @@ class SetupAccountUseCaseTest {
   }
 
   @Test
-  void initialize_givenAnInstanceThatAlreadyHasAnAdmin_thenRefuses() {
+  void initialize_givenAnInstanceThatAlreadyHasAnAccount_thenRefuses() {
     // Given — K3: der Einmal-Schluessel wirkt genau einmal.
-    when(accounts.existsAnyAdmin()).thenReturn(true);
+    when(accounts.existsAnyAccount()).thenReturn(true);
     final SetupAccountUseCase einrichtung = einrichtung(SCHLUESSEL);
 
     // When / Then
@@ -386,9 +398,9 @@ class SetupAccountUseCaseTest {
   }
 
   @Test
-  void initialize_givenAnInstanceThatAlreadyHasAnAdmin_thenStoresNothing() {
+  void initialize_givenAnInstanceThatAlreadyHasAnAccount_thenStoresNothing() {
     // Given
-    when(accounts.existsAnyAdmin()).thenReturn(true);
+    when(accounts.existsAnyAccount()).thenReturn(true);
     final SetupAccountUseCase einrichtung = einrichtung(SCHLUESSEL);
 
     // When
@@ -400,12 +412,12 @@ class SetupAccountUseCaseTest {
 
   @Test
   void initialize_givenALostRaceAgainstTheUniqueIndex_thenRefusesLikeAnExistingAccount() {
-    // Given — zwei gleichzeitige Aufrufe mit verschiedenen Adressen kommen beide durch
-    // existsAnyAdmin; was sie trennt, ist account_single_admin auf Ebene der Datenbank.
-    when(accounts.existsAnyAdmin()).thenReturn(false);
+    // Given — zwei gleichzeitige Aufrufe mit derselben Adresse kommen beide durch
+    // existsAnyAccount; was sie trennt, ist account_email_key auf Ebene der Datenbank (A5).
+    when(accounts.existsAnyAccount()).thenReturn(false);
     codeStimmt();
     when(accounts.save(any(Account.class)))
-        .thenThrow(new DataIntegrityViolationException("account_single_admin"));
+        .thenThrow(new DataIntegrityViolationException("account_email_key"));
     final SetupAccountUseCase einrichtung = einrichtung(SCHLUESSEL);
 
     // When / Then
@@ -415,10 +427,10 @@ class SetupAccountUseCaseTest {
   @Test
   void initialize_givenALostRaceAgainstTheUniqueIndex_thenNeverIssuesASession() {
     // Given
-    when(accounts.existsAnyAdmin()).thenReturn(false);
+    when(accounts.existsAnyAccount()).thenReturn(false);
     codeStimmt();
     when(accounts.save(any(Account.class)))
-        .thenThrow(new DataIntegrityViolationException("account_single_admin"));
+        .thenThrow(new DataIntegrityViolationException("account_email_key"));
     final SetupAccountUseCase einrichtung = einrichtung(SCHLUESSEL);
 
     // When
@@ -431,10 +443,10 @@ class SetupAccountUseCaseTest {
   @Test
   void initialize_givenALostRaceAgainstTheUniqueIndex_thenNeverCarriesTheDatabaseTextOutwards() {
     // Given — der Text der Datenbank nennt Tabelle und Index; er gehoert nicht in die Antwort.
-    when(accounts.existsAnyAdmin()).thenReturn(false);
+    when(accounts.existsAnyAccount()).thenReturn(false);
     codeStimmt();
     when(accounts.save(any(Account.class)))
-        .thenThrow(new DataIntegrityViolationException("account_single_admin"));
+        .thenThrow(new DataIntegrityViolationException("account_email_key"));
     final SetupAccountUseCase einrichtung = einrichtung(SCHLUESSEL);
 
     // When / Then
@@ -444,9 +456,9 @@ class SetupAccountUseCaseTest {
   }
 
   @Test
-  void isInitialized_givenAnInstanceWithAnAdmin_thenIsTrue() {
+  void isInitialized_givenAnInstanceWithAnAccount_thenIsTrue() {
     // Given
-    when(accounts.existsAnyAdmin()).thenReturn(true);
+    when(accounts.existsAnyAccount()).thenReturn(true);
 
     // When / Then
     assertThat(einrichtung(SCHLUESSEL).isInitialized()).isTrue();
@@ -455,7 +467,7 @@ class SetupAccountUseCaseTest {
   @Test
   void isInitialized_givenAFreshInstance_thenIsFalse() {
     // Given
-    when(accounts.existsAnyAdmin()).thenReturn(false);
+    when(accounts.existsAnyAccount()).thenReturn(false);
 
     // When / Then
     assertThat(einrichtung(SCHLUESSEL).isInitialized()).isFalse();
@@ -473,7 +485,7 @@ class SetupAccountUseCaseTest {
   @Test
   void requestCode_givenTheRightKeyOnAFreshInstance_thenIssuesACodeToTheEnteredAddress() {
     // Given — ein Konto gibt es noch nicht, darum geht der Anzeigename mit (E8).
-    when(accounts.existsAnyAdmin()).thenReturn(false);
+    when(accounts.existsAnyAccount()).thenReturn(false);
     final SetupAccountUseCase einrichtung = einrichtung(SCHLUESSEL);
 
     // When
@@ -486,7 +498,7 @@ class SetupAccountUseCaseTest {
   @Test
   void requestCode_givenTheRightKeyOnAFreshInstance_thenCreatesNoAccountYet() {
     // Given — erst der richtige Code legt das Konto an (Kriterium 6).
-    when(accounts.existsAnyAdmin()).thenReturn(false);
+    when(accounts.existsAnyAccount()).thenReturn(false);
     final SetupAccountUseCase einrichtung = einrichtung(SCHLUESSEL);
 
     // When
@@ -523,9 +535,9 @@ class SetupAccountUseCaseTest {
   }
 
   @Test
-  void requestCode_givenAnInstanceThatAlreadyHasAnAdmin_thenRefusesAndIssuesNoCode() {
+  void requestCode_givenAnInstanceThatAlreadyHasAnAccount_thenRefusesAndIssuesNoCode() {
     // Given — der Einmal-Schluessel wirkt genau einmal, auch fuer die Anforderung.
-    when(accounts.existsAnyAdmin()).thenReturn(true);
+    when(accounts.existsAnyAccount()).thenReturn(true);
     final SetupAccountUseCase einrichtung = einrichtung(SCHLUESSEL);
 
     // When
@@ -567,7 +579,7 @@ class SetupAccountUseCaseTest {
   @Test
   void requestCode_givenTheLimitReached_thenLooksNeitherAtTheInstanceNorIssues() {
     // Given — fuenf Anforderungen an einer schon eingerichteten Instanz.
-    when(accounts.existsAnyAdmin()).thenReturn(true);
+    when(accounts.existsAnyAccount()).thenReturn(true);
     final SetupAccountUseCase einrichtung = einrichtung(SCHLUESSEL);
     fordereFuenfmalAn(einrichtung, SCHLUESSEL);
     clearInvocations(accounts);
@@ -577,7 +589,7 @@ class SetupAccountUseCaseTest {
         .isThrownBy(() -> einrichtung.requestCode(MAIL, NAME, SCHLUESSEL, IP));
 
     // Then
-    verify(accounts, never()).existsAnyAdmin();
+    verify(accounts, never()).existsAnyAccount();
     verify(ausstellung, never()).ausstellen(anyString(), anyString());
   }
 }

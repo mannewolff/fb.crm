@@ -23,7 +23,8 @@ import org.springframework.transaction.annotation.Transactional;
  * <p>Eine frische Instanz hat kein Konto — und ohne Konto keinen Weg hinein. Der Einmal-Schluessel
  * aus {@code FBCRM_BOOTSTRAP_ADMIN_TOKEN} oeffnet diesen einen Weg, und zwar genau einmal. Er geht
  * in zwei Schritten: Mit {@link #requestCode} kommt ein Code an die eingegebene Adresse, mit {@link
- * #initialize} entstehen Konto und Sitzung, der Betreiber ist danach unmittelbar angemeldet.
+ * #initialize} entstehen Konto und Sitzung, der Betreiber ist danach unmittelbar angemeldet. Das
+ * erste Konto ist ein aktives C-Level-Konto; nach einer Rolle fragt die Einrichtung nicht.
  *
  * <p><b>Kein Zwischenzustand</b> (E9). Die Bestaetigung bringt Schluessel, Anzeigename und Adresse
  * erneut mit, und der Schluessel wird im Augenblick der Kontoanlage ein zweites Mal geprueft. In
@@ -39,12 +40,15 @@ import org.springframework.transaction.annotation.Transactional;
  * wird bei leerem konfiguriertem Wert <b>gar nicht erst verglichen</b>, sondern jeder Aufruf
  * abgewiesen.
  *
- * <p><b>Das Wettrennen.</b> Zwei gleichzeitige Aufrufe mit <b>verschiedenen</b> Adressen kaemen
- * beide durch {@link AccountRepository#existsAnyAdmin()} und beide durch den eindeutigen Index auf
- * {@code lower(email)} — der sieht zwei verschiedene Schluessel. Was sie trennt, ist der partielle
- * eindeutige Index {@code account_single_admin} aus {@code V1__baseline.sql}: Er steht auf dem
- * konstanten Ausdruck {@code (true)} und traegt damit fuer jede ADMIN-Zeile denselben Schluessel.
- * Seine Verletzung wird hier in dieselbe Abweisung uebersetzt wie „Konto existiert bereits".
+ * <p><b>Das Wettrennen</b> (Plan #414, A5). Der Riegel ist „es existiert irgendein Konto" ({@link
+ * AccountRepository#existsAnyAccount()}). Zwei gleichzeitige Aufrufe mit <b>derselben</b> Adresse
+ * trennt der eindeutige Index {@code account_email_key} auf {@code lower(email)}; seine Verletzung
+ * wird hier in dieselbe Abweisung uebersetzt wie „Konto existiert bereits". Zwei gleichzeitige
+ * Aufrufe mit <b>verschiedenen</b> Adressen und richtigem Einmal-Schluessel kommen beide durch und
+ * enden in zwei C-Level-Konten desselben Betreibers — fachlich erlaubt, seit mehrere Konten
+ * dazugehoeren; der fruehere Index {@code account_single_admin}, der das schloss, trug die Zusage
+ * „genau ein Konto" und ist mit V30 entfallen. Danach wirkt der Schluessel nicht mehr, und wer ihn
+ * erraet, konnte schon vorher ein Konto anlegen.
  *
  * <p><b>Zuerst wird gezaehlt</b>, in beiden Schritten, und erst danach der Schluessel geprueft: Ein
  * vor dem Zaehlen gepruefter Schluessel liesse die Einrichtungsseite ungebremst (Kriterium 6,
@@ -88,7 +92,7 @@ public class SetupAccountUseCase {
   /** Ob die Instanz bereits eingerichtet ist (E11). */
   @Transactional(readOnly = true)
   public boolean isInitialized() {
-    return accounts.existsAnyAdmin();
+    return accounts.existsAnyAccount();
   }
 
   /**
@@ -102,7 +106,7 @@ public class SetupAccountUseCase {
    * <p><b>Bewusst ohne {@code @Transactional}</b>, aus demselben Grund wie bei {@link
    * LoginUseCase}: Eine Transaktion, die mit {@link LoginFailed} zurueckrollt, naehme die gezaehlte
    * Fehleingabe wieder weg. Das Konto entsteht in der Transaktion seines Speicherns; das verlorene
-   * Wettrennen an {@code account_single_admin} faengt {@link #speichere} wie bisher.
+   * Wettrennen an {@code account_email_key} faengt {@link #speichere} wie bisher.
    *
    * @param email die Anmeldeadresse des ersten Kontos — dieselbe, an die der Code ging
    * @param displayName der Anzeigename
@@ -121,7 +125,7 @@ public class SetupAccountUseCase {
       final String presentedKey,
       final String clientIp) {
     einloesung.bremse(clientIp);
-    if (!schluesselStimmt(presentedKey) || accounts.existsAnyAdmin()) {
+    if (!schluesselStimmt(presentedKey) || accounts.existsAnyAccount()) {
       throw new SetupRefused();
     }
     if (!einloesung.loese(email, code, clientIp)) {
@@ -130,7 +134,7 @@ public class SetupAccountUseCase {
     }
 
     final Instant jetzt = clock.instant();
-    final Account neu = new Account(null, email, displayName, Role.ADMIN, 0, jetzt, jetzt);
+    final Account neu = new Account(null, email, displayName, Role.C_LEVEL, true, 0, jetzt, jetzt);
 
     final Account angelegt = speichere(neu);
     return new LoginResult(angelegt, cookie(angelegt, jetzt));
@@ -158,7 +162,7 @@ public class SetupAccountUseCase {
     if (!warten.isZero()) {
       throw new TooManyLoginAttempts(warten);
     }
-    if (!schluesselStimmt(presentedKey) || accounts.existsAnyAdmin()) {
+    if (!schluesselStimmt(presentedKey) || accounts.existsAnyAccount()) {
       throw new SetupRefused();
     }
     ausstellung.ausstellen(email, displayName);

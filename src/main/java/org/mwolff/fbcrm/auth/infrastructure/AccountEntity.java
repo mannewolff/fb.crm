@@ -13,7 +13,7 @@ import org.jspecify.annotations.Nullable;
 import org.mwolff.fbcrm.auth.domain.Account;
 import org.mwolff.fbcrm.auth.domain.Role;
 
-/** Die Zeile der Tabelle {@code account} aus {@code V1__baseline.sql}. */
+/** Die Zeile der Tabelle {@code account} aus {@code V1__baseline.sql}, ergaenzt um V30. */
 @Entity
 @Table(name = "account")
 class AccountEntity {
@@ -31,6 +31,9 @@ class AccountEntity {
   @Enumerated(EnumType.STRING)
   @Column(name = "role", nullable = false, length = 32)
   private Role role;
+
+  @Column(name = "aktiv", nullable = false)
+  private boolean aktiv;
 
   @Column(name = "session_generation", nullable = false)
   private int sessionGeneration;
@@ -72,6 +75,7 @@ class AccountEntity {
     this.email = account.email();
     this.displayName = account.displayName();
     this.role = account.role();
+    this.aktiv = account.aktiv();
     this.sessionGeneration = account.sessionGeneration();
     this.createdAt = account.createdAt();
     this.updatedAt = account.updatedAt();
@@ -91,6 +95,10 @@ class AccountEntity {
 
   Role getRole() {
     return role;
+  }
+
+  boolean isAktiv() {
+    return aktiv;
   }
 
   int getSessionGeneration() {
