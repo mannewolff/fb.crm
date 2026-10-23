@@ -1,15 +1,20 @@
 package org.mwolff.fbcrm;
 
+import static com.tngtech.archunit.core.domain.JavaClass.Predicates.equivalentTo;
 import static com.tngtech.archunit.core.domain.JavaClass.Predicates.resideInAPackage;
+import static com.tngtech.archunit.core.domain.JavaClass.Predicates.resideInAnyPackage;
 import static com.tngtech.archunit.core.domain.JavaClass.Predicates.resideOutsideOfPackage;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.classes;
+import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.methods;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 import static com.tngtech.archunit.library.dependencies.SlicesRuleDefinition.slices;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.tngtech.archunit.base.DescribedPredicate;
 import com.tngtech.archunit.core.domain.JavaClass;
 import com.tngtech.archunit.core.domain.JavaClasses;
 import com.tngtech.archunit.core.domain.JavaConstructor;
+import com.tngtech.archunit.core.domain.JavaMethod;
 import com.tngtech.archunit.core.importer.ClassFileImporter;
 import com.tngtech.archunit.core.importer.ImportOption;
 import com.tngtech.archunit.lang.ArchCondition;
@@ -22,6 +27,15 @@ import java.util.Arrays;
 import org.junit.jupiter.api.Test;
 import org.mwolff.fbcrm.angebot.application.VerbotenerKontozugriff;
 import org.mwolff.fbcrm.angebot.application.VerbotenerZeitzugriff;
+import org.mwolff.fbcrm.angebot.web.AngebotAnlagenController;
+import org.mwolff.fbcrm.auth.web.MitarbeitendeController;
+import org.mwolff.fbcrm.common.web.Bedingungskopf;
+import org.mwolff.fbcrm.firma.web.VerbotenerSchreibweg;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.ResponseStatus;
 
 /**
  * Schichtenregeln nach CLAUDE-java.md §6.1.
@@ -217,6 +231,105 @@ class ArchitectureTest {
                 + " (Plan #288, E20)")
         .allowEmptyShould(true)
         .check(CLASSES);
+  }
+
+  /**
+   * Kein schreibender Weg eines geschuetzten Datensatzes kommt ohne {@link Bedingungskopf} aus
+   * (Plan #415, E3, E12; Issue #456).
+   *
+   * <p>Geprueft wird der vollstaendige Stand, nicht eine Liste, die jedes Bereichspaket erweitert:
+   * Ein vergessener Eintrag fiele dort nicht auf. Frei bleiben die anlegenden Wege (Kriterium 7 der
+   * Anforderung #411) und das Loeschen der Anlage, die nie geaendert wird und darum keine Version
+   * traegt (Plan #415, E7).
+   */
+  @Test
+  void geschuetzteControllers_thenEveryWritingRouteTakesABedingungskopf() {
+    schreibendeWegeMitBedingungskopf().check(CLASSES);
+  }
+
+  /**
+   * Dass die Regel ueberhaupt greift, nach dem Muster der Gegenprobe zu {@code arbeitszeit}: {@code
+   * VerbotenerSchreibweg} liegt im Testbaum in {@code firma.web} und aendert ohne Kopf — genau das,
+   * was die Regel finden soll. Seine beiden anderen Wege laesst sie durch.
+   */
+  @Test
+  void geschuetzteControllers_givenAWritingRouteWithoutBedingungskopf_thenTheRuleFails() {
+    final JavaClasses mitVerstoss =
+        new ClassFileImporter().importClasses(VerbotenerSchreibweg.class);
+
+    assertThatThrownBy(() -> schreibendeWegeMitBedingungskopf().check(mitVerstoss))
+        .isInstanceOf(AssertionError.class)
+        .hasMessageContaining(VerbotenerSchreibweg.class.getName() + ".aendernOhneStand()")
+        .hasMessageContaining("(1 times)")
+        .hasMessageContaining("Plan #415");
+  }
+
+  /** Die Web-Pakete der geschuetzten Datensaetze; die Konten liegen als einziges in auth.web. */
+  private static final DescribedPredicate<JavaClass> GESCHUETZTE_CONTROLLER =
+      resideInAnyPackage(
+              "org.mwolff.fbcrm.firma.web",
+              "org.mwolff.fbcrm.angebot.web",
+              "org.mwolff.fbcrm.rechnung.web",
+              "org.mwolff.fbcrm.arbeitszeit.web",
+              "org.mwolff.fbcrm.eigeneangaben.web")
+          .or(equivalentTo(MitarbeitendeController.class));
+
+  /*
+   * Eine Methode fuer beide Laeufe, aus demselben Grund wie bei angebotOhneArbeitszeit: zwei
+   * Abschriften liefen beim ersten Nachziehen des Textes auseinander.
+   */
+  private static ArchRule schreibendeWegeMitBedingungskopf() {
+    return methods()
+        .that(
+            DescribedPredicate.describe(
+                "schreibende Wege der geschuetzten Datensaetze",
+                (JavaMethod weg) ->
+                    GESCHUETZTE_CONTROLLER.test(weg.getOwner())
+                        && schreibend(weg)
+                        && !legtAn(weg)
+                        && !loeschtAnlage(weg)))
+        .should(
+            ArchCondition.from(
+                DescribedPredicate.describe(
+                    "einen Bedingungskopf als Parameter nehmen",
+                    (JavaMethod weg) ->
+                        weg.getRawParameterTypes().stream()
+                            .anyMatch(typ -> typ.isEquivalentTo(Bedingungskopf.class)))))
+        .because(
+            "ein Weg, der einen bestehenden Datensatz aendert, loescht oder seinen Zustand"
+                + " wechselt, nennt den Stand, auf dem er beruht; ohne ihn ueberschriebe der"
+                + " zuletzt Speichernde still (Plan #415, E3, E12)")
+        .allowEmptyShould(true);
+  }
+
+  private static boolean schreibend(final JavaMethod weg) {
+    return weg.isAnnotatedWith(PutMapping.class)
+        || weg.isAnnotatedWith(PostMapping.class)
+        || weg.isAnnotatedWith(DeleteMapping.class);
+  }
+
+  /*
+   * Anlegend ist ein Weg, der mit 201 antwortet, oder ein POST auf die Sammlung ohne eigenen Pfad:
+   * Die nachgetragene Rechnung setzt ihre 201 ueber ResponseEntity.created und nicht per
+   * Annotation, der Entwurf zum Angebot legt unter /rechnungen an.
+   */
+  private static boolean legtAn(final JavaMethod weg) {
+    final boolean aufDieSammlung =
+        weg.tryGetAnnotationOfType(PostMapping.class)
+            .map(post -> post.value().length == 0 && post.path().length == 0)
+            .orElse(false);
+    final boolean mit201 =
+        weg.tryGetAnnotationOfType(ResponseStatus.class)
+            .map(
+                status ->
+                    status.value() == HttpStatus.CREATED || status.code() == HttpStatus.CREATED)
+            .orElse(false);
+    return aufDieSammlung || mit201;
+  }
+
+  private static boolean loeschtAnlage(final JavaMethod weg) {
+    return weg.getOwner().isEquivalentTo(AngebotAnlagenController.class)
+        && weg.isAnnotatedWith(DeleteMapping.class);
   }
 
   private static final int HOECHSTENS_PARAMETER = 7;
