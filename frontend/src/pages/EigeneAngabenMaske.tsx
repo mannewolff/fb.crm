@@ -9,6 +9,7 @@ import { eigeneAngabenLesen, eigeneAngabenPflegen } from '../api/eigeneAngaben';
 import type { EigeneAngaben } from '../api/eigeneAngaben';
 import type { FieldErrors } from '../api/client';
 import AnschriftFelder from '../components/AnschriftFelder';
+import { useRechte } from '../auth/rechte';
 import BriefbogenKarte from '../components/BriefbogenKarte';
 import Karte from '../components/Karte';
 import { useKopfPfad } from '../components/KopfPfad';
@@ -41,6 +42,9 @@ import { ABSTAND_BUEHNE } from '../theme';
  * „Abbrechen" ist hier ein **Schalter, kein Weg**: Ueber „Eigene Angaben" liegt keine Ebene, auf
  * die es fuehren koennte — bei der Firma ist das die Detailansicht. Es nimmt die Aenderungen
  * stattdessen auf den gespeicherten Stand zurueck.
+ *
+ * Ohne das Recht, die Einstellungen zu aendern, stehen die Angaben ohne „Speichern" und
+ * „Abbrechen" da — ReadOnly liest sie nur (Kriterium 10 von #409, Plan #414, A10, E1).
  */
 
 const AUSFALL_LESEN =
@@ -181,6 +185,7 @@ function nichtBereit(stand: Exclude<Stand, 'bereit'>): ReactNode {
 }
 
 export default function EigeneAngabenMaske() {
+  const { darfEinstellungenAendern } = useRechte();
   const [stand, setzeStand] = useState<Stand>('laedt');
   const [werte, setzeWerte] = useState<Werte>(LEERE_WERTE);
   // Der zuletzt gespeicherte Stand — das Ziel der Ruecknahme. Kein `null`: Solange nichts geladen
@@ -320,10 +325,12 @@ export default function EigeneAngabenMaske() {
               setzeWerte={setzeWerte}
               meldung={meldungAm(feldFehler, 'bankverbindung')}
             />
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, flexWrap: 'wrap' }}>
-              <KupferTaste disabled={laeuft}>Speichern</KupferTaste>
-              <WeicheTaste onClick={zuruecknehmen}>Abbrechen</WeicheTaste>
-            </Box>
+            {darfEinstellungenAendern ? (
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, flexWrap: 'wrap' }}>
+                <KupferTaste disabled={laeuft}>Speichern</KupferTaste>
+                <WeicheTaste onClick={zuruecknehmen}>Abbrechen</WeicheTaste>
+              </Box>
+            ) : null}
           </Box>
         ) : (
           nichtBereit(stand)

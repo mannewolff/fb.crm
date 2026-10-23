@@ -6,7 +6,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import RechnungenPage from './RechnungenPage';
 import { KopfPfadProvider } from '../components/KopfPfad';
 import { fetchNachPfad, json, problem } from '../test/fetchNachPfad';
+import { alsRolle } from '../test/rechteDoppel';
 import { renderMitTheme } from '../test/render';
+
+vi.mock('../auth/rechte', () => import('../test/rechteDoppel'));
 
 const WEG_LISTE = 'GET /api/rechnungen';
 const WEG_WAHL = 'GET /api/rechnungen/abrechenbare-angebote';
@@ -378,6 +381,46 @@ describe('RechnungenPage — nachgetragene Rechnungen (#254, Kriterien 1, 6, 7; 
       expect(zeile.getAllByRole('cell')[5]).toBeEmptyDOMElement();
     },
   );
+});
+
+describe('RechnungenPage — je Rolle (Kriterium 10 von #409, Plan #414, A10)', () => {
+  it('zeigt ReadOnly die Liste samt „Herunterladen", aber ohne „Neue Rechnung" und „Rechnung nachtragen"', async () => {
+    alsRolle('READ_ONLY');
+    fetchNachPfad({ [WEG_LISTE]: json(200, { rechnungen: [GESTELLT] }) });
+
+    renderSeite();
+
+    const zeile = within((await screen.findAllByRole('row'))[1]);
+    // Herunterladen liest nur — es bleibt fuer jede Rolle (E4).
+    expect(zeile.getByRole('link', { name: 'Herunterladen' })).toHaveAttribute(
+      'href',
+      '/api/rechnungen/4/dokument',
+    );
+    expect(screen.queryByRole('button', { name: 'Neue Rechnung' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Rechnung nachtragen' })).not.toBeInTheDocument();
+  });
+
+  it('sagt ReadOnly im leeren Zustand nur „Noch keine Rechnung." — ohne Verweis auf die Tasten', async () => {
+    alsRolle('READ_ONLY');
+    fetchNachPfad({ [WEG_LISTE]: json(200, { rechnungen: [] }) });
+
+    renderSeite();
+
+    expect(await screen.findByRole('status')).toHaveTextContent(/^Noch keine Rechnung\.$/);
+  });
+
+  it('zeigt einem Employee beide Tasten, denn er darf fachlich schreiben', async () => {
+    alsRolle('EMPLOYEE');
+    fetchNachPfad({ [WEG_LISTE]: json(200, { rechnungen: [GESTELLT] }) });
+
+    renderSeite();
+
+    expect(await screen.findByRole('button', { name: 'Neue Rechnung' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Rechnung nachtragen' })).toHaveAttribute(
+      'href',
+      '/rechnungen/nachtragen',
+    );
+  });
 });
 
 describe('RechnungenPage — die Wahl „Neue Rechnung" (#160, Kriterium 2)', () => {

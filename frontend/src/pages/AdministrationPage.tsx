@@ -14,6 +14,7 @@ import type { Rechnungseinstellungen } from '../api/rechnungseinstellungen';
 import Karte from '../components/Karte';
 import { useKopfPfad } from '../components/KopfPfad';
 import type { PfadVerweis } from '../components/KopfPfad';
+import { useRechte } from '../auth/rechte';
 import KupferTaste from '../components/KupferTaste';
 import WeicheTaste from '../components/WeicheTaste';
 import { feldMeldungen } from '../lib/apifehler';
@@ -50,6 +51,9 @@ import { ABSTAND_BUEHNE } from '../theme';
  *
  * „Abbrechen" ist hier ein **Schalter, kein Weg**: Ueber „Administration" liegt keine Ebene, auf
  * die es fuehren koennte. Es nimmt die Aenderungen stattdessen auf den gespeicherten Stand zurueck.
+ *
+ * Ohne das Recht, die Einstellungen zu aendern, stehen die Werte ohne „Speichern" und „Abbrechen"
+ * da — ReadOnly liest sie nur (Kriterium 10 von #409, Plan #414, A10).
  */
 
 const AUSFALL_LESEN =
@@ -192,6 +196,7 @@ function nichtBereit(stand: Exclude<Stand, 'bereit'>): ReactNode {
 }
 
 export default function AdministrationPage() {
+  const { darfEinstellungenAendern } = useRechte();
   const [stand, setzeStand] = useState<Stand>('laedt');
   const [werte, setzeWerte] = useState<Werte>(LEERE_WERTE);
   // Der zuletzt gespeicherte Stand — das Ziel der Ruecknahme. Kein `null`: Solange nichts geladen
@@ -358,10 +363,12 @@ export default function AdministrationPage() {
               fullWidth
               slotProps={{ inputLabel: { shrink: true } }}
             />
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, flexWrap: 'wrap' }}>
-              <KupferTaste disabled={laeuft}>Speichern</KupferTaste>
-              <WeicheTaste onClick={zuruecknehmen}>Abbrechen</WeicheTaste>
-            </Box>
+            {darfEinstellungenAendern ? (
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, flexWrap: 'wrap' }}>
+                <KupferTaste disabled={laeuft}>Speichern</KupferTaste>
+                <WeicheTaste onClick={zuruecknehmen}>Abbrechen</WeicheTaste>
+              </Box>
+            ) : null}
           </Box>
         ) : (
           nichtBereit(stand)

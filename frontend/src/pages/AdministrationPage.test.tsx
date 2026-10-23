@@ -5,8 +5,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import KopfPfad, { KopfPfadProvider } from '../components/KopfPfad';
 import { fetchNachPfad, json, leer, problem } from '../test/fetchNachPfad';
+import { alsRolle } from '../test/rechteDoppel';
 import { renderMitTheme } from '../test/render';
 import AdministrationPage from './AdministrationPage';
+
+vi.mock('../auth/rechte', () => import('../test/rechteDoppel'));
 
 /** Die Antwort der Schnittstelle, wie das Backend sie schreibt. */
 const EINSTELLUNGEN = {
@@ -361,5 +364,28 @@ describe('AdministrationPage', () => {
 
     expect(await screen.findByText('Die Einstellungen sind gespeichert.')).toBeInTheDocument();
     expect(speichern()).toBeEnabled();
+  });
+});
+
+describe('AdministrationPage — je Rolle (Kriterien 9 und 10 von #409, Plan #414, A10)', () => {
+  it('zeigt ReadOnly die Einstellungen ohne „Speichern" und „Abbrechen"', async () => {
+    alsRolle('READ_ONLY');
+    fetchNachPfad({ [PFAD]: json(200, EINSTELLUNGEN) });
+
+    renderSeite();
+
+    expect(await screen.findByRole('textbox', { name: MUSTER })).toHaveValue('{NNNN}-{JJJJ}');
+    expect(screen.queryByRole('button', { name: 'Speichern' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Abbrechen' })).not.toBeInTheDocument();
+  });
+
+  it('zeigt einem C-Level „Speichern" und „Abbrechen"', async () => {
+    alsRolle('C_LEVEL');
+    fetchNachPfad({ [PFAD]: json(200, EINSTELLUNGEN) });
+
+    renderSeite();
+
+    expect(await screen.findByRole('button', { name: 'Speichern' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Abbrechen' })).toBeInTheDocument();
   });
 });

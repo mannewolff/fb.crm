@@ -33,6 +33,7 @@ import {
   setzeRechnungszustand,
 } from '../api/rechnungen';
 import type { AbrechnungsangabeEingabe, Rechnung, Rechnungsmaskenzeile } from '../api/rechnungen';
+import { useRechte } from '../auth/rechte';
 import AktionsMenue from '../components/AktionsMenue';
 import Karte from '../components/Karte';
 import { useKopfPfad } from '../components/KopfPfad';
@@ -111,6 +112,9 @@ import { ABSTAND_BUEHNE, RADIUS_RUND, TASTE_INNENABSTAND, ZAHLEN_KLASSE } from '
  *
  * Laden, „gibt es nicht" (404) und Ausfall wie in {@link AngebotPage}: Eine Kennung, die keine ist,
  * geht gar nicht erst ans Netz (`lib/kennung.ts`).
+ *
+ * Ohne Schreibrecht fehlen die Aktionen des Entwurfs und der Ausgang der Forderung (Kriterium 10
+ * von #409, Plan #414, A10); „Herunterladen" bleibt (E4).
  */
 
 const NICHT_GEFUNDEN = 'Diese Rechnung gibt es nicht.';
@@ -740,6 +744,7 @@ function Pflichtangaben({
 }
 
 export default function RechnungPage() {
+  const { darfFachlichSchreiben } = useRechte();
   const { rechnungId } = useParams();
   const kennung = kennungAus(rechnungId);
   const navigate = useNavigate();
@@ -992,7 +997,7 @@ export default function RechnungPage() {
         data-testid="rechnung-aktionen"
         sx={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}
       >
-        {rechnung.zustand === 'GESTELLT' ? (
+        {!darfFachlichSchreiben ? null : rechnung.zustand === 'GESTELLT' ? (
           <>
             <WeicheTaste
               onClick={() => {
@@ -1204,7 +1209,7 @@ export default function RechnungPage() {
       <Karte
         titel={ueberschriftZu(rechnung)}
         titelEbene={1}
-        werkzeug={aktionenZu(rechnung, gerechnet)}
+        werkzeug={darfFachlichSchreiben ? aktionenZu(rechnung, gerechnet) : undefined}
       >
         <Angaben rechnung={rechnung} />
       </Karte>

@@ -7,8 +7,11 @@ import type { EigeneAngaben } from '../api/eigeneAngaben';
 import KopfPfad, { KopfPfadProvider } from '../components/KopfPfad';
 import { fetchNachPfad, json, leer, problem } from '../test/fetchNachPfad';
 import type { Routen } from '../test/fetchNachPfad';
+import { alsRolle } from '../test/rechteDoppel';
 import { renderMitTheme } from '../test/render';
 import EigeneAngabenMaske from './EigeneAngabenMaske';
+
+vi.mock('../auth/rechte', () => import('../test/rechteDoppel'));
 
 const ANGABEN: EigeneAngaben = {
   name: 'Manfred Wolff',
@@ -344,5 +347,28 @@ describe('EigeneAngabenMaske', () => {
 
     expect(await screen.findByText('Die Angaben sind gespeichert.')).toBeInTheDocument();
     expect(speichern()).toBeEnabled();
+  });
+});
+
+describe('EigeneAngabenMaske — je Rolle (Kriterien 9 und 10 von #409, Plan #414, A10, E1)', () => {
+  it('zeigt ReadOnly die Angaben ohne „Speichern" und „Abbrechen"', async () => {
+    alsRolle('READ_ONLY');
+    fetchMaske({ [PFAD]: json(200, ANGABEN) });
+
+    renderMaske();
+
+    expect(await screen.findByRole('textbox', { name: 'Name' })).toHaveValue('Manfred Wolff');
+    expect(screen.queryByRole('button', { name: 'Speichern' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Abbrechen' })).not.toBeInTheDocument();
+  });
+
+  it('zeigt einem C-Level „Speichern" und „Abbrechen"', async () => {
+    alsRolle('C_LEVEL');
+    fetchMaske({ [PFAD]: json(200, ANGABEN) });
+
+    renderMaske();
+
+    expect(await screen.findByRole('button', { name: 'Speichern' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Abbrechen' })).toBeInTheDocument();
   });
 });

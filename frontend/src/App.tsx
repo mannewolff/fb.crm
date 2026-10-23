@@ -51,8 +51,8 @@ const DokumentationPage = lazy(async () => import('./pages/DokumentationPage'));
  * Die Einstellungen — `/eigene-angaben` und `/administration` — liegen zusaetzlich in
  * {@link RollenRoute}: Sie stehen nur einer Rolle offen, die sie sehen darf (Plan #414, A11).
  * Ebenso `/mitarbeitende` mit seinen Masken, die nur einem C-Level offenstehen (A12), und die
- * Masken zu Firma, Ansprechpartner und Angebot, die nur einer Rolle offenstehen, die fachlich
- * schreiben darf (Kriterium 10 von #409).
+ * Masken zu Firma, Ansprechpartner, Angebot und nachgetragener Rechnung, die nur einer Rolle
+ * offenstehen, die fachlich schreiben darf (Kriterium 10 von #409).
  *
  * Die unbekannte Adresse bekommt keine eigene Ansicht: Mit Sitzung fuehrt sie auf die
  * Startadresse, ohne Sitzung uebernimmt {@link ProtectedRoute} und fuehrt auf die
@@ -94,12 +94,23 @@ export default function App() {
             {/* Statisch vor dynamisch (Plan #259, E21): `nachtragen` ist die Maske der
                 nachgetragenen Rechnung, nicht die Rechnung „nachtragen". Die nachgetragene
                 Rechnung hat ihren eigenen Kennungsraum unter `/rechnungen/nachgetragen/`. */}
-            <Route path="/rechnungen/nachtragen" element={<NachtragMaske />} />
+            <Route
+              path="/rechnungen/nachtragen"
+              element={
+                <RollenRoute recht="darfFachlichSchreiben">
+                  <NachtragMaske />
+                </RollenRoute>
+              }
+            />
             <Route path="/rechnungen/:rechnungId" element={<RechnungPage />} />
             <Route path="/rechnungen/nachgetragen/:id" element={<NachgetrageneRechnungPage />} />
             <Route
               path="/rechnungen/nachgetragen/:id/bearbeiten"
-              element={<NachtragMaske />}
+              element={
+                <RollenRoute recht="darfFachlichSchreiben">
+                  <NachtragMaske />
+                </RollenRoute>
+              }
             />
             {/* Das Jahr steht spaeter im Pfad und nicht als Parameter (Plan #288, E16): Es benennt
                 ein eigenes Objekt — den Abschluss — und filtert keine Ansicht. */}

@@ -6,7 +6,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import NachgetrageneRechnungPage from './NachgetrageneRechnungPage';
 import { KopfPfadProvider } from '../components/KopfPfad';
 import { fetchNachPfad, json, leer, problem } from '../test/fetchNachPfad';
+import { alsRolle } from '../test/rechteDoppel';
 import { renderMitTheme } from '../test/render';
+
+vi.mock('../auth/rechte', () => import('../test/rechteDoppel'));
 
 /**
  * Die Einzelansicht der nachgetragenen Rechnung (#254, Kriterien 6, 7, 8, 10, 11; Plan #259, E21,
@@ -427,5 +430,41 @@ describe('NachgetrageneRechnungPage — Löschen (Kriterium 10)', () => {
       ),
     ).toBeInTheDocument();
     expect(screen.getByTestId('adresse')).toHaveTextContent('/rechnungen/nachgetragen/7');
+  });
+});
+
+describe('NachgetrageneRechnungPage — je Rolle (Kriterium 10 von #409, Plan #414, A10)', () => {
+  it.each([
+    ['GESTELLT', GESTELLT],
+    ['BEZAHLT', BEZAHLT],
+    ['ABGESCHRIEBEN', ABGESCHRIEBEN],
+  ])('zeigt ReadOnly die Rechnung im Zustand %s nur mit „Herunterladen" (E4)', async (_, nachtrag) => {
+    alsRolle('READ_ONLY');
+    fetchNachPfad({ [WEG]: json(200, nachtrag) });
+
+    renderSeite();
+    await geladen();
+
+    expect(screen.queryAllByRole('button')).toHaveLength(0);
+    expect(screen.queryByRole('link', { name: 'Bearbeiten' })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Herunterladen' })).toHaveAttribute(
+      'href',
+      '/api/nachgetragene-rechnungen/7/dokument',
+    );
+  });
+
+  it('zeigt einem Employee „Bearbeiten", die Zustandstaste und das ⋯-Menue', async () => {
+    alsRolle('EMPLOYEE');
+    fetchNachPfad({ [WEG]: json(200, GESTELLT) });
+
+    renderSeite();
+    await geladen();
+
+    expect(screen.getByRole('link', { name: 'Bearbeiten' })).toHaveAttribute(
+      'href',
+      '/rechnungen/nachgetragen/7/bearbeiten',
+    );
+    expect(screen.getByRole('button', { name: 'Als bezahlt markieren' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Aktionen für diese Rechnung' })).toBeInTheDocument();
   });
 });

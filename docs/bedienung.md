@@ -64,7 +64,9 @@ fb.crm verlangt dafür den Namen, Straße und Hausnummer, Postleitzahl, Ort, die
 die Steuernummer oder die Umsatzsteuer-Identifikationsnummer.
 
 **Einstieg:** In der Schiene im Block „Stammdaten" den Eintrag „Eigene Angaben" wählen. Die
-Ansicht zeigt oben das Formular „Eigene Angaben" und darunter die Karte „Briefpapier".
+Ansicht zeigt oben das Formular „Eigene Angaben" und darunter die Karte „Briefpapier". Speichern,
+Briefpapier hochladen, ersetzen und entfernen kann nur ein C-Level; ReadOnly liest die Angaben nur
+und kann den Probedruck holen.
 
 **Angaben speichern:**
 
@@ -113,6 +115,7 @@ Rechnung entstehen: das Muster der Rechnungsnummer, die nächste laufende Nummer
 Mehrwertsteuersatz und das Zahlungsziel in Tagen.
 
 **Einstieg:** Im Fuß der Schiene „Administration" wählen. Die Seite zeigt den Bereich „Rechnung".
+Speichern kann hier nur ein C-Level; ReadOnly liest die Einstellungen nur.
 
 **Einstellungen setzen:**
 
@@ -447,9 +450,10 @@ Person meldet sich danach wieder mit ihrer Adresse an.
   stellen und die Arbeitszeit bedienen. „Mitarbeitende", „Eigene Angaben" und „Administration"
   stehen einem Employee nicht offen.
 - ReadOnly liest alles, auch die eigenen Angaben und die Rechnungseinstellungen, und ändert nichts.
-  „Mitarbeitende" steht ReadOnly nicht offen. Bei Firmen, Angeboten und in der Arbeitszeit fehlen
-  ReadOnly die Tasten zum Anlegen, Ändern, Stornieren, Hochladen, Kommentieren und „Zeit erfassen";
-  Anlagen lassen sich weiter ansehen und herunterladen.
+  „Mitarbeitende" steht ReadOnly nicht offen. Bei Firmen, Angeboten, Rechnungen und in der
+  Arbeitszeit fehlen ReadOnly die Tasten zum Anlegen, Ändern, Stellen, Stornieren, Hochladen,
+  Kommentieren und „Zeit erfassen"; Anlagen und Rechnungen lassen sich weiter ansehen und
+  herunterladen.
 
 **Der letzte C-Level:** Es bleibt immer mindestens ein aktiver C-Level. Das letzte aktive
 C-Level-Konto lässt sich weder stilllegen noch auf eine andere Rolle setzen; fb.crm sagt dann „Es

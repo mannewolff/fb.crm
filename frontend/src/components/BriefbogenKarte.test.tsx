@@ -4,7 +4,10 @@ import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vites
 
 import BriefbogenKarte from './BriefbogenKarte';
 import { alsJson, fetchNachPfad, formularWeg, json, leer, problem } from '../test/fetchNachPfad';
+import { alsRolle } from '../test/rechteDoppel';
 import { renderMitTheme } from '../test/render';
+
+vi.mock('../auth/rechte', () => import('../test/rechteDoppel'));
 
 /**
  * Die Karte „Briefpapier" bei den eigenen Angaben (fachliche Quelle #361; Plan #363, E8, E16,
@@ -498,5 +501,55 @@ describe('BriefbogenKarte — Probedruck', () => {
 
     expect(await screen.findByText(AUSFALL_PROBEDRUCK)).toBeInTheDocument();
     expect(objektUrl.erzeuge).not.toHaveBeenCalled();
+  });
+});
+
+describe('BriefbogenKarte — je Rolle (Kriterien 9 und 10 von #409, Plan #414, A10, E1)', () => {
+  it('zeigt ReadOnly das hinterlegte Briefpapier nur mit „Probedruck" (E4)', async () => {
+    alsRolle('READ_ONLY');
+    fetchNachPfad({ [LESEN]: json(200, MIT_PAPIER) });
+
+    renderKarte();
+
+    const papier = within(await screen.findByTestId('briefpapier'));
+    expect(papier.getByText('Briefbogen.pdf')).toBeInTheDocument();
+    expect(papier.getByRole('button', { name: 'Probedruck' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Briefpapier entfernen' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Briefpapier ersetzen' })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Einstellungen speichern' }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Briefpapier-PDF auswählen')).not.toBeInTheDocument();
+  });
+
+  it('bietet ReadOnly ohne Briefpapier kein „Briefpapier hochladen" an', async () => {
+    alsRolle('READ_ONLY');
+    fetchNachPfad({ [LESEN]: json(200, OHNE_PAPIER) });
+
+    renderKarte();
+
+    expect(await screen.findByText(OHNE)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Briefpapier hochladen' })).not.toBeInTheDocument();
+  });
+
+  it('zeigt einem C-Level Ersetzen, Entfernen und „Einstellungen speichern"', async () => {
+    alsRolle('C_LEVEL');
+    fetchNachPfad({ [LESEN]: json(200, MIT_PAPIER) });
+
+    renderKarte();
+
+    expect(await screen.findByRole('button', { name: 'Briefpapier ersetzen' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Briefpapier entfernen' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Einstellungen speichern' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Probedruck' })).toBeInTheDocument();
+  });
+
+  it('zeigt einem C-Level ohne Briefpapier „Briefpapier hochladen"', async () => {
+    alsRolle('C_LEVEL');
+    fetchNachPfad({ [LESEN]: json(200, OHNE_PAPIER) });
+
+    renderKarte();
+
+    expect(await screen.findByRole('button', { name: 'Briefpapier hochladen' })).toBeInTheDocument();
   });
 });

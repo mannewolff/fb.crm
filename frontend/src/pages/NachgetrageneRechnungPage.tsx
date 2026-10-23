@@ -22,6 +22,7 @@ import {
   setzeNachtragszustand,
 } from '../api/nachtraege';
 import type { Nachtrag } from '../api/nachtraege';
+import { useRechte } from '../auth/rechte';
 import AktionsMenue from '../components/AktionsMenue';
 import type { AktionsEintrag } from '../components/AktionsMenue';
 import Karte from '../components/Karte';
@@ -65,6 +66,9 @@ import { ABSTAND_BUEHNE, ZAHLEN_KLASSE } from '../theme';
  *
  * Laden, „gibt es nicht" (404) und Ausfall wie in {@link RechnungPage}: Eine Kennung, die keine ist,
  * geht gar nicht erst ans Netz (`lib/kennung.ts`).
+ *
+ * Ohne Schreibrecht fehlen „Bearbeiten", die Zustandstaste und das ⋯-Menue (Kriterium 10 von #409,
+ * Plan #414, A10); „Herunterladen" bleibt (E4).
  */
 
 const NICHT_GEFUNDEN = 'Diese nachgetragene Rechnung gibt es nicht.';
@@ -137,6 +141,7 @@ function Angaben({ nachtrag }: { readonly nachtrag: Nachtrag }) {
 }
 
 export default function NachgetrageneRechnungPage() {
+  const { darfFachlichSchreiben } = useRechte();
   const { id } = useParams();
   const kennung = kennungAus(id);
   const navigate = useNavigate();
@@ -219,27 +224,31 @@ export default function NachgetrageneRechnungPage() {
     const gestellt = nachtrag.zustand === 'GESTELLT';
     return (
       <>
-        <WeicheTaste
-          to={`/rechnungen/nachgetragen/${String(nachtrag.id)}/bearbeiten`}
-          symbol={<IconPencil size={SYMBOL_TASTE} stroke={1.8} />}
-        >
-          Bearbeiten
-        </WeicheTaste>
-        <WeicheTaste
-          onClick={() => {
-            void umstellen(nachtrag, gestellt ? 'BEZAHLT' : 'GESTELLT');
-          }}
-          disabled={laeuft}
-          symbol={
-            gestellt ? (
-              <IconCircleCheck size={SYMBOL_TASTE} stroke={1.8} />
-            ) : (
-              <IconRotate2 size={SYMBOL_TASTE} stroke={1.8} />
-            )
-          }
-        >
-          {gestellt ? BEZAHLT : ZURUECK}
-        </WeicheTaste>
+        {darfFachlichSchreiben ? (
+          <>
+            <WeicheTaste
+              to={`/rechnungen/nachgetragen/${String(nachtrag.id)}/bearbeiten`}
+              symbol={<IconPencil size={SYMBOL_TASTE} stroke={1.8} />}
+            >
+              Bearbeiten
+            </WeicheTaste>
+            <WeicheTaste
+              onClick={() => {
+                void umstellen(nachtrag, gestellt ? 'BEZAHLT' : 'GESTELLT');
+              }}
+              disabled={laeuft}
+              symbol={
+                gestellt ? (
+                  <IconCircleCheck size={SYMBOL_TASTE} stroke={1.8} />
+                ) : (
+                  <IconRotate2 size={SYMBOL_TASTE} stroke={1.8} />
+                )
+              }
+            >
+              {gestellt ? BEZAHLT : ZURUECK}
+            </WeicheTaste>
+          </>
+        ) : null}
         {nachtrag.dokument ? (
           <Button
             component="a"
@@ -259,11 +268,13 @@ export default function NachgetrageneRechnungPage() {
             {KEIN_DOKUMENT}
           </Typography>
         )}
-        <AktionsMenue
-          name="Aktionen für diese Rechnung"
-          objekt={ueberschriftZu(nachtrag)}
-          eintraege={menueZu(nachtrag)}
-        />
+        {darfFachlichSchreiben ? (
+          <AktionsMenue
+            name="Aktionen für diese Rechnung"
+            objekt={ueberschriftZu(nachtrag)}
+            eintraege={menueZu(nachtrag)}
+          />
+        ) : null}
       </>
     );
   }

@@ -19,6 +19,7 @@ import {
   rechnungDokumentPfad,
   rechnungenUebersicht,
 } from '../api/rechnungen';
+import { useRechte } from '../auth/rechte';
 import type {
   AbrechenbareAngebote,
   AbrechenbaresAngebot,
@@ -73,6 +74,9 @@ import { ABSTAND_BUEHNE, RADIUS_KLEIN, ZAHLEN_KLASSE } from '../theme';
  * <b>Ueber der Liste steht der Monat der Arbeitszeit</b> ({@link Monatswahl}, Issue #203): Erst
  * sagt der Betrachter, welcher Monat vorbelegt werden soll, dann waehlt er das Angebot — der Klick
  * auf das Angebot ist der Abschluss, und was er mitnimmt, muss vorher dastehen.
+ *
+ * Ohne Schreibrecht fehlen „Neue Rechnung" und „Rechnung nachtragen" (Kriterium 10 von #409,
+ * Plan #414, A10); die Liste und das Herunterladen bleiben (E4).
  */
 
 /** Die Liste ist die erste Stufe des Pfades — ueber ihr steht nichts (E6). */
@@ -83,6 +87,8 @@ const AUSFALL = 'Die Rechnungen sind gerade nicht zu erreichen. Bitte später er
 const LEER =
   'Noch keine Rechnung. Schreiben Sie die erste über „Neue Rechnung" oder tragen Sie eine ' +
   'frühere über „Rechnung nachtragen" nach.';
+/** Die Leere ohne Schreibrecht — ohne Verweis auf Tasten, die dann fehlen. */
+const LEER_LESEND = 'Noch keine Rechnung.';
 
 const WAHL_LAEDT = 'Die abrechenbaren Angebote werden geladen …';
 const WAHL_AUSFALL =
@@ -269,7 +275,7 @@ function Wahlzeile({
 }
 
 /** Was in der Karte steht: Ladehinweis, Meldung, Satz zur Leere oder die Tafel. */
-function inhaltZu(stand: Stand): ReactNode {
+function inhaltZu(stand: Stand, darfSchreiben: boolean): ReactNode {
   if (stand.art === 'laedt') {
     return (
       <Typography
@@ -288,7 +294,7 @@ function inhaltZu(stand: Stand): ReactNode {
         role="status"
         sx={(theme) => ({ fontSize: 12.5, color: theme.vars.palette.kupferwolke.textMatt })}
       >
-        {LEER}
+        {darfSchreiben ? LEER : LEER_LESEND}
       </Typography>
     );
   }
@@ -302,6 +308,7 @@ function inhaltZu(stand: Stand): ReactNode {
 }
 
 export default function RechnungenPage() {
+  const { darfFachlichSchreiben } = useRechte();
   useKopfPfad(KEIN_WEG, 'Rechnungen');
   const navigate = useNavigate();
   const titelId = useId();
@@ -403,26 +410,28 @@ export default function RechnungenPage() {
         titel="Rechnungen"
         titelEbene={1}
         werkzeug={
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-            <WeicheTaste
-              to="/rechnungen/nachtragen"
-              symbol={<IconFileImport size={SYMBOL_TASTE} stroke={1.8} />}
-            >
-              Rechnung nachtragen
-            </WeicheTaste>
-            <KupferTaste
-              onClick={() => {
-                setzeWahlOffen(true);
-              }}
-              disabled={laeuft}
-              symbol={<IconFilePlus size={SYMBOL_TASTE} stroke={1.8} />}
-            >
-              Neue Rechnung
-            </KupferTaste>
-          </Box>
+          darfFachlichSchreiben ? (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+              <WeicheTaste
+                to="/rechnungen/nachtragen"
+                symbol={<IconFileImport size={SYMBOL_TASTE} stroke={1.8} />}
+              >
+                Rechnung nachtragen
+              </WeicheTaste>
+              <KupferTaste
+                onClick={() => {
+                  setzeWahlOffen(true);
+                }}
+                disabled={laeuft}
+                symbol={<IconFilePlus size={SYMBOL_TASTE} stroke={1.8} />}
+              >
+                Neue Rechnung
+              </KupferTaste>
+            </Box>
+          ) : undefined
         }
       >
-        {inhaltZu(stand)}
+        {inhaltZu(stand, darfFachlichSchreiben)}
       </Karte>
       {wahlOffen ? (
         <Dialog open onClose={schliessen} fullWidth maxWidth="sm" aria-labelledby={titelId}>

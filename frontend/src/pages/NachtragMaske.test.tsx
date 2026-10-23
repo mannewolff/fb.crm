@@ -8,6 +8,8 @@ import { MAX_UPLOAD_BYTE } from '../lib/dateigroesse';
 import { fetchNachPfad, formularWeg, json, leer, problem } from '../test/fetchNachPfad';
 import type { Routen } from '../test/fetchNachPfad';
 import { renderMitTheme } from '../test/render';
+import { NICHT_OFFEN } from '../routes/RollenRoute';
+import { appAlsRolle } from '../test/appAlsRolle';
 import NachtragMaske from './NachtragMaske';
 
 const WEG = '/api/nachgetragene-rechnungen';
@@ -721,5 +723,30 @@ describe('NachtragMaske — Deaktiviert', () => {
     expect(await screen.findByText('Rechnungsliste')).toBeVisible();
     // Nur der Aufbau fragte; gesendet wurde nichts.
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('NachtragMaske — nur mit Schreibrecht (Kriterium 10 von #409, Plan #414, A11)', () => {
+  it.each([
+    ['/rechnungen/nachtragen', 'Rechnung nachtragen'],
+    ['/rechnungen/nachgetragen/7/bearbeiten', 'Nachgetragene Rechnung bearbeiten'],
+  ])('zeigt ReadOnly auf „%s" den Satz statt der Maske „%s"', async (start, titel) => {
+    const aufruf = appAlsRolle('READ_ONLY', start);
+
+    expect(await screen.findByText(new RegExp(NICHT_OFFEN))).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { level: 1, name: titel })).not.toBeInTheDocument();
+    // Die Maske entsteht gar nicht — sie liest auch nichts.
+    expect(aufruf).toHaveBeenCalledTimes(2);
+  });
+
+  it('zeigt einem Employee die Maske, denn er darf fachlich schreiben', async () => {
+    appAlsRolle('EMPLOYEE', '/rechnungen/nachtragen', {
+      [`GET ${ALLE_FIRMEN}`]: json(200, FIRMEN),
+    });
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Rechnung nachtragen' }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(new RegExp(NICHT_OFFEN))).not.toBeInTheDocument();
   });
 });

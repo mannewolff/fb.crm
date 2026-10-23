@@ -17,6 +17,7 @@ import {
 } from '../api/briefbogen';
 import type { Briefbogen, BriefbogenEingabe } from '../api/briefbogen';
 import type { FieldErrors } from '../api/client';
+import { useRechte } from '../auth/rechte';
 import { feldMeldungen } from '../lib/apifehler';
 import { dateigroesse } from '../lib/dateigroesse';
 import { ersteDatei } from '../lib/dateiwahl';
@@ -52,6 +53,10 @@ import WeicheTaste from './WeicheTaste';
  *
  * <b>Keine Kupfertaste</b>: Die eine der Ansicht ist „Speichern" der eigenen Angaben
  * (CLAUDE-design.md, „Eine Hauptsache je Ansicht").
+ *
+ * <b>Ohne das Recht, die Einstellungen zu aendern</b>, fehlen Hochladen, Ersetzen, Entfernen und
+ * „Einstellungen speichern" samt Dateifeld (Kriterium 10 von #409, Plan #414, A10, E1); der
+ * Probedruck bleibt, denn er liest nur (E4).
  */
 
 /** 5 MB, binaer gerechnet — das Gegenstueck zu `Briefpapiergrenze.MAX_BYTE` (E17). */
@@ -201,6 +206,7 @@ function sichern(inhalt: Blob) {
 }
 
 export default function BriefbogenKarte() {
+  const { darfEinstellungenAendern } = useRechte();
   const [lesestand, setzeLesestand] = useState<Lesestand>('laedt');
   const [stand, setzeStand] = useState<Briefbogen | null>(null);
   const [werte, setzeWerte] = useState<Werte | null>(null);
@@ -319,7 +325,7 @@ export default function BriefbogenKarte() {
 
   const bereit = lesestand === 'bereit' && stand !== null && werte !== null;
 
-  const werkzeug = bereit ? (
+  const werkzeug = bereit && darfEinstellungenAendern ? (
     <>
       <Box
         component="input"
@@ -362,7 +368,7 @@ export default function BriefbogenKarte() {
         {meldung === null ? null : <Alert severity="error">{meldung}</Alert>}
         {hinweis ? <Alert severity="info">{HINWEIS_STEUER}</Alert> : null}
         {erfolg ? <Alert severity="success">{GESPEICHERT}</Alert> : null}
-        {papierZeile(stand, laeuft, entfernen, probedruck)}
+        {papierZeile(stand, laeuft, darfEinstellungenAendern ? entfernen : null, probedruck)}
         <Box sx={{ display: 'flex', flexWrap: 'wrap', columnGap: 3 }}>
           <FormControlLabel
             control={
@@ -414,16 +420,18 @@ export default function BriefbogenKarte() {
             );
           })}
         </Box>
-        <Box>
-          <WeicheTaste
-            onClick={() => {
-              void speichern(werte);
-            }}
-            disabled={laeuft}
-          >
-            Einstellungen speichern
-          </WeicheTaste>
-        </Box>
+        {darfEinstellungenAendern ? (
+          <Box>
+            <WeicheTaste
+              onClick={() => {
+                void speichern(werte);
+              }}
+              disabled={laeuft}
+            >
+              Einstellungen speichern
+            </WeicheTaste>
+          </Box>
+        ) : null}
       </Box>
     );
   }
@@ -435,11 +443,14 @@ export default function BriefbogenKarte() {
   );
 }
 
-/** Der Stand des hinterlegten PDF samt Entfernen und Probedruck — oder der Satz, dass es fehlt. */
+/**
+ * Der Stand des hinterlegten PDF samt Entfernen und Probedruck — oder der Satz, dass es fehlt.
+ * Ohne `entfernen` (kein Recht zum Aendern) steht nur der Probedruck da.
+ */
 function papierZeile(
   stand: Briefbogen,
   laeuft: boolean,
-  entfernen: () => Promise<void>,
+  entfernen: (() => Promise<void>) | null,
   probedruck: () => Promise<void>,
 ): ReactNode {
   const { papier } = stand;
@@ -493,15 +504,17 @@ function papierZeile(
       >
         Probedruck
       </WeicheTaste>
-      <WeicheTaste
-        onClick={() => {
-          void entfernen();
-        }}
-        disabled={laeuft}
-        symbol={<IconTrash size={SYMBOL} stroke={1.8} />}
-      >
-        Briefpapier entfernen
-      </WeicheTaste>
+      {entfernen === null ? null : (
+        <WeicheTaste
+          onClick={() => {
+            void entfernen();
+          }}
+          disabled={laeuft}
+          symbol={<IconTrash size={SYMBOL} stroke={1.8} />}
+        >
+          Briefpapier entfernen
+        </WeicheTaste>
+      )}
     </Box>
   );
 }

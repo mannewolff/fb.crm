@@ -6,7 +6,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import RechnungPage from './RechnungPage';
 import { KopfPfadProvider } from '../components/KopfPfad';
 import { alsJson, fetchNachPfad, json, leer, problem } from '../test/fetchNachPfad';
+import { alsRolle } from '../test/rechteDoppel';
 import { renderMitTheme } from '../test/render';
+
+vi.mock('../auth/rechte', () => import('../test/rechteDoppel'));
 
 /**
  * Die Entwurfsmaske der Rechnung (Issue #185), das Stellen und die gestellte Rechnung (Issue #186).
@@ -1032,5 +1035,62 @@ describe('RechnungPage — der Ausgang der Forderung (Issue #253)', () => {
     expect(
       await screen.findByText('Der Zustand wurde nicht geändert. Bitte später erneut versuchen.'),
     ).toBeInTheDocument();
+  });
+});
+
+describe('RechnungPage — je Rolle (Kriterium 10 von #409, Plan #414, A10)', () => {
+  it('zeigt ReadOnly den Entwurf ohne „Speichern", „Rechnung stellen" und „Entwurf löschen"', async () => {
+    alsRolle('READ_ONLY');
+    fetchNachPfad({ [WEG]: json(200, ENTWURF) });
+
+    renderSeite();
+
+    expect(await screen.findByRole('table', { name: 'Positionen' })).toBeInTheDocument();
+    expect(screen.queryByTestId('rechnung-aktionen')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Speichern' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Rechnung stellen' })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Aktionen für diese Rechnung' }),
+    ).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ['GESTELLT', GESTELLT],
+    ['BEZAHLT', BEZAHLT],
+    ['ABGESCHRIEBEN', ABGESCHRIEBEN],
+  ])('zeigt ReadOnly die Rechnung im Zustand %s nur mit „Herunterladen" (E4)', async (_, rechnung) => {
+    alsRolle('READ_ONLY');
+    fetchNachPfad({ [WEG]: json(200, rechnung) });
+
+    renderSeite();
+    await screen.findByRole('table', { name: 'Positionen' });
+
+    const aktionen = within(screen.getByTestId('rechnung-aktionen'));
+    expect(aktionen.queryAllByRole('button')).toHaveLength(0);
+    expect(aktionen.getByRole('link', { name: 'Herunterladen' })).toHaveAttribute(
+      'href',
+      '/api/rechnungen/4/dokument',
+    );
+  });
+
+  it('zeigt einem Employee am Entwurf „Speichern" und „Rechnung stellen"', async () => {
+    alsRolle('EMPLOYEE');
+    fetchNachPfad({ [WEG]: json(200, ENTWURF) });
+
+    renderSeite();
+
+    expect(await screen.findByRole('button', { name: 'Speichern' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Rechnung stellen' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Aktionen für diese Rechnung' })).toBeInTheDocument();
+  });
+
+  it('zeigt einem Employee an der gestellten Rechnung den Ausgang der Forderung', async () => {
+    alsRolle('EMPLOYEE');
+    fetchNachPfad({ [WEG]: json(200, GESTELLT) });
+
+    renderSeite();
+
+    expect(await screen.findByRole('button', { name: 'Als bezahlt markieren' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Abschreiben' })).toBeInTheDocument();
   });
 });
