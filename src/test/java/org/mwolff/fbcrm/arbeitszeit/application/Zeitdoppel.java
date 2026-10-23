@@ -52,6 +52,12 @@ final class Zeitdoppel {
   /** Die Uhr, gegen die die Zeitstempel geprueft werden. */
   static final Instant JETZT = Instant.parse("2026-11-12T17:30:00Z");
 
+  /**
+   * Das Konto, dem ein Eintrag gehoert, wenn ein Test keines nennt (Plan #426, E1) — auch das, mit
+   * dem die Anwendungsfaelle dieses Pakets anfragen.
+   */
+  static final long KONTO = 21L;
+
   /** Ein frueherer Zeitpunkt — der Anlagezeitpunkt eines vorhandenen Eintrags. */
   static final Instant FRUEHER = Instant.parse("2026-11-12T08:00:00Z");
 
@@ -145,7 +151,7 @@ final class Zeitdoppel {
   }
 
   /**
-   * Ein gespeicherter Zeiteintrag am {@link #TAG}.
+   * Ein gespeicherter Zeiteintrag am {@link #TAG}, der dem {@link #KONTO} gehoert.
    *
    * @param id Kennung des Eintrags
    * @param angebotPositionId Kennung der Position, auf die gebucht wurde
@@ -154,8 +160,27 @@ final class Zeitdoppel {
    */
   static Zeiteintrag zeiteintrag(
       final long id, final long angebotPositionId, final String von, final String bis) {
+    return zeiteintrag(id, KONTO, angebotPositionId, von, bis);
+  }
+
+  /**
+   * Ein gespeicherter Zeiteintrag am {@link #TAG}, der dem genannten Konto gehoert.
+   *
+   * @param id Kennung des Eintrags
+   * @param accountId Kennung des Kontos, dem der Eintrag gehoert
+   * @param angebotPositionId Kennung der Position, auf die gebucht wurde
+   * @param von Beginn als {@code H:mm}
+   * @param bis Ende als {@code H:mm}
+   */
+  static Zeiteintrag zeiteintrag(
+      final long id,
+      final long accountId,
+      final long angebotPositionId,
+      final String von,
+      final String bis) {
     return new Zeiteintrag(
         Long.valueOf(id),
+        accountId,
         angebotPositionId,
         TAG,
         LocalTime.parse(von),

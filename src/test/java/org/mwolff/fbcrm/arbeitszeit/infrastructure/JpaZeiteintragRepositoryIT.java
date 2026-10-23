@@ -2,6 +2,7 @@ package org.mwolff.fbcrm.arbeitszeit.infrastructure;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.entry;
+import static org.assertj.core.api.Assertions.tuple;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -26,6 +27,10 @@ import org.springframework.jdbc.core.JdbcTemplate;
  * eingeschlossenen Grenzen und die beiden Summen ueber echte Zeilen — einmal ueber alle Monate,
  * einmal ueber einen Monat beziehungsweise Zeitraum — je mit und ohne Positionsmenge, dazu die
  * Monate mit Eintrag.
+ *
+ * <p>Seit Plan #426 gehoert jeder Eintrag einer Person (E1). Gelesen wird darum zusaetzlich je
+ * Konto ({@code findImZeitraumFuerKonto}, E8), und die Summen zaehlen weiter ueber alle Personen
+ * (E15). Die Eintraege gehoeren Anna, wo ein Fall keine Person nennt; Ben ist die zweite Person.
  */
 class JpaZeiteintragRepositoryIT extends AbstractIntegrationTest {
 
@@ -36,6 +41,8 @@ class JpaZeiteintragRepositoryIT extends AbstractIntegrationTest {
 
   private long konzeption;
   private long beratung;
+  private long anna;
+  private long ben;
 
   @Autowired
   JpaZeiteintragRepositoryIT(final JpaZeiteintragRepository repository, final JdbcTemplate jdbc) {
@@ -59,6 +66,18 @@ class JpaZeiteintragRepositoryIT extends AbstractIntegrationTest {
         jdbc.queryForObject("SELECT id FROM angebot LIMIT 1", Long.class).longValue();
     konzeption = position(angebotId, 1, "Konzeption");
     beratung = position(angebotId, 2, "Beratung");
+    jdbc.execute("TRUNCATE outbox_message, account RESTART IDENTITY CASCADE");
+    anna = konto("anna@firma.de", "Anna");
+    ben = konto("ben@firma.de", "Ben");
+  }
+
+  private long konto(final String email, final String name) {
+    return jdbc.queryForObject(
+            "INSERT INTO account (email, display_name, role) VALUES (?, ?, 'EMPLOYEE') RETURNING id",
+            Long.class,
+            email,
+            name)
+        .longValue();
   }
 
   private long position(final long angebotId, final int platz, final String bezeichnung) {
@@ -77,9 +96,19 @@ class JpaZeiteintragRepositoryIT extends AbstractIntegrationTest {
 
   private Zeiteintrag gesichert(
       final long positionId, final String tag, final String von, final String bis) {
+    return gesichert(anna, positionId, tag, von, bis);
+  }
+
+  private Zeiteintrag gesichert(
+      final long accountId,
+      final long positionId,
+      final String tag,
+      final String von,
+      final String bis) {
     return repository.save(
         new Zeiteintrag(
             null,
+            accountId,
             positionId,
             LocalDate.parse(tag),
             LocalTime.parse(von),
@@ -151,6 +180,103 @@ class JpaZeiteintragRepositoryIT extends AbstractIntegrationTest {
 
     // Then
     assertThat(gefunden).extracting(Zeiteintrag::tag).containsExactly(LocalDate.of(2026, 11, 12));
+  }
+
+  @Test
+  void findById_givenAnEntryOfBen_thenItBelongsToBen() {
+    // Given — die Person geht durch die Zeile und kommt unveraendert zurueck (E1).
+    final Zeiteintrag angelegt = gesichert(ben, konzeption, "2026-11-03", "10:00", "11:00");
+
+    // When
+    final Optional<Zeiteintrag> gefunden = repository.findById(angelegt.requireId());
+
+    // Then
+    assertThat(gefunden).map(Zeiteintrag::accountId).contains(ben);
+  }
+
+  @Test
+  void findImZeitraumFuerKonto_thenReturnsOnlyTheRowsOfThatAccountIncludingBothBounds() {
+    // Given — Anna und Ben am selben Tag zur selben Zeit; dazu Bens Zeilen auf beiden Grenzen
+    // und je eine davor und danach.
+    gesichert(anna, konzeption, "2026-11-03", "09:00", "12:00");
+    gesichert(ben, konzeption, "2026-11-03", "10:00", "11:00");
+    gesichert(ben, beratung, "2026-11-01", "09:00", "10:00");
+    gesichert(ben, beratung, "2026-11-30", "09:00", "10:00");
+    gesichert(ben, beratung, "2026-10-31", "09:00", "10:00");
+    gesichert(ben, beratung, "2026-12-01", "09:00", "10:00");
+
+    // When
+    final List<Zeiteintrag> gefunden =
+        repository.findImZeitraumFuerKonto(
+            LocalDate.of(2026, 11, 1), LocalDate.of(2026, 11, 30), ben);
+
+    // Then — nur Bens drei Zeilen im November, keine von Anna (Plan #426, E8).
+    assertThat(gefunden)
+        .extracting(Zeiteintrag::accountId, Zeiteintrag::tag)
+        .containsExactlyInAnyOrder(
+            tuple(ben, LocalDate.of(2026, 11, 1)),
+            tuple(ben, LocalDate.of(2026, 11, 3)),
+            tuple(ben, LocalDate.of(2026, 11, 30)));
+  }
+
+  @Test
+  void findImZeitraumFuerKonto_givenAnAccountWithoutEntries_thenEmpty() {
+    // Given
+    gesichert(anna, konzeption, "2026-11-03", "09:00", "12:00");
+
+    // When
+    final List<Zeiteintrag> gefunden =
+        repository.findImZeitraumFuerKonto(
+            LocalDate.of(2026, 11, 3), LocalDate.of(2026, 11, 3), ben);
+
+    // Then
+    assertThat(gefunden).isEmpty();
+  }
+
+  @Test
+  void findImZeitraum_givenEntriesOfTwoAccounts_thenReturnsBoth() {
+    // Given — der Weg ohne Konto bleibt fuer die Sicht „Alle" (E8).
+    gesichert(anna, konzeption, "2026-11-03", "09:00", "12:00");
+    gesichert(ben, konzeption, "2026-11-03", "10:00", "11:00");
+
+    // When
+    final List<Zeiteintrag> gefunden =
+        repository.findImZeitraum(LocalDate.of(2026, 11, 3), LocalDate.of(2026, 11, 3));
+
+    // Then
+    assertThat(gefunden).extracting(Zeiteintrag::accountId).containsExactlyInAnyOrder(anna, ben);
+  }
+
+  @Test
+  void angefallenJePosition_givenEntriesOfTwoAccounts_thenSumsAcrossBoth() {
+    // Given — Anna 9:00 bis 12:00, Ben 10:00 bis 11:00 auf derselben Position (E15).
+    gesichert(anna, konzeption, "2026-11-03", "09:00", "12:00");
+    gesichert(ben, konzeption, "2026-11-03", "10:00", "11:00");
+
+    // When
+    final Map<Long, BigDecimal> angefallen = repository.angefallenJePosition(Set.of(konzeption));
+
+    // Then — „angefallen" zaehlt beide Personen zusammen.
+    assertThat(angefallen).containsEntry(konzeption, new BigDecimal("4.00"));
+  }
+
+  @Test
+  void stundenJePositionImMonatUndAlleSummen_givenEntriesOfTwoAccounts_thenSumAcrossBoth() {
+    // Given — dieselben beiden Eintraege; auch die drei uebrigen Summen trennen nicht (E15).
+    gesichert(anna, konzeption, "2026-11-03", "09:00", "12:00");
+    gesichert(ben, konzeption, "2026-11-03", "10:00", "11:00");
+
+    // When
+    final Map<Long, BigDecimal> imMonat =
+        repository.stundenJePositionImMonat(Set.of(konzeption), YearMonth.of(2026, 11));
+    final Map<Long, BigDecimal> alle = repository.alleAngefallenJePosition();
+    final Map<Long, BigDecimal> imZeitraum =
+        repository.alleStundenJePositionImZeitraum(
+            LocalDate.of(2026, 11, 1), LocalDate.of(2026, 11, 30));
+
+    // Then
+    assertThat(List.of(imMonat, alle, imZeitraum))
+        .allSatisfy(summe -> assertThat(summe).containsEntry(konzeption, new BigDecimal("4.00")));
   }
 
   @Test

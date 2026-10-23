@@ -17,7 +17,8 @@ import org.springframework.stereotype.Repository;
  * Setzt den Port {@link ZeiteintragRepository} auf JPA um und uebersetzt in beide Richtungen.
  *
  * <p>Jeder Zeiteintrag ist eine Zeile fuer sich: Anlegen, Fortschreiben und Loeschen gehen einzeln,
- * wie beim Kommentar am Angebot und anders als bei den Positionen eines Belegs.
+ * wie beim Kommentar am Angebot und anders als bei den Positionen eines Belegs. Die Zeile entsteht
+ * aus dem Fachobjekt ({@code ZeiteintragEntity.aus}, Plan #426, E2).
  *
  * <p><b>Die Summen rechnet der Adapter, nicht die Datenbank.</b> Beide Abfragen holen die Zeilen
  * der angefragten Positionen, und addiert werden die <i>Minuten</i> der Eintraege; erst die Summe
@@ -42,10 +43,11 @@ import org.springframework.stereotype.Repository;
  * behalten von jeder nur ihren Monat — auch dafuer keine eigene Abfrage.
  */
 /*
- * Neun Methoden des Ports und drei private Helfer ergeben zwoelf. Sie weiter aufzuteilen
- * verschoebe die Zahl, ohne etwas zu klaeren: Die Breite kommt vom Port — vier Summen in zwei
- * Paaren und die Monate mit Eintrag —, und der Adapter ist die eine Stelle, an der Zeiteintrag und
- * Zeile ineinander uebergehen. Dasselbe Vorgehen wie bei {@code JpaRechnungRepository}.
+ * Zehn Methoden des Ports und zwei private Helfer ergeben zwoelf. Sie weiter aufzuteilen
+ * verschoebe die Zahl, ohne etwas zu klaeren: Die Breite kommt vom Port — zwei Lesewege nach
+ * Zeitraum, vier Summen in zwei Paaren und die Monate mit Eintrag —, und der Adapter ist die eine
+ * Stelle, an der Zeiteintrag und Zeile ineinander uebergehen. Dasselbe Vorgehen wie bei {@code
+ * JpaRechnungRepository}.
  */
 @SuppressWarnings("PMD.TooManyMethods")
 @Repository
@@ -70,8 +72,16 @@ class JpaZeiteintragRepository implements ZeiteintragRepository {
   }
 
   @Override
+  public List<Zeiteintrag> findImZeitraumFuerKonto(
+      final LocalDate von, final LocalDate bis, final long accountId) {
+    return zeilen.findImZeitraumFuerKonto(von, bis, accountId).stream()
+        .map(JpaZeiteintragRepository::toDomain)
+        .toList();
+  }
+
+  @Override
   public Zeiteintrag save(final Zeiteintrag zeiteintrag) {
-    return toDomain(zeilen.save(toEntity(zeiteintrag)));
+    return toDomain(zeilen.save(ZeiteintragEntity.aus(zeiteintrag)));
   }
 
   @Override
@@ -131,22 +141,12 @@ class JpaZeiteintragRepository implements ZeiteintragRepository {
   private static Zeiteintrag toDomain(final ZeiteintragEntity zeile) {
     return new Zeiteintrag(
         zeile.getId(),
+        zeile.getAccountId(),
         zeile.getAngebotPositionId(),
         zeile.getTag(),
         zeile.getVon(),
         zeile.getBis(),
         zeile.getCreatedAt(),
         zeile.getUpdatedAt());
-  }
-
-  private static ZeiteintragEntity toEntity(final Zeiteintrag zeiteintrag) {
-    return new ZeiteintragEntity(
-        zeiteintrag.id(),
-        zeiteintrag.angebotPositionId(),
-        zeiteintrag.tag(),
-        zeiteintrag.von(),
-        zeiteintrag.bis(),
-        zeiteintrag.createdAt(),
-        zeiteintrag.updatedAt());
   }
 }

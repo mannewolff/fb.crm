@@ -11,7 +11,11 @@ import org.mwolff.fbcrm.common.Identifiable;
 
 /**
  * Eine erfasste Arbeitszeit: ein Tag, eine Uhrzeit von und bis, eine Angebotsposition (Issue #193,
- * Kriterium 1).
+ * Kriterium 1) — und die Person, der sie gehoert (Plan #426, E1).
+ *
+ * <p><b>Die Person steht als blosse Kennung des Kontos</b>, nicht als Name: Der Name kommt beim
+ * Lesen aus dem Konto, damit nach einer Umbenennung alle Eintraege den aktuellen zeigen (#410,
+ * Kriterium 9).
  *
  * <p><b>Die Dauer wird gerechnet, nicht gefuehrt</b> (Plan #194, A3). Eine gespeicherte Dauer waere
  * ein zweiter Wahrheitsort neben von und bis, der bei jeder Korrektur nachgezogen werden muesste —
@@ -30,6 +34,7 @@ import org.mwolff.fbcrm.common.Identifiable;
  * hingenommen.
  *
  * @param id technische Kennung — {@code null}, solange der Eintrag nicht gespeichert ist
+ * @param accountId Kennung des Kontos, dem der Eintrag gehoert
  * @param angebotPositionId Kennung der Angebotsposition, auf die gebucht wurde
  * @param tag der Tag, an dem gearbeitet wurde
  * @param von Beginn, auf einer Viertelstunde ohne Sekunden
@@ -39,6 +44,7 @@ import org.mwolff.fbcrm.common.Identifiable;
  */
 public record Zeiteintrag(
     @Nullable Long id,
+    long accountId,
     long angebotPositionId,
     LocalDate tag,
     LocalTime von,
@@ -103,14 +109,22 @@ public record Zeiteintrag(
    * sind zwei Eintraege und kein Widerspruch. An verschiedenen Tagen gibt es keine Ueberschneidung,
    * auch bei gleicher Uhrzeit.
    *
-   * <p>Die Position spielt keine Rolle: Niemand arbeitet zur selben Zeit fuer zwei Kunden (Issue
-   * #193, Kriterium 4). Welche Eintraege verglichen werden, entscheidet der Anwendungsfall — die
-   * Methode vergleicht zwei.
+   * <p><b>Dieselbe Person nicht zweimal, zwei Personen schon</b> (#410, Kriterium 5). Die Position
+   * spielt keine Rolle: Wer zur selben Zeit fuer zwei Kunden bucht, hat sich verschrieben. Zwei
+   * Eintraege verschiedener Konten ueberschneiden sich dagegen nie.
+   *
+   * <p>Welche Eintraege verglichen werden, entscheidet weiter der Anwendungsfall — die Methode
+   * vergleicht zwei. Er liest dafuer nur die Eintraege der Person, der der gepruefte gehoeren soll
+   * (Plan #426, E8); der Vergleich der Konten hier ist die letzte Sicherung hinter dieser Abfrage,
+   * nicht die Regel selbst.
    *
    * @param anderer der Eintrag, gegen den verglichen wird
    */
   public boolean ueberschneidet(final Zeiteintrag anderer) {
-    return tag.equals(anderer.tag) && von.isBefore(anderer.bis) && anderer.von.isBefore(bis);
+    return accountId == anderer.accountId
+        && tag.equals(anderer.tag)
+        && von.isBefore(anderer.bis)
+        && anderer.von.isBefore(bis);
   }
 
   /**

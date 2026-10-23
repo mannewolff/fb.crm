@@ -38,6 +38,9 @@ import java.util.Set;
  * begrenzten — mit Positionsmenge genau ein Monat, ohne sie zwei Datumsgrenzen, die einen Monat
  * ebenso fassen wie ein Jahr (Plan #274, E6).
  *
+ * <p>Keine der vier Summen trennt nach Personen: Kontingent, Rechnungsvorschlag und Auswertungen
+ * zaehlen die Stunden aller (Plan #426, E15; #410, Kriterien 6 bis 8).
+ *
  * <p>Der fuenfte Weg, {@link #monateMitEintragImZeitraum(LocalDate, LocalDate)}, ist der eine, der
  * keine Stunden liefert: Er sagt nur, in welchen Monaten eines Zeitraums ueberhaupt Zeit erfasst
  * ist.
@@ -63,6 +66,23 @@ public interface ZeiteintragRepository {
    * @param bis letzter Tag des Zeitraums
    */
   List<Zeiteintrag> findImZeitraum(LocalDate von, LocalDate bis);
+
+  /**
+   * Die Zeiteintraege einer Person in einem Zeitraum, beide Grenzen eingeschlossen (Plan #426, E8).
+   *
+   * <p>Die Leser sind die Monatsliste einer Person und die Ueberschneidungspruefung, die je Person
+   * gilt (#410, Kriterium 5). Gefiltert wird hier, wo ohnehin gelesen wird, und nicht danach in der
+   * Anwendungsschicht: Sonst kaemen fremde Eintraege in den Speicher, auch fuer ein Konto, das sie
+   * nicht sehen darf. {@link #findImZeitraum(LocalDate, LocalDate)} bleibt fuer die Sicht „Alle"
+   * und die Leser ueber alle Angebote.
+   *
+   * <p>Ohne zugesagte Reihenfolge, wie {@link #findImZeitraum(LocalDate, LocalDate)}.
+   *
+   * @param von erster Tag des Zeitraums
+   * @param bis letzter Tag des Zeitraums
+   * @param accountId Kennung des Kontos, dessen Eintraege gelesen werden
+   */
+  List<Zeiteintrag> findImZeitraumFuerKonto(LocalDate von, LocalDate bis, long accountId);
 
   /**
    * Legt den Zeiteintrag an oder schreibt ihn fort und liefert ihn mit gesetzter Kennung zurueck.

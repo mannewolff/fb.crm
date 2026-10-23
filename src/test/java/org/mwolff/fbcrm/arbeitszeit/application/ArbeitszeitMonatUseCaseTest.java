@@ -95,6 +95,7 @@ class ArbeitszeitMonatUseCaseTest {
     final Zeiteintrag vorlage = Zeitdoppel.zeiteintrag(id, Zeitdoppel.KONZEPTION_ID, von, bis);
     return new Zeiteintrag(
         vorlage.id(),
+        vorlage.accountId(),
         vorlage.angebotPositionId(),
         SPAETER,
         vorlage.von(),

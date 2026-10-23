@@ -10,13 +10,15 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import org.jspecify.annotations.Nullable;
+import org.mwolff.fbcrm.arbeitszeit.domain.Zeiteintrag;
 
 /**
- * Die Zeile der Tabelle {@code arbeitszeit} aus {@code V19__arbeitszeit.sql}.
+ * Die Zeile der Tabelle {@code arbeitszeit} aus {@code V19__arbeitszeit.sql}, ergaenzt um V32.
  *
  * <p>Die Angebotsposition steht als blosse Kennung und nicht als Beziehung, aus demselben Grund wie
  * das Angebot in {@code AngebotKommentarEntity}: Eine Beziehung laedt das Angebot mit jeder
- * erfassten Viertelstunde, ohne dass es gebraucht wuerde.
+ * erfassten Viertelstunde, ohne dass es gebraucht wuerde. Dasselbe gilt fuer das Konto, dem der
+ * Eintrag gehoert (Plan #426, E1).
  *
  * <p><b>Die Zeile ist unveraenderlich</b> — anders als {@code RechnungPositionEntity} und aus
  * demselben Grund wie der Kommentar am Angebot: Ein Zeiteintrag ist eine Zeile fuer sich, und der
@@ -30,6 +32,9 @@ class ZeiteintragEntity {
   @Id
   @GeneratedValue(strategy = GenerationType.IDENTITY)
   private @Nullable Long id;
+
+  @Column(name = "account_id", nullable = false)
+  private long accountId;
 
   @Column(name = "angebot_position_id", nullable = false)
   private long angebotPositionId;
@@ -58,25 +63,40 @@ class ZeiteintragEntity {
     // Von Hibernate benutzt.
   }
 
-  ZeiteintragEntity(
-      final @Nullable Long id,
-      final long angebotPositionId,
-      final LocalDate tag,
-      final LocalTime von,
-      final LocalTime bis,
-      final Instant createdAt,
-      final Instant updatedAt) {
-    this.id = id;
-    this.angebotPositionId = angebotPositionId;
-    this.tag = tag;
-    this.von = von;
-    this.bis = bis;
-    this.createdAt = createdAt;
-    this.updatedAt = updatedAt;
+  /**
+   * Die Zeile zu einem Zeiteintrag — jedes Feld kommt aus dem Fachobjekt (Plan #426, E2), wie bei
+   * {@code AccountEntity.aus}.
+   *
+   * <p>Mit der Person haette ein Konstruktor mit einzelnen Feldern acht Parameter und verstiesse
+   * gegen die Grenze von sieben, die {@code ArchitectureTest} ohne Ausnahme fuer jede Entity zieht.
+   * So nennt der Adapter am Aufruf nur, <i>was</i> abgebildet wird, und kein Aufruf kann Konto und
+   * Position vertauschen.
+   *
+   * @param eintrag der Zeiteintrag, dessen Stand die Zeile tragen soll
+   * @return die Zeile; ihre Kennung ist die des Eintrags und damit {@code null}, solange er noch
+   *     nicht geschrieben wurde
+   */
+  static ZeiteintragEntity aus(final Zeiteintrag eintrag) {
+    return new ZeiteintragEntity(eintrag);
+  }
+
+  private ZeiteintragEntity(final Zeiteintrag eintrag) {
+    this.id = eintrag.id();
+    this.accountId = eintrag.accountId();
+    this.angebotPositionId = eintrag.angebotPositionId();
+    this.tag = eintrag.tag();
+    this.von = eintrag.von();
+    this.bis = eintrag.bis();
+    this.createdAt = eintrag.createdAt();
+    this.updatedAt = eintrag.updatedAt();
   }
 
   @Nullable Long getId() {
     return id;
+  }
+
+  long getAccountId() {
+    return accountId;
   }
 
   long getAngebotPositionId() {

@@ -18,20 +18,37 @@ import org.junit.jupiter.params.provider.ValueSource;
  * <p>Gegenstand sind die drei Zusagen des Records: die Dauer als Minuten und als Stunden mit zwei
  * Nachkommastellen (Plan #194, E5), die Ueberschneidung mit berührenden Grenzen als Nicht-Fall (A8)
  * und die Invariante aus Raster und {@code bis > von} (A19).
+ *
+ * <p>Seit Plan #426 (E1, E8) gehoert jeder Eintrag einer Person: Ueberschneiden koennen sich nur
+ * zwei Eintraege desselben Kontos, zwei Personen duerfen zur selben Zeit arbeiten.
  */
 class ZeiteintragTest {
 
   private static final LocalDate TAG = LocalDate.of(2026, 11, 12);
   private static final Instant ANGELEGT = Instant.parse("2026-11-12T08:00:00Z");
   private static final long POSITION = 7L;
+  private static final long ANNA = 21L;
+  private static final long BEN = 22L;
 
   private static Zeiteintrag eintrag(final String von, final String bis) {
-    return eintrag(TAG, von, bis);
+    return eintrag(ANNA, TAG, von, bis);
   }
 
   private static Zeiteintrag eintrag(final LocalDate tag, final String von, final String bis) {
+    return eintrag(ANNA, tag, von, bis);
+  }
+
+  private static Zeiteintrag eintrag(
+      final long accountId, final LocalDate tag, final String von, final String bis) {
     return new Zeiteintrag(
-        null, POSITION, tag, LocalTime.parse(von), LocalTime.parse(bis), ANGELEGT, ANGELEGT);
+        null,
+        accountId,
+        POSITION,
+        tag,
+        LocalTime.parse(von),
+        LocalTime.parse(bis),
+        ANGELEGT,
+        ANGELEGT);
   }
 
   @Test
@@ -149,6 +166,27 @@ class ZeiteintragTest {
 
     // Then
     assertThat(ueberschneidung).isFalse();
+  }
+
+  @Test
+  void ueberschneidet_givenTwoEntriesOfDifferentAccountsAtTheSameTime_thenFalse() {
+    // When — Anna 9:00 bis 12:00, Ben 10:00 bis 11:00: zwei Personen duerfen zur selben Zeit
+    // arbeiten (Plan #426, E8; #410, Kriterium 5).
+    final boolean ueberschneidung =
+        eintrag(ANNA, TAG, "09:00", "12:00").ueberschneidet(eintrag(BEN, TAG, "10:00", "11:00"));
+
+    // Then
+    assertThat(ueberschneidung).isFalse();
+  }
+
+  @Test
+  void ueberschneidet_givenTwoEntriesOfTheSameAccountAtTheSameTime_thenTrue() {
+    // When — Anna 9:00 bis 12:00 und Anna 11:00 bis 13:00: dieselbe Person nicht zweimal.
+    final boolean ueberschneidung =
+        eintrag(ANNA, TAG, "09:00", "12:00").ueberschneidet(eintrag(ANNA, TAG, "11:00", "13:00"));
+
+    // Then
+    assertThat(ueberschneidung).isTrue();
   }
 
   @ParameterizedTest

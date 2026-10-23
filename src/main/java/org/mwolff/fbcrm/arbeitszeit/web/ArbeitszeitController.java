@@ -8,6 +8,7 @@ import org.mwolff.fbcrm.arbeitszeit.application.ArbeitszeitMonatUseCase;
 import org.mwolff.fbcrm.arbeitszeit.application.BuchbarePositionenUseCase;
 import org.mwolff.fbcrm.arbeitszeit.application.ZeiteintragUseCase;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -72,12 +73,20 @@ public class ArbeitszeitController {
     return buchbare.positionen().stream().map(BuchungspositionResponse::of).toList();
   }
 
-  /** Erfasst eine Arbeitszeit (Kriterium 1). */
+  /**
+   * Erfasst eine Arbeitszeit (Kriterium 1) fuer das angemeldete Konto.
+   *
+   * <p>Die Person kommt aus der Sitzung, nicht aus dem Rumpf (Plan #426, E1) — wie der Verfasser
+   * eines Kommentars am Angebot.
+   */
   @PostMapping
   @ResponseStatus(HttpStatus.CREATED)
-  public ZeiteintragResponse anlegen(@Valid @RequestBody final ZeiteintragRequest anfrage) {
+  public ZeiteintragResponse anlegen(
+      @AuthenticationPrincipal final Long accountId,
+      @Valid @RequestBody final ZeiteintragRequest anfrage) {
     return ZeiteintragResponse.of(
-        useCase.anlegen(anfrage.angebotPositionId(), anfrage.tag(), anfrage.von(), anfrage.bis()));
+        useCase.anlegen(
+            accountId, anfrage.angebotPositionId(), anfrage.tag(), anfrage.von(), anfrage.bis()));
   }
 
   /** Aendert einen Zeiteintrag (Kriterium 6). */

@@ -3,6 +3,7 @@ package org.mwolff.fbcrm.arbeitszeit;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -20,16 +21,22 @@ import org.springframework.jdbc.core.JdbcTemplate;
  * Angebotsposition und die beiden CHECKs um {@code bis > von} und das Raster der Viertelstunde
  * (Plan #194, A4). Gearbeitet wird mit {@link JdbcTemplate} und direkten Anweisungen — der Weg
  * ueber den Bestand kaeme an diesen Faellen gar nicht vorbei, weil der Record sie vorher abweist.
+ *
+ * <p>Seit {@code V32__arbeitszeit_person.sql} gehoert jeder Eintrag einem Konto (Plan #426, E1, E3,
+ * E9): Die Spalte {@code account_id} ist Pflicht, verweist auf {@code account (id)} und liegt mit
+ * dem Tag in einem eigenen Index. Der Vorlauf legt dafuer ein Konto an, und jeder Eintrag gehoert
+ * ihm. Die Uebernahme des Altbestands prueft {@code ArbeitszeitMigrationIT}.
  */
 class ArbeitszeitSchemaIT extends AbstractIntegrationTest {
 
   private static final String INSERT =
-      "INSERT INTO arbeitszeit (angebot_position_id, tag, von, bis)"
-          + " VALUES (?, DATE '2026-11-12', CAST(? AS time), CAST(? AS time))";
+      "INSERT INTO arbeitszeit (account_id, angebot_position_id, tag, von, bis)"
+          + " VALUES (?, ?, DATE '2026-11-12', CAST(? AS time), CAST(? AS time))";
 
   private final JdbcTemplate jdbc;
 
   private long angebotPositionId;
+  private long accountId;
 
   @Autowired
   ArbeitszeitSchemaIT(final JdbcTemplate jdbc) {
@@ -58,10 +65,22 @@ class ArbeitszeitSchemaIT extends AbstractIntegrationTest {
         Long.valueOf(angebotId));
     angebotPositionId =
         jdbc.queryForObject("SELECT id FROM angebot_position LIMIT 1", Long.class).longValue();
+    jdbc.execute("TRUNCATE outbox_message, account RESTART IDENTITY CASCADE");
+    accountId =
+        jdbc.queryForObject(
+                "INSERT INTO account (email, display_name, role)"
+                    + " VALUES ('manne@example.org', 'Manne', 'C_LEVEL') RETURNING id",
+                Long.class)
+            .longValue();
   }
 
   private int eintrag(final long positionId, final String von, final String bis) {
-    return jdbc.update(INSERT, Long.valueOf(positionId), von, bis);
+    return eintrag(Long.valueOf(accountId), positionId, von, bis);
+  }
+
+  private int eintrag(
+      final @Nullable Long konto, final long positionId, final String von, final String bis) {
+    return jdbc.update(INSERT, konto, Long.valueOf(positionId), von, bis);
   }
 
   @Test
@@ -114,6 +133,54 @@ class ArbeitszeitSchemaIT extends AbstractIntegrationTest {
   }
 
   @Test
+  void arbeitszeit_givenAnUnknownAccount_thenRejectedByTheForeignKey() {
+    // When / Then — Plan #426, E1: ein Eintrag gehoert einem vorhandenen Konto.
+    assertThatThrownBy(() -> eintrag(Long.valueOf(4711L), angebotPositionId, "09:00", "11:00"))
+        .isInstanceOf(DataIntegrityViolationException.class)
+        .hasMessageContaining("arbeitszeit_account_id_fkey");
+  }
+
+  @Test
+  void arbeitszeit_givenNoAccount_thenRejectedByTheDatabase() {
+    // When / Then — E3: nach der Uebernahme des Altbestands ist die Spalte Pflicht.
+    assertThatThrownBy(() -> eintrag(null, angebotPositionId, "09:00", "11:00"))
+        .isInstanceOf(DataIntegrityViolationException.class)
+        .hasMessageContaining("account_id");
+  }
+
+  @Test
+  void migration_thenTheAccountColumnIsMandatory() {
+    // When
+    final String nullable =
+        jdbc.queryForObject(
+            "SELECT is_nullable FROM information_schema.columns WHERE table_schema = 'public'"
+                + " AND table_name = 'arbeitszeit' AND column_name = 'account_id'",
+            String.class);
+
+    // Then
+    assertThat(nullable).isEqualTo("NO");
+  }
+
+  @Test
+  void migration_thenTheAccountColumnReferencesTheAccountWithoutOnDelete() {
+    // When — ohne ON DELETE wie an jedem Fremdschluessel dieses Schemas: Konten werden
+    // stillgelegt, nicht geloescht.
+    final String regel =
+        jdbc.queryForObject(
+            "SELECT rc.delete_rule FROM information_schema.referential_constraints rc"
+                + " JOIN information_schema.constraint_column_usage ccu"
+                + " ON ccu.constraint_name = rc.constraint_name"
+                + " AND ccu.constraint_schema = rc.constraint_schema"
+                + " WHERE rc.constraint_schema = 'public'"
+                + " AND rc.constraint_name = 'arbeitszeit_account_id_fkey'"
+                + " AND ccu.table_name = 'account' AND ccu.column_name = 'id'",
+            String.class);
+
+    // Then
+    assertThat(regel).isEqualTo("NO ACTION");
+  }
+
+  @Test
   void migration_thenNoStoredDurationColumnExists() {
     // When — A3: Die Dauer wird aus von und bis gerechnet, nicht gefuehrt.
     final Integer spalten =
@@ -128,16 +195,31 @@ class ArbeitszeitSchemaIT extends AbstractIntegrationTest {
   }
 
   @Test
-  void migration_thenBothLookupPathsHaveAnIndex() {
-    // When — nachgeschlagen wird je Monat (tag) und je Position (A4).
+  void migration_thenEveryLookupPathHasAnIndex() {
+    // When — nachgeschlagen wird je Monat (tag), je Position (A4) und je Person und Tag (Plan
+    // #426, E9).
     final Integer spuren =
         jdbc.queryForObject(
             "SELECT count(*) FROM pg_indexes WHERE schemaname = 'public'"
                 + " AND tablename = 'arbeitszeit'"
-                + " AND indexname IN ('arbeitszeit_tag_idx', 'arbeitszeit_angebot_position_idx')",
+                + " AND indexname IN ('arbeitszeit_tag_idx', 'arbeitszeit_angebot_position_idx',"
+                + " 'arbeitszeit_account_tag_idx')",
             Integer.class);
 
     // Then
-    assertThat(spuren).isEqualTo(2);
+    assertThat(spuren).isEqualTo(3);
+  }
+
+  @Test
+  void migration_thenThePersonIndexLeadsWithTheAccountAndThenTheDay() {
+    // When — E9: das Konto an erster Stelle, damit die Abfrage je Person auf ihm liegt.
+    final String definition =
+        jdbc.queryForObject(
+            "SELECT indexdef FROM pg_indexes WHERE schemaname = 'public'"
+                + " AND indexname = 'arbeitszeit_account_tag_idx'",
+            String.class);
+
+    // Then
+    assertThat(definition).endsWith("(account_id, tag)");
   }
 }

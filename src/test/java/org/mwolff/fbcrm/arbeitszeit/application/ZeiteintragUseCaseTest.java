@@ -45,6 +45,7 @@ class ZeiteintragUseCaseTest {
 
   private static final long EINTRAG = 4L;
   private static final long FREMDER_EINTRAG = 5L;
+  private static final long ANDERES_KONTO = 22L;
 
   @Mock private ZeiteintragRepository zeiten;
   @Mock private AngebotRepository angebote;
@@ -89,7 +90,11 @@ class ZeiteintragUseCaseTest {
 
   private Zeiteintrag anlegen(final long angebotPositionId, final String von, final String bis) {
     return useCase.anlegen(
-        angebotPositionId, Zeitdoppel.TAG, LocalTime.parse(von), LocalTime.parse(bis));
+        Zeitdoppel.KONTO,
+        angebotPositionId,
+        Zeitdoppel.TAG,
+        LocalTime.parse(von),
+        LocalTime.parse(bis));
   }
 
   private Zeiteintrag aendern(final long angebotPositionId, final String von, final String bis) {
@@ -103,7 +108,7 @@ class ZeiteintragUseCaseTest {
 
   @Test
   void anlegen_givenABookablePositionAndAFreeSlot_thenStoresTheEntryWithBothTimestamps() {
-    // Given — Kriterium 1.
+    // Given — Kriterium 1; der Eintrag gehoert dem anfragenden Konto (Plan #426, E1).
     angebotStehtIn(Angebotsstatus.BESTELLT);
     keinEintragAmTag();
     speichernGibtZurueck();
@@ -116,6 +121,7 @@ class ZeiteintragUseCaseTest {
         .isEqualTo(
             new Zeiteintrag(
                 null,
+                Zeitdoppel.KONTO,
                 Zeitdoppel.KONZEPTION_ID,
                 Zeitdoppel.TAG,
                 LocalTime.of(9, 0),
@@ -317,7 +323,7 @@ class ZeiteintragUseCaseTest {
 
   @Test
   void aendern_givenAnotherTime_thenKeepsCreatedAtAndSetsUpdatedAtFromTheClock() {
-    // Given — Kriterium 6; der Eintrag bleibt auf seiner Position.
+    // Given — Kriterium 6; der Eintrag bleibt auf seiner Position und bei seiner Person.
     eintragGibtEs(konzeption("09:00", "11:00"));
     amTagLiegt(konzeption("09:00", "11:00"));
     speichernGibtZurueck();
@@ -330,12 +336,29 @@ class ZeiteintragUseCaseTest {
         .isEqualTo(
             new Zeiteintrag(
                 Long.valueOf(EINTRAG),
+                Zeitdoppel.KONTO,
                 Zeitdoppel.KONZEPTION_ID,
                 Zeitdoppel.TAG,
                 LocalTime.of(9, 0),
                 LocalTime.of(12, 0),
                 Zeitdoppel.FRUEHER,
                 Zeitdoppel.JETZT));
+  }
+
+  @Test
+  void aendern_givenAnEntryOfAnotherAccount_thenItKeepsItsOwner() {
+    // Given — Plan #426, E1: Aendern haengt einen Eintrag nicht um; er bleibt bei seiner Person.
+    final Zeiteintrag vorhandener =
+        Zeitdoppel.zeiteintrag(EINTRAG, ANDERES_KONTO, Zeitdoppel.KONZEPTION_ID, "09:00", "11:00");
+    eintragGibtEs(vorhandener);
+    amTagLiegt(vorhandener);
+    speichernGibtZurueck();
+
+    // When
+    final Zeiteintrag geaendert = aendern(Zeitdoppel.KONZEPTION_ID, "09:00", "12:00");
+
+    // Then
+    assertThat(geaendert.accountId()).isEqualTo(ANDERES_KONTO);
   }
 
   @Test

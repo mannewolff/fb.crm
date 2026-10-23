@@ -67,6 +67,10 @@ public class ZeiteintragUseCase {
   /**
    * Erfasst eine Arbeitszeit auf einer Angebotsposition (Kriterium 1).
    *
+   * <p>Der Eintrag gehoert dem anfragenden Konto (Plan #426, E1). Fuer eine andere Person zu
+   * erfassen und die Rechte je Rolle folgen mit dem Paket „Zeiteintraege schreiben".
+   *
+   * @param accountId Kennung des anfragenden Kontos, dem der Eintrag gehoert
    * @param angebotPositionId Kennung der Position, auf die gebucht wird
    * @param tag der Tag, an dem gearbeitet wurde
    * @param von Beginn, auf einer Viertelstunde
@@ -78,18 +82,24 @@ public class ZeiteintragUseCase {
    * @throws ZeitenUeberschneidenSich wenn am selben Tag schon ein Eintrag in diesem Zeitraum liegt
    */
   public Zeiteintrag anlegen(
-      final long angebotPositionId, final LocalDate tag, final LocalTime von, final LocalTime bis) {
+      final long accountId,
+      final long angebotPositionId,
+      final LocalDate tag,
+      final LocalTime von,
+      final LocalTime bis) {
     pruefeZeiten(von, bis);
     pruefeBuchungZulaessig(angebotPositionId);
     final Instant jetzt = clock.instant();
-    return gespeichert(new Zeiteintrag(null, angebotPositionId, tag, von, bis, jetzt, jetzt));
+    return gespeichert(
+        new Zeiteintrag(null, accountId, angebotPositionId, tag, von, bis, jetzt, jetzt));
   }
 
   /**
    * Aendert einen Zeiteintrag (Kriterium 6) — Tag, Uhrzeit und Position.
    *
    * <p>„Buchung zulaessig" wird nur geprueft, wenn die Position wechselt (A7); der Eintrag selbst
-   * zaehlt bei der Ueberschneidung nicht mit (A8).
+   * zaehlt bei der Ueberschneidung nicht mit (A8). Er bleibt bei der Person, der er gehoert (Plan
+   * #426, E1).
    *
    * @param id Kennung des Eintrags
    * @param angebotPositionId Kennung der Position, auf die gebucht wird
@@ -118,6 +128,7 @@ public class ZeiteintragUseCase {
     return gespeichert(
         new Zeiteintrag(
             vorhandener.id(),
+            vorhandener.accountId(),
             angebotPositionId,
             tag,
             von,

@@ -20,6 +20,7 @@ import java.time.LocalTime;
 import java.time.YearMonth;
 import java.util.List;
 import java.util.Optional;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -40,6 +41,9 @@ import org.mwolff.fbcrm.arbeitszeit.application.ZeiteintragUseCase;
 import org.mwolff.fbcrm.arbeitszeit.domain.Zeiteintrag;
 import org.mwolff.fbcrm.common.web.GlobalExceptionHandler;
 import org.springframework.http.MediaType;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.web.method.annotation.AuthenticationPrincipalArgumentResolver;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
@@ -58,6 +62,10 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
  * Parameter — fehlt er, fragt der Controller ohne Monat und der Anwendungsfall nimmt den laufenden;
  * ein unbrauchbarer Monat ist eine fehlerhafte Anfrage (400).
  *
+ * <p>Die Sitzung steht als {@link SecurityContextHolder} mit der Kennung des Kontos als Principal,
+ * wie in {@code AngebotKommentareControllerTest}: Ein neuer Eintrag gehoert dem angemeldeten Konto
+ * (Plan #426, E1), und die Kennung kommt aus der Sitzung, nicht aus dem Rumpf.
+ *
  * <p><b>Welche Felder</b> die Antwort traegt, entscheidet dieser Layer; <b>wie</b> Tag und Uhrzeit
  * geschrieben werden, entscheidet der von Spring Boot gebaute ObjectMapper, den {@code
  * standaloneSetup} nicht kennt — hier steht deshalb nur, dass sie da sind. Die Textform belegt
@@ -70,6 +78,7 @@ class ArbeitszeitControllerTest {
   private static final String PFAD_EINZELN = PFAD + "/{id}";
 
   private static final long EINTRAG = 4L;
+  private static final long ANGEMELDET = 21L;
   private static final long POSITION = 101L;
   private static final LocalDate TAG = LocalDate.of(2026, 11, 12);
   private static final Instant ANGELEGT = Instant.parse("2026-11-12T08:00:00Z");
@@ -89,15 +98,26 @@ class ArbeitszeitControllerTest {
 
   @BeforeEach
   void baueDenController() {
+    SecurityContextHolder.getContext()
+        .setAuthentication(
+            UsernamePasswordAuthenticationToken.authenticated(
+                Long.valueOf(ANGEMELDET), null, List.of()));
     mockMvc =
         MockMvcBuilders.standaloneSetup(new ArbeitszeitController(useCase, monate, buchbare))
             .setControllerAdvice(new GlobalExceptionHandler())
+            .setCustomArgumentResolvers(new AuthenticationPrincipalArgumentResolver())
             .build();
+  }
+
+  @AfterEach
+  void raeumeDieSitzungAb() {
+    SecurityContextHolder.clearContext();
   }
 
   private static Zeiteintrag eintrag() {
     return new Zeiteintrag(
         Long.valueOf(EINTRAG),
+        ANGEMELDET,
         POSITION,
         TAG,
         LocalTime.of(9, 0),
@@ -109,7 +129,7 @@ class ArbeitszeitControllerTest {
   @Test
   void anlegen_thenAnswers201WithTheEntryAndItsCalculatedHours() throws Exception {
     // Given — die Dauer steht nicht in der Anfrage; sie wird gerechnet (Plan #194, A3).
-    when(useCase.anlegen(POSITION, TAG, LocalTime.of(9, 0), LocalTime.of(10, 45)))
+    when(useCase.anlegen(ANGEMELDET, POSITION, TAG, LocalTime.of(9, 0), LocalTime.of(10, 45)))
         .thenReturn(eintrag());
 
     // When / Then
@@ -127,7 +147,8 @@ class ArbeitszeitControllerTest {
   @Test
   void anlegen_thenPassesTheSubmittedTimesToTheUseCase() throws Exception {
     // Given
-    when(useCase.anlegen(eq(POSITION), eq(TAG), von.capture(), eq(LocalTime.of(10, 45))))
+    when(useCase.anlegen(
+            eq(ANGEMELDET), eq(POSITION), eq(TAG), von.capture(), eq(LocalTime.of(10, 45))))
         .thenReturn(eintrag());
 
     // When
@@ -170,7 +191,7 @@ class ArbeitszeitControllerTest {
   @Test
   void anlegen_whenTheTimeIsOutsideTheGrid_thenAnswers422WithAFieldErrorAtVon() throws Exception {
     // Given — A19: die Meldung kommt am Feld an und nicht als Serverfehler.
-    when(useCase.anlegen(POSITION, TAG, LocalTime.of(9, 0), LocalTime.of(10, 45)))
+    when(useCase.anlegen(ANGEMELDET, POSITION, TAG, LocalTime.of(9, 0), LocalTime.of(10, 45)))
         .thenThrow(UhrzeitNichtImRaster.anVon());
 
     // When / Then
@@ -184,7 +205,7 @@ class ArbeitszeitControllerTest {
   void anlegen_whenThePositionIsNotBookable_thenAnswers422WithAFieldErrorAtThePosition()
       throws Exception {
     // Given — Antworten 2, 3 und 5.
-    when(useCase.anlegen(POSITION, TAG, LocalTime.of(9, 0), LocalTime.of(10, 45)))
+    when(useCase.anlegen(ANGEMELDET, POSITION, TAG, LocalTime.of(9, 0), LocalTime.of(10, 45)))
         .thenThrow(PositionNichtBuchbar.amKundenangebot());
 
     // When / Then
