@@ -10,8 +10,8 @@ import type { Recht, Rechte } from '../auth/rechte';
  * Jahresabschluessen (#287, Kriterium 1), darunter „Stammdaten". Das Tagesgeschaeft steht oben, weil es der haeufigere Weg ist; Angebote entstehen
  * weiterhin an der Firma (Issue #126). Welche Bloecke dazukommen, entsteht mit den Fachplaenen.
  *
- * Im Fuss stehen „Administration" und „Dokumentation" als eigene Gruppe ueber der Nutzerkarte
- * (E7). „Administration" traegt heute den Bereich „Rechnung" — Nummernmuster, naechste Nummer,
+ * Im Fuss stehen „Mitarbeitende", „Administration" und „Dokumentation" als eigene Gruppe ueber der
+ * Nutzerkarte (E7, Plan #414 A12). „Administration" traegt heute den Bereich „Rechnung" — Nummernmuster, naechste Nummer,
  * Steuersatz und Zahlungsziel (Issue #166). „Einklappen" steht nicht mehr darunter: Es ist eine
  * Icontaste neben der Marke geworden und damit kein Ziel der Navigation mehr.
  *
@@ -31,6 +31,7 @@ export type Symbolname =
   | 'chart-histogram'
   | 'building-community'
   | 'id'
+  | 'users'
   | 'settings'
   | 'book';
 
@@ -83,6 +84,14 @@ export const NAV_BLOECKE: readonly NavBlock[] = [
 ];
 
 export const FUSS_EINTRAEGE: readonly NavEintrag[] = [
+  // „Mitarbeitende" steht neben „Administration": Konten und Rollen gehoeren in den Fuss, nicht zu
+  // den Stammdaten (Plan #414, A12). Nur ein C-Level verwaltet Konten und sieht den Eintrag.
+  {
+    beschriftung: 'Mitarbeitende',
+    ziel: '/mitarbeitende',
+    symbol: 'users',
+    recht: 'darfKontenVerwalten',
+  },
   {
     beschriftung: 'Administration',
     ziel: '/administration',

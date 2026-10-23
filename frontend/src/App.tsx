@@ -23,6 +23,8 @@ const NachtragMaske = lazy(async () => import('./pages/NachtragMaske'));
 const NachgetrageneRechnungPage = lazy(async () => import('./pages/NachgetrageneRechnungPage'));
 const EigeneAngabenMaske = lazy(async () => import('./pages/EigeneAngabenMaske'));
 const AdministrationPage = lazy(async () => import('./pages/AdministrationPage'));
+const MitarbeitendePage = lazy(async () => import('./pages/MitarbeitendePage'));
+const MitarbeiterMaske = lazy(async () => import('./pages/MitarbeiterMaske'));
 const JahresabschluessePage = lazy(async () => import('./pages/JahresabschluessePage'));
 const JahresabschlussPage = lazy(async () => import('./pages/JahresabschlussPage'));
 const StartseitePage = lazy(async () => import('./pages/StartseitePage'));
@@ -48,6 +50,7 @@ const DokumentationPage = lazy(async () => import('./pages/DokumentationPage'));
  *
  * Die Einstellungen — `/eigene-angaben` und `/administration` — liegen zusaetzlich in
  * {@link RollenRoute}: Sie stehen nur einer Rolle offen, die sie sehen darf (Plan #414, A11).
+ * Ebenso `/mitarbeitende` mit seinen Masken, die nur einem C-Level offenstehen (A12).
  *
  * Die unbekannte Adresse bekommt keine eigene Ansicht: Mit Sitzung fuehrt sie auf die
  * Startadresse, ohne Sitzung uebernimmt {@link ProtectedRoute} und fuehrt auf die
@@ -121,6 +124,31 @@ export default function App() {
               element={
                 <RollenRoute recht="darfEinstellungenSehen">
                   <AdministrationPage />
+                </RollenRoute>
+              }
+            />
+            {/* Die Konten verwaltet nur ein C-Level (Plan #414, A12); statisch vor dynamisch. */}
+            <Route
+              path="/mitarbeitende"
+              element={
+                <RollenRoute recht="darfKontenVerwalten">
+                  <MitarbeitendePage />
+                </RollenRoute>
+              }
+            />
+            <Route
+              path="/mitarbeitende/neu"
+              element={
+                <RollenRoute recht="darfKontenVerwalten">
+                  <MitarbeiterMaske />
+                </RollenRoute>
+              }
+            />
+            <Route
+              path="/mitarbeitende/:id/bearbeiten"
+              element={
+                <RollenRoute recht="darfKontenVerwalten">
+                  <MitarbeiterMaske />
                 </RollenRoute>
               }
             />

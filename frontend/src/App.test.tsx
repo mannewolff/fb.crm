@@ -165,6 +165,12 @@ describe('App', () => {
     ],
     ['fuehrt „/eigene-angaben" ohne Sitzung auf die Anmeldeseite', '/eigene-angaben'],
     ['fuehrt „/administration“ ohne Sitzung auf die Anmeldeseite', '/administration'],
+    ['fuehrt „/mitarbeitende" ohne Sitzung auf die Anmeldeseite', '/mitarbeitende'],
+    ['fuehrt „/mitarbeitende/neu" ohne Sitzung auf die Anmeldeseite', '/mitarbeitende/neu'],
+    [
+      'fuehrt „/mitarbeitende/2/bearbeiten" ohne Sitzung auf die Anmeldeseite',
+      '/mitarbeitende/2/bearbeiten',
+    ],
     ['fuehrt „/dokumentation" ohne Sitzung auf die Anmeldeseite', '/dokumentation'],
     ['fuehrt „/dokumentation/betrieb" ohne Sitzung auf die Anmeldeseite', '/dokumentation/betrieb'],
   ])('%s', async (_name, pfad) => {
@@ -428,6 +434,64 @@ describe('App', () => {
       await screen.findByRole('heading', { level: 1, name: 'Administration' }),
     ).toBeInTheDocument();
     expect(screen.getByRole('navigation', { name: 'Hauptnavigation' })).toBeInTheDocument();
+  });
+
+  it('zeigt „/mitarbeitende" einem C-Level im Rahmen — nachgeladen, nicht im ersten Rutsch', async () => {
+    fensterbreite(1440);
+    fetchNachPfad({
+      'GET /api/auth/me': json(200, KONTO),
+      'GET /api/instance': json(200, { version: '0.1.3' }),
+      'GET /api/mitarbeitende': json(200, {
+        mitarbeitende: [{ ...KONTO, aktiv: true }],
+      }),
+    });
+
+    renderApp(['/mitarbeitende'], 0);
+
+    expect(screen.getByRole('status')).toHaveTextContent('Sitzung wird geprüft');
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Mitarbeitende' }),
+    ).toBeInTheDocument();
+    expect(await screen.findByRole('table', { name: 'Mitarbeitende' })).toBeInTheDocument();
+  });
+
+  it.each([
+    ['/mitarbeitende/neu', 'Neues Konto'],
+    ['/mitarbeitende/1/bearbeiten', 'Konto bearbeiten'],
+  ])('zeigt „%s" einem C-Level als Maske', async (adresse, titel) => {
+    fensterbreite(1440);
+    fetchNachPfad({
+      'GET /api/auth/me': json(200, KONTO),
+      'GET /api/instance': json(200, { version: '0.1.3' }),
+      'GET /api/mitarbeitende': json(200, {
+        mitarbeitende: [{ ...KONTO, aktiv: true }],
+      }),
+    });
+
+    renderApp([adresse], 0);
+
+    expect(await screen.findByRole('heading', { level: 1, name: titel })).toBeInTheDocument();
+    expect(await screen.findByRole('radio', { name: 'C-Level' })).toBeInTheDocument();
+  });
+
+  it.each([
+    ['EMPLOYEE', '/mitarbeitende'],
+    ['EMPLOYEE', '/mitarbeitende/neu'],
+    ['READ_ONLY', '/mitarbeitende'],
+    ['READ_ONLY', '/mitarbeitende/2/bearbeiten'],
+  ])('zeigt %s auf „%s" den Satz statt der Konten (Kriterien 9, 10 von #409)', async (rolle, adresse) => {
+    fensterbreite(1440);
+    const fetchMock = fetchNachPfad({
+      'GET /api/auth/me': json(200, { ...KONTO, role: rolle }),
+      'GET /api/instance': json(200, { version: '0.1.3' }),
+    });
+
+    renderApp([adresse], 0);
+
+    expect(
+      await screen.findByText(/Diese Ansicht steht deiner Rolle nicht offen/),
+    ).toBeInTheDocument();
+    expect(fetchMock).not.toHaveBeenCalledWith('/api/mitarbeitende', expect.anything());
   });
 
   it.each(['/administration', '/eigene-angaben'])(

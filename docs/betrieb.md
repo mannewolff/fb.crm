@@ -85,7 +85,10 @@ Die Antwort enthält `"status":"UP"`. Kommt die Anwendung nicht hoch, nennt
 
 ## Konto einrichten
 
-fb.crm hat genau ein Konto. Es entsteht einmalig über die Einrichtungsseite.
+fb.crm wird von einer Firma mit mehreren Personen genutzt, jede mit einem eigenen Konto. Das erste
+Konto entsteht einmalig über die Einrichtungsseite und ist ein C-Level-Konto: Es darf alles,
+auch weitere Konten anlegen. Die Einrichtungsseite fragt darum nicht nach einer Rolle. Alle
+weiteren Konten legt ein C-Level in fb.crm selbst an (Abschnitt „Weitere Konten anlegen").
 
 1. Im Browser die Adresse der Instanz öffnen: lokal `https://localhost`, unter eigenem Namen die
    eigene Domain. Lokal stellt Caddy ein Zertifikat seiner eigenen Zertifizierungsstelle aus; der
@@ -136,6 +139,24 @@ wie im Teil „Bedienung" unter „Erste Schritte" beschrieben; der Einmal-Schl�
 gebraucht. Das Konto bleibt dasselbe, mit Rolle, Namen und seinen Kommentaren am Angebot. Ein Konto
 wird dafür nicht gelöscht: Seine Kommentare hängen an ihm, und die Datenbank wiese das Löschen ab.
 Wer `POSTGRES_USER` oder `POSTGRES_DB` in der `.env` geändert hat, setzt dort die eigenen Werte ein.
+
+## Weitere Konten anlegen
+
+Weitere Konten entstehen nicht über die Einrichtungsseite, sondern in fb.crm: Ein C-Level wählt im
+Fuß der Schiene „Mitarbeitende" und dort „Neues Konto" (Teil „Bedienung", Abschnitt
+„Mitarbeitende und Rollen"). Eine Registrierung gibt es nicht.
+
+**Mailversand im Betrieb mit mehreren Personen:** Sobald mehr als eine Person mit fb.crm arbeitet,
+muss der Mailversand eingerichtet sein (Abschnitt „Mailversand einrichten"). Jede Person meldet
+sich mit einem Code an, den fb.crm an ihre eigene Adresse schickt, und erfährt beim Anlegen ihres
+Kontos per Begrüßungsmail, unter welcher Adresse fb.crm erreichbar ist. Diese Adresse ist
+`FBCRM_BASE_URL`. Ohne Mailversand geht keine Begrüßungsmail hinaus, und die Maske sagt das nach
+dem Anlegen; jeder Code steht dann weiterhin im Protokoll des Servers (Abschnitt „Konto
+einrichten", „Code aus dem Protokoll"), wo ihn nur der Betreiber liest.
+
+**Stillgelegte Konten:** Ein stillgelegtes Konto bleibt in der Datenbank, mit seiner Adresse und
+seinen Kommentaren. Seine Adresse lässt sich darum keinem neuen Konto geben; ein C-Level aktiviert
+stattdessen das bisherige Konto wieder.
 
 ## Betrieb unter eigenem Namen
 

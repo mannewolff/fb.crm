@@ -13,10 +13,12 @@ man diese Dokumentation in fb.crm findet.
 **Einstieg:** Im Browser die Adresse der eigenen Instanz öffnen, etwa `https://localhost` oder die
 eigene Domain. Wer nicht angemeldet ist, landet auf der Seite „Anmelden".
 
-**Anmelden:** Angemeldet wird man mit einem Code, den fb.crm per Mail an die Adresse des Kontos
-schickt.
+**Anmelden:** Jede Person hat ein eigenes Konto und meldet sich mit ihrer eigenen E-Mail-Adresse
+an. Angemeldet wird man mit einem Code, den fb.crm per Mail an diese Adresse schickt. Wer neu ist,
+bekommt vorher eine Begrüßungsmail mit der Adresse von fb.crm, sobald ein C-Level das Konto
+angelegt hat.
 
-1. Im Feld „E-Mail-Adresse" die Adresse des Kontos eingeben und „Code anfordern" wählen.
+1. Im Feld „E-Mail-Adresse" die eigene Adresse eingeben und „Code anfordern" wählen.
 2. Die Seite zeigt nun das Feld „Code" und den Hinweis, dass ein Code unterwegs ist, falls es zu
    dieser Adresse ein Konto gibt. Der Hinweis lautet für jede Adresse gleich; er verrät nicht, ob
    es das Konto gibt.
@@ -36,15 +38,15 @@ mit der gewählten Ansicht. Die Schiene trägt zwei Blöcke:
 - „Stammdaten" mit „Firmen" und „Eigene Angaben" — die Angaben, auf die das Tagesgeschäft
   zurückgreift.
 
-Im Fuß der Schiene stehen „Administration" und „Dokumentation", darunter die Karte mit dem Namen
-des Kontos, seiner Adresse und seiner Rolle. Ein Klick auf diese Karte öffnet ein Menü mit
+Im Fuß der Schiene stehen „Mitarbeitende", „Administration" und „Dokumentation", darunter die
+Karte mit dem Namen des Kontos, seiner Adresse und seiner Rolle. Ein Klick auf diese Karte öffnet ein Menü mit
 „Abmelden". Die Taste „Einklappen" neben der Marke verkleinert die Schiene auf ihre Symbole.
 
 Die Schiene sieht je Rolle verschieden aus: Sie zeigt nur, was der eigenen Rolle offensteht. Ein
 Employee findet darin weder „Eigene Angaben" noch „Administration"; C-Level und ReadOnly sehen
-beide. Ruft man eine Ansicht, die der eigenen Rolle nicht offensteht, über ihre Adresse direkt
-auf, erscheint die Meldung „Diese Ansicht steht deiner Rolle nicht offen" mit einem Weg zur
-Startseite. Welche Rolle das eigene Konto hat, steht auf der Karte im Fuß der Schiene.
+beide. „Mitarbeitende" sieht nur ein C-Level. Ruft man eine Ansicht, die der eigenen Rolle nicht
+offensteht, über ihre Adresse direkt auf, erscheint die Meldung „Diese Ansicht steht deiner Rolle
+nicht offen" mit einem Weg zur Startseite. Welche Rolle das eigene Konto hat, steht auf der Karte im Fuß der Schiene.
 
 **Diese Dokumentation in fb.crm:** Im Fuß der Schiene „Dokumentation" wählen. Die Dokumentation
 ist nur nach der Anmeldung erreichbar; wer nicht angemeldet ist, kommt zuerst auf die Seite
@@ -399,3 +401,57 @@ nimmt es heraus. Anders als eine gestellte Rechnung bleibt eine nachgetragene in
 
 **Ergebnis:** Die nachgetragene Rechnung steht in der Übersicht „Rechnungen" und ist dort am
 Zeichen „nachgetragen" neben ihrem Zustand zu erkennen.
+
+## Mitarbeitende und Rollen
+
+**Zweck:** fb.crm wird von einer Firma mit mehreren Personen genutzt. Jede Person meldet sich mit
+einem eigenen Konto an, und die Rolle des Kontos bestimmt, was sie darf. Konten verwaltet ein
+C-Level in der Ansicht „Mitarbeitende".
+
+**Einstieg:** Im Fuß der Schiene „Mitarbeitende" wählen. Die Ansicht steht nur einem C-Level
+offen. Sie listet jedes Konto mit Namen, E-Mail-Adresse, Rolle und Zustand, „Aktiv" oder
+„Stillgelegt".
+
+**Konto anlegen:**
+
+1. „Neues Konto" wählen.
+2. „E-Mail-Adresse" und „Name" angeben und unter „Rolle" C-Level, Employee oder ReadOnly wählen.
+   Alle drei Angaben sind Pflicht; eine Rolle ist nicht vorgewählt.
+3. „Anlegen" wählen.
+
+Die neue Person erhält eine Begrüßungsmail mit der Adresse von fb.crm und meldet sich dort mit
+ihrer Adresse und dem Code aus der Mail an, wie unter „Erste Schritte" beschrieben. Ist der
+Mailversand nicht eingerichtet, sagt die Maske nach dem Anlegen, dass keine Begrüßungsmail
+hinausging; dann gibt man der Person selbst Bescheid. Eine Adresse, die schon ein anderes Konto
+trägt, auch ein stillgelegtes, weist die Maske am Feld „E-Mail-Adresse" ab, gleich in welcher
+Schreibweise.
+
+**Konto ändern:** In der Zeile des Kontos über das Menü ⋯ „Bearbeiten" wählen, Adresse, Namen oder
+Rolle ändern und „Speichern" wählen. Die Änderung wirkt sofort, auch für eine Person, die gerade
+angemeldet ist. Nach einer neuen Adresse ist die Person abgemeldet und meldet sich mit der neuen
+Adresse wieder an.
+
+**Stilllegen:** Wer ausscheidet, dessen Konto wird stillgelegt, nicht gelöscht. Über das Menü ⋯
+„Stilllegen" wählen und die Rückfrage bestätigen. Die Person ist sofort abgemeldet und kann sich
+nicht mehr anmelden; ihre Kommentare am Angebot bleiben mit ihrem Namen stehen.
+
+**Wieder aktivieren:** Über das Menü ⋯ eines stillgelegten Kontos „Wieder aktivieren" wählen. Die
+Person meldet sich danach wieder mit ihrer Adresse an.
+
+**Was jede Rolle darf:**
+
+- C-Level darf alles: Kunden, Angebote, Rechnungen und Arbeitszeit bearbeiten, die eigenen Angaben
+  und die Rechnungseinstellungen ändern und in „Mitarbeitende" Konten verwalten.
+- Employee darf alles Fachliche: Kunden, Angebote und Rechnungen anlegen und ändern, Rechnungen
+  stellen und die Arbeitszeit bedienen. „Mitarbeitende", „Eigene Angaben" und „Administration"
+  stehen einem Employee nicht offen.
+- ReadOnly liest alles, auch die eigenen Angaben und die Rechnungseinstellungen, und ändert nichts.
+  „Mitarbeitende" steht ReadOnly nicht offen.
+
+**Der letzte C-Level:** Es bleibt immer mindestens ein aktiver C-Level. Das letzte aktive
+C-Level-Konto lässt sich weder stilllegen noch auf eine andere Rolle setzen; fb.crm sagt dann „Es
+muss mindestens ein aktiver C-Level bleiben." Das gilt auch für das eigene Konto: Ein C-Level darf
+sich selbst stilllegen oder herabstufen, solange ein anderer aktiver C-Level bleibt.
+
+**Ergebnis:** Jede Person der Firma hat ein eigenes Konto mit der passenden Rolle, und wer
+ausgeschieden ist, kommt nicht mehr hinein.

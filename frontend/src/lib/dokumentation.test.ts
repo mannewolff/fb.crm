@@ -241,6 +241,7 @@ describe('Szenarien des Fachplans (E16)', () => {
         'Konto einrichten',
         'Betrieb unter eigenem Namen',
         'Mailversand einrichten',
+        'Weitere Konten anlegen',
       ]),
     );
     const readme = readFileSync(join(WURZEL, 'README.md'), 'utf8');
@@ -279,5 +280,35 @@ describe('Szenarien des Fachplans (E16)', () => {
     expect(text).toMatch(/Code/u);
     expect(text).toMatch(/Protokoll/u);
     expect(text).not.toMatch(/Passwort/u);
+  });
+
+  it('Szenario: Erstes Konto auf frischer Installation', () => {
+    const text = abschnitt('betrieb', 'Konto einrichten');
+
+    // Kriterium 12 (#409): Das erste Konto ist C-Level, weitere entstehen in fb.crm.
+    expect(text).toMatch(/C-Level/u);
+    expect(text).toMatch(/Mailversand/u);
+    expect(text).toMatch(/Weitere Konten anlegen/u);
+  });
+
+  it('Szenario: C-Level legt eine Mitarbeiterin an', () => {
+    const weitere = abschnitt('betrieb', 'Weitere Konten anlegen');
+    const rollen = abschnitt('bedienung', 'Mitarbeitende und Rollen');
+
+    // Kriterium 12 (#409): Mailversand im Betrieb mit mehreren Personen, ohne ihn das Protokoll.
+    expect(weitere).toMatch(/Mailversand/u);
+    expect(weitere).toMatch(/Protokoll/u);
+    expect(abschnittsnamen('bedienung')).toContain('Mitarbeitende und Rollen');
+    for (const stichwort of ['Neues Konto', 'Bearbeiten', 'Stilllegen', 'Wieder aktivieren']) {
+      expect(rollen, stichwort).toContain(stichwort);
+    }
+    for (const rolle of ['C-Level', 'Employee', 'ReadOnly']) {
+      expect(rollen, rolle).toMatch(new RegExp(`^${rolle} darf|^${rolle} liest`, 'mu'));
+    }
+    expect(rollen).toMatch(/letzte aktive\s+C-Level-Konto/u);
+    // Die Erste Schritte nennen die eigene Adresse, der Aufbau „Mitarbeitende" im Fuss.
+    const erste = abschnitt('bedienung', 'Erste Schritte');
+    expect(erste).toMatch(/eigenen E-Mail-Adresse/u);
+    expect(erste).toMatch(/Fuß der Schiene stehen „Mitarbeitende"/u);
   });
 });

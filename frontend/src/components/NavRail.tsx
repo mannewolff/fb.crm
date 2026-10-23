@@ -11,6 +11,7 @@ import {
   IconLayoutSidebarLeftCollapse,
   IconLayoutSidebarLeftExpand,
   IconSettings,
+  IconUsers,
 } from '@tabler/icons-react';
 import type { TablerIcon } from '@tabler/icons-react';
 import { useEffect, useState } from 'react';
@@ -69,6 +70,7 @@ const SYMBOLE: Readonly<Record<Symbolname, TablerIcon>> = {
   'chart-histogram': IconChartHistogram,
   'building-community': IconBuildingCommunity,
   id: IconId,
+  users: IconUsers,
   settings: IconSettings,
   book: IconBook,
 };

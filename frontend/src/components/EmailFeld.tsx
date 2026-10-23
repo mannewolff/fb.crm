@@ -10,9 +10,10 @@ interface EmailFeldProps {
   /**
    * Was der Browser vorschlagen soll: `email` beim Einrichten des Kontos, `username` dort, wo die
    * Adresse das Konto bezeichnet (etwa bei der Anmeldung) — so findet der Passwortmanager den
-   * Eintrag.
+   * Eintrag. `off`, wo die Adresse einer anderen Person gehoert (Konto anlegen): Dort waere die
+   * eigene Adresse als Vorschlag falsch.
    */
-  readonly autoComplete: 'email' | 'username';
+  readonly autoComplete: 'email' | 'username' | 'off';
 }
 
 /**

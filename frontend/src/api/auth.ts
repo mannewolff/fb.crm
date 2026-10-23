@@ -35,7 +35,7 @@ function istObjekt(wert: unknown): wert is Record<string, unknown> {
  * Verengt auf eine der drei Rollen. Eine unbekannte Rolle ist kein Konto mit weniger Rechten,
  * sondern eine Antwort in falscher Form — die Oberflaeche raet nicht, was sie bedeuten koennte.
  */
-function istRolle(wert: unknown): wert is Rolle {
+export function istRolle(wert: unknown): wert is Rolle {
   return wert === 'C_LEVEL' || wert === 'EMPLOYEE' || wert === 'READ_ONLY';
 }
 

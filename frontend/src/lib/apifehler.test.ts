@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { ApiError } from '../api/client';
-import { feldMeldungen, nichtGefunden, serverMeldung, verboten } from './apifehler';
+import { feldMeldungen, konflikt, nichtGefunden, serverMeldung, verboten } from './apifehler';
 
 describe('nichtGefunden', () => {
   it('erkennt die Antwort mit Status 404', () => {
@@ -28,6 +28,20 @@ describe('verboten', () => {
 
   it('haelt einen Fehlschlag ohne Antwort fuer kein Verbot', () => {
     expect(verboten(new TypeError('Netz weg'))).toBe(false);
+  });
+});
+
+describe('konflikt', () => {
+  it('erkennt die Antwort mit Status 409', () => {
+    expect(konflikt(new ApiError(409, 'Widerspricht dem Stand', {}))).toBe(true);
+  });
+
+  it.each([400, 403, 500])('haelt den Status %i fuer keinen Konflikt', (status) => {
+    expect(konflikt(new ApiError(status, 'Anders', {}))).toBe(false);
+  });
+
+  it('haelt einen Fehlschlag ohne Antwort fuer keinen Konflikt', () => {
+    expect(konflikt(new TypeError('Netz weg'))).toBe(false);
   });
 });
 

@@ -58,8 +58,9 @@ afterEach(() => {
 });
 
 describe('navItems (E15, E18)', () => {
-  it('fuehrt im Fuss nur noch die beiden Ziele — „Einklappen" steht an der Marke (E7)', () => {
+  it('fuehrt im Fuss nur Ziele — „Einklappen" steht an der Marke (E7)', () => {
     expect(FUSS_EINTRAEGE.map((eintrag) => eintrag.beschriftung)).toEqual([
+      'Mitarbeitende',
       'Administration',
       'Dokumentation',
     ]);
@@ -127,6 +128,7 @@ describe('sichtbareBloecke (Plan #414, A11)', () => {
       .map((eintrag) => [eintrag.beschriftung, eintrag.recht]);
     expect(mitRecht).toEqual([
       ['Eigene Angaben', 'darfEinstellungenSehen'],
+      ['Mitarbeitende', 'darfKontenVerwalten'],
       ['Administration', 'darfEinstellungenSehen'],
     ]);
   });
@@ -166,6 +168,23 @@ describe('NavRail je Rolle (Plan #414, A11)', () => {
 
     expect(ziele).toContain('/eigene-angaben');
     expect(ziele).toContain('/administration');
+  });
+
+  it('Szenario: Erstes Konto auf frischer Installation', async () => {
+    // Das Konto der Einrichtung ist C-Level (Kriterium 2 von #409) und findet die Ansicht im Fuss.
+    await zieleFuer('C_LEVEL');
+    const fuss = within(screen.getByTestId('schiene-fuss'));
+    expect(fuss.getByRole('link', { name: 'Mitarbeitende' })).toHaveAttribute(
+      'href',
+      '/mitarbeitende',
+    );
+  });
+
+  it.each(['EMPLOYEE', 'READ_ONLY'])('fuehrt „Mitarbeitende" fuer %s nicht', async (rolle) => {
+    const ziele = await zieleFuer(rolle);
+
+    expect(screen.queryByRole('link', { name: 'Mitarbeitende' })).not.toBeInTheDocument();
+    expect(ziele).not.toContain('/mitarbeitende');
   });
 
   it('zeigt C-Level die Einstellungen', async () => {
@@ -284,7 +303,7 @@ describe('NavRail', () => {
     expect(gewaehlt).toHaveBeenCalledTimes(1);
   });
 
-  it('traegt im Fuss Administration, Dokumentation und die Nutzerkarte (K12, E7)', async () => {
+  it('traegt im Fuss Mitarbeitende, Administration, Dokumentation und die Nutzerkarte (K12, E7)', async () => {
     angemeldet();
 
     renderSchiene();
@@ -292,6 +311,7 @@ describe('NavRail', () => {
 
     const fuss = within(screen.getByTestId('schiene-fuss'));
     expect(fuss.getAllByRole('link').map((link) => link.getAttribute('href'))).toEqual([
+      '/mitarbeitende',
       '/administration',
       '/dokumentation',
     ]);

@@ -23,6 +23,15 @@ export function verboten(ursache: unknown): boolean {
   return ursache instanceof ApiError && ursache.status === 403;
 }
 
+/**
+ * Wahr nur bei einer Antwort mit Status 409 — die Anfrage widerspricht dem Stand, etwa beim letzten
+ * aktiven C-Level (#409, Kriterium 8). Ihr Grund steht in der Meldung des Servers; jeder andere
+ * Fehlschlag ist ein Ausfall.
+ */
+export function konflikt(ursache: unknown): boolean {
+  return ursache instanceof ApiError && ursache.status === 409;
+}
+
 /** Die feldweisen Meldungen des Servers, oder nichts, wenn der Fehlschlag keine traegt. */
 export function feldMeldungen(ursache: unknown): FieldErrors {
   return ursache instanceof ApiError ? ursache.fieldErrors : {};
