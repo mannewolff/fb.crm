@@ -49,7 +49,9 @@ class JpaNachgetrageneRechnungRepositoryTest {
           Rechnungszustand.ABGESCHRIEBEN,
           "nachgetragen/21/original.pdf",
           ANGELEGT,
-          GEAENDERT);
+          GEAENDERT,
+          5L,
+          7L);
 
   @Mock private SpringDataNachgetrageneRechnungRepository zeilen;
 
@@ -98,7 +100,9 @@ class JpaNachgetrageneRechnungRepositoryTest {
             Rechnungszustand.GESTELLT,
             null,
             ANGELEGT,
-            ANGELEGT);
+            ANGELEGT,
+            0L,
+            null);
     when(zeilen.save(any(NachgetrageneRechnungEntity.class)))
         .thenReturn(NachgetrageneRechnungEntity.aus(RECHNUNG));
 

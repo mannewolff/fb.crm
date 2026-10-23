@@ -342,6 +342,9 @@ describe('Szenarien des Fachplans (E16)', () => {
     // Ein geloeschter Entwurf weist jede Taste ab und fuehrt zur Uebersicht (Issue #447).
     expect(text).toMatch(/„Entwurf löschen" löscht nur den Entwurf, den man gesehen hat/u);
     expect(text).toMatch(/„Zur Übersicht" führt zur Liste der Rechnungen/u);
+    // Die nachgetragene Rechnung ist in jedem Zustand geschuetzt, samt ihrem PDF (Issue #448).
+    expect(text).toMatch(/Maske „Nachgetragene Rechnung bearbeiten"/u);
+    expect(text).toMatch(/Ersetzen oder Entfernen ihres PDFs/u);
     expect(text).toMatch(/\*\*Ergebnis:\*\*/u);
   });
 

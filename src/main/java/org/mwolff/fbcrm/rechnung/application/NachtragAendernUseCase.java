@@ -21,6 +21,11 @@ import org.springframework.transaction.annotation.Transactional;
  * </ul>
  *
  * <p>Zustand und Original bleiben unberuehrt; fuer beide gibt es eigene Anwendungsfaelle.
+ *
+ * <p><b>Davor steht nur der Stand</b> (#411, Kriterium 4; Plan #415, E1, E14). Bevor irgendeine
+ * fachliche Regel gefragt wird, vergleicht der Anwendungsfall den vorgelegten Stand mit dem der
+ * Rechnung: Wer auf einem alten Stand speichert, bekommt {@link NachtragGeaendert} mit Urheber und
+ * Zeitpunkt der fremden Aenderung. Das handelnde Konto steht danach als Urheber an der Rechnung.
  */
 @Service
 @Transactional
@@ -47,16 +52,22 @@ public class NachtragAendernUseCase {
    *
    * @param id Kennung der nachgetragenen Rechnung
    * @param daten die eingereichten Eckdaten, die Nummer schon getrimmt
+   * @param version der vorgelegte Stand aus {@code If-Match}
+   * @param konto Kennung des handelnden Kontos
    * @throws NachtragNichtGefunden wenn es die Rechnung nicht gibt
+   * @throws NachtragGeaendert wenn die Rechnung inzwischen einen anderen Stand hat als den
+   *     vorgelegten
    * @throws FirmaNichtGefunden wenn es die Firma nicht gibt
    * @throws RechnungsdatumAusserhalb wenn ein geaendertes Datum nicht im laufenden Jahr bis heute
    *     liegt
    * @throws NummerSchonVergeben wenn eine andere Rechnung diese Nummer schon traegt
    * @throws BetraegePassenNicht wenn der Bruttobetrag unter dem Nettobetrag liegt
    */
-  public NachgetrageneRechnung aendere(final long id, final Nachtragsdaten daten) {
+  public NachgetrageneRechnung aendere(
+      final long id, final Nachtragsdaten daten, final long version, final long konto) {
     final NachgetrageneRechnung rechnung =
         nachgetragene.findById(id).orElseThrow(NachtragNichtGefunden::new);
+    NachtragGeaendert.pruefe(rechnung, version, konto);
     if (firmen.findById(daten.firmaId()).isEmpty()) {
       throw new FirmaNichtGefunden();
     }
@@ -68,12 +79,14 @@ public class NachtragAendernUseCase {
     }
     BetraegePassenNicht.pruefe(daten.netto(), daten.brutto());
     return nachgetragene.save(
-        rechnung.geaendert(
-            daten.firmaId(),
-            daten.nummer(),
-            daten.rechnungDatum(),
-            daten.netto(),
-            daten.brutto(),
-            clock.instant()));
+        rechnung
+            .geaendert(
+                daten.firmaId(),
+                daten.nummer(),
+                daten.rechnungDatum(),
+                daten.netto(),
+                daten.brutto(),
+                clock.instant())
+            .durch(konto));
   }
 }

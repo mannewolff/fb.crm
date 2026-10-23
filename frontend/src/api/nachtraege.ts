@@ -43,6 +43,11 @@ export interface Nachtrag {
   readonly zustand: Rechnungszustand;
   /** Ob ein Original hinterlegt ist; der Schluessel im Speicher geht nicht nach aussen. */
   readonly dokument: boolean;
+  /**
+   * Der Stand der Rechnung (Plan #415, E2): Aendern, Zustand und das Original legen ihn als
+   * `If-Match` vor, und jede Antwort darauf traegt den neuen.
+   */
+  readonly version: number;
 }
 
 /** Die Eckdaten, wie die Maske sie schickt — die Felder von `NachtragRequest`. */
@@ -78,6 +83,7 @@ export function parseNachtrag(wert: unknown): Nachtrag {
     bruttoInCent: inHundertsteln(nachtrag.brutto),
     zustand: rechnungszustand(nachtrag.zustand),
     dokument: jaNein(nachtrag.dokument),
+    version: zahl(nachtrag.version),
   };
 }
 
@@ -98,9 +104,23 @@ export function nachtragLesen(id: number): Promise<Nachtrag> {
   return apiJson(pfad(id), { methode: 'GET' }, parseNachtrag);
 }
 
-/** Aendert die Eckdaten in jedem Zustand (Kriterium 10); die Antwort traegt den neuen Stand. */
-export function nachtragAendern(id: number, eingabe: NachtragEingabe): Promise<Nachtrag> {
-  return apiJson(pfad(id), { methode: 'PUT', rumpf: eingabe }, parseNachtrag);
+/*
+ * Aendern, Zustand und das Original legen den Stand, auf dem sie beruhen, als `If-Match` vor (#411,
+ * Kriterium 4; Plan #415, E2). Hat inzwischen jemand anderes geaendert, weist der Server mit einem
+ * Bearbeitungskonflikt ab; die Antwort auf einen gelungenen Schritt traegt den neuen Stand.
+ */
+
+/**
+ * Aendert die Eckdaten in jedem Zustand (Kriterium 10); die Antwort traegt den neuen Stand.
+ *
+ * @param version der Stand, auf dem die Aenderung beruht
+ */
+export function nachtragAendern(
+  id: number,
+  version: number,
+  eingabe: NachtragEingabe,
+): Promise<Nachtrag> {
+  return apiJson(pfad(id), { methode: 'PUT', rumpf: eingabe, version }, parseNachtrag);
 }
 
 /** Loescht die Rechnung samt ihrem Original (Kriterium 10) — die Antwort traegt keinen Inhalt. */
@@ -112,9 +132,19 @@ export function nachtragLoeschen(id: number): Promise<void> {
  * Stellt den Zustand um, mit demselben Rumpf wie bei der gestellten Rechnung (Kriterium 8, E24).
  *
  * Welcher Uebergang zulaessig ist, entscheidet der Server; ein unzulaessiger kommt als 409 zurueck.
+ *
+ * @param version der Stand, auf dem der Wechsel beruht
  */
-export function setzeNachtragszustand(id: number, zustand: Rechnungszustand): Promise<Nachtrag> {
-  return apiJson(`${pfad(id)}/zustand`, { methode: 'PUT', rumpf: { zustand } }, parseNachtrag);
+export function setzeNachtragszustand(
+  id: number,
+  version: number,
+  zustand: Rechnungszustand,
+): Promise<Nachtrag> {
+  return apiJson(
+    `${pfad(id)}/zustand`,
+    { methode: 'PUT', rumpf: { zustand }, version },
+    parseNachtrag,
+  );
 }
 
 /**
@@ -133,14 +163,24 @@ export function nachtragDokumentPfad(id: number): string {
  *
  * Der Teil heisst `datei`, wie ihn `NachgetrageneRechnungController` erwartet. Ob die Datei ein
  * PDF ist, entscheidet der Server am Inhalt (E12) — was die Maske vorher prueft, fuehrt nur.
+ *
+ * @param version der Stand, auf dem das Ablegen beruht
  */
-export function nachtragDokumentAblegen(id: number, datei: File): Promise<Nachtrag> {
+export function nachtragDokumentAblegen(
+  id: number,
+  version: number,
+  datei: File,
+): Promise<Nachtrag> {
   const formular = new FormData();
   formular.append('datei', datei);
-  return apiJson(nachtragDokumentPfad(id), { methode: 'POST', formular }, parseNachtrag);
+  return apiJson(nachtragDokumentPfad(id), { methode: 'POST', formular, version }, parseNachtrag);
 }
 
-/** Entfernt das Original; die Rechnung bleibt (Kriterium 10). */
-export function nachtragDokumentEntfernen(id: number): Promise<void> {
-  return apiOhneInhalt(nachtragDokumentPfad(id), { methode: 'DELETE' });
+/**
+ * Entfernt das Original; die Rechnung bleibt (Kriterium 10). Die Antwort traegt den neuen Stand.
+ *
+ * @param version der Stand, auf dem das Entfernen beruht
+ */
+export function nachtragDokumentEntfernen(id: number, version: number): Promise<Nachtrag> {
+  return apiJson(nachtragDokumentPfad(id), { methode: 'DELETE', version }, parseNachtrag);
 }

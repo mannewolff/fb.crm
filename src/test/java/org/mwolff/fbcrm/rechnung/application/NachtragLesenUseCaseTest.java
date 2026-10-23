@@ -53,7 +53,9 @@ class NachtragLesenUseCaseTest {
         Rechnungszustand.GESTELLT,
         null,
         ANGELEGT,
-        ANGELEGT);
+        ANGELEGT,
+        0L,
+        null);
   }
 
   @Test

@@ -4,6 +4,7 @@ import jakarta.validation.Valid;
 import java.io.IOException;
 import java.net.URI;
 import org.mwolff.fbcrm.common.web.Anlagekopf;
+import org.mwolff.fbcrm.common.web.Bedingungskopf;
 import org.mwolff.fbcrm.rechnung.application.NachtragAendernUseCase;
 import org.mwolff.fbcrm.rechnung.application.NachtragAnlegenUseCase;
 import org.mwolff.fbcrm.rechnung.application.NachtragDokumentUseCase;
@@ -14,6 +15,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -44,6 +46,11 @@ import org.springframework.web.multipart.MultipartFile;
  *
  * <p>Keine Aenderung an {@code SecurityConfig}: Die Wege fallen unter das bestehende {@code
  * /api/**} fuer angemeldete Benutzer.
+ *
+ * <p><b>Aendern, Zustand und das Original legen den Stand vor</b> (#411, Kriterium 4; Plan #415,
+ * E2, E3, E14): Sie lesen {@link Bedingungskopf} aus {@code If-Match} und das handelnde Konto aus
+ * der Sitzung. Fehlt der Kopf, antwortet der Weg mit 428, ohne den Anwendungsfall zu fragen.
+ * Anlegen und Herunterladen bleiben frei; das Loeschen folgt in einem eigenen Paket.
  */
 @RestController
 @RequestMapping(NachgetrageneRechnungController.PFAD)
@@ -93,11 +100,19 @@ public class NachgetrageneRechnungController {
     return lies(id);
   }
 
-  /** Aendert die Eckdaten in jedem Zustand (Kriterium 10) und liefert den neuen Stand. */
+  /**
+   * Aendert die Eckdaten in jedem Zustand (Kriterium 10) und liefert den neuen Stand.
+   *
+   * <p>Der Kopf steht vor dem Rumpf: Fehlt er, weist der Weg mit 428 ab, bevor der Rumpf gelesen
+   * und geprueft wird (Plan #415, E3).
+   */
   @PutMapping("/{id}")
   public NachtragResponse aendern(
-      @PathVariable final long id, @Valid @RequestBody final NachtragRequest anfrage) {
-    aendernUseCase.aendere(id, anfrage.daten());
+      @PathVariable final long id,
+      final Bedingungskopf stand,
+      @AuthenticationPrincipal final Long accountId,
+      @Valid @RequestBody final NachtragRequest anfrage) {
+    aendernUseCase.aendere(id, anfrage.daten(), stand.version(), accountId);
     return lies(id);
   }
 
@@ -114,8 +129,11 @@ public class NachgetrageneRechnungController {
    */
   @PutMapping("/{id}/zustand")
   public NachtragResponse zustand(
-      @PathVariable final long id, @Valid @RequestBody final RechnungZustandRequest anfrage) {
-    zustandUseCase.setze(id, anfrage.zustand());
+      @PathVariable final long id,
+      final Bedingungskopf stand,
+      @AuthenticationPrincipal final Long accountId,
+      @Valid @RequestBody final RechnungZustandRequest anfrage) {
+    zustandUseCase.setze(id, anfrage.zustand(), stand.version(), accountId);
     return lies(id);
   }
 
@@ -152,17 +170,28 @@ public class NachgetrageneRechnungController {
    */
   @PostMapping("/{id}/dokument")
   public NachtragResponse dokumentAblegen(
-      @PathVariable final long id, @RequestPart("datei") final MultipartFile datei)
+      @PathVariable final long id,
+      final Bedingungskopf stand,
+      @AuthenticationPrincipal final Long accountId,
+      @RequestPart("datei") final MultipartFile datei)
       throws IOException {
-    dokumentUseCase.lege(id, datei.getBytes());
+    dokumentUseCase.lege(id, datei.getBytes(), stand.version(), accountId);
     return lies(id);
   }
 
-  /** Entfernt das Original; die Rechnung bleibt (Kriterium 10). */
+  /**
+   * Entfernt das Original; die Rechnung bleibt (Kriterium 10).
+   *
+   * <p>200 mit dem neuen Stand und nicht 204: Das Entfernen erhoeht die Version, und die
+   * Oberflaeche legt sie beim naechsten Schritt vor (Plan #415, E2) — wie nach dem Ablegen.
+   */
   @DeleteMapping("/{id}/dokument")
-  @ResponseStatus(HttpStatus.NO_CONTENT)
-  public void dokumentEntfernen(@PathVariable final long id) {
-    dokumentUseCase.entferne(id);
+  public NachtragResponse dokumentEntfernen(
+      @PathVariable final long id,
+      final Bedingungskopf stand,
+      @AuthenticationPrincipal final Long accountId) {
+    dokumentUseCase.entferne(id, stand.version(), accountId);
+    return lies(id);
   }
 
   private NachtragResponse lies(final long id) {

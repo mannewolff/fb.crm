@@ -63,6 +63,15 @@ class NachtragDokumentUseCaseTest {
   private static final byte[] PDF =
       "%PDF-1.7\n1 0 obj\n<<>>\nendobj\n".getBytes(StandardCharsets.US_ASCII);
 
+  /** Der Stand der gespeicherten Rechnung, den ein aktueller Aufruf vorlegt. */
+  private static final long STAND = 3L;
+
+  /** Wer die gespeicherte Rechnung zuletzt geaendert hat. */
+  private static final long URHEBER = 7L;
+
+  /** Wer gerade ablegt oder entfernt. */
+  private static final long KONTO = 9L;
+
   /*
    * Eine HTML-Seite, wie sie als „rechnung.pdf" hochgeladen werden koennte. Der Teilname erreicht
    * den Anwendungsfall gar nicht: Er bekommt allein die Bytes, und an denen ist sie kein PDF.
@@ -121,7 +130,9 @@ class NachtragDokumentUseCaseTest {
         Rechnungszustand.GESTELLT,
         pdfSchluessel,
         ANGELEGT,
-        ANGELEGT);
+        ANGELEGT,
+        STAND,
+        URHEBER);
   }
 
   private void rechnungGibtEs(final @Nullable String pdfSchluessel) {
@@ -133,7 +144,7 @@ class NachtragDokumentUseCaseTest {
   }
 
   private void assertAbgewiesenMit(final byte[] inhalt, final String meldung) {
-    assertThatThrownBy(() -> useCase.lege(ID, inhalt))
+    assertThatThrownBy(() -> useCase.lege(ID, inhalt, STAND, KONTO))
         .isInstanceOfSatisfying(
             DokumentNichtAnnehmbar.class,
             fehler -> {
@@ -157,11 +168,13 @@ class NachtragDokumentUseCaseTest {
     speichernGibtZurueck();
 
     // When
-    final NachgetrageneRechnung ergebnis = useCase.lege(ID, PDF);
+    final NachgetrageneRechnung ergebnis = useCase.lege(ID, PDF, STAND, KONTO);
 
     // Then
     assertThat(ergebnis.pdfSchluessel()).isEqualTo(NEU);
     assertThat(ergebnis.updatedAt()).isEqualTo(JETZT);
+    assertThat(ergebnis.version()).isEqualTo(STAND);
+    assertThat(ergebnis.geaendertVon()).isEqualTo(KONTO);
     // any() statt anyString(): anyString() passt nicht auf null, und ohne bisheriges Original
     // waere null genau der Schluessel, den ein falsches Entfernen hinterherschickte.
     verify(speicher, never()).loesche(any());
@@ -215,7 +228,7 @@ class NachtragDokumentUseCaseTest {
     speichernGibtZurueck();
 
     // When
-    final NachgetrageneRechnung ergebnis = useCase.lege(ID, genau);
+    final NachgetrageneRechnung ergebnis = useCase.lege(ID, genau, STAND, KONTO);
 
     // Then
     assertThat(ergebnis.pdfSchluessel()).isEqualTo(NEU);
@@ -229,7 +242,7 @@ class NachtragDokumentUseCaseTest {
     speichernGibtZurueck();
 
     // When
-    useCase.lege(ID, PDF);
+    useCase.lege(ID, PDF, STAND, KONTO);
 
     // Then
     final ArgumentCaptor<NachgetrageneRechnung> gesichert =
@@ -251,7 +264,7 @@ class NachtragDokumentUseCaseTest {
     speichernGibtZurueck();
 
     // When
-    useCase.lege(ID, PDF);
+    useCase.lege(ID, PDF, STAND, KONTO);
 
     // Then
     verify(speicher, never()).loesche(anyString());
@@ -274,7 +287,7 @@ class NachtragDokumentUseCaseTest {
         .loesche(ALT);
 
     // When
-    final NachgetrageneRechnung ergebnis = useCase.lege(ID, PDF);
+    final NachgetrageneRechnung ergebnis = useCase.lege(ID, PDF, STAND, KONTO);
 
     // Then
     assertThat(ergebnis.pdfSchluessel()).isEqualTo(NEU);
@@ -294,7 +307,7 @@ class NachtragDokumentUseCaseTest {
     when(speicher.legeHochgeladenes(ID, PDF)).thenThrow(ausfall);
 
     // When / Then
-    assertThatThrownBy(() -> useCase.lege(ID, PDF)).isSameAs(ausfall);
+    assertThatThrownBy(() -> useCase.lege(ID, PDF, STAND, KONTO)).isSameAs(ausfall);
     verify(nachgetragene, never()).save(any());
     verify(speicher, never()).loesche(anyString());
   }
@@ -305,7 +318,26 @@ class NachtragDokumentUseCaseTest {
     when(nachgetragene.findById(ID)).thenReturn(Optional.empty());
 
     // When / Then
-    assertThatThrownBy(() -> useCase.lege(ID, PDF)).isInstanceOf(NachtragNichtGefunden.class);
+    assertThatThrownBy(() -> useCase.lege(ID, PDF, STAND, KONTO))
+        .isInstanceOf(NachtragNichtGefunden.class);
+    verifyNoInteractions(speicher);
+  }
+
+  @Test
+  void lege_onAnOutdatedStand_thenNachtragGeaendertBeforeAnythingIsStored() {
+    // Given — auch eine leere Datei waere abzuweisen; der Stand wird zuerst gemeldet
+    rechnungGibtEs(ALT);
+
+    // When / Then
+    assertThatThrownBy(() -> useCase.lege(ID, new byte[0], STAND - 1, KONTO))
+        .isInstanceOfSatisfying(
+            NachtragGeaendert.class,
+            konflikt -> {
+              assertThat(konflikt.urheberKonto()).hasValue(URHEBER);
+              assertThat(konflikt.handelndesKonto()).isEqualTo(KONTO);
+              assertThat(konflikt.zeitpunkt()).contains(ANGELEGT);
+            });
+    verify(nachgetragene, never()).save(any());
     verifyNoInteractions(speicher);
   }
 
@@ -350,7 +382,7 @@ class NachtragDokumentUseCaseTest {
     speichernGibtZurueck();
 
     // When
-    final NachgetrageneRechnung ergebnis = useCase.entferne(ID);
+    final NachgetrageneRechnung ergebnis = useCase.entferne(ID, STAND, KONTO);
 
     // Then
     final ArgumentCaptor<NachgetrageneRechnung> gesichert =
@@ -361,6 +393,26 @@ class NachtragDokumentUseCaseTest {
     assertThat(gesichert.getValue().pdfSchluessel()).isNull();
     assertThat(ergebnis.pdfSchluessel()).isNull();
     assertThat(ergebnis.updatedAt()).isEqualTo(JETZT);
+    assertThat(ergebnis.version()).isEqualTo(STAND);
+    assertThat(ergebnis.geaendertVon()).isEqualTo(KONTO);
+  }
+
+  @Test
+  void entferne_onAnOutdatedStand_thenNachtragGeaendertAndNothingIsRemoved() {
+    // Given
+    rechnungGibtEs(ALT);
+
+    // When / Then
+    assertThatThrownBy(() -> useCase.entferne(ID, STAND + 1, KONTO))
+        .isInstanceOfSatisfying(
+            NachtragGeaendert.class,
+            konflikt -> {
+              assertThat(konflikt.urheberKonto()).hasValue(URHEBER);
+              assertThat(konflikt.handelndesKonto()).isEqualTo(KONTO);
+              assertThat(konflikt.zeitpunkt()).contains(ANGELEGT);
+            });
+    verify(nachgetragene, never()).save(any());
+    verifyNoInteractions(speicher);
   }
 
   @Test
@@ -371,7 +423,7 @@ class NachtragDokumentUseCaseTest {
     speichernGibtZurueck();
 
     // When
-    useCase.entferne(ID);
+    useCase.entferne(ID, STAND, KONTO);
 
     // Then
     verify(speicher, never()).loesche(anyString());
@@ -392,7 +444,7 @@ class NachtragDokumentUseCaseTest {
         .loesche(ALT);
 
     // When
-    final NachgetrageneRechnung ergebnis = useCase.entferne(ID);
+    final NachgetrageneRechnung ergebnis = useCase.entferne(ID, STAND, KONTO);
 
     // Then
     assertThat(ergebnis.pdfSchluessel()).isNull();
@@ -407,7 +459,8 @@ class NachtragDokumentUseCaseTest {
     rechnungGibtEs(null);
 
     // When / Then
-    assertThatThrownBy(() -> useCase.entferne(ID)).isInstanceOf(NachtragNichtGefunden.class);
+    assertThatThrownBy(() -> useCase.entferne(ID, STAND, KONTO))
+        .isInstanceOf(NachtragNichtGefunden.class);
     verify(nachgetragene, never()).save(any());
     verifyNoInteractions(speicher);
   }
@@ -418,7 +471,8 @@ class NachtragDokumentUseCaseTest {
     when(nachgetragene.findById(ID)).thenReturn(Optional.empty());
 
     // When / Then
-    assertThatThrownBy(() -> useCase.entferne(ID)).isInstanceOf(NachtragNichtGefunden.class);
+    assertThatThrownBy(() -> useCase.entferne(ID, STAND, KONTO))
+        .isInstanceOf(NachtragNichtGefunden.class);
     verifyNoInteractions(speicher);
   }
 }

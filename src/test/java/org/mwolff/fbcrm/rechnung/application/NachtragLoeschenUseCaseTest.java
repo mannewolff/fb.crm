@@ -103,7 +103,9 @@ class NachtragLoeschenUseCaseTest {
         zustand,
         pdfSchluessel,
         ANGELEGT,
-        ANGELEGT);
+        ANGELEGT,
+        0L,
+        null);
   }
 
   private void rechnungGibtEs(final @Nullable String pdfSchluessel) {

@@ -1,4 +1,4 @@
-import { screen, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -34,11 +34,12 @@ const GESTELLT = {
   brutto: 1190,
   zustand: 'GESTELLT',
   dokument: true,
+  version: 3,
 };
 
 const OHNE_DOKUMENT = { ...GESTELLT, dokument: false };
-const BEZAHLT = { ...GESTELLT, zustand: 'BEZAHLT' };
-const ABGESCHRIEBEN = { ...GESTELLT, zustand: 'ABGESCHRIEBEN' };
+const BEZAHLT = { ...GESTELLT, zustand: 'BEZAHLT', version: 4 };
+const ABGESCHRIEBEN = { ...GESTELLT, zustand: 'ABGESCHRIEBEN', version: 4 };
 
 /** Die Adresse — daran haengt, ob das Loeschen zur Liste gefuehrt hat. */
 function Adresse() {
@@ -263,7 +264,11 @@ describe('NachgetrageneRechnungPage — Zustand (Kriterium 8, E24)', () => {
     ).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/nachgetragene-rechnungen/7/zustand',
-      expect.objectContaining({ method: 'PUT', body: JSON.stringify({ zustand: 'BEZAHLT' }) }),
+      expect.objectContaining({
+        method: 'PUT',
+        body: JSON.stringify({ zustand: 'BEZAHLT' }),
+        headers: expect.objectContaining({ 'If-Match': '"3"' }) as unknown,
+      }),
     );
   });
 
@@ -466,5 +471,93 @@ describe('NachgetrageneRechnungPage — je Rolle (Kriterium 10 von #409, Plan #4
     );
     expect(screen.getByRole('button', { name: 'Als bezahlt markieren' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Aktionen für diese Rechnung' })).toBeInTheDocument();
+  });
+});
+
+/** Heute um die genannte Uhrzeit in der Ortszeit — die Meldung nennt dann nur die Uhrzeit. */
+function heuteUm(stunde: number, minute: number): string {
+  const zeitpunkt = new Date();
+  zeitpunkt.setHours(stunde, minute, 0, 0);
+  return zeitpunkt.toISOString();
+}
+
+/** Die Abweisung des Servers, wie `GlobalExceptionHandler` sie schreibt (Plan #415, E4, E15). */
+function abweisung(geaendertVon: string): () => Response {
+  return json(409, {
+    title: 'Conflict',
+    status: 409,
+    detail: 'Dieser Eintrag wurde inzwischen geändert.',
+    konflikt: { art: 'veraltet', geaendertAm: heuteUm(10, 42), eigenesFenster: false, geaendertVon },
+  });
+}
+
+/** Antwortet der Reihe nach mit den Antworten — beim ersten Aufruf mit der ersten. */
+function nacheinander(...antworten: readonly (() => Response)[]): () => Response {
+  let aufruf = 0;
+  return () => {
+    const antwort = antworten[Math.min(aufruf, antworten.length - 1)];
+    aufruf += 1;
+    return antwort();
+  };
+}
+
+describe('NachgetrageneRechnungPage — gleichzeitig arbeiten (#411, Kriterium 4; Plan #415)', () => {
+  it('Szenario: abgewiesener Zustandswechsel — Konfliktmeldung, Neu laden holt den neuen Stand', async () => {
+    const fetchMock = fetchNachPfad({
+      [WEG]: nacheinander(json(200, GESTELLT), json(200, BEZAHLT)),
+      [WEG_ZUSTAND]: nacheinander(abweisung('Anna'), json(200, { ...GESTELLT, version: 5 })),
+    });
+    const nutzer = userEvent.setup();
+
+    renderSeite();
+    await geladen();
+    await nutzer.click(screen.getByRole('button', { name: 'Als bezahlt markieren' }));
+
+    // Nichts ist umgestellt, und die Meldung nennt Anna statt eines Ausfalls.
+    const meldung = await screen.findByRole('alert');
+    expect(meldung).toHaveTextContent('Nicht ausgeführt');
+    expect(meldung).toHaveTextContent('Anna hat diesen Eintrag inzwischen geändert (10:42).');
+    expect(meldung).not.toHaveTextContent('Bitte später erneut versuchen');
+    expect(within(screen.getByTestId('kopfkarte-chips')).getByText('Gestellt')).toBeInTheDocument();
+
+    // Neu laden: Annas Stand — bereits bezahlt — samt neuer Version; eigene Eingaben gibt es nicht.
+    await nutzer.click(screen.getByRole('button', { name: 'Neu laden' }));
+    expect(
+      await within(screen.getByTestId('kopfkarte-chips')).findByText('Bezahlt'),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Deine Eingaben' })).not.toBeInTheDocument();
+
+    // Der naechste Schritt legt den neu geladenen Stand vor.
+    await nutzer.click(screen.getByRole('button', { name: 'Zurück auf gestellt' }));
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenLastCalledWith(
+        '/api/nachgetragene-rechnungen/7/zustand',
+        expect.objectContaining({
+          body: JSON.stringify({ zustand: 'GESTELLT' }),
+          headers: expect.objectContaining({ 'If-Match': '"4"' }) as unknown,
+        }),
+      );
+    });
+  });
+
+  it('meldet einen Ausfall beim Neu laden und laesst die Konfliktmeldung stehen', async () => {
+    fetchNachPfad({
+      [WEG]: nacheinander(json(200, GESTELLT), problem(503, 'kaputt')),
+      [WEG_ZUSTAND]: abweisung('Anna'),
+    });
+    const nutzer = userEvent.setup();
+
+    renderSeite();
+    await geladen();
+    await nutzer.click(screen.getByRole('button', { name: 'Als bezahlt markieren' }));
+    await nutzer.click(await screen.findByRole('button', { name: 'Neu laden' }));
+
+    expect(
+      await screen.findByText(
+        'Der aktuelle Stand ist gerade nicht zu erreichen. Bitte erneut versuchen.',
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Neu laden' })).toBeInTheDocument();
   });
 });

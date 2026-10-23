@@ -236,7 +236,9 @@ class RechnungenUebersichtUseCaseTest {
             Rechnungszustand.BEZAHLT,
             null,
             Rechnungsdoppel.ANGELEGT,
-            Rechnungsdoppel.ANGELEGT);
+            Rechnungsdoppel.ANGELEGT,
+            0L,
+            null);
     when(nachtraege.findAlle())
         .thenReturn(
             List.of(

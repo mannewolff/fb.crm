@@ -40,6 +40,10 @@ import org.mwolff.fbcrm.rechnung.application.RechnungszustandPasstNicht;
  * @param pdfSchluessel Schluessel des hinterlegten Originals, oder {@code null} ohne Original
  * @param createdAt Zeitpunkt der Erfassung
  * @param updatedAt Zeitpunkt der letzten Aenderung
+ * @param version der Stand der Rechnung, wie ihn {@code If-Match} vorlegt (Plan #415, E1); 0 vor
+ *     der ersten Aenderung, danach fuehrt ihn der Bestand
+ * @param geaendertVon Kennung des Kontos, das die Rechnung zuletzt geaendert hat, oder {@code
+ *     null}, solange sie das nicht weiss (Plan #415, E14)
  */
 public record NachgetrageneRechnung(
     @Nullable Long id,
@@ -51,7 +55,9 @@ public record NachgetrageneRechnung(
     Rechnungszustand zustand,
     @Nullable String pdfSchluessel,
     Instant createdAt,
-    Instant updatedAt)
+    Instant updatedAt,
+    long version,
+    @Nullable Long geaendertVon)
     implements Identifiable {
 
   /** Prueft die beiden Invarianten; die Meldung am Feld kommt aus der Anwendungsschicht. */
@@ -94,7 +100,9 @@ public record NachgetrageneRechnung(
         zustand,
         pdfSchluessel,
         createdAt,
-        zeitpunkt);
+        zeitpunkt,
+        version,
+        geaendertVon);
   }
 
   /**
@@ -109,7 +117,18 @@ public record NachgetrageneRechnung(
       throw new RechnungszustandPasstNicht();
     }
     return new NachgetrageneRechnung(
-        id, firmaId, nummer, rechnungDatum, netto, brutto, ziel, pdfSchluessel, createdAt, jetzt);
+        id,
+        firmaId,
+        nummer,
+        rechnungDatum,
+        netto,
+        brutto,
+        ziel,
+        pdfSchluessel,
+        createdAt,
+        jetzt,
+        version,
+        geaendertVon);
   }
 
   /**
@@ -120,7 +139,18 @@ public record NachgetrageneRechnung(
    */
   public NachgetrageneRechnung mitDokument(final String schluessel, final Instant jetzt) {
     return new NachgetrageneRechnung(
-        id, firmaId, nummer, rechnungDatum, netto, brutto, zustand, schluessel, createdAt, jetzt);
+        id,
+        firmaId,
+        nummer,
+        rechnungDatum,
+        netto,
+        brutto,
+        zustand,
+        schluessel,
+        createdAt,
+        jetzt,
+        version,
+        geaendertVon);
   }
 
   /**
@@ -130,6 +160,42 @@ public record NachgetrageneRechnung(
    */
   public NachgetrageneRechnung ohneDokument(final Instant jetzt) {
     return new NachgetrageneRechnung(
-        id, firmaId, nummer, rechnungDatum, netto, brutto, zustand, null, createdAt, jetzt);
+        id,
+        firmaId,
+        nummer,
+        rechnungDatum,
+        netto,
+        brutto,
+        zustand,
+        null,
+        createdAt,
+        jetzt,
+        version,
+        geaendertVon);
+  }
+
+  /**
+   * Die Rechnung mit dem Konto, das sie gerade geaendert hat (Plan #415, E14).
+   *
+   * <p>Ein eigener Schritt neben den Uebergaengen, wie an der Rechnung: Wer aendert, ist eine
+   * Angabe des Anwendungsfalls, nicht der fachlichen Regel. Die Version bleibt, wie sie ist — sie
+   * zaehlt der Bestand beim Schreiben weiter.
+   *
+   * @param konto Kennung des handelnden Kontos
+   */
+  public NachgetrageneRechnung durch(final long konto) {
+    return new NachgetrageneRechnung(
+        id,
+        firmaId,
+        nummer,
+        rechnungDatum,
+        netto,
+        brutto,
+        zustand,
+        pdfSchluessel,
+        createdAt,
+        updatedAt,
+        version,
+        konto);
   }
 }

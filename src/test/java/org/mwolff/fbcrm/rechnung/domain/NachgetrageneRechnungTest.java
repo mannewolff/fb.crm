@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
@@ -33,6 +34,8 @@ class NachgetrageneRechnungTest {
   private static final BigDecimal NETTO = new BigDecimal("1000.00");
   private static final BigDecimal BRUTTO = new BigDecimal("1190.00");
   private static final String SCHLUESSEL = "nachgetragen/21/original.pdf";
+  private static final long VERSION = 5L;
+  private static final long URHEBER = 7L;
 
   private static NachgetrageneRechnung rechnung(final Rechnungszustand zustand) {
     return new NachgetrageneRechnung(
@@ -45,7 +48,9 @@ class NachgetrageneRechnungTest {
         zustand,
         SCHLUESSEL,
         ANGELEGT,
-        ANGELEGT);
+        ANGELEGT,
+        VERSION,
+        URHEBER);
   }
 
   private static NachgetrageneRechnung mitBetraegen(final String netto, final String brutto) {
@@ -59,7 +64,9 @@ class NachgetrageneRechnungTest {
         Rechnungszustand.GESTELLT,
         null,
         ANGELEGT,
-        ANGELEGT);
+        ANGELEGT,
+        0L,
+        null);
   }
 
   @Test
@@ -100,6 +107,38 @@ class NachgetrageneRechnungTest {
       names = {"GESTELLT", "BEZAHLT", "ABGESCHRIEBEN"})
   void konstruktor_givenAGestellterZustand_thenAccepted(final Rechnungszustand zustand) {
     assertThat(rechnung(zustand).zustand()).isEqualTo(zustand);
+  }
+
+  @Test
+  void durch_thenOnlyTheUrheberChanges() {
+    // Given
+    final NachgetrageneRechnung rechnung = rechnung(Rechnungszustand.GESTELLT);
+
+    // When
+    final NachgetrageneRechnung durch = rechnung.durch(9L);
+
+    // Then — Plan #415, E14: der Stand zaehlt der Bestand, nicht der Urheber
+    assertThat(durch.geaendertVon()).isEqualTo(9L);
+    assertThat(durch).usingRecursiveComparison().ignoringFields("geaendertVon").isEqualTo(rechnung);
+  }
+
+  @Test
+  void everyTransition_thenKeepsVersionAndUrheber() {
+    // Given
+    final NachgetrageneRechnung rechnung = rechnung(Rechnungszustand.GESTELLT);
+
+    // When / Then — den Urheber setzt allein durch(), den Stand allein der Bestand
+    assertThat(
+            List.of(
+                rechnung.geaendert(FIRMA_ID, "RE-1", RECHNUNGSDATUM, NETTO, BRUTTO, SPAETER),
+                rechnung.mitZustand(Rechnungszustand.BEZAHLT, SPAETER),
+                rechnung.mitDokument("neu.pdf", SPAETER),
+                rechnung.ohneDokument(SPAETER)))
+        .allSatisfy(
+            neu -> {
+              assertThat(neu.version()).isEqualTo(VERSION);
+              assertThat(neu.geaendertVon()).isEqualTo(URHEBER);
+            });
   }
 
   @Test
@@ -174,7 +213,9 @@ class NachgetrageneRechnungTest {
                 Rechnungszustand.BEZAHLT,
                 SCHLUESSEL,
                 ANGELEGT,
-                SPAETER));
+                SPAETER,
+                VERSION,
+                URHEBER));
   }
 
   @Test
@@ -268,7 +309,9 @@ class NachgetrageneRechnungTest {
                 Rechnungszustand.BEZAHLT,
                 "nachgetragen/21/neu.pdf",
                 ANGELEGT,
-                SPAETER));
+                SPAETER,
+                VERSION,
+                URHEBER));
   }
 
   @Test
@@ -290,6 +333,8 @@ class NachgetrageneRechnungTest {
                 Rechnungszustand.ABGESCHRIEBEN,
                 null,
                 ANGELEGT,
-                SPAETER));
+                SPAETER,
+                VERSION,
+                URHEBER));
   }
 }

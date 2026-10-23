@@ -974,7 +974,9 @@ class RechnungsauskunftTest {
         Rechnungszustand.GESTELLT,
         null,
         Rechnungsdoppel.ANGELEGT,
-        Rechnungsdoppel.ANGELEGT);
+        Rechnungsdoppel.ANGELEGT,
+        0L,
+        null);
   }
 
   /** Das Angebot der Rechnungen, dazu die Adler AG und die Birke — beide Wege zum Namen. */

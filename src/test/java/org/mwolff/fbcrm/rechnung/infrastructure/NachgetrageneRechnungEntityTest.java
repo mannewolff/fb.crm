@@ -34,7 +34,9 @@ class NachgetrageneRechnungEntityTest {
         Rechnungszustand.BEZAHLT,
         pdfSchluessel,
         ANGELEGT,
-        GEAENDERT);
+        GEAENDERT,
+        5L,
+        7L);
   }
 
   @Test
@@ -56,7 +58,9 @@ class NachgetrageneRechnungEntityTest {
             gelesen ->
                 assertThat(gelesen.getPdfSchluessel()).isEqualTo("nachgetragen/21/original.pdf"),
             gelesen -> assertThat(gelesen.getCreatedAt()).isEqualTo(ANGELEGT),
-            gelesen -> assertThat(gelesen.getUpdatedAt()).isEqualTo(GEAENDERT));
+            gelesen -> assertThat(gelesen.getUpdatedAt()).isEqualTo(GEAENDERT),
+            gelesen -> assertThat(gelesen.getVersion()).isEqualTo(5L),
+            gelesen -> assertThat(gelesen.getGeaendertVon()).isEqualTo(7L));
   }
 
   @Test

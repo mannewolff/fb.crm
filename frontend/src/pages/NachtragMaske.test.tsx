@@ -1,11 +1,11 @@
-import { screen } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import KopfPfad, { KopfPfadProvider } from '../components/KopfPfad';
 import { MAX_UPLOAD_BYTE } from '../lib/dateigroesse';
-import { fetchNachPfad, formularWeg, json, leer, problem } from '../test/fetchNachPfad';
+import { fetchNachPfad, formularWeg, json, problem } from '../test/fetchNachPfad';
 import type { Routen } from '../test/fetchNachPfad';
 import { renderMitTheme } from '../test/render';
 import { NICHT_OFFEN } from '../routes/RollenRoute';
@@ -37,6 +37,7 @@ const NACHTRAG = {
   brutto: 1190.6,
   zustand: 'GESTELLT',
   dokument: false,
+  version: 3,
 };
 
 /** Die Adresse, an der sich ablesen laesst, wohin die Maske gefuehrt hat. */
@@ -531,7 +532,7 @@ describe('NachtragMaske — Erfolg', () => {
       { ...NACHTRAG, dokument: true },
       {
         [`PUT ${WEG}/7`]: json(200, { ...NACHTRAG, dokument: true }),
-        [`DELETE ${WEG}/7/dokument`]: leer(204),
+        [`DELETE ${WEG}/7/dokument`]: json(200, { ...NACHTRAG, version: 5 }),
       },
     );
 
@@ -748,5 +749,249 @@ describe('NachtragMaske — nur mit Schreibrecht (Kriterium 10 von #409, Plan #4
       await screen.findByRole('heading', { level: 1, name: 'Rechnung nachtragen' }),
     ).toBeInTheDocument();
     expect(screen.queryByText(new RegExp(NICHT_OFFEN))).not.toBeInTheDocument();
+  });
+});
+
+/** Heute um die genannte Uhrzeit in der Ortszeit — die Meldung nennt dann nur die Uhrzeit. */
+function heuteUm(stunde: number, minute: number): string {
+  const zeitpunkt = new Date();
+  zeitpunkt.setHours(stunde, minute, 0, 0);
+  return zeitpunkt.toISOString();
+}
+
+/** Die Abweisung des Servers, wie `GlobalExceptionHandler` sie schreibt (Plan #415, E4, E15). */
+function abweisung(geaendertVon: string): () => Response {
+  return json(409, {
+    title: 'Conflict',
+    status: 409,
+    detail: 'Dieser Eintrag wurde inzwischen geändert.',
+    konflikt: { art: 'veraltet', geaendertAm: heuteUm(10, 42), eigenesFenster: false, geaendertVon },
+  });
+}
+
+/** Antwortet der Reihe nach mit den Antworten — beim ersten Aufruf mit der ersten. */
+function nacheinander(...antworten: readonly (() => Response)[]): () => Response {
+  let aufruf = 0;
+  return () => {
+    const antwort = antworten[Math.min(aufruf, antworten.length - 1)];
+    aufruf += 1;
+    return antwort();
+  };
+}
+
+/** Die Bedingungskoepfe aller Aufrufe des Wegs, in ihrer Reihenfolge. */
+function vorgelegteStaende(
+  fetchMock: ReturnType<typeof fetchNachPfad>,
+  methode: string,
+  pfad: string,
+): (string | undefined)[] {
+  return fetchMock.mock.calls
+    .filter(([ziel, init]) => ziel === pfad && init?.method === methode)
+    .map(([, init]) => (init?.headers as Record<string, string> | undefined)?.['If-Match']);
+}
+
+describe('NachtragMaske — gleichzeitig arbeiten (#411, Kriterien 1 bis 4; Plan #415)', () => {
+  /** Annas Stand: Sie hat Nummer und Betraege inzwischen geaendert. */
+  const ANNAS_STAND = {
+    ...NACHTRAG,
+    nummer: 'RE-2026-099',
+    netto: 2000,
+    brutto: 2380,
+    version: 4,
+  };
+
+  it('legt beim Speichern den gelesenen Stand vor und das Original auf dem Stand der Antwort', async () => {
+    const fetchMock = aendern(
+      { ...NACHTRAG, dokument: true },
+      {
+        [`PUT ${WEG}/7`]: json(200, { ...NACHTRAG, dokument: true, version: 4 }),
+        [`POST ${WEG}/7/dokument`]: json(200, { ...NACHTRAG, dokument: true, version: 5 }),
+      },
+    );
+
+    renderMaske('/rechnungen/nachgetragen/7/bearbeiten');
+    const nutzer = await bereit();
+    await nutzer.upload(dateifeld(), pdf());
+    await nutzer.click(screen.getByRole('button', { name: 'Speichern' }));
+
+    await screen.findByText('Einzelansicht');
+    expect(vorgelegteStaende(fetchMock, 'PUT', `${WEG}/7`)).toEqual(['"3"']);
+    expect(vorgelegteStaende(fetchMock, 'POST', `${WEG}/7/dokument`)).toEqual(['"4"']);
+  });
+
+  it('legt beim Entfernen des Originals den Stand der Antwort vor', async () => {
+    const fetchMock = aendern(
+      { ...NACHTRAG, dokument: true },
+      {
+        [`PUT ${WEG}/7`]: json(200, { ...NACHTRAG, dokument: true, version: 4 }),
+        [`DELETE ${WEG}/7/dokument`]: json(200, { ...NACHTRAG, version: 5 }),
+      },
+    );
+
+    renderMaske('/rechnungen/nachgetragen/7/bearbeiten');
+    const nutzer = await bereit();
+    await nutzer.click(screen.getByRole('checkbox', { name: 'Hinterlegtes PDF entfernen' }));
+    await nutzer.click(screen.getByRole('button', { name: 'Speichern' }));
+
+    await screen.findByText('Einzelansicht');
+    expect(vorgelegteStaende(fetchMock, 'DELETE', `${WEG}/7/dokument`)).toEqual(['"4"']);
+  });
+
+  it('legt beim Anlegen keinen Stand vor', async () => {
+    const fetchMock = anlegen({ [`POST ${WEG}`]: json(201, NACHTRAG) });
+
+    renderMaske('/rechnungen/nachtragen');
+    const nutzer = await bereit();
+    await ausfuellen(nutzer);
+    await nutzer.click(screen.getByRole('button', { name: 'Anlegen' }));
+
+    await screen.findByText('Einzelansicht');
+    expect(vorgelegteStaende(fetchMock, 'POST', WEG)).toEqual([undefined]);
+  });
+
+  it('Szenario: abgewiesenes Speichern — die Eingaben bleiben, Neu laden stellt sie daneben', async () => {
+    const fetchMock = aendern(NACHTRAG, {
+      [`GET ${WEG}/7`]: nacheinander(json(200, NACHTRAG), json(200, ANNAS_STAND)),
+      [`PUT ${WEG}/7`]: nacheinander(abweisung('Anna'), json(200, { ...ANNAS_STAND, version: 5 })),
+    });
+
+    renderMaske('/rechnungen/nachgetragen/7/bearbeiten');
+    const nutzer = await bereit();
+    await nutzer.clear(nummer());
+    await nutzer.type(nummer(), 'RE-2026-015');
+    await nutzer.click(screen.getByRole('button', { name: 'Speichern' }));
+
+    // Abgewiesen: Die Meldung nennt Anna, und die eigene Nummer steht weiter im Feld.
+    const meldung = await screen.findByRole('alert');
+    expect(meldung).toHaveTextContent('Nicht ausgeführt');
+    expect(meldung).toHaveTextContent('Anna hat diesen Eintrag inzwischen geändert (10:42).');
+    expect(meldung).not.toHaveTextContent('Bitte später erneut versuchen');
+    expect(nummer()).toHaveValue('RE-2026-015');
+    expect(adresse()).toBe('/rechnungen/nachgetragen/7/bearbeiten');
+
+    // Neu laden: Annas Stand steht in der Maske, die eigenen Werte daneben zum Kopieren.
+    await nutzer.click(screen.getByRole('button', { name: 'Neu laden' }));
+    await waitFor(() => {
+      expect(nummer()).toHaveValue('RE-2026-099');
+    });
+    expect(netto()).toHaveValue('2000,00');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    const eigene = screen.getByRole('region', { name: 'Deine Eingaben' });
+    expect(eigene).toHaveTextContent('Rechnungsnummer');
+    expect(eigene).toHaveTextContent('RE-2026-015');
+    expect(eigene).toHaveTextContent('12.03.2026');
+    expect(eigene).toHaveTextContent('1000,50');
+
+    // Auf Annas Stand geht das Speichern durch; vorgelegt wird der neu geladene Stand.
+    await nutzer.click(screen.getByRole('button', { name: 'Speichern' }));
+    await screen.findByText('Einzelansicht');
+    expect(vorgelegteStaende(fetchMock, 'PUT', `${WEG}/7`)).toEqual(['"3"', '"4"']);
+  });
+
+  it('nimmt die gewaehlte Datei beim Neu laden aus der Maske und nennt sie bei den eigenen Eingaben', async () => {
+    const fetchMock = aendern(NACHTRAG, {
+      [`GET ${WEG}/7`]: nacheinander(json(200, NACHTRAG), json(200, ANNAS_STAND)),
+      [`PUT ${WEG}/7`]: nacheinander(abweisung('Anna'), json(200, { ...ANNAS_STAND, version: 5 })),
+    });
+
+    renderMaske('/rechnungen/nachgetragen/7/bearbeiten');
+    const nutzer = await bereit();
+    await nutzer.upload(dateifeld(), pdf('original.pdf'));
+    await nutzer.click(screen.getByRole('button', { name: 'Speichern' }));
+    await nutzer.click(await screen.findByRole('button', { name: 'Neu laden' }));
+
+    const eigene = await screen.findByRole('region', { name: 'Deine Eingaben' });
+    expect(eigene).toHaveTextContent('original.pdf');
+    expect(screen.getByText('Keine Datei gewählt.')).toBeVisible();
+
+    // Verwerfen raeumt die eigenen Werte ab; das naechste Speichern schickt kein Original mit.
+    await nutzer.click(within(eigene).getByRole('button', { name: 'Verwerfen' }));
+    expect(screen.queryByRole('region', { name: 'Deine Eingaben' })).not.toBeInTheDocument();
+    await nutzer.click(screen.getByRole('button', { name: 'Speichern' }));
+    await screen.findByText('Einzelansicht');
+    expect(vorgelegteStaende(fetchMock, 'POST', `${WEG}/7/dokument`)).toEqual([]);
+  });
+
+  it('nennt das gewuenschte Entfernen des PDFs bei den eigenen Eingaben und setzt es zurueck', async () => {
+    aendern(
+      { ...NACHTRAG, dokument: true },
+      {
+        [`GET ${WEG}/7`]: nacheinander(
+          json(200, { ...NACHTRAG, dokument: true }),
+          json(200, { ...ANNAS_STAND, dokument: true }),
+        ),
+        [`PUT ${WEG}/7`]: abweisung('Anna'),
+      },
+    );
+
+    renderMaske('/rechnungen/nachgetragen/7/bearbeiten');
+    const nutzer = await bereit();
+    await nutzer.click(screen.getByRole('checkbox', { name: 'Hinterlegtes PDF entfernen' }));
+    await nutzer.click(screen.getByRole('button', { name: 'Speichern' }));
+    await nutzer.click(await screen.findByRole('button', { name: 'Neu laden' }));
+
+    const eigene = await screen.findByRole('region', { name: 'Deine Eingaben' });
+    expect(eigene).toHaveTextContent('Hinterlegtes PDF entfernen');
+    expect(screen.getByRole('checkbox', { name: 'Hinterlegtes PDF entfernen' })).not.toBeChecked();
+  });
+
+  it('laesst den Kunden bei den eigenen Eingaben leer, wenn keiner gewaehlt ist', async () => {
+    aendern(NACHTRAG, {
+      [`GET ${WEG}/7`]: nacheinander(json(200, NACHTRAG), json(200, ANNAS_STAND)),
+      [`PUT ${WEG}/7`]: abweisung('Anna'),
+    });
+
+    renderMaske('/rechnungen/nachgetragen/7/bearbeiten');
+    const nutzer = await bereit();
+    await nutzer.click(screen.getByRole('button', { name: 'Speichern' }));
+    await screen.findByRole('alert');
+    // Nach der Abweisung die Wahl geleert: Auch das ist ein eigener Stand der Maske.
+    await nutzer.selectOptions(kundenwahl(), '');
+    await nutzer.click(screen.getByRole('button', { name: 'Neu laden' }));
+
+    const eigene = await screen.findByRole('region', { name: 'Deine Eingaben' });
+    expect(within(eigene).getByText('Kunde')).toBeInTheDocument();
+    expect(eigene).not.toHaveTextContent('Adler AG');
+    expect(kundenwahl()).toHaveValue('5');
+  });
+
+  it('zeigt die Konfliktmeldung, wenn das Original auf altem Stand abgewiesen wird', async () => {
+    aendern(
+      { ...NACHTRAG, dokument: true },
+      {
+        [`PUT ${WEG}/7`]: json(200, { ...NACHTRAG, dokument: true, version: 4 }),
+        [`DELETE ${WEG}/7/dokument`]: abweisung('Anna'),
+      },
+    );
+
+    renderMaske('/rechnungen/nachgetragen/7/bearbeiten');
+    const nutzer = await bereit();
+    await nutzer.click(screen.getByRole('checkbox', { name: 'Hinterlegtes PDF entfernen' }));
+    await nutzer.click(screen.getByRole('button', { name: 'Speichern' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Anna hat diesen Eintrag inzwischen geändert (10:42).',
+    );
+    expect(screen.queryByText(DATEI_AUSFALL)).not.toBeInTheDocument();
+    expect(adresse()).toBe('/rechnungen/nachgetragen/7/bearbeiten');
+  });
+
+  it('meldet einen Ausfall beim Neu laden und laesst die Konfliktmeldung stehen', async () => {
+    aendern(NACHTRAG, {
+      [`GET ${WEG}/7`]: nacheinander(json(200, NACHTRAG), problem(503, 'kaputt')),
+      [`PUT ${WEG}/7`]: abweisung('Anna'),
+    });
+
+    renderMaske('/rechnungen/nachgetragen/7/bearbeiten');
+    const nutzer = await bereit();
+    await nutzer.click(screen.getByRole('button', { name: 'Speichern' }));
+    await nutzer.click(await screen.findByRole('button', { name: 'Neu laden' }));
+
+    expect(
+      await screen.findByText(
+        'Der aktuelle Stand ist gerade nicht zu erreichen. Bitte erneut versuchen.',
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Neu laden' })).toBeInTheDocument();
   });
 });

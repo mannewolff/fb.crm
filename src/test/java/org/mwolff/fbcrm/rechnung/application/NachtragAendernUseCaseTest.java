@@ -3,6 +3,7 @@ package org.mwolff.fbcrm.rechnung.application;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -48,6 +49,15 @@ class NachtragAendernUseCaseTest {
   private static final BigDecimal NETTO = new BigDecimal("1000.00");
   private static final BigDecimal BRUTTO = new BigDecimal("1190.00");
 
+  /** Der Stand der gespeicherten Rechnung, den ein aktueller Aufruf vorlegt. */
+  private static final long STAND = 3L;
+
+  /** Wer die gespeicherte Rechnung zuletzt geaendert hat. */
+  private static final long URHEBER = 7L;
+
+  /** Wer gerade aendert. */
+  private static final long KONTO = 9L;
+
   @Mock private NachgetrageneRechnungRepository nachgetragene;
   @Mock private FirmaRepository firmen;
   @Mock private Rechnungsnummern rechnungsnummern;
@@ -83,7 +93,9 @@ class NachtragAendernUseCaseTest {
         zustand,
         "nachgetragen/21/original.pdf",
         ANGELEGT,
-        ANGELEGT);
+        ANGELEGT,
+        STAND,
+        URHEBER);
   }
 
   private static Nachtragsdaten daten(final String nummer, final LocalDate datum) {
@@ -94,7 +106,8 @@ class NachtragAendernUseCaseTest {
   @Test
   void aendere_thenWrittenWithTheNewEckdatenAndTheMomentFromTheClock() {
     // When
-    final NachgetrageneRechnung geaendert = useCase.aendere(ID, daten(" RE-2 ", GESPEICHERT));
+    final NachgetrageneRechnung geaendert =
+        useCase.aendere(ID, daten(" RE-2 ", GESPEICHERT), STAND, KONTO);
 
     // Then
     verify(rechnungsnummern).vergebenVonAnderer("RE-2", ID);
@@ -109,21 +122,53 @@ class NachtragAendernUseCaseTest {
             r -> assertThat(r.zustand()).isEqualTo(Rechnungszustand.GESTELLT),
             r -> assertThat(r.pdfSchluessel()).isEqualTo("nachgetragen/21/original.pdf"),
             r -> assertThat(r.createdAt()).isEqualTo(ANGELEGT),
-            r -> assertThat(r.updatedAt()).isEqualTo(JETZT));
+            r -> assertThat(r.updatedAt()).isEqualTo(JETZT),
+            r -> assertThat(r.version()).isEqualTo(STAND),
+            r -> assertThat(r.geaendertVon()).isEqualTo(KONTO));
     assertThat(geaendert).isEqualTo(gespeicherte.getValue());
+  }
+
+  @ParameterizedTest
+  @ValueSource(longs = {2L, 4L})
+  void aendere_onAnOutdatedStand_thenNachtragGeaendertWithUrheberAndZeitpunkt(
+      final long vorgelegt) {
+    // When / Then — abgewiesen wird jede Abweichung, nicht nur ein aelterer Stand (#411, Kr. 4)
+    assertThatThrownBy(() -> useCase.aendere(ID, daten("RE-2", GESPEICHERT), vorgelegt, KONTO))
+        .isInstanceOfSatisfying(
+            NachtragGeaendert.class,
+            konflikt -> {
+              assertThat(konflikt.urheberKonto()).hasValue(URHEBER);
+              assertThat(konflikt.handelndesKonto()).isEqualTo(KONTO);
+              assertThat(konflikt.zeitpunkt()).contains(ANGELEGT);
+            });
+    verify(nachgetragene, never()).save(any());
+  }
+
+  @Test
+  void aendere_onAnOutdatedStandWithAnUnknownFirma_thenTheStandIsReportedFirst() {
+    // Given — der Vergleich steht vor jeder fachlichen Pruefung
+    lenient().when(firmen.findById(ANDERE_FIRMA)).thenReturn(Optional.empty());
+
+    // When / Then
+    assertThatThrownBy(() -> useCase.aendere(ID, daten("RE-2", GESPEICHERT), STAND + 1, KONTO))
+        .isInstanceOf(NachtragGeaendert.class);
+    verify(rechnungsnummern, never()).vergebenVonAnderer(any(), anyLong());
   }
 
   @Test
   void aendere_withTheUnchangedDatumAfterTheTurnOfTheYear_thenAccepted() {
     // When / Then
-    assertThat(useCase.aendere(ID, daten("RE-1", GESPEICHERT)).rechnungDatum())
+    assertThat(useCase.aendere(ID, daten("RE-1", GESPEICHERT), STAND, KONTO).rechnungDatum())
         .isEqualTo(GESPEICHERT);
   }
 
   @Test
   void aendere_withAChangedDatumInsideTheBoundary_thenAccepted() {
     // When / Then
-    assertThat(useCase.aendere(ID, daten("RE-1", LocalDate.of(2027, 1, 1))).rechnungDatum())
+    assertThat(
+            useCase
+                .aendere(ID, daten("RE-1", LocalDate.of(2027, 1, 1)), STAND, KONTO)
+                .rechnungDatum())
         .isEqualTo(LocalDate.of(2027, 1, 1));
   }
 
@@ -132,7 +177,8 @@ class NachtragAendernUseCaseTest {
   void aendere_withAChangedDatumOutsideTheBoundary_thenRechnungsdatumAusserhalb(
       final String datum) {
     // When / Then
-    assertThatThrownBy(() -> useCase.aendere(ID, daten("RE-1", LocalDate.parse(datum))))
+    assertThatThrownBy(
+            () -> useCase.aendere(ID, daten("RE-1", LocalDate.parse(datum)), STAND, KONTO))
         .isInstanceOf(RechnungsdatumAusserhalb.class);
     verify(nachgetragene, never()).save(any());
   }
@@ -143,7 +189,8 @@ class NachtragAendernUseCaseTest {
     when(rechnungsnummern.vergebenVonAnderer("RE-1", ID)).thenReturn(false);
 
     // When / Then
-    assertThat(useCase.aendere(ID, daten("RE-1", GESPEICHERT)).nummer()).isEqualTo("RE-1");
+    assertThat(useCase.aendere(ID, daten("RE-1", GESPEICHERT), STAND, KONTO).nummer())
+        .isEqualTo("RE-1");
   }
 
   @Test
@@ -152,7 +199,7 @@ class NachtragAendernUseCaseTest {
     when(rechnungsnummern.vergebenVonAnderer("RE-7", ID)).thenReturn(true);
 
     // When / Then
-    assertThatThrownBy(() -> useCase.aendere(ID, daten("RE-7", GESPEICHERT)))
+    assertThatThrownBy(() -> useCase.aendere(ID, daten("RE-7", GESPEICHERT), STAND, KONTO))
         .isInstanceOf(NummerSchonVergeben.class);
     verify(nachgetragene, never()).save(any());
   }
@@ -165,7 +212,9 @@ class NachtragAendernUseCaseTest {
                 useCase.aendere(
                     ID,
                     new Nachtragsdaten(
-                        ANDERE_FIRMA, "RE-1", GESPEICHERT, NETTO, new BigDecimal("999.99"))))
+                        ANDERE_FIRMA, "RE-1", GESPEICHERT, NETTO, new BigDecimal("999.99")),
+                    STAND,
+                    KONTO))
         .isInstanceOf(BetraegePassenNicht.class);
     verify(nachgetragene, never()).save(any());
   }
@@ -179,7 +228,8 @@ class NachtragAendernUseCaseTest {
     when(nachgetragene.findById(ID)).thenReturn(Optional.of(gespeichert(zustand)));
 
     // When / Then
-    assertThat(useCase.aendere(ID, daten("RE-1", GESPEICHERT)).zustand()).isEqualTo(zustand);
+    assertThat(useCase.aendere(ID, daten("RE-1", GESPEICHERT), STAND, KONTO).zustand())
+        .isEqualTo(zustand);
   }
 
   @Test
@@ -188,7 +238,7 @@ class NachtragAendernUseCaseTest {
     when(nachgetragene.findById(ID)).thenReturn(Optional.empty());
 
     // When / Then
-    assertThatThrownBy(() -> useCase.aendere(ID, daten("RE-1", GESPEICHERT)))
+    assertThatThrownBy(() -> useCase.aendere(ID, daten("RE-1", GESPEICHERT), STAND, KONTO))
         .isInstanceOf(NachtragNichtGefunden.class);
     verify(nachgetragene, never()).save(any());
   }
@@ -199,7 +249,7 @@ class NachtragAendernUseCaseTest {
     when(firmen.findById(ANDERE_FIRMA)).thenReturn(Optional.empty());
 
     // When / Then
-    assertThatThrownBy(() -> useCase.aendere(ID, daten("RE-1", GESPEICHERT)))
+    assertThatThrownBy(() -> useCase.aendere(ID, daten("RE-1", GESPEICHERT), STAND, KONTO))
         .isInstanceOf(FirmaNichtGefunden.class);
     verify(nachgetragene, never()).save(any());
   }

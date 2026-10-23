@@ -24,6 +24,8 @@ import org.mwolff.fbcrm.rechnung.domain.Rechnungszustand;
  * @param brutto der Bruttobetrag, wie erfasst
  * @param zustand gestellt, bezahlt oder abgeschrieben
  * @param dokument ob ein Original hinterlegt ist
+ * @param version der Stand der Rechnung, den die Oberflaeche beim naechsten schreibenden Schritt
+ *     mit {@code If-Match} vorlegt (Plan #415, E2)
  */
 public record NachtragResponse(
     long id,
@@ -34,7 +36,8 @@ public record NachtragResponse(
     BigDecimal netto,
     BigDecimal brutto,
     Rechnungszustand zustand,
-    boolean dokument) {
+    boolean dokument,
+    long version) {
 
   /** Die Sicht der Oberflaeche auf eine nachgetragene Rechnung samt Firma. */
   static NachtragResponse of(final NachgetrageneRechnungMitFirma mitFirma) {
@@ -48,6 +51,7 @@ public record NachtragResponse(
         rechnung.netto(),
         rechnung.brutto(),
         rechnung.zustand(),
-        rechnung.pdfSchluessel() != null);
+        rechnung.pdfSchluessel() != null,
+        rechnung.version());
   }
 }

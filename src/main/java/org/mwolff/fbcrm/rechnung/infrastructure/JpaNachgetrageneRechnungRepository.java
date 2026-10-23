@@ -63,6 +63,8 @@ class JpaNachgetrageneRechnungRepository implements NachgetrageneRechnungReposit
         zeile.getZustand(),
         zeile.getPdfSchluessel(),
         zeile.getCreatedAt(),
-        zeile.getUpdatedAt());
+        zeile.getUpdatedAt(),
+        zeile.getVersion(),
+        zeile.getGeaendertVon());
   }
 }

@@ -62,6 +62,7 @@ const NACHTRAG = {
   brutto: 1190,
   zustand: 'GESTELLT',
   dokument: false,
+  version: 0,
 };
 
 /** Die Firmenwahl der Nachtrags-Maske: alle Firmen, auch stillgelegte. */

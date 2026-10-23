@@ -22,17 +22,21 @@ import {
   nachtragLesen,
 } from '../api/nachtraege';
 import type { Nachtrag, NachtragEingabe } from '../api/nachtraege';
+import EigeneEingaben from '../components/EigeneEingaben';
+import type { EigeneEingabe } from '../components/EigeneEingaben';
 import Karte from '../components/Karte';
 import { useKopfPfad } from '../components/KopfPfad';
 import type { PfadVerweis } from '../components/KopfPfad';
+import Konfliktmeldung from '../components/Konfliktmeldung';
 import KupferTaste from '../components/KupferTaste';
 import WeicheTaste from '../components/WeicheTaste';
-import { feldMeldungen, nichtGefunden } from '../lib/apifehler';
+import { feldMeldungen, istBearbeitungskonflikt, nichtGefunden } from '../lib/apifehler';
 import { dateigroesse, MAX_UPLOAD_BYTE } from '../lib/dateigroesse';
 import { ersteDatei } from '../lib/dateiwahl';
 import { meldungAm } from '../lib/feldmeldung';
 import { dezimal, hundertstel } from '../lib/geld';
 import { kennungAus } from '../lib/kennung';
+import { tagWort } from '../lib/tag';
 import { ABSTAND_BUEHNE } from '../theme';
 
 /**
@@ -67,11 +71,21 @@ import { ABSTAND_BUEHNE } from '../theme';
  *
  * Das Formular traegt `noValidate`; die Pflichtangaben stehen als `required` am Feld, die Meldungen
  * dazu schreibt diese Maske — in derselben Sprache und an derselben Stelle wie die des Servers.
+ *
+ * <b>Gespeichert wird auf dem gelesenen Stand</b> (#411, Kriterien 1 bis 4; Plan #415, E2). Die
+ * Maske fuehrt die Version der Rechnung mit und legt sie beim Speichern vor; das Original geht
+ * danach auf dem Stand hinaus, den die Antwort des Speicherns traegt. Hat inzwischen jemand anderes
+ * gespeichert — oder dieselbe Person in einem anderen Fenster —, weist der Server ab, und die
+ * {@link Konfliktmeldung} sagt, wer wann geaendert hat. Die eigenen Eingaben bleiben dabei im
+ * Formular stehen. „Neu laden" holt den Stand des Servers samt neuer Version ins Formular und
+ * stellt die eigenen Werte daneben in {@link EigeneEingaben}, bis „Verwerfen" gewaehlt wird.
  */
 
 const LAEDT = 'Die Angaben werden geladen …';
 const NICHT_GEFUNDEN = 'Diese nachgetragene Rechnung gibt es nicht.';
 const AUSFALL_LESEN = 'Die Angaben sind gerade nicht zu erreichen. Bitte später erneut versuchen.';
+/** Wo „Neu laden" nach einer Abweisung scheitert. */
+const AUSFALL_NEU_LADEN = 'Der aktuelle Stand ist gerade nicht zu erreichen. Bitte erneut versuchen.';
 const AUSFALL_SPEICHERN = 'Die Rechnung wurde nicht gespeichert. Bitte später erneut versuchen.';
 const AUSFALL_SUCHE = 'Die Suche ist gerade nicht möglich. Bitte später erneut versuchen.';
 const NICHTS_GEFUNDEN = 'Zu diesem Suchtext wurde keine Firma gefunden.';
@@ -101,6 +115,9 @@ const KEIN_KUNDE = '';
 const DATEI = 'datei';
 
 const SYMBOL = 16;
+
+/** Wohin die Konfliktmeldung fuehrt, wenn die Rechnung inzwischen geloescht ist. */
+const UEBERSICHT = '/rechnungen';
 
 /** Ueber der Maske steht die Rechnungsliste — der fachliche Ort des Nachtragens (Kriterium 1). */
 const ZU_RECHNUNGEN: readonly PfadVerweis[] = [{ titel: 'Rechnungen', ziel: '/rechnungen' }];
@@ -193,6 +210,35 @@ function werteAus(nachtrag: Nachtrag): Werte {
   };
 }
 
+/**
+ * Was gerade in der Maske steht, als eigene Eingaben zum Kopieren (#411, Kriterium 3).
+ *
+ * Beschriftet wie die Felder der Maske, damit sich jeder Wert seinem Feld zuordnen laesst. Das
+ * Original steht nur dabei, wenn die Maske damit etwas vorhatte — eine gewaehlte Datei oder das
+ * Entfernen des hinterlegten PDFs.
+ */
+function eigeneEingabenAus(
+  werte: Werte,
+  gewaehlt: Wahlzeile | null,
+  datei: File | null,
+  entfernen: boolean,
+): readonly EigeneEingabe[] {
+  const original =
+    datei === null
+      ? entfernen
+        ? [{ bezeichnung: 'Originalrechnung (PDF)', wert: 'Hinterlegtes PDF entfernen' }]
+        : []
+      : [{ bezeichnung: 'Originalrechnung (PDF)', wert: datei.name }];
+  return [
+    { bezeichnung: 'Kunde', wert: gewaehlt?.wort ?? '' },
+    { bezeichnung: 'Rechnungsnummer', wert: werte.nummer },
+    { bezeichnung: 'Rechnungsdatum', wert: tagWort(werte.rechnungDatum) },
+    { bezeichnung: 'Nettobetrag', wert: werte.netto },
+    { bezeichnung: 'Bruttobetrag', wert: werte.brutto },
+    ...original,
+  ];
+}
+
 /** Die Eintraege der Kundenwahl: die Treffer, und davor der gewaehlte, wenn er keiner ist. */
 function wahlzeilen(
   treffer: readonly FirmaZeile[],
@@ -279,14 +325,23 @@ function pruefen(werte: Werte, gewaehlt: Wahlzeile | null, datei: File | null): 
   };
 }
 
-/** Der zweite Aufruf (E11): das Original ablegen, ersetzen oder entfernen — oder nichts. */
-async function originalNachziehen(id: number, datei: File | null, entfernen: boolean) {
+/**
+ * Der zweite Aufruf (E11): das Original ablegen, ersetzen oder entfernen — oder nichts.
+ *
+ * @param version der Stand, den die Antwort des ersten Aufrufs trug
+ */
+async function originalNachziehen(
+  id: number,
+  version: number,
+  datei: File | null,
+  entfernen: boolean,
+) {
   if (datei !== null) {
-    await nachtragDokumentAblegen(id, datei);
+    await nachtragDokumentAblegen(id, version, datei);
     return;
   }
   if (entfernen) {
-    await nachtragDokumentEntfernen(id);
+    await nachtragDokumentEntfernen(id, version);
   }
 }
 
@@ -368,6 +423,12 @@ export default function NachtragMaske() {
   const [laeuft, setzeLaeuft] = useState(false);
   // Die Kennung einer Rechnung, die diese Maske schon angelegt hat, deren Original aber scheiterte.
   const [gespeichert, setzeGespeichert] = useState<number | null>(null);
+  // Der Stand, den das naechste Speichern vorlegt: gelesen, oder aus der Antwort des letzten.
+  const [version, setzeVersion] = useState(0);
+  // Die Abweisung eines Schritts auf altem Stand, ungeprueft — die Konfliktmeldung liest sie selbst.
+  const [abweisung, setzeAbweisung] = useState<unknown>(null);
+  // Die eigenen Werte nach „Neu laden", bis „Verwerfen" gewaehlt wird (#411, Kriterium 3).
+  const [eigene, setzeEigene] = useState<readonly EigeneEingabe[] | null>(null);
   // Das Dateifeld als Zustand und nicht als `useRef`: Die Taste steht erst, wenn es das Feld gibt,
   // auf das sie klickt — dasselbe Muster wie in {@link Anlagen}.
   const [feld, setzeFeld] = useState<HTMLInputElement | null>(null);
@@ -393,6 +454,7 @@ export default function NachtragMaske() {
         setzeGewaehlt({ id: nachtrag.firmaId, wort: nachtrag.firmaName });
         setzeWerte(werteAus(nachtrag));
         setzeHinterlegt(nachtrag.dokument);
+        setzeVersion(nachtrag.version);
       }
       setzeStand(geladen.gesamt === 0 ? 'leer' : 'bereit');
     });
@@ -425,40 +487,81 @@ export default function NachtragMaske() {
 
   const absenden = async () => {
     setzeFehler(null);
+    setzeAbweisung(null);
     const pruefung = pruefen(werte, gewaehlt, datei);
     setzeFeldFehler(pruefung.fehler ?? {});
     if (pruefung.eingabe === null) {
       return;
     }
     setzeLaeuft(true);
-    let gesichert: number;
+    let gesichert: Nachtrag;
     try {
-      const antwort =
+      gesichert =
         vorhanden === null
           ? await nachtragAnlegen(pruefung.eingabe)
-          : await nachtragAendern(vorhanden, pruefung.eingabe);
-      gesichert = antwort.id;
+          : await nachtragAendern(vorhanden, version, pruefung.eingabe);
     } catch (ursache: unknown) {
       setzeLaeuft(false);
       const felder = feldMeldungen(ursache);
-      if (Object.keys(felder).length > 0) {
+      if (istBearbeitungskonflikt(ursache)) {
+        // Die Eingaben bleiben stehen; den Weg weiter zeigt die Konfliktmeldung (Kriterium 3).
+        setzeAbweisung(ursache);
+      } else if (Object.keys(felder).length > 0) {
         setzeFeldFehler(felder);
       } else {
         setzeFehler(AUSFALL_SPEICHERN);
       }
       return;
     }
-    setzeGespeichert(gesichert);
+    setzeGespeichert(gesichert.id);
+    setzeVersion(gesichert.version);
     try {
-      await originalNachziehen(gesichert, datei, entfernen);
+      await originalNachziehen(gesichert.id, gesichert.version, datei, entfernen);
     } catch (ursache: unknown) {
-      // Die Rechnung steht; nur das Original fehlt. Die Meldung gehoert an die Datei (E11).
       setzeLaeuft(false);
+      if (istBearbeitungskonflikt(ursache)) {
+        setzeAbweisung(ursache);
+        return;
+      }
+      // Die Rechnung steht; nur das Original fehlt. Die Meldung gehoert an die Datei (E11).
       const grund = meldungAm(feldMeldungen(ursache), DATEI) ?? AUSFALL_DATEI;
       setzeFeldFehler({ [DATEI]: [`${grund} ${UEBRIGE_GESPEICHERT}`] });
       return;
     }
-    navigate(`/rechnungen/nachgetragen/${String(gesichert)}`, { replace: true });
+    navigate(`/rechnungen/nachgetragen/${String(gesichert.id)}`, { replace: true });
+  };
+
+  /**
+   * „Neu laden" nach einer Abweisung: der Stand des Servers ins Formular, die eigenen Werte daneben
+   * (#411, Kriterium 3; Plan #415, E12).
+   *
+   * Die eigenen Werte werden genommen, wie sie in diesem Augenblick in der Maske stehen — auch was
+   * nach der Abweisung noch getippt wurde, soll nicht verloren gehen. Eine gewaehlte Datei steht
+   * danach nur noch dort: Sie ginge sonst mit dem naechsten Speichern still auf den neuen Stand.
+   */
+  const neuLaden = async (id: number) => {
+    const meine = eigeneEingabenAus(werte, gewaehlt, datei, entfernen);
+    setzeFehler(null);
+    setzeLaeuft(true);
+    try {
+      const nachtrag = await nachtragLesen(id);
+      setzeGewaehlt({ id: nachtrag.firmaId, wort: nachtrag.firmaName });
+      setzeWerte(werteAus(nachtrag));
+      setzeHinterlegt(nachtrag.dokument);
+      setzeVersion(nachtrag.version);
+      setzeDatei(null);
+      setzeEntfernen(false);
+      if (feld !== null) {
+        feld.value = '';
+      }
+      setzeEigene(meine);
+      setzeAbweisung(null);
+      setzeFeldFehler({});
+    } catch {
+      setzeFehler(AUSFALL_NEU_LADEN);
+    } finally {
+      setzeLaeuft(false);
+    }
   };
 
   const titel = bearbeiten ? 'Nachgetragene Rechnung bearbeiten' : 'Rechnung nachtragen';
@@ -489,6 +592,23 @@ export default function NachtragMaske() {
             sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}
           >
             {fehler === null ? null : <Alert severity="error">{fehler}</Alert>}
+            {vorhanden === null ? null : (
+              <Konfliktmeldung
+                ursache={abweisung}
+                onNeuLaden={() => {
+                  void neuLaden(vorhanden);
+                }}
+                uebersicht={UEBERSICHT}
+              />
+            )}
+            {eigene === null ? null : (
+              <EigeneEingaben
+                werte={eigene}
+                onVerwerfen={() => {
+                  setzeEigene(null);
+                }}
+              />
+            )}
             <TextField
               type="search"
               size="small"

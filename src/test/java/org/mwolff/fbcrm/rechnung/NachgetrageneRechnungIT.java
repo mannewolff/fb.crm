@@ -14,6 +14,7 @@ import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mwolff.fbcrm.AbstractIntegrationTest;
+import org.mwolff.fbcrm.Stand;
 import org.mwolff.fbcrm.auth.Anmeldung;
 import org.mwolff.fbcrm.auth.Konten;
 import org.mwolff.fbcrm.auth.domain.AccountRepository;
@@ -51,6 +52,7 @@ class NachgetrageneRechnungIT extends AbstractIntegrationTest {
   private static final Instant ANGELEGT = Instant.parse("2026-09-01T08:00:00Z");
   private static final String FIRMA = "Adler AG";
   private static final String PFAD = "/api/nachgetragene-rechnungen";
+  private static final String TABELLE = "rechnung_nachgetragen";
 
   private static final byte[] PDF =
       "%PDF-1.7\nein frueheres Original\n%%EOF\n".getBytes(StandardCharsets.UTF_8);
@@ -104,6 +106,17 @@ class NachgetrageneRechnungIT extends AbstractIntegrationTest {
     return rest.exchange(pfad, methode, new HttpEntity<>(rumpf, sitzung), typ);
   }
 
+  /** Ein geschuetzter Weg, auf dem aktuellen Stand der Zeile vorgelegt (Plan #415, E3). */
+  private <T> ResponseEntity<T> rufAufStand(
+      final long id,
+      final String pfad,
+      final HttpMethod methode,
+      final @Nullable Object rumpf,
+      final Class<T> typ) {
+    return rest.exchange(
+        pfad, methode, new HttpEntity<>(rumpf, Stand.aktuell(sitzung, jdbc, TABELLE, id)), typ);
+  }
+
   private Map<String, Object> rumpf(final String nummer, final String netto, final String brutto) {
     final Map<String, Object> rumpf = new LinkedHashMap<>();
     rumpf.put("firmaId", Long.valueOf(firmaId));
@@ -136,8 +149,7 @@ class NachgetrageneRechnungIT extends AbstractIntegrationTest {
               }
             },
             dateikopf));
-    final HttpHeaders kopf = new HttpHeaders();
-    kopf.addAll(sitzung);
+    final HttpHeaders kopf = Stand.aktuell(sitzung, jdbc, TABELLE, id);
     kopf.setContentType(MediaType.MULTIPART_FORM_DATA);
     return rest.exchange(
         PFAD + "/" + id + "/dokument", HttpMethod.POST, new HttpEntity<>(felder, kopf), typ);
@@ -216,13 +228,15 @@ class NachgetrageneRechnungIT extends AbstractIntegrationTest {
 
     // When
     final ResponseEntity<NachtragResponse> bezahlt =
-        ruf(
+        rufAufStand(
+            id,
             PFAD + "/" + id + "/zustand",
             HttpMethod.PUT,
             Map.of("zustand", "BEZAHLT"),
             NachtragResponse.class);
     final ResponseEntity<NachtragResponse> zurueck =
-        ruf(
+        rufAufStand(
+            id,
             PFAD + "/" + id + "/zustand",
             HttpMethod.PUT,
             Map.of("zustand", "GESTELLT"),
@@ -241,7 +255,8 @@ class NachgetrageneRechnungIT extends AbstractIntegrationTest {
 
     // When
     final ResponseEntity<NachtragResponse> antwort =
-        ruf(
+        rufAufStand(
+            id,
             PFAD + "/" + id,
             HttpMethod.PUT,
             rumpf("RE-2026-5a", "200.00", "238.00"),
@@ -253,6 +268,37 @@ class NachgetrageneRechnungIT extends AbstractIntegrationTest {
     assertThat(geaendert.nummer()).isEqualTo("RE-2026-5a");
     assertThat(geaendert.netto()).isEqualByComparingTo("200.00");
     assertThat(geaendert.brutto()).isEqualByComparingTo("238.00");
+  }
+
+  @Test
+  void aendern_onAnOutdatedStand_thenConflictAndTheFirstStandStays() {
+    // Given — #411, Kriterium 1: ein anderes Fenster hat inzwischen gespeichert
+    final long id = nachgetragen("RE-2026-5");
+    final HttpHeaders veraltet = Stand.aktuell(sitzung, jdbc, TABELLE, id);
+    final NachtragResponse erster =
+        Objects.requireNonNull(
+            rufAufStand(
+                    id,
+                    PFAD + "/" + id,
+                    HttpMethod.PUT,
+                    rumpf("RE-2026-5a", "200.00", "238.00"),
+                    NachtragResponse.class)
+                .getBody());
+
+    // When
+    final ResponseEntity<String> zweiter =
+        rest.exchange(
+            PFAD + "/" + id,
+            HttpMethod.PUT,
+            new HttpEntity<>(rumpf("RE-2026-5b", "300.00", "357.00"), veraltet),
+            String.class);
+
+    // Then
+    assertThat(erster.version()).isEqualTo(1L);
+    assertThat(zweiter.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+    assertThat(zweiter.getBody()).contains("\"konflikt\"").contains("\"veraltet\"");
+    assertThat(ruf(PFAD + "/" + id, HttpMethod.GET, null, NachtragResponse.class).getBody())
+        .isEqualTo(erster);
   }
 
   @Test
@@ -293,11 +339,13 @@ class NachgetrageneRechnungIT extends AbstractIntegrationTest {
     ladeHoch(id, PDF, NachtragResponse.class);
 
     // When
-    final ResponseEntity<Void> antwort =
-        ruf(PFAD + "/" + id + "/dokument", HttpMethod.DELETE, null, Void.class);
+    final ResponseEntity<NachtragResponse> antwort =
+        rufAufStand(
+            id, PFAD + "/" + id + "/dokument", HttpMethod.DELETE, null, NachtragResponse.class);
 
     // Then
-    assertThat(antwort.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
+    assertThat(antwort.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(Objects.requireNonNull(antwort.getBody()).dokument()).isFalse();
     assertThat(dokument(id).getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
     assertThat(
             Objects.requireNonNull(

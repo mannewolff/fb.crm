@@ -22,15 +22,21 @@ import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Optional;
 import org.jspecify.annotations.Nullable;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.mwolff.fbcrm.common.Urheber;
+import org.mwolff.fbcrm.common.web.Bedingungskopf;
 import org.mwolff.fbcrm.common.web.GlobalExceptionHandler;
 import org.mwolff.fbcrm.rechnung.application.BetraegePassenNicht;
 import org.mwolff.fbcrm.rechnung.application.DokumentNichtAnnehmbar;
@@ -39,6 +45,7 @@ import org.mwolff.fbcrm.rechnung.application.NachgetrageneRechnungMitFirma;
 import org.mwolff.fbcrm.rechnung.application.NachtragAendernUseCase;
 import org.mwolff.fbcrm.rechnung.application.NachtragAnlegenUseCase;
 import org.mwolff.fbcrm.rechnung.application.NachtragDokumentUseCase;
+import org.mwolff.fbcrm.rechnung.application.NachtragGeaendert;
 import org.mwolff.fbcrm.rechnung.application.NachtragLesenUseCase;
 import org.mwolff.fbcrm.rechnung.application.NachtragLoeschenUseCase;
 import org.mwolff.fbcrm.rechnung.application.NachtragNichtGefunden;
@@ -52,7 +59,11 @@ import org.mwolff.fbcrm.rechnung.domain.Rechnungszustand;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.web.method.annotation.AuthenticationPrincipalArgumentResolver;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 /**
@@ -64,6 +75,11 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
  * Entfernen. Dazu die Fehler: 400 mit {@code fieldErrors} fuer die Form des Rumpfs (E9, E10), 422
  * mit {@code fieldErrors} fuer die fachlichen Abweisungen (E23), 404 fuer eine unbekannte Kennung
  * und fuer den Download ohne hinterlegtes Dokument (E17).
+ *
+ * <p><b>Aendern, Zustand, Ablegen und Entfernen des Originals legen den Stand vor</b> (#411,
+ * Kriterium 4; Plan #415, E3, E14): Fuer jeden der vier Wege gilt dasselbe Dreigespann — ohne
+ * {@code If-Match} 428, auf einem alten Stand 409 mit {@code konflikt}, auf dem aktuellen 200 mit
+ * dem erhoehten Stand; die vier Wege laufen je durch dieselben drei parametrisierten Tests.
  */
 @ExtendWith(MockitoExtension.class)
 class NachgetrageneRechnungControllerTest {
@@ -78,6 +94,20 @@ class NachgetrageneRechnungControllerTest {
   private static final String EINZELN = PFAD + "/" + ID;
   private static final byte[] PDF = "%PDF-1.7 Original".getBytes(StandardCharsets.US_ASCII);
 
+  /** Der Stand, den die Maske vorlegt (Plan #415, E2). */
+  private static final long STAND = 3L;
+
+  /** Derselbe Stand als starkes Etikett im Kopf {@code If-Match}. */
+  private static final String VORGELEGT = "\"" + STAND + "\"";
+
+  /** Das angemeldete Konto. */
+  private static final long ANGEMELDET = 31L;
+
+  /** Das Konto, das inzwischen geaendert hat. */
+  private static final long ANNA = 30L;
+
+  private static final Instant ANNAS_AENDERUNG = Instant.parse("2026-10-06T08:42:00Z");
+
   @Mock private NachtragAnlegenUseCase anlegen;
   @Mock private NachtragLesenUseCase lesen;
   @Mock private NachtragAendernUseCase aendern;
@@ -91,16 +121,36 @@ class NachgetrageneRechnungControllerTest {
 
   @BeforeEach
   void baueDenController() {
+    // Die Sitzung wie im Betrieb: die Kennung des Kontos als Principal (Plan #415, E14).
+    SecurityContextHolder.getContext()
+        .setAuthentication(
+            UsernamePasswordAuthenticationToken.authenticated(
+                Long.valueOf(ANGEMELDET), null, List.of()));
     mockMvc =
         MockMvcBuilders.standaloneSetup(
                 new NachgetrageneRechnungController(
                     anlegen, lesen, aendern, loeschen, zustand, dokument))
-            .setControllerAdvice(new GlobalExceptionHandler(konto -> Optional.empty()))
+            .setControllerAdvice(
+                new GlobalExceptionHandler(
+                    konto ->
+                        konto == ANNA ? Optional.of(new Urheber(ANNA, "Anna")) : Optional.empty()))
+            .setCustomArgumentResolvers(
+                new Bedingungskopf.Leser(), new AuthenticationPrincipalArgumentResolver())
             .build();
+  }
+
+  @AfterEach
+  void raeumeDieSitzungAb() {
+    SecurityContextHolder.clearContext();
   }
 
   private static NachgetrageneRechnung rechnung(
       final Rechnungszustand stand, final @Nullable String schluessel) {
+    return rechnung(stand, schluessel, 0L);
+  }
+
+  private static NachgetrageneRechnung rechnung(
+      final Rechnungszustand stand, final @Nullable String schluessel, final long version) {
     return new NachgetrageneRechnung(
         Long.valueOf(ID),
         FIRMA,
@@ -111,7 +161,9 @@ class NachgetrageneRechnungControllerTest {
         stand,
         schluessel,
         ZEIT,
-        ZEIT);
+        ZEIT,
+        version,
+        null);
   }
 
   private static NachgetrageneRechnungMitFirma mitFirma(
@@ -305,11 +357,15 @@ class NachgetrageneRechnungControllerTest {
     when(lesen.lese(ID)).thenReturn(mitFirma(Rechnungszustand.GESTELLT, null));
 
     mockMvc
-        .perform(put(EINZELN).contentType(MediaType.APPLICATION_JSON).content(gueltig()))
+        .perform(
+            put(EINZELN)
+                .header(HttpHeaders.IF_MATCH, VORGELEGT)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(gueltig()))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.nummer").value(NUMMER));
 
-    verify(aendern).aendere(eq(ID), daten.capture());
+    verify(aendern).aendere(eq(ID), daten.capture(), eq(STAND), eq(ANGEMELDET));
     assertThat(daten.getValue().nummer()).isEqualTo(NUMMER);
   }
 
@@ -318,6 +374,7 @@ class NachgetrageneRechnungControllerTest {
     mockMvc
         .perform(
             put(EINZELN)
+                .header(HttpHeaders.IF_MATCH, VORGELEGT)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(rumpf("5", "\"\"", "1.00", "1.00")))
         .andExpect(status().isBadRequest())
@@ -327,19 +384,29 @@ class NachgetrageneRechnungControllerTest {
 
   @Test
   void aendern_withAnUnknownId_thenNotFound() throws Exception {
-    when(aendern.aendere(eq(ID), any())).thenThrow(new NachtragNichtGefunden());
+    when(aendern.aendere(eq(ID), any(), eq(STAND), eq(ANGEMELDET)))
+        .thenThrow(new NachtragNichtGefunden());
 
     mockMvc
-        .perform(put(EINZELN).contentType(MediaType.APPLICATION_JSON).content(gueltig()))
+        .perform(
+            put(EINZELN)
+                .header(HttpHeaders.IF_MATCH, VORGELEGT)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(gueltig()))
         .andExpect(status().isNotFound());
   }
 
   @Test
   void aendern_withANummerAlreadyTaken_thenUnprocessable() throws Exception {
-    when(aendern.aendere(eq(ID), any())).thenThrow(new NummerSchonVergeben());
+    when(aendern.aendere(eq(ID), any(), eq(STAND), eq(ANGEMELDET)))
+        .thenThrow(new NummerSchonVergeben());
 
     mockMvc
-        .perform(put(EINZELN).contentType(MediaType.APPLICATION_JSON).content(gueltig()))
+        .perform(
+            put(EINZELN)
+                .header(HttpHeaders.IF_MATCH, VORGELEGT)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(gueltig()))
         .andExpect(status().isUnprocessableEntity())
         .andExpect(jsonPath("$.fieldErrors.nummer").isArray());
   }
@@ -365,18 +432,23 @@ class NachgetrageneRechnungControllerTest {
     mockMvc
         .perform(
             put(EINZELN + "/zustand")
+                .header(HttpHeaders.IF_MATCH, VORGELEGT)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"zustand\":\"BEZAHLT\"}"))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.zustand").value("BEZAHLT"));
 
-    verify(zustand).setze(ID, Rechnungszustand.BEZAHLT);
+    verify(zustand).setze(ID, Rechnungszustand.BEZAHLT, STAND, ANGEMELDET);
   }
 
   @Test
   void zustand_withoutZiel_thenBadRequest() throws Exception {
     mockMvc
-        .perform(put(EINZELN + "/zustand").contentType(MediaType.APPLICATION_JSON).content("{}"))
+        .perform(
+            put(EINZELN + "/zustand")
+                .header(HttpHeaders.IF_MATCH, VORGELEGT)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{}"))
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.fieldErrors.zustand").isArray());
     verifyNoInteractions(zustand);
@@ -384,11 +456,13 @@ class NachgetrageneRechnungControllerTest {
 
   @Test
   void zustand_withAnEdgeTheRuleForbids_thenConflict() throws Exception {
-    when(zustand.setze(ID, Rechnungszustand.ENTWURF)).thenThrow(new RechnungszustandPasstNicht());
+    when(zustand.setze(ID, Rechnungszustand.ENTWURF, STAND, ANGEMELDET))
+        .thenThrow(new RechnungszustandPasstNicht());
 
     mockMvc
         .perform(
             put(EINZELN + "/zustand")
+                .header(HttpHeaders.IF_MATCH, VORGELEGT)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"zustand\":\"ENTWURF\"}"))
         .andExpect(status().isConflict());
@@ -396,11 +470,13 @@ class NachgetrageneRechnungControllerTest {
 
   @Test
   void zustand_withAnUnknownId_thenNotFound() throws Exception {
-    when(zustand.setze(ID, Rechnungszustand.BEZAHLT)).thenThrow(new NachtragNichtGefunden());
+    when(zustand.setze(ID, Rechnungszustand.BEZAHLT, STAND, ANGEMELDET))
+        .thenThrow(new NachtragNichtGefunden());
 
     mockMvc
         .perform(
             put(EINZELN + "/zustand")
+                .header(HttpHeaders.IF_MATCH, VORGELEGT)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"zustand\":\"BEZAHLT\"}"))
         .andExpect(status().isNotFound());
@@ -456,23 +532,26 @@ class NachgetrageneRechnungControllerTest {
     mockMvc
         .perform(
             multipart(EINZELN + "/dokument")
-                .file(new MockMultipartFile("datei", "original.pdf", "application/pdf", PDF)))
+                .file(new MockMultipartFile("datei", "original.pdf", "application/pdf", PDF))
+                .header(HttpHeaders.IF_MATCH, VORGELEGT))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.dokument").value(true));
 
     // Then
-    verify(dokument).lege(eq(ID), inhalt.capture());
+    verify(dokument).lege(eq(ID), inhalt.capture(), eq(STAND), eq(ANGEMELDET));
     assertThat(inhalt.getValue()).isEqualTo(PDF);
   }
 
   @Test
   void dokumentAblegen_withAFileThatIsNoPdf_thenUnprocessableAtDatei() throws Exception {
-    when(dokument.lege(eq(ID), any())).thenThrow(Dokumentablehnung.keinPdf());
+    when(dokument.lege(eq(ID), any(), eq(STAND), eq(ANGEMELDET)))
+        .thenThrow(Dokumentablehnung.keinPdf());
 
     mockMvc
         .perform(
             multipart(EINZELN + "/dokument")
-                .file(new MockMultipartFile("datei", "rechnung.pdf", "application/pdf", PDF)))
+                .file(new MockMultipartFile("datei", "rechnung.pdf", "application/pdf", PDF))
+                .header(HttpHeaders.IF_MATCH, VORGELEGT))
         .andExpect(status().isUnprocessableEntity())
         .andExpect(
             jsonPath("$.fieldErrors.datei[0]").value(DokumentNichtAnnehmbar.MELDUNG_KEIN_PDF));
@@ -480,26 +559,134 @@ class NachgetrageneRechnungControllerTest {
 
   @Test
   void dokumentAblegen_withAnUnknownId_thenNotFound() throws Exception {
-    when(dokument.lege(anyLong(), any())).thenThrow(new NachtragNichtGefunden());
+    when(dokument.lege(anyLong(), any(), anyLong(), anyLong()))
+        .thenThrow(new NachtragNichtGefunden());
 
     mockMvc
         .perform(
             multipart(EINZELN + "/dokument")
-                .file(new MockMultipartFile("datei", "original.pdf", "application/pdf", PDF)))
+                .file(new MockMultipartFile("datei", "original.pdf", "application/pdf", PDF))
+                .header(HttpHeaders.IF_MATCH, VORGELEGT))
         .andExpect(status().isNotFound());
   }
 
   @Test
-  void dokumentEntfernen_thenNoContent() throws Exception {
-    mockMvc.perform(delete(EINZELN + "/dokument")).andExpect(status().isNoContent());
+  void dokumentEntfernen_thenOkWithoutTheDokumentFlag() throws Exception {
+    when(lesen.lese(ID)).thenReturn(mitFirma(Rechnungszustand.GESTELLT, null));
 
-    verify(dokument).entferne(ID);
+    mockMvc
+        .perform(delete(EINZELN + "/dokument").header(HttpHeaders.IF_MATCH, VORGELEGT))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.dokument").value(false));
+
+    verify(dokument).entferne(ID, STAND, ANGEMELDET);
   }
 
   @Test
   void dokumentEntfernen_withoutDokument_thenNotFound() throws Exception {
-    when(dokument.entferne(ID)).thenThrow(new NachtragNichtGefunden());
+    when(dokument.entferne(ID, STAND, ANGEMELDET)).thenThrow(new NachtragNichtGefunden());
 
-    mockMvc.perform(delete(EINZELN + "/dokument")).andExpect(status().isNotFound());
+    mockMvc
+        .perform(delete(EINZELN + "/dokument").header(HttpHeaders.IF_MATCH, VORGELEGT))
+        .andExpect(status().isNotFound());
+  }
+
+  // --- Stand vorlegen (Plan #415) -----------------------------------------------------------
+
+  /**
+   * Die Anfrage des genannten Wegs, ohne Kopf — jeder Test setzt ihn selbst oder laesst ihn weg.
+   */
+  private static MockHttpServletRequestBuilder anfrageZu(final String weg) {
+    return switch (weg) {
+      case "aendern" -> put(EINZELN).contentType(MediaType.APPLICATION_JSON).content(gueltig());
+      case "zustand" ->
+          put(EINZELN + "/zustand")
+              .contentType(MediaType.APPLICATION_JSON)
+              .content("{\"zustand\":\"BEZAHLT\"}");
+      case "ablegen" ->
+          multipart(EINZELN + "/dokument")
+              .file(new MockMultipartFile("datei", "original.pdf", "application/pdf", PDF));
+      case "entfernen" -> delete(EINZELN + "/dokument");
+      default -> throw new IllegalArgumentException(weg);
+    };
+  }
+
+  /** Der Anwendungsfall des Wegs wirft den Konflikt — mit Stand und Konto aus der Anfrage. */
+  private void wirftKonflikt(final String weg) {
+    final NachtragGeaendert konflikt = new NachtragGeaendert(ANNA, ANGEMELDET, ANNAS_AENDERUNG);
+    switch (weg) {
+      case "aendern" ->
+          when(aendern.aendere(eq(ID), any(), eq(STAND), eq(ANGEMELDET))).thenThrow(konflikt);
+      case "zustand" ->
+          when(zustand.setze(ID, Rechnungszustand.BEZAHLT, STAND, ANGEMELDET)).thenThrow(konflikt);
+      case "ablegen" ->
+          when(dokument.lege(eq(ID), any(), eq(STAND), eq(ANGEMELDET))).thenThrow(konflikt);
+      case "entfernen" -> when(dokument.entferne(ID, STAND, ANGEMELDET)).thenThrow(konflikt);
+      default -> throw new IllegalArgumentException(weg);
+    }
+  }
+
+  /** Prueft, dass der Anwendungsfall des Wegs Stand und Konto bekommen hat. */
+  private void bekamStandUndKonto(final String weg) {
+    switch (weg) {
+      case "aendern" -> verify(aendern).aendere(eq(ID), any(), eq(STAND), eq(ANGEMELDET));
+      case "zustand" -> verify(zustand).setze(ID, Rechnungszustand.BEZAHLT, STAND, ANGEMELDET);
+      case "ablegen" -> verify(dokument).lege(eq(ID), any(), eq(STAND), eq(ANGEMELDET));
+      case "entfernen" -> verify(dokument).entferne(ID, STAND, ANGEMELDET);
+      default -> throw new IllegalArgumentException(weg);
+    }
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"aendern", "zustand", "ablegen", "entfernen"})
+  void schreibenderWeg_withoutIfMatch_thenAnswers428AndChangesNothing(final String weg)
+      throws Exception {
+    // Given — E3: Ohne vorgelegten Stand wird nicht geschrieben.
+
+    // When / Then
+    mockMvc
+        .perform(anfrageZu(weg))
+        .andExpect(status().isPreconditionRequired())
+        .andExpect(jsonPath("$.detail").value(Bedingungskopf.MELDUNG));
+    verifyNoInteractions(aendern, zustand, dokument, lesen);
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"aendern", "zustand", "ablegen", "entfernen"})
+  void schreibenderWeg_withAnOutdatedStand_thenAnswers409WithTheConflict(final String weg)
+      throws Exception {
+    // Given — #411, Kriterium 4: Anna hat die nachgetragene Rechnung inzwischen geaendert.
+    wirftKonflikt(weg);
+
+    // When / Then
+    mockMvc
+        .perform(anfrageZu(weg).header(HttpHeaders.IF_MATCH, VORGELEGT))
+        .andExpect(status().isConflict())
+        .andExpect(jsonPath("$.konflikt.art").value("veraltet"))
+        .andExpect(jsonPath("$.konflikt.geaendertVon").value("Anna"))
+        .andExpect(jsonPath("$.konflikt.geaendertAm").value("2026-10-06T08:42:00Z"))
+        .andExpect(jsonPath("$.konflikt.eigenesFenster").value(false));
+    verifyNoInteractions(lesen);
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"aendern", "zustand", "ablegen", "entfernen"})
+  void schreibenderWeg_withTheCurrentStand_thenAnswers200WithTheRaisedVersion(final String weg)
+      throws Exception {
+    // Given — #411, Kriterium 8: Auf dem aktuellen Stand geht der Schritt unveraendert durch; die
+    // Antwort traegt den erhoehten Stand, den die Oberflaeche beim naechsten Schritt vorlegt.
+    when(lesen.lese(ID))
+        .thenReturn(
+            new NachgetrageneRechnungMitFirma(
+                rechnung(Rechnungszustand.GESTELLT, null, STAND + 1), FIRMA, FIRMENNAME));
+
+    // When
+    mockMvc
+        .perform(anfrageZu(weg).header(HttpHeaders.IF_MATCH, VORGELEGT))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.version").value(STAND + 1));
+
+    // Then
+    bekamStandUndKonto(weg);
   }
 }

@@ -362,7 +362,9 @@ final class Rechnungsdoppel {
         Rechnungszustand.GESTELLT,
         pdfSchluessel,
         ANGELEGT,
-        ANGELEGT);
+        ANGELEGT,
+        0L,
+        null);
   }
 
   /** Die Firma, an die das Angebot geht — mit vollstaendiger Anschrift. */

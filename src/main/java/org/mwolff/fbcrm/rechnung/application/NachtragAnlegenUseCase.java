@@ -75,6 +75,8 @@ public class NachtragAnlegenUseCase {
             Rechnungszustand.GESTELLT,
             null,
             jetzt,
-            jetzt));
+            jetzt,
+            0L,
+            null));
   }
 }

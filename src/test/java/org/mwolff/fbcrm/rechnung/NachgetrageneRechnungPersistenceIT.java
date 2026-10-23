@@ -68,7 +68,9 @@ class NachgetrageneRechnungPersistenceIT extends AbstractIntegrationTest {
         Rechnungszustand.GESTELLT,
         null,
         ANGELEGT,
-        ANGELEGT);
+        ANGELEGT,
+        0L,
+        null);
   }
 
   private NachgetrageneRechnung geschrieben(final NachgetrageneRechnung rechnung) {

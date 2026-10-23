@@ -26,6 +26,7 @@ const NACHTRAG = {
   brutto: 1190.6,
   zustand: 'GESTELLT',
   dokument: true,
+  version: 3,
 };
 
 /** Dieselbe Rechnung nach dem Verengen: Geld in ganzen Cent. */
@@ -39,7 +40,11 @@ const NACHTRAG_VERENGT = {
   bruttoInCent: 119060,
   zustand: 'GESTELLT',
   dokument: true,
+  version: 3,
 };
+
+/** Der Bedingungskopf, mit dem ein geschuetzter Weg den Stand 3 vorlegt (Plan #415, E2). */
+const VORGELEGT = { 'If-Match': '"3"' };
 
 /** Die Angaben der Maske — die Betraege als Dezimaltext mit Punkt. */
 const EINGABE: NachtragEingabe = {
@@ -74,6 +79,10 @@ describe('parseNachtrag', () => {
   it('weist ein fehlendes Kennzeichen des Originals ab', () => {
     expect(() => parseNachtrag({ ...NACHTRAG, dokument: 'ja' })).toThrow(FORMFEHLER);
   });
+
+  it('weist eine fehlende Version ab', () => {
+    expect(() => parseNachtrag({ ...NACHTRAG, version: undefined })).toThrow(FORMFEHLER);
+  });
 });
 
 describe('nachtragDokumentPfad', () => {
@@ -107,15 +116,19 @@ describe('die Wege', () => {
     );
   });
 
-  it('aendert die Eckdaten als Ganzes', async () => {
+  it('aendert die Eckdaten als Ganzes auf dem vorgelegten Stand', async () => {
     const fetchMock = fetchNachPfad({
       'PUT /api/nachgetragene-rechnungen/7': json(200, NACHTRAG),
     });
 
-    expect(await nachtragAendern(7, EINGABE)).toEqual(NACHTRAG_VERENGT);
+    expect(await nachtragAendern(7, 3, EINGABE)).toEqual(NACHTRAG_VERENGT);
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/nachgetragene-rechnungen/7',
-      expect.objectContaining({ method: 'PUT', body: JSON.stringify(EINGABE) }),
+      expect.objectContaining({
+        method: 'PUT',
+        body: JSON.stringify(EINGABE),
+        headers: expect.objectContaining(VORGELEGT) as unknown,
+      }),
     );
   });
 
@@ -138,38 +151,55 @@ describe('die Wege', () => {
       }),
     });
 
-    expect((await setzeNachtragszustand(7, 'BEZAHLT')).zustand).toBe('BEZAHLT');
+    expect((await setzeNachtragszustand(7, 3, 'BEZAHLT')).zustand).toBe('BEZAHLT');
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/nachgetragene-rechnungen/7/zustand',
-      expect.objectContaining({ method: 'PUT', body: JSON.stringify({ zustand: 'BEZAHLT' }) }),
+      expect.objectContaining({
+        method: 'PUT',
+        body: JSON.stringify({ zustand: 'BEZAHLT' }),
+        headers: expect.objectContaining(VORGELEGT) as unknown,
+      }),
     );
   });
 
   it('legt das Original im Teil „datei" ab und gibt den neuen Stand heraus', async () => {
     const gesendet: FormData[] = [];
-    fetchNachPfad({
+    const fetchMock = fetchNachPfad({
       'POST /api/nachgetragene-rechnungen/7/dokument': formularWeg((formular) => {
         gesendet.push(formular);
       }, json(200, NACHTRAG)),
     });
     const datei = new File(['%PDF-1.7'], 'rechnung.pdf', { type: 'application/pdf' });
 
-    await expect(nachtragDokumentAblegen(7, datei)).resolves.toEqual(NACHTRAG_VERENGT);
+    await expect(nachtragDokumentAblegen(7, 3, datei)).resolves.toEqual(NACHTRAG_VERENGT);
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/nachgetragene-rechnungen/7/dokument',
+      expect.objectContaining({ headers: expect.objectContaining(VORGELEGT) as unknown }),
+    );
     expect(gesendet).toHaveLength(1);
     expect([...gesendet[0].keys()]).toEqual(['datei']);
     expect(gesendet[0].get('datei')).toBe(datei);
   });
 
-  it('entfernt das Original', async () => {
+  it('entfernt das Original und gibt den neuen Stand heraus', async () => {
     const fetchMock = fetchNachPfad({
-      'DELETE /api/nachgetragene-rechnungen/7/dokument': leer(204),
+      'DELETE /api/nachgetragene-rechnungen/7/dokument': json(200, {
+        ...NACHTRAG,
+        dokument: false,
+        version: 4,
+      }),
     });
 
-    await nachtragDokumentEntfernen(7);
+    const ohne = await nachtragDokumentEntfernen(7, 3);
 
+    expect(ohne.dokument).toBe(false);
+    expect(ohne.version).toBe(4);
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/nachgetragene-rechnungen/7/dokument',
-      expect.objectContaining({ method: 'DELETE' }),
+      expect.objectContaining({
+        method: 'DELETE',
+        headers: expect.objectContaining(VORGELEGT) as unknown,
+      }),
     );
   });
 });
