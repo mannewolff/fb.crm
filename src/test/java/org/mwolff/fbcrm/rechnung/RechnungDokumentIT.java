@@ -133,7 +133,15 @@ class RechnungDokumentIT extends AbstractIntegrationTest {
     rumpf.put("steuernummer", steuernummer);
     rumpf.put("umsatzsteuerId", "DE123456789");
     rumpf.put("bankverbindung", bankverbindung);
-    ruf("/api/eigene-angaben", HttpMethod.PUT, rumpf, Void.class);
+    // Auf dem aktuellen Stand der eigenen Angaben, wie die Maske (Plan #415, E2).
+    assertThat(
+            rest.exchange(
+                    "/api/eigene-angaben",
+                    HttpMethod.PUT,
+                    new HttpEntity<>(rumpf, Stand.aktuell(sitzung, jdbc, "eigene_angaben", 1L)),
+                    String.class)
+                .getStatusCode())
+        .isEqualTo(HttpStatus.OK);
   }
 
   private long firmaAnlegen(

@@ -451,7 +451,15 @@ class BriefpapierIT extends AbstractIntegrationTest {
     eigene.put("ort", "Bremen");
     eigene.put("steuernummer", "75/123/45678");
     eigene.put("bankverbindung", "DE02 1203 0000 0000 2020 51");
-    ruf("/api/eigene-angaben", HttpMethod.PUT, eigene, Void.class);
+    // Auf dem aktuellen Stand der eigenen Angaben, wie die Maske (Plan #415, E2).
+    assertThat(
+            rest.exchange(
+                    "/api/eigene-angaben",
+                    HttpMethod.PUT,
+                    new HttpEntity<>(eigene, Stand.aktuell(sitzung, jdbc, "eigene_angaben", 1L)),
+                    String.class)
+                .getStatusCode())
+        .isEqualTo(HttpStatus.OK);
     final Map<String, Object> firma = new LinkedHashMap<>();
     firma.put("name", "Adler AG");
     firma.put("strasse", "Hauptstrasse 1");

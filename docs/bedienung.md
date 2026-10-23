@@ -69,8 +69,8 @@ und Löschen des Entwurfs, bei „Rechnung stellen" und bei „Als bezahlt marki
 „Zurück auf gestellt". An einer nachgetragenen Rechnung gilt es in jedem Zustand beim Speichern in
 der Maske „Nachgetragene Rechnung bearbeiten", beim Ersetzen oder Entfernen ihres PDFs, beim Löschen
 und bei „Als bezahlt markieren", „Abschreiben" und „Zurück auf gestellt". Unter „Administration"
-gilt es beim Speichern der Einstellungen zur Rechnung, bei den Eigenen Angaben in der Karte
-„Briefpapier" beim Hochladen, Ersetzen und Entfernen des Briefpapiers und bei „Einstellungen
+gilt es beim Speichern der Einstellungen zur Rechnung. Bei den Eigenen Angaben gilt es beim
+Speichern der Angaben und in der Karte „Briefpapier" beim Hochladen, Ersetzen und Entfernen des Briefpapiers und bei „Einstellungen
 speichern". Bei Firmen und Ansprechpartnern gilt es beim Speichern in den Masken „Firma
 bearbeiten" und „Ansprechpartner bearbeiten" und bei „Stilllegen" und „Wieder aktivieren". In der
 Arbeitszeit gilt es beim Speichern im Dialog „Arbeitszeit ändern" und beim Löschen eines Eintrags.
@@ -157,6 +157,12 @@ Unter „Administration" steht die Meldung oben in der Karte „Rechnung", wenn 
 Einstellungen zur Rechnung seit dem Öffnen gespeichert hat. Muster, nächste Nummer, Steuersatz und
 Zahlungsziel bleiben in den Feldern; „Neu laden" zeigt den aktuellen Stand und die eigenen Werte
 unter „Deine Eingaben".
+
+Bei den Eigenen Angaben steht die Meldung oben in der Karte „Eigene Angaben", wenn ein anderer
+die Angaben seit dem Öffnen gespeichert hat. Die eigenen Werte bleiben in den Feldern; „Neu laden"
+zeigt den aktuellen Stand und die eigenen Werte unter „Deine Eingaben". Beim Stellen einer
+Rechnung gelten die Eigenen Angaben, wie sie in diesem Augenblick sind; eine Änderung daran weist
+das Stellen nicht ab.
 
 In der Karte „Briefpapier" steht die Meldung über dem Briefpapier. Der Briefbogen zählt als ein
 Eintrag: Hat ein anderer inzwischen ein Briefpapier hochgeladen, ersetzt oder entfernt, wird auch

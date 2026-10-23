@@ -4,6 +4,7 @@ import java.time.Instant;
 import java.util.NoSuchElementException;
 import org.mwolff.fbcrm.eigeneangaben.domain.EigeneAngaben;
 import org.mwolff.fbcrm.eigeneangaben.domain.EigeneAngabenRepository;
+import org.mwolff.fbcrm.eigeneangaben.domain.EigeneAngabenStand;
 import org.springframework.stereotype.Repository;
 
 /**
@@ -12,6 +13,9 @@ import org.springframework.stereotype.Repository;
  * <p>Die Zeile ist da — {@code V5__eigene_angaben.sql} legt sie an. Fehlt sie doch, ist das kein
  * Fachfall, sondern ein kaputtes Schema; deshalb fliegt hier eine {@link NoSuchElementException}
  * und keine fachliche Ausnahme.
+ *
+ * <p>Geschrieben wird mit {@code saveAndFlush}: Erst das Schreiben erhoeht die Version, und der
+ * neue Stand geht mit der Antwort hinaus (Plan #415, E2).
  */
 @Repository
 class JpaEigeneAngabenRepository implements EigeneAngabenRepository {
@@ -28,8 +32,23 @@ class JpaEigeneAngabenRepository implements EigeneAngabenRepository {
   }
 
   @Override
-  public void speichere(final EigeneAngaben angaben, final Instant geaendertAm) {
-    jpa.save(EigeneAngabenEntity.aus(angaben, geaendertAm));
+  public EigeneAngabenStand stand() {
+    return standVon(jpa.findById(EigeneAngabenEntity.ZEILE).orElseThrow());
+  }
+
+  @Override
+  public EigeneAngabenStand speichere(
+      final EigeneAngaben angaben,
+      final Instant geaendertAm,
+      final long version,
+      final long konto) {
+    return standVon(
+        jpa.saveAndFlush(EigeneAngabenEntity.aus(angaben, geaendertAm, version, konto)));
+  }
+
+  private static EigeneAngabenStand standVon(final EigeneAngabenEntity zeile) {
+    return new EigeneAngabenStand(
+        zeile.getVersion(), zeile.getGeaendertVon(), zeile.getUpdatedAt());
   }
 
   private static EigeneAngaben toDomain(final EigeneAngabenEntity zeile) {

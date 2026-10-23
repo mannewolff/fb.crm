@@ -1,9 +1,9 @@
-import { screen } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import type { EigeneAngaben } from '../api/eigeneAngaben';
+import type { GespeicherteEigeneAngaben } from '../api/eigeneAngaben';
 import KopfPfad, { KopfPfadProvider } from '../components/KopfPfad';
 import { fetchNachPfad, json, leer, problem } from '../test/fetchNachPfad';
 import type { Routen } from '../test/fetchNachPfad';
@@ -13,7 +13,7 @@ import EigeneAngabenMaske from './EigeneAngabenMaske';
 
 vi.mock('../auth/rechte', () => import('../test/rechteDoppel'));
 
-const ANGABEN: EigeneAngaben = {
+const ANGABEN: GespeicherteEigeneAngaben = {
   name: 'Manfred Wolff',
   berufsbezeichnung: 'Freiberuflicher Softwareentwickler',
   strasse: 'Hauptstraße 1',
@@ -26,10 +26,14 @@ const ANGABEN: EigeneAngaben = {
   steuernummer: '75/123/45678',
   umsatzsteuerId: 'DE123456789',
   bankverbindung: 'DE02120300000000202051',
+  version: 3,
 };
 
+/** Was Anna inzwischen gespeichert hat (#411, Kriterium 1). */
+const ANNAS_STAND: GespeicherteEigeneAngaben = { ...ANGABEN, ort: 'Hamburg', version: 4 };
+
 /** Die frische Instanz: die Zeile steht, aber kein Feld ist gepflegt. */
-const LEER: EigeneAngaben = {
+const LEER: GespeicherteEigeneAngaben = {
   name: null,
   berufsbezeichnung: null,
   strasse: null,
@@ -42,6 +46,7 @@ const LEER: EigeneAngaben = {
   steuernummer: null,
   umsatzsteuerId: null,
   bankverbindung: null,
+  version: 0,
 };
 
 const PFAD = 'GET /api/eigene-angaben';
@@ -89,6 +94,45 @@ function feld(name: string) {
 
 function speichern() {
   return screen.getByRole('button', { name: 'Speichern' });
+}
+
+/** Die Angaben ohne Stand — so, wie die Maske sie als Rumpf schickt. */
+function rumpf(angaben: GespeicherteEigeneAngaben): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(angaben).filter(([feld]) => feld !== 'version'));
+}
+
+/** Heute um die genannte Uhrzeit in der Ortszeit — die Meldung nennt dann nur die Uhrzeit. */
+function heuteUm(stunde: number, minute: number): string {
+  const zeitpunkt = new Date();
+  zeitpunkt.setHours(stunde, minute, 0, 0);
+  return zeitpunkt.toISOString();
+}
+
+/** Die Abweisung des Servers, wie `GlobalExceptionHandler` sie schreibt (Plan #415, E4). */
+function abweisung(geaendertVon: string): () => Response {
+  return json(409, {
+    title: 'Conflict',
+    status: 409,
+    detail: 'Dieser Eintrag wurde inzwischen geändert.',
+    konflikt: { art: 'veraltet', geaendertAm: heuteUm(10, 42), eigenesFenster: false, geaendertVon },
+  });
+}
+
+/** Antwortet der Reihe nach mit den Antworten — beim ersten Aufruf mit der ersten. */
+function nacheinander(...antworten: readonly (() => Response)[]): () => Response {
+  let aufruf = 0;
+  return () => {
+    const antwort = antworten[Math.min(aufruf, antworten.length - 1)];
+    aufruf += 1;
+    return antwort();
+  };
+}
+
+/** Die Staende, die die PUT-Aufrufe der Maske als `If-Match` vorgelegt haben. */
+function vorgelegteStaende(fetchMock: ReturnType<typeof fetchNachPfad>): readonly unknown[] {
+  return fetchMock.mock.calls
+    .filter(([pfad, init]) => pfad === '/api/eigene-angaben' && init?.method === 'PUT')
+    .map(([, init]) => (init?.headers as Record<string, string> | undefined)?.['If-Match']);
 }
 
 afterEach(() => {
@@ -186,7 +230,7 @@ describe('EigeneAngabenMaske', () => {
     const nutzer = userEvent.setup();
     const fetchMock = fetchMaske({
       [PFAD]: json(200, ANGABEN),
-      [SCHREIBEN]: leer(204),
+      [SCHREIBEN]: json(200, { ...ANGABEN, ort: 'Hamburg', version: 4 }),
     });
 
     renderMaske();
@@ -199,16 +243,110 @@ describe('EigeneAngabenMaske', () => {
       '/api/eigene-angaben',
       expect.objectContaining({
         method: 'PUT',
-        body: JSON.stringify({ ...ANGABEN, ort: 'Hamburg' }),
+        body: JSON.stringify({ ...rumpf(ANGABEN), ort: 'Hamburg' }),
       }),
     );
+    // Plan #415, E2: vorgelegt wird der gelesene Stand.
+    expect(vorgelegteStaende(fetchMock)).toEqual(['"3"']);
+  });
+
+  it('legt beim zweiten Speichern den Stand aus der Antwort des ersten vor', async () => {
+    const nutzer = userEvent.setup();
+    const fetchMock = fetchMaske({
+      [PFAD]: json(200, ANGABEN),
+      [SCHREIBEN]: nacheinander(
+        json(200, { ...ANGABEN, ort: 'Hamburg', version: 4 }),
+        json(200, { ...ANGABEN, ort: 'Kiel', version: 5 }),
+      ),
+    });
+
+    renderMaske();
+    await nutzer.clear(await screen.findByRole('textbox', { name: 'Ort' }));
+    await nutzer.type(feld('Ort'), 'Hamburg');
+    await nutzer.click(speichern());
+    await screen.findByText('Die Angaben sind gespeichert.');
+    await nutzer.clear(feld('Ort'));
+    await nutzer.type(feld('Ort'), 'Kiel');
+    await nutzer.click(speichern());
+
+    // #411, Kriterium 8: Wer nacheinander speichert, merkt vom Schutz nichts.
+    await waitFor(() => {
+      expect(vorgelegteStaende(fetchMock)).toEqual(['"3"', '"4"']);
+    });
+    expect(screen.queryByText('Nicht ausgeführt')).not.toBeInTheDocument();
+  });
+
+  it('Szenario: abgewiesenes Speichern — die Eingaben bleiben, Neu laden stellt sie daneben', async () => {
+    const nutzer = userEvent.setup();
+    const fetchMock = fetchMaske({
+      [PFAD]: nacheinander(json(200, ANGABEN), json(200, ANNAS_STAND)),
+      [SCHREIBEN]: nacheinander(abweisung('Anna'), json(200, { ...ANNAS_STAND, version: 5 })),
+    });
+
+    renderMaske();
+    await nutzer.clear(await screen.findByRole('textbox', { name: 'Telefon' }));
+    await nutzer.type(feld('Telefon'), '040 9876');
+    await nutzer.click(speichern());
+
+    // Abgewiesen: Die Meldung nennt Anna, und die eigenen Werte stehen weiter in den Feldern.
+    const meldung = await screen.findByRole('alert');
+    expect(meldung).toHaveTextContent('Nicht ausgeführt');
+    expect(meldung).toHaveTextContent('Anna hat diesen Eintrag inzwischen geändert (10:42).');
+    expect(screen.queryByText(/nicht gespeichert/u)).not.toBeInTheDocument();
+    expect(screen.queryByText('Die Angaben sind gespeichert.')).not.toBeInTheDocument();
+    expect(feld('Telefon')).toHaveValue('040 9876');
+    expect(feld('Ort')).toHaveValue('Bremen');
+
+    // Neu laden: Annas Stand steht in der Maske, die eigenen Werte daneben zum Kopieren.
+    await nutzer.click(screen.getByRole('button', { name: 'Neu laden' }));
+    await waitFor(() => {
+      expect(feld('Ort')).toHaveValue('Hamburg');
+    });
+    expect(feld('Telefon')).toHaveValue('0421/1234');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    const eigene = screen.getByRole('region', { name: 'Deine Eingaben' });
+    expect(eigene).toHaveTextContent('Telefon');
+    expect(eigene).toHaveTextContent('040 9876');
+    expect(eigene).toHaveTextContent('Bremen');
+
+    // Auf Annas Stand geht das Speichern durch; vorgelegt wird der neu geladene Stand.
+    await nutzer.click(speichern());
+    expect(await screen.findByText('Die Angaben sind gespeichert.')).toBeInTheDocument();
+    expect(vorgelegteStaende(fetchMock)).toEqual(['"3"', '"4"']);
+
+    // „Verwerfen" nimmt die eigenen Werte weg.
+    await nutzer.click(screen.getByRole('button', { name: 'Verwerfen' }));
+    expect(screen.queryByRole('region', { name: 'Deine Eingaben' })).not.toBeInTheDocument();
+  });
+
+  it('meldet einen Ausfall beim Neu laden und laesst die Konfliktmeldung stehen', async () => {
+    const nutzer = userEvent.setup();
+    fetchMaske({
+      [PFAD]: nacheinander(json(200, ANGABEN), leer(503)),
+      [SCHREIBEN]: abweisung('Anna'),
+    });
+
+    renderMaske();
+    await nutzer.clear(await screen.findByRole('textbox', { name: 'Telefon' }));
+    await nutzer.type(feld('Telefon'), '040 9876');
+    await nutzer.click(speichern());
+    await nutzer.click(await screen.findByRole('button', { name: 'Neu laden' }));
+
+    expect(
+      await screen.findByText(
+        'Der aktuelle Stand ist gerade nicht zu erreichen. Bitte später erneut versuchen.',
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Neu laden' })).toBeInTheDocument();
+    expect(feld('Telefon')).toHaveValue('040 9876');
+    expect(screen.queryByRole('region', { name: 'Deine Eingaben' })).not.toBeInTheDocument();
   });
 
   it('schickt ein geleertes Feld als null und nicht als Leerstring', async () => {
     const nutzer = userEvent.setup();
     const fetchMock = fetchMaske({
       [PFAD]: json(200, ANGABEN),
-      [SCHREIBEN]: leer(204),
+      [SCHREIBEN]: json(200, { ...ANGABEN, version: 4 }),
     });
 
     renderMaske();
@@ -223,7 +361,7 @@ describe('EigeneAngabenMaske', () => {
       '/api/eigene-angaben',
       expect.objectContaining({
         body: JSON.stringify({
-          ...ANGABEN,
+          ...rumpf(ANGABEN),
           berufsbezeichnung: null,
           steuernummer: null,
           telefon: '0421/1234',
@@ -288,7 +426,10 @@ describe('EigeneAngabenMaske', () => {
 
   it('nimmt nach dem Speichern auf den neuen Stand zurueck, nicht auf den geladenen', async () => {
     const nutzer = userEvent.setup();
-    fetchMaske({ [PFAD]: json(200, ANGABEN), [SCHREIBEN]: leer(204) });
+    fetchMaske({
+      [PFAD]: json(200, ANGABEN),
+      [SCHREIBEN]: json(200, { ...ANGABEN, ort: 'Hamburg', version: 4 }),
+    });
 
     renderMaske();
     await nutzer.clear(await screen.findByRole('textbox', { name: 'Ort' }));
@@ -333,7 +474,7 @@ describe('EigeneAngabenMaske', () => {
       [SCHREIBEN]: () =>
         new Promise<Response>((fertig) => {
           loese = () => {
-            fertig(new Response(null, { status: 204 }));
+            fertig(json(200, { ...ANGABEN, version: 4 })());
           };
         }),
     });

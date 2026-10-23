@@ -1,6 +1,7 @@
 package org.mwolff.fbcrm.eigeneangaben.web;
 
 import org.jspecify.annotations.Nullable;
+import org.mwolff.fbcrm.eigeneangaben.application.GespeicherteEigeneAngaben;
 import org.mwolff.fbcrm.eigeneangaben.domain.EigeneAngaben;
 
 /**
@@ -24,6 +25,8 @@ import org.mwolff.fbcrm.eigeneangaben.domain.EigeneAngaben;
  * @param steuernummer Steuernummer, oder {@code null}
  * @param umsatzsteuerId Umsatzsteuer-Identifikationsnummer, oder {@code null}
  * @param bankverbindung Bankverbindung, oder {@code null}
+ * @param version der Stand der Zeile, den das Speichern als {@code If-Match} vorlegt (Plan #415,
+ *     E2)
  */
 public record EigeneAngabenResponse(
     @Nullable String name,
@@ -37,10 +40,12 @@ public record EigeneAngabenResponse(
     @Nullable String webadresse,
     @Nullable String steuernummer,
     @Nullable String umsatzsteuerId,
-    @Nullable String bankverbindung) {
+    @Nullable String bankverbindung,
+    long version) {
 
-  /** Die Sicht der Oberflaeche auf die eigenen Angaben. */
-  static EigeneAngabenResponse of(final EigeneAngaben angaben) {
+  /** Die Sicht der Oberflaeche auf die eigenen Angaben samt ihrem Stand. */
+  static EigeneAngabenResponse of(final GespeicherteEigeneAngaben gespeichert) {
+    final EigeneAngaben angaben = gespeichert.angaben();
     return new EigeneAngabenResponse(
         angaben.name(),
         angaben.berufsbezeichnung(),
@@ -53,6 +58,7 @@ public record EigeneAngabenResponse(
         angaben.webadresse(),
         angaben.steuernummer(),
         angaben.umsatzsteuerId(),
-        angaben.bankverbindung());
+        angaben.bankverbindung(),
+        gespeichert.version());
   }
 }

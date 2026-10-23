@@ -352,6 +352,9 @@ describe('Szenarien des Fachplans (E16)', () => {
     // Eintrag, auch zwischen Briefpapier und Raendern (Issue #450, E11).
     expect(text).toMatch(/Speichern der\s+Einstellungen zur Rechnung/u);
     expect(text).toMatch(/Der Briefbogen zählt als ein\s+Eintrag/u);
+    // Die Eigenen Angaben sind geschuetzt und weisen das Stellen nicht ab (Issue #454, E10).
+    expect(text).toMatch(/Bei den Eigenen Angaben gilt es beim\s+Speichern der Angaben/u);
+    expect(text).toMatch(/weist\s+das Stellen nicht ab/u);
     // Firma und Ansprechpartner sind geschuetzt, auch beim Stilllegen und Wiederaktivieren
     // (Issue #451, E18).
     expect(text).toMatch(/Bei Firmen und Ansprechpartnern gilt es/u);

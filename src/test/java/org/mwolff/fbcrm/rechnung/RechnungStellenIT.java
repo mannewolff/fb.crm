@@ -222,7 +222,15 @@ class RechnungStellenIT extends AbstractIntegrationTest {
     rumpf.put("steuernummer", steuernummer);
     rumpf.put("umsatzsteuerId", umsatzsteuerId);
     rumpf.put("bankverbindung", bankverbindung);
-    ruf("/api/eigene-angaben", HttpMethod.PUT, rumpf, Void.class);
+    // Auf dem aktuellen Stand der eigenen Angaben, wie die Maske (Plan #415, E2).
+    assertThat(
+            rest.exchange(
+                    "/api/eigene-angaben",
+                    HttpMethod.PUT,
+                    new HttpEntity<>(rumpf, Stand.aktuell(sitzung, jdbc, "eigene_angaben", 1L)),
+                    String.class)
+                .getStatusCode())
+        .isEqualTo(HttpStatus.OK);
   }
 
   private long firmaAnlegen(
@@ -240,7 +248,16 @@ class RechnungStellenIT extends AbstractIntegrationTest {
       final @Nullable String ort) {
     final Map<String, Object> rumpf = firmenrumpf(strasse, plz, ort);
     rumpf.put("name", name);
-    ruf("/api/firmen/" + firmaId, HttpMethod.PUT, rumpf, Void.class);
+    // Auf dem aktuellen Stand der Firma, wie die Maske (Plan #415, E2).
+    assertThat(
+            rest.exchange(
+                    "/api/firmen/" + firmaId,
+                    HttpMethod.PUT,
+                    new HttpEntity<>(rumpf, Stand.aktuell(sitzung, jdbc, "firma", firmaId)),
+                    String.class)
+                .getStatusCode()
+                .is2xxSuccessful())
+        .isTrue();
   }
 
   private static Map<String, Object> firmenrumpf(

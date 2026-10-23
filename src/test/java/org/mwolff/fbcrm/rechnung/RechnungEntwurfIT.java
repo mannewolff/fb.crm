@@ -311,7 +311,15 @@ class RechnungEntwurfIT extends AbstractIntegrationTest {
     rumpf.put("steuernummer", "75/123/45678");
     rumpf.put("umsatzsteuerId", null);
     rumpf.put("bankverbindung", "DE02 1203 0000 0000 2020 51");
-    ruf("/api/eigene-angaben", HttpMethod.PUT, rumpf, Void.class);
+    // Auf dem aktuellen Stand der eigenen Angaben, wie die Maske (Plan #415, E2).
+    assertThat(
+            rest.exchange(
+                    "/api/eigene-angaben",
+                    HttpMethod.PUT,
+                    new HttpEntity<>(rumpf, Stand.aktuell(sitzung, jdbc, "eigene_angaben", 1L)),
+                    String.class)
+                .getStatusCode())
+        .isEqualTo(HttpStatus.OK);
   }
 
   /** Die Zahl der offenen Rechnungen auf der Startseite. */
