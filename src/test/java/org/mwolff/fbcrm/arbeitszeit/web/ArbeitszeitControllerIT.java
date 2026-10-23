@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.tuple;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalTime;
 import java.time.YearMonth;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -133,6 +134,18 @@ class ArbeitszeitControllerIT extends AbstractIntegrationTest {
   private <T> ResponseEntity<T> ruf(
       final String pfad, final HttpMethod methode, final Object rumpf, final Class<T> typ) {
     return rest.exchange(pfad, methode, new HttpEntity<>(rumpf, sitzung), typ);
+  }
+
+  /*
+   * Ein Aendern, wie die Maske es schickt: auf dem aktuellen Stand der Zeile (Plan #415, E2). Den
+   * Schutz selbst pruefen die Tests, die den Kopf weglassen oder einen alten Stand vorlegen.
+   */
+  private <T> ResponseEntity<T> aendere(final long id, final Object rumpf, final Class<T> typ) {
+    return rest.exchange(
+        PFAD + "/" + id,
+        HttpMethod.PUT,
+        new HttpEntity<>(rumpf, Stand.aktuell(sitzung, jdbc, "arbeitszeit", id)),
+        typ);
   }
 
   private static long kennung(final AngebotPositionResponse position) {
@@ -277,11 +290,7 @@ class ArbeitszeitControllerIT extends AbstractIntegrationTest {
 
     // When
     final ResponseEntity<ZeiteintragResponse> geaendert =
-        ruf(
-            PFAD + "/" + id,
-            HttpMethod.PUT,
-            eintrag(konzeptionId, "09:00", "12:00"),
-            ZeiteintragResponse.class);
+        aendere(id, eintrag(konzeptionId, "09:00", "12:00"), ZeiteintragResponse.class);
 
     // Then
     assertThat(geaendert.getStatusCode()).isEqualTo(HttpStatus.OK);
@@ -289,16 +298,55 @@ class ArbeitszeitControllerIT extends AbstractIntegrationTest {
   }
 
   @Test
-  void aendern_whenTheEntryIsUnknown_thenAnswers404() {
-    // Given — die Kennung steht im Pfad.
-    // When / Then
+  void aendern_onAnOutdatedStand_thenAnswers409AndTheRowKeepsTheFirstChange() {
+    // Given — #411, Kriterium 1: ein erstes Aendern hat den Stand von 0 auf 1 gehoben.
+    final long id = erfassteKennung("09:00", "11:00");
+    final ResponseEntity<String> erstes =
+        aendere(id, eintrag(konzeptionId, "09:00", "12:00"), String.class);
+    assertThat(erstes.getStatusCode()).as(erstes.getBody()).isEqualTo(HttpStatus.OK);
+    final HttpHeaders alterStand = new HttpHeaders();
+    alterStand.putAll(sitzung);
+    alterStand.setIfMatch("\"0\"");
+
+    // When — ein zweites Aendern legt noch den Stand 0 vor.
+    final ResponseEntity<String> abgewiesen =
+        rest.exchange(
+            PFAD + "/" + id,
+            HttpMethod.PUT,
+            new HttpEntity<>(eintrag(konzeptionId, "09:00", "10:00"), alterStand),
+            String.class);
+
+    // Then — 409 mit dem Konflikt, und der Eintrag traegt die erste Aenderung auf Stand 1.
+    assertThat(abgewiesen.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+    assertThat(abgewiesen.getBody()).contains("\"konflikt\"").contains("\"veraltet\"");
+    assertThat(lieseDenMonat(MONAT).tage().get(0).eintraege())
+        .singleElement()
+        .extracting(
+            ArbeitszeitMonatResponse.Zeitzeile::bis, ArbeitszeitMonatResponse.Zeitzeile::version)
+        .containsExactly(LocalTime.of(12, 0), 1L);
+  }
+
+  @Test
+  void aendern_withoutIfMatch_thenAnswers428() {
+    // Given
+    final long id = erfassteKennung("09:00", "11:00");
+
+    // When / Then — E3: ohne vorgelegten Stand wird nicht geschrieben.
     assertThat(
             ruf(
-                    PFAD + "/999",
+                    PFAD + "/" + id,
                     HttpMethod.PUT,
                     eintrag(konzeptionId, "09:00", "12:00"),
                     String.class)
                 .getStatusCode())
+        .isEqualTo(HttpStatus.PRECONDITION_REQUIRED);
+  }
+
+  @Test
+  void aendern_whenTheEntryIsUnknown_thenAnswers404() {
+    // Given — die Kennung steht im Pfad.
+    // When / Then
+    assertThat(aendere(999L, eintrag(konzeptionId, "09:00", "12:00"), String.class).getStatusCode())
         .isEqualTo(HttpStatus.NOT_FOUND);
   }
 
@@ -313,13 +361,7 @@ class ArbeitszeitControllerIT extends AbstractIntegrationTest {
 
     // Then — derselbe Eintrag ist danach nicht mehr aenderbar.
     assertThat(geloescht.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
-    assertThat(
-            ruf(
-                    PFAD + "/" + id,
-                    HttpMethod.PUT,
-                    eintrag(konzeptionId, "09:00", "12:00"),
-                    String.class)
-                .getStatusCode())
+    assertThat(aendere(id, eintrag(konzeptionId, "09:00", "12:00"), String.class).getStatusCode())
         .isEqualTo(HttpStatus.NOT_FOUND);
   }
 
@@ -586,11 +628,7 @@ class ArbeitszeitControllerIT extends AbstractIntegrationTest {
 
     // When — ein PUT ohne Feld accountId
     final ResponseEntity<ZeiteintragResponse> korrigiert =
-        ruf(
-            PFAD + "/" + bensEintrag,
-            HttpMethod.PUT,
-            eintrag(konzeptionId, "08:00", "16:00"),
-            ZeiteintragResponse.class);
+        aendere(bensEintrag, eintrag(konzeptionId, "08:00", "16:00"), ZeiteintragResponse.class);
 
     // Then — die Zeiten sind geaendert, und der Eintrag gehoert weiter Ben.
     assertThat(korrigiert.getStatusCode()).isEqualTo(HttpStatus.OK);
@@ -599,9 +637,8 @@ class ArbeitszeitControllerIT extends AbstractIntegrationTest {
 
     // When — erst ein PUT mit genanntem anderem Konto haengt ihn um.
     final ResponseEntity<ZeiteintragResponse> umgehaengt =
-        ruf(
-            PFAD + "/" + bensEintrag,
-            HttpMethod.PUT,
+        aendere(
+            bensEintrag,
             fuer(manneId, eintrag(konzeptionId, "08:00", "16:00")),
             ZeiteintragResponse.class);
 
@@ -621,11 +658,7 @@ class ArbeitszeitControllerIT extends AbstractIntegrationTest {
 
     // When
     final ResponseEntity<String> abgewiesen =
-        ruf(
-            PFAD + "/" + mannesEintrag,
-            HttpMethod.PUT,
-            eintrag(konzeptionId, "09:00", "12:00"),
-            String.class);
+        aendere(mannesEintrag, eintrag(konzeptionId, "09:00", "12:00"), String.class);
 
     // Then
     assertThat(abgewiesen.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);

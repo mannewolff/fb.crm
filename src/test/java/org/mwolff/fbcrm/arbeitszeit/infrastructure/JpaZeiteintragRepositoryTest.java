@@ -107,14 +107,14 @@ class JpaZeiteintragRepositoryTest {
   @Test
   void save_thenHandsEveryFieldToTheRow() {
     // Given
-    when(zeilen.save(any(ZeiteintragEntity.class)))
+    when(zeilen.saveAndFlush(any(ZeiteintragEntity.class)))
         .thenReturn(zeile(KONZEPTION, "2026-11-12", "09:00", "10:45"));
 
     // When
     repository.save(zeiteintrag("09:00", "10:45"));
 
     // Then
-    verify(zeilen).save(gespeicherte.capture());
+    verify(zeilen).saveAndFlush(gespeicherte.capture());
     assertThat(gespeicherte.getValue())
         .extracting(
             ZeiteintragEntity::getId,
@@ -139,7 +139,7 @@ class JpaZeiteintragRepositoryTest {
   @Test
   void save_thenReturnsTheStoredEntryWithItsId() {
     // Given
-    when(zeilen.save(any(ZeiteintragEntity.class)))
+    when(zeilen.saveAndFlush(any(ZeiteintragEntity.class)))
         .thenReturn(zeile(KONZEPTION, "2026-11-12", "09:00", "10:45"));
 
     // When
@@ -147,6 +147,37 @@ class JpaZeiteintragRepositoryTest {
 
     // Then
     assertThat(gesichert.id()).isEqualTo(EINTRAG_ID);
+  }
+
+  @Test
+  void save_thenHandsVersionAndUrheberToTheRowAndBack() {
+    // Given — Plan #415, E1, E14: Stand und Urheber gehen in beide Richtungen durch.
+    final Zeiteintrag geaendert =
+        new Zeiteintrag(
+            EINTRAG_ID,
+            ANNA,
+            KONZEPTION,
+            TAG,
+            LocalTime.of(9, 0),
+            LocalTime.of(10, 45),
+            ANGELEGT,
+            GEAENDERT,
+            3L,
+            Long.valueOf(BEN));
+    when(zeilen.saveAndFlush(any(ZeiteintragEntity.class)))
+        .thenReturn(ZeiteintragEntity.aus(geaendert));
+
+    // When
+    final Zeiteintrag gesichert = repository.save(geaendert);
+
+    // Then
+    verify(zeilen).saveAndFlush(gespeicherte.capture());
+    assertThat(gespeicherte.getValue())
+        .extracting(ZeiteintragEntity::getVersion, ZeiteintragEntity::getGeaendertVon)
+        .containsExactly(3L, Long.valueOf(BEN));
+    assertThat(gesichert)
+        .extracting(Zeiteintrag::version, Zeiteintrag::geaendertVon)
+        .containsExactly(3L, Long.valueOf(BEN));
   }
 
   @Test

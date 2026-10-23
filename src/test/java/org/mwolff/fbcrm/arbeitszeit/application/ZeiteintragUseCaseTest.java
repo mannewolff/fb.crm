@@ -2,7 +2,9 @@ package org.mwolff.fbcrm.arbeitszeit.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
+import static org.assertj.core.api.Assertions.catchThrowableOfType;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -35,6 +37,7 @@ import org.mwolff.fbcrm.auth.application.GetCurrentAccountUseCase;
 import org.mwolff.fbcrm.auth.application.MitarbeitendeVerwaltung;
 import org.mwolff.fbcrm.auth.domain.Account;
 import org.mwolff.fbcrm.auth.domain.Role;
+import org.mwolff.fbcrm.common.Bearbeitungskonflikt;
 import org.mwolff.fbcrm.firma.application.FirmaNichtGefunden;
 import org.mwolff.fbcrm.firma.domain.FirmaRepository;
 import org.springframework.http.HttpStatus;
@@ -74,6 +77,9 @@ class ZeiteintragUseCaseTest {
   private static final long CLARA = 3L;
   private static final long LEA = 6L;
   private static final long UNBEKANNT = 999L;
+
+  /** Der Stand, den die Zeiteintraege des {@link Zeitdoppel} tragen und den die Ansicht vorlegt. */
+  private static final long STAND = 0L;
 
   private static final LocalDate DRITTER = LocalDate.of(2026, 11, 3);
   private static final LocalDate VIERTER = LocalDate.of(2026, 11, 4);
@@ -187,6 +193,7 @@ class ZeiteintragUseCaseTest {
     return useCase.aendern(
         anfragend,
         EINTRAG,
+        STAND,
         Optional.empty(),
         angebotPositionId,
         Zeitdoppel.TAG,
@@ -434,7 +441,127 @@ class ZeiteintragUseCaseTest {
                 LocalTime.of(9, 0),
                 LocalTime.of(12, 0),
                 Zeitdoppel.FRUEHER,
-                Zeitdoppel.JETZT));
+                Zeitdoppel.JETZT,
+                STAND,
+                Long.valueOf(ANNA)));
+  }
+
+  @Test
+  void aendern_onAnOutdatedStand_thenRejectsWithUrheberAndTimeAndStoresNothing() {
+    // Given — #411, Kriterium 1: Ben hat den Eintrag inzwischen geaendert, sein Stand ist 1.
+    eintragGibtEs(
+        new Zeiteintrag(
+            Long.valueOf(EINTRAG),
+            ANNA,
+            Zeitdoppel.KONZEPTION_ID,
+            Zeitdoppel.TAG,
+            LocalTime.of(9, 0),
+            LocalTime.of(11, 0),
+            Zeitdoppel.FRUEHER,
+            Zeitdoppel.JETZT,
+            STAND + 1,
+            Long.valueOf(BEN)));
+
+    // When
+    final ZeiteintragGeaendert konflikt =
+        catchThrowableOfType(
+            ZeiteintragGeaendert.class, () -> aendern(Zeitdoppel.KONZEPTION_ID, "09:00", "12:00"));
+
+    // Then — der Konflikt nennt Urheber, Handelnden und Zeitpunkt; geschrieben wurde nichts.
+    assertThat(konflikt.art()).isEqualTo(Bearbeitungskonflikt.Art.VERALTET);
+    assertThat(konflikt.urheberKonto()).hasValue(BEN);
+    assertThat(konflikt.handelndesKonto()).isEqualTo(ANNA);
+    assertThat(konflikt.zeitpunkt()).hasValue(Zeitdoppel.JETZT);
+    verify(zeiten, never()).save(any());
+  }
+
+  @Test
+  void aendern_onAnOutdatedStand_thenRejectsBeforeAnyBusinessRule() {
+    // Given — Plan #415, E1: der Vergleich kommt vor Raster, Buchbarkeit und Ueberschneidung. Die
+    // Eingabe verstiesse gegen das Raster, gemeldet wird trotzdem der Konflikt.
+    eintragGibtEs(
+        new Zeiteintrag(
+            Long.valueOf(EINTRAG),
+            ANNA,
+            Zeitdoppel.KONZEPTION_ID,
+            Zeitdoppel.TAG,
+            LocalTime.of(9, 0),
+            LocalTime.of(11, 0),
+            Zeitdoppel.FRUEHER,
+            Zeitdoppel.JETZT,
+            STAND + 2,
+            null));
+
+    // When / Then
+    assertThatExceptionOfType(ZeiteintragGeaendert.class)
+        .isThrownBy(() -> aendern(Zeitdoppel.SCHULUNG_ID, "09:10", "12:00"));
+    verify(zeiten, never()).findImZeitraumFuerKonto(any(), any(), anyLong());
+  }
+
+  @Test
+  void aendern_byACLevelOnAForeignEntryWithAnOutdatedStand_thenRejectsAsWell() {
+    // Given — #410: auch die Korrektur eines fremden Eintrags durch ein C-Level ist geschuetzt.
+    eintragGibtEs(
+        new Zeiteintrag(
+            Long.valueOf(EINTRAG),
+            BEN,
+            Zeitdoppel.KONZEPTION_ID,
+            Zeitdoppel.TAG,
+            LocalTime.of(9, 0),
+            LocalTime.of(11, 0),
+            Zeitdoppel.FRUEHER,
+            Zeitdoppel.JETZT,
+            STAND + 1,
+            Long.valueOf(BEN)));
+
+    // When
+    final ZeiteintragGeaendert konflikt =
+        catchThrowableOfType(
+            ZeiteintragGeaendert.class,
+            () -> aendern(MANFRED, Zeitdoppel.KONZEPTION_ID, "09:00", "12:00"));
+
+    // Then
+    assertThat(konflikt.handelndesKonto()).isEqualTo(MANFRED);
+    verify(zeiten, never()).save(any());
+  }
+
+  @Test
+  void aendern_aForeignEntryOfAnEmployee_thenReportsNotFoundBeforeTheStand() {
+    // Given — E7 vor E1: einem Employee verriete ein Konflikt Urheber und Zeitpunkt eines
+    // Eintrags, den es fuer ihn nicht gibt.
+    eintragGibtEs(
+        new Zeiteintrag(
+            Long.valueOf(EINTRAG),
+            BEN,
+            Zeitdoppel.KONZEPTION_ID,
+            Zeitdoppel.TAG,
+            LocalTime.of(9, 0),
+            LocalTime.of(11, 0),
+            Zeitdoppel.FRUEHER,
+            Zeitdoppel.JETZT,
+            STAND + 1,
+            Long.valueOf(BEN)));
+
+    // When / Then
+    assertThatExceptionOfType(ZeiteintragNichtGefunden.class)
+        .isThrownBy(() -> aendern(ANNA, Zeitdoppel.KONZEPTION_ID, "09:00", "12:00"));
+  }
+
+  @Test
+  void aendern_byACLevelOnAForeignEntry_thenRecordsTheCLevelAsUrheber() {
+    // Given — E14: geaendert_von nennt den Handelnden, nicht den Eigentuemer.
+    final Zeiteintrag vorhandener =
+        Zeitdoppel.zeiteintrag(EINTRAG, BEN, Zeitdoppel.KONZEPTION_ID, "09:00", "11:00");
+    eintragGibtEs(vorhandener);
+    amTagLiegtFuer(BEN, vorhandener);
+    speichernGibtZurueck();
+
+    // When
+    final Zeiteintrag geaendert = aendern(MANFRED, Zeitdoppel.KONZEPTION_ID, "09:00", "12:00");
+
+    // Then
+    assertThat(geaendert.geaendertVon()).isEqualTo(MANFRED);
+    assertThat(geaendert.version()).isEqualTo(STAND);
   }
 
   @Test
@@ -564,6 +691,7 @@ class ZeiteintragUseCaseTest {
         useCase.aendern(
             ANNA,
             EINTRAG,
+            STAND,
             Optional.empty(),
             Zeitdoppel.KONZEPTION_ID,
             andererTag,
@@ -672,6 +800,7 @@ class ZeiteintragUseCaseTest {
     return anwendungsfall.aendern(
         anfragend,
         eintrag.requireId(),
+        eintrag.version(),
         person,
         eintrag.angebotPositionId(),
         eintrag.tag(),
@@ -750,6 +879,29 @@ class ZeiteintragUseCaseTest {
     assertThat(bestand.findImZeitraumFuerKonto(VIERTER, VIERTER, BEN)).containsExactly(korrigiert);
     assertThat(vorher.subtract(angefallenAnDerKonzeption(bestand))).isEqualByComparingTo("2.00");
     verify(konten, never()).liste();
+  }
+
+  @Test
+  void aendern_whenBenAndManfredChangeTheSameEntry_thenTheSecondIsRejectedAndBensStandStays() {
+    // Given — #411, Kriterium 1: Ben und Manfred haben Bens Eintrag vom 4. November offen.
+    final Zeitbestand bestand = new Zeitbestand();
+    final ZeiteintragUseCase anwendungsfall = useCaseMit(bestand);
+    final Zeiteintrag geoeffnet = gebucht(bestand, BEN, VIERTER, "08:00", "18:00");
+
+    // When — Ben speichert zuerst, Manfred danach auf dem Stand, den er geoeffnet hatte.
+    final Zeiteintrag bens =
+        aendernIn(anwendungsfall, BEN, geoeffnet, Optional.empty(), "08:00", "16:00");
+    final ZeiteintragGeaendert konflikt =
+        catchThrowableOfType(
+            ZeiteintragGeaendert.class,
+            () ->
+                aendernIn(anwendungsfall, MANFRED, geoeffnet, Optional.empty(), "08:00", "17:00"));
+
+    // Then — Bens Stand bleibt, und der Konflikt nennt Ben als Urheber.
+    assertThat(bens.version()).isEqualTo(geoeffnet.version() + 1);
+    assertThat(bestand.findImZeitraumFuerKonto(VIERTER, VIERTER, BEN)).containsExactly(bens);
+    assertThat(konflikt.urheberKonto()).hasValue(BEN);
+    assertThat(konflikt.handelndesKonto()).isEqualTo(MANFRED);
   }
 
   @Test
@@ -954,10 +1106,11 @@ class ZeiteintragUseCaseTest {
     final ZeiteintragUseCase anwendungsfall = useCaseMit(bestand);
     final Zeiteintrag claras = gebucht(bestand, CLARA, DRITTER, "09:00", "12:00");
 
-    // When
-    aendernIn(anwendungsfall, MANFRED, claras, Optional.empty(), "09:00", "11:00");
+    // When — das zweite Aendern beruht auf dem Stand, den das erste hinterlassen hat.
+    final Zeiteintrag einmal =
+        aendernIn(anwendungsfall, MANFRED, claras, Optional.empty(), "09:00", "11:00");
     final Zeiteintrag korrigiert =
-        aendernIn(anwendungsfall, MANFRED, claras, Optional.of(CLARA), "09:00", "10:00");
+        aendernIn(anwendungsfall, MANFRED, einmal, Optional.of(CLARA), "09:00", "10:00");
 
     // Then
     assertThat(korrigiert.accountId()).isEqualTo(CLARA);

@@ -72,7 +72,8 @@ und bei „Als bezahlt markieren", „Abschreiben" und „Zurück auf gestellt".
 gilt es beim Speichern der Einstellungen zur Rechnung, bei den Eigenen Angaben in der Karte
 „Briefpapier" beim Hochladen, Ersetzen und Entfernen des Briefpapiers und bei „Einstellungen
 speichern". Bei Firmen und Ansprechpartnern gilt es beim Speichern in den Masken „Firma
-bearbeiten" und „Ansprechpartner bearbeiten" und bei „Stilllegen" und „Wieder aktivieren". Das
+bearbeiten" und „Ansprechpartner bearbeiten" und bei „Stilllegen" und „Wieder aktivieren". In der
+Arbeitszeit gilt es beim Speichern im Dialog „Arbeitszeit ändern". Das
 Angebot zählt dabei als Ganzes, mit seinen Positionen und seinem Status; jeder Kommentar ist ein
 Eintrag für sich.
 
@@ -173,6 +174,15 @@ aktuellen Stand, danach wählt man den Eintrag erneut, wenn er noch passt. Firma
 Ansprechpartner sind getrennte Einträge: Wer die Firma ändert, weist das Speichern eines
 Ansprechpartners nicht ab. Eine neue Firma und einen neuen Ansprechpartner legt man immer ohne
 Rückfrage an.
+
+Im Dialog „Arbeitszeit ändern" steht die Meldung oben im Dialog, wenn ein anderer den Eintrag seit
+dem Laden der Monatsliste geändert hat — auch dann, wenn ein C-Level den Eintrag einer anderen
+Person korrigiert. Tag, Uhrzeiten, Person und Position bleiben in den Feldern. „Neu laden" zeigt den
+aktuellen Stand des Eintrags und die eigenen Werte unter „Deine Eingaben"; die Monatsliste dahinter
+lädt dabei mit. Hat der andere den Eintrag inzwischen in einen anderen Monat oder an eine andere
+Person gegeben, sagt der Dialog das; dann schließt man ihn und öffnet den Eintrag in der Liste neu,
+die eigenen Werte stehen bis dahin unter „Deine Eingaben" zum Kopieren. Eine neue Arbeitszeit erfasst
+man mit „Zeit erfassen" immer ohne Rückfrage.
 
 **Ergebnis:** Angebot und Rechnung tragen die Änderungen beider, und keine ist unbemerkt verloren
 gegangen.

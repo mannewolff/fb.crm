@@ -15,8 +15,9 @@ import org.mwolff.fbcrm.arbeitszeit.domain.Zeiteintrag;
  * A20).
  *
  * <p>Die Felder sind die aus A20 und vollstaendig: Je Zeile Kennung, Tag, Uhrzeit, gerechnete
- * Dauer, die Position mit Angebot und Firmenname und die Person mit ihrem aktuellen Namen; je Tag
- * die Summe, dazu die des Monats. Die Oberflaeche rechnet und fragt damit nichts nach.
+ * Dauer, die Position mit Angebot und Firmenname, die Person mit ihrem aktuellen Namen und der
+ * Stand des Eintrags (Plan #415, E2); je Tag die Summe, dazu die des Monats. Die Oberflaeche
+ * rechnet und fragt damit nichts nach.
  *
  * <p><b>Die Person steht an jeder Zeile</b>, gleich welche Auswahl gilt (Plan #426, E14): Eine
  * Antwort, deren Felder von der Auswahl abhaengen, zwaenge den Parser zu einer Fallunterscheidung.
@@ -92,6 +93,8 @@ public record ArbeitszeitMonatResponse(
    * @param stunden die gerechnete Dauer
    * @param position die Position, auf die gebucht wurde
    * @param person die Person, der der Eintrag gehoert, mit ihrem aktuellen Namen
+   * @param version der Stand des Eintrags; der Dialog zum Aendern legt ihn als {@code If-Match} vor
+   *     (Plan #415, E2)
    */
   public record Zeitzeile(
       long id,
@@ -100,7 +103,8 @@ public record ArbeitszeitMonatResponse(
       LocalTime bis,
       BigDecimal stunden,
       BuchungspositionResponse position,
-      PersonResponse person) {
+      PersonResponse person,
+      long version) {
 
     static Zeitzeile of(final Zeitbuchung buchung) {
       final Zeiteintrag eintrag = buchung.eintrag();
@@ -111,7 +115,8 @@ public record ArbeitszeitMonatResponse(
           eintrag.bis(),
           eintrag.stunden(),
           BuchungspositionResponse.of(buchung.position()),
-          PersonResponse.of(buchung.person()));
+          PersonResponse.of(buchung.person()),
+          eintrag.version());
     }
   }
 }

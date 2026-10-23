@@ -98,6 +98,8 @@ export interface Zeitzeile {
   readonly position: Buchungsposition;
   /** Wem der Eintrag gehoert — an jeder Zeile, gleich welche Auswahl gilt (E14). */
   readonly person: Person;
+  /** Der Stand des Eintrags; der Dialog legt ihn beim Aendern als `If-Match` vor (Plan #415, E2). */
+  readonly version: number;
 }
 
 /** Ein Tag mit seinen Zeilen und seiner Summe; ein Tag ohne Eintrag fehlt. */
@@ -148,6 +150,8 @@ export interface Zeiteintrag {
   readonly von: string;
   readonly bis: string;
   readonly stundenInHundertsteln: number;
+  /** Der Stand nach dem Speichern (Plan #415, E2). */
+  readonly version: number;
 }
 
 function parseBuchungsposition(wert: unknown): Buchungsposition {
@@ -199,6 +203,7 @@ function parseZeitzeile(wert: unknown): Zeitzeile {
     stundenInHundertsteln: inHundertsteln(zeile.stunden),
     position: parseBuchungsposition(zeile.position),
     person: parsePerson(zeile.person),
+    version: zahl(zeile.version),
   };
 }
 
@@ -245,6 +250,7 @@ export function parseZeiteintrag(wert: unknown): Zeiteintrag {
     von: text(eintrag.von),
     bis: text(eintrag.bis),
     stundenInHundertsteln: inHundertsteln(eintrag.stunden),
+    version: zahl(eintrag.version),
   };
 }
 
@@ -301,11 +307,19 @@ export function zeiteintragAnlegen(eingabe: ZeiteintragEingabe): Promise<Zeitein
   return apiJson(PFAD, { methode: 'POST', rumpf: eingabe }, parseZeiteintrag);
 }
 
-/** Aendert einen Eintrag (Kriterium 6) — derselbe Rumpf wie beim Erfassen. */
-export function zeiteintragAendern(id: number, eingabe: ZeiteintragEingabe): Promise<Zeiteintrag> {
+/**
+ * Aendert einen Eintrag (Kriterium 6) — derselbe Rumpf wie beim Erfassen, auf dem vorgelegten Stand
+ * (#411, Kriterien 1 und 4; Plan #415, E2). Hat sich der Eintrag seither geaendert, weist der
+ * Server mit dem Bearbeitungskonflikt ab; das Erfassen legt keinen Stand vor (Kriterium 7).
+ */
+export function zeiteintragAendern(
+  id: number,
+  version: number,
+  eingabe: ZeiteintragEingabe,
+): Promise<Zeiteintrag> {
   return apiJson(
     `${PFAD}/${String(id)}`,
-    { methode: 'PUT', rumpf: eingabe },
+    { methode: 'PUT', rumpf: eingabe, version },
     parseZeiteintrag,
   );
 }

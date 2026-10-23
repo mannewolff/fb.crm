@@ -41,10 +41,14 @@ import org.mwolff.fbcrm.arbeitszeit.application.PositionNichtBuchbar;
 import org.mwolff.fbcrm.arbeitszeit.application.UhrzeitNichtImRaster;
 import org.mwolff.fbcrm.arbeitszeit.application.WaehlbarePerson;
 import org.mwolff.fbcrm.arbeitszeit.application.Zeitbuchung;
+import org.mwolff.fbcrm.arbeitszeit.application.ZeiteintragGeaendert;
 import org.mwolff.fbcrm.arbeitszeit.application.ZeiteintragNichtGefunden;
 import org.mwolff.fbcrm.arbeitszeit.application.ZeiteintragUseCase;
 import org.mwolff.fbcrm.arbeitszeit.domain.Zeiteintrag;
+import org.mwolff.fbcrm.common.Urheber;
+import org.mwolff.fbcrm.common.web.Bedingungskopf;
 import org.mwolff.fbcrm.common.web.GlobalExceptionHandler;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -92,6 +96,17 @@ class ArbeitszeitControllerTest {
   private static final long BEN = 22L;
   private static final Optional<Long> OHNE_PERSON = Optional.empty();
 
+  /** Der Stand, den die Ansicht vorlegt (Plan #415, E2). */
+  private static final long STAND = 3L;
+
+  /** Derselbe Stand als starkes Etikett im Kopf {@code If-Match}. */
+  private static final String VORGELEGT = "\"" + STAND + "\"";
+
+  /** Das Konto, das den Eintrag vorher geaendert hat. */
+  private static final long ANNA = 30L;
+
+  private static final Instant VORHIN = Instant.parse("2026-11-12T09:12:00Z");
+
   private static final String RUMPF =
       """
       {"angebotPositionId":101,"tag":"2026-11-12","von":"09:00","bis":"10:45"}
@@ -120,8 +135,12 @@ class ArbeitszeitControllerTest {
     mockMvc =
         MockMvcBuilders.standaloneSetup(
                 new ArbeitszeitController(useCase, monate, buchbare, personen))
-            .setControllerAdvice(new GlobalExceptionHandler(konto -> Optional.empty()))
-            .setCustomArgumentResolvers(new AuthenticationPrincipalArgumentResolver())
+            .setControllerAdvice(
+                new GlobalExceptionHandler(
+                    konto ->
+                        konto == ANNA ? Optional.of(new Urheber(ANNA, "Anna")) : Optional.empty()))
+            .setCustomArgumentResolvers(
+                new Bedingungskopf.Leser(), new AuthenticationPrincipalArgumentResolver())
             .build();
   }
 
@@ -132,6 +151,20 @@ class ArbeitszeitControllerTest {
 
   private static Zeiteintrag eintrag() {
     return eintragVon(ANGEMELDET);
+  }
+
+  private static Zeiteintrag eintragMitStand(final long version) {
+    return new Zeiteintrag(
+        Long.valueOf(EINTRAG),
+        ANGEMELDET,
+        POSITION,
+        TAG,
+        LocalTime.of(9, 0),
+        LocalTime.of(10, 45),
+        ANGELEGT,
+        ANGELEGT,
+        version,
+        Long.valueOf(ANGEMELDET));
   }
 
   private static Zeiteintrag eintragVon(final long accountId) {
@@ -249,6 +282,7 @@ class ArbeitszeitControllerTest {
     when(useCase.aendern(
             ANGEMELDET,
             EINTRAG,
+            STAND,
             OHNE_PERSON,
             POSITION,
             TAG,
@@ -260,6 +294,7 @@ class ArbeitszeitControllerTest {
     mockMvc
         .perform(
             put(PFAD_EINZELN, Long.valueOf(EINTRAG))
+                .header(HttpHeaders.IF_MATCH, VORGELEGT)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(RUMPF))
         .andExpect(status().isOk())
@@ -273,6 +308,7 @@ class ArbeitszeitControllerTest {
     when(useCase.aendern(
             ANGEMELDET,
             EINTRAG,
+            STAND,
             OHNE_PERSON,
             POSITION,
             TAG,
@@ -284,9 +320,90 @@ class ArbeitszeitControllerTest {
     mockMvc
         .perform(
             put(PFAD_EINZELN, Long.valueOf(EINTRAG))
+                .header(HttpHeaders.IF_MATCH, VORGELEGT)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(RUMPF))
         .andExpect(status().isNotFound());
+  }
+
+  @Test
+  void aendern_thenTheAnswerCarriesTheRaisedVersion() throws Exception {
+    // Given — Plan #415, E2: der Bestand hat den Stand beim Schreiben erhoeht.
+    when(useCase.aendern(
+            ANGEMELDET,
+            EINTRAG,
+            STAND,
+            OHNE_PERSON,
+            POSITION,
+            TAG,
+            LocalTime.of(9, 0),
+            LocalTime.of(10, 45)))
+        .thenReturn(eintragMitStand(STAND + 1));
+
+    // When / Then
+    mockMvc
+        .perform(
+            put(PFAD_EINZELN, Long.valueOf(EINTRAG))
+                .header(HttpHeaders.IF_MATCH, VORGELEGT)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(RUMPF))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.version").value(STAND + 1));
+  }
+
+  @Test
+  void aendern_withoutIfMatch_thenAnswers428AndChangesNothing() throws Exception {
+    // When / Then — E3: ohne vorgelegten Stand wird nicht geschrieben.
+    mockMvc
+        .perform(
+            put(PFAD_EINZELN, Long.valueOf(EINTRAG))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(RUMPF))
+        .andExpect(status().isPreconditionRequired())
+        .andExpect(jsonPath("$.detail").value(Bedingungskopf.MELDUNG));
+    verifyNoInteractions(useCase);
+  }
+
+  @Test
+  void aendern_withAnOutdatedStand_thenAnswers409WithTheConflict() throws Exception {
+    // Given — #411, Kriterium 1: Anna hat den Eintrag inzwischen geaendert.
+    when(useCase.aendern(
+            ANGEMELDET,
+            EINTRAG,
+            STAND,
+            OHNE_PERSON,
+            POSITION,
+            TAG,
+            LocalTime.of(9, 0),
+            LocalTime.of(10, 45)))
+        .thenThrow(new ZeiteintragGeaendert(ANNA, ANGEMELDET, VORHIN));
+
+    // When / Then
+    mockMvc
+        .perform(
+            put(PFAD_EINZELN, Long.valueOf(EINTRAG))
+                .header(HttpHeaders.IF_MATCH, VORGELEGT)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(RUMPF))
+        .andExpect(status().isConflict())
+        .andExpect(jsonPath("$.konflikt.art").value("veraltet"))
+        .andExpect(jsonPath("$.konflikt.geaendertVon").value("Anna"))
+        .andExpect(jsonPath("$.konflikt.geaendertAm").value("2026-11-12T09:12:00Z"))
+        .andExpect(jsonPath("$.konflikt.eigenesFenster").value(false));
+  }
+
+  @Test
+  void anlegen_withoutIfMatch_thenCreatesTheEntry() throws Exception {
+    // Given — #411, Kriterium 7: ein neuer Zeiteintrag entsteht ohne Rueckfrage nach dem Stand.
+    when(useCase.anlegen(
+            ANGEMELDET, OHNE_PERSON, POSITION, TAG, LocalTime.of(9, 0), LocalTime.of(10, 45)))
+        .thenReturn(eintragMitStand(0L));
+
+    // When / Then
+    mockMvc
+        .perform(post(PFAD).contentType(MediaType.APPLICATION_JSON).content(RUMPF))
+        .andExpect(status().isCreated())
+        .andExpect(jsonPath("$.version").value(0L));
   }
 
   @Test
@@ -357,6 +474,7 @@ class ArbeitszeitControllerTest {
     when(useCase.aendern(
             ANGEMELDET,
             EINTRAG,
+            STAND,
             Optional.of(Long.valueOf(BEN)),
             POSITION,
             TAG,
@@ -368,6 +486,7 @@ class ArbeitszeitControllerTest {
     mockMvc
         .perform(
             put(PFAD_EINZELN, Long.valueOf(EINTRAG))
+                .header(HttpHeaders.IF_MATCH, VORGELEGT)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(RUMPF_FUER_BEN))
         .andExpect(status().isOk())
@@ -403,7 +522,9 @@ class ArbeitszeitControllerTest {
                 TAG,
                 List.of(
                     new Zeitbuchung(
-                        eintrag(), position(), new WaehlbarePerson(ANGEMELDET, "Manne", true))),
+                        eintragMitStand(STAND),
+                        position(),
+                        new WaehlbarePerson(ANGEMELDET, "Manne", true))),
                 new BigDecimal("1.75"))),
         new BigDecimal("1.75"),
         new BigDecimal("1.00"),
@@ -436,6 +557,8 @@ class ArbeitszeitControllerTest {
         .andExpect(jsonPath("$.tage[0].eintraege[0].person.id").value(Long.valueOf(ANGEMELDET)))
         .andExpect(jsonPath("$.tage[0].eintraege[0].person.name").value("Manne"))
         .andExpect(jsonPath("$.tage[0].eintraege[0].person.aktiv").value(true))
+        // Plan #415, E2: der Dialog zum Aendern legt den Stand der Zeile vor.
+        .andExpect(jsonPath("$.tage[0].eintraege[0].version").value(STAND))
         .andExpect(jsonPath("$.auswahl").value(String.valueOf(ANGEMELDET)));
   }
 

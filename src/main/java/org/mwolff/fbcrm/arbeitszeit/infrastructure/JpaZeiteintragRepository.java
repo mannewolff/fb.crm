@@ -79,9 +79,14 @@ class JpaZeiteintragRepository implements ZeiteintragRepository {
         .toList();
   }
 
+  /*
+   * saveAndFlush statt save, aus demselben Grund wie in JpaAngebotskommentarRepository (Plan #415,
+   * E1): Den Zaehler version erhoeht Hibernate erst beim Schreiben der Zeile, und die Antwort soll
+   * den neuen Stand tragen, den die Ansicht beim naechsten Aendern vorlegt.
+   */
   @Override
   public Zeiteintrag save(final Zeiteintrag zeiteintrag) {
-    return toDomain(zeilen.save(ZeiteintragEntity.aus(zeiteintrag)));
+    return toDomain(zeilen.saveAndFlush(ZeiteintragEntity.aus(zeiteintrag)));
   }
 
   @Override
@@ -147,6 +152,8 @@ class JpaZeiteintragRepository implements ZeiteintragRepository {
         zeile.getVon(),
         zeile.getBis(),
         zeile.getCreatedAt(),
-        zeile.getUpdatedAt());
+        zeile.getUpdatedAt(),
+        zeile.getVersion(),
+        zeile.getGeaendertVon());
   }
 }

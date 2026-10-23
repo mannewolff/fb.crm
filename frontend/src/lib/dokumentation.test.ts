@@ -356,6 +356,9 @@ describe('Szenarien des Fachplans (E16)', () => {
     // (Issue #451, E18).
     expect(text).toMatch(/Bei Firmen und Ansprechpartnern gilt es/u);
     expect(text).toMatch(/Firma und\s+Ansprechpartner sind getrennte Einträge/u);
+    // Das Aendern eines Zeiteintrags ist geschuetzt, das Erfassen bleibt frei (Issue #452).
+    expect(text).toMatch(/Dialog „Arbeitszeit ändern"/u);
+    expect(text).toMatch(/Eine neue Arbeitszeit erfasst\s+man mit „Zeit erfassen" immer ohne Rückfrage/u);
     expect(text).toMatch(/\*\*Ergebnis:\*\*/u);
   });
 

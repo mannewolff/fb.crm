@@ -8,6 +8,7 @@ import org.mwolff.fbcrm.arbeitszeit.application.ArbeitszeitMonatUseCase;
 import org.mwolff.fbcrm.arbeitszeit.application.BuchbarePositionenUseCase;
 import org.mwolff.fbcrm.arbeitszeit.application.Personenauskunft;
 import org.mwolff.fbcrm.arbeitszeit.application.ZeiteintragUseCase;
+import org.mwolff.fbcrm.common.web.Bedingungskopf;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -39,6 +40,11 @@ import org.springframework.web.bind.annotation.RestController;
  * Controller entscheidet nichts. Ein Wert, der kein Monat ist, laesst sich nicht wandeln und kommt
  * als 400 zurueck ({@code GlobalExceptionHandler}); eine eigene Pruefung dafuer waere eine zweite
  * Abschrift derselben Regel.
+ *
+ * <p><b>Aendern legt den Stand vor</b> (#411, Kriterien 1 und 4; Plan #415, E2, E3, E14): {@code
+ * PUT} liest {@link Bedingungskopf} und reicht ihn mit der Kennung des angemeldeten Kontos weiter;
+ * ohne {@code If-Match} antwortet der Weg 428, ohne den Anwendungsfall zu fragen. {@code POST}
+ * bleibt ohne Kopf — ein neuer Zeiteintrag ist nie geschuetzt (Kriterium 7).
  *
  * <p>Keine Aenderung an {@code SecurityConfig}: Die Wege fallen unter das bestehende {@code
  * /api/**} fuer angemeldete Benutzer.
@@ -124,19 +130,24 @@ public class ArbeitszeitController {
   }
 
   /**
-   * Aendert einen Zeiteintrag (Kriterium 6); mit genannter Person haengt ein C-Level ihn um (Plan
-   * #426, E13). Ob das angemeldete Konto den Eintrag schreiben darf, entscheidet der Anwendungsfall
-   * (E6, E7).
+   * Aendert einen Zeiteintrag (Kriterium 6) auf dem vorgelegten Stand; mit genannter Person haengt
+   * ein C-Level ihn um (Plan #426, E13). Ob das angemeldete Konto den Eintrag schreiben darf,
+   * entscheidet der Anwendungsfall (E6, E7).
+   *
+   * <p>Der Kopf steht vor dem Rumpf: Fehlt er, weist der Weg mit 428 ab, bevor der Rumpf gelesen
+   * und geprueft wird (Plan #415, E3).
    */
   @PutMapping("/{id}")
   public ZeiteintragResponse aendern(
       @AuthenticationPrincipal final Long accountId,
       @PathVariable final long id,
+      final Bedingungskopf stand,
       @Valid @RequestBody final ZeiteintragRequest anfrage) {
     return ZeiteintragResponse.of(
         useCase.aendern(
             accountId,
             id,
+            stand.version(),
             Optional.ofNullable(anfrage.accountId()),
             anfrage.angebotPositionId(),
             anfrage.tag(),

@@ -20,6 +20,8 @@ import org.mwolff.fbcrm.arbeitszeit.domain.Zeiteintrag;
  * @param von Beginn
  * @param bis Ende
  * @param stunden die gerechnete Dauer in Stunden mit zwei Nachkommastellen
+ * @param version der Stand des Eintrags; die Ansicht legt ihn beim naechsten Aendern als {@code
+ *     If-Match} wieder vor (Plan #415, E2)
  */
 public record ZeiteintragResponse(
     long id,
@@ -28,7 +30,8 @@ public record ZeiteintragResponse(
     LocalDate tag,
     LocalTime von,
     LocalTime bis,
-    BigDecimal stunden) {
+    BigDecimal stunden,
+    long version) {
 
   /** Derselbe Eintrag in der Sprache der Schnittstelle. */
   static ZeiteintragResponse of(final Zeiteintrag eintrag) {
@@ -39,6 +42,7 @@ public record ZeiteintragResponse(
         eintrag.tag(),
         eintrag.von(),
         eintrag.bis(),
-        eintrag.stunden());
+        eintrag.stunden(),
+        eintrag.version());
   }
 }

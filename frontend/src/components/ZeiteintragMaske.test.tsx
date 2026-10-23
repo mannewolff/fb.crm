@@ -1,5 +1,6 @@
 import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { MemoryRouter } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import ZeiteintragMaske from './ZeiteintragMaske';
@@ -27,6 +28,8 @@ const POSITIONEN = 'GET /api/arbeitszeit/buchbare-positionen';
 const ANLEGEN = 'POST /api/arbeitszeit';
 const AENDERN = 'PUT /api/arbeitszeit/7';
 const PERSONEN = 'GET /api/arbeitszeit/personen';
+/** Der Monat des Tages der Zeile in der Sicht ihrer Person — dort holt „Neu laden" den Stand. */
+const MONAT_DER_ZEILE = 'GET /api/arbeitszeit?monat=2026-11&person=1';
 
 /** Der Tag, den der Dialog beim Erfassen vorbelegt (lokale Zeit, E4). */
 const HEUTE = heute();
@@ -101,6 +104,7 @@ const ZEILE: Zeitzeile = {
   stundenInHundertsteln: 175,
   position: KONZEPTION,
   person: PERSON,
+  version: 2,
 };
 
 /** Dieselbe Zeile, aber auf einer Position, die nicht mehr buchbar ist. */
@@ -114,6 +118,7 @@ const ANGELEGT = {
   von: '09:00:00',
   bis: '10:45:00',
   stunden: 1.75,
+  version: 0,
 };
 
 type Nutzer = ReturnType<typeof userEvent.setup>;
@@ -175,16 +180,71 @@ function angehalten(antwort: () => Response) {
 function renderMaske(zeile: Zeitzeile | null = null, auswahl: Personenauswahl | null = null) {
   const gespeichert = vi.fn();
   const geschlossen = vi.fn();
+  const neuGeladen = vi.fn();
   const view = renderMitTheme(
-    <ZeiteintragMaske
-      zeile={zeile}
-      auswahl={auswahl}
-      onGespeichert={gespeichert}
-      onSchliessen={geschlossen}
-    />,
+    <MemoryRouter>
+      <ZeiteintragMaske
+        zeile={zeile}
+        auswahl={auswahl}
+        onGespeichert={gespeichert}
+        onNeuGeladen={neuGeladen}
+        onSchliessen={geschlossen}
+      />
+    </MemoryRouter>,
   );
-  return { ...view, gespeichert, geschlossen };
+  return { ...view, gespeichert, geschlossen, neuGeladen };
 }
+
+/** Heute um die genannte Uhrzeit in der Ortszeit — die Meldung nennt dann nur die Uhrzeit. */
+function heuteUm(stunde: number, minute: number): string {
+  const zeitpunkt = new Date();
+  zeitpunkt.setHours(stunde, minute, 0, 0);
+  return zeitpunkt.toISOString();
+}
+
+/** Die Abweisung des Servers, wie `GlobalExceptionHandler` sie schreibt (Plan #415, E4, E15). */
+function abweisung(geaendertVon: string): () => Response {
+  return json(409, {
+    title: 'Conflict',
+    status: 409,
+    detail: 'Dieser Eintrag wurde inzwischen geändert.',
+    konflikt: { art: 'veraltet', geaendertAm: heuteUm(10, 42), eigenesFenster: false, geaendertVon },
+  });
+}
+
+/** Antwortet der Reihe nach mit den Antworten — beim ersten Aufruf mit der ersten. */
+function nacheinander(...antworten: readonly (() => Response)[]): () => Response {
+  let aufruf = 0;
+  return () => {
+    const antwort = antworten[Math.min(aufruf, antworten.length - 1)];
+    aufruf += 1;
+    return antwort();
+  };
+}
+
+/** Der Monat der Zeile mit den genannten Eintraegen, wie `ArbeitszeitMonatResponse` ihn schreibt. */
+function monatMit(...eintraege: readonly unknown[]) {
+  return {
+    monat: '2026-11',
+    auswahl: '1',
+    tage: [{ tag: '2026-11-10', eintraege, stunden: 2 }],
+    stunden: 2,
+    stundenFuerKunden: 2,
+    stundenIntern: 0,
+  };
+}
+
+/** Der Eintrag der Zeile, wie ein anderer ihn inzwischen gespeichert hat: bis 11:00, Stand 3. */
+const FREMD_GEAENDERT = {
+  id: 7,
+  tag: '2026-11-10',
+  von: '09:00:00',
+  bis: '11:00:00',
+  stunden: 2,
+  position: KONZEPTION,
+  person: PERSON,
+  version: 3,
+};
 
 /** Fuellt die drei leeren Angaben einer neuen Buchung; der Tag steht schon. */
 async function fuelle(nutzer: Nutzer) {
@@ -840,5 +900,179 @@ describe('ZeiteintragMaske — die Person, fuer die erfasst wird (Plan #426, E12
       'Die Personen sind gerade nicht zu erreichen. Bitte später erneut versuchen.',
     );
     expect(personenFeld()).toHaveValue('');
+  });
+});
+
+describe('ZeiteintragMaske — gleichzeitig aendern (#411, Kriterien 1 bis 3; Plan #415, E2, E12)', () => {
+  it('legt beim Aendern den Stand der Zeile als If-Match vor, beim Erfassen keinen', async () => {
+    const nutzer = userEvent.setup();
+    const abruf = antworten({
+      [POSITIONEN]: json(200, [KONZEPTION]),
+      [AENDERN]: json(200, { ...ANGELEGT, id: 7, version: 3 }),
+    });
+
+    renderMaske(ZEILE);
+    await screen.findByRole('option', { name: 'Konzeption' });
+    await nutzer.click(speicherTaste());
+
+    await vi.waitFor(() => {
+      expect(abruf).toHaveBeenCalledWith(
+        '/api/arbeitszeit/7',
+        expect.objectContaining({
+          headers: expect.objectContaining({ 'If-Match': '"2"' }) as unknown,
+        }),
+      );
+    });
+  });
+
+  it('meldet die Abweisung mit Name und Uhrzeit und laesst die Eingaben stehen', async () => {
+    const nutzer = userEvent.setup();
+    antworten({ [POSITIONEN]: json(200, [KONZEPTION]), [AENDERN]: abweisung('Anna Berg') });
+
+    const { gespeichert } = renderMaske(ZEILE);
+    await nutzer.clear(await screen.findByLabelText(/^bis/));
+    await nutzer.type(bisFeld(), '12:00');
+    await nutzer.click(speicherTaste());
+
+    expect(await screen.findByText('Nicht ausgeführt')).toBeInTheDocument();
+    expect(screen.getByText('Anna Berg hat diesen Eintrag inzwischen geändert (10:42).')).toBeInTheDocument();
+    expect(bisFeld()).toHaveValue('12:00');
+    expect(gespeichert).not.toHaveBeenCalled();
+    // Kein Satz vom Ausfall daneben — die Abweisung ist kein Fehlschlag des Netzes.
+    expect(
+      screen.queryByText('Die Arbeitszeit wurde nicht gespeichert. Bitte später erneut versuchen.'),
+    ).not.toBeInTheDocument();
+  });
+
+  it('holt mit „Neu laden" den neuen Stand, stellt die eigenen Werte daneben und speichert darauf', async () => {
+    const nutzer = userEvent.setup();
+    const abruf = antworten({
+      [POSITIONEN]: json(200, [KONZEPTION]),
+      [AENDERN]: nacheinander(abweisung('Anna Berg'), json(200, { ...ANGELEGT, id: 7, version: 4 })),
+      [MONAT_DER_ZEILE]: json(200, monatMit(FREMD_GEAENDERT)),
+    });
+
+    const { gespeichert, neuGeladen } = renderMaske(ZEILE);
+    await nutzer.clear(await screen.findByLabelText(/^bis/));
+    await nutzer.type(bisFeld(), '12:00');
+    await nutzer.click(speicherTaste());
+    await nutzer.click(await screen.findByRole('button', { name: 'Neu laden' }));
+
+    // Der Stand des Servers steht in den Feldern, die eigenen Werte daneben zum Kopieren.
+    const eigene = within(await screen.findByRole('region', { name: 'Deine Eingaben' }));
+    expect(bisFeld()).toHaveValue('11:00');
+    expect(eigene.getByText('12:00')).toBeInTheDocument();
+    expect(eigene.getByText('IT Bildungshaus — Konzeption')).toBeInTheDocument();
+    expect(screen.queryByText('Nicht ausgeführt')).not.toBeInTheDocument();
+    expect(neuGeladen).toHaveBeenCalledTimes(1);
+
+    // Das naechste Speichern beruht auf dem neuen Stand.
+    await nutzer.click(speicherTaste());
+    await vi.waitFor(() => {
+      expect(gespeichert).toHaveBeenCalledTimes(1);
+    });
+    const kopfe = abruf.mock.calls
+      .filter(([ziel, init]) => ziel === '/api/arbeitszeit/7' && init?.method === 'PUT')
+      .map(([, init]) => (init?.headers as Record<string, string> | undefined)?.['If-Match']);
+    expect(kopfe).toEqual(['"2"', '"3"']);
+  });
+
+  it('nennt einem Employee keine Person unter „Deine Eingaben" — er waehlt keine', async () => {
+    alsRolle('EMPLOYEE');
+    const nutzer = userEvent.setup();
+    fetchNachPfad({
+      [POSITIONEN]: json(200, [KONZEPTION]),
+      [AENDERN]: abweisung('Anna Berg'),
+      [MONAT_DER_ZEILE]: json(200, monatMit(FREMD_GEAENDERT)),
+    });
+
+    renderMaske(ZEILE);
+    await screen.findByRole('option', { name: 'Konzeption' });
+    await nutzer.click(speicherTaste());
+    await nutzer.click(await screen.findByRole('button', { name: 'Neu laden' }));
+
+    const eigene = within(await screen.findByRole('region', { name: 'Deine Eingaben' }));
+    expect(eigene.getByText('10.11.2026')).toBeInTheDocument();
+    expect(eigene.queryByText('Person')).not.toBeInTheDocument();
+  });
+
+  it('nennt eine geleerte Auswahl unter „Deine Eingaben" als leer', async () => {
+    const nutzer = userEvent.setup();
+    antworten({
+      [POSITIONEN]: json(200, [KONZEPTION]),
+      [AENDERN]: abweisung('Anna Berg'),
+      [MONAT_DER_ZEILE]: json(200, monatMit(FREMD_GEAENDERT)),
+    });
+
+    renderMaske(ZEILE);
+    await screen.findByRole('option', { name: BEN.name });
+    await screen.findByRole('option', { name: 'Konzeption' });
+    await nutzer.click(speicherTaste());
+    await screen.findByRole('button', { name: 'Neu laden' });
+    // Nach der Abweisung leert der Mensch beide Auswahlen und laedt dann neu.
+    await nutzer.selectOptions(personenFeld(), '');
+    await nutzer.selectOptions(positionsFeld(), '');
+    await nutzer.click(screen.getByRole('button', { name: 'Neu laden' }));
+
+    const eigene = within(await screen.findByRole('region', { name: 'Deine Eingaben' }));
+    expect(eigene.getAllByText('(leer)')).toHaveLength(2);
+  });
+
+  it('nimmt die eigenen Werte mit „Verwerfen" weg', async () => {
+    const nutzer = userEvent.setup();
+    antworten({
+      [POSITIONEN]: json(200, [KONZEPTION]),
+      [AENDERN]: abweisung('Anna Berg'),
+      [MONAT_DER_ZEILE]: json(200, monatMit(FREMD_GEAENDERT)),
+    });
+
+    renderMaske(ZEILE);
+    await screen.findByRole('option', { name: 'Konzeption' });
+    await nutzer.click(speicherTaste());
+    await nutzer.click(await screen.findByRole('button', { name: 'Neu laden' }));
+    await nutzer.click(await screen.findByRole('button', { name: 'Verwerfen' }));
+
+    expect(screen.queryByRole('region', { name: 'Deine Eingaben' })).not.toBeInTheDocument();
+  });
+
+  it('sagt es, wo der Eintrag nicht mehr in seinem Monat steht — die eigenen Werte bleiben', async () => {
+    const nutzer = userEvent.setup();
+    antworten({
+      [POSITIONEN]: json(200, [KONZEPTION]),
+      [AENDERN]: abweisung('Anna Berg'),
+      [MONAT_DER_ZEILE]: json(200, monatMit()),
+    });
+
+    renderMaske(ZEILE);
+    await screen.findByRole('option', { name: 'Konzeption' });
+    await nutzer.click(speicherTaste());
+    await nutzer.click(await screen.findByRole('button', { name: 'Neu laden' }));
+
+    expect(
+      await screen.findByText(/Der Eintrag steht nicht mehr an seinem Monat/),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Deine Eingaben' })).toBeInTheDocument();
+  });
+
+  it('meldet den Ausfall von „Neu laden", ohne die Abweisung zu verlieren', async () => {
+    const nutzer = userEvent.setup();
+    antworten({
+      [POSITIONEN]: json(200, [KONZEPTION]),
+      [AENDERN]: abweisung('Anna Berg'),
+      [MONAT_DER_ZEILE]: problem(500, 'kaputt'),
+    });
+
+    renderMaske(ZEILE);
+    await screen.findByRole('option', { name: 'Konzeption' });
+    await nutzer.click(speicherTaste());
+    await nutzer.click(await screen.findByRole('button', { name: 'Neu laden' }));
+
+    expect(
+      await screen.findByText(
+        'Der aktuelle Stand ist gerade nicht zu erreichen. Bitte später erneut versuchen.',
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByText('Nicht ausgeführt')).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Deine Eingaben' })).not.toBeInTheDocument();
   });
 });

@@ -16,6 +16,7 @@ import org.mwolff.fbcrm.auth.application.MitarbeitendeVerwaltung;
 import org.mwolff.fbcrm.auth.application.UnknownAccount;
 import org.mwolff.fbcrm.auth.domain.Account;
 import org.mwolff.fbcrm.auth.domain.Role;
+import org.mwolff.fbcrm.common.Bearbeitungskonflikt;
 import org.mwolff.fbcrm.firma.application.FirmaNichtGefunden;
 import org.mwolff.fbcrm.firma.domain.Firma;
 import org.mwolff.fbcrm.firma.domain.FirmaRepository;
@@ -36,6 +37,11 @@ import org.springframework.transaction.annotation.Transactional;
  *   <li>Aendern und Loeschen lesen den Eintrag und weisen ihn als nicht gefunden ab, wenn er dem
  *       anfragenden Konto nicht gehoert und dieses nicht C-Level ist (E7): Eine 403 bestaetigte
  *       einem Employee, dass es die Kennung gibt.
+ *   <li>Beim Aendern der vorgelegte Stand (#411, Kriterien 1 und 4; Plan #415, E1, E14): Weicht er
+ *       vom Stand des Eintrags ab, wird mit {@link ZeiteintragGeaendert} abgewiesen, vor jeder
+ *       fachlichen Pruefung und bevor etwas geschrieben wird — auch wenn ein C-Level einen fremden
+ *       Eintrag korrigiert. Erst nach der Rechtepruefung: Einem Konto, das den Eintrag nicht sehen
+ *       darf, verriete ein Konflikt Urheber und Zeitpunkt.
  *   <li>Die Person bestimmen und als waehlbar pruefen (E12). Beim Anlegen heisst eine fehlende
  *       Angabe „gehoert dem anfragenden Konto", beim Aendern „der Eigentuemer bleibt, der er ist" —
  *       ein Aendern ohne Angabe haengt einen fremden Eintrag nie um. Geprueft wird nur eine Person,
@@ -145,8 +151,10 @@ public class ZeiteintragUseCase {
    * gehoert (Plan #426, E12); eine genannte andere Person haengt ihn um, und geprueft wird dann
    * gegen deren Zeiten (E13).
    *
-   * @param accountId Kennung des anfragenden Kontos
+   * @param accountId Kennung des anfragenden Kontos — zugleich der Urheber der Aenderung (Plan
+   *     #415, E14)
    * @param id Kennung des Eintrags
+   * @param version der vorgelegte Stand aus {@code If-Match} (Plan #415, E2)
    * @param person Kennung der Person, der der Eintrag kuenftig gehoeren soll, oder leer fuer die
    *     bisherige
    * @param angebotPositionId Kennung der Position, auf die gebucht wird
@@ -156,6 +164,7 @@ public class ZeiteintragUseCase {
    * @throws UnknownAccount wenn es das anfragende Konto nicht mehr gibt
    * @throws ZeiteintragNichtGefunden wenn es den Eintrag nicht gibt, er dem anfragenden Konto nicht
    *     gehoert und dieses nicht C-Level ist, oder das anfragende Konto ReadOnly ist
+   * @throws ZeiteintragGeaendert wenn der Eintrag inzwischen einen anderen Stand hat
    * @throws PersonNichtWaehlbar wenn die genannte Person von der bisherigen abweicht und das
    *     anfragende Konto den Eintrag nicht auf sie umhaengen darf
    * @throws UhrzeitNichtImRaster wenn Beginn oder Ende nicht auf einer Viertelstunde liegen
@@ -168,6 +177,7 @@ public class ZeiteintragUseCase {
   public Zeiteintrag aendern(
       final long accountId,
       final long id,
+      final long version,
       final Optional<Long> person,
       final long angebotPositionId,
       final LocalDate tag,
@@ -175,6 +185,12 @@ public class ZeiteintragUseCase {
       final LocalTime bis) {
     final Account anfragend = aktuellesKonto.byId(accountId);
     final Zeiteintrag vorhandener = schreibbarer(anfragend, id);
+    Bearbeitungskonflikt.pruefe(
+        version,
+        vorhandener.version(),
+        () ->
+            new ZeiteintragGeaendert(
+                vorhandener.geaendertVon(), accountId, vorhandener.updatedAt()));
     final long eigentuemer = person(anfragend, person, vorhandener.accountId());
     pruefeZeiten(von, bis);
     if (angebotPositionId != vorhandener.angebotPositionId()) {
@@ -182,14 +198,17 @@ public class ZeiteintragUseCase {
     }
     return gespeichert(
         new Zeiteintrag(
-            vorhandener.id(),
-            eigentuemer,
-            angebotPositionId,
-            tag,
-            von,
-            bis,
-            vorhandener.createdAt(),
-            clock.instant()));
+                vorhandener.id(),
+                eigentuemer,
+                angebotPositionId,
+                tag,
+                von,
+                bis,
+                vorhandener.createdAt(),
+                clock.instant(),
+                vorhandener.version(),
+                vorhandener.geaendertVon())
+            .durch(accountId));
   }
 
   /**

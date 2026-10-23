@@ -20,6 +20,9 @@ const DEZEMBER = 'GET /api/arbeitszeit?monat=2026-12';
 const POSITIONEN = 'GET /api/arbeitszeit/buchbare-positionen';
 const ANLEGEN = 'POST /api/arbeitszeit';
 const LOESCHEN = 'DELETE /api/arbeitszeit/7';
+const AENDERN = 'PUT /api/arbeitszeit/7';
+/** Der Monat der Zeile in der Sicht ihrer Person — dort holt „Neu laden" den Stand. */
+const MONAT_DER_PERSON = 'GET /api/arbeitszeit?monat=2026-11&person=1';
 const WEG_PERSONEN = '/api/arbeitszeit/personen';
 const PERSONEN = `GET ${WEG_PERSONEN}`;
 
@@ -76,6 +79,7 @@ const MONATSLISTE = {
           stunden: 1.75,
           position: KONZEPTION,
           person: PERSON,
+          version: 2,
         },
         {
           id: 8,
@@ -85,6 +89,7 @@ const MONATSLISTE = {
           stunden: 2,
           position: SCHULUNG,
           person: PERSON,
+          version: 0,
         },
       ],
       stunden: 3.75,
@@ -100,6 +105,7 @@ const MONATSLISTE = {
           stunden: 2,
           position: KONZEPTION,
           person: PERSON,
+          version: 2,
         },
       ],
       stunden: 2,
@@ -129,6 +135,7 @@ const ANGELEGT = {
   von: '09:00:00',
   bis: '10:45:00',
   stunden: 1.75,
+  version: 0,
 };
 
 type Nutzer = ReturnType<typeof userEvent.setup>;
@@ -394,6 +401,81 @@ describe('ArbeitszeitPage — erfassen und aendern (Kriterien 1 und 6, Plan A14)
     ]);
     // Und kein Verweis, der die Zeile als Ganzes anfasst.
     expect(tafel.queryAllByRole('link')).toHaveLength(0);
+  });
+});
+
+describe('ArbeitszeitPage — gleichzeitig aendern (#411, Kriterien 1 bis 3; Plan #415, E2)', () => {
+  it('legt den Stand der Zeile vor und meldet nach einem abgewiesenen Aendern, wer wann geaendert hat', async () => {
+    const nutzer = userEvent.setup();
+    const geaendertAm = new Date();
+    geaendertAm.setHours(10, 42, 0, 0);
+    const aufruf = mitRouten({
+      [NOVEMBER]: json(200, MONATSLISTE),
+      [POSITIONEN]: json(200, [KONZEPTION]),
+      [AENDERN]: json(409, {
+        title: 'Conflict',
+        status: 409,
+        detail: 'Dieser Eintrag wurde inzwischen geändert.',
+        konflikt: {
+          art: 'veraltet',
+          geaendertAm: geaendertAm.toISOString(),
+          eigenesFenster: false,
+          geaendertVon: 'Anna Berg',
+        },
+      }),
+    });
+
+    renderSeite('/arbeitszeit?monat=2026-11');
+    await nutzer.click(await screen.findByRole('button', { name: '9:00 bis 10:45' }));
+    const dialog = within(await screen.findByRole('dialog'));
+    await dialog.findByRole('option', { name: 'Konzeption' });
+    await nutzer.clear(dialog.getByLabelText(/^bis/));
+    await nutzer.type(dialog.getByLabelText(/^bis/), '12:00');
+    await nutzer.click(dialog.getByRole('button', { name: 'Speichern' }));
+
+    // Die Meldung nennt Name und Uhrzeit, der Dialog bleibt offen und die Eingabe steht.
+    expect(await dialog.findByText('Nicht ausgeführt')).toBeInTheDocument();
+    expect(
+      dialog.getByText('Anna Berg hat diesen Eintrag inzwischen geändert (10:42).'),
+    ).toBeInTheDocument();
+    expect(dialog.getByLabelText(/^bis/)).toHaveValue('12:00');
+    expect(dialog.getByRole('button', { name: 'Neu laden' })).toBeInTheDocument();
+    // Vorgelegt wurde der Stand der Zeile aus der Monatsliste.
+    expect(aufruf).toHaveBeenCalledWith(
+      '/api/arbeitszeit/7',
+      expect.objectContaining({
+        headers: expect.objectContaining({ 'If-Match': '"2"' }) as unknown,
+      }),
+    );
+    // Die Liste dahinter ist nicht neu geladen worden — gespeichert wurde nichts.
+    expect(monatsaufrufe(aufruf)).toBe(1);
+  });
+
+  it('laedt nach „Neu laden" auch die Liste dahinter neu', async () => {
+    const nutzer = userEvent.setup();
+    const aufruf = mitRouten({
+      [NOVEMBER]: json(200, MONATSLISTE),
+      [POSITIONEN]: json(200, [KONZEPTION]),
+      [MONAT_DER_PERSON]: json(200, MONATSLISTE),
+      [AENDERN]: json(409, {
+        title: 'Conflict',
+        status: 409,
+        detail: 'Dieser Eintrag wurde inzwischen geändert.',
+        konflikt: { art: 'veraltet', eigenesFenster: true },
+      }),
+    });
+
+    renderSeite('/arbeitszeit?monat=2026-11');
+    await nutzer.click(await screen.findByRole('button', { name: '9:00 bis 10:45' }));
+    const dialog = within(await screen.findByRole('dialog'));
+    await dialog.findByRole('option', { name: 'Konzeption' });
+    await nutzer.click(dialog.getByRole('button', { name: 'Speichern' }));
+    await nutzer.click(await dialog.findByRole('button', { name: 'Neu laden' }));
+
+    expect(await dialog.findByRole('region', { name: 'Deine Eingaben' })).toBeInTheDocument();
+    await vi.waitFor(() => {
+      expect(monatsaufrufe(aufruf)).toBe(2);
+    });
   });
 });
 

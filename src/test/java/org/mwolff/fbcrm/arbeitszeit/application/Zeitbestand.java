@@ -51,9 +51,14 @@ final class Zeitbestand implements ZeiteintragRepository {
         .toList();
   }
 
+  /*
+   * Der Zaehler laeuft wie unter Hibernate (Plan #415, E1): Eine neue Zeile beginnt bei 0, jedes
+   * Fortschreiben erhoeht ihn um eins.
+   */
   @Override
   public Zeiteintrag save(final Zeiteintrag zeiteintrag) {
-    final Long id = zeiteintrag.id() == null ? Long.valueOf(naechsteKennung++) : zeiteintrag.id();
+    final boolean neu = zeiteintrag.id() == null;
+    final Long id = neu ? Long.valueOf(naechsteKennung++) : zeiteintrag.id();
     final Zeiteintrag gespeichert =
         new Zeiteintrag(
             id,
@@ -63,7 +68,9 @@ final class Zeitbestand implements ZeiteintragRepository {
             zeiteintrag.von(),
             zeiteintrag.bis(),
             zeiteintrag.createdAt(),
-            zeiteintrag.updatedAt());
+            zeiteintrag.updatedAt(),
+            neu ? 0L : zeiteintrag.version() + 1,
+            zeiteintrag.geaendertVon());
     zeilen.put(id, gespeichert);
     return gespeichert;
   }

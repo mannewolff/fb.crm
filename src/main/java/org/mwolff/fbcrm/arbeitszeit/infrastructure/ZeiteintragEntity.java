@@ -6,6 +6,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
@@ -13,7 +14,8 @@ import org.jspecify.annotations.Nullable;
 import org.mwolff.fbcrm.arbeitszeit.domain.Zeiteintrag;
 
 /**
- * Die Zeile der Tabelle {@code arbeitszeit} aus {@code V19__arbeitszeit.sql}, ergaenzt um V32.
+ * Die Zeile der Tabelle {@code arbeitszeit} aus {@code V19__arbeitszeit.sql}, ergaenzt um V32 und
+ * um Version und Urheber aus {@code V33__version.sql}.
  *
  * <p>Die Angebotsposition steht als blosse Kennung und nicht als Beziehung, aus demselben Grund wie
  * das Angebot in {@code AngebotKommentarEntity}: Eine Beziehung laedt das Angebot mit jeder
@@ -55,6 +57,18 @@ class ZeiteintragEntity {
   private Instant updatedAt;
 
   /*
+   * Der Stand der Zeile, gefuehrt von Hibernate (Plan #415, E1) — wie in AngebotKommentarEntity:
+   * Jedes Schreiben erhoeht ihn, und ein UPDATE auf einem anderen Stand als dem gelesenen
+   * scheitert. Ein long und kein Long, damit weiter die Kennung entscheidet, ob die Zeile neu ist.
+   */
+  @Version
+  @Column(name = "version", nullable = false)
+  private long version;
+
+  @Column(name = "geaendert_von")
+  private @Nullable Long geaendertVon;
+
+  /*
    * JPA verlangt einen parameterlosen Konstruktor und fuellt die Felder danach selbst; NullAway
    * sieht diesen Weg nicht und meldete sonst nicht initialisierte Felder.
    */
@@ -89,6 +103,8 @@ class ZeiteintragEntity {
     this.bis = eintrag.bis();
     this.createdAt = eintrag.createdAt();
     this.updatedAt = eintrag.updatedAt();
+    this.version = eintrag.version();
+    this.geaendertVon = eintrag.geaendertVon();
   }
 
   @Nullable Long getId() {
@@ -121,5 +137,13 @@ class ZeiteintragEntity {
 
   Instant getUpdatedAt() {
     return updatedAt;
+  }
+
+  long getVersion() {
+    return version;
+  }
+
+  @Nullable Long getGeaendertVon() {
+    return geaendertVon;
   }
 }

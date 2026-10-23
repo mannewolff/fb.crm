@@ -11,12 +11,14 @@ import type { FormEvent, ReactNode } from 'react';
 
 import {
   ALLE,
+  arbeitszeitMonat,
   buchbarePositionen,
   personen,
   zeiteintragAendern,
   zeiteintragAnlegen,
 } from '../api/arbeitszeit';
 import type {
+  Arbeitsmonat,
   Buchungsposition,
   Person,
   Personenauswahl,
@@ -26,11 +28,14 @@ import type {
 import type { FieldErrors } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
 import { useRechte } from '../auth/rechte';
-import { feldMeldungen } from '../lib/apifehler';
+import { feldMeldungen, istBearbeitungskonflikt } from '../lib/apifehler';
 import { dauerInHundertsteln, stundenWort, uhrzeitFeld } from '../lib/arbeitszeit';
 import { meldungAm } from '../lib/feldmeldung';
 import { heute, tagWort } from '../lib/tag';
 import { ZAHLEN_KLASSE } from '../theme';
+import EigeneEingaben from './EigeneEingaben';
+import type { EigeneEingabe } from './EigeneEingaben';
+import Konfliktmeldung from './Konfliktmeldung';
 import KupferTaste from './KupferTaste';
 import WeicheTaste from './WeicheTaste';
 
@@ -74,6 +79,16 @@ import WeicheTaste from './WeicheTaste';
  * Speichern den Eintrag stillschweigend um. Der Server taete das nicht (E12) — die Maske verlaesst
  * sich nicht darauf.
  *
+ * <b>Das Aendern legt den Stand der Zeile vor</b> (#411, Kriterien 1 bis 3; Plan #415, E2, E12):
+ * Hat jemand den Eintrag seit dem Laden der Monatsliste geaendert, weist der Server ab, und die
+ * {@link Konfliktmeldung} sagt, wer wann. Die eigenen Eingaben bleiben im Dialog stehen. „Neu
+ * laden" holt den Eintrag aus dem Monat seines Tages und der Sicht seiner Person — einen Abruf je
+ * Eintrag kennt die Schnittstelle nicht —, setzt ihn samt neuem Stand in die Felder und stellt die
+ * eigenen Werte daneben in {@link EigeneEingaben}, bis „Verwerfen" gewaehlt wird. Liegt der
+ * Eintrag dort nicht mehr, weil er inzwischen an einen anderen Monat oder eine andere Person ging,
+ * sagt der Dialog das; die eigenen Werte stehen trotzdem zum Kopieren da. Das Erfassen legt keinen
+ * Stand vor (Kriterium 7).
+ *
  * <b>Ohne Schreibrecht entsteht der Dialog gar nicht</b> (Kriterium 10 von #409, Plan #414, A10):
  * Er dient nur dem Schreiben, und die Monatsliste oeffnet ihn dann ohnehin nicht. Die Huelle fragt
  * das Recht vor dem eigentlichen Dialog, damit auch seine Auswahlliste nicht geladen wird.
@@ -91,6 +106,14 @@ const LEER =
 const AUSFALL_PERSONEN =
   'Die Personen sind gerade nicht zu erreichen. Bitte später erneut versuchen.';
 const AUSFALL_SPEICHERN = 'Die Arbeitszeit wurde nicht gespeichert. Bitte später erneut versuchen.';
+const AUSFALL_NEU_LADEN =
+  'Der aktuelle Stand ist gerade nicht zu erreichen. Bitte später erneut versuchen.';
+const NICHT_MEHR_DA =
+  'Der Eintrag steht nicht mehr an seinem Monat und bei seiner Person. Schließen Sie den Dialog' +
+  ' und öffnen Sie ihn in der Liste neu; Ihre Eingaben stehen unten zum Kopieren.';
+
+/** Wohin die Konfliktmeldung fuehrt, wenn es den Eintrag nicht mehr gibt. */
+const UEBERSICHT = '/arbeitszeit';
 
 /** Was an einem Feld steht, das eine Angabe braucht und keine hat. */
 const PFLICHT = 'Bitte ausfüllen.';
@@ -108,6 +131,8 @@ export interface ZeiteintragMaskeProps {
   readonly auswahl: Personenauswahl | null;
   /** Gespeichert: Die Monatsliste ist nicht mehr aktuell und der Dialog hat seinen Zweck erfuellt. */
   readonly onGespeichert: () => void;
+  /** „Neu laden" hat den Stand des Servers geholt — die Monatsliste dahinter ist nicht mehr aktuell. */
+  readonly onNeuGeladen?: () => void;
   /** Abgebrochen — ohne Wirkung auf den Bestand. */
   readonly onSchliessen: () => void;
 }
@@ -209,6 +234,41 @@ function waehlbarePersonen(zeile: Zeitzeile | null, liste: readonly Person[]): r
     return aktive;
   }
   return [zeile.person, ...aktive];
+}
+
+/**
+ * Was gerade im Dialog steht, als eigene Eingaben zum Kopieren (#411, Kriterium 3) — beschriftet
+ * wie die Felder. Position und Person stehen mit ihrem Namen da, nicht mit ihrer Kennung; was die
+ * Auswahl nicht kennt, steht als Kennung, damit nichts still verschwindet.
+ */
+function eigeneEingabenAus(
+  werte: Werte,
+  positionen: readonly Buchungsposition[],
+  personenwahl: readonly Person[] | null,
+): readonly EigeneEingabe[] {
+  const position = positionen.find((kandidat) => String(kandidat.id) === werte.angebotPositionId);
+  const eingaben: EigeneEingabe[] = [
+    { bezeichnung: 'Tag', wert: tagWort(werte.tag) },
+    { bezeichnung: 'von', wert: werte.von },
+    { bezeichnung: 'bis', wert: werte.bis },
+  ];
+  if (personenwahl !== null) {
+    const person = personenwahl.find((kandidat) => String(kandidat.id) === werte.accountId);
+    eingaben.push({ bezeichnung: 'Person', wert: person?.name ?? werte.accountId });
+  }
+  eingaben.push({
+    bezeichnung: 'Position',
+    wert:
+      position === undefined
+        ? werte.angebotPositionId
+        : `${position.firmaName} — ${position.bezeichnung}`,
+  });
+  return eingaben;
+}
+
+/** Der Eintrag in einem gelesenen Monat, oder `undefined`, wo er dort nicht (mehr) steht. */
+function eintragIn(monat: Arbeitsmonat, id: number): Zeitzeile | undefined {
+  return monat.tage.flatMap((arbeitstag) => arbeitstag.eintraege).find((zeile) => zeile.id === id);
 }
 
 /** Die Felder ohne Angabe, jedes mit seiner Meldung — leer heisst „vollstaendig". */
@@ -341,21 +401,28 @@ interface DialogProps extends ZeiteintragMaskeProps {
 
 /** Der Dialog selbst — nur fuer eine Rolle, die fachlich schreiben darf. */
 function Zeiteintragsdialog({
-  zeile,
+  zeile: geoeffnet,
   auswahl,
   kontoId,
   mitPerson,
   onGespeichert,
+  onNeuGeladen,
   onSchliessen,
 }: DialogProps) {
   const titelId = useId();
   const [wahlstand, setzeWahlstand] = useState<Wahlstand>({ art: 'laedt' });
   const [personenstand, setzePersonenstand] = useState<Personenstand>({ art: 'laedt' });
-  const [werte, setzeWerte] = useState<Werte>(() => werteAus(zeile));
+  const [werte, setzeWerte] = useState<Werte>(() => werteAus(geoeffnet));
   const [eigeneFehler, setzeEigeneFehler] = useState<FieldErrors>({});
   const [feldFehler, setzeFeldFehler] = useState<FieldErrors>({});
   const [fehler, setzeFehler] = useState<string | null>(null);
   const [laeuft, setzeLaeuft] = useState(false);
+  // Der Eintrag, auf dem das Aendern beruht: geoeffnet, oder aus „Neu laden" — samt seinem Stand.
+  const [zeile, setzeZeile] = useState<Zeitzeile | null>(geoeffnet);
+  // Die Abweisung eines Speicherns auf altem Stand, ungeprueft — die Konfliktmeldung liest sie selbst.
+  const [abweisung, setzeAbweisung] = useState<unknown>(null);
+  // Die eigenen Werte nach „Neu laden", bis „Verwerfen" gewaehlt wird (#411, Kriterium 3).
+  const [eigene, setzeEigene] = useState<readonly EigeneEingabe[] | null>(null);
 
   useEffect(() => {
     let gueltig = true;
@@ -383,7 +450,7 @@ function Zeiteintragsdialog({
       setzePersonenstand(neu);
       // Beim Aendern steht die Person der Zeile schon; beim Erfassen entscheidet erst die Liste,
       // ob die umgeschaltete Person aktiv ist.
-      if (zeile === null && neu.art === 'daten') {
+      if (geoeffnet === null && neu.art === 'daten') {
         const vorbelegt = personBeimErfassen(auswahl, kontoId, neu.personen);
         setzeWerte((alt) => ({ ...alt, accountId: vorbelegt }));
       }
@@ -391,7 +458,7 @@ function Zeiteintragsdialog({
     return () => {
       gueltig = false;
     };
-  }, [mitPerson, zeile, auswahl, kontoId]);
+  }, [mitPerson, geoeffnet, auswahl, kontoId]);
 
   const setze = (feld: keyof Werte, wert: string) => {
     setzeWerte((alt) => ({ ...alt, [feld]: wert }));
@@ -400,6 +467,7 @@ function Zeiteintragsdialog({
   const absenden = async (ereignis: FormEvent<HTMLFormElement>) => {
     ereignis.preventDefault();
     setzeFehler(null);
+    setzeAbweisung(null);
     setzeFeldFehler({});
     const fehlen = fehlendeAngaben(werte, mitPerson);
     setzeEigeneFehler(fehlen);
@@ -418,7 +486,7 @@ function Zeiteintragsdialog({
       if (zeile === null) {
         await zeiteintragAnlegen(eingabe);
       } else {
-        await zeiteintragAendern(zeile.id, eingabe);
+        await zeiteintragAendern(zeile.id, zeile.version, eingabe);
       }
       // Kein `setzeLaeuft(false)`: Der Dialog hat seinen Zweck erfuellt, und die Monatsliste baut
       // ihn ab. Ein freigegebenes Speichern waere ein zweiter Eintrag auf einen Klick.
@@ -426,7 +494,10 @@ function Zeiteintragsdialog({
     } catch (ursache) {
       setzeLaeuft(false);
       const felder = feldMeldungen(ursache);
-      if (Object.keys(felder).length > 0) {
+      if (istBearbeitungskonflikt(ursache)) {
+        // Die Eingaben bleiben stehen; den Weg weiter zeigt die Konfliktmeldung (Kriterium 3).
+        setzeAbweisung(ursache);
+      } else if (Object.keys(felder).length > 0) {
         setzeFeldFehler(felder);
       } else {
         setzeFehler(AUSFALL_SPEICHERN);
@@ -443,9 +514,44 @@ function Zeiteintragsdialog({
     zeile,
     personenstand.art === 'daten' ? personenstand.personen : [],
   );
-  const gruppen = gruppiert(
-    mitZeilenposition(zeile, wahlstand.art === 'daten' ? wahlstand.positionen : []),
+  const positionen = mitZeilenposition(
+    zeile,
+    wahlstand.art === 'daten' ? wahlstand.positionen : [],
   );
+  const gruppen = gruppiert(positionen);
+
+  /**
+   * „Neu laden" nach einer Abweisung: der Stand des Servers in die Felder, die eigenen Werte daneben
+   * (#411, Kriterium 3; Plan #415, E12).
+   *
+   * Gefragt wird der Monat des Tages, an dem der Eintrag stand, in der Sicht seiner Person — dort
+   * steht er, solange ihn niemand an einen anderen Monat oder eine andere Person gegeben hat. Die
+   * eigenen Werte werden genommen, wie sie in diesem Augenblick im Dialog stehen.
+   */
+  const neuLaden = async (bisher: Zeitzeile) => {
+    const meine = eigeneEingabenAus(werte, positionen, mitPerson ? personenwahl : null);
+    setzeFehler(null);
+    setzeLaeuft(true);
+    try {
+      const monat = await arbeitszeitMonat(bisher.tag.slice(0, 7), bisher.person.id);
+      const frisch = eintragIn(monat, bisher.id);
+      setzeEigene(meine);
+      setzeAbweisung(null);
+      if (frisch === undefined) {
+        setzeFehler(NICHT_MEHR_DA);
+      } else {
+        setzeZeile(frisch);
+        setzeWerte(werteAus(frisch));
+        setzeEigeneFehler({});
+        setzeFeldFehler({});
+      }
+      onNeuGeladen?.();
+    } catch {
+      setzeFehler(AUSFALL_NEU_LADEN);
+    } finally {
+      setzeLaeuft(false);
+    }
+  };
 
   return (
     <Dialog open onClose={onSchliessen} fullWidth maxWidth="sm" aria-labelledby={titelId}>
@@ -461,6 +567,23 @@ function Zeiteintragsdialog({
       >
         <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
           {fehler === null ? null : <Alert severity="error">{fehler}</Alert>}
+          {zeile === null ? null : (
+            <Konfliktmeldung
+              ursache={abweisung}
+              onNeuLaden={() => {
+                void neuLaden(zeile);
+              }}
+              uebersicht={UEBERSICHT}
+            />
+          )}
+          {eigene === null ? null : (
+            <EigeneEingaben
+              werte={eigene}
+              onVerwerfen={() => {
+                setzeEigene(null);
+              }}
+            />
+          )}
           {mitPerson && personenstand.art === 'fehler' ? (
             <Alert severity="error">{AUSFALL_PERSONEN}</Alert>
           ) : null}

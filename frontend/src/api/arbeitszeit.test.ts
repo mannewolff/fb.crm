@@ -45,6 +45,7 @@ const MONAT = {
           stunden: 1.75,
           position: POSITION,
           person: PERSON,
+          version: 3,
         },
         {
           id: 8,
@@ -54,6 +55,7 @@ const MONAT = {
           stunden: 2,
           position: POSITION,
           person: PERSON,
+          version: 0,
         },
       ],
       stunden: 3.75,
@@ -73,6 +75,7 @@ const EINTRAG = {
   von: '09:00:00',
   bis: '10:45:00',
   stunden: 1.75,
+  version: 4,
 };
 
 const EINGABE = {
@@ -107,7 +110,15 @@ describe('parseArbeitsmonat (A20)', () => {
       stundenInHundertsteln: 175,
       position: POSITION,
       person: PERSON,
+      version: 3,
     });
+  });
+
+  it('scheitert, wo eine Zeile keinen Stand traegt (Plan #415, E2)', () => {
+    const ohneStand = { ...MONAT.tage[0].eintraege[0], version: undefined };
+    expect(() =>
+      parseArbeitsmonat({ ...MONAT, tage: [{ ...MONAT.tage[0], eintraege: [ohneStand] }] }),
+    ).toThrow(TypeError);
   });
 
   it('liest die Auswahl einer Person als Kennung und das Wort alle als „Alle" (E10)', () => {
@@ -207,7 +218,12 @@ describe('parseZeiteintrag', () => {
       von: '09:00:00',
       bis: '10:45:00',
       stundenInHundertsteln: 175,
+      version: 4,
     });
+  });
+
+  it('scheitert, wo der Stand fehlt (Plan #415, E2)', () => {
+    expect(() => parseZeiteintrag({ ...EINTRAG, version: undefined })).toThrow(TypeError);
   });
 
   it('scheitert, wo die Kennung keine Zahl ist', () => {
@@ -293,7 +309,7 @@ describe('buchbarePositionen', () => {
 describe('zeiteintragAnlegen', () => {
   it('schickt die vier Angaben als JSON und liest den angelegten Eintrag', async () => {
     let hinaus: unknown = null;
-    fetchNachPfad({
+    const abruf = fetchNachPfad({
       'POST /api/arbeitszeit': (rumpf) => {
         hinaus = alsJson(rumpf);
         return json(201, EINTRAG)();
@@ -302,6 +318,8 @@ describe('zeiteintragAnlegen', () => {
 
     await expect(zeiteintragAnlegen(EINGABE)).resolves.toMatchObject({ id: 7 });
     expect(hinaus).toEqual(EINGABE);
+    // Anlegen bleibt frei (#411, Kriterium 7): kein Stand im Kopf.
+    expect(abruf.mock.calls[0][1]?.headers).not.toHaveProperty('If-Match');
     // Ohne Konto geht das Feld nicht hinaus: dann gehoert der Eintrag dem angemeldeten (E12).
     expect(hinaus).not.toHaveProperty('accountId');
   });
@@ -342,8 +360,21 @@ describe('zeiteintragAendern', () => {
       },
     });
 
-    await expect(zeiteintragAendern(7, EINGABE)).resolves.toMatchObject({ id: 7 });
+    await expect(zeiteintragAendern(7, 3, EINGABE)).resolves.toMatchObject({ id: 7, version: 4 });
     expect(hinaus).toEqual(EINGABE);
+  });
+
+  it('legt den Stand des Eintrags als If-Match vor (Plan #415, E2)', async () => {
+    const abruf = fetchNachPfad({ 'PUT /api/arbeitszeit/7': json(200, EINTRAG) });
+
+    await zeiteintragAendern(7, 3, EINGABE);
+
+    expect(abruf).toHaveBeenCalledWith(
+      '/api/arbeitszeit/7',
+      expect.objectContaining({
+        headers: expect.objectContaining({ 'If-Match': '"3"' }) as unknown,
+      }),
+    );
   });
 });
 

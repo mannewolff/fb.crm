@@ -74,6 +74,11 @@ import { ABSTAND_BUEHNE, ZAHLEN_KLASSE } from '../theme';
  * `AuthContext` (E17) — kein eigener Abruf von `GET /api/auth/me`. Die Sperre selbst liegt im
  * Server; die Ansicht zeigt nur, was die Rolle darf.
  *
+ * <b>Das Aendern beruht auf dem Stand der Zeile</b> (#411, Kriterien 1 bis 3; Plan #415, E2): Die
+ * Monatsliste traegt ihn je Eintrag, der Dialog legt ihn vor und zeigt eine Abweisung samt „Neu
+ * laden" und den eigenen Eingaben selbst. Holt er dabei einen neuen Stand, laedt auch die Liste
+ * dahinter neu.
+ *
  * <b>Nach jeder Schreibung laedt der Monat neu</b> (`runde`), statt die Liste hier
  * fortzuschreiben: Tagessummen und Monatssumme rechnet der Server, und ein Eintrag kann den Monat
  * wechseln. Eine hier nachgezogene Liste waere eine zweite Wahrheit ueber dieselben Zahlen.
@@ -684,6 +689,7 @@ export default function ArbeitszeitPage() {
             setzeMaske(null);
             neuLaden();
           }}
+          onNeuGeladen={neuLaden}
           onSchliessen={() => {
             setzeMaske(null);
           }}

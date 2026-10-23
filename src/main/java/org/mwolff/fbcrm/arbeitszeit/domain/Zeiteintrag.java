@@ -33,6 +33,11 @@ import org.mwolff.fbcrm.common.Identifiable;
  * Beginn. Die letzte Viertelstunde vor Mitternacht ist damit nicht erfassbar; das wird bewusst
  * hingenommen.
  *
+ * <p><b>Eigene Version, eigener Urheber</b> (Plan #415, E1, E14): Ein Zeiteintrag ist ein Datensatz
+ * fuer sich, und ein Aendern beruht auf seinem Stand — auch wenn ein C-Level einen fremden Eintrag
+ * korrigiert (#410). Den Zaehler fuehrt der Bestand; {@link #durch(long)} haelt fest, wer zuletzt
+ * geaendert hat.
+ *
  * @param id technische Kennung — {@code null}, solange der Eintrag nicht gespeichert ist
  * @param accountId Kennung des Kontos, dem der Eintrag gehoert
  * @param angebotPositionId Kennung der Angebotsposition, auf die gebucht wurde
@@ -41,6 +46,10 @@ import org.mwolff.fbcrm.common.Identifiable;
  * @param bis Ende, auf einer Viertelstunde ohne Sekunden; stets nach {@code von}
  * @param createdAt Zeitpunkt der Anlage
  * @param updatedAt Zeitpunkt der letzten Aenderung
+ * @param version der Stand des Eintrags, wie ihn {@code If-Match} vorlegt (Plan #415, E1); 0 vor
+ *     dem ersten Schreiben, danach fuehrt ihn der Bestand
+ * @param geaendertVon Kennung des Kontos, das den Eintrag zuletzt geaendert hat, oder {@code null},
+ *     solange er nie geaendert wurde
  */
 public record Zeiteintrag(
     @Nullable Long id,
@@ -50,7 +59,9 @@ public record Zeiteintrag(
     LocalTime von,
     LocalTime bis,
     Instant createdAt,
-    Instant updatedAt)
+    Instant updatedAt,
+    long version,
+    @Nullable Long geaendertVon)
     implements Identifiable {
 
   /** Die Schrittweite der Erfassung in Minuten (Issue #193, Antwort 6). */
@@ -71,6 +82,44 @@ public record Zeiteintrag(
     if (!bis.isAfter(von)) {
       throw new IllegalArgumentException("Das Ende liegt nach dem Beginn: " + von + " bis " + bis);
     }
+  }
+
+  /**
+   * Ein Eintrag, der nie geaendert wurde — so entsteht jeder neue.
+   *
+   * @param id technische Kennung, oder {@code null} vor dem Speichern
+   * @param accountId Kennung des Kontos, dem der Eintrag gehoert
+   * @param angebotPositionId Kennung der Angebotsposition
+   * @param tag der Tag, an dem gearbeitet wurde
+   * @param von Beginn
+   * @param bis Ende
+   * @param createdAt Zeitpunkt der Anlage
+   * @param updatedAt Zeitpunkt der letzten Aenderung
+   */
+  public Zeiteintrag(
+      final @Nullable Long id,
+      final long accountId,
+      final long angebotPositionId,
+      final LocalDate tag,
+      final LocalTime von,
+      final LocalTime bis,
+      final Instant createdAt,
+      final Instant updatedAt) {
+    this(id, accountId, angebotPositionId, tag, von, bis, createdAt, updatedAt, 0L, null);
+  }
+
+  /**
+   * Der Eintrag mit dem Konto, das ihn gerade geaendert hat (Plan #415, E14).
+   *
+   * <p>Ein eigener Schritt wie {@code Angebotskommentar.durch(long)}: Wer aendert, ist eine Angabe
+   * des Anwendungsfalls. Die Version bleibt, wie sie ist — sie zaehlt der Bestand beim Schreiben
+   * weiter.
+   *
+   * @param konto Kennung des handelnden Kontos
+   */
+  public Zeiteintrag durch(final long konto) {
+    return new Zeiteintrag(
+        id, accountId, angebotPositionId, tag, von, bis, createdAt, updatedAt, version, konto);
   }
 
   /**
