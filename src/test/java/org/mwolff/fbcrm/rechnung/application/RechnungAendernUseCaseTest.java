@@ -349,6 +349,27 @@ class RechnungAendernUseCaseTest {
     verifyNoInteractions(angebote);
   }
 
+  @Test
+  void aendere_givenADeletedEntwurf_thenRejectsAsGeloeschtAndWritesNothing() {
+    // Given — #411, Kriterium 6: Anna hat den Entwurf inzwischen geloescht.
+    when(rechnungen.findById(ENTWURF))
+        .thenReturn(Optional.of(Rechnungsdoppel.geloescht(ENTWURF, ANNA, ANNAS_AENDERUNG)));
+    final RechnungAendernUseCase useCase = useCase();
+    final RechnungDaten daten = daten(angabe(Rechnungsdoppel.BERATUNG_ID, "10.00"));
+
+    // When / Then — der vorgelegte Stand ist der der Zeile; abgewiesen wird wegen der Loeschung.
+    assertThatThrownBy(() -> useCase.aendere(ENTWURF, daten))
+        .asInstanceOf(InstanceOfAssertFactories.type(RechnungGeloescht.class))
+        .satisfies(
+            konflikt -> assertThat(konflikt.art()).isEqualTo(Bearbeitungskonflikt.Art.GELOESCHT),
+            konflikt -> assertThat(konflikt.urheberKonto()).hasValue(ANNA),
+            konflikt -> assertThat(konflikt.handelndesKonto()).isEqualTo(MANFRED),
+            konflikt -> assertThat(konflikt.zeitpunkt()).hasValue(ANNAS_AENDERUNG));
+    verify(rechnungen).findById(ENTWURF);
+    verifyNoMoreInteractions(rechnungen);
+    verifyNoInteractions(angebote);
+  }
+
   private static Angebot umgepreistesAngebot() {
     return Rechnungsdoppel.angebot(
         Angebotsstatus.BESTELLT,

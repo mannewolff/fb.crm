@@ -51,6 +51,9 @@ import org.springframework.jdbc.core.JdbcTemplate;
  * Datum im Folgejahr, und das ist fachlich dasselbe: Das Zaehlerjahr kommt aus dem Rechnungsdatum
  * und nicht aus dem heutigen Tag (Kriterium 17).
  *
+ * <p>Eine geloeschte Rechnung haelt ihre Nummer nicht fest (Plan #415, E17): Die Vorabpruefung und
+ * der eindeutige Index lassen gekennzeichnete Zeilen aus.
+ *
  * <p>Kein Beleg zum Inhalt des Dokuments und keiner zu den Abweisungen — beides steht in {@code
  * RechnungStellenIT}, und es zweimal zu fahren kostete Zeit ohne eine zweite Aussage.
  */
@@ -406,5 +409,24 @@ class RechnungNummerIT extends AbstractIntegrationTest {
     eigeneAngabenSetzen("75/123/45678");
     assertThat(stelleUndNimmDieNummer(gescheitert)).isEqualTo(nummer(1, heute.getYear()));
     assertThat(naechsteNummer()).isEqualTo(2);
+  }
+
+  @Test
+  void stellen_afterTheRechnungWithThatNummerWasDeleted_thenTheNummerIsFreeAgain() {
+    // Given — eine gestellte Rechnung mit 0001, danach gekennzeichnet (Plan #415, E17). Ueber die
+    // Schnittstelle laesst sich nur ein Entwurf loeschen, und der traegt keine Nummer; die Zusage
+    // von existiertNummer und des Index aus V35 gilt aber fuer jede gekennzeichnete Zeile, darum
+    // setzt der Test das Kennzeichen direkt.
+    final long angebotId = bestelltesAngebot("160.00");
+    final long geloescht = entwurf(angebotId, "40.00", heute);
+    assertThat(stelleUndNimmDieNummer(geloescht)).isEqualTo(nummer(1, heute.getYear()));
+    jdbc.update("UPDATE rechnung SET geloescht_am = now() WHERE id = ?", Long.valueOf(geloescht));
+
+    // When — der Zaehler geht zurueck auf 1; die Einstellungen pruefen die Nummer dabei schon.
+    einstellungenSetzen(MIT_JAHR, 1);
+    final String gezogen = stelleUndNimmDieNummer(entwurf(angebotId, "40.00", heute));
+
+    // Then — die Nummer der geloeschten Rechnung ist wieder vergeben, ohne Abweisung.
+    assertThat(gezogen).isEqualTo(nummer(1, heute.getYear()));
   }
 }

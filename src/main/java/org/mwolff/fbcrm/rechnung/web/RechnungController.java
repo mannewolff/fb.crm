@@ -44,7 +44,8 @@ import org.springframework.web.bind.annotation.RestController;
  * <p><b>Aendern, Stellen und Zustand legen den Stand vor</b> (#411, Kriterien 4 und 5; Plan #415,
  * E2, E3, E10, E14): Sie lesen {@link Bedingungskopf} aus {@code If-Match} und das handelnde Konto
  * aus der Sitzung. Fehlt der Kopf, antwortet der Weg mit 428, ohne den Anwendungsfall zu fragen.
- * Das Loeschen folgt in einem eigenen Paket.
+ * Das Loeschen ebenso; ist der Entwurf inzwischen geloescht, antwortet jeder dieser Wege mit 409
+ * und {@code konflikt.art = "gelöscht"} (E16), das Lesen dagegen mit 404.
  */
 @RestController
 @RequestMapping("/api/rechnungen/{id}")
@@ -165,10 +166,16 @@ public class RechnungController {
         .body(new InputStreamResource(dokument.inhalt()));
   }
 
-  /** Loescht den Entwurf (Kriterium 12). */
+  /**
+   * Loescht den Entwurf (Kriterium 12) — mit Kennzeichen, auf dem vorgelegten Stand (Plan #415,
+   * E16, E17).
+   */
   @DeleteMapping
   @ResponseStatus(HttpStatus.NO_CONTENT)
-  public void loeschen(@PathVariable final long id) {
-    loeschenUseCase.loesche(id);
+  public void loeschen(
+      @PathVariable final long id,
+      final Bedingungskopf stand,
+      @AuthenticationPrincipal final Long accountId) {
+    loeschenUseCase.loesche(id, stand.version(), accountId);
   }
 }

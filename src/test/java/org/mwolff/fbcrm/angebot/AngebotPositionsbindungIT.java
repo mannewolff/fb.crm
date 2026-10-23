@@ -48,6 +48,10 @@ import org.springframework.jdbc.core.JdbcTemplate;
  * vorher. Auch das ist nur hier pruefbar: Die Auskunft kommt ueber {@link
  * org.mwolff.fbcrm.angebot.application.Rechnungsbindung} aus dem Bestand des Moduls {@code
  * rechnung}.
+ *
+ * <p><b>Ein geloeschter Entwurf bindet nichts</b> (Plan #415, E17): Seine Positionszeilen sind hart
+ * fort, und die gekennzeichnete Kopfzeile zaehlt in keiner der beiden Auskuenfte mit. Die Position
+ * laesst sich danach entfernen, und das Kennzeichen der Art wieder wechseln.
  */
 class AngebotPositionsbindungIT extends AbstractIntegrationTest {
 
@@ -230,6 +234,29 @@ class AngebotPositionsbindungIT extends AbstractIntegrationTest {
         .isOne();
   }
 
+  /*
+   * Loescht den Entwurf aus dem Ausgangspunkt ueber den Weg der Maske (Plan #415, E17): Die Zeile
+   * bleibt gekennzeichnet stehen, ihre Positionen sind fort.
+   */
+  private void loescheDenEntwurf() {
+    final long rechnungId =
+        Objects.requireNonNull(jdbc.queryForObject("SELECT id FROM rechnung", Long.class))
+            .longValue();
+    assertThat(
+            rufAufStand(
+                    "/api/rechnungen/" + rechnungId,
+                    HttpMethod.DELETE,
+                    null,
+                    Void.class,
+                    rechnungId)
+                .getStatusCode())
+        .isEqualTo(HttpStatus.NO_CONTENT);
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT count(*) FROM rechnung WHERE geloescht_am IS NOT NULL", Long.class))
+        .isOne();
+  }
+
   private AngebotResponse angebot() {
     return Objects.requireNonNull(
         ruf("/api/angebote/" + angebotId, HttpMethod.GET, null, AngebotResponse.class).getBody());
@@ -357,5 +384,59 @@ class AngebotPositionsbindungIT extends AbstractIntegrationTest {
         .contains(KennzeichenNichtAenderbar.MELDUNG)
         .contains(KennzeichenNichtAenderbar.FELD);
     assertThat(angebot()).isEqualTo(vorher);
+  }
+
+  @Test
+  void aendern_withoutThePositionOfADeletedEntwurf_thenOkAndThePositionIsGone() {
+    // Given — #415, E17: Der Entwurf ist geloescht; seine Positionszeilen sind hart fort und
+    // binden die Konzeption nicht mehr — weder ueber die Positionsverwendung noch ueber den
+    // Fremdschluessel ohne ON DELETE.
+    loescheDenEntwurf();
+
+    // When — die Konzeption faellt am Angebot weg.
+    final ResponseEntity<AngebotResponse> antwort =
+        aendere(
+            List.of(
+                position(
+                    Long.valueOf(schulungId), SCHULUNG, "FESTPREIS", "1", "PAUSCHAL", "1200.00")),
+            AngebotResponse.class);
+
+    // Then — das Speichern geht durch, und die Zeile der Position ist entfernt.
+    assertThat(antwort.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(Objects.requireNonNull(antwort.getBody()).positionen())
+        .extracting(AngebotPositionResponse::bezeichnung)
+        .containsExactly(SCHULUNG);
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT count(*) FROM angebot_position WHERE id = ?",
+                Long.class,
+                Long.valueOf(konzeptionId)))
+        .isZero();
+  }
+
+  @Test
+  void aendern_switchingToInternalAfterTheEntwurfWasDeleted_thenOk() {
+    // Given — Rechnungsbindung: Ein geloeschter Entwurf ist keine Rechnung mehr (E17).
+    loescheDenEntwurf();
+
+    // When
+    final ResponseEntity<AngebotResponse> antwort =
+        aendere(
+            List.of(
+                position(
+                    Long.valueOf(konzeptionId),
+                    KONZEPTION,
+                    "AUFWAND",
+                    "2.50",
+                    "PERSONENTAG",
+                    "1000.00"),
+                position(
+                    Long.valueOf(schulungId), SCHULUNG, "FESTPREIS", "1", "PAUSCHAL", "1200.00")),
+            Boolean.TRUE,
+            AngebotResponse.class);
+
+    // Then
+    assertThat(antwort.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(Objects.requireNonNull(antwort.getBody()).intern()).isTrue();
   }
 }

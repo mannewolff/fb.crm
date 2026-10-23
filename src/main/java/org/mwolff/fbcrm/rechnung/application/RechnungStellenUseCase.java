@@ -7,7 +7,6 @@ import java.util.Objects;
 import org.mwolff.fbcrm.angebot.application.AngebotNichtGefunden;
 import org.mwolff.fbcrm.angebot.domain.Angebot;
 import org.mwolff.fbcrm.angebot.domain.AngebotRepository;
-import org.mwolff.fbcrm.common.Bearbeitungskonflikt;
 import org.mwolff.fbcrm.eigeneangaben.domain.EigeneAngaben;
 import org.mwolff.fbcrm.eigeneangaben.domain.EigeneAngabenRepository;
 import org.mwolff.fbcrm.firma.application.FirmaNichtGefunden;
@@ -144,6 +143,7 @@ public class RechnungStellenUseCase {
    * @param version der vorgelegte Stand des Entwurfs aus {@code If-Match}
    * @param konto Kennung des handelnden Kontos
    * @throws RechnungNichtGefunden wenn es die Rechnung nicht gibt
+   * @throws RechnungGeloescht wenn der Entwurf inzwischen geloescht ist (Plan #415, E16)
    * @throws RechnungGeaendert wenn der Entwurf inzwischen einen anderen Stand hat als den
    *     vorgelegten
    * @throws RechnungszustandPasstNicht wenn die Rechnung schon gestellt ist
@@ -157,10 +157,7 @@ public class RechnungStellenUseCase {
   public Rechnung stelle(final long rechnungId, final long version, final long konto) {
     final Rechnung entwurf =
         rechnungen.findByIdMitSperre(rechnungId).orElseThrow(RechnungNichtGefunden::new);
-    Bearbeitungskonflikt.pruefe(
-        version,
-        entwurf.version(),
-        () -> new RechnungGeaendert(entwurf.geaendertVon(), konto, entwurf.updatedAt()));
+    Rechnungsvergleich.pruefe(entwurf, version, konto);
     if (entwurf.zustand() != Rechnungszustand.ENTWURF) {
       throw new RechnungszustandPasstNicht();
     }

@@ -1,7 +1,6 @@
 package org.mwolff.fbcrm.rechnung.application;
 
 import java.time.Clock;
-import org.mwolff.fbcrm.common.Bearbeitungskonflikt;
 import org.mwolff.fbcrm.rechnung.domain.Rechnung;
 import org.mwolff.fbcrm.rechnung.domain.RechnungRepository;
 import org.mwolff.fbcrm.rechnung.domain.Rechnungszustand;
@@ -46,6 +45,7 @@ public class RechnungZustandSetzenUseCase {
    * @param version der vorgelegte Stand aus {@code If-Match}
    * @param konto Kennung des handelnden Kontos
    * @throws RechnungNichtGefunden wenn es die Rechnung nicht gibt
+   * @throws RechnungGeloescht wenn die Rechnung inzwischen geloescht ist (Plan #415, E16)
    * @throws RechnungGeaendert wenn die Rechnung inzwischen einen anderen Stand hat als den
    *     vorgelegten
    * @throws RechnungszustandPasstNicht wenn der Uebergang nicht zulaessig ist
@@ -54,10 +54,7 @@ public class RechnungZustandSetzenUseCase {
       final long rechnungId, final Rechnungszustand ziel, final long version, final long konto) {
     final Rechnung rechnung =
         rechnungen.findById(rechnungId).orElseThrow(RechnungNichtGefunden::new);
-    Bearbeitungskonflikt.pruefe(
-        version,
-        rechnung.version(),
-        () -> new RechnungGeaendert(rechnung.geaendertVon(), konto, rechnung.updatedAt()));
+    Rechnungsvergleich.pruefe(rechnung, version, konto);
     return rechnungen.save(rechnung.mitZustand(ziel, clock.instant()).durch(konto));
   }
 }

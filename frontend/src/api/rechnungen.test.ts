@@ -513,14 +513,17 @@ describe('die Wege', () => {
     );
   });
 
-  it('loescht den Entwurf', async () => {
+  it('loescht den Entwurf und legt dabei seinen Stand vor', async () => {
     const fetchMock = fetchNachPfad({ 'DELETE /api/rechnungen/4': leer(204) });
 
-    await rechnungLoeschen(4);
+    await rechnungLoeschen(4, 3);
 
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/rechnungen/4',
-      expect.objectContaining({ method: 'DELETE' }),
+      expect.objectContaining({
+        method: 'DELETE',
+        headers: expect.objectContaining({ 'If-Match': '"3"' }) as unknown,
+      }),
     );
   });
 

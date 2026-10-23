@@ -10,6 +10,7 @@ import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mwolff.fbcrm.AbstractIntegrationTest;
+import org.mwolff.fbcrm.Schutzspalten;
 import org.mwolff.fbcrm.common.Anschrift;
 import org.mwolff.fbcrm.common.Einheit;
 import org.mwolff.fbcrm.rechnung.domain.Belegabsender;
@@ -29,7 +30,8 @@ import org.springframework.transaction.support.TransactionTemplate;
  * der Reihenfolge der Plaetze (E24), das Aufruecken nach einer weggefallenen Position — nur hier
  * pruefbar, weil es an der aufgeschobenen Eindeutigkeit von {@code rechnung_position_reihenfolge}
  * haengt —, die beiden Kopien ueber ihre sechzehn Spalten und die Frage nach einer vergebenen
- * Nummer.
+ * Nummer. Geloescht wird mit Kennzeichen (Plan #415, E17): Die Zeile bleibt, keine Liste und keine
+ * Nummernpruefung sieht sie.
  *
  * <p>Jeder Zug setzt seine Transaktionsgrenze selbst ueber {@link TransactionTemplate}: Der Adapter
  * schreibt die Positionszeilen im Zug des Aufrufers fort und hat keine eigene Grenze — sie gehoert
@@ -303,17 +305,45 @@ class RechnungPersistenceIT extends AbstractIntegrationTest {
   }
 
   @Test
-  void delete_thenRemovesTheRechnungWithItsPositions() {
-    // Given — ein Entwurf, aus dem nichts wird, verschwindet (#160, Kriterium 12).
+  void save_givenADeletedEntwurf_thenTheRowStaysMarkedWithoutPositionsAndNoListShowsIt() {
+    // Given — ein Entwurf, aus dem nichts wird, verschwindet (#160, Kriterium 12) — mit
+    // Kennzeichen (Plan #415, E17).
+    leereKonten(jdbc);
+    final long konto = Schutzspalten.konto(jdbc);
+    final Instant geloeschtAm = Instant.parse("2026-10-05T08:42:00Z");
     final Rechnung gespeichert = geschrieben(entwurf(List.of(beratung("3.00"))));
 
     // When
-    transaktion.executeWithoutResult(status -> repository.delete(gespeichert.requireId()));
+    geschrieben(gelesen(gespeichert.requireId()).orElseThrow().geloescht(konto, geloeschtAm));
 
-    // Then
-    assertThat(gelesen(gespeichert.requireId())).isEmpty();
+    // Then — die Zeile traegt Urheber und Zeitpunkt, die Positionszeilen sind hart fort.
+    assertThat(gelesen(gespeichert.requireId()))
+        .hasValueSatisfying(
+            rechnung -> {
+              assertThat(rechnung.geloeschtAm()).isEqualTo(geloeschtAm);
+              assertThat(rechnung.geloeschtVon()).isEqualTo(konto);
+              assertThat(rechnung.positionen()).isEmpty();
+            });
     assertThat(jdbc.queryForObject("SELECT count(*) FROM rechnung_position", Integer.class))
         .isZero();
+    assertThat(alle()).isEmpty();
+    assertThat(zumAngebot()).isEmpty();
+  }
+
+  @Test
+  void existiertNummer_givenADeletedRechnung_thenTheNummerIsFree() {
+    // Given — eine gestellte Rechnung, gekennzeichnet (Plan #415, E17; Index seit V35).
+    final Rechnung gestellt =
+        geschrieben(
+            entwurf(List.of(beratung("3.00")))
+                .gestellt("R26-0004", NEUNZEHN, 10, EMPFAENGER, ABSENDER, GESTELLT_AM));
+    assertThat(vergeben("R26-0004")).isTrue();
+    jdbc.update(
+        "UPDATE rechnung SET geloescht_am = now() WHERE id = ?",
+        Long.valueOf(gestellt.requireId()));
+
+    // When / Then
+    assertThat(vergeben("R26-0004")).isFalse();
   }
 
   @Test

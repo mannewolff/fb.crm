@@ -170,4 +170,21 @@ class RechnungZustandSetzenUseCaseTest {
     verify(rechnungen).findById(RECHNUNG);
     verifyNoMoreInteractions(rechnungen);
   }
+
+  @Test
+  void setze_givenADeletedRechnung_thenRejectsAsGeloeschtAndWritesNothing() {
+    // Given — #411, Kriterium 6: die Rechnung ist inzwischen geloescht.
+    when(rechnungen.findById(RECHNUNG))
+        .thenReturn(Optional.of(Rechnungsdoppel.geloescht(RECHNUNG, ANNA, ANNAS_WECHSEL)));
+
+    // When / Then
+    assertThatThrownBy(() -> useCase.setze(RECHNUNG, Rechnungszustand.BEZAHLT, GELESEN, MANFRED))
+        .asInstanceOf(InstanceOfAssertFactories.type(RechnungGeloescht.class))
+        .satisfies(
+            konflikt -> assertThat(konflikt.art()).isEqualTo(Bearbeitungskonflikt.Art.GELOESCHT),
+            konflikt -> assertThat(konflikt.urheberKonto()).hasValue(ANNA),
+            konflikt -> assertThat(konflikt.zeitpunkt()).hasValue(ANNAS_WECHSEL));
+    verify(rechnungen).findById(RECHNUNG);
+    verifyNoMoreInteractions(rechnungen);
+  }
 }

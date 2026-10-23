@@ -43,12 +43,16 @@ public class RechnungDokumentLesenUseCase {
    * Das Dokument zu einer Rechnung samt ihrer Nummer.
    *
    * @param rechnungId Kennung der Rechnung
-   * @throws RechnungNichtGefunden wenn es die Rechnung nicht gibt
+   * @throws RechnungNichtGefunden wenn es die Rechnung nicht gibt oder sie geloescht ist (Plan
+   *     #415, E17)
    * @throws RechnungszustandPasstNicht wenn die Rechnung ein Entwurf ist oder kein Dokument traegt
    */
   public Rechnungsdokument lese(final long rechnungId) {
     final Rechnung rechnung =
-        rechnungen.findById(rechnungId).orElseThrow(RechnungNichtGefunden::new);
+        rechnungen
+            .findById(rechnungId)
+            .filter(gefunden -> gefunden.geloeschtAm() == null)
+            .orElseThrow(RechnungNichtGefunden::new);
     final @Nullable String schluessel = rechnung.pdfSchluessel();
     final @Nullable String nummer = rechnung.nummer();
     if (!rechnung.zustand().istGestellt() || schluessel == null || nummer == null) {

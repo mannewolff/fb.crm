@@ -53,6 +53,7 @@ import type { Rechnungssummen } from '../lib/abrechnung';
 import {
   feldMeldungen,
   istBearbeitungskonflikt,
+  konfliktAngaben,
   nichtGefunden,
   serverMeldung,
 } from '../lib/apifehler';
@@ -132,6 +133,10 @@ import { ABSTAND_BUEHNE, RADIUS_RUND, TASTE_INNENABSTAND, ZAHLEN_KLASSE } from '
  * fremden Aenderung. Die Eingaben bleiben dabei in der Maske stehen. „Neu laden" holt den Stand
  * des Servers samt neuer Version und stellt die eigenen Werte daneben in {@link EigeneEingaben},
  * bis „Verwerfen" gewaehlt wird — den Schritt loest man danach auf dem neuen Stand erneut aus.
+ *
+ * <b>Ist der Entwurf inzwischen geloescht</b> (#411, Kriterium 6; Plan #415, E16, E17), wird jeder
+ * Schritt darauf abgewiesen, auch das Loeschen selbst. Statt „Neu laden" fuehrt „Zur Übersicht"
+ * zurueck, und die eigenen Werte stehen sofort in {@link EigeneEingaben} zum Kopieren.
  */
 
 const NICHT_GEFUNDEN = 'Diese Rechnung gibt es nicht.';
@@ -885,7 +890,7 @@ export default function RechnungPage() {
       const felder = feldMeldungen(ursache);
       if (istBearbeitungskonflikt(ursache)) {
         // Die Eingaben bleiben stehen; den Weg weiter zeigt die Konfliktmeldung (Kriterium 3).
-        setzeAbweisung(ursache);
+        abgewiesen(ursache, rechnung);
       } else if (Object.keys(felder).length > 0) {
         setzeFeldFehler(felder);
       } else {
@@ -930,7 +935,7 @@ export default function RechnungPage() {
     } catch (ursache) {
       const felder = feldMeldungen(ursache);
       if (istBearbeitungskonflikt(ursache)) {
-        setzeAbweisung(ursache);
+        abgewiesen(ursache, rechnung);
       } else if (Object.keys(felder).length > 0) {
         setzeFehlende(felder);
       } else {
@@ -956,7 +961,7 @@ export default function RechnungPage() {
       uebernimm(await setzeRechnungszustand(rechnung.id, rechnung.version, ziel));
     } catch (ursache) {
       if (istBearbeitungskonflikt(ursache)) {
-        setzeAbweisung(ursache);
+        abgewiesen(ursache, rechnung);
       } else {
         setzeFehler(serverMeldung(ursache, AUSFALL_ZUSTAND));
       }
@@ -964,6 +969,20 @@ export default function RechnungPage() {
       setzeLaeuft(false);
     }
   };
+
+  /**
+   * Nimmt die Abweisung eines Schritts auf.
+   *
+   * Ist die Rechnung inzwischen geloescht, gibt es nichts neu zu laden (#411, Kriterium 6): Die
+   * eigenen Werte stehen sofort in {@link EigeneEingaben} zum Kopieren, und die Konfliktmeldung
+   * fuehrt zur Uebersicht. Nur der Entwurf hat eine Maske und damit eigene Werte.
+   */
+  function abgewiesen(ursache: unknown, rechnung: Rechnung) {
+    setzeAbweisung(ursache);
+    if (konfliktAngaben(ursache)?.art === 'gelöscht' && !istGestellt(rechnung.zustand)) {
+      setzeEigene(eigeneEingabenAus(texte, zeilen));
+    }
+  }
 
   /**
    * „Neu laden" nach einer Abweisung (#411, Kriterium 3; Plan #415, E12): der Stand des Servers
@@ -992,14 +1011,25 @@ export default function RechnungPage() {
     }
   };
 
+  /**
+   * Loescht den Entwurf auf dem Stand der Ansicht (#411, Kriterium 6; Plan #415, E17).
+   *
+   * Hat inzwischen jemand anderes geaendert oder geloescht, bleibt die Seite stehen, und die
+   * {@link Konfliktmeldung} sagt, was geschehen ist.
+   */
   const loeschen = async (rechnung: Rechnung) => {
     setzeFehler(null);
+    setzeAbweisung(null);
     setzeLaeuft(true);
     try {
-      await rechnungLoeschen(rechnung.id);
-      navigate('/rechnungen');
-    } catch {
-      setzeFehler(AUSFALL_LOESCHEN);
+      await rechnungLoeschen(rechnung.id, rechnung.version);
+      navigate(UEBERSICHT);
+    } catch (ursache) {
+      if (istBearbeitungskonflikt(ursache)) {
+        abgewiesen(ursache, rechnung);
+      } else {
+        setzeFehler(AUSFALL_LOESCHEN);
+      }
       setzeLaeuft(false);
     }
   };

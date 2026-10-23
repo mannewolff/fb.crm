@@ -20,8 +20,8 @@ import org.mwolff.fbcrm.rechnung.domain.Rechnung;
 import org.mwolff.fbcrm.rechnung.domain.Rechnungszustand;
 
 /**
- * Die Zeile der Tabelle {@code rechnung} nach {@code V18__rechnung.sql} und {@code
- * V33__version.sql}.
+ * Die Zeile der Tabelle {@code rechnung} nach {@code V18__rechnung.sql}, {@code V33__version.sql}
+ * und {@code V34__geloescht.sql}.
  *
  * <p>Das Angebot steht als blosse Kennung und nicht als Beziehung, aus demselben Grund wie bei
  * {@code AngebotEntity}: Angebot und Rechnung sind eigene Wurzeln mit eigenem Lebenszyklus, und
@@ -45,7 +45,7 @@ import org.mwolff.fbcrm.rechnung.domain.Rechnungszustand;
  * Spaltenliste in V18); beim Lesen steht dort {@code null}.
  */
 /*
- * Einunddreissig Spalten ergeben einunddreissig Felder. Sechzehn davon tragen die beiden Kopien
+ * Dreiunddreissig Spalten ergeben dreiunddreissig Felder. Sechzehn davon tragen die beiden Kopien
  * von Empfaenger und Absender (R8) — sie stehen einzeln, weil eine Kopie aus Spalten besteht und
  * nicht aus einem Textblock. Die Zeile ist die Zeile der Tabelle; sie in Teilzeilen zu zerlegen,
  * nur um die Zahl zu druecken, braeuchte eine Kette von @AttributeOverride und klaerte nichts.
@@ -158,6 +158,13 @@ class RechnungEntity {
   @Column(name = "geaendert_von")
   private @Nullable Long geaendertVon;
 
+  /* Das Kennzeichen der Loeschung (Plan #415, E17): NULL heisst „nicht geloescht" (V34). */
+  @Column(name = "geloescht_am")
+  private @Nullable Instant geloeschtAm;
+
+  @Column(name = "geloescht_von")
+  private @Nullable Long geloeschtVon;
+
   /*
    * JPA verlangt einen parameterlosen Konstruktor und fuellt die Felder danach selbst; NullAway
    * sieht diesen Weg nicht und meldete sonst nicht initialisierte Felder.
@@ -199,6 +206,8 @@ class RechnungEntity {
     this.updatedAt = rechnung.updatedAt();
     this.version = rechnung.version();
     this.geaendertVon = rechnung.geaendertVon();
+    this.geloeschtAm = rechnung.geloeschtAm();
+    this.geloeschtVon = rechnung.geloeschtVon();
   }
 
   private void uebernehmeEmpfaenger(final @Nullable Belegempfaenger empfaenger) {
@@ -314,5 +323,13 @@ class RechnungEntity {
 
   @Nullable Long getGeaendertVon() {
     return geaendertVon;
+  }
+
+  @Nullable Instant getGeloeschtAm() {
+    return geloeschtAm;
+  }
+
+  @Nullable Long getGeloeschtVon() {
+    return geloeschtVon;
   }
 }

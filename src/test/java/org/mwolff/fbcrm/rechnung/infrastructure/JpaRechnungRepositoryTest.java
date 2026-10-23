@@ -512,7 +512,7 @@ class JpaRechnungRepositoryTest {
   @Test
   void findAlle_thenLoadsEveryRechnungWithItsPositions() {
     // Given
-    when(rechnungen.findAll()).thenReturn(List.of(entwurfszeile()));
+    when(rechnungen.findLebende()).thenReturn(List.of(entwurfszeile()));
     when(positionen.findByRechnungen(List.of(RECHNUNG_ID)))
         .thenReturn(List.of(positionszeile(RECHNUNG_ID, (short) 1, BERATUNG)));
 
@@ -525,7 +525,7 @@ class JpaRechnungRepositoryTest {
   @Test
   void findAlle_givenARechnungWithoutPositions_thenItIsReadWithAnEmptyList() {
     // Given
-    when(rechnungen.findAll()).thenReturn(List.of(entwurfszeile()));
+    when(rechnungen.findLebende()).thenReturn(List.of(entwurfszeile()));
     when(positionen.findByRechnungen(List.of(RECHNUNG_ID))).thenReturn(List.of());
 
     // When / Then
@@ -535,18 +535,41 @@ class JpaRechnungRepositoryTest {
   }
 
   @Test
-  void delete_thenRemovesThePositionRowsAndTheRechnung() {
-    // Given
+  void save_givenADeletedEntwurf_thenMarksTheRowAndDeletesItsPositionRows() {
+    // Given — Plan #415, E17: die Zeile bleibt mit Kennzeichen, die Positionszeilen gehen hart.
+    final Instant geloeschtAm = Instant.parse("2026-10-05T08:42:00Z");
     final RechnungPositionEntity beratung = positionszeile((short) 1, BERATUNG);
-    when(positionen.findByRechnung(RECHNUNG_ID)).thenReturn(List.of(beratung));
+    erwarteSchreibenDerZeile(entwurfszeile(), List.of(beratung));
 
     // When
-    repository.delete(RECHNUNG_ID);
+    repository.save(entwurf(List.of(BERATUNG)).geloescht(31L, geloeschtAm));
 
     // Then
+    verify(rechnungen).save(gespeicherte.capture());
+    assertThat(gespeicherte.getValue())
+        .satisfies(
+            zeile -> assertThat(zeile.getGeloeschtAm()).isEqualTo(geloeschtAm),
+            zeile -> assertThat(zeile.getGeloeschtVon()).isEqualTo(31L));
     verify(positionen).deleteAll(geloeschtePositionen.capture());
     assertThat(geloeschtePositionen.getValue()).containsExactly(beratung);
-    verify(rechnungen).deleteById(RECHNUNG_ID);
+  }
+
+  @Test
+  void findById_givenADeletedRow_thenReadsTheMarkBack() {
+    // Given — der Zugriff ueber die Kennung liefert die gekennzeichnete Zeile mit (E16).
+    final Instant geloeschtAm = Instant.parse("2026-10-05T08:42:00Z");
+    when(rechnungen.findById(RECHNUNG_ID))
+        .thenReturn(
+            Optional.of(RechnungEntity.aus(entwurf(List.of()).geloescht(31L, geloeschtAm))));
+    when(positionen.findByRechnung(RECHNUNG_ID)).thenReturn(List.of());
+
+    // When / Then
+    assertThat(repository.findById(RECHNUNG_ID))
+        .hasValueSatisfying(
+            rechnung -> {
+              assertThat(rechnung.geloeschtAm()).isEqualTo(geloeschtAm);
+              assertThat(rechnung.geloeschtVon()).isEqualTo(31L);
+            });
   }
 
   @ParameterizedTest

@@ -35,6 +35,11 @@ import org.mwolff.fbcrm.rechnung.application.RechnungszustandPasstNicht;
  * wirft {@link RechnungszustandPasstNicht} — hier und nicht erst im Anwendungsfall, damit kein Weg
  * daran vorbeifuehrt.
  *
+ * <p><b>Geloescht wird mit Kennzeichen</b> (Plan #415, E17): {@link #geloescht(long, Instant)}
+ * haelt Zeitpunkt und Konto fest, damit ein spaeterer Zugriff beides nennen kann. Die Positionen
+ * gehen dabei verloren — sie zeigen ohne {@code ON DELETE} auf die Positionen des Angebots und
+ * sperrten diese sonst fuer immer.
+ *
  * @param id technische Kennung — {@code null}, solange die Rechnung nicht gespeichert ist
  * @param angebotId Kennung des Angebots, das abgerechnet wird
  * @param zustand Entwurf, gestellt, bezahlt oder abgeschrieben
@@ -54,6 +59,9 @@ import org.mwolff.fbcrm.rechnung.application.RechnungszustandPasstNicht;
  *     der ersten Aenderung, danach fuehrt ihn der Bestand
  * @param geaendertVon Kennung des Kontos, das die Rechnung zuletzt geaendert hat, oder {@code
  *     null}, solange sie das nicht weiss (Plan #415, E14)
+ * @param geloeschtAm Zeitpunkt der Loeschung, oder {@code null} fuer eine bestehende Rechnung (Plan
+ *     #415, E17)
+ * @param geloeschtVon Kennung des Kontos, das die Rechnung geloescht hat, oder {@code null}
  */
 public record Rechnung(
     @Nullable Long id,
@@ -72,7 +80,9 @@ public record Rechnung(
     Instant createdAt,
     Instant updatedAt,
     long version,
-    @Nullable Long geaendertVon)
+    @Nullable Long geaendertVon,
+    @Nullable Instant geloeschtAm,
+    @Nullable Long geloeschtVon)
     implements Identifiable {
 
   /** Der Teiler, der aus einem Satz in Prozent einen Faktor macht: zwei Stellen nach links. */
@@ -81,6 +91,72 @@ public record Rechnung(
   /** Nimmt die Positionen als Kopie: Der Aufrufer darf seine Liste danach weiterverwenden. */
   public Rechnung {
     positionen = List.copyOf(positionen);
+  }
+
+  /**
+   * Eine Rechnung, die nie geloescht wurde — so entsteht und lebt jede, bis sie geloescht wird.
+   *
+   * @param id technische Kennung, oder {@code null} vor dem Speichern
+   * @param angebotId Kennung des Angebots
+   * @param zustand der Zustand
+   * @param rechnungDatum Datum der Rechnung
+   * @param leistungszeitraum Zeitraum der Leistung als Text, oder {@code null}
+   * @param positionen die Positionen in ihrer Reihenfolge
+   * @param nummer die Rechnungsnummer, oder {@code null} im Entwurf
+   * @param steuersatz der Steuersatz in Prozent, oder {@code null} im Entwurf
+   * @param zahlungszielTage das Zahlungsziel in Tagen, oder {@code null}
+   * @param gestelltAm Zeitpunkt des Stellens, oder {@code null} im Entwurf
+   * @param pdfSchluessel Schluessel des archivierten Dokuments, oder {@code null}
+   * @param empfaenger Kopie des Empfaengers, oder {@code null} im Entwurf
+   * @param absender Kopie der eigenen Angaben, oder {@code null} im Entwurf
+   * @param createdAt Zeitpunkt der Anlage
+   * @param updatedAt Zeitpunkt der letzten Aenderung
+   * @param version der Stand der Rechnung
+   * @param geaendertVon Kennung des Kontos, das zuletzt geaendert hat, oder {@code null}
+   */
+  /*
+   * Siebzehn Parameter, weil die Rechnung siebzehn lebende Angaben traegt; der Konstruktor erspart
+   * jeder Stelle, die eine bestehende Rechnung baut, die beiden leeren Angaben zur Loeschung.
+   */
+  @SuppressWarnings("PMD.ExcessiveParameterList")
+  public Rechnung(
+      final @Nullable Long id,
+      final long angebotId,
+      final Rechnungszustand zustand,
+      final LocalDate rechnungDatum,
+      final @Nullable String leistungszeitraum,
+      final List<Rechnungsposition> positionen,
+      final @Nullable String nummer,
+      final @Nullable BigDecimal steuersatz,
+      final @Nullable Integer zahlungszielTage,
+      final @Nullable Instant gestelltAm,
+      final @Nullable String pdfSchluessel,
+      final @Nullable Belegempfaenger empfaenger,
+      final @Nullable Belegabsender absender,
+      final Instant createdAt,
+      final Instant updatedAt,
+      final long version,
+      final @Nullable Long geaendertVon) {
+    this(
+        id,
+        angebotId,
+        zustand,
+        rechnungDatum,
+        leistungszeitraum,
+        positionen,
+        nummer,
+        steuersatz,
+        zahlungszielTage,
+        gestelltAm,
+        pdfSchluessel,
+        empfaenger,
+        absender,
+        createdAt,
+        updatedAt,
+        version,
+        geaendertVon,
+        null,
+        null);
   }
 
   /** Die Netto-Summe: die Summe der gerundeten Positionsbetraege, Cent fuer Cent. */
@@ -142,7 +218,9 @@ public record Rechnung(
         createdAt,
         zeitpunkt,
         version,
-        geaendertVon);
+        geaendertVon,
+        geloeschtAm,
+        geloeschtVon);
   }
 
   /**
@@ -185,7 +263,9 @@ public record Rechnung(
         createdAt,
         zeitpunkt,
         version,
-        geaendertVon);
+        geaendertVon,
+        geloeschtAm,
+        geloeschtVon);
   }
 
   /**
@@ -218,7 +298,9 @@ public record Rechnung(
         createdAt,
         updatedAt,
         version,
-        geaendertVon);
+        geaendertVon,
+        geloeschtAm,
+        geloeschtVon);
   }
 
   /**
@@ -254,7 +336,9 @@ public record Rechnung(
         createdAt,
         jetzt,
         version,
-        geaendertVon);
+        geaendertVon,
+        geloeschtAm,
+        geloeschtVon);
   }
 
   /**
@@ -284,6 +368,44 @@ public record Rechnung(
         createdAt,
         updatedAt,
         version,
+        konto,
+        geloeschtAm,
+        geloeschtVon);
+  }
+
+  /**
+   * Der Entwurf mit dem Kennzeichen der Loeschung (#160, Kriterium 12; Plan #415, E17).
+   *
+   * <p>Die Zeile bleibt mit Zeitpunkt und Konto der Loeschung, die Positionen fallen weg: Sie
+   * zeigen ohne {@code ON DELETE} auf die Positionen des Angebots, und eine gekennzeichnete
+   * Rechnung, die sie behielte, sperrte diese Positionen fuer immer. Nur ein Entwurf laesst sich
+   * loeschen — eine gestellte Rechnung risse ein Loch in den Nummernkreis.
+   *
+   * @param konto Kennung des loeschenden Kontos
+   * @param zeitpunkt Zeitpunkt der Loeschung
+   * @throws RechnungszustandPasstNicht wenn die Rechnung schon gestellt ist
+   */
+  public Rechnung geloescht(final long konto, final Instant zeitpunkt) {
+    nurEntwurf();
+    return new Rechnung(
+        id,
+        angebotId,
+        zustand,
+        rechnungDatum,
+        leistungszeitraum,
+        List.of(),
+        nummer,
+        steuersatz,
+        zahlungszielTage,
+        gestelltAm,
+        pdfSchluessel,
+        empfaenger,
+        absender,
+        createdAt,
+        updatedAt,
+        version,
+        geaendertVon,
+        zeitpunkt,
         konto);
   }
 

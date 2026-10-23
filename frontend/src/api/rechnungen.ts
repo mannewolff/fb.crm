@@ -454,9 +454,10 @@ export function rechnungLesen(id: number): Promise<Rechnung> {
 }
 
 /*
- * Aendern, Stellen und Zustand legen den Stand, auf dem sie beruhen, als `If-Match` vor (#411,
- * Kriterien 4 und 5; Plan #415, E2, E10). Hat inzwischen jemand anderes geaendert, weist der Server
- * mit einem Bearbeitungskonflikt ab; die Antwort auf einen gelungenen Schritt traegt den neuen Stand.
+ * Aendern, Loeschen, Stellen und Zustand legen den Stand, auf dem sie beruhen, als `If-Match` vor
+ * (#411, Kriterien 4 bis 6; Plan #415, E2, E10). Hat inzwischen jemand anderes geaendert, weist
+ * der Server mit einem Bearbeitungskonflikt ab; die Antwort auf einen gelungenen Schritt traegt den
+ * neuen Stand.
  */
 
 /**
@@ -475,9 +476,16 @@ export function rechnungAendern(
   return apiJson(pfad(id), { methode: 'PUT', rumpf: eingabe, version }, parseRechnung);
 }
 
-/** Loescht den Entwurf (Kriterium 12) — die Antwort traegt keinen Inhalt. */
-export function rechnungLoeschen(id: number): Promise<void> {
-  return apiOhneInhalt(pfad(id), { methode: 'DELETE' });
+/**
+ * Loescht den Entwurf (Kriterium 12) — die Antwort traegt keinen Inhalt.
+ *
+ * Geloescht wird mit Kennzeichen (Plan #415, E17); ist der Entwurf inzwischen geaendert oder
+ * geloescht, weist der Server mit einem Bearbeitungskonflikt ab.
+ *
+ * @param version der Stand, auf dem das Loeschen beruht
+ */
+export function rechnungLoeschen(id: number, version: number): Promise<void> {
+  return apiOhneInhalt(pfad(id), { methode: 'DELETE', version });
 }
 
 /**

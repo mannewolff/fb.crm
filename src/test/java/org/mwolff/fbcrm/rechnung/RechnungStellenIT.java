@@ -1089,7 +1089,12 @@ class RechnungStellenIT extends AbstractIntegrationTest {
     // When / Then — eine gestellte Rechnung ist festgeschrieben (Kriterium 14).
     assertThat(setzeMenge(gestellt, "40.00").getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
     assertThat(
-            ruf("/api/rechnungen/" + gestellt.id(), HttpMethod.DELETE, null, String.class)
+            rufAufStand(
+                    "/api/rechnungen/" + gestellt.id(),
+                    HttpMethod.DELETE,
+                    null,
+                    String.class,
+                    gestellt.id())
                 .getStatusCode())
         .isEqualTo(HttpStatus.CONFLICT);
   }

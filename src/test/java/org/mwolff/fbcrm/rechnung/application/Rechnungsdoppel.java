@@ -204,6 +204,17 @@ final class Rechnungsdoppel {
   }
 
   /**
+   * Ein Rechnungsentwurf auf {@link #ANGEBOT}, inzwischen geloescht (Plan #415, E17).
+   *
+   * @param id Kennung der Rechnung
+   * @param urheber das Konto, das geloescht hat
+   * @param zeitpunkt wann es geloescht hat
+   */
+  static Rechnung geloescht(final long id, final long urheber, final Instant zeitpunkt) {
+    return entwurf(id, List.of(beratung("80.00"))).geloescht(urheber, zeitpunkt);
+  }
+
+  /**
    * Dasselbe Angebot auf einem anderen Stand, zuletzt geaendert von einem Konto.
    *
    * @param angebot das Angebot, dessen Angaben bleiben

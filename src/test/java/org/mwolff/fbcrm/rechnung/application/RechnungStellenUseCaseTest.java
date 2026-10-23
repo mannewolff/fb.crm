@@ -677,6 +677,27 @@ class RechnungStellenUseCaseTest {
   }
 
   @Test
+  void stelle_givenADeletedEntwurf_thenNothingIsGestelltAndTheDeletionIsNamed() {
+    // Given — #411, Kriterium 6: Anna hat den Entwurf inzwischen geloescht.
+    entwurfLiegt(Rechnungsdoppel.geloescht(ENTWURF, ANNA, ANNAS_AENDERUNG));
+
+    // When / Then — abgewiesen mit Annas Namen und dem Zeitpunkt der Loeschung.
+    assertThatThrownBy(() -> useCase.stelle(ENTWURF, GELESEN, MANFRED))
+        .asInstanceOf(InstanceOfAssertFactories.type(RechnungGeloescht.class))
+        .satisfies(
+            konflikt -> assertThat(konflikt.art()).isEqualTo(Bearbeitungskonflikt.Art.GELOESCHT),
+            konflikt -> assertThat(konflikt.urheberKonto()).hasValue(ANNA),
+            konflikt -> assertThat(konflikt.handelndesKonto()).isEqualTo(MANFRED),
+            konflikt -> assertThat(konflikt.zeitpunkt()).hasValue(ANNAS_AENDERUNG));
+
+    // Then — keine Nummer gezogen, kein Dokument, nichts geschrieben.
+    verify(rechnungen).findByIdMitSperre(ENTWURF);
+    verifyNoMoreInteractions(rechnungen);
+    verifyNoInteractions(
+        nummernkreis, rechnungsnummern, einstellungen, drucker, dokumente, briefboegen, angebote);
+  }
+
+  @Test
   void stelle_givenTheCurrentStand_thenTheGestellteRechnungCarriesTheStellenden() {
     // Given — Anna hat den Entwurf geaendert, Manfred hat danach geoeffnet und legt Stand 1 vor.
     entwurfLiegt(Rechnungsdoppel.aufStand(entwurfUeber("80.00"), 1L, ANNA, ANNAS_AENDERUNG));

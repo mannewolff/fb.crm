@@ -412,4 +412,73 @@ class RechnungTest {
     assertThatThrownBy(() -> rechnung.geaendert(RECHNUNGSDATUM, ZEITRAUM, positionen, GESTELLT_AM))
         .isInstanceOf(RechnungszustandPasstNicht.class);
   }
+
+  @Test
+  void entwurf_thenIsNotDeleted() {
+    // Given / When — so entsteht jede Rechnung.
+    final Rechnung rechnung = entwurf(List.of(BERATUNG));
+
+    // Then
+    assertThat(rechnung)
+        .satisfies(
+            neu -> assertThat(neu.geloeschtAm()).isNull(),
+            neu -> assertThat(neu.geloeschtVon()).isNull());
+  }
+
+  @Test
+  void geloescht_givenADraft_thenCarriesTheMarkAndDropsThePositions() {
+    // Given — Plan #415, E17.
+    final Rechnung rechnung = entwurf(List.of(BERATUNG)).durch(30L);
+    final Instant zeitpunkt = Instant.parse("2026-10-05T08:42:00Z");
+
+    // When
+    final Rechnung geloescht = rechnung.geloescht(31L, zeitpunkt);
+
+    // Then — die Zeile bleibt mit Kennzeichen, die Positionen fallen weg, alles andere bleibt.
+    assertThat(geloescht)
+        .satisfies(
+            neu -> assertThat(neu.geloeschtAm()).isEqualTo(zeitpunkt),
+            neu -> assertThat(neu.geloeschtVon()).isEqualTo(31L),
+            neu -> assertThat(neu.positionen()).isEmpty(),
+            neu -> assertThat(neu.id()).isEqualTo(11L),
+            neu -> assertThat(neu.zustand()).isEqualTo(Rechnungszustand.ENTWURF),
+            neu -> assertThat(neu.updatedAt()).isEqualTo(ANGELEGT),
+            neu -> assertThat(neu.geaendertVon()).isEqualTo(30L),
+            neu -> assertThat(neu.version()).isZero());
+  }
+
+  @Test
+  void geloescht_givenAnIssuedRechnung_thenRejected() {
+    // Given — eine gestellte Rechnung risse ein Loch in den Nummernkreis.
+    final Rechnung rechnung = gestellt();
+    final Instant zeitpunkt = Instant.parse("2026-10-05T08:42:00Z");
+
+    // When / Then
+    assertThatThrownBy(() -> rechnung.geloescht(31L, zeitpunkt))
+        .isInstanceOf(RechnungszustandPasstNicht.class);
+  }
+
+  @Test
+  void uebergaenge_thenKeepTheMarkOfTheDeletion() {
+    // Given — jeder Uebergang reicht das Kennzeichen weiter; keiner hebt es still auf.
+    final Instant zeitpunkt = Instant.parse("2026-10-05T08:42:00Z");
+    final Rechnung geloescht = entwurf(List.of(BERATUNG)).geloescht(31L, zeitpunkt);
+
+    // When
+    final Rechnung geaendert =
+        geloescht.geaendert(RECHNUNGSDATUM, ZEITRAUM, List.of(BERATUNG), GESTELLT_AM).durch(30L);
+    final Rechnung gestellt =
+        geloescht
+            .gestellt("R26-0004", NEUNZEHN, 10, EMPFAENGER, ABSENDER, GESTELLT_AM)
+            .mitDokument("rechnung/11/abc.pdf")
+            .mitZustand(Rechnungszustand.BEZAHLT, GESTELLT_AM);
+
+    // Then
+    assertThat(List.of(geaendert, gestellt))
+        .allSatisfy(
+            neu -> {
+              assertThat(neu.geloeschtAm()).isEqualTo(zeitpunkt);
+              assertThat(neu.geloeschtVon()).isEqualTo(31L);
+            });
+  }
 }

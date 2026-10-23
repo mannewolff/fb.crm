@@ -30,6 +30,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.mwolff.fbcrm.common.Bearbeitungskonflikt;
 import org.mwolff.fbcrm.common.Urheber;
 import org.mwolff.fbcrm.common.web.Bedingungskopf;
 import org.mwolff.fbcrm.common.web.GlobalExceptionHandler;
@@ -38,6 +39,7 @@ import org.mwolff.fbcrm.rechnung.application.RechnungAendernUseCase;
 import org.mwolff.fbcrm.rechnung.application.RechnungDaten;
 import org.mwolff.fbcrm.rechnung.application.RechnungDokumentLesenUseCase;
 import org.mwolff.fbcrm.rechnung.application.RechnungGeaendert;
+import org.mwolff.fbcrm.rechnung.application.RechnungGeloescht;
 import org.mwolff.fbcrm.rechnung.application.RechnungLesenUseCase;
 import org.mwolff.fbcrm.rechnung.application.RechnungLoeschenUseCase;
 import org.mwolff.fbcrm.rechnung.application.RechnungNichtGefunden;
@@ -70,7 +72,9 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
  * <p><b>Aendern, Stellen und Zustand legen den Stand vor</b> (#411, Kriterien 4 und 5; Plan #415,
  * E3, E10): Fuer jeden der drei Wege gilt dasselbe Dreigespann — ohne {@code If-Match} 428, auf
  * einem alten Stand 409 mit {@code konflikt}, auf dem aktuellen 200 mit dem erhoehten Stand; die
- * drei Wege laufen je durch dieselben drei parametrisierten Tests.
+ * drei Wege laufen je durch dieselben drei parametrisierten Tests. Das Loeschen legt den Stand
+ * ebenso vor und antwortet auf dem aktuellen 204; an einem inzwischen geloeschten Entwurf antworten
+ * alle vier Wege 409 mit {@code art = "gelöscht"} (Kriterium 6; E16).
  */
 @ExtendWith(MockitoExtension.class)
 class RechnungControllerTest {
@@ -467,28 +471,38 @@ class RechnungControllerTest {
   }
 
   @Test
-  void loeschen_thenNoContent() throws Exception {
+  void loeschen_withTheCurrentStand_thenNoContentAndTheUseCaseSeesStandAndKonto() throws Exception {
     // When / Then
-    mockMvc.perform(delete(PFAD)).andExpect(status().isNoContent());
-    verify(loeschen).loesche(Webdoppel.RECHNUNG);
+    mockMvc
+        .perform(delete(PFAD).header(HttpHeaders.IF_MATCH, VORGELEGT))
+        .andExpect(status().isNoContent());
+    verify(loeschen).loesche(Webdoppel.RECHNUNG, STAND, ANGEMELDET);
   }
 
   @Test
   void loeschen_atAGestellteRechnung_thenConflict() throws Exception {
     // Given
-    doThrow(new RechnungszustandPasstNicht()).when(loeschen).loesche(Webdoppel.RECHNUNG);
+    doThrow(new RechnungszustandPasstNicht())
+        .when(loeschen)
+        .loesche(Webdoppel.RECHNUNG, STAND, ANGEMELDET);
 
     // When / Then
-    mockMvc.perform(delete(PFAD)).andExpect(status().isConflict());
+    mockMvc
+        .perform(delete(PFAD).header(HttpHeaders.IF_MATCH, VORGELEGT))
+        .andExpect(status().isConflict());
   }
 
   @Test
   void loeschen_withAnUnknownRechnung_thenNotFound() throws Exception {
     // Given
-    doThrow(new RechnungNichtGefunden()).when(loeschen).loesche(Webdoppel.RECHNUNG);
+    doThrow(new RechnungNichtGefunden())
+        .when(loeschen)
+        .loesche(Webdoppel.RECHNUNG, STAND, ANGEMELDET);
 
     // When / Then
-    mockMvc.perform(delete(PFAD)).andExpect(status().isNotFound());
+    mockMvc
+        .perform(delete(PFAD).header(HttpHeaders.IF_MATCH, VORGELEGT))
+        .andExpect(status().isNotFound());
   }
 
   @Test
@@ -745,13 +759,18 @@ class RechnungControllerTest {
           put(PFAD + "/zustand")
               .contentType(MediaType.APPLICATION_JSON)
               .content("{\"zustand\":\"BEZAHLT\"}");
+      case "loeschen" -> delete(PFAD);
       default -> throw new IllegalArgumentException(weg);
     };
   }
 
   /** Der Anwendungsfall des Wegs wirft den Konflikt — mit Stand und Konto aus der Anfrage. */
   private void wirftKonflikt(final String weg) {
-    final RechnungGeaendert konflikt = new RechnungGeaendert(ANNA, ANGEMELDET, ANNAS_AENDERUNG);
+    wirft(weg, new RechnungGeaendert(ANNA, ANGEMELDET, ANNAS_AENDERUNG));
+  }
+
+  /** Der Anwendungsfall des Wegs wirft den genannten Konflikt. */
+  private void wirft(final String weg, final Bearbeitungskonflikt konflikt) {
     switch (weg) {
       case "aendern" -> when(aendern.aendere(eq(Webdoppel.RECHNUNG), any())).thenThrow(konflikt);
       case "stellen" ->
@@ -759,6 +778,8 @@ class RechnungControllerTest {
       case "zustand" ->
           when(zustand.setze(Webdoppel.RECHNUNG, Rechnungszustand.BEZAHLT, STAND, ANGEMELDET))
               .thenThrow(konflikt);
+      case "loeschen" ->
+          doThrow(konflikt).when(loeschen).loesche(Webdoppel.RECHNUNG, STAND, ANGEMELDET);
       default -> throw new IllegalArgumentException(weg);
     }
   }
@@ -779,7 +800,7 @@ class RechnungControllerTest {
   }
 
   @ParameterizedTest
-  @ValueSource(strings = {"aendern", "stellen", "zustand"})
+  @ValueSource(strings = {"aendern", "stellen", "zustand", "loeschen"})
   void schreibenderWeg_withoutIfMatch_thenAnswers428AndChangesNothing(final String weg)
       throws Exception {
     // Given — E3: Ohne vorgelegten Stand wird nicht geschrieben; ein freiwilliger Kopf waere ein
@@ -790,11 +811,11 @@ class RechnungControllerTest {
         .perform(anfrageZu(weg))
         .andExpect(status().isPreconditionRequired())
         .andExpect(jsonPath("$.detail").value(Bedingungskopf.MELDUNG));
-    verifyNoInteractions(aendern, stellen, zustand, lesen);
+    verifyNoInteractions(aendern, stellen, zustand, loeschen, lesen);
   }
 
   @ParameterizedTest
-  @ValueSource(strings = {"aendern", "stellen", "zustand"})
+  @ValueSource(strings = {"aendern", "stellen", "zustand", "loeschen"})
   void schreibenderWeg_withAnOutdatedStand_thenAnswers409WithTheConflict(final String weg)
       throws Exception {
     // Given — #411, Szenario „Rechnung auf veraltetem Stand stellen": Anna hat inzwischen
@@ -830,5 +851,23 @@ class RechnungControllerTest {
 
     // Then
     bekamStandUndKonto(weg);
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"aendern", "stellen", "zustand", "loeschen"})
+  void schreibenderWeg_atADeletedRechnung_thenAnswers409AsGeloescht(final String weg)
+      throws Exception {
+    // Given — #411, Kriterium 6; Plan #415, E16: Anna hat den Entwurf inzwischen geloescht.
+    wirft(weg, new RechnungGeloescht(ANNA, ANGEMELDET, ANNAS_AENDERUNG));
+
+    // When / Then
+    mockMvc
+        .perform(anfrageZu(weg).header(HttpHeaders.IF_MATCH, VORGELEGT))
+        .andExpect(status().isConflict())
+        .andExpect(jsonPath("$.konflikt.art").value("gelöscht"))
+        .andExpect(jsonPath("$.konflikt.geaendertVon").value("Anna"))
+        .andExpect(jsonPath("$.konflikt.geaendertAm").value("2026-09-30T08:42:00Z"))
+        .andExpect(jsonPath("$.konflikt.eigenesFenster").value(false));
+    verifyNoInteractions(lesen);
   }
 }

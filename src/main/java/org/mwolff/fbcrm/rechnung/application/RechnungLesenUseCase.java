@@ -69,14 +69,18 @@ public class RechnungLesenUseCase {
    * Die Rechnung zu einer Kennung mit dem Stand jeder Position ihres Angebots.
    *
    * @param rechnungId Kennung der Rechnung
-   * @throws RechnungNichtGefunden wenn es die Rechnung nicht gibt
+   * @throws RechnungNichtGefunden wenn es die Rechnung nicht gibt oder sie geloescht ist (Plan
+   *     #415, E17)
    * @throws AngebotNichtGefunden wenn es das Angebot der Rechnung nicht gibt
    * @throws FirmaNichtGefunden wenn es die Firma des Angebots nicht gibt — weder Angebote noch
    *     Firmen werden geloescht, beides waere ein Widerspruch im Bestand
    */
   public Rechnungsansicht lese(final long rechnungId) {
     final Rechnung rechnung =
-        rechnungen.findById(rechnungId).orElseThrow(RechnungNichtGefunden::new);
+        rechnungen
+            .findById(rechnungId)
+            .filter(gefunden -> gefunden.geloeschtAm() == null)
+            .orElseThrow(RechnungNichtGefunden::new);
     final Angebot angebot =
         angebote.findById(rechnung.angebotId()).orElseThrow(AngebotNichtGefunden::new);
     final Firma firma = firmen.findById(angebot.firmaId()).orElseThrow(FirmaNichtGefunden::new);

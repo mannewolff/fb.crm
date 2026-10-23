@@ -339,6 +339,9 @@ describe('Szenarien des Fachplans (E16)', () => {
     expect(text).toMatch(/„Rechnung stellen"/u);
     expect(text).toMatch(/„Als bezahlt markieren"/u);
     expect(text).toMatch(/zählt allein der\s+Entwurf/u);
+    // Ein geloeschter Entwurf weist jede Taste ab und fuehrt zur Uebersicht (Issue #447).
+    expect(text).toMatch(/„Entwurf löschen" löscht nur den Entwurf, den man gesehen hat/u);
+    expect(text).toMatch(/„Zur Übersicht" führt zur Liste der Rechnungen/u);
     expect(text).toMatch(/\*\*Ergebnis:\*\*/u);
   });
 

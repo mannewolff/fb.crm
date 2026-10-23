@@ -12,7 +12,6 @@ import org.mwolff.fbcrm.angebot.application.AngebotNichtGefunden;
 import org.mwolff.fbcrm.angebot.domain.Angebot;
 import org.mwolff.fbcrm.angebot.domain.AngebotRepository;
 import org.mwolff.fbcrm.angebot.domain.Angebotsposition;
-import org.mwolff.fbcrm.common.Bearbeitungskonflikt;
 import org.mwolff.fbcrm.rechnung.domain.Rechnung;
 import org.mwolff.fbcrm.rechnung.domain.RechnungRepository;
 import org.mwolff.fbcrm.rechnung.domain.Rechnungsposition;
@@ -44,6 +43,8 @@ import org.springframework.transaction.annotation.Transactional;
  * Stand mit dem der Rechnung: Wer auf einem alten Stand speichert, bekommt {@link
  * RechnungGeaendert} mit Urheber und Zeitpunkt der fremden Aenderung, denn der andere kann den
  * Entwurf eben erst gestellt haben. Das handelnde Konto steht danach als Urheber an der Rechnung.
+ * Ist der Entwurf inzwischen geloescht, weist schon dieser Vergleich mit {@link RechnungGeloescht}
+ * ab (E16), und es entsteht nichts neu.
  */
 @Service
 @Transactional
@@ -67,6 +68,7 @@ public class RechnungAendernUseCase {
    * @param daten die eingereichten Angaben samt vollstaendiger Positionsliste, vorgelegtem Stand
    *     und handelndem Konto
    * @throws RechnungNichtGefunden wenn es die Rechnung nicht gibt
+   * @throws RechnungGeloescht wenn die Rechnung inzwischen geloescht ist (Plan #415, E16)
    * @throws RechnungGeaendert wenn die Rechnung inzwischen einen anderen Stand hat als den
    *     vorgelegten
    * @throws RechnungszustandPasstNicht wenn die Rechnung schon gestellt ist
@@ -77,12 +79,7 @@ public class RechnungAendernUseCase {
   public Rechnung aendere(final long rechnungId, final RechnungDaten daten) {
     final Rechnung rechnung =
         rechnungen.findById(rechnungId).orElseThrow(RechnungNichtGefunden::new);
-    Bearbeitungskonflikt.pruefe(
-        daten.version(),
-        rechnung.version(),
-        () ->
-            new RechnungGeaendert(
-                rechnung.geaendertVon(), daten.geaendertVon(), rechnung.updatedAt()));
+    Rechnungsvergleich.pruefe(rechnung, daten.version(), daten.geaendertVon());
     if (rechnung.zustand() != Rechnungszustand.ENTWURF) {
       throw new RechnungszustandPasstNicht();
     }

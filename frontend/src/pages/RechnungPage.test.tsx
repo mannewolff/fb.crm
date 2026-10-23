@@ -570,6 +570,8 @@ describe('RechnungPage — den Entwurf loeschen (Kriterium 12)', () => {
       '/api/rechnungen/4',
       expect.objectContaining({ method: 'DELETE' }),
     );
+    // Geloescht wird auf dem gezeigten Stand (#411, Kriterium 6; Plan #415, E17).
+    expect(vorgelegteStaende(fetchMock, WEG_LOESCHEN)).toEqual(['"3"']);
   });
 
   it('loescht nicht, wenn die Rueckfrage abgebrochen wird', async () => {
@@ -1115,6 +1117,16 @@ function abweisung(geaendertVon: string): () => Response {
   });
 }
 
+/** Die Abweisung an einem inzwischen geloeschten Entwurf (#411, Kriterium 6; Plan #415, E16). */
+function geloescht(geaendertVon: string): () => Response {
+  return json(409, {
+    title: 'Conflict',
+    status: 409,
+    detail: 'Dieser Eintrag wurde inzwischen gelöscht.',
+    konflikt: { art: 'gelöscht', geaendertAm: heuteUm(10, 42), eigenesFenster: false, geaendertVon },
+  });
+}
+
 /** Antwortet der Reihe nach mit den Antworten — beim ersten Aufruf mit der ersten. */
 function nacheinander(...antworten: readonly (() => Response)[]): () => Response {
   let aufruf = 0;
@@ -1305,5 +1317,88 @@ describe('RechnungPage — gleichzeitig arbeiten (#411, Kriterien 1 bis 5; Plan 
       ),
     ).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Neu laden' })).toBeInTheDocument();
+  });
+});
+
+describe('RechnungPage — inzwischen geloescht (#411, Kriterium 6; Plan #415, E16, E17)', () => {
+  /** Waehlt „Entwurf löschen" und bestaetigt die Rueckfrage. */
+  async function loescheDenEntwurf(nutzer: ReturnType<typeof userEvent.setup>) {
+    await waehle(nutzer, 'Entwurf löschen');
+    const frage = await screen.findByRole('dialog');
+    await nutzer.click(within(frage).getByRole('button', { name: 'Entwurf löschen' }));
+  }
+
+  it('Szenario: abgewiesenes Speichern am geloeschten Entwurf — Zur Übersicht, die Eingaben bleiben sichtbar', async () => {
+    const nutzer = userEvent.setup();
+    const fetchMock = fetchNachPfad({ [WEG]: json(200, GESPEICHERT), [WEG_AENDERN]: geloescht('Anna') });
+
+    renderSeite();
+    await screen.findByRole('table', { name: 'Positionen' });
+    await trageEin(nutzer, 1, '90');
+    await nutzer.click(screen.getByRole('button', { name: 'Speichern' }));
+
+    // Abgewiesen: Anna hat geloescht; statt „Neu laden" fuehrt der Weg zur Uebersicht.
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Anna hat diesen Eintrag inzwischen gelöscht (10:42).',
+    );
+    expect(screen.getByRole('link', { name: 'Zur Übersicht' })).toHaveAttribute('href', '/rechnungen');
+    expect(screen.queryByRole('button', { name: 'Neu laden' })).not.toBeInTheDocument();
+
+    // Die eigenen Werte stehen weiter in der Maske und daneben zum Kopieren.
+    expect(mengenfeld(1)).toHaveValue('90');
+    const eigene = screen.getByRole('region', { name: 'Deine Eingaben' });
+    expect(eigene).toHaveTextContent('Leistungszeitraum');
+    expect(eigene).toHaveTextContent('Oktober 2026');
+    expect(eigene).toHaveTextContent('Entwicklung · 90 Stunde');
+    expect(vorgelegteStaende(fetchMock, WEG_AENDERN)).toEqual(['"4"']);
+  });
+
+  it('weist das Loeschen eines inzwischen geloeschten Entwurfs ab und bleibt auf der Rechnung', async () => {
+    const nutzer = userEvent.setup();
+    fetchNachPfad({ [WEG]: json(200, ENTWURF), [WEG_LOESCHEN]: geloescht('Anna') });
+
+    renderSeite();
+    await screen.findByRole('table', { name: 'Positionen' });
+    await loescheDenEntwurf(nutzer);
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Anna hat diesen Eintrag inzwischen gelöscht (10:42).',
+    );
+    expect(screen.getByRole('link', { name: 'Zur Übersicht' })).toHaveAttribute('href', '/rechnungen');
+    expect(screen.getByRole('region', { name: 'Deine Eingaben' })).toBeInTheDocument();
+    expect(screen.queryByText('Der Entwurf wurde nicht gelöscht.')).not.toBeInTheDocument();
+    expect(screen.getByTestId('adresse')).toHaveTextContent('/rechnungen/4');
+  });
+
+  it('weist das Loeschen eines inzwischen geaenderten Entwurfs ab und bietet Neu laden', async () => {
+    const nutzer = userEvent.setup();
+    fetchNachPfad({ [WEG]: json(200, ENTWURF), [WEG_LOESCHEN]: abweisung('Anna') });
+
+    renderSeite();
+    await screen.findByRole('table', { name: 'Positionen' });
+    await loescheDenEntwurf(nutzer);
+
+    // Nichts ist geloescht: die Meldung nennt Annas Aenderung, die Seite bleibt.
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Anna hat diesen Eintrag inzwischen geändert (10:42).',
+    );
+    expect(screen.getByRole('button', { name: 'Neu laden' })).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Deine Eingaben' })).not.toBeInTheDocument();
+    expect(screen.getByTestId('adresse')).toHaveTextContent('/rechnungen/4');
+  });
+
+  it('zeigt am Beleg nach einer Abweisung als geloescht keine eigenen Eingaben', async () => {
+    const nutzer = userEvent.setup();
+    fetchNachPfad({ [WEG]: json(200, GESTELLT), [WEG_ZUSTAND]: geloescht('Anna') });
+
+    renderSeite();
+    await screen.findByRole('table', { name: 'Positionen' });
+    await nutzer.click(screen.getByRole('button', { name: 'Als bezahlt markieren' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Anna hat diesen Eintrag inzwischen gelöscht (10:42).',
+    );
+    expect(screen.getByRole('link', { name: 'Zur Übersicht' })).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Deine Eingaben' })).not.toBeInTheDocument();
   });
 });

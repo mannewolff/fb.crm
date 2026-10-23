@@ -65,8 +65,8 @@ Abschnitt zeigt, was dann geschieht und wie man weitermacht. Bisher gilt das bei
 Maske „Angebot bearbeiten" und in der Ansicht eines Angebots bei „Status weiter", „Status zurück",
 „Abschließen", „Wieder öffnen", „Stornieren" und „Storno zurücknehmen", dazu beim Bearbeiten und
 Löschen eines Kommentars und beim Löschen einer Anlage. An einer Rechnung gilt es beim Speichern
-des Entwurfs, bei „Rechnung stellen" und bei „Als bezahlt markieren", „Abschreiben" und „Zurück auf
-gestellt". Das Angebot zählt dabei als Ganzes, mit seinen Positionen und seinem Status; jeder
+und Löschen des Entwurfs, bei „Rechnung stellen" und bei „Als bezahlt markieren", „Abschreiben" und
+„Zurück auf gestellt". Das Angebot zählt dabei als Ganzes, mit seinen Positionen und seinem Status; jeder
 Kommentar ist ein Eintrag für sich.
 
 **Einstieg:** Die Abweisung erscheint von selbst, wenn man „Speichern" wählt und jemand anderes
@@ -117,6 +117,14 @@ Angaben oder den Briefbogen geändert, wird trotzdem gestellt — mit dem Stand 
 Dasselbe gilt für „Als bezahlt markieren", „Abschreiben" und „Zurück auf gestellt": Nach einer
 Abweisung holt „Neu laden" den aktuellen Zustand der Rechnung, danach wählt man die Taste erneut,
 wenn sie noch passt.
+
+„Entwurf löschen" löscht nur den Entwurf, den man gesehen hat: Hat ihn ein anderer seit dem Öffnen
+geändert, bleibt er stehen, und die Meldung nennt die Änderung. Ist der Entwurf inzwischen gelöscht
+— von einem anderen oder von einem selbst in einem anderen Fenster —, wird jede Taste daran
+abgewiesen: Speichern, Löschen, „Rechnung stellen" und der Ausgang der Forderung. Die Meldung nennt,
+wer ihn wann gelöscht hat, „Zur Übersicht" führt zur Liste der Rechnungen, und die eigenen Werte
+stehen weiter in der Maske und unter „Deine Eingaben" zum Kopieren. Ein gelöschter Entwurf zählt
+nirgends mehr mit: Seine Mengen sind am Angebot wieder offen.
 
 **Ergebnis:** Angebot und Rechnung tragen die Änderungen beider, und keine ist unbemerkt verloren
 gegangen.
