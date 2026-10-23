@@ -1,6 +1,7 @@
 package org.mwolff.fbcrm.arbeitszeit.web;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.tuple;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -17,6 +18,7 @@ import org.mwolff.fbcrm.angebot.web.AngebotResponse;
 import org.mwolff.fbcrm.auth.Anmeldung;
 import org.mwolff.fbcrm.auth.Konten;
 import org.mwolff.fbcrm.auth.domain.AccountRepository;
+import org.mwolff.fbcrm.auth.domain.Role;
 import org.mwolff.fbcrm.auth.domain.SecretHasher;
 import org.mwolff.fbcrm.common.Geschaeftszone;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -43,7 +45,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
  * Bezeichnung seiner Position und den Namen der Firma, je Tag eine Summe und fuer den Monat eine
  * weitere; ohne Parameter antwortet sie fuer den laufenden Monat, und ein Monat, den es nicht gibt,
  * ist eine fehlerhafte Anfrage. Die buchbaren Positionen nennen nur, was nach Aufwand in Stunden
- * abrechnet.
+ * abrechnet. Die waehlbaren Personen (Plan #426, E11) nennt ein eigener Weg.
  *
  * <p>Der Ausgangspunkt ist ein bestelltes Angebot mit zwei Positionen: „Konzeption" nach Aufwand in
  * Stunden, auf die gebucht werden darf, und daneben eine Pauschale, auf die nicht gebucht werden
@@ -414,5 +416,38 @@ class ArbeitszeitControllerIT extends AbstractIntegrationTest {
               assertThat(position.angebotId()).isEqualTo(angebotId);
               assertThat(position.angebotTitel()).isEqualTo("Website-Relaunch");
             });
+  }
+
+  @Test
+  void personen_signedInAsCLevel_thenAnswers200WithAllAccountsIncludingTheDeactivatedOne() {
+    // Given — Kriterium 9 von #410: auch eine stillgelegte Person steht zur Auswahl.
+    final long ben =
+        accounts
+            .save(
+                Konten.mit(null, "ben@example.org", Role.EMPLOYEE, false, 0, ANGELEGT)
+                    .mitNamen("Ben", ANGELEGT))
+            .requireId();
+
+    // When
+    final ResponseEntity<PersonResponse[]> gelesen =
+        ruf(PFAD + "/personen", HttpMethod.GET, null, PersonResponse[].class);
+
+    // Then — nach Anzeigenamen: Ben vor Manne.
+    assertThat(gelesen.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(Objects.requireNonNull(gelesen.getBody()))
+        .extracting(PersonResponse::id, PersonResponse::name, PersonResponse::aktiv)
+        .containsExactly(
+            tuple(ben, "Ben", false),
+            tuple(accounts.findByEmail(MAIL).orElseThrow().requireId(), "Manne", true));
+  }
+
+  @Test
+  void personen_withoutASession_thenAnswers401() {
+    // Given
+    sitzung = new HttpHeaders();
+
+    // When / Then
+    assertThat(ruf(PFAD + "/personen", HttpMethod.GET, null, String.class).getStatusCode())
+        .isEqualTo(HttpStatus.UNAUTHORIZED);
   }
 }

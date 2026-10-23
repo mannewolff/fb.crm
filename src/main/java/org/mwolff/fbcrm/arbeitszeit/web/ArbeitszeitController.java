@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Optional;
 import org.mwolff.fbcrm.arbeitszeit.application.ArbeitszeitMonatUseCase;
 import org.mwolff.fbcrm.arbeitszeit.application.BuchbarePositionenUseCase;
+import org.mwolff.fbcrm.arbeitszeit.application.Personenauskunft;
 import org.mwolff.fbcrm.arbeitszeit.application.ZeiteintragUseCase;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -28,7 +29,10 @@ import org.springframework.web.bind.annotation.RestController;
  * (Plan #194, A7), und die Ansicht liest einen Monat quer ueber alle Angebote.
  *
  * <p>Der Controller entscheidet nichts (CLAUDE-java.md §6.3). Warum {@code POST} und {@code PUT}
- * mit einem Rumpf antworten, steht in {@link ZeiteintragResponse}.
+ * mit einem Rumpf antworten, steht in {@link ZeiteintragResponse}. Er liest allein die Kennung des
+ * angemeldeten Kontos und reicht sie weiter; Rechte und Vorauswahl je Rolle liegen im
+ * Anwendungsfall, der Rolle und Zustand selbst aus dem Konto holt (Plan #426, E6) — welche Personen
+ * waehlbar sind, entscheidet {@link Personenauskunft}.
  *
  * <p><b>Der Monat ist optional.</b> Fehlt er, fragt der Controller ohne Monat, und welcher der
  * laufende ist, entscheidet der Anwendungsfall an seiner Uhr in der Geschaeftszone (E4) — der
@@ -46,14 +50,17 @@ public class ArbeitszeitController {
   private final ZeiteintragUseCase useCase;
   private final ArbeitszeitMonatUseCase monate;
   private final BuchbarePositionenUseCase buchbare;
+  private final Personenauskunft personenauskunft;
 
   public ArbeitszeitController(
       final ZeiteintragUseCase useCase,
       final ArbeitszeitMonatUseCase monate,
-      final BuchbarePositionenUseCase buchbare) {
+      final BuchbarePositionenUseCase buchbare,
+      final Personenauskunft personenauskunft) {
     this.useCase = useCase;
     this.monate = monate;
     this.buchbare = buchbare;
+    this.personenauskunft = personenauskunft;
   }
 
   /**
@@ -71,6 +78,16 @@ public class ArbeitszeitController {
   @GetMapping("/buchbare-positionen")
   public List<BuchungspositionResponse> buchbarePositionen() {
     return buchbare.positionen().stream().map(BuchungspositionResponse::of).toList();
+  }
+
+  /**
+   * Die Personen, unter denen das angemeldete Konto waehlen darf — fuer Umschalter und
+   * Erfassungsdialog (Plan #426, E11). Ein eigener Weg wie {@code buchbare-positionen}: Die Liste
+   * aendert sich nicht je Monat.
+   */
+  @GetMapping("/personen")
+  public List<PersonResponse> personen(@AuthenticationPrincipal final Long accountId) {
+    return personenauskunft.personen(accountId).stream().map(PersonResponse::of).toList();
   }
 
   /**

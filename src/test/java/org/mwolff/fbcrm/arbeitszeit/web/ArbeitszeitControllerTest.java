@@ -33,8 +33,10 @@ import org.mwolff.fbcrm.arbeitszeit.application.Arbeitstag;
 import org.mwolff.fbcrm.arbeitszeit.application.ArbeitszeitMonatUseCase;
 import org.mwolff.fbcrm.arbeitszeit.application.BuchbarePositionenUseCase;
 import org.mwolff.fbcrm.arbeitszeit.application.Buchungsposition;
+import org.mwolff.fbcrm.arbeitszeit.application.Personenauskunft;
 import org.mwolff.fbcrm.arbeitszeit.application.PositionNichtBuchbar;
 import org.mwolff.fbcrm.arbeitszeit.application.UhrzeitNichtImRaster;
+import org.mwolff.fbcrm.arbeitszeit.application.WaehlbarePerson;
 import org.mwolff.fbcrm.arbeitszeit.application.Zeitbuchung;
 import org.mwolff.fbcrm.arbeitszeit.application.ZeiteintragNichtGefunden;
 import org.mwolff.fbcrm.arbeitszeit.application.ZeiteintragUseCase;
@@ -58,9 +60,10 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
  * <p>Gegenstand sind die Statuscodes — 201 beim Anlegen, 200 beim Aendern, 204 beim Loeschen, 404
  * bei unbekannter Kennung —, die Felder der Antwort samt der gerechneten Dauer und die
  * Feldmeldungen der fachlichen Abweisungen (422). Dazu die beiden Lesewege: die Monatsliste mit
- * ihren Summen (Plan #194, A20) und die buchbaren Positionen (A15). Der Monat ist ein optionaler
- * Parameter — fehlt er, fragt der Controller ohne Monat und der Anwendungsfall nimmt den laufenden;
- * ein unbrauchbarer Monat ist eine fehlerhafte Anfrage (400).
+ * ihren Summen (Plan #194, A20), die buchbaren Positionen (A15) und die waehlbaren Personen (Plan
+ * #426, E11). Der Monat ist ein optionaler Parameter — fehlt er, fragt der Controller ohne Monat
+ * und der Anwendungsfall nimmt den laufenden; ein unbrauchbarer Monat ist eine fehlerhafte Anfrage
+ * (400).
  *
  * <p>Die Sitzung steht als {@link SecurityContextHolder} mit der Kennung des Kontos als Principal,
  * wie in {@code AngebotKommentareControllerTest}: Ein neuer Eintrag gehoert dem angemeldeten Konto
@@ -91,6 +94,7 @@ class ArbeitszeitControllerTest {
   @Mock private ZeiteintragUseCase useCase;
   @Mock private ArbeitszeitMonatUseCase monate;
   @Mock private BuchbarePositionenUseCase buchbare;
+  @Mock private Personenauskunft personen;
 
   @Captor private ArgumentCaptor<LocalTime> von;
 
@@ -103,7 +107,8 @@ class ArbeitszeitControllerTest {
             UsernamePasswordAuthenticationToken.authenticated(
                 Long.valueOf(ANGEMELDET), null, List.of()));
     mockMvc =
-        MockMvcBuilders.standaloneSetup(new ArbeitszeitController(useCase, monate, buchbare))
+        MockMvcBuilders.standaloneSetup(
+                new ArbeitszeitController(useCase, monate, buchbare, personen))
             .setControllerAdvice(new GlobalExceptionHandler())
             .setCustomArgumentResolvers(new AuthenticationPrincipalArgumentResolver())
             .build();
@@ -350,5 +355,25 @@ class ArbeitszeitControllerTest {
         .perform(get(PFAD + "/buchbare-positionen"))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$[0].angebotTitel").value(nullValue()));
+  }
+
+  @Test
+  void personen_thenPassesTheSignedInAccountAndMapsTheAnswer() throws Exception {
+    // Given — E6: welche Personen waehlbar sind, entscheidet der Anwendungsfall.
+    when(personen.personen(ANGEMELDET))
+        .thenReturn(
+            List.of(new WaehlbarePerson(2L, "Ben", true), new WaehlbarePerson(3L, "Clara", false)));
+
+    // When / Then
+    mockMvc
+        .perform(get(PFAD + "/personen"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$[0].id").value(2))
+        .andExpect(jsonPath("$[0].name").value("Ben"))
+        .andExpect(jsonPath("$[0].aktiv").value(true))
+        .andExpect(jsonPath("$[1].id").value(3))
+        .andExpect(jsonPath("$[1].name").value("Clara"))
+        .andExpect(jsonPath("$[1].aktiv").value(false));
+    verify(personen).personen(ANGEMELDET);
   }
 }

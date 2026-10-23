@@ -6,7 +6,10 @@
  * Plan #194, A6). Die Richtung der Abhaengigkeit ist {@code arbeitszeit} → {@code angebot} und
  * {@code arbeitszeit} → {@code firma} (A1): Die Zeit wird auf eine Angebotsposition gebucht und
  * muss deren Abrechnungsart, Einheit und den Status ihres Angebots kennen, und die Meldung der
- * Ueberschneidung nennt die Firma. Umgekehrt zeigt nichts.
+ * Ueberschneidung nennt die Firma. Umgekehrt zeigt nichts. Dazu kommt {@code arbeitszeit} → {@code
+ * auth} (Plan #426, E5): {@link org.mwolff.fbcrm.arbeitszeit.application.Personenauskunft} liest
+ * die Konten mit ihrem aktuellen Namen, ihrer Rolle und ihrem Zustand ueber die Lesewege von {@code
+ * auth.application}; das Anmeldemodul kennt kein Fachmodul.
  *
  * <p><b>Nach draussen gibt es genau zwei Tueren</b>, und beide liegen hier: {@link
  * org.mwolff.fbcrm.arbeitszeit.application.Arbeitszeitauskunft} sagt einem fremden Modul die
