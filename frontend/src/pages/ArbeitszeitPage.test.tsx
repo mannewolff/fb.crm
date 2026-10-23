@@ -52,9 +52,13 @@ const EIGENE_WEBSEITE = {
   firmaName: 'Manfred Wolff',
 };
 
+/** Die Person an jeder Zeile, wie `PersonResponse` sie schreibt (Plan #426, E14). */
+const PERSON = { id: 1, name: 'Manfred Wolff', aktiv: true };
+
 /** Zwei Tage mit drei Eintraegen: 1,75 + 2,00 Std. am 12., 2,00 Std. am 20. November. */
 const MONATSLISTE = {
   monat: '2026-11',
+  auswahl: '1',
   tage: [
     {
       tag: '2026-11-12',
@@ -66,6 +70,7 @@ const MONATSLISTE = {
           bis: '10:45:00',
           stunden: 1.75,
           position: KONZEPTION,
+          person: PERSON,
         },
         {
           id: 8,
@@ -74,6 +79,7 @@ const MONATSLISTE = {
           bis: '15:00:00',
           stunden: 2,
           position: SCHULUNG,
+          person: PERSON,
         },
       ],
       stunden: 3.75,
@@ -88,6 +94,7 @@ const MONATSLISTE = {
           bis: '10:00:00',
           stunden: 2,
           position: KONZEPTION,
+          person: PERSON,
         },
       ],
       stunden: 2,
@@ -101,6 +108,7 @@ const MONATSLISTE = {
 /** Ein Monat ohne einen einzigen Eintrag. */
 const LEERER_MONAT = {
   monat: '2026-11',
+  auswahl: '1',
   tage: [],
   stunden: 0,
   stundenFuerKunden: 0,
@@ -110,6 +118,7 @@ const LEERER_MONAT = {
 /** Die Antwort auf das Erfassen — die Ansicht liest daraus nichts, sie laedt den Monat neu. */
 const ANGELEGT = {
   id: 12,
+  accountId: 1,
   angebotPositionId: 101,
   tag: '2026-11-12',
   von: '09:00:00',

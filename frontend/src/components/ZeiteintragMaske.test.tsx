@@ -78,6 +78,9 @@ const EIGENE_WEBSEITE = {
   firmaName: 'Manfred Wolff',
 };
 
+/** Die Person der Zeile, wie `PersonResponse` sie schreibt (Plan #426, E14). */
+const PERSON = { id: 1, name: 'Manfred Wolff', aktiv: true };
+
 /** Die Zeile der Monatsliste, die geaendert wird. */
 const ZEILE: Zeitzeile = {
   id: 7,
@@ -86,6 +89,7 @@ const ZEILE: Zeitzeile = {
   bis: '10:45:00',
   stundenInHundertsteln: 175,
   position: KONZEPTION,
+  person: PERSON,
 };
 
 /** Dieselbe Zeile, aber auf einer Position, die nicht mehr buchbar ist. */
@@ -93,6 +97,7 @@ const ZEILE_ALTLAST: Zeitzeile = { ...ZEILE, position: ALTLAST };
 
 const ANGELEGT = {
   id: 12,
+  accountId: 1,
   angebotPositionId: 101,
   tag: HEUTE,
   von: '09:00:00',
