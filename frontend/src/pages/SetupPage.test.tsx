@@ -9,7 +9,7 @@ import type { Routen } from '../test/fetchNachPfad';
 import { renderMitTheme } from '../test/render';
 import SetupPage from './SetupPage';
 
-const KONTO = { id: 1, displayName: 'Manfred Wolff', email: 'info@mwolff.org' };
+const KONTO = { id: 1, displayName: 'Manfred Wolff', email: 'info@mwolff.org', role: 'C_LEVEL' };
 
 /** Frische Instanz ohne Sitzung — dazu, was der jeweilige Fall braucht. */
 function frisch(weitere: Routen = {}) {

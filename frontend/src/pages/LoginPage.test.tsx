@@ -8,7 +8,7 @@ import { alsJson, fetchNachPfad, json, leer } from '../test/fetchNachPfad';
 import { renderMitTheme } from '../test/render';
 import LoginPage from './LoginPage';
 
-const KONTO = { id: 1, displayName: 'Manfred Wolff', email: 'info@mwolff.org' };
+const KONTO = { id: 1, displayName: 'Manfred Wolff', email: 'info@mwolff.org', role: 'C_LEVEL' };
 
 function problemAntwort(status: number, detail: string): Response {
   return new Response(JSON.stringify({ title: 'Nicht angemeldet', detail }), {

@@ -1,3 +1,5 @@
+import type { Recht, Rechte } from '../auth/rechte';
+
 /**
  * Die Eintraege der Schiene (E15).
  *
@@ -16,6 +18,10 @@
  * Die <b>Symbolnamen sind die der Symbolfamilie Tabler</b> (E3) — dieselbe, die die Vorlage
  * benutzt. {@link NavRail} loest sie in Komponenten auf; hier bleibt es bei Namen, damit diese
  * Datei ohne React auskommt.
+ *
+ * Ein Eintrag mit `recht` steht nur in der Schiene einer Rolle, die dieses Recht traegt
+ * (Plan #414, A11); ohne `recht` steht er fuer jede Rolle. Die Schiene filtert, die Adresse
+ * selbst bewacht {@link RollenRoute} im Routenbaum mit demselben Recht.
  */
 
 export type Symbolname =
@@ -32,6 +38,8 @@ export interface NavEintrag {
   readonly beschriftung: string;
   readonly ziel: string;
   readonly symbol: Symbolname;
+  /** Das Recht, ohne das der Eintrag fehlt; ohne Angabe steht er fuer jede Rolle. */
+  readonly recht?: Recht;
 }
 
 export interface NavBlock {
@@ -64,12 +72,37 @@ export const NAV_BLOECKE: readonly NavBlock[] = [
       // „Eigene Angaben" ist ein Stammdatum wie die Firma und steht neben ihr — nicht hinter
       // „Administration" im Fuss (dort gehoeren Konto, Instanz und Rollen hin) und nicht in einem
       // eigenen Block, denn ein Block mit einem Eintrag benennt keine Gruppe (E14).
-      { beschriftung: 'Eigene Angaben', ziel: '/eigene-angaben', symbol: 'id' },
+      {
+        beschriftung: 'Eigene Angaben',
+        ziel: '/eigene-angaben',
+        symbol: 'id',
+        recht: 'darfEinstellungenSehen',
+      },
     ],
   },
 ];
 
 export const FUSS_EINTRAEGE: readonly NavEintrag[] = [
-  { beschriftung: 'Administration', ziel: '/administration', symbol: 'settings' },
+  {
+    beschriftung: 'Administration',
+    ziel: '/administration',
+    symbol: 'settings',
+    recht: 'darfEinstellungenSehen',
+  },
   { beschriftung: 'Dokumentation', ziel: '/dokumentation', symbol: 'book' },
 ];
+
+/** Ob ein Eintrag fuer diese Rechte in der Schiene steht. */
+export function sichtbar(eintrag: NavEintrag, rechte: Rechte): boolean {
+  return eintrag.recht === undefined || rechte[eintrag.recht];
+}
+
+/** Die Bloecke mit ihren sichtbaren Eintraegen; ein Block ohne sichtbaren Eintrag faellt weg. */
+export function sichtbareBloecke(bloecke: readonly NavBlock[], rechte: Rechte): NavBlock[] {
+  return bloecke
+    .map((block) => ({
+      ...block,
+      eintraege: block.eintraege.filter((eintrag) => sichtbar(eintrag, rechte)),
+    }))
+    .filter((block) => block.eintraege.length > 0);
+}

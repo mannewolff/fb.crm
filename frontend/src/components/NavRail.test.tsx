@@ -4,14 +4,16 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AuthProvider } from '../auth/AuthContext';
-import { FUSS_EINTRAEGE, NAV_BLOECKE } from '../layout/navItems';
+import { rechteAus } from '../auth/rechte';
+import { FUSS_EINTRAEGE, NAV_BLOECKE, sichtbareBloecke } from '../layout/navItems';
+import type { NavBlock } from '../layout/navItems';
 import { SCHIENE_SCHLUESSEL } from '../lib/railState';
 import { fetchNachPfad, json, leer } from '../test/fetchNachPfad';
 import type { Routen } from '../test/fetchNachPfad';
 import { renderMitTheme } from '../test/render';
 import NavRail from './NavRail';
 
-const KONTO = { id: 1, displayName: 'Manfred Wolff', email: 'info@mwolff.org' };
+const KONTO = { id: 1, displayName: 'Manfred Wolff', email: 'info@mwolff.org', role: 'C_LEVEL' };
 
 /** Ein Speicher, der ein Neuladen ueberlebt, weil er nicht an der Komponente haengt. */
 function speicher() {
@@ -29,9 +31,9 @@ function speicher() {
 }
 
 /** Sitzung und Versionsstand — beides braucht die Schiene fuer Marke und Nutzerkarte. */
-function angemeldet(weitere: Routen = {}) {
+function angemeldet(weitere: Routen = {}, konto: unknown = KONTO) {
   return fetchNachPfad({
-    'GET /api/auth/me': json(200, KONTO),
+    'GET /api/auth/me': json(200, konto),
     'GET /api/instance': json(200, { version: '0.1.1' }),
     ...weitere,
   });
@@ -92,6 +94,88 @@ describe('navItems (E15, E18)', () => {
   });
 });
 
+describe('sichtbareBloecke (Plan #414, A11)', () => {
+  const BLOECKE: readonly NavBlock[] = [
+    {
+      titel: 'Offen',
+      eintraege: [{ beschriftung: 'Firmen', ziel: '/firmen', symbol: 'building-community' }],
+    },
+    {
+      titel: 'Nur mit Recht',
+      eintraege: [
+        { beschriftung: 'Konten', ziel: '/konten', symbol: 'id', recht: 'darfKontenVerwalten' },
+      ],
+    },
+  ];
+
+  it('laesst einen Block ohne sichtbaren Eintrag samt Titel weg', () => {
+    expect(sichtbareBloecke(BLOECKE, rechteAus('EMPLOYEE')).map((block) => block.titel)).toEqual([
+      'Offen',
+    ]);
+  });
+
+  it('behaelt den Block, sobald die Rolle das Recht traegt', () => {
+    expect(sichtbareBloecke(BLOECKE, rechteAus('C_LEVEL')).map((block) => block.titel)).toEqual([
+      'Offen',
+      'Nur mit Recht',
+    ]);
+  });
+
+  it('versieht „Eigene Angaben" und „Administration" mit dem Recht, Einstellungen zu sehen', () => {
+    const mitRecht = [...NAV_BLOECKE.flatMap((block) => block.eintraege), ...FUSS_EINTRAEGE]
+      .filter((eintrag) => eintrag.recht !== undefined)
+      .map((eintrag) => [eintrag.beschriftung, eintrag.recht]);
+    expect(mitRecht).toEqual([
+      ['Eigene Angaben', 'darfEinstellungenSehen'],
+      ['Administration', 'darfEinstellungenSehen'],
+    ]);
+  });
+});
+
+describe('NavRail je Rolle (Plan #414, A11)', () => {
+  /** Alle Ziele der Schiene, Bloecke und Fuss, sobald die Nutzerkarte steht. */
+  async function zieleFuer(rolle: string): Promise<(string | null)[]> {
+    angemeldet({}, { ...KONTO, role: rolle });
+    renderSchiene();
+    await screen.findByRole('button', { name: /Nutzermenü/ });
+    const navigation = within(screen.getByRole('navigation', { name: 'Hauptnavigation' }));
+    return navigation.getAllByRole('link').map((link) => link.getAttribute('href'));
+  }
+
+  it('Szenario: Employee kommt nicht an die Einstellungen', async () => {
+    const ziele = await zieleFuer('EMPLOYEE');
+
+    expect(screen.queryByRole('link', { name: 'Eigene Angaben' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Administration' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Mitarbeitende' })).not.toBeInTheDocument();
+    expect(ziele).toEqual([
+      '/',
+      '/angebote',
+      '/arbeitszeit',
+      '/rechnungen',
+      '/jahresabschluesse',
+      '/firmen',
+      '/dokumentation',
+    ]);
+    // Der Block „Stammdaten" bleibt, denn „Firmen" steht noch darin.
+    expect(screen.getByText('Stammdaten')).toBeInTheDocument();
+  });
+
+  it('zeigt ReadOnly die Einstellungen, denn sie liest sie (Kriterium 10 von #409)', async () => {
+    const ziele = await zieleFuer('READ_ONLY');
+
+    expect(ziele).toContain('/eigene-angaben');
+    expect(ziele).toContain('/administration');
+  });
+
+  it('zeigt C-Level die Einstellungen', async () => {
+    const ziele = await zieleFuer('C_LEVEL');
+
+    expect(ziele).toContain('/eigene-angaben');
+    expect(ziele).toContain('/administration');
+  });
+});
+
 describe('NavRail', () => {
   it('ist als Hauptnavigation benannt', () => {
     angemeldet();
@@ -110,10 +194,12 @@ describe('NavRail', () => {
     expect(screen.queryAllByRole('link', { current: true })).toHaveLength(0);
   });
 
-  it('traegt zwischen Marke und Fuss die zwei Bloecke in ihrer Reihenfolge (K11, E18, E24)', () => {
+  it('traegt zwischen Marke und Fuss die zwei Bloecke in ihrer Reihenfolge (K11, E18, E24)', async () => {
     angemeldet();
 
     renderSchiene();
+    // „Eigene Angaben" steht erst, wenn die Rolle der Sitzung bekannt ist (Plan #414, A11).
+    await screen.findByRole('link', { name: 'Eigene Angaben' });
 
     // Die Marke bleibt fuer sich: Der Gruppentitel gehoert zum Block, nicht zum Kopf. Der eine
     // Weg im Kopf ist die Marke selbst, die auf die Startseite fuehrt (K2).
@@ -202,6 +288,7 @@ describe('NavRail', () => {
     angemeldet();
 
     renderSchiene();
+    await screen.findByRole('link', { name: 'Administration' });
 
     const fuss = within(screen.getByTestId('schiene-fuss'));
     expect(fuss.getAllByRole('link').map((link) => link.getAttribute('href'))).toEqual([
@@ -244,10 +331,11 @@ describe('NavRail', () => {
     ['/jahresabschluesse', 'Jahresabschlüsse'],
     // Der Abschluss eines Jahres laesst „Jahresabschlüsse" aktiv stehen (Plan #288, E16).
     ['/jahresabschluesse/2025', 'Jahresabschlüsse'],
-  ])('setzt auf %s aria-current="page" an „%s" und nur dort (K12)', (adresse, beschriftung) => {
+  ])('setzt auf %s aria-current="page" an „%s" und nur dort (K12)', async (adresse, beschriftung) => {
     angemeldet();
 
     renderSchiene(adresse);
+    await screen.findByRole('button', { name: /Nutzermenü/ });
 
     const aktiv = screen.getAllByRole('link', { current: 'page' });
     expect(aktiv).toHaveLength(1);

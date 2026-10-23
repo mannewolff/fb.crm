@@ -4,6 +4,7 @@ import { Navigate, Outlet, Route, Routes } from 'react-router-dom';
 import { AuthProvider } from './auth/AuthContext';
 import AppShell from './components/AppShell';
 import ProtectedRoute from './routes/ProtectedRoute';
+import RollenRoute from './routes/RollenRoute';
 
 // Route-Level Lazy Loading ist Pflicht fuer alle Top-Level-Routen (CLAUDE-react.md).
 const LoginPage = lazy(async () => import('./pages/LoginPage'));
@@ -44,6 +45,9 @@ const DokumentationPage = lazy(async () => import('./pages/DokumentationPage'));
  * einzelnen Angebot, sondern zeigt einen Monat ueber alle (Issue #193). Die Dokumentation steht
  * unter `/dokumentation` mit dem Teil „Bedienung" und unter `/dokumentation/betrieb` mit dem Teil
  * „Betrieb" — beide aus einer Seite (Issue #387).
+ *
+ * Die Einstellungen — `/eigene-angaben` und `/administration` — liegen zusaetzlich in
+ * {@link RollenRoute}: Sie stehen nur einer Rolle offen, die sie sehen darf (Plan #414, A11).
  *
  * Die unbekannte Adresse bekommt keine eigene Ansicht: Mit Sitzung fuehrt sie auf die
  * Startadresse, ohne Sitzung uebernimmt {@link ProtectedRoute} und fuehrt auf die
@@ -104,8 +108,22 @@ export default function App() {
               path="/firmen/:id/ansprechpartner/:ansprechpartnerId/bearbeiten"
               element={<AnsprechpartnerMaske />}
             />
-            <Route path="/eigene-angaben" element={<EigeneAngabenMaske />} />
-            <Route path="/administration" element={<AdministrationPage />} />
+            <Route
+              path="/eigene-angaben"
+              element={
+                <RollenRoute recht="darfEinstellungenSehen">
+                  <EigeneAngabenMaske />
+                </RollenRoute>
+              }
+            />
+            <Route
+              path="/administration"
+              element={
+                <RollenRoute recht="darfEinstellungenSehen">
+                  <AdministrationPage />
+                </RollenRoute>
+              }
+            />
             {/* Ein Teil der Dokumentation ist ein eigenes Gegenstueck und steht im Pfad
                 (Plan #378, E6); einen unbekannten Teil fuehrt die Seite auf `/dokumentation`. */}
             <Route path="/dokumentation" element={<DokumentationPage />} />

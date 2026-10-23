@@ -46,7 +46,7 @@ const FIRMA: Firma = {
   ansprechpartner: [ANNA, BRUNO],
 };
 
-const KONTO = { id: 1, displayName: 'Manfred Wolff', email: 'info@mwolff.org' };
+const KONTO = { id: 1, displayName: 'Manfred Wolff', email: 'info@mwolff.org', role: 'C_LEVEL' };
 
 /** Eine Zeile der Angebotsliste, wie Jackson sie schreibt — die Summe als Dezimalzahl. */
 interface AngebotRoh {

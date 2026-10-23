@@ -7,7 +7,7 @@ import App from './App';
 import { fetchNachPfad, json, problem } from './test/fetchNachPfad';
 import { renderMitTheme } from './test/render';
 
-const KONTO = { id: 1, displayName: 'Manfred Wolff', email: 'info@mwolff.org' };
+const KONTO = { id: 1, displayName: 'Manfred Wolff', email: 'info@mwolff.org', role: 'C_LEVEL' };
 
 /** Ein Angebot, wie das Backend es schreibt. */
 const ANGEBOT = {
@@ -429,6 +429,29 @@ describe('App', () => {
     ).toBeInTheDocument();
     expect(screen.getByRole('navigation', { name: 'Hauptnavigation' })).toBeInTheDocument();
   });
+
+  it.each(['/administration', '/eigene-angaben'])(
+    'zeigt einem Employee auf „%s" den Satz statt der Einstellungen (Plan #414, A11)',
+    async (adresse) => {
+      fensterbreite(1440);
+      const fetchMock = fetchNachPfad({
+        'GET /api/auth/me': json(200, { ...KONTO, role: 'EMPLOYEE' }),
+        'GET /api/instance': json(200, { version: '0.1.3' }),
+      });
+
+      renderApp([adresse], 0);
+
+      expect(
+        await screen.findByText(/Diese Ansicht steht deiner Rolle nicht offen/),
+      ).toBeInTheDocument();
+      expect(screen.getByRole('link', { name: 'Zur Startseite' })).toHaveAttribute('href', '/');
+      expect(screen.getByRole('navigation', { name: 'Hauptnavigation' })).toBeInTheDocument();
+      // Die Ansicht selbst entsteht nicht — keine ihrer Anfragen geht hinaus.
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(fetchMock).toHaveBeenCalledWith('/api/auth/me', expect.anything());
+      expect(fetchMock).toHaveBeenCalledWith('/api/instance', expect.anything());
+    },
+  );
 
   it('zeigt „/" als Startseite im Rahmen', async () => {
     fensterbreite(1440);

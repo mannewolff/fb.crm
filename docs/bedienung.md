@@ -37,8 +37,14 @@ mit der gewählten Ansicht. Die Schiene trägt zwei Blöcke:
   zurückgreift.
 
 Im Fuß der Schiene stehen „Administration" und „Dokumentation", darunter die Karte mit dem Namen
-des Kontos. Ein Klick auf diese Karte öffnet ein Menü mit „Abmelden". Die Taste „Einklappen"
-neben der Marke verkleinert die Schiene auf ihre Symbole.
+des Kontos, seiner Adresse und seiner Rolle. Ein Klick auf diese Karte öffnet ein Menü mit
+„Abmelden". Die Taste „Einklappen" neben der Marke verkleinert die Schiene auf ihre Symbole.
+
+Die Schiene sieht je Rolle verschieden aus: Sie zeigt nur, was der eigenen Rolle offensteht. Ein
+Employee findet darin weder „Eigene Angaben" noch „Administration"; C-Level und ReadOnly sehen
+beide. Ruft man eine Ansicht, die der eigenen Rolle nicht offensteht, über ihre Adresse direkt
+auf, erscheint die Meldung „Diese Ansicht steht deiner Rolle nicht offen" mit einem Weg zur
+Startseite. Welche Rolle das eigene Konto hat, steht auf der Karte im Fuß der Schiene.
 
 **Diese Dokumentation in fb.crm:** Im Fuß der Schiene „Dokumentation" wählen. Die Dokumentation
 ist nur nach der Anmeldung erreichbar; wer nicht angemeldet ist, kommt zuerst auf die Seite

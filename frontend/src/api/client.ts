@@ -139,6 +139,22 @@ function nutzlast(anfrage: Anfrage): Nutzlast {
   return {};
 }
 
+/** Der Rueckruf fuer eine Abweisung durch die Rolle — oder keiner. */
+let beiVerbotenRueckruf: (() => void) | null = null;
+
+/**
+ * Setzt den Rueckruf, der bei jeder Antwort mit Status 403 laeuft, bevor der {@link ApiError}
+ * geworfen wird (Plan #414, E5).
+ *
+ * Ein 403 heisst: Die Zugangsregel der API haelt die Rolle der Sitzung fuer zu klein. Hat ein
+ * C-Level sie gerade geaendert, kennt die Oberflaeche noch die alte — der `AuthProvider` liest sie
+ * darum hier nach. Ein Abruf ohne Anlass entsteht dabei nicht: Den Anlass gibt die abgewiesene
+ * Anfrage. `null` nimmt den Rueckruf wieder heraus.
+ */
+export function beiVerboten(rueckruf: (() => void) | null): void {
+  beiVerbotenRueckruf = rueckruf;
+}
+
 async function anfragen(pfad: string, anfrage: Anfrage): Promise<Response> {
   const antwort = await fetch(pfad, {
     method: anfrage.methode,
@@ -147,7 +163,11 @@ async function anfragen(pfad: string, anfrage: Anfrage): Promise<Response> {
     signal: anfrage.signal,
   });
   if (!antwort.ok) {
-    throw await fehlerAus(antwort);
+    const fehler = await fehlerAus(antwort);
+    if (antwort.status === 403) {
+      beiVerbotenRueckruf?.();
+    }
+    throw fehler;
   }
   return antwort;
 }

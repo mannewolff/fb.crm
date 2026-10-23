@@ -2,13 +2,15 @@ import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { apiOhneInhalt } from '../api/client';
 import { renderMitTheme } from '../test/render';
 import { AuthProvider, useAuth } from './AuthContext';
+import { useRechte } from './rechte';
 
-const KONTO = { id: 1, displayName: 'Manfred Wolff', email: 'info@mwolff.org' };
+const KONTO = { id: 1, displayName: 'Manfred Wolff', email: 'info@mwolff.org', role: 'C_LEVEL' };
 
-function kontoAntwort(): Response {
-  return new Response(JSON.stringify(KONTO), {
+function kontoAntwort(konto: unknown = KONTO): Response {
+  return new Response(JSON.stringify(konto), {
     status: 200,
     headers: { 'Content-Type': 'application/json' },
   });
@@ -32,11 +34,30 @@ function fetchLiefertVerzoegert(bauen: () => Response) {
 
 /** Spiegelt den Sitzungszustand und bietet die beiden Wege daraus an. */
 function Spiegel() {
-  const { sitzung, codeAnfordern, anmelden, einrichten, abmelden } = useAuth();
+  const { sitzung, codeAnfordern, anmelden, einrichten, abmelden, rolleNeuLesen } = useAuth();
+  const { darfKontenVerwalten } = useRechte();
   return (
     <div>
       <p>Zustand: {sitzung.status}</p>
       <p>Konto: {sitzung.status === 'angemeldet' ? sitzung.konto.displayName : 'keines'}</p>
+      <p>Rolle: {sitzung.status === 'angemeldet' ? sitzung.konto.role : 'keine'}</p>
+      <p>Konten verwalten: {darfKontenVerwalten ? 'ja' : 'nein'}</p>
+      <button
+        type="button"
+        onClick={() => {
+          void rolleNeuLesen();
+        }}
+      >
+        Rolle neu lesen
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          apiOhneInhalt('/api/firmen', { methode: 'POST' }).catch(() => undefined);
+        }}
+      >
+        verbotene Anfrage
+      </button>
       <button
         type="button"
         onClick={() => {
@@ -239,6 +260,125 @@ describe('AuthProvider', () => {
     await new Promise((weiter) => setTimeout(weiter, 10));
 
     expect(fehler).not.toHaveBeenCalled();
+  });
+});
+
+describe('Rolle der Sitzung (Plan #414, A8, E5)', () => {
+  const EMPLOYEE = { ...KONTO, role: 'EMPLOYEE' };
+
+  function verboteneAntwort(): Response {
+    return new Response(JSON.stringify({ detail: 'Nicht erlaubt' }), {
+      status: 403,
+      headers: { 'Content-Type': 'application/problem+json' },
+    });
+  }
+
+  it('traegt die Rolle im Zustand angemeldet', async () => {
+    fetchLiefert(() => kontoAntwort(EMPLOYEE));
+
+    renderSpiegel();
+
+    expect(await screen.findByText('Rolle: EMPLOYEE')).toBeInTheDocument();
+    expect(screen.getByText('Konten verwalten: nein')).toBeInTheDocument();
+  });
+
+  it('liest die Rolle nach einem 403 neu', async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(kontoAntwort())
+      .mockResolvedValueOnce(verboteneAntwort())
+      .mockResolvedValueOnce(kontoAntwort(EMPLOYEE));
+    const nutzer = userEvent.setup();
+
+    renderSpiegel();
+    await screen.findByText('Rolle: C_LEVEL');
+    expect(screen.getByText('Konten verwalten: ja')).toBeInTheDocument();
+    await nutzer.click(screen.getByRole('button', { name: 'verbotene Anfrage' }));
+
+    expect(await screen.findByText('Rolle: EMPLOYEE')).toBeInTheDocument();
+    expect(screen.getByText('Konten verwalten: nein')).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock).toHaveBeenLastCalledWith('/api/auth/me', expect.anything());
+  });
+
+  it('liest ohne Sitzung nach einem 403 nichts nach', async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response(null, { status: 401 }))
+      .mockResolvedValueOnce(verboteneAntwort());
+    const nutzer = userEvent.setup();
+
+    renderSpiegel();
+    await screen.findByText('Zustand: abgemeldet');
+    await nutzer.click(screen.getByRole('button', { name: 'verbotene Anfrage' }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+    expect(fetchMock).toHaveBeenLastCalledWith('/api/firmen', expect.anything());
+    expect(screen.getByText('Zustand: abgemeldet')).toBeInTheDocument();
+  });
+
+  it('ruft sich nicht ohne Ende neu auf, wenn das Nachlesen selbst mit 403 antwortet', async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(kontoAntwort())
+      .mockResolvedValueOnce(verboteneAntwort())
+      .mockResolvedValueOnce(verboteneAntwort())
+      .mockResolvedValue(kontoAntwort(EMPLOYEE));
+    const nutzer = userEvent.setup();
+
+    renderSpiegel();
+    await screen.findByText('Rolle: C_LEVEL');
+    await nutzer.click(screen.getByRole('button', { name: 'verbotene Anfrage' }));
+    await new Promise((weiter) => setTimeout(weiter, 20));
+
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    // Ein Nachlesen, das selbst scheitert, laesst die Sitzung stehen.
+    expect(screen.getByText('Rolle: C_LEVEL')).toBeInTheDocument();
+    expect(screen.getByText('Zustand: angemeldet')).toBeInTheDocument();
+  });
+
+  it('gilt als abgemeldet, wenn das Nachlesen mit 401 antwortet', async () => {
+    vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(kontoAntwort())
+      .mockResolvedValueOnce(new Response(null, { status: 401 }));
+    const nutzer = userEvent.setup();
+
+    renderSpiegel();
+    await screen.findByText('Zustand: angemeldet');
+    await nutzer.click(screen.getByRole('button', { name: 'Rolle neu lesen' }));
+
+    expect(await screen.findByText('Zustand: abgemeldet')).toBeInTheDocument();
+  });
+
+  it('behaelt die Sitzung, wenn das Nachlesen am Netz scheitert', async () => {
+    vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(kontoAntwort())
+      .mockRejectedValueOnce(new TypeError('Netz weg'));
+    const nutzer = userEvent.setup();
+
+    renderSpiegel();
+    await screen.findByText('Zustand: angemeldet');
+    await nutzer.click(screen.getByRole('button', { name: 'Rolle neu lesen' }));
+    await new Promise((weiter) => setTimeout(weiter, 10));
+
+    expect(screen.getByText('Zustand: angemeldet')).toBeInTheDocument();
+    expect(screen.getByText('Rolle: C_LEVEL')).toBeInTheDocument();
+  });
+
+  it('nimmt den Rueckruf beim Ausbau wieder heraus', async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(kontoAntwort())
+      .mockResolvedValueOnce(verboteneAntwort());
+
+    const { unmount } = renderSpiegel();
+    await screen.findByText('Zustand: angemeldet');
+    unmount();
+    await apiOhneInhalt('/api/firmen', { methode: 'POST' }).catch(() => undefined);
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 });
 

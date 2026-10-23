@@ -17,7 +17,8 @@ import { useEffect, useState } from 'react';
 import { Link as RouterLink, NavLink } from 'react-router-dom';
 
 import { instance } from '../api/instance';
-import { FUSS_EINTRAEGE, NAV_BLOECKE } from '../layout/navItems';
+import { useRechte } from '../auth/rechte';
+import { FUSS_EINTRAEGE, NAV_BLOECKE, sichtbar, sichtbareBloecke } from '../layout/navItems';
 import type { NavEintrag, Symbolname } from '../layout/navItems';
 import { liesEingeklappt, merkeEingeklappt } from '../lib/railState';
 import { ICONTASTE, RADIUS_GROSS, RADIUS_KLEIN, RADIUS_RUND } from '../theme';
@@ -50,6 +51,10 @@ import UserMenu from './UserMenu';
  * keine aktive Gestalt (E16) — mit Pfirsich-Hinterlegung auf der Startseite saehe sie wie ein
  * Navigationseintrag aus, und sie ist keiner. Der Name haengt als `aria-label` am Weg selbst,
  * nicht am Inhalt: Eingeklappt bleibt nur das Markenmal uebrig, und das traegt `aria-hidden`.
+ *
+ * Die Schiene zeigt nur, was der Rolle der Sitzung offensteht (Plan #414, A11): Ein Eintrag mit
+ * einem Recht, das sie nicht traegt, fehlt, und ein Block ohne sichtbaren Eintrag fehlt samt
+ * Titel — ein Gruppentitel ueber nichts benennt keine Gruppe.
  */
 
 /** Breite ausgeklappt und eingeklappt (CLAUDE-design.md, „Rahmen"). */
@@ -194,6 +199,7 @@ function EinklappTaste({
 export default function NavRail({ onWahl }: { readonly onWahl?: () => void }) {
   const [eingeklappt, setEingeklappt] = useState(liesEingeklappt);
   const [version, setVersion] = useState<string | undefined>(undefined);
+  const rechte = useRechte();
 
   useEffect(() => {
     instance()
@@ -264,7 +270,7 @@ export default function NavRail({ onWahl }: { readonly onWahl?: () => void }) {
         data-testid="schiene-bloecke"
         sx={{ display: 'flex', flexDirection: 'column', gap: '2px' }}
       >
-        {NAV_BLOECKE.map((block) => (
+        {sichtbareBloecke(NAV_BLOECKE, rechte).map((block) => (
           <Box key={block.titel} sx={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
             {eingeklappt ? null : (
               <Typography
@@ -300,7 +306,7 @@ export default function NavRail({ onWahl }: { readonly onWahl?: () => void }) {
         }}
       >
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-          {FUSS_EINTRAEGE.map((eintrag) => (
+          {FUSS_EINTRAEGE.filter((eintrag) => sichtbar(eintrag, rechte)).map((eintrag) => (
             <NavZiel
               key={eintrag.ziel}
               eintrag={eintrag}

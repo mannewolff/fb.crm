@@ -13,6 +13,9 @@ import { useAuth } from '../auth/AuthContext';
  * keine Sitzung hat, soll nicht vor einer leeren Ansicht landen, sondern auf der
  * Anmeldeseite.
  *
+ * Sie fragt nur, ob eine Sitzung besteht, nicht nach ihrer Rolle. Was einer Rolle offensteht,
+ * entscheidet dahinter {@link RollenRoute} (Plan #414, A11).
+ *
  * Beide Wege gehen mit `replace` — sonst legte jeder abgewiesene Aufruf einen Eintrag in den
  * Verlauf, und der Zurueck-Knopf liefe in eine Schleife (E21).
  */
