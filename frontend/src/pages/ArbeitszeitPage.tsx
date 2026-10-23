@@ -1,13 +1,20 @@
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
+import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { IconChevronLeft, IconChevronRight, IconClockPlus, IconTrash } from '@tabler/icons-react';
 import { Fragment, useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useSearchParams } from 'react-router-dom';
 
-import { arbeitszeitMonat, zeiteintragLoeschen } from '../api/arbeitszeit';
-import type { Arbeitsmonat, Arbeitstag, Zeitzeile } from '../api/arbeitszeit';
+import { ALLE, arbeitszeitMonat, personen, zeiteintragLoeschen } from '../api/arbeitszeit';
+import type {
+  Arbeitsmonat,
+  Arbeitstag,
+  Person,
+  Personenauswahl,
+  Zeitzeile,
+} from '../api/arbeitszeit';
 import { useRechte } from '../auth/rechte';
 import AktionsMenue from '../components/AktionsMenue';
 import InternChip from '../components/InternChip';
@@ -55,6 +62,18 @@ import { ABSTAND_BUEHNE, ZAHLEN_KLASSE } from '../theme';
  * aus {@link RechnungenPage} und {@link FirmenPage}): Je Zeile gibt es genau diese zwei
  * fokussierbaren Elemente, und beide sind mit der Tastatur zu erreichen.
  *
+ * <b>Wessen Zeiten die Ansicht zeigt, steht ebenso in der Adresse</b> (`?person=`, Plan #426):
+ * die Kennung eines Kontos oder `alle`, aus demselben Grund wie der Monat. <b>Fehlt die Auswahl,
+ * fragt die Ansicht ohne sie</b>, und die Vorauswahl aus der Rolle trifft der Server (E10) — ReadOnly
+ * steht dann auf „Alle", C-Level und Employee auf den eigenen Zeiten. Der Umschalter zeigt die
+ * Auswahl, die die Antwort nennt, und die Spalte „Person" erscheint nur bei „Alle" (E14). Einen
+ * Umschalter gibt es nur, wo die Rolle die Zeiten aller sehen darf: Ein Employee sieht nur seine
+ * eigenen, und eine Wahl, die der Server ohnehin uebergeht, waere ein leeres Versprechen.
+ *
+ * <b>Die Rolle fragt die Ansicht ueber {@link useRechte}</b> und damit ueber die Sitzung des
+ * `AuthContext` (E17) — kein eigener Abruf von `GET /api/auth/me`. Die Sperre selbst liegt im
+ * Server; die Ansicht zeigt nur, was die Rolle darf.
+ *
  * <b>Nach jeder Schreibung laedt der Monat neu</b> (`runde`), statt die Liste hier
  * fortzuschreiben: Tagessummen und Monatssumme rechnet der Server, und ein Eintrag kann den Monat
  * wechseln. Eine hier nachgezogene Liste waere eine zweite Wahrheit ueber dieselben Zahlen.
@@ -65,6 +84,15 @@ const KEIN_WEG: readonly PfadVerweis[] = [];
 
 /** Der Name des Parameters, unter dem der Monat in der Adresse steht (A13). */
 const PARAM_MONAT = 'monat';
+
+/** Der Name des Parameters, unter dem die Auswahl der Person in der Adresse steht (E10). */
+const PARAM_PERSON = 'person';
+
+/** Der zugaengliche Name des Umschalters — und die Ueberschrift der Spalte bei „Alle". */
+const PERSON = 'Person';
+
+/** Was im Umschalter fuer alle Personen steht. */
+const ALLE_WORT = 'Alle';
 
 const LAEDT = 'Die Arbeitszeit wird geladen …';
 const AUSFALL = 'Die Arbeitszeit ist gerade nicht zu erreichen. Bitte später erneut versuchen.';
@@ -79,6 +107,15 @@ const SPALTEN: readonly TafelSpalte[] = [
   'Zeit',
   { beschriftung: 'Dauer', zahl: true },
   'Position',
+  'Aktionen',
+];
+
+/** Dieselben Spalten bei „Alle" — die Person steht vor den Aktionen (E14). */
+const SPALTEN_ALLE: readonly TafelSpalte[] = [
+  'Zeit',
+  { beschriftung: 'Dauer', zahl: true },
+  'Position',
+  PERSON,
   'Aktionen',
 ];
 
@@ -111,12 +148,23 @@ type Stand =
   | { readonly art: 'daten'; readonly monatsliste: Arbeitsmonat }
   | { readonly art: 'fehler' };
 
+/**
+ * Die Auswahl der Adresse, oder `null`, wo sie keine nennt — dann fragt die Ansicht ohne und der
+ * Server waehlt aus der Rolle (E10). Dieselbe Form, die {@link arbeitszeitMonat} hinausschickt.
+ */
+function alsAuswahl(wert: string | null): Personenauswahl | null {
+  if (wert === ALLE) {
+    return ALLE;
+  }
+  return wert !== null && /^\d+$/.test(wert) ? Number(wert) : null;
+}
+
 /** Holt den Monat und macht auch aus dem Fehlschlag einen Stand. */
-async function laden(monat: string | null): Promise<Stand> {
+async function laden(monat: string | null, auswahl: Personenauswahl | null): Promise<Stand> {
   try {
     return {
       art: 'daten',
-      monatsliste: await arbeitszeitMonat(monat ?? undefined),
+      monatsliste: await arbeitszeitMonat(monat ?? undefined, auswahl ?? undefined),
     };
   } catch {
     return { art: 'fehler' };
@@ -186,6 +234,45 @@ function Monatswechsel({
 }
 
 /**
+ * Der Umschalter im Kartenkopf: „Alle" und die Personen, die der Server nennt (E11).
+ *
+ * Ein natives Select wie {@link Monatswahl}. Stillgelegte Personen stehen mit zur Wahl — ihre
+ * Zeiten bleiben sichtbar (Kriterium 9 von #410). Gibt es nur eine Person, steht nur sie da: „Alle"
+ * hiesse dann dasselbe noch einmal. Nennt die Antwort trotzdem „Alle", steht es zur Wahl, damit der
+ * Umschalter zeigt, was gilt.
+ */
+function Personenumschalter({
+  liste,
+  auswahl,
+  waehlen,
+}: {
+  readonly liste: readonly Person[];
+  readonly auswahl: Personenauswahl | null;
+  readonly waehlen: (neu: string) => void;
+}) {
+  return (
+    <TextField
+      select
+      size="small"
+      label={PERSON}
+      value={auswahl === null ? '' : String(auswahl)}
+      onChange={(ereignis) => {
+        waehlen(ereignis.target.value);
+      }}
+      slotProps={{ select: { native: true }, inputLabel: { shrink: true } }}
+      sx={{ minWidth: 180 }}
+    >
+      {liste.length > 1 || auswahl === ALLE ? <option value={ALLE}>{ALLE_WORT}</option> : null}
+      {liste.map((person) => (
+        <option key={person.id} value={String(person.id)}>
+          {person.name}
+        </option>
+      ))}
+    </TextField>
+  );
+}
+
+/**
  * Die Zeile, die einen Tag eroeffnet: sein Datum und seine Summe (A20).
  *
  * Das Datum ist eine <b>Kopfzelle der Zeile</b> (`th scope="row"`) und keine Kopfzelle einer
@@ -193,7 +280,13 @@ function Monatswechsel({
  * liest damit „12.11.2026 — 3,75 Std." und nicht einen Tag, der fuer alles Folgende gelten soll.
  * Das Polster steht hier, weil die {@link Tafel} nur ihre `td` polstert.
  */
-function Tagesgruppe({ arbeitstag }: { readonly arbeitstag: Arbeitstag }) {
+function Tagesgruppe({
+  arbeitstag,
+  mitPerson,
+}: {
+  readonly arbeitstag: Arbeitstag;
+  readonly mitPerson: boolean;
+}) {
   return (
     <Box component="tr">
       <Box
@@ -219,6 +312,7 @@ function Tagesgruppe({ arbeitstag }: { readonly arbeitstag: Arbeitstag }) {
         {stundenWort(arbeitstag.stundenInHundertsteln)}
       </Box>
       <Box component="td" />
+      {mitPerson ? <Box component="td" /> : null}
       <Box component="td" />
     </Box>
   );
@@ -233,12 +327,18 @@ function Tagesgruppe({ arbeitstag }: { readonly arbeitstag: Arbeitstag }) {
  * <b>Hier entsteht keine Zahl.</b> Beide Werte kommen vom Server ({@code Arbeitsmonat}, Issue #230)
  * — die Ansicht rechnet weder die Teile aus den Zeilen noch den einen Teil aus dem anderen.
  */
-function Aufteilung({ monatsliste }: { readonly monatsliste: Arbeitsmonat }) {
+function Aufteilung({
+  monatsliste,
+  spalten,
+}: {
+  readonly monatsliste: Arbeitsmonat;
+  readonly spalten: number;
+}) {
   return (
     <Box component="tr">
       <Box
         component="td"
-        colSpan={SPALTEN.length}
+        colSpan={spalten}
         sx={(theme) => ({
           ...GRUPPENZELLE,
           fontWeight: 400,
@@ -269,9 +369,11 @@ interface ZeilenAktionen {
  */
 function Zeile({
   zeile,
+  mitPerson,
   aktionen,
 }: {
   readonly zeile: Zeitzeile;
+  readonly mitPerson: boolean;
   readonly aktionen: ZeilenAktionen | null;
 }) {
   const wort = `${tagWort(zeile.tag)}, ${zeitspanneWort(zeile.von, zeile.bis)}`;
@@ -324,6 +426,7 @@ function Zeile({
           {zeile.position.intern ? <InternChip /> : null}
         </Typography>
       </Box>
+      {mitPerson ? <Box component="td">{zeile.person.name}</Box> : null}
       <Box component="td" sx={{ textAlign: 'right' }}>
         {aktionen === null ? null : (
           <AktionsMenue
@@ -345,7 +448,13 @@ function Zeile({
 }
 
 /** Die abschliessende Zeile der Tafel: die Summe des Monats (A20). */
-function Monatssumme({ monatsliste }: { readonly monatsliste: Arbeitsmonat }) {
+function Monatssumme({
+  monatsliste,
+  mitPerson,
+}: {
+  readonly monatsliste: Arbeitsmonat;
+  readonly mitPerson: boolean;
+}) {
   return (
     <Box component="tr">
       <Box component="th" scope="row" sx={{ ...GRUPPENZELLE, fontWeight: 700 }}>
@@ -359,6 +468,7 @@ function Monatssumme({ monatsliste }: { readonly monatsliste: Arbeitsmonat }) {
         {stundenWort(monatsliste.stundenInHundertsteln)}
       </Box>
       <Box component="td" />
+      {mitPerson ? <Box component="td" /> : null}
       <Box component="td" />
     </Box>
   );
@@ -399,15 +509,19 @@ function inhaltZu(
       </Typography>
     );
   }
+  // Die Person je Zeile nur bei „Alle" — sonst ist es in jeder Zeile dieselbe (E14).
+  const mitPerson = stand.monatsliste.auswahl === ALLE;
+  const spalten = mitPerson ? SPALTEN_ALLE : SPALTEN;
   return (
-    <Tafel beschriftung={`Arbeitszeit ${monatWort(stand.monatsliste.monat)}`} spalten={SPALTEN}>
+    <Tafel beschriftung={`Arbeitszeit ${monatWort(stand.monatsliste.monat)}`} spalten={spalten}>
       {stand.monatsliste.tage.map((arbeitstag) => (
         <Fragment key={arbeitstag.tag}>
-          <Tagesgruppe arbeitstag={arbeitstag} />
+          <Tagesgruppe arbeitstag={arbeitstag} mitPerson={mitPerson} />
           {arbeitstag.eintraege.map((zeile) => (
             <Zeile
               key={zeile.id}
               zeile={zeile}
+              mitPerson={mitPerson}
               aktionen={
                 schreibend === null
                   ? null
@@ -424,18 +538,21 @@ function inhaltZu(
           ))}
         </Fragment>
       ))}
-      <Monatssumme monatsliste={stand.monatsliste} />
-      <Aufteilung monatsliste={stand.monatsliste} />
+      <Monatssumme monatsliste={stand.monatsliste} mitPerson={mitPerson} />
+      <Aufteilung monatsliste={stand.monatsliste} spalten={spalten.length} />
     </Tafel>
   );
 }
 
 export default function ArbeitszeitPage() {
-  const { darfFachlichSchreiben } = useRechte();
+  const { darfFachlichSchreiben, darfZeitenAllerSehen } = useRechte();
   useKopfPfad(KEIN_WEG, 'Arbeitszeit');
   const [parameter, setzeParameter] = useSearchParams();
   const monat = alsMonat(parameter.get(PARAM_MONAT));
+  const auswahl = alsAuswahl(parameter.get(PARAM_PERSON));
   const [stand, setzeStand] = useState<Stand>({ art: 'laedt' });
+  /** Die Personen des Umschalters; `null`, solange sie fehlen oder nicht zu erreichen sind. */
+  const [personenliste, setzePersonenliste] = useState<readonly Person[] | null>(null);
   const [maske, setzeMaske] = useState<Maske | null>(null);
   const [loeschfehler, setzeLoeschfehler] = useState<string | null>(null);
   /** Jede Schreibung zaehlt eine Runde weiter — der Effekt holt den Monat dann erneut. */
@@ -444,7 +561,7 @@ export default function ArbeitszeitPage() {
   useEffect(() => {
     let gueltig = true;
     setzeStand({ art: 'laedt' });
-    void laden(monat).then((neu) => {
+    void laden(monat, auswahl).then((neu) => {
       // Ein juengerer Monat hat diesen Lauf abgeloest; seine Antwort ist die richtige.
       if (gueltig) {
         setzeStand(neu);
@@ -453,8 +570,38 @@ export default function ArbeitszeitPage() {
     return () => {
       gueltig = false;
     };
-  }, [monat, runde]);
+  }, [monat, auswahl, runde]);
 
+  useEffect(() => {
+    // Ein Employee bekommt keinen Umschalter und fragt darum auch keine Personen.
+    if (!darfZeitenAllerSehen) {
+      return undefined;
+    }
+    let gueltig = true;
+    personen().then(
+      (liste) => {
+        if (gueltig) {
+          setzePersonenliste(liste);
+        }
+      },
+      () => {
+        // Ohne Personen kein Umschalter — die Liste der gewaehlten Auswahl steht trotzdem da.
+      },
+    );
+    return () => {
+      gueltig = false;
+    };
+  }, [darfZeitenAllerSehen]);
+
+  /**
+   * Schreibt einen Parameter in die Adresse und laesst den anderen stehen. Geschoben statt
+   * ersetzt: Monat und Person zu wechseln sind Handlungen, die „zurueck" zuruecknehmen soll.
+   */
+  const setze = (name: string, wert: string) => {
+    const neu = new URLSearchParams(parameter);
+    neu.set(name, wert);
+    setzeParameter(neu);
+  };
   const neuLaden = () => {
     setzeLoeschfehler(null);
     setzeRunde((alt) => alt + 1);
@@ -474,6 +621,8 @@ export default function ArbeitszeitPage() {
 
   // Der Monat der Adresse, solange sie einen nennt; sonst der, den die Antwort nennt (E4).
   const gezeigterMonat = monat ?? (stand.art === 'daten' ? stand.monatsliste.monat : null);
+  // Die Auswahl, die die Antwort nennt — sie gilt, auch wo der Server sie getroffen hat (E10).
+  const gezeigteAuswahl = stand.art === 'daten' ? stand.monatsliste.auswahl : auswahl;
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: ABSTAND_BUEHNE }}>
@@ -482,13 +631,20 @@ export default function ArbeitszeitPage() {
         titelEbene={1}
         werkzeug={
           <>
+            {!darfZeitenAllerSehen || personenliste === null ? null : (
+              <Personenumschalter
+                liste={personenliste}
+                auswahl={gezeigteAuswahl}
+                waehlen={(neu) => {
+                  setze(PARAM_PERSON, neu);
+                }}
+              />
+            )}
             {gezeigterMonat === null ? null : (
               <Monatswechsel
                 monat={gezeigterMonat}
                 waehlen={(neu) => {
-                  // Geschoben statt ersetzt: Der Monatswechsel ist eine Handlung, die „zurueck"
-                  // zuruecknehmen koennen soll.
-                  setzeParameter({ [PARAM_MONAT]: neu });
+                  setze(PARAM_MONAT, neu);
                 }}
               />
             )}

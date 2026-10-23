@@ -19,6 +19,11 @@ export interface Rechte {
   readonly darfEinstellungenAendern: boolean;
   /** Konten anlegen, aendern und stilllegen (nur C-Level). */
   readonly darfKontenVerwalten: boolean;
+  /**
+   * Die Arbeitszeit aller Personen sehen und zwischen ihnen umschalten (C-Level, ReadOnly; Plan
+   * #426, Kriterien 3 und 4 von #410). Ein Employee sieht nur die eigene.
+   */
+  readonly darfZeitenAllerSehen: boolean;
 }
 
 /** Der Name eines Rechts — so nimmt {@link RollenRoute} das verlangte Recht entgegen. */
@@ -29,11 +34,13 @@ const KEINE: Rechte = {
   darfEinstellungenSehen: false,
   darfEinstellungenAendern: false,
   darfKontenVerwalten: false,
+  darfZeitenAllerSehen: false,
 };
 
 /**
  * Die Rechte je Rolle (Geklaerter Stand 5 und 6 von #409): C-Level darf alles, Employee alles
- * Fachliche ohne Konten und Einstellungen, ReadOnly liest — die Einstellungen eingeschlossen.
+ * Fachliche ohne Konten und Einstellungen, ReadOnly liest — die Einstellungen und die Zeiten
+ * aller eingeschlossen.
  */
 const RECHTE: Readonly<Record<Rolle, Rechte>> = {
   C_LEVEL: {
@@ -41,9 +48,10 @@ const RECHTE: Readonly<Record<Rolle, Rechte>> = {
     darfEinstellungenSehen: true,
     darfEinstellungenAendern: true,
     darfKontenVerwalten: true,
+    darfZeitenAllerSehen: true,
   },
   EMPLOYEE: { ...KEINE, darfFachlichSchreiben: true },
-  READ_ONLY: { ...KEINE, darfEinstellungenSehen: true },
+  READ_ONLY: { ...KEINE, darfEinstellungenSehen: true, darfZeitenAllerSehen: true },
 };
 
 /** Die Namen der Rollen, wie die Oberflaeche sie zeigt — woertlich wie im Fachplan (E8). */

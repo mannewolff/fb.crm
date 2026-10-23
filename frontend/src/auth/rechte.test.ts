@@ -10,18 +10,22 @@ const ERWARTET: ReadonlyArray<readonly [Rolle | null, Recht, boolean]> = [
   ['C_LEVEL', 'darfEinstellungenSehen', true],
   ['C_LEVEL', 'darfEinstellungenAendern', true],
   ['C_LEVEL', 'darfKontenVerwalten', true],
+  ['C_LEVEL', 'darfZeitenAllerSehen', true],
   ['EMPLOYEE', 'darfFachlichSchreiben', true],
   ['EMPLOYEE', 'darfEinstellungenSehen', false],
   ['EMPLOYEE', 'darfEinstellungenAendern', false],
   ['EMPLOYEE', 'darfKontenVerwalten', false],
+  ['EMPLOYEE', 'darfZeitenAllerSehen', false],
   ['READ_ONLY', 'darfFachlichSchreiben', false],
   ['READ_ONLY', 'darfEinstellungenSehen', true],
   ['READ_ONLY', 'darfEinstellungenAendern', false],
   ['READ_ONLY', 'darfKontenVerwalten', false],
+  ['READ_ONLY', 'darfZeitenAllerSehen', true],
   [null, 'darfFachlichSchreiben', false],
   [null, 'darfEinstellungenSehen', false],
   [null, 'darfEinstellungenAendern', false],
   [null, 'darfKontenVerwalten', false],
+  [null, 'darfZeitenAllerSehen', false],
 ];
 
 describe('rechteAus', () => {
@@ -29,12 +33,13 @@ describe('rechteAus', () => {
     expect(rechteAus(rolle)[recht]).toBe(erwartet);
   });
 
-  it('kennt genau die vier Rechte', () => {
+  it('kennt genau die fuenf Rechte', () => {
     expect(Object.keys(rechteAus('C_LEVEL')).sort()).toEqual([
       'darfEinstellungenAendern',
       'darfEinstellungenSehen',
       'darfFachlichSchreiben',
       'darfKontenVerwalten',
+      'darfZeitenAllerSehen',
     ]);
   });
 });

@@ -20,6 +20,8 @@ const DEZEMBER = 'GET /api/arbeitszeit?monat=2026-12';
 const POSITIONEN = 'GET /api/arbeitszeit/buchbare-positionen';
 const ANLEGEN = 'POST /api/arbeitszeit';
 const LOESCHEN = 'DELETE /api/arbeitszeit/7';
+const WEG_PERSONEN = '/api/arbeitszeit/personen';
+const PERSONEN = `GET ${WEG_PERSONEN}`;
 
 const KONZEPTION = {
   id: 101,
@@ -54,6 +56,9 @@ const EIGENE_WEBSEITE = {
 
 /** Die Person an jeder Zeile, wie `PersonResponse` sie schreibt (Plan #426, E14). */
 const PERSON = { id: 1, name: 'Manfred Wolff', aktiv: true };
+
+/** Eine zweite Person, stillgelegt — sie steht fuer C-Level und ReadOnly mit zur Wahl (Kriterium 9). */
+const BEN = { id: 2, name: 'Ben Berger', aktiv: false };
 
 /** Zwei Tage mit drei Eintraegen: 1,75 + 2,00 Std. am 12., 2,00 Std. am 20. November. */
 const MONATSLISTE = {
@@ -128,6 +133,11 @@ const ANGELEGT = {
 
 type Nutzer = ReturnType<typeof userEvent.setup>;
 
+/** Die Aufrufe ausser dem der Personen — der faellt fuer C-Level und ReadOnly einmal an. */
+function ohnePersonen(aufruf: ReturnType<typeof fetchNachPfad>): readonly unknown[] {
+  return aufruf.mock.calls.filter(([ziel]) => ziel !== WEG_PERSONEN);
+}
+
 /** Wie oft die Monatsliste gefragt wurde — der Dialog fragt daneben nach seinen Positionen. */
 function monatsaufrufe(aufruf: ReturnType<typeof fetchNachPfad>): number {
   // Der Weg kommt als Zeichenkette heraus — `api/client.ts` ruft `fetch` nie mit einem `Request`.
@@ -159,8 +169,9 @@ function renderSeite(adresse = '/arbeitszeit') {
   );
 }
 
+/** Die Routen des Falls; die Personen antworten mit einer einzigen, wo der Fall nichts anderes sagt. */
 function mitRouten(routen: Routen) {
-  return fetchNachPfad(routen);
+  return fetchNachPfad({ [PERSONEN]: json(200, [PERSON]), ...routen });
 }
 
 afterEach(() => {
@@ -183,7 +194,7 @@ describe('ArbeitszeitPage (Kriterium 5, Plan A13, A20)', () => {
     renderSeite();
 
     expect(await screen.findByText('November 2026')).toBeInTheDocument();
-    expect(aufruf).toHaveBeenCalledTimes(1);
+    expect(ohnePersonen(aufruf)).toHaveLength(1);
   });
 
   it('fragt ohne Monat, wo die Adresse keinen gueltigen nennt', async () => {
@@ -278,7 +289,7 @@ describe('ArbeitszeitPage (Kriterium 5, Plan A13, A20)', () => {
     await nutzer.click(await screen.findByRole('button', { name: 'Vorheriger Monat' }));
 
     expect(await screen.findByText('Oktober 2026')).toBeInTheDocument();
-    expect(aufruf).toHaveBeenCalledTimes(2);
+    expect(ohnePersonen(aufruf)).toHaveLength(2);
   });
 
   it('laedt im leeren Monat eine Einladung statt einer Entschuldigung', async () => {
@@ -440,7 +451,7 @@ describe('ArbeitszeitPage — loeschen (Kriterium 6, Antwort 4)', () => {
     await nutzer.click(screen.getByRole('button', { name: 'Abbrechen' }));
 
     // Nur der Leseweg des Monats, kein DELETE.
-    expect(aufruf).toHaveBeenCalledTimes(1);
+    expect(ohnePersonen(aufruf)).toHaveLength(1);
   });
 
   it('loescht nach der Rueckfrage und laedt den Monat neu', async () => {
@@ -530,5 +541,166 @@ describe('ArbeitszeitPage — Kennzeichen intern und die Aufteilung (Issue #236,
       'Noch keine Arbeitszeit in diesem Monat.',
     );
     expect(screen.queryByText(/davon für Kunden/)).not.toBeInTheDocument();
+  });
+});
+
+describe('ArbeitszeitPage — Personen (Plan #426, E10, E14, E17)', () => {
+  /** Derselbe Monat in der Sicht „Alle": die Zeile am 20. gehoert Ben. */
+  const ALLE_PERSONEN = {
+    ...MONATSLISTE,
+    auswahl: 'alle',
+    tage: [
+      MONATSLISTE.tage[0],
+      {
+        ...MONATSLISTE.tage[1],
+        eintraege: [{ ...MONATSLISTE.tage[1].eintraege[0], person: BEN }],
+      },
+    ],
+  };
+  const NOVEMBER_ALLE = 'GET /api/arbeitszeit?monat=2026-11&person=alle';
+  const NOVEMBER_BEN = 'GET /api/arbeitszeit?monat=2026-11&person=2';
+  const OKTOBER_ALLE = 'GET /api/arbeitszeit?monat=2026-10&person=alle';
+
+  /** Die Eintraege des Umschalters in ihrer Reihenfolge. */
+  function eintraege(): readonly (string | null)[] {
+    return within(screen.getByRole('combobox', { name: 'Person' }))
+      .getAllByRole('option')
+      .map((eintrag) => eintrag.textContent);
+  }
+
+  it('zeigt einem C-Level den Umschalter mit „Alle" und allen Personen, stillgelegte eingeschlossen', async () => {
+    mitRouten({ [NOVEMBER]: json(200, MONATSLISTE), [PERSONEN]: json(200, [PERSON, BEN]) });
+
+    renderSeite('/arbeitszeit?monat=2026-11');
+
+    expect(await screen.findByRole('combobox', { name: 'Person' })).toHaveValue('1');
+    expect(eintraege()).toEqual(['Alle', 'Manfred Wolff', 'Ben Berger']);
+  });
+
+  it('zeigt ReadOnly den Umschalter und uebernimmt beim Oeffnen die Auswahl der Antwort (E10)', async () => {
+    alsRolle('READ_ONLY');
+    const aufruf = mitRouten({
+      [OHNE_MONAT]: json(200, ALLE_PERSONEN),
+      [PERSONEN]: json(200, [PERSON, BEN]),
+    });
+
+    renderSeite();
+
+    // Gefragt wird ohne Auswahl — die Vorauswahl „Alle" trifft der Server, nicht die Ansicht.
+    await vi.waitFor(() => {
+      expect(screen.getByRole('combobox', { name: 'Person' })).toHaveValue('alle');
+    });
+    expect(aufruf.mock.calls.map(([ziel]) => ziel)).toContain('/api/arbeitszeit');
+  });
+
+  it('zeigt einem Employee keinen Umschalter und fragt keine Personen', async () => {
+    alsRolle('EMPLOYEE');
+    const aufruf = mitRouten({ [NOVEMBER]: json(200, MONATSLISTE) });
+
+    renderSeite('/arbeitszeit?monat=2026-11');
+
+    expect(await screen.findByRole('table')).toBeInTheDocument();
+    expect(screen.queryByRole('combobox', { name: 'Person' })).not.toBeInTheDocument();
+    expect(aufruf.mock.calls.map(([ziel]) => ziel)).not.toContain(WEG_PERSONEN);
+  });
+
+  it('hat genau einen Eintrag, wo es nur eine Person gibt', async () => {
+    mitRouten({ [NOVEMBER]: json(200, MONATSLISTE) });
+
+    renderSeite('/arbeitszeit?monat=2026-11');
+
+    await screen.findByRole('combobox', { name: 'Person' });
+    expect(eintraege()).toEqual(['Manfred Wolff']);
+  });
+
+  it('laesst den Umschalter weg, wo die Personen nicht zu erreichen sind — die Liste bleibt', async () => {
+    mitRouten({ [NOVEMBER]: json(200, MONATSLISTE), [PERSONEN]: problem(500, 'Kaputt.') });
+
+    renderSeite('/arbeitszeit?monat=2026-11');
+
+    expect(await screen.findByRole('table')).toBeInTheDocument();
+    expect(screen.queryByRole('combobox', { name: 'Person' })).not.toBeInTheDocument();
+  });
+
+  it('zeigt bei „Alle" die Spalte „Person" mit dem Namen aus jeder Zeile (E14)', async () => {
+    mitRouten({ [NOVEMBER_ALLE]: json(200, ALLE_PERSONEN), [PERSONEN]: json(200, [PERSON, BEN]) });
+
+    renderSeite('/arbeitszeit?monat=2026-11&person=alle');
+
+    const tafel = within(await screen.findByRole('table', { name: 'Arbeitszeit November 2026' }));
+    expect(tafel.getByRole('columnheader', { name: 'Person' })).toBeInTheDocument();
+    expect(tafel.getAllByText('Manfred Wolff')).toHaveLength(2);
+    expect(within(tafel.getByRole('row', { name: /8:00 bis 10:00/ })).getByText('Ben Berger'))
+      .toBeInTheDocument();
+    // Die Aufteilung spannt ueber alle Spalten, auch ueber die zusaetzliche.
+    expect(tafel.getByText(/^davon für Kunden/)).toHaveAttribute('colspan', '5');
+  });
+
+  it('zeigt bei einer einzelnen Person keine Spalte „Person"', async () => {
+    mitRouten({ [NOVEMBER]: json(200, MONATSLISTE) });
+
+    renderSeite('/arbeitszeit?monat=2026-11');
+
+    const tafel = within(await screen.findByRole('table', { name: 'Arbeitszeit November 2026' }));
+    expect(tafel.queryByRole('columnheader', { name: 'Person' })).not.toBeInTheDocument();
+    expect(tafel.getByText(/^davon für Kunden/)).toHaveAttribute('colspan', '4');
+  });
+
+  it('schreibt den Wechsel am Umschalter als ?person= in die Adresse und behaelt den Monat', async () => {
+    const aufruf = mitRouten({
+      [NOVEMBER]: json(200, MONATSLISTE),
+      [NOVEMBER_BEN]: json(200, { ...MONATSLISTE, auswahl: '2' }),
+      [PERSONEN]: json(200, [PERSON, BEN]),
+    });
+    const nutzer = userEvent.setup();
+
+    renderSeite('/arbeitszeit?monat=2026-11');
+    await nutzer.selectOptions(await screen.findByRole('combobox', { name: 'Person' }), '2');
+
+    expect(await screen.findByTestId('adresse')).toHaveTextContent(
+      '/arbeitszeit?monat=2026-11&person=2',
+    );
+    await vi.waitFor(() => {
+      expect(aufruf.mock.calls.map(([ziel]) => ziel)).toContain(
+        '/api/arbeitszeit?monat=2026-11&person=2',
+      );
+    });
+  });
+
+  it('behaelt die Auswahl der Adresse beim Monatswechsel', async () => {
+    mitRouten({
+      [NOVEMBER_ALLE]: json(200, ALLE_PERSONEN),
+      [OKTOBER_ALLE]: json(200, { ...LEERER_MONAT, monat: '2026-10', auswahl: 'alle' }),
+      [PERSONEN]: json(200, [PERSON, BEN]),
+    });
+    const nutzer = userEvent.setup();
+
+    renderSeite('/arbeitszeit?monat=2026-11&person=alle');
+    await nutzer.click(await screen.findByRole('button', { name: 'Vorheriger Monat' }));
+
+    expect(await screen.findByTestId('adresse')).toHaveTextContent(
+      '/arbeitszeit?monat=2026-10&person=alle',
+    );
+    expect(await screen.findByText('Oktober 2026')).toBeInTheDocument();
+  });
+
+  it('fragt ohne Auswahl, wo die Adresse keine gueltige nennt', async () => {
+    mitRouten({ [NOVEMBER]: json(200, MONATSLISTE) });
+
+    renderSeite('/arbeitszeit?monat=2026-11&person=ben');
+
+    expect(await screen.findByRole('table')).toBeInTheDocument();
+  });
+
+  it('gibt ReadOnly auch bei „Alle" weder „Zeit erfassen" noch einen Weg zum Aendern oder Loeschen', async () => {
+    alsRolle('READ_ONLY');
+    mitRouten({ [NOVEMBER_ALLE]: json(200, ALLE_PERSONEN), [PERSONEN]: json(200, [PERSON, BEN]) });
+
+    renderSeite('/arbeitszeit?monat=2026-11&person=alle');
+
+    const tafel = within(await screen.findByRole('table'));
+    expect(tafel.queryAllByRole('button')).toHaveLength(0);
+    expect(screen.queryByRole('button', { name: 'Zeit erfassen' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: 'Löschen' })).not.toBeInTheDocument();
   });
 });
