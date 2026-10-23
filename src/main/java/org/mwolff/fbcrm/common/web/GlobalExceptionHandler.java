@@ -6,8 +6,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 import org.jspecify.annotations.Nullable;
+import org.mwolff.fbcrm.common.Bearbeitungskonflikt;
 import org.mwolff.fbcrm.common.Feldfehler;
 import org.mwolff.fbcrm.common.Uploadgrenze;
+import org.mwolff.fbcrm.common.Urheber;
+import org.mwolff.fbcrm.common.Urheberauskunft;
 import org.mwolff.fbcrm.common.ZuVieleVersuche;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -18,6 +21,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.ErrorResponse;
@@ -38,9 +42,10 @@ import org.springframework.web.multipart.MaxUploadSizeExceededException;
 /*
  * PMD.TooManyMethods: Die Klasse ist die einzige Stelle, an der Fehler auf HTTP-Antworten
  * abgebildet werden (CLAUDE-java.md §6.3), und traegt darum je Fehlerart einen Zweig. Mit dem
- * Zweig fuer die verweigerte Rolle (Plan #414, A9) sind es elf Methoden; die Schwelle der Regel
- * liegt bei zehn. Sie zu halten hiesse, die Abbildung auf zwei Klassen zu verteilen — gegen genau
- * die eine Stelle, um derentwillen es die Klasse gibt.
+ * Zweig fuer die verweigerte Rolle (Plan #414, A9) und den beiden fuer den Bearbeitungskonflikt
+ * (Plan #415, E4) sind es vierzehn Methoden; die Schwelle der Regel liegt bei zehn. Sie zu halten
+ * hiesse, die Abbildung auf zwei Klassen zu verteilen — gegen genau die eine Stelle, um derentwillen
+ * es die Klasse gibt.
  */
 @SuppressWarnings("PMD.TooManyMethods")
 @RestControllerAdvice
@@ -64,7 +69,24 @@ public class GlobalExceptionHandler {
    */
   public static final String VERBOTEN_DETAIL = "Das steht deiner Rolle nicht offen.";
 
+  /** Antworttext, wenn der Stand des Eintrags inzwischen ein anderer ist (Plan #415, E4). */
+  public static final String VERALTET_DETAIL = "Dieser Eintrag wurde inzwischen geändert.";
+
+  /** Antworttext, wenn der Eintrag inzwischen geloescht wurde (Plan #415, E16). */
+  public static final String GELOESCHT_DETAIL = "Dieser Eintrag wurde inzwischen gelöscht.";
+
   private static final Logger LOG = LoggerFactory.getLogger(GlobalExceptionHandler.class);
+
+  private final Urheberauskunft urheberauskunft;
+
+  /**
+   * Die Abbildung mit dem Weg zum Namen des Urhebers.
+   *
+   * @param urheberauskunft loest das Konto eines Bearbeitungskonflikts zum Namen auf (E6)
+   */
+  public GlobalExceptionHandler(final Urheberauskunft urheberauskunft) {
+    this.urheberauskunft = urheberauskunft;
+  }
 
   @ExceptionHandler(MethodArgumentNotValidException.class)
   public ProblemDetail handleBeanValidation(final MethodArgumentNotValidException exception) {
@@ -105,6 +127,57 @@ public class GlobalExceptionHandler {
     final ProblemDetail problem = handleUnexpected(exception);
     problem.setProperty("fieldErrors", exception.felder());
     return problem;
+  }
+
+  /**
+   * Ein Schritt beruht auf einem Stand, den es so nicht mehr gibt (Plan #415, E4, E6, E15, E16).
+   *
+   * <p>409 wie jeder fachliche Konflikt im Projekt, dazu die Erweiterung {@code konflikt}: An ihr,
+   * nicht am Status, unterscheidet die Oberflaeche diese Lage von den anderen 409-Lagen. Den Namen
+   * loest diese Stelle einmal ueber {@link Urheberauskunft} auf; der Anwendungsfall kennt nur die
+   * Kennungen. Ob die fremde Aenderung die eigene aus einem anderen Fenster war, entscheidet der
+   * Vergleich der Kennungen — ein Vergleich der Namen waere bei gleichnamigen Konten falsch (E15).
+   *
+   * <p>Was die Zeile nicht weiss oder die Auskunft nicht kennt, fehlt in der Erweiterung, statt
+   * leer darin zu stehen.
+   */
+  @ExceptionHandler(Bearbeitungskonflikt.class)
+  public ProblemDetail handleBearbeitungskonflikt(final Bearbeitungskonflikt exception) {
+    final Map<String, Object> konflikt = new LinkedHashMap<>();
+    konflikt.put("art", exception.art().wert());
+    exception.zeitpunkt().ifPresent(zeitpunkt -> konflikt.put("geaendertAm", zeitpunkt.toString()));
+    exception
+        .urheberKonto()
+        .ifPresent(
+            konto ->
+                urheberauskunft
+                    .zu(konto)
+                    .map(Urheber::anzeigename)
+                    .ifPresent(name -> konflikt.put("geaendertVon", name)));
+    konflikt.put(
+        "eigenesFenster",
+        exception.urheberKonto().isPresent()
+            && exception.urheberKonto().getAsLong() == exception.handelndesKonto());
+    final String detail =
+        exception.art() == Bearbeitungskonflikt.Art.GELOESCHT ? GELOESCHT_DETAIL : VERALTET_DETAIL;
+    return konfliktProblem(detail, konflikt);
+  }
+
+  /**
+   * Zwei Transaktionen haben dieselbe Zeile zugleich geschrieben, und Hibernate hat es erst am
+   * Zaehler {@code version} bemerkt (Plan #415, E4).
+   *
+   * <p>Der Vergleich im Anwendungsfall faengt den Regelfall; dieser Zweig faengt das Rennen
+   * dazwischen. Ohne ihn fiele die Ausnahme in {@link #handleUnexpected} und kaeme als 500 zurueck.
+   * Wer zugleich geschrieben hat, weiss an dieser Stelle niemand: Die Erweiterung nennt darum weder
+   * Urheber noch Zeitpunkt, und die Meldung der Ausnahme, die Klassennamen traegt, bleibt drinnen.
+   */
+  @ExceptionHandler(ObjectOptimisticLockingFailureException.class)
+  public ProblemDetail handleOptimisticLocking(
+      final ObjectOptimisticLockingFailureException exception) {
+    return konfliktProblem(
+        VERALTET_DETAIL,
+        Map.of("art", Bearbeitungskonflikt.Art.VERALTET.wert(), "eigenesFenster", false));
   }
 
   /**
@@ -208,6 +281,13 @@ public class GlobalExceptionHandler {
       return ProblemDetail.forStatusAndDetail(HttpStatus.INTERNAL_SERVER_ERROR, GENERIC_DETAIL);
     }
     return ProblemDetail.forStatusAndDetail(status.code(), detailOf(exception, status));
+  }
+
+  private static ProblemDetail konfliktProblem(
+      final String detail, final Map<String, Object> konflikt) {
+    final ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, detail);
+    problem.setProperty("konflikt", konflikt);
+    return problem;
   }
 
   private static String wartemeldung(final long minuten) {

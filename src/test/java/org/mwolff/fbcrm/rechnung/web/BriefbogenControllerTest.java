@@ -19,6 +19,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -81,7 +82,7 @@ class BriefbogenControllerTest {
 
   private static MockMvc strecke(final BriefbogenController controller) {
     return MockMvcBuilders.standaloneSetup(controller)
-        .setControllerAdvice(new GlobalExceptionHandler())
+        .setControllerAdvice(new GlobalExceptionHandler(konto -> Optional.empty()))
         .build();
   }
 

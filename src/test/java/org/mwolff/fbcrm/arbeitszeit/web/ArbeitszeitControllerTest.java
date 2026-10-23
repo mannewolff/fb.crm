@@ -120,7 +120,7 @@ class ArbeitszeitControllerTest {
     mockMvc =
         MockMvcBuilders.standaloneSetup(
                 new ArbeitszeitController(useCase, monate, buchbare, personen))
-            .setControllerAdvice(new GlobalExceptionHandler())
+            .setControllerAdvice(new GlobalExceptionHandler(konto -> Optional.empty()))
             .setCustomArgumentResolvers(new AuthenticationPrincipalArgumentResolver())
             .build();
   }

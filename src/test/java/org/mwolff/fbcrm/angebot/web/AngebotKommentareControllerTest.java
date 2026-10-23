@@ -14,6 +14,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -85,7 +86,7 @@ class AngebotKommentareControllerTest {
                 Long.valueOf(ANGEMELDET), null, List.of()));
     mockMvc =
         MockMvcBuilders.standaloneSetup(new AngebotKommentareController(useCase))
-            .setControllerAdvice(new GlobalExceptionHandler())
+            .setControllerAdvice(new GlobalExceptionHandler(konto -> Optional.empty()))
             .setCustomArgumentResolvers(new AuthenticationPrincipalArgumentResolver())
             .build();
   }

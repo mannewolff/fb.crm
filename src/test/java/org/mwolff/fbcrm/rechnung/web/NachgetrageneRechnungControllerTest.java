@@ -22,6 +22,7 @@ import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.Optional;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -94,7 +95,7 @@ class NachgetrageneRechnungControllerTest {
         MockMvcBuilders.standaloneSetup(
                 new NachgetrageneRechnungController(
                     anlegen, lesen, aendern, loeschen, zustand, dokument))
-            .setControllerAdvice(new GlobalExceptionHandler())
+            .setControllerAdvice(new GlobalExceptionHandler(konto -> Optional.empty()))
             .build();
   }
 

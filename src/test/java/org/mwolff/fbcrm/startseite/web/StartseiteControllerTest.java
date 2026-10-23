@@ -105,7 +105,7 @@ class StartseiteControllerTest {
     wandlung.addConverter(new ZeitraumConverter());
     mockMvc =
         MockMvcBuilders.standaloneSetup(new StartseiteController(useCase))
-            .setControllerAdvice(new GlobalExceptionHandler())
+            .setControllerAdvice(new GlobalExceptionHandler(konto -> Optional.empty()))
             .setConversionService(wandlung)
             .build();
   }

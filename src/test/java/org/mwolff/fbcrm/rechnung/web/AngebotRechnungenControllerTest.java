@@ -65,7 +65,7 @@ class AngebotRechnungenControllerTest {
     mockMvc =
         MockMvcBuilders.standaloneSetup(
                 new AngebotRechnungenController(anlegen, lesen, abrechnungsstand))
-            .setControllerAdvice(new GlobalExceptionHandler())
+            .setControllerAdvice(new GlobalExceptionHandler(konto -> Optional.empty()))
             .build();
   }
 
