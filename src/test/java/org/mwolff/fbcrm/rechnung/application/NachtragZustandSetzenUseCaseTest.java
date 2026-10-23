@@ -24,6 +24,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.mwolff.fbcrm.common.Bearbeitungskonflikt;
 import org.mwolff.fbcrm.rechnung.domain.NachgetrageneRechnung;
 import org.mwolff.fbcrm.rechnung.domain.NachgetrageneRechnungRepository;
 import org.mwolff.fbcrm.rechnung.domain.Rechnungszustand;
@@ -176,6 +177,41 @@ class NachtragZustandSetzenUseCaseTest {
     // When / Then
     assertThatThrownBy(() -> useCase.setze(ID, Rechnungszustand.BEZAHLT, STAND, KONTO))
         .isInstanceOf(NachtragNichtGefunden.class);
+    verify(nachgetragene, never()).save(any());
+  }
+
+  @Test
+  void setze_givenADeletedRechnung_thenNachtragGeloeschtAndWritesNothing() {
+    // Given — #411, Kriterium 6: Anna (Konto 7) hat die Rechnung inzwischen geloescht.
+    final Instant geloescht = Instant.parse("2026-10-05T08:42:00Z");
+    when(nachgetragene.findById(ID))
+        .thenReturn(
+            Optional.of(
+                new NachgetrageneRechnung(
+                        ID,
+                        4L,
+                        "RE-1",
+                        LocalDate.of(2026, 3, 1),
+                        new BigDecimal("1000.00"),
+                        new BigDecimal("1190.00"),
+                        Rechnungszustand.GESTELLT,
+                        null,
+                        ANGELEGT,
+                        ANGELEGT,
+                        STAND,
+                        URHEBER)
+                    .geloescht(URHEBER, geloescht)));
+
+    // When / Then
+    assertThatThrownBy(() -> useCase.setze(ID, Rechnungszustand.BEZAHLT, STAND, KONTO))
+        .isInstanceOfSatisfying(
+            NachtragGeloescht.class,
+            konflikt -> {
+              assertThat(konflikt.art()).isEqualTo(Bearbeitungskonflikt.Art.GELOESCHT);
+              assertThat(konflikt.urheberKonto()).hasValue(URHEBER);
+              assertThat(konflikt.handelndesKonto()).isEqualTo(KONTO);
+              assertThat(konflikt.zeitpunkt()).contains(geloescht);
+            });
     verify(nachgetragene, never()).save(any());
   }
 }

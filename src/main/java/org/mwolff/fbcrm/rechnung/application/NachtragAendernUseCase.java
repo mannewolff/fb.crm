@@ -55,6 +55,7 @@ public class NachtragAendernUseCase {
    * @param version der vorgelegte Stand aus {@code If-Match}
    * @param konto Kennung des handelnden Kontos
    * @throws NachtragNichtGefunden wenn es die Rechnung nicht gibt
+   * @throws NachtragGeloescht wenn die Rechnung inzwischen geloescht ist
    * @throws NachtragGeaendert wenn die Rechnung inzwischen einen anderen Stand hat als den
    *     vorgelegten
    * @throws FirmaNichtGefunden wenn es die Firma nicht gibt
@@ -67,7 +68,7 @@ public class NachtragAendernUseCase {
       final long id, final Nachtragsdaten daten, final long version, final long konto) {
     final NachgetrageneRechnung rechnung =
         nachgetragene.findById(id).orElseThrow(NachtragNichtGefunden::new);
-    NachtragGeaendert.pruefe(rechnung, version, konto);
+    Nachtragsvergleich.pruefe(rechnung, version, konto);
     if (firmen.findById(daten.firmaId()).isEmpty()) {
       throw new FirmaNichtGefunden();
     }

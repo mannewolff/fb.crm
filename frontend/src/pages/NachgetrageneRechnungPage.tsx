@@ -76,6 +76,10 @@ import { ABSTAND_BUEHNE, ZAHLEN_KLASSE } from '../theme';
  * {@link Konfliktmeldung} ueber der Ansicht. „Neu laden" holt den Stand des Servers samt neuer
  * Version; den Schritt loest man danach auf dem neuen Stand erneut aus. Eigene Eingaben gibt es
  * hier keine — die Ansicht hat kein Formular.
+ *
+ * <b>Das Loeschen legt den Stand ebenso vor</b> (#411, Kriterium 6; Plan #415, E16, E17). Ist die
+ * Rechnung inzwischen geloescht, wird jeder Schritt darauf abgewiesen; statt „Neu laden" fuehrt
+ * „Zur Übersicht" zurueck.
  */
 
 const NICHT_GEFUNDEN = 'Diese nachgetragene Rechnung gibt es nicht.';
@@ -219,14 +223,25 @@ export default function NachgetrageneRechnungPage() {
     }
   };
 
+  /**
+   * Loescht die Rechnung auf dem Stand der Ansicht (#411, Kriterium 6; Plan #415, E17).
+   *
+   * Hat inzwischen jemand anderes geaendert oder geloescht, bleibt die Seite stehen, und die
+   * {@link Konfliktmeldung} sagt, was geschehen ist.
+   */
   const loeschen = async (nachtrag: Nachtrag) => {
     setzeFehler(null);
+    setzeAbweisung(null);
     setzeLaeuft(true);
     try {
-      await nachtragLoeschen(nachtrag.id);
-      navigate('/rechnungen');
-    } catch {
-      setzeFehler(AUSFALL_LOESCHEN);
+      await nachtragLoeschen(nachtrag.id, nachtrag.version);
+      navigate(UEBERSICHT);
+    } catch (ursache) {
+      if (istBearbeitungskonflikt(ursache)) {
+        setzeAbweisung(ursache);
+      } else {
+        setzeFehler(AUSFALL_LOESCHEN);
+      }
       setzeLaeuft(false);
     }
   };

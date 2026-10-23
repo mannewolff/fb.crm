@@ -132,14 +132,17 @@ describe('die Wege', () => {
     );
   });
 
-  it('loescht die nachgetragene Rechnung', async () => {
+  it('loescht die nachgetragene Rechnung und legt dabei ihren Stand vor', async () => {
     const fetchMock = fetchNachPfad({ 'DELETE /api/nachgetragene-rechnungen/7': leer(204) });
 
-    await nachtragLoeschen(7);
+    await nachtragLoeschen(7, 3);
 
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/nachgetragene-rechnungen/7',
-      expect.objectContaining({ method: 'DELETE' }),
+      expect.objectContaining({
+        method: 'DELETE',
+        headers: expect.objectContaining({ 'If-Match': '"3"' }) as unknown,
+      }),
     );
   });
 

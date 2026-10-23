@@ -67,8 +67,8 @@ Maske „Angebot bearbeiten" und in der Ansicht eines Angebots bei „Status wei
 Löschen eines Kommentars und beim Löschen einer Anlage. An einer Rechnung gilt es beim Speichern
 und Löschen des Entwurfs, bei „Rechnung stellen" und bei „Als bezahlt markieren", „Abschreiben" und
 „Zurück auf gestellt". An einer nachgetragenen Rechnung gilt es in jedem Zustand beim Speichern in
-der Maske „Nachgetragene Rechnung bearbeiten", beim Ersetzen oder Entfernen ihres PDFs und bei „Als
-bezahlt markieren", „Abschreiben" und „Zurück auf gestellt". Das Angebot zählt dabei als Ganzes, mit
+der Maske „Nachgetragene Rechnung bearbeiten", beim Ersetzen oder Entfernen ihres PDFs, beim Löschen
+und bei „Als bezahlt markieren", „Abschreiben" und „Zurück auf gestellt". Das Angebot zählt dabei als Ganzes, mit
 seinen Positionen und seinem Status; jeder Kommentar ist ein Eintrag für sich.
 
 **Einstieg:** Die Abweisung erscheint von selbst, wenn man „Speichern" wählt und jemand anderes
@@ -136,6 +136,15 @@ nicht mitgespeichert, bis man es erneut wählt. In der Ansicht der nachgetragene
 Meldung über der Kopfkarte, wenn „Als bezahlt markieren", „Abschreiben" oder „Zurück auf gestellt"
 abgewiesen wird; „Neu laden" holt den aktuellen Zustand, danach wählt man die Taste erneut, wenn sie
 noch passt.
+
+„Löschen" an einer nachgetragenen Rechnung löscht nur die Rechnung, die man gesehen hat: Hat sie ein
+anderer seit dem Öffnen geändert, bleibt sie samt ihrem PDF stehen, und die Meldung nennt die
+Änderung. Ist die nachgetragene Rechnung inzwischen gelöscht, wird jede Taste daran abgewiesen —
+Speichern, Löschen, das PDF und der Ausgang der Forderung. Die Meldung nennt, wer sie wann gelöscht
+hat, „Zur Übersicht" führt zur Liste der Rechnungen, und in der Maske stehen die eigenen Werte weiter
+im Formular und unter „Deine Eingaben" zum Kopieren. Eine gelöschte nachgetragene Rechnung zählt
+nirgends mehr mit, weder in der Übersicht noch auf der Startseite oder im Jahresabschluss, und ihre
+Nummer ist wieder frei.
 
 **Ergebnis:** Angebot und Rechnung tragen die Änderungen beider, und keine ist unbemerkt verloren
 gegangen.

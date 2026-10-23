@@ -99,4 +99,14 @@ class NachtragLesenUseCaseTest {
     assertThat(NachtragNichtGefunden.class.getAnnotation(ResponseStatus.class).code())
         .isEqualTo(HttpStatus.NOT_FOUND);
   }
+
+  @Test
+  void lese_aDeletedRechnung_thenNachtragNichtGefunden() {
+    // Given — Plan #415, E17: eine gekennzeichnete Rechnung ist fuer jeden Leseweg fort.
+    when(nachgetragene.findById(ID))
+        .thenReturn(Optional.of(rechnung().geloescht(30L, Instant.parse("2026-10-05T08:42:00Z"))));
+
+    // When / Then
+    assertThatThrownBy(() -> useCase.lese(ID)).isInstanceOf(NachtragNichtGefunden.class);
+  }
 }

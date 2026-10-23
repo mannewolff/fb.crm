@@ -78,9 +78,19 @@ class JpaNachgetrageneRechnungRepositoryTest {
   }
 
   @Test
-  void findAlle_thenTranslatesEveryRow() {
-    // Given
-    when(zeilen.findAll()).thenReturn(List.of(NachgetrageneRechnungEntity.aus(RECHNUNG)));
+  void findById_givenADeletedRow_thenReadsTheKennzeichenBack() {
+    // Given — Plan #415, E17: ueber die Kennung kommt auch die gekennzeichnete Zeile.
+    final NachgetrageneRechnung geloescht = RECHNUNG.geloescht(9L, GEAENDERT);
+    when(zeilen.findById(ID)).thenReturn(Optional.of(NachgetrageneRechnungEntity.aus(geloescht)));
+
+    // When / Then
+    assertThat(repository.findById(ID)).contains(geloescht);
+  }
+
+  @Test
+  void findAlle_thenTranslatesEveryLivingRow() {
+    // Given — die Liste fragt allein die Zeilen ohne Kennzeichen.
+    when(zeilen.findLebende()).thenReturn(List.of(NachgetrageneRechnungEntity.aus(RECHNUNG)));
 
     // When / Then
     assertThat(repository.findAlle()).containsExactly(RECHNUNG);
@@ -116,15 +126,6 @@ class JpaNachgetrageneRechnungRepositoryTest {
             zeile -> assertThat(zeile.getId()).isNull(),
             zeile -> assertThat(zeile.getZustand()).isEqualTo(Rechnungszustand.GESTELLT));
     assertThat(geschrieben).isEqualTo(RECHNUNG);
-  }
-
-  @Test
-  void delete_thenDeletesTheRowById() {
-    // When
-    repository.delete(ID);
-
-    // Then
-    verify(zeilen).deleteById(ID);
   }
 
   @ParameterizedTest

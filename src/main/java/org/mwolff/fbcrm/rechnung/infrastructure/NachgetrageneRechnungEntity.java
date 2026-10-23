@@ -17,8 +17,8 @@ import org.mwolff.fbcrm.rechnung.domain.NachgetrageneRechnung;
 import org.mwolff.fbcrm.rechnung.domain.Rechnungszustand;
 
 /**
- * Die Zeile der Tabelle {@code rechnung_nachgetragen} nach {@code V22__rechnung_nachgetragen.sql}
- * und {@code V33__version.sql}.
+ * Die Zeile der Tabelle {@code rechnung_nachgetragen} nach {@code V22__rechnung_nachgetragen.sql},
+ * {@code V33__version.sql} und {@code V34__geloescht.sql}.
  *
  * <p>Die Firma steht als blosse Kennung und nicht als Beziehung, aus demselben Grund wie das
  * Angebot an {@link RechnungEntity}: Firma und Rechnung sind eigene Wurzeln, und eine Beziehung
@@ -77,6 +77,13 @@ class NachgetrageneRechnungEntity {
   @Column(name = "geaendert_von")
   private @Nullable Long geaendertVon;
 
+  /* Das Kennzeichen der Loeschung (Plan #415, E17): NULL heisst „nicht geloescht" (V34). */
+  @Column(name = "geloescht_am")
+  private @Nullable Instant geloeschtAm;
+
+  @Column(name = "geloescht_von")
+  private @Nullable Long geloeschtVon;
+
   /*
    * JPA verlangt einen parameterlosen Konstruktor und fuellt die Felder danach selbst; NullAway
    * sieht diesen Weg nicht und meldete sonst nicht initialisierte Felder.
@@ -110,6 +117,8 @@ class NachgetrageneRechnungEntity {
     this.updatedAt = rechnung.updatedAt();
     this.version = rechnung.version();
     this.geaendertVon = rechnung.geaendertVon();
+    this.geloeschtAm = rechnung.geloeschtAm();
+    this.geloeschtVon = rechnung.geloeschtVon();
   }
 
   @Nullable Long getId() {
@@ -158,5 +167,13 @@ class NachgetrageneRechnungEntity {
 
   @Nullable Long getGeaendertVon() {
     return geaendertVon;
+  }
+
+  @Nullable Instant getGeloeschtAm() {
+    return geloeschtAm;
+  }
+
+  @Nullable Long getGeloeschtVon() {
+    return geloeschtVon;
   }
 }

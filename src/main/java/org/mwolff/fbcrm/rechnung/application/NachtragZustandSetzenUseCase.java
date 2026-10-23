@@ -42,6 +42,7 @@ public class NachtragZustandSetzenUseCase {
    * @param version der vorgelegte Stand aus {@code If-Match}
    * @param konto Kennung des handelnden Kontos
    * @throws NachtragNichtGefunden wenn es die Rechnung nicht gibt
+   * @throws NachtragGeloescht wenn die Rechnung inzwischen geloescht ist
    * @throws NachtragGeaendert wenn die Rechnung inzwischen einen anderen Stand hat als den
    *     vorgelegten
    * @throws RechnungszustandPasstNicht wenn der Uebergang nicht zulaessig ist
@@ -50,7 +51,7 @@ public class NachtragZustandSetzenUseCase {
       final long id, final Rechnungszustand ziel, final long version, final long konto) {
     final NachgetrageneRechnung rechnung =
         nachgetragene.findById(id).orElseThrow(NachtragNichtGefunden::new);
-    NachtragGeaendert.pruefe(rechnung, version, konto);
+    Nachtragsvergleich.pruefe(rechnung, version, konto);
     return nachgetragene.save(rechnung.mitZustand(ziel, clock.instant()).durch(konto));
   }
 }

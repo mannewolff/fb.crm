@@ -35,6 +35,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.mwolff.fbcrm.common.Bearbeitungskonflikt;
 import org.mwolff.fbcrm.common.Urheber;
 import org.mwolff.fbcrm.common.web.Bedingungskopf;
 import org.mwolff.fbcrm.common.web.GlobalExceptionHandler;
@@ -46,6 +47,7 @@ import org.mwolff.fbcrm.rechnung.application.NachtragAendernUseCase;
 import org.mwolff.fbcrm.rechnung.application.NachtragAnlegenUseCase;
 import org.mwolff.fbcrm.rechnung.application.NachtragDokumentUseCase;
 import org.mwolff.fbcrm.rechnung.application.NachtragGeaendert;
+import org.mwolff.fbcrm.rechnung.application.NachtragGeloescht;
 import org.mwolff.fbcrm.rechnung.application.NachtragLesenUseCase;
 import org.mwolff.fbcrm.rechnung.application.NachtragLoeschenUseCase;
 import org.mwolff.fbcrm.rechnung.application.NachtragNichtGefunden;
@@ -71,15 +73,18 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
  * E17, E21, E23, E24, E26, E27; Issue #268).
  *
  * <p>Gegenstand sind die acht Wege und ihre Statuscodes: 201 mit {@code Location} beim Anlegen, 200
- * beim Lesen, Aendern, Umstellen, Herunterladen und Ablegen des Dokuments, 204 beim Loeschen und
- * Entfernen. Dazu die Fehler: 400 mit {@code fieldErrors} fuer die Form des Rumpfs (E9, E10), 422
+ * beim Lesen, Aendern, Umstellen, Herunterladen, Ablegen und Entfernen des Dokuments, 204 beim
+ * Loeschen. Dazu die Fehler: 400 mit {@code fieldErrors} fuer die Form des Rumpfs (E9, E10), 422
  * mit {@code fieldErrors} fuer die fachlichen Abweisungen (E23), 404 fuer eine unbekannte Kennung
  * und fuer den Download ohne hinterlegtes Dokument (E17).
  *
  * <p><b>Aendern, Zustand, Ablegen und Entfernen des Originals legen den Stand vor</b> (#411,
  * Kriterium 4; Plan #415, E3, E14): Fuer jeden der vier Wege gilt dasselbe Dreigespann — ohne
  * {@code If-Match} 428, auf einem alten Stand 409 mit {@code konflikt}, auf dem aktuellen 200 mit
- * dem erhoehten Stand; die vier Wege laufen je durch dieselben drei parametrisierten Tests.
+ * dem erhoehten Stand; die vier Wege laufen je durch dieselben drei parametrisierten Tests. Das
+ * Loeschen legt den Stand ebenso vor und antwortet auf dem aktuellen 204; an einer inzwischen
+ * geloeschten Rechnung antworten alle fuenf Wege 409 mit {@code art = "gelöscht"} (Kriterium 6;
+ * E16).
  */
 @ExtendWith(MockitoExtension.class)
 class NachgetrageneRechnungControllerTest {
@@ -412,17 +417,21 @@ class NachgetrageneRechnungControllerTest {
   }
 
   @Test
-  void loeschen_thenNoContent() throws Exception {
-    mockMvc.perform(delete(EINZELN)).andExpect(status().isNoContent());
+  void loeschen_withTheCurrentStand_thenNoContentAndTheUseCaseSeesStandAndKonto() throws Exception {
+    mockMvc
+        .perform(delete(EINZELN).header(HttpHeaders.IF_MATCH, VORGELEGT))
+        .andExpect(status().isNoContent());
 
-    verify(loeschen).loesche(ID);
+    verify(loeschen).loesche(ID, STAND, ANGEMELDET);
   }
 
   @Test
   void loeschen_withAnUnknownId_thenNotFound() throws Exception {
-    doThrow(new NachtragNichtGefunden()).when(loeschen).loesche(ID);
+    doThrow(new NachtragNichtGefunden()).when(loeschen).loesche(ID, STAND, ANGEMELDET);
 
-    mockMvc.perform(delete(EINZELN)).andExpect(status().isNotFound());
+    mockMvc
+        .perform(delete(EINZELN).header(HttpHeaders.IF_MATCH, VORGELEGT))
+        .andExpect(status().isNotFound());
   }
 
   @Test
@@ -607,13 +616,18 @@ class NachgetrageneRechnungControllerTest {
           multipart(EINZELN + "/dokument")
               .file(new MockMultipartFile("datei", "original.pdf", "application/pdf", PDF));
       case "entfernen" -> delete(EINZELN + "/dokument");
+      case "loeschen" -> delete(EINZELN);
       default -> throw new IllegalArgumentException(weg);
     };
   }
 
   /** Der Anwendungsfall des Wegs wirft den Konflikt — mit Stand und Konto aus der Anfrage. */
   private void wirftKonflikt(final String weg) {
-    final NachtragGeaendert konflikt = new NachtragGeaendert(ANNA, ANGEMELDET, ANNAS_AENDERUNG);
+    wirft(weg, new NachtragGeaendert(ANNA, ANGEMELDET, ANNAS_AENDERUNG));
+  }
+
+  /** Der Anwendungsfall des Wegs wirft den genannten Konflikt. */
+  private void wirft(final String weg, final Bearbeitungskonflikt konflikt) {
     switch (weg) {
       case "aendern" ->
           when(aendern.aendere(eq(ID), any(), eq(STAND), eq(ANGEMELDET))).thenThrow(konflikt);
@@ -622,6 +636,7 @@ class NachgetrageneRechnungControllerTest {
       case "ablegen" ->
           when(dokument.lege(eq(ID), any(), eq(STAND), eq(ANGEMELDET))).thenThrow(konflikt);
       case "entfernen" -> when(dokument.entferne(ID, STAND, ANGEMELDET)).thenThrow(konflikt);
+      case "loeschen" -> doThrow(konflikt).when(loeschen).loesche(ID, STAND, ANGEMELDET);
       default -> throw new IllegalArgumentException(weg);
     }
   }
@@ -633,12 +648,13 @@ class NachgetrageneRechnungControllerTest {
       case "zustand" -> verify(zustand).setze(ID, Rechnungszustand.BEZAHLT, STAND, ANGEMELDET);
       case "ablegen" -> verify(dokument).lege(eq(ID), any(), eq(STAND), eq(ANGEMELDET));
       case "entfernen" -> verify(dokument).entferne(ID, STAND, ANGEMELDET);
+      case "loeschen" -> verify(loeschen).loesche(ID, STAND, ANGEMELDET);
       default -> throw new IllegalArgumentException(weg);
     }
   }
 
   @ParameterizedTest
-  @ValueSource(strings = {"aendern", "zustand", "ablegen", "entfernen"})
+  @ValueSource(strings = {"aendern", "zustand", "ablegen", "entfernen", "loeschen"})
   void schreibenderWeg_withoutIfMatch_thenAnswers428AndChangesNothing(final String weg)
       throws Exception {
     // Given — E3: Ohne vorgelegten Stand wird nicht geschrieben.
@@ -648,11 +664,11 @@ class NachgetrageneRechnungControllerTest {
         .perform(anfrageZu(weg))
         .andExpect(status().isPreconditionRequired())
         .andExpect(jsonPath("$.detail").value(Bedingungskopf.MELDUNG));
-    verifyNoInteractions(aendern, zustand, dokument, lesen);
+    verifyNoInteractions(aendern, zustand, dokument, loeschen, lesen);
   }
 
   @ParameterizedTest
-  @ValueSource(strings = {"aendern", "zustand", "ablegen", "entfernen"})
+  @ValueSource(strings = {"aendern", "zustand", "ablegen", "entfernen", "loeschen"})
   void schreibenderWeg_withAnOutdatedStand_thenAnswers409WithTheConflict(final String weg)
       throws Exception {
     // Given — #411, Kriterium 4: Anna hat die nachgetragene Rechnung inzwischen geaendert.
@@ -688,5 +704,23 @@ class NachgetrageneRechnungControllerTest {
 
     // Then
     bekamStandUndKonto(weg);
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"aendern", "zustand", "ablegen", "entfernen", "loeschen"})
+  void schreibenderWeg_atADeletedRechnung_thenAnswers409AsGeloescht(final String weg)
+      throws Exception {
+    // Given — #411, Kriterium 6; Plan #415, E16: Anna hat die Rechnung inzwischen geloescht.
+    wirft(weg, new NachtragGeloescht(ANNA, ANGEMELDET, ANNAS_AENDERUNG));
+
+    // When / Then
+    mockMvc
+        .perform(anfrageZu(weg).header(HttpHeaders.IF_MATCH, VORGELEGT))
+        .andExpect(status().isConflict())
+        .andExpect(jsonPath("$.konflikt.art").value("gelöscht"))
+        .andExpect(jsonPath("$.konflikt.geaendertVon").value("Anna"))
+        .andExpect(jsonPath("$.konflikt.geaendertAm").value("2026-10-06T08:42:00Z"))
+        .andExpect(jsonPath("$.konflikt.eigenesFenster").value(false));
+    verifyNoInteractions(lesen);
   }
 }

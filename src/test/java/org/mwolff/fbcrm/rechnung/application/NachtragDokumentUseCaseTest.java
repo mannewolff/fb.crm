@@ -2,6 +2,7 @@ package org.mwolff.fbcrm.rechnung.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.catchThrowable;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doThrow;
@@ -34,6 +35,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.mwolff.fbcrm.common.Bearbeitungskonflikt;
 import org.mwolff.fbcrm.common.Uploadgrenze;
 import org.mwolff.fbcrm.rechnung.domain.DokumentSpeicher;
 import org.mwolff.fbcrm.rechnung.domain.DokumentSpeicherAusfall;
@@ -71,6 +73,9 @@ class NachtragDokumentUseCaseTest {
 
   /** Wer gerade ablegt oder entfernt. */
   private static final long KONTO = 9L;
+
+  /** Wann Konto 7 die Rechnung geloescht hat. */
+  private static final Instant GELOESCHT = Instant.parse("2026-10-05T08:42:00Z");
 
   /*
    * Eine HTML-Seite, wie sie als „rechnung.pdf" hochgeladen werden koennte. Der Teilname erreicht
@@ -473,6 +478,58 @@ class NachtragDokumentUseCaseTest {
     // When / Then
     assertThatThrownBy(() -> useCase.entferne(ID, STAND, KONTO))
         .isInstanceOf(NachtragNichtGefunden.class);
+    verifyNoInteractions(speicher);
+  }
+
+  // --- geloescht ---------------------------------------------------------------------------
+
+  /** Die Rechnung mit Original, inzwischen von Konto 7 geloescht (#411, Kriterium 6). */
+  private void rechnungIstGeloescht() {
+    when(nachgetragene.findById(ID))
+        .thenReturn(Optional.of(gespeichert(ALT).geloescht(URHEBER, GELOESCHT)));
+  }
+
+  private static void istGeloescht(final Throwable abgewiesen) {
+    assertThat(abgewiesen)
+        .isInstanceOfSatisfying(
+            NachtragGeloescht.class,
+            konflikt -> {
+              assertThat(konflikt.art()).isEqualTo(Bearbeitungskonflikt.Art.GELOESCHT);
+              assertThat(konflikt.urheberKonto()).hasValue(URHEBER);
+              assertThat(konflikt.handelndesKonto()).isEqualTo(KONTO);
+              assertThat(konflikt.zeitpunkt()).contains(GELOESCHT);
+            });
+  }
+
+  @Test
+  void lege_givenADeletedRechnung_thenNachtragGeloeschtBeforeAnythingIsStored() {
+    // Given
+    rechnungIstGeloescht();
+
+    // When / Then — nichts landet im Speicher, nichts in der Zeile.
+    istGeloescht(catchThrowable(() -> useCase.lege(ID, PDF, STAND, KONTO)));
+    verify(nachgetragene, never()).save(any());
+    verifyNoInteractions(speicher);
+  }
+
+  @Test
+  void entferne_givenADeletedRechnung_thenNachtragGeloeschtAndNothingIsRemoved() {
+    // Given
+    rechnungIstGeloescht();
+
+    // When / Then
+    istGeloescht(catchThrowable(() -> useCase.entferne(ID, STAND, KONTO)));
+    verify(nachgetragene, never()).save(any());
+    verifyNoInteractions(speicher);
+  }
+
+  @Test
+  void lies_givenADeletedRechnung_thenNachtragNichtGefunden() {
+    // Given — Plan #415, E17: eine gekennzeichnete Rechnung ist fuer jeden Leseweg fort.
+    rechnungIstGeloescht();
+
+    // When / Then
+    assertThatThrownBy(() -> useCase.lies(ID)).isInstanceOf(NachtragNichtGefunden.class);
     verifyNoInteractions(speicher);
   }
 }

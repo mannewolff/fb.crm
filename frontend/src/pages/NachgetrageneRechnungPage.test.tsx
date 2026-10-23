@@ -396,7 +396,10 @@ describe('NachgetrageneRechnungPage — Löschen (Kriterium 10)', () => {
     expect(screen.getByTestId('adresse')).toHaveTextContent(/^\/rechnungen$/);
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/nachgetragene-rechnungen/7',
-      expect.objectContaining({ method: 'DELETE' }),
+      expect.objectContaining({
+        method: 'DELETE',
+        headers: expect.objectContaining({ 'If-Match': '"3"' }) as unknown,
+      }),
     );
   });
 
@@ -491,6 +494,16 @@ function abweisung(geaendertVon: string): () => Response {
   });
 }
 
+/** Die Abweisung, weil die Rechnung inzwischen geloescht ist (#411, Kriterium 6; Plan #415, E16). */
+function geloescht(geaendertVon: string): () => Response {
+  return json(409, {
+    title: 'Conflict',
+    status: 409,
+    detail: 'Dieser Eintrag wurde inzwischen gelöscht.',
+    konflikt: { art: 'gelöscht', geaendertAm: heuteUm(10, 42), eigenesFenster: false, geaendertVon },
+  });
+}
+
 /** Antwortet der Reihe nach mit den Antworten — beim ersten Aufruf mit der ersten. */
 function nacheinander(...antworten: readonly (() => Response)[]): () => Response {
   let aufruf = 0;
@@ -559,5 +572,58 @@ describe('NachgetrageneRechnungPage — gleichzeitig arbeiten (#411, Kriterium 4
       ),
     ).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Neu laden' })).toBeInTheDocument();
+  });
+});
+
+describe('NachgetrageneRechnungPage — gelöscht (#411, Kriterium 6; Plan #415, E16, E17)', () => {
+  it('Szenario: Loeschen auf altem Stand — die Meldung nennt Anna, die Seite bleibt stehen', async () => {
+    fetchNachPfad({ [WEG]: json(200, GESTELLT), [WEG_LOESCHEN]: abweisung('Anna') });
+    const nutzer = userEvent.setup();
+
+    renderSeite();
+    await geladen();
+    await waehle(nutzer, 'Löschen');
+    await nutzer.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Löschen' }));
+
+    const meldung = await screen.findByRole('alert');
+    expect(meldung).toHaveTextContent('Anna hat diesen Eintrag inzwischen geändert (10:42).');
+    expect(meldung).not.toHaveTextContent('Bitte später erneut versuchen');
+    expect(screen.getByRole('button', { name: 'Neu laden' })).toBeInTheDocument();
+    expect(screen.getByTestId('adresse')).toHaveTextContent('/rechnungen/nachgetragen/7');
+  });
+
+  it('Szenario: Loeschen einer schon geloeschten — die Meldung fuehrt zur Uebersicht', async () => {
+    fetchNachPfad({ [WEG]: json(200, GESTELLT), [WEG_LOESCHEN]: geloescht('Anna') });
+    const nutzer = userEvent.setup();
+
+    renderSeite();
+    await geladen();
+    await waehle(nutzer, 'Löschen');
+    await nutzer.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Löschen' }));
+
+    const meldung = await screen.findByRole('alert');
+    expect(meldung).toHaveTextContent('Anna hat diesen Eintrag inzwischen gelöscht (10:42).');
+    expect(screen.queryByRole('button', { name: 'Neu laden' })).not.toBeInTheDocument();
+    expect(screen.queryByText(/nicht gelöscht\. Bitte später/u)).not.toBeInTheDocument();
+
+    await nutzer.click(within(meldung).getByRole('link', { name: 'Zur Übersicht' }));
+    expect(await screen.findByText('Die Liste')).toBeInTheDocument();
+  });
+
+  it('Szenario: Zustandswechsel an einer geloeschten — Zur Uebersicht statt Neu laden', async () => {
+    fetchNachPfad({ [WEG]: json(200, GESTELLT), [WEG_ZUSTAND]: geloescht('Anna') });
+    const nutzer = userEvent.setup();
+
+    renderSeite();
+    await geladen();
+    await nutzer.click(screen.getByRole('button', { name: 'Als bezahlt markieren' }));
+
+    const meldung = await screen.findByRole('alert');
+    expect(meldung).toHaveTextContent('Anna hat diesen Eintrag inzwischen gelöscht (10:42).');
+    expect(within(meldung).getByRole('link', { name: 'Zur Übersicht' })).toHaveAttribute(
+      'href',
+      '/rechnungen',
+    );
+    expect(screen.queryByRole('button', { name: 'Neu laden' })).not.toBeInTheDocument();
   });
 });

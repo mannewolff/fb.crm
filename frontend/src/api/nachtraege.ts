@@ -123,9 +123,16 @@ export function nachtragAendern(
   return apiJson(pfad(id), { methode: 'PUT', rumpf: eingabe, version }, parseNachtrag);
 }
 
-/** Loescht die Rechnung samt ihrem Original (Kriterium 10) — die Antwort traegt keinen Inhalt. */
-export function nachtragLoeschen(id: number): Promise<void> {
-  return apiOhneInhalt(pfad(id), { methode: 'DELETE' });
+/**
+ * Loescht die Rechnung samt ihrem Original (Kriterium 10) — die Antwort traegt keinen Inhalt.
+ *
+ * Geloescht wird mit Kennzeichen (Plan #415, E17); ist die Rechnung inzwischen geaendert oder
+ * geloescht, weist der Server mit einem Bearbeitungskonflikt ab.
+ *
+ * @param version der Stand, auf dem das Loeschen beruht
+ */
+export function nachtragLoeschen(id: number, version: number): Promise<void> {
+  return apiOhneInhalt(pfad(id), { methode: 'DELETE', version });
 }
 
 /**

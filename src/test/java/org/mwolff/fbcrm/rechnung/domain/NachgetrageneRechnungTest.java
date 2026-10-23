@@ -142,6 +142,57 @@ class NachgetrageneRechnungTest {
   }
 
   @Test
+  void geloescht_inEveryState_thenCarriesTimeAndKontoAndKeepsEverythingElse() {
+    // Given — Plan #415, E17: geloescht wird in jedem Zustand, die Zeile bleibt mit Kennzeichen
+    for (final Rechnungszustand zustand :
+        List.of(
+            Rechnungszustand.GESTELLT, Rechnungszustand.BEZAHLT, Rechnungszustand.ABGESCHRIEBEN)) {
+      final NachgetrageneRechnung rechnung = rechnung(zustand);
+
+      // When
+      final NachgetrageneRechnung geloescht = rechnung.geloescht(9L, SPAETER);
+
+      // Then
+      assertThat(geloescht.geloeschtAm()).isEqualTo(SPAETER);
+      assertThat(geloescht.geloeschtVon()).isEqualTo(9L);
+      assertThat(geloescht)
+          .usingRecursiveComparison()
+          .ignoringFields("geloeschtAm", "geloeschtVon")
+          .isEqualTo(rechnung);
+    }
+  }
+
+  @Test
+  void neueRechnung_thenCarriesNoKennzeichen() {
+    // When / Then — der Konstruktor ohne Kennzeichen baut eine lebende Rechnung
+    assertThat(rechnung(Rechnungszustand.GESTELLT))
+        .satisfies(
+            rechnung -> assertThat(rechnung.geloeschtAm()).isNull(),
+            rechnung -> assertThat(rechnung.geloeschtVon()).isNull());
+  }
+
+  @Test
+  void everyTransition_thenKeepsTheKennzeichen() {
+    // Given
+    final NachgetrageneRechnung geloescht =
+        rechnung(Rechnungszustand.GESTELLT).geloescht(9L, SPAETER);
+
+    // When / Then — kein Uebergang hebt die Loeschung auf
+    assertThat(
+            List.of(
+                geloescht.geaendert(FIRMA_ID, "RE-1", RECHNUNGSDATUM, NETTO, BRUTTO, SPAETER),
+                geloescht.mitZustand(Rechnungszustand.BEZAHLT, SPAETER),
+                geloescht.mitDokument("neu.pdf", SPAETER),
+                geloescht.ohneDokument(SPAETER),
+                geloescht.durch(3L)))
+        .allSatisfy(
+            neu -> {
+              assertThat(neu.geloeschtAm()).isEqualTo(SPAETER);
+              assertThat(neu.geloeschtVon()).isEqualTo(9L);
+            });
+  }
+
+  @Test
   void requireId_givenAStoredRechnung_thenItsId() {
     assertThat(rechnung(Rechnungszustand.GESTELLT).requireId()).isEqualTo(ID);
   }

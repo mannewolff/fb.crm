@@ -26,6 +26,9 @@ import org.mwolff.fbcrm.rechnung.application.RechnungszustandPasstNicht;
  * Rechnungszustand#ausgangswechselErlaubt}, E4). Aendern laesst sie sich in jedem Zustand (#254,
  * Kriterium 10).
  *
+ * <p><b>Geloescht wird mit Kennzeichen</b> (Plan #415, E17): {@link #geloescht(long, Instant)}
+ * haelt Zeitpunkt und Konto fest, damit ein spaeterer Zugriff beides nennen kann.
+ *
  * <p>Unveraenderlich: Jeder Uebergang liefert eine neue Instanz. Der Zeitpunkt kommt von aussen,
  * weil die Domaene keine Uhr kennt (CLAUDE-java.md §6.2).
  *
@@ -44,6 +47,9 @@ import org.mwolff.fbcrm.rechnung.application.RechnungszustandPasstNicht;
  *     der ersten Aenderung, danach fuehrt ihn der Bestand
  * @param geaendertVon Kennung des Kontos, das die Rechnung zuletzt geaendert hat, oder {@code
  *     null}, solange sie das nicht weiss (Plan #415, E14)
+ * @param geloeschtAm Zeitpunkt der Loeschung, oder {@code null} fuer eine bestehende Rechnung (Plan
+ *     #415, E17)
+ * @param geloeschtVon Kennung des Kontos, das die Rechnung geloescht hat, oder {@code null}
  */
 public record NachgetrageneRechnung(
     @Nullable Long id,
@@ -57,7 +63,9 @@ public record NachgetrageneRechnung(
     Instant createdAt,
     Instant updatedAt,
     long version,
-    @Nullable Long geaendertVon)
+    @Nullable Long geaendertVon,
+    @Nullable Instant geloeschtAm,
+    @Nullable Long geloeschtVon)
     implements Identifiable {
 
   /** Prueft die beiden Invarianten; die Meldung am Feld kommt aus der Anwendungsschicht. */
@@ -68,6 +76,57 @@ public record NachgetrageneRechnung(
     if (!zustand.istGestellt()) {
       throw new IllegalArgumentException("Eine nachgetragene Rechnung ist nie ein Entwurf.");
     }
+  }
+
+  /**
+   * Eine Rechnung, die nie geloescht wurde — so entsteht und lebt jede, bis sie geloescht wird.
+   *
+   * @param id technische Kennung, oder {@code null} vor dem Speichern
+   * @param firmaId Kennung der Firma
+   * @param nummer die Rechnungsnummer
+   * @param rechnungDatum Datum der Rechnung
+   * @param netto der Nettobetrag
+   * @param brutto der Bruttobetrag
+   * @param zustand der Zustand
+   * @param pdfSchluessel Schluessel des Originals, oder {@code null}
+   * @param createdAt Zeitpunkt der Erfassung
+   * @param updatedAt Zeitpunkt der letzten Aenderung
+   * @param version der Stand der Rechnung
+   * @param geaendertVon Kennung des Kontos, das zuletzt geaendert hat, oder {@code null}
+   */
+  /*
+   * Zwoelf Parameter, weil die Rechnung zwoelf lebende Angaben traegt; der Konstruktor erspart
+   * jeder Stelle, die eine bestehende Rechnung baut, die beiden leeren Angaben zur Loeschung.
+   */
+  @SuppressWarnings("PMD.ExcessiveParameterList")
+  public NachgetrageneRechnung(
+      final @Nullable Long id,
+      final long firmaId,
+      final String nummer,
+      final LocalDate rechnungDatum,
+      final BigDecimal netto,
+      final BigDecimal brutto,
+      final Rechnungszustand zustand,
+      final @Nullable String pdfSchluessel,
+      final Instant createdAt,
+      final Instant updatedAt,
+      final long version,
+      final @Nullable Long geaendertVon) {
+    this(
+        id,
+        firmaId,
+        nummer,
+        rechnungDatum,
+        netto,
+        brutto,
+        zustand,
+        pdfSchluessel,
+        createdAt,
+        updatedAt,
+        version,
+        geaendertVon,
+        null,
+        null);
   }
 
   /**
@@ -102,7 +161,9 @@ public record NachgetrageneRechnung(
         createdAt,
         zeitpunkt,
         version,
-        geaendertVon);
+        geaendertVon,
+        geloeschtAm,
+        geloeschtVon);
   }
 
   /**
@@ -128,7 +189,9 @@ public record NachgetrageneRechnung(
         createdAt,
         jetzt,
         version,
-        geaendertVon);
+        geaendertVon,
+        geloeschtAm,
+        geloeschtVon);
   }
 
   /**
@@ -150,7 +213,9 @@ public record NachgetrageneRechnung(
         createdAt,
         jetzt,
         version,
-        geaendertVon);
+        geaendertVon,
+        geloeschtAm,
+        geloeschtVon);
   }
 
   /**
@@ -171,7 +236,9 @@ public record NachgetrageneRechnung(
         createdAt,
         jetzt,
         version,
-        geaendertVon);
+        geaendertVon,
+        geloeschtAm,
+        geloeschtVon);
   }
 
   /**
@@ -196,6 +263,37 @@ public record NachgetrageneRechnung(
         createdAt,
         updatedAt,
         version,
+        konto,
+        geloeschtAm,
+        geloeschtVon);
+  }
+
+  /**
+   * Die Rechnung mit dem Kennzeichen der Loeschung — in jedem Zustand (#254, Kriterium 10; Plan
+   * #415, E17).
+   *
+   * <p>Die Zeile bleibt mit Zeitpunkt und Konto der Loeschung, damit ein spaeterer Zugriff beides
+   * nennen kann. Anders als die Rechnung kennt sie keine Grenze: fb.crm hat sie nicht erzeugt, also
+   * gibt es nichts festzuschreiben und keine Luecke im Nummernkreis.
+   *
+   * @param konto Kennung des loeschenden Kontos
+   * @param zeitpunkt Zeitpunkt der Loeschung
+   */
+  public NachgetrageneRechnung geloescht(final long konto, final Instant zeitpunkt) {
+    return new NachgetrageneRechnung(
+        id,
+        firmaId,
+        nummer,
+        rechnungDatum,
+        netto,
+        brutto,
+        zustand,
+        pdfSchluessel,
+        createdAt,
+        updatedAt,
+        version,
+        geaendertVon,
+        zeitpunkt,
         konto);
   }
 }

@@ -769,6 +769,16 @@ function abweisung(geaendertVon: string): () => Response {
   });
 }
 
+/** Die Abweisung, weil die Rechnung inzwischen geloescht ist (#411, Kriterium 6; Plan #415, E16). */
+function geloescht(geaendertVon: string): () => Response {
+  return json(409, {
+    title: 'Conflict',
+    status: 409,
+    detail: 'Dieser Eintrag wurde inzwischen gelöscht.',
+    konflikt: { art: 'gelöscht', geaendertAm: heuteUm(10, 42), eigenesFenster: false, geaendertVon },
+  });
+}
+
 /** Antwortet der Reihe nach mit den Antworten — beim ersten Aufruf mit der ersten. */
 function nacheinander(...antworten: readonly (() => Response)[]): () => Response {
   let aufruf = 0;
@@ -993,5 +1003,56 @@ describe('NachtragMaske — gleichzeitig arbeiten (#411, Kriterien 1 bis 4; Plan
       ),
     ).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Neu laden' })).toBeInTheDocument();
+  });
+});
+
+describe('NachtragMaske — gelöscht (#411, Kriterium 6; Plan #415, E16, E17)', () => {
+  it('Szenario: Speichern einer geloeschten — Zur Uebersicht, die Eingaben bleiben zum Kopieren', async () => {
+    const fetchMock = aendern(NACHTRAG, { [`PUT ${WEG}/7`]: geloescht('Anna') });
+
+    renderMaske('/rechnungen/nachgetragen/7/bearbeiten');
+    const nutzer = await bereit();
+    await nutzer.clear(nummer());
+    await nutzer.type(nummer(), 'RE-2026-015');
+    await nutzer.click(screen.getByRole('button', { name: 'Speichern' }));
+
+    // Abgewiesen: Die Meldung nennt Anna und die Loeschung; es gibt nichts neu zu laden.
+    const meldung = await screen.findByRole('alert');
+    expect(meldung).toHaveTextContent('Anna hat diesen Eintrag inzwischen gelöscht (10:42).');
+    expect(screen.queryByRole('button', { name: 'Neu laden' })).not.toBeInTheDocument();
+
+    // Die eigenen Werte stehen weiter im Formular und sofort unter „Deine Eingaben".
+    expect(nummer()).toHaveValue('RE-2026-015');
+    const eigene = screen.getByRole('region', { name: 'Deine Eingaben' });
+    expect(eigene).toHaveTextContent('RE-2026-015');
+    expect(vorgelegteStaende(fetchMock, 'POST', `${WEG}/7/dokument`)).toEqual([]);
+
+    // „Zur Übersicht" fuehrt zur Liste der Rechnungen.
+    expect(within(meldung).getByRole('link', { name: 'Zur Übersicht' })).toHaveAttribute(
+      'href',
+      '/rechnungen',
+    );
+  });
+
+  it('nimmt auch eine Abweisung des Originals als geloescht auf', async () => {
+    aendern(
+      { ...NACHTRAG, dokument: true },
+      {
+        [`PUT ${WEG}/7`]: json(200, { ...NACHTRAG, dokument: true, version: 4 }),
+        [`DELETE ${WEG}/7/dokument`]: geloescht('Anna'),
+      },
+    );
+
+    renderMaske('/rechnungen/nachgetragen/7/bearbeiten');
+    const nutzer = await bereit();
+    await nutzer.click(screen.getByRole('checkbox', { name: 'Hinterlegtes PDF entfernen' }));
+    await nutzer.click(screen.getByRole('button', { name: 'Speichern' }));
+
+    const meldung = await screen.findByRole('alert');
+    expect(meldung).toHaveTextContent('Anna hat diesen Eintrag inzwischen gelöscht (10:42).');
+    expect(screen.getByRole('region', { name: 'Deine Eingaben' })).toHaveTextContent(
+      'Hinterlegtes PDF entfernen',
+    );
+    expect(adresse()).toBe('/rechnungen/nachgetragen/7/bearbeiten');
   });
 });

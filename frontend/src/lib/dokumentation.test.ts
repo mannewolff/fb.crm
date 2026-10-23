@@ -345,6 +345,9 @@ describe('Szenarien des Fachplans (E16)', () => {
     // Die nachgetragene Rechnung ist in jedem Zustand geschuetzt, samt ihrem PDF (Issue #448).
     expect(text).toMatch(/Maske „Nachgetragene Rechnung bearbeiten"/u);
     expect(text).toMatch(/Ersetzen oder Entfernen ihres PDFs/u);
+    // Eine geloeschte nachgetragene Rechnung weist jede Taste ab, ihre Nummer ist frei (Issue #449).
+    expect(text).toMatch(/„Löschen" an einer nachgetragenen Rechnung löscht nur die Rechnung/u);
+    expect(text).toMatch(/Nummer ist wieder frei/u);
     expect(text).toMatch(/\*\*Ergebnis:\*\*/u);
   });
 

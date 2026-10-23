@@ -3,7 +3,6 @@ package org.mwolff.fbcrm.rechnung.application;
 import java.time.Instant;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.fbcrm.common.Bearbeitungskonflikt;
-import org.mwolff.fbcrm.rechnung.domain.NachgetrageneRechnung;
 
 /**
  * Die nachgetragene Rechnung wurde seit dem Oeffnen geaendert, und der Schritt beruht auf dem alten
@@ -13,7 +12,7 @@ import org.mwolff.fbcrm.rechnung.domain.NachgetrageneRechnung;
  * Entfernen des Originals gleichermassen — in jedem Zustand, denn einen Entwurf hat sie nicht.
  * Status und Abbildung nach 409 mit der Erweiterung {@code konflikt} legt {@link
  * Bearbeitungskonflikt} fest; hier stehen nur, wer zuletzt geaendert hat, wer abgewiesen wird und
- * wann der gueltige Stand entstand.
+ * wann der gueltige Stand entstand. Gefragt wird ueber {@link Nachtragsvergleich}.
  */
 public final class NachtragGeaendert extends Bearbeitungskonflikt {
 
@@ -28,20 +27,5 @@ public final class NachtragGeaendert extends Bearbeitungskonflikt {
   public NachtragGeaendert(
       final @Nullable Long urheberKonto, final long handelndesKonto, final Instant zeitpunkt) {
     super(Art.VERALTET, urheberKonto, handelndesKonto, zeitpunkt);
-  }
-
-  /**
-   * Weist einen Schritt ab, dessen vorgelegter Stand nicht der der Rechnung ist.
-   *
-   * @param rechnung die Rechnung, wie sie gerade im Bestand steht
-   * @param version der vorgelegte Stand aus {@code If-Match}
-   * @param konto Kennung des handelnden Kontos
-   * @throws NachtragGeaendert wenn die beiden Staende voneinander abweichen
-   */
-  static void pruefe(final NachgetrageneRechnung rechnung, final long version, final long konto) {
-    Bearbeitungskonflikt.pruefe(
-        version,
-        rechnung.version(),
-        () -> new NachtragGeaendert(rechnung.geaendertVon(), konto, rechnung.updatedAt()));
   }
 }

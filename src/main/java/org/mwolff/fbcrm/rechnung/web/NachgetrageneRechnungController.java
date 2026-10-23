@@ -47,10 +47,12 @@ import org.springframework.web.multipart.MultipartFile;
  * <p>Keine Aenderung an {@code SecurityConfig}: Die Wege fallen unter das bestehende {@code
  * /api/**} fuer angemeldete Benutzer.
  *
- * <p><b>Aendern, Zustand und das Original legen den Stand vor</b> (#411, Kriterium 4; Plan #415,
- * E2, E3, E14): Sie lesen {@link Bedingungskopf} aus {@code If-Match} und das handelnde Konto aus
- * der Sitzung. Fehlt der Kopf, antwortet der Weg mit 428, ohne den Anwendungsfall zu fragen.
- * Anlegen und Herunterladen bleiben frei; das Loeschen folgt in einem eigenen Paket.
+ * <p><b>Aendern, Zustand, das Original und das Loeschen legen den Stand vor</b> (#411, Kriterium 4;
+ * Plan #415, E2, E3, E14): Sie lesen {@link Bedingungskopf} aus {@code If-Match} und das handelnde
+ * Konto aus der Sitzung. Fehlt der Kopf, antwortet der Weg mit 428, ohne den Anwendungsfall zu
+ * fragen. Das Loeschen ebenso; ist die Rechnung inzwischen geloescht, antwortet jeder dieser Wege
+ * mit 409 und {@code konflikt.art = "gelöscht"} (E16), Lesen und Herunterladen dagegen mit 404.
+ * Anlegen und Herunterladen bleiben frei.
  */
 @RestController
 @RequestMapping(NachgetrageneRechnungController.PFAD)
@@ -116,11 +118,17 @@ public class NachgetrageneRechnungController {
     return lies(id);
   }
 
-  /** Loescht die Rechnung samt ihrem Original (Kriterium 10). */
+  /**
+   * Loescht die Rechnung samt ihrem Original (Kriterium 10) — mit Kennzeichen, auf dem vorgelegten
+   * Stand (Plan #415, E16, E17).
+   */
   @DeleteMapping("/{id}")
   @ResponseStatus(HttpStatus.NO_CONTENT)
-  public void loeschen(@PathVariable final long id) {
-    loeschenUseCase.loesche(id);
+  public void loeschen(
+      @PathVariable final long id,
+      final Bedingungskopf stand,
+      @AuthenticationPrincipal final Long accountId) {
+    loeschenUseCase.loesche(id, stand.version(), accountId);
   }
 
   /**

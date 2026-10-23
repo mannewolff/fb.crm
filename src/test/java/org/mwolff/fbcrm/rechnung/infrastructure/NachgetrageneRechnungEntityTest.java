@@ -64,6 +64,27 @@ class NachgetrageneRechnungEntityTest {
   }
 
   @Test
+  void aus_givenADeletedRechnung_thenCarriesTheKennzeichen() {
+    // When
+    final NachgetrageneRechnungEntity zeile =
+        NachgetrageneRechnungEntity.aus(rechnung(null).geloescht(9L, GEAENDERT));
+
+    // Then — Plan #415, E17
+    assertThat(zeile.getGeloeschtAm()).isEqualTo(GEAENDERT);
+    assertThat(zeile.getGeloeschtVon()).isEqualTo(9L);
+  }
+
+  @Test
+  void aus_givenALivingRechnung_thenTheKennzeichenStaysEmpty() {
+    // When
+    final NachgetrageneRechnungEntity zeile = NachgetrageneRechnungEntity.aus(rechnung(null));
+
+    // Then
+    assertThat(zeile.getGeloeschtAm()).isNull();
+    assertThat(zeile.getGeloeschtVon()).isNull();
+  }
+
+  @Test
   void aus_givenNoDocument_thenTheKeyStaysEmpty() {
     // When / Then
     assertThat(NachgetrageneRechnungEntity.aus(rechnung(null)).getPdfSchluessel()).isNull();

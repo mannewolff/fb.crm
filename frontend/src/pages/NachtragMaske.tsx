@@ -30,7 +30,12 @@ import type { PfadVerweis } from '../components/KopfPfad';
 import Konfliktmeldung from '../components/Konfliktmeldung';
 import KupferTaste from '../components/KupferTaste';
 import WeicheTaste from '../components/WeicheTaste';
-import { feldMeldungen, istBearbeitungskonflikt, nichtGefunden } from '../lib/apifehler';
+import {
+  feldMeldungen,
+  istBearbeitungskonflikt,
+  konfliktAngaben,
+  nichtGefunden,
+} from '../lib/apifehler';
 import { dateigroesse, MAX_UPLOAD_BYTE } from '../lib/dateigroesse';
 import { ersteDatei } from '../lib/dateiwahl';
 import { meldungAm } from '../lib/feldmeldung';
@@ -79,6 +84,10 @@ import { ABSTAND_BUEHNE } from '../theme';
  * {@link Konfliktmeldung} sagt, wer wann geaendert hat. Die eigenen Eingaben bleiben dabei im
  * Formular stehen. „Neu laden" holt den Stand des Servers samt neuer Version ins Formular und
  * stellt die eigenen Werte daneben in {@link EigeneEingaben}, bis „Verwerfen" gewaehlt wird.
+ *
+ * <b>Ist die Rechnung inzwischen geloescht</b> (#411, Kriterium 6; Plan #415, E16, E17), wird das
+ * Speichern abgewiesen. Statt „Neu laden" fuehrt „Zur Übersicht" zurueck, und die eigenen Werte
+ * stehen sofort in {@link EigeneEingaben} zum Kopieren.
  */
 
 const LAEDT = 'Die Angaben werden geladen …';
@@ -505,7 +514,7 @@ export default function NachtragMaske() {
       const felder = feldMeldungen(ursache);
       if (istBearbeitungskonflikt(ursache)) {
         // Die Eingaben bleiben stehen; den Weg weiter zeigt die Konfliktmeldung (Kriterium 3).
-        setzeAbweisung(ursache);
+        abgewiesen(ursache);
       } else if (Object.keys(felder).length > 0) {
         setzeFeldFehler(felder);
       } else {
@@ -520,7 +529,7 @@ export default function NachtragMaske() {
     } catch (ursache: unknown) {
       setzeLaeuft(false);
       if (istBearbeitungskonflikt(ursache)) {
-        setzeAbweisung(ursache);
+        abgewiesen(ursache);
         return;
       }
       // Die Rechnung steht; nur das Original fehlt. Die Meldung gehoert an die Datei (E11).
@@ -530,6 +539,20 @@ export default function NachtragMaske() {
     }
     navigate(`/rechnungen/nachgetragen/${String(gesichert.id)}`, { replace: true });
   };
+
+  /**
+   * Nimmt die Abweisung eines Schritts auf.
+   *
+   * Ist die Rechnung inzwischen geloescht, gibt es nichts neu zu laden (#411, Kriterium 6): Die
+   * eigenen Werte stehen sofort in {@link EigeneEingaben} zum Kopieren, und die Konfliktmeldung
+   * fuehrt zur Uebersicht.
+   */
+  function abgewiesen(ursache: unknown) {
+    setzeAbweisung(ursache);
+    if (konfliktAngaben(ursache)?.art === 'gelöscht') {
+      setzeEigene(eigeneEingabenAus(werte, gewaehlt, datei, entfernen));
+    }
+  }
 
   /**
    * „Neu laden" nach einer Abweisung: der Stand des Servers ins Formular, die eigenen Werte daneben

@@ -32,13 +32,17 @@ public class NachtragLesenUseCase {
    * Die nachgetragene Rechnung zu einer Kennung.
    *
    * @param id Kennung der nachgetragenen Rechnung
-   * @throws NachtragNichtGefunden wenn es die Rechnung nicht gibt
+   * @throws NachtragNichtGefunden wenn es die Rechnung nicht gibt oder sie geloescht ist (Plan
+   *     #415, E17)
    * @throws FirmaNichtGefunden wenn es ihre Firma nicht gibt — Firmen werden nie geloescht, das
    *     waere ein Widerspruch im Bestand
    */
   public NachgetrageneRechnungMitFirma lese(final long id) {
     final NachgetrageneRechnung rechnung =
-        nachgetragene.findById(id).orElseThrow(NachtragNichtGefunden::new);
+        nachgetragene
+            .findById(id)
+            .filter(gefunden -> gefunden.geloeschtAm() == null)
+            .orElseThrow(NachtragNichtGefunden::new);
     final Firma firma = firmen.findById(rechnung.firmaId()).orElseThrow(FirmaNichtGefunden::new);
     return new NachgetrageneRechnungMitFirma(rechnung, rechnung.firmaId(), firma.name());
   }

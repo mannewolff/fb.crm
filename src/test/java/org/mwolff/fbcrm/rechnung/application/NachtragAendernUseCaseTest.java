@@ -7,6 +7,7 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
@@ -25,6 +26,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.mwolff.fbcrm.common.Bearbeitungskonflikt;
 import org.mwolff.fbcrm.firma.application.FirmaNichtGefunden;
 import org.mwolff.fbcrm.firma.domain.FirmaRepository;
 import org.mwolff.fbcrm.rechnung.domain.NachgetrageneRechnung;
@@ -252,5 +254,26 @@ class NachtragAendernUseCaseTest {
     assertThatThrownBy(() -> useCase.aendere(ID, daten("RE-1", GESPEICHERT), STAND, KONTO))
         .isInstanceOf(FirmaNichtGefunden.class);
     verify(nachgetragene, never()).save(any());
+  }
+
+  @Test
+  void aendere_givenADeletedRechnung_thenNachtragGeloeschtAndWritesNothing() {
+    // Given — #411, Kriterium 6: Anna (Konto 7) hat die Rechnung inzwischen geloescht.
+    final Instant geloescht = Instant.parse("2026-10-05T08:42:00Z");
+    when(nachgetragene.findById(ID))
+        .thenReturn(Optional.of(gespeichert().geloescht(URHEBER, geloescht)));
+
+    // When / Then — der vorgelegte Stand ist der der Zeile; abgewiesen wird wegen der Loeschung.
+    assertThatThrownBy(() -> useCase.aendere(ID, daten("RE-2", GESPEICHERT), STAND, KONTO))
+        .isInstanceOfSatisfying(
+            NachtragGeloescht.class,
+            konflikt -> {
+              assertThat(konflikt.art()).isEqualTo(Bearbeitungskonflikt.Art.GELOESCHT);
+              assertThat(konflikt.urheberKonto()).hasValue(URHEBER);
+              assertThat(konflikt.handelndesKonto()).isEqualTo(KONTO);
+              assertThat(konflikt.zeitpunkt()).contains(geloescht);
+            });
+    verify(nachgetragene, never()).save(any());
+    verifyNoInteractions(rechnungsnummern);
   }
 }
