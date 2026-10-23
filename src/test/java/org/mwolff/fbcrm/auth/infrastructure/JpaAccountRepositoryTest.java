@@ -33,6 +33,12 @@ class JpaAccountRepositoryTest {
   private static final Instant ANGELEGT = Instant.parse("2026-09-01T08:00:00Z");
   private static final Instant GEAENDERT = Instant.parse("2026-09-18T12:00:00Z");
 
+  /** Das Konto, das zuletzt verwaltet hat (Plan #415, E19). */
+  private static final long VERWALTER = 3L;
+
+  /** Der Stand der Kontenverwaltung, den jede Zeile hier traegt. */
+  private static final long VERSION = 5L;
+
   @Mock private SpringDataAccountRepository jpa;
 
   @Captor private ArgumentCaptor<AccountEntity> gespeicherte;
@@ -44,7 +50,8 @@ class JpaAccountRepositoryTest {
   }
 
   private static Account konto(final Long id) {
-    return Konten.gespeichert(id, "manne@example.org", 2, ANGELEGT, GEAENDERT);
+    return Konten.imStand(
+        Konten.gespeichert(id, "manne@example.org", 2, ANGELEGT, GEAENDERT), VERSION, VERWALTER);
   }
 
   @Test
@@ -66,7 +73,25 @@ class JpaAccountRepositoryTest {
             zeile -> assertThat(zeile.isAktiv()).isTrue(),
             zeile -> assertThat(zeile.getSessionGeneration()).isEqualTo(2),
             zeile -> assertThat(zeile.getCreatedAt()).isEqualTo(ANGELEGT),
-            zeile -> assertThat(zeile.getUpdatedAt()).isEqualTo(GEAENDERT));
+            zeile -> assertThat(zeile.getUpdatedAt()).isEqualTo(GEAENDERT),
+            zeile -> assertThat(zeile.getVersion()).isEqualTo(VERSION),
+            zeile -> assertThat(zeile.getGeaendertVon()).isEqualTo(VERWALTER));
+  }
+
+  @Test
+  void save_givenAnAccountWithoutUrheber_thenTheRowCarriesNone() {
+    // Given — ein frisches Konto: Version 0, niemand hat es bisher verwaltet.
+    final Account frisch = Konten.neu("anna@firma.de", ANGELEGT);
+    when(jpa.saveAndFlush(any(AccountEntity.class))).thenReturn(AccountEntity.aus(frisch));
+
+    // When
+    final Account gesichert = repository.save(frisch);
+
+    // Then
+    verify(jpa).saveAndFlush(gespeicherte.capture());
+    assertThat(gespeicherte.getValue().getVersion()).isZero();
+    assertThat(gespeicherte.getValue().getGeaendertVon()).isNull();
+    assertThat(gesichert.geaendertVon()).isNull();
   }
 
   @Test
@@ -207,7 +232,31 @@ class JpaAccountRepositoryTest {
     assertThat(gesperrt).containsExactly(konto(11L));
   }
 
+  @Test
+  void findByIdMitSperre_givenAKnownAccount_thenLocksAndTranslatesTheRow() {
+    // Given
+    when(jpa.sperreKonto(11L)).thenReturn(Optional.of(zeile(11L)));
+
+    // When
+    final Optional<Account> gesperrt = repository.findByIdMitSperre(11L);
+
+    // Then — Version und Urheber kommen mit, gegen sie prueft die Verwaltung (E19).
+    assertThat(gesperrt).contains(konto(11L));
+  }
+
+  @Test
+  void findByIdMitSperre_givenAnUnknownId_thenEmpty() {
+    // Given
+    when(jpa.sperreKonto(11L)).thenReturn(Optional.empty());
+
+    // When
+    final Optional<Account> gesperrt = repository.findByIdMitSperre(11L);
+
+    // Then
+    assertThat(gesperrt).isEmpty();
+  }
+
   private static Account benannt(final Long id, final String email, final String name) {
-    return konto(id).mitAdresse(email, GEAENDERT).mitNamen(name, GEAENDERT);
+    return Konten.benannt(konto(id).mitAdresse(email, GEAENDERT, VERWALTER), name);
   }
 }

@@ -195,17 +195,16 @@ class MehrereKontenIT extends AbstractIntegrationTest {
   void szenarioStilllegenBeendetDieSitzung_thenLoggedOutLockedOutAndCommentsKeepTheName() {
     // Given — Anna ist angemeldet und hat an einem Angebot kommentiert.
     final HttpHeaders manfred = cLevel(MANFRED);
-    final long annaId = id(legeAn(manfred, ANNA, "Anna Berg", Role.EMPLOYEE));
+    id(legeAn(manfred, ANNA, "Anna Berg", Role.EMPLOYEE));
     final HttpHeaders anna = Anmeldung.perCode(rest, jdbc, hasher, ANNA);
     final long angebot = angebot(manfred);
     kommentiere(anna, angebot, "Bitte bis Freitag.");
 
     // When
-    final ResponseEntity<String> stillgelegt =
-        ruf(manfred, MITARBEITENDE + "/" + annaId + "/stilllegen", HttpMethod.POST, null);
+    final ResponseEntity<String> stillgelegt = stilllegen(manfred, ANNA);
 
     // Then — beim naechsten Schritt abgemeldet.
-    assertThat(stillgelegt.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
+    assertThat(stillgelegt.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(ruf(anna, kommentare(angebot), HttpMethod.GET, null).getStatusCode())
         .isEqualTo(HttpStatus.UNAUTHORIZED);
 
@@ -238,11 +237,7 @@ class MehrereKontenIT extends AbstractIntegrationTest {
 
     // When
     final ResponseEntity<String> geaendert =
-        ruf(
-            manfred,
-            MITARBEITENDE + "/" + annaId,
-            HttpMethod.PUT,
-            konto(ANNA, "Anna Müller", Role.EMPLOYEE));
+        aendere(manfred, annaId, ANNA, konto(ANNA, "Anna Müller", Role.EMPLOYEE));
 
     // Then — der Name wirkt ohne Abmeldung, auch auf die bisherigen Kommentare.
     assertThat(geaendert.getStatusCode()).isEqualTo(HttpStatus.OK);
@@ -260,13 +255,8 @@ class MehrereKontenIT extends AbstractIntegrationTest {
 
     // When / Then — herabstufen und stilllegen werden mit dem einen Satz abgewiesen.
     final ResponseEntity<String> herabgestuft =
-        ruf(
-            manfred,
-            MITARBEITENDE + "/" + manfredId,
-            HttpMethod.PUT,
-            konto(MANFRED, "Manfred", Role.EMPLOYEE));
-    final ResponseEntity<String> stillgelegt =
-        ruf(manfred, MITARBEITENDE + "/" + manfredId + "/stilllegen", HttpMethod.POST, null);
+        aendere(manfred, manfredId, MANFRED, konto(MANFRED, "Manfred", Role.EMPLOYEE));
+    final ResponseEntity<String> stillgelegt = stilllegen(manfred, MANFRED);
     assertThat(List.of(herabgestuft, stillgelegt))
         .allSatisfy(
             antwort -> {
@@ -286,27 +276,16 @@ class MehrereKontenIT extends AbstractIntegrationTest {
 
     // When / Then — jetzt geht das Herabstufen des eigenen Kontos durch …
     assertThat(
-            ruf(
-                    manfred,
-                    MITARBEITENDE + "/" + manfredId,
-                    HttpMethod.PUT,
-                    konto(MANFRED, "Manfred", Role.EMPLOYEE))
+            aendere(manfred, manfredId, MANFRED, konto(MANFRED, "Manfred", Role.EMPLOYEE))
                 .getStatusCode())
         .isEqualTo(HttpStatus.OK);
 
     // … und, wieder befoerdert, auch das Stilllegen des eigenen Kontos.
     assertThat(
-            ruf(
-                    berta,
-                    MITARBEITENDE + "/" + manfredId,
-                    HttpMethod.PUT,
-                    konto(MANFRED, "Manfred", Role.C_LEVEL))
+            aendere(berta, manfredId, MANFRED, konto(MANFRED, "Manfred", Role.C_LEVEL))
                 .getStatusCode())
         .isEqualTo(HttpStatus.OK);
-    assertThat(
-            ruf(manfred, MITARBEITENDE + "/" + manfredId + "/stilllegen", HttpMethod.POST, null)
-                .getStatusCode())
-        .isEqualTo(HttpStatus.NO_CONTENT);
+    assertThat(stilllegen(manfred, MANFRED).getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(ruf(manfred, "/api/auth/me", HttpMethod.GET, null).getStatusCode())
         .isEqualTo(HttpStatus.UNAUTHORIZED);
     assertThat(aktiveCLevel()).isEqualTo(1);
@@ -358,8 +337,8 @@ class MehrereKontenIT extends AbstractIntegrationTest {
   void anlegen_givenTheAddressOfADeactivatedAccountInAnotherCase_thenRefusedAtTheField() {
     // Given — Anna ist stillgelegt; ihre Adresse bleibt blockiert (E6).
     final HttpHeaders manfred = cLevel(MANFRED);
-    final long annaId = id(legeAn(manfred, ANNA, "Anna Berg", Role.EMPLOYEE));
-    ruf(manfred, MITARBEITENDE + "/" + annaId + "/stilllegen", HttpMethod.POST, null);
+    legeAn(manfred, ANNA, "Anna Berg", Role.EMPLOYEE);
+    stilllegen(manfred, ANNA);
 
     // When
     final ResponseEntity<String> antwort =
@@ -380,11 +359,7 @@ class MehrereKontenIT extends AbstractIntegrationTest {
 
     // When
     final ResponseEntity<String> antwort =
-        ruf(
-            manfred,
-            MITARBEITENDE + "/" + annaId,
-            HttpMethod.PUT,
-            konto("Manfred@FIRMA.de", "Anna Berg", Role.EMPLOYEE));
+        aendere(manfred, annaId, ANNA, konto("Manfred@FIRMA.de", "Anna Berg", Role.EMPLOYEE));
 
     // Then
     assertThat(antwort.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
@@ -401,11 +376,7 @@ class MehrereKontenIT extends AbstractIntegrationTest {
 
     // When
     final ResponseEntity<String> antwort =
-        ruf(
-            manfred,
-            MITARBEITENDE + "/" + annaId,
-            HttpMethod.PUT,
-            konto("anna.berg@firma.de", "Anna Berg", Role.EMPLOYEE));
+        aendere(manfred, annaId, ANNA, konto("anna.berg@firma.de", "Anna Berg", Role.EMPLOYEE));
 
     // Then
     assertThat(antwort.getStatusCode()).isEqualTo(HttpStatus.OK);
@@ -421,16 +392,123 @@ class MehrereKontenIT extends AbstractIntegrationTest {
     // Given — Kriterium 7.
     final HttpHeaders manfred = cLevel(MANFRED);
     final long annaId = id(legeAn(manfred, ANNA, "Anna Berg", Role.EMPLOYEE));
-    ruf(manfred, MITARBEITENDE + "/" + annaId + "/stilllegen", HttpMethod.POST, null);
+    stilllegen(manfred, ANNA);
 
     // When
     final ResponseEntity<String> antwort =
-        ruf(manfred, MITARBEITENDE + "/" + annaId + "/aktivieren", HttpMethod.POST, null);
+        rufMitStand(
+            manfred,
+            MITARBEITENDE + "/" + annaId + "/aktivieren",
+            HttpMethod.POST,
+            null,
+            stand(manfred, ANNA));
 
     // Then
-    assertThat(antwort.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
+    assertThat(antwort.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(zeile(manfred, ANNA).path("aktiv").asBoolean()).isTrue();
     assertThat(Anmeldung.perCode(rest, jdbc, hasher, ANNA)).isNotEmpty();
+  }
+
+  @Test
+  void aendern_afterTheAffectedPersonLoggedInAndOut_thenTheVersionStaysAndTheOldStandPasses() {
+    // Given — Plan #415, E19: Manfred oeffnet Annas Konto und liest den Stand.
+    final HttpHeaders manfred = cLevel(MANFRED);
+    final long annaId = id(legeAn(manfred, ANNA, "Anna Berg", Role.EMPLOYEE));
+    final long gelesen = stand(manfred, ANNA);
+
+    // When — Anna meldet sich an und wieder ab.
+    final HttpHeaders anna = Anmeldung.perCode(rest, jdbc, hasher, ANNA);
+    assertThat(ruf(anna, "/api/auth/logout", HttpMethod.POST, null).getStatusCode())
+        .isEqualTo(HttpStatus.NO_CONTENT);
+
+    // Then — die Version des Kontos steht, obwohl die Sitzungs-Generation weitergezaehlt hat …
+    assertThat(stand(manfred, ANNA)).isEqualTo(gelesen);
+    assertThat(accounts.findById(annaId))
+        .hasValueSatisfying(k -> assertThat(k.sessionGeneration()).isEqualTo(1));
+
+    // … und das Aendern auf dem vorher gelesenen Stand geht durch, mit erhoehter Version.
+    final ResponseEntity<String> geaendert =
+        rufMitStand(
+            manfred,
+            MITARBEITENDE + "/" + annaId,
+            HttpMethod.PUT,
+            konto(ANNA, "Anna Müller", Role.EMPLOYEE),
+            gelesen);
+    assertThat(geaendert.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(lies(geaendert).path("version").asLong()).isGreaterThan(gelesen);
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT geaendert_von FROM account WHERE id = ?", Long.class, annaId))
+        .isEqualTo(kontoId(MANFRED));
+  }
+
+  @Test
+  void schreibendeWege_givenAnOutdatedStand_thenAnswer409AndNothingChanges() {
+    // Given — #411, Kriterium 4: Manfred hat Annas Konto gelesen, Berta hat es seither verwaltet.
+    final HttpHeaders manfred = cLevel(MANFRED);
+    final long annaId = id(legeAn(manfred, ANNA, "Anna Berg", Role.EMPLOYEE));
+    final long gelesen = stand(manfred, ANNA);
+    legeAn(manfred, BERTA, "Berta", Role.C_LEVEL);
+    final HttpHeaders berta = Anmeldung.perCode(rest, jdbc, hasher, BERTA);
+    assertThat(
+            aendere(berta, annaId, ANNA, konto(ANNA, "Anna Adler", Role.EMPLOYEE)).getStatusCode())
+        .isEqualTo(HttpStatus.OK);
+
+    // When — Aendern, Stilllegen und Wiederaktivieren auf dem alten Stand.
+    final List<ResponseEntity<String>> antworten =
+        List.of(
+            rufMitStand(
+                manfred,
+                MITARBEITENDE + "/" + annaId,
+                HttpMethod.PUT,
+                konto(ANNA, "Anna Berg", Role.READ_ONLY),
+                gelesen),
+            rufMitStand(
+                manfred,
+                MITARBEITENDE + "/" + annaId + "/stilllegen",
+                HttpMethod.POST,
+                null,
+                gelesen),
+            rufMitStand(
+                manfred,
+                MITARBEITENDE + "/" + annaId + "/aktivieren",
+                HttpMethod.POST,
+                null,
+                gelesen));
+
+    // Then — abgewiesen mit Bertas Namen, und Bertas Stand bleibt.
+    assertThat(antworten)
+        .allSatisfy(
+            antwort -> {
+              assertThat(antwort.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+              assertThat(lies(antwort).path("konflikt").path("geaendertVon").asText())
+                  .isEqualTo("Berta");
+            });
+    final JsonNode anna = zeile(manfred, ANNA);
+    assertThat(anna.path("displayName").asText()).isEqualTo("Anna Adler");
+    assertThat(anna.path("role").asText()).isEqualTo(Role.EMPLOYEE.name());
+    assertThat(anna.path("aktiv").asBoolean()).isTrue();
+  }
+
+  @Test
+  void schreibendeWege_withoutIfMatch_thenAnswer428() {
+    // Given
+    final HttpHeaders manfred = cLevel(MANFRED);
+    final long annaId = id(legeAn(manfred, ANNA, "Anna Berg", Role.EMPLOYEE));
+
+    // When / Then — E3: ohne vorgelegten Stand wird nicht geschrieben.
+    assertThat(
+            List.of(
+                ruf(
+                    manfred,
+                    MITARBEITENDE + "/" + annaId,
+                    HttpMethod.PUT,
+                    konto(ANNA, "Anna Müller", Role.EMPLOYEE)),
+                ruf(manfred, MITARBEITENDE + "/" + annaId + "/stilllegen", HttpMethod.POST, null)))
+        .allSatisfy(
+            antwort ->
+                assertThat(antwort.getStatusCode()).isEqualTo(HttpStatus.PRECONDITION_REQUIRED));
+    assertThat(zeile(manfred, ANNA).path("aktiv").asBoolean()).isTrue();
   }
 
   @Test
@@ -463,7 +541,7 @@ class MehrereKontenIT extends AbstractIntegrationTest {
   /** Legt ein aktives C-Level-Konto an und meldet es an. */
   private HttpHeaders cLevel(final String email) {
     accounts.save(
-        Konten.mit(null, email, Role.C_LEVEL, true, 0, ANGELEGT).mitNamen("Manfred", ANGELEGT));
+        Konten.benannt(Konten.mit(null, email, Role.C_LEVEL, true, 0, ANGELEGT), "Manfred"));
     return Anmeldung.perCode(rest, jdbc, hasher, email);
   }
 
@@ -475,6 +553,31 @@ class MehrereKontenIT extends AbstractIntegrationTest {
   private static Map<String, String> konto(
       final String email, final String name, final Role rolle) {
     return Map.of("email", email, "displayName", name, "role", rolle.name());
+  }
+
+  /** Der Stand eines Kontos, wie die Liste der Verwaltung ihn zeigt (Plan #415, E19). */
+  private long stand(final HttpHeaders sitzung, final String email) {
+    return zeile(sitzung, email).path("version").asLong();
+  }
+
+  /** Aendert ein Konto auf dem Stand, den die Liste gerade zeigt. */
+  private ResponseEntity<String> aendere(
+      final HttpHeaders sitzung,
+      final long id,
+      final String email,
+      final Map<String, String> rumpf) {
+    return rufMitStand(
+        sitzung, MITARBEITENDE + "/" + id, HttpMethod.PUT, rumpf, stand(sitzung, email));
+  }
+
+  /** Legt ein Konto auf dem Stand still, den die Liste gerade zeigt. */
+  private ResponseEntity<String> stilllegen(final HttpHeaders sitzung, final String email) {
+    return rufMitStand(
+        sitzung,
+        MITARBEITENDE + "/" + kontoId(email) + "/stilllegen",
+        HttpMethod.POST,
+        null,
+        stand(sitzung, email));
   }
 
   private long id(final ResponseEntity<String> antwort) {
@@ -532,7 +635,14 @@ class MehrereKontenIT extends AbstractIntegrationTest {
 
   private @Nullable Throwable herabstufen(final Account konto) {
     return catchThrowable(
-        () -> verwaltung.aendern(konto.requireId(), konto.email(), "C-Level", Role.EMPLOYEE));
+        () ->
+            verwaltung.aendern(
+                konto.requireId(),
+                konto.email(),
+                "C-Level",
+                Role.EMPLOYEE,
+                konto.version(),
+                konto.requireId()));
   }
 
   /** Wartet, bis so viele Verbindungen auf eine Zeilensperre warten. */
@@ -572,6 +682,19 @@ class MehrereKontenIT extends AbstractIntegrationTest {
     } catch (final JsonProcessingException fehler) {
       throw new IllegalStateException("Kein JSON: " + antwort.getBody(), fehler);
     }
+  }
+
+  /** Wie {@link #ruf}, mit dem vorgelegten Stand im Kopf {@code If-Match}. */
+  private ResponseEntity<String> rufMitStand(
+      final HttpHeaders sitzung,
+      final String pfad,
+      final HttpMethod methode,
+      final @Nullable Object rumpf,
+      final long version) {
+    final HttpHeaders kopf = new HttpHeaders();
+    kopf.addAll(sitzung);
+    kopf.setIfMatch("\"" + version + "\"");
+    return ruf(kopf, pfad, methode, rumpf);
   }
 
   private ResponseEntity<String> ruf(

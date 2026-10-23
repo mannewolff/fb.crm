@@ -9,7 +9,7 @@ import Radio from '@mui/material/Radio';
 import RadioGroup from '@mui/material/RadioGroup';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
-import { useEffect, useId, useState } from 'react';
+import { useCallback, useEffect, useId, useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
 import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom';
 
@@ -19,13 +19,21 @@ import type { FieldErrors } from '../api/client';
 import { mitarbeiterAendern, mitarbeiterAnlegen, mitarbeitendeListe } from '../api/mitarbeitende';
 import type { Mitarbeiter } from '../api/mitarbeitende';
 import { rollenname } from '../auth/rechte';
+import EigeneEingaben from '../components/EigeneEingaben';
+import type { EigeneEingabe } from '../components/EigeneEingaben';
 import EmailFeld from '../components/EmailFeld';
 import Karte from '../components/Karte';
+import Konfliktmeldung from '../components/Konfliktmeldung';
 import { useKopfPfad } from '../components/KopfPfad';
 import type { PfadVerweis } from '../components/KopfPfad';
 import KupferTaste from '../components/KupferTaste';
 import WeicheTaste from '../components/WeicheTaste';
-import { feldMeldungen, konflikt, serverMeldung } from '../lib/apifehler';
+import {
+  feldMeldungen,
+  istBearbeitungskonflikt,
+  konflikt,
+  serverMeldung,
+} from '../lib/apifehler';
 import { meldungAm } from '../lib/feldmeldung';
 import { kennungAus } from '../lib/kennung';
 import { ABSTAND_BUEHNE } from '../theme';
@@ -47,6 +55,14 @@ import { ABSTAND_BUEHNE } from '../theme';
  *
  * Eine Abweisung des Servers, die dem Stand widerspricht — das letzte aktive C-Level-Konto soll
  * herabgestuft werden —, steht mit dem Satz des Servers da (Kriterium 8).
+ *
+ * <b>Gespeichert wird auf dem gelesenen Stand</b> (#411, Kriterien 1 bis 4; Plan #415, E19). Die
+ * Maske fuehrt die Version des Kontos mit und legt sie beim Speichern vor. Hat inzwischen ein
+ * anderer C-Level das Konto verwaltet — oder dieselbe Person in einem anderen Fenster —, weist der
+ * Server ab, und die {@link Konfliktmeldung} sagt, wer wann geaendert hat. Die eigenen Eingaben
+ * bleiben im Formular. „Neu laden" holt den Stand des Servers samt neuer Version ins Formular und
+ * stellt die eigenen Werte daneben in {@link EigeneEingaben}, bis „Verwerfen" gewaehlt wird. Ein
+ * Konto wird nie geloescht; die Meldung kennt hier nur „veraltet".
  */
 
 const ROLLEN: readonly Rolle[] = ['C_LEVEL', 'EMPLOYEE', 'READ_ONLY'];
@@ -57,6 +73,11 @@ const ROLLE_FEHLT = 'Bitte eine Rolle wählen.';
 const NICHT_GEFUNDEN = 'Dieses Konto gibt es nicht.';
 const AUSFALL_LESEN = 'Das Konto ist gerade nicht zu erreichen. Bitte später erneut versuchen.';
 const AUSFALL_SPEICHERN = 'Das Konto wurde nicht gespeichert. Bitte später erneut versuchen.';
+/** Wo „Neu laden" nach einer Abweisung scheitert. */
+const AUSFALL_NEU_LADEN = 'Der aktuelle Stand ist gerade nicht zu erreichen. Bitte erneut versuchen.';
+
+/** Wohin die Konfliktmeldung fuehrt — bei Konten nur der Form halber, sie werden nie geloescht. */
+const UEBERSICHT = '/mitarbeitende';
 
 /** Ueber der Maske steht die Liste. */
 const ZU_MITARBEITENDEN: readonly PfadVerweis[] = [
@@ -78,6 +99,29 @@ function fehlendeAngaben(email: string, name: string, rolle: Rolle | null): Fiel
     fehler.role = [ROLLE_FEHLT];
   }
   return fehler;
+}
+
+/**
+ * Was gerade in der Maske steht, als eigene Eingaben zum Kopieren (#411, Kriterium 3) — beschriftet
+ * wie die Felder, damit sich jeder Wert seinem Feld zuordnen laesst.
+ */
+function eigeneEingabenAus(
+  email: string,
+  name: string,
+  rolle: Rolle | null,
+): readonly EigeneEingabe[] {
+  return [
+    { bezeichnung: 'E-Mail-Adresse', wert: email },
+    { bezeichnung: 'Name', wert: name },
+    // Ohne gewaehlte Rolle bleibt der Wert leer — so wie ein leeres Feld (EigeneEingaben).
+    { bezeichnung: 'Rolle', wert: ROLLEN.filter((wert) => wert === rolle).map(rollenname).join('') },
+  ];
+}
+
+/** Das Konto zur Kennung aus der Liste — einen Leseweg fuer ein einzelnes Konto gibt es nicht. */
+async function kontoLesen(kennung: number): Promise<Mitarbeiter | undefined> {
+  const konten = await mitarbeitendeListe();
+  return konten.find((kandidat) => kandidat.id === kennung);
 }
 
 function nichtBereit(stand: Exclude<Stand, 'bereit'>): ReactNode {
@@ -123,6 +167,20 @@ export default function MitarbeiterMaske() {
   const [fehler, setzeFehler] = useState<string | null>(null);
   const [laeuft, setzeLaeuft] = useState(false);
   const [ohneBegruessung, setzeOhneBegruessung] = useState<Mitarbeiter | null>(null);
+  // Der Stand, den das naechste Speichern vorlegt: gelesen, oder aus „Neu laden".
+  const [version, setzeVersion] = useState(0);
+  // Die Abweisung eines Speicherns auf altem Stand, ungeprueft — die Konfliktmeldung liest sie selbst.
+  const [abweisung, setzeAbweisung] = useState<unknown>(null);
+  // Die eigenen Werte nach „Neu laden", bis „Verwerfen" gewaehlt wird (#411, Kriterium 3).
+  const [eigene, setzeEigene] = useState<readonly EigeneEingabe[] | null>(null);
+
+  // Die Setzer sind stabil; so kann der Leseweg beim Oeffnen dieselbe Uebernahme benutzen.
+  const uebernimm = useCallback((konto: Mitarbeiter) => {
+    setzeEmail(konto.email);
+    setzeName(konto.displayName);
+    setzeRolle(konto.role);
+    setzeVersion(konto.version);
+  }, []);
 
   useEffect(() => {
     if (!aendern) {
@@ -133,26 +191,24 @@ export default function MitarbeiterMaske() {
       setzeStand('unbekannt');
       return;
     }
-    mitarbeitendeListe()
-      .then((konten) => {
-        const konto = konten.find((kandidat) => kandidat.id === kennung);
+    kontoLesen(kennung)
+      .then((konto) => {
         if (konto === undefined) {
           setzeStand('unbekannt');
           return;
         }
-        setzeEmail(konto.email);
-        setzeName(konto.displayName);
-        setzeRolle(konto.role);
+        uebernimm(konto);
         setzeStand('bereit');
       })
       .catch(() => {
         setzeStand('ausfall');
       });
-  }, [aendern, kennung]);
+  }, [aendern, kennung, uebernimm]);
 
   const absenden = async (ereignis: FormEvent<HTMLFormElement>) => {
     ereignis.preventDefault();
     setzeFehler(null);
+    setzeAbweisung(null);
     const fehlend = fehlendeAngaben(email, name, rolle);
     setzeFeldFehler(fehlend);
     if (rolle === null || Object.keys(fehlend).length > 0) {
@@ -168,19 +224,50 @@ export default function MitarbeiterMaske() {
           return;
         }
       } else {
-        await mitarbeiterAendern(kennung, eingabe);
+        await mitarbeiterAendern(kennung, version, eingabe);
       }
       navigate('/mitarbeitende', { replace: true });
     } catch (ursache) {
       setzeLaeuft(false);
       const felder = feldMeldungen(ursache);
-      if (Object.keys(felder).length > 0) {
+      if (istBearbeitungskonflikt(ursache)) {
+        // Die Eingaben bleiben stehen; den Weg weiter zeigt die Konfliktmeldung (Kriterium 3).
+        setzeAbweisung(ursache);
+      } else if (Object.keys(felder).length > 0) {
         setzeFeldFehler(felder);
       } else {
         setzeFehler(
           konflikt(ursache) ? serverMeldung(ursache, AUSFALL_SPEICHERN) : AUSFALL_SPEICHERN,
         );
       }
+    }
+  };
+
+  /**
+   * „Neu laden" nach einer Abweisung: der Stand des Servers ins Formular, die eigenen Werte daneben
+   * (#411, Kriterium 3; Plan #415, E12).
+   *
+   * Die eigenen Werte werden genommen, wie sie in diesem Augenblick in der Maske stehen — auch was
+   * nach der Abweisung noch getippt wurde, soll nicht verloren gehen.
+   */
+  const neuLaden = async (id: number) => {
+    const meine = eigeneEingabenAus(email, name, rolle);
+    setzeFehler(null);
+    setzeLaeuft(true);
+    try {
+      const konto = await kontoLesen(id);
+      if (konto === undefined) {
+        setzeFehler(AUSFALL_NEU_LADEN);
+        return;
+      }
+      uebernimm(konto);
+      setzeEigene(meine);
+      setzeAbweisung(null);
+      setzeFeldFehler({});
+    } catch {
+      setzeFehler(AUSFALL_NEU_LADEN);
+    } finally {
+      setzeLaeuft(false);
     }
   };
 
@@ -199,6 +286,23 @@ export default function MitarbeiterMaske() {
       sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}
     >
       {fehler === null ? null : <Alert severity="error">{fehler}</Alert>}
+      {kennung === null ? null : (
+        <Konfliktmeldung
+          ursache={abweisung}
+          onNeuLaden={() => {
+            void neuLaden(kennung);
+          }}
+          uebersicht={UEBERSICHT}
+        />
+      )}
+      {eigene === null ? null : (
+        <EigeneEingaben
+          werte={eigene}
+          onVerwerfen={() => {
+            setzeEigene(null);
+          }}
+        />
+      )}
       <EmailFeld
         wert={email}
         setzeWert={setzeEmail}

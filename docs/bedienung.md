@@ -74,6 +74,8 @@ Speichern der Angaben und in der Karte „Briefpapier" beim Hochladen, Ersetzen 
 speichern". Bei Firmen und Ansprechpartnern gilt es beim Speichern in den Masken „Firma
 bearbeiten" und „Ansprechpartner bearbeiten" und bei „Stilllegen" und „Wieder aktivieren". In der
 Arbeitszeit gilt es beim Speichern im Dialog „Arbeitszeit ändern" und beim Löschen eines Eintrags.
+Unter „Mitarbeitende" gilt es beim Speichern in der Maske „Konto bearbeiten" und bei „Stilllegen"
+und „Wieder aktivieren".
 Das
 Angebot zählt dabei als Ganzes, mit seinen Positionen und seinem Status; jeder Kommentar ist ein
 Eintrag für sich.
@@ -200,6 +202,14 @@ Löschen, und es entsteht nichts neu. Die Meldung nennt, wer ihn wann gelöscht 
 „Arbeitszeit ändern" schließt sich der Dialog dabei. Ein gelöschter Eintrag zählt nirgends mehr
 mit — weder in der Monatsliste noch in den Stunden am Angebot, im Vorschlag einer Rechnung, auf der
 Startseite oder im Jahresabschluss —, und seine Zeit ist für einen neuen Eintrag wieder frei.
+
+In der Maske „Konto bearbeiten" steht die Meldung oben im Formular, wenn ein anderer C-Level das
+Konto seit dem Öffnen geändert, stillgelegt oder wieder aktiviert hat. Adresse, Name und Rolle
+bleiben in den Feldern; „Neu laden" zeigt den aktuellen Stand und die eigenen Werte unter „Deine
+Eingaben". In der Ansicht „Mitarbeitende" steht die Meldung über der Liste, wenn „Stilllegen" oder
+„Wieder aktivieren" abgewiesen wird; „Neu laden" holt die Liste, danach wählt man den Eintrag
+erneut, wenn er noch passt. Dass sich die Person selbst an- oder abmeldet, weist nichts ab: Das
+Konto gilt dadurch nicht als geändert. Ein neues Konto legt man immer ohne Rückfrage an.
 
 **Ergebnis:** Angebot und Rechnung tragen die Änderungen beider, und keine ist unbemerkt verloren
 gegangen.

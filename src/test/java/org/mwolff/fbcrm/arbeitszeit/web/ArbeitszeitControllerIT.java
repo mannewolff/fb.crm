@@ -571,8 +571,8 @@ class ArbeitszeitControllerIT extends AbstractIntegrationTest {
     final long ben =
         accounts
             .save(
-                Konten.mit(null, "ben@example.org", Role.EMPLOYEE, false, 0, ANGELEGT)
-                    .mitNamen("Ben", ANGELEGT))
+                Konten.benannt(
+                    Konten.mit(null, "ben@example.org", Role.EMPLOYEE, false, 0, ANGELEGT), "Ben"))
             .requireId();
 
     // When
@@ -596,8 +596,8 @@ class ArbeitszeitControllerIT extends AbstractIntegrationTest {
     final long ben =
         accounts
             .save(
-                Konten.mit(null, "ben@example.org", Role.EMPLOYEE, true, 0, ANGELEGT)
-                    .mitNamen("Ben", ANGELEGT))
+                Konten.benannt(
+                    Konten.mit(null, "ben@example.org", Role.EMPLOYEE, true, 0, ANGELEGT), "Ben"))
             .requireId();
     sitzung = Anmeldung.perCode(rest, jdbc, hasher, "ben@example.org");
     final long bensEintrag = erfassteKennung("11:00", "12:00");
@@ -630,8 +630,8 @@ class ArbeitszeitControllerIT extends AbstractIntegrationTest {
     final HttpHeaders manne = sitzung;
     erfasse("09:00", "10:45", ZeiteintragResponse.class);
     accounts.save(
-        Konten.mit(null, "ben@example.org", Role.EMPLOYEE, true, 0, ANGELEGT)
-            .mitNamen("Ben", ANGELEGT));
+        Konten.benannt(
+            Konten.mit(null, "ben@example.org", Role.EMPLOYEE, true, 0, ANGELEGT), "Ben"));
     sitzung = Anmeldung.perCode(rest, jdbc, hasher, "ben@example.org");
     erfasse("11:00", "12:00", ZeiteintragResponse.class);
     sitzung = manne;
@@ -657,8 +657,8 @@ class ArbeitszeitControllerIT extends AbstractIntegrationTest {
   private long legeBenAn() {
     return accounts
         .save(
-            Konten.mit(null, "ben@example.org", Role.EMPLOYEE, true, 0, ANGELEGT)
-                .mitNamen("Ben", ANGELEGT))
+            Konten.benannt(
+                Konten.mit(null, "ben@example.org", Role.EMPLOYEE, true, 0, ANGELEGT), "Ben"))
         .requireId();
   }
 

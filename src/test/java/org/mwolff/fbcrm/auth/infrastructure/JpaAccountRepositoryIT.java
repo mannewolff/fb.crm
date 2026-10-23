@@ -71,7 +71,7 @@ class JpaAccountRepositoryIT extends AbstractIntegrationTest {
   }
 
   private Account speichereMitNamen(final String email, final String name) {
-    return repository.save(neuesKonto(email).mitNamen(name, ANGELEGT));
+    return repository.save(Konten.benannt(neuesKonto(email), name));
   }
 
   /** Versucht, die Zeile ohne Warten zu sperren; liefert den Fehler oder {@code null}. */
@@ -203,7 +203,8 @@ class JpaAccountRepositoryIT extends AbstractIntegrationTest {
     final Account gesichert = speichere("anna@firma.de", Role.EMPLOYEE, true);
 
     // When
-    repository.save(gesichert.stillgelegt(Instant.parse("2026-09-18T12:00:00Z")));
+    repository.save(
+        gesichert.stillgelegt(Instant.parse("2026-09-18T12:00:00Z"), gesichert.requireId()));
 
     // Then
     assertThat(repository.findById(gesichert.requireId()))
@@ -352,7 +353,9 @@ class JpaAccountRepositoryIT extends AbstractIntegrationTest {
             status -> {
               final Throwable beimAufruf =
                   catchThrowable(
-                      () -> repository.save(anna.mitAdresse("MANNE@example.org", ANGELEGT)));
+                      () ->
+                          repository.save(
+                              anna.mitAdresse("MANNE@example.org", ANGELEGT, anna.requireId())));
               status.setRollbackOnly();
               return beimAufruf;
             });

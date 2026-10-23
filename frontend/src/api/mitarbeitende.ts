@@ -1,4 +1,4 @@
-import { apiJson, apiOhneInhalt } from './client';
+import { apiJson } from './client';
 import type { Rolle } from './auth';
 import { istRolle } from './auth';
 import { FORMFEHLER, jaNein, liste, objekt, text, zahl } from './verengen';
@@ -11,8 +11,10 @@ import { FORMFEHLER, jaNein, liste, objekt, text, zahl } from './verengen';
  * (CLAUDE-react.md). Jede Antwort geht durch einen Parser — kein `as`.
  *
  * Einen Leseweg fuer ein einzelnes Konto gibt es nicht: Die Maske findet das Konto in der Liste.
- * Stilllegen und Wiederaktivieren antworten ohne Rumpf, wie bei der Firma; den neuen Stand liest
- * die Ansicht ueber die Liste.
+ *
+ * Aendern, Stilllegen und Wiederaktivieren legen die gelesene Version als `If-Match` vor und
+ * antworten mit dem neuen Stand samt erhoehter Version (#411, Kriterium 4; Plan #415, E19). Das
+ * Anlegen legt keinen Stand vor (Kriterium 7).
  */
 
 /** Ein Konto in der Ansicht „Mitarbeitende". */
@@ -23,6 +25,8 @@ export interface Mitarbeiter {
   readonly role: Rolle;
   /** `false` heisst stillgelegt. */
   readonly aktiv: boolean;
+  /** Der Stand, den Aendern, Stilllegen und Wiederaktivieren vorlegen (Plan #415, E19). */
+  readonly version: number;
   /**
    * Nur in der Antwort auf das Anlegen: ob eine Begruessung hinausging (A13). Sonst fehlt das Feld
    * in der Antwort, und hier steht `null`.
@@ -53,6 +57,7 @@ export function parseMitarbeiter(wert: unknown): Mitarbeiter {
     email: text(konto.email),
     role: rolle(konto.role),
     aktiv: jaNein(konto.aktiv),
+    version: zahl(konto.version),
     begruessungMailVersandt:
       konto.begruessungMailVersandt === undefined ? null : jaNein(konto.begruessungMailVersandt),
   };
@@ -73,21 +78,45 @@ export function mitarbeiterAnlegen(eingabe: MitarbeiterEingabe): Promise<Mitarbe
   return apiJson('/api/mitarbeitende', { methode: 'POST', rumpf: eingabe }, parseMitarbeiter);
 }
 
-/** Schreibt Adresse, Name und Rolle fort (Kriterium 6). */
-export function mitarbeiterAendern(id: number, eingabe: MitarbeiterEingabe): Promise<Mitarbeiter> {
+/**
+ * Schreibt Adresse, Name und Rolle fort (Kriterium 6).
+ *
+ * @param version der Stand, auf dem die Aenderung beruht
+ */
+export function mitarbeiterAendern(
+  id: number,
+  version: number,
+  eingabe: MitarbeiterEingabe,
+): Promise<Mitarbeiter> {
   return apiJson(
     `/api/mitarbeitende/${String(id)}`,
-    { methode: 'PUT', rumpf: eingabe },
+    { methode: 'PUT', rumpf: eingabe, version },
     parseMitarbeiter,
   );
 }
 
-/** Legt das Konto still (Kriterium 7). */
-export function mitarbeiterStilllegen(id: number): Promise<void> {
-  return apiOhneInhalt(`/api/mitarbeitende/${String(id)}/stilllegen`, { methode: 'POST' });
+/**
+ * Legt das Konto still (Kriterium 7).
+ *
+ * @param version der Stand, auf dem das Stilllegen beruht
+ */
+export function mitarbeiterStilllegen(id: number, version: number): Promise<Mitarbeiter> {
+  return apiJson(
+    `/api/mitarbeitende/${String(id)}/stilllegen`,
+    { methode: 'POST', version },
+    parseMitarbeiter,
+  );
 }
 
-/** Nimmt das Konto wieder in Betrieb (Kriterium 7). */
-export function mitarbeiterAktivieren(id: number): Promise<void> {
-  return apiOhneInhalt(`/api/mitarbeitende/${String(id)}/aktivieren`, { methode: 'POST' });
+/**
+ * Nimmt das Konto wieder in Betrieb (Kriterium 7).
+ *
+ * @param version der Stand, auf dem das Wiederaktivieren beruht
+ */
+export function mitarbeiterAktivieren(id: number, version: number): Promise<Mitarbeiter> {
+  return apiJson(
+    `/api/mitarbeitende/${String(id)}/aktivieren`,
+    { methode: 'POST', version },
+    parseMitarbeiter,
+  );
 }

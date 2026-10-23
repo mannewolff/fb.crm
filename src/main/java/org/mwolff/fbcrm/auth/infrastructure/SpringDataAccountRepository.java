@@ -33,4 +33,9 @@ interface SpringDataAccountRepository extends JpaRepository<AccountEntity, Long>
   @Lock(LockModeType.PESSIMISTIC_WRITE)
   @Query("select a from AccountEntity a where a.role = :role and a.aktiv = true order by a.id")
   List<AccountEntity> sperreAktiveMitRolle(@Param("role") Role role);
+
+  /** Sperrt ein Konto und liest es (Plan #415, E19). */
+  @Lock(LockModeType.PESSIMISTIC_WRITE)
+  @Query("select a from AccountEntity a where a.id = :id")
+  Optional<AccountEntity> sperreKonto(@Param("id") long id);
 }

@@ -448,7 +448,7 @@ describe('App', () => {
       'GET /api/auth/me': json(200, KONTO),
       'GET /api/instance': json(200, { version: '0.1.3' }),
       'GET /api/mitarbeitende': json(200, {
-        mitarbeitende: [{ ...KONTO, aktiv: true }],
+        mitarbeitende: [{ ...KONTO, aktiv: true, version: 0 }],
       }),
     });
 
@@ -470,7 +470,7 @@ describe('App', () => {
       'GET /api/auth/me': json(200, KONTO),
       'GET /api/instance': json(200, { version: '0.1.3' }),
       'GET /api/mitarbeitende': json(200, {
-        mitarbeitende: [{ ...KONTO, aktiv: true }],
+        mitarbeitende: [{ ...KONTO, aktiv: true, version: 0 }],
       }),
     });
 

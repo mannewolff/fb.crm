@@ -24,10 +24,11 @@ import type { AktionsEintrag } from '../components/AktionsMenue';
 import Karte from '../components/Karte';
 import { useKopfPfad } from '../components/KopfPfad';
 import type { PfadVerweis } from '../components/KopfPfad';
+import Konfliktmeldung from '../components/Konfliktmeldung';
 import KupferTaste from '../components/KupferTaste';
 import Tafel from '../components/Tafel';
 import ZustandsChip from '../components/ZustandsChip';
-import { konflikt, serverMeldung } from '../lib/apifehler';
+import { istBearbeitungskonflikt, konflikt, serverMeldung } from '../lib/apifehler';
 import { ABSTAND_BUEHNE } from '../theme';
 
 /**
@@ -43,6 +44,11 @@ import { ABSTAND_BUEHNE } from '../theme';
  * Server ist die Quelle der Wahrheit. Weist er ab — etwa beim letzten aktiven C-Level —, steht sein
  * Satz als Meldung ueber der Tafel; den Grund kennt nur er (Kriterium 8).
  *
+ * <b>Geschaltet wird auf dem gelesenen Stand</b> (#411, Kriterium 4; Plan #415, E19): Stilllegen
+ * und Wiederaktivieren legen die Version der Zeile vor. Hat ein anderer C-Level das Konto
+ * inzwischen verwaltet, steht ueber der Tafel die {@link Konfliktmeldung}; „Neu laden" liest die
+ * Liste samt neuer Versionen, danach waehlt man den Eintrag erneut, wenn er noch passt.
+ *
  * Die Rolle steht mit ihrem Anzeigenamen da, aus {@link rollenname} (E8) — nie als Wert der API.
  */
 
@@ -51,6 +57,9 @@ const KEIN_WEG: readonly PfadVerweis[] = [];
 
 const AUSFALL = 'Die Konten sind gerade nicht zu erreichen. Bitte später erneut versuchen.';
 const SCHALTEN_FEHLT = 'Der Stand des Kontos wurde nicht geändert. Bitte später erneut versuchen.';
+
+/** Wohin die Konfliktmeldung fuehrt — bei Konten nur der Form halber, sie werden nie geloescht. */
+const UEBERSICHT = '/mitarbeitende';
 
 /** Der Satz der Rueckfrage — er erklaert die Folge, nicht die Aktion (Kriterium 7). */
 const STILLLEGEN_FRAGE =
@@ -170,6 +179,8 @@ export default function MitarbeitendePage() {
   useKopfPfad(KEIN_WEG, 'Mitarbeitende');
   const [stand, setzeStand] = useState<Stand>({ art: 'laedt' });
   const [meldung, setzeMeldung] = useState<string | null>(null);
+  // Die Abweisung eines Umschaltens auf altem Stand, ungeprueft — die Konfliktmeldung liest sie.
+  const [abweisung, setzeAbweisung] = useState<unknown>(null);
 
   // Ein Neulesen nach dem Schalten laesst die Tafel stehen, bis die Antwort da ist — sonst
   // sprange die Ansicht fuer einen Augenblick auf den Ladehinweis und der Fokus ginge verloren.
@@ -187,12 +198,26 @@ export default function MitarbeitendePage() {
 
   const schalte = (konto: Mitarbeiter) => {
     setzeMeldung(null);
+    setzeAbweisung(null);
     const aufruf = konto.aktiv ? mitarbeiterStilllegen : mitarbeiterAktivieren;
-    aufruf(konto.id)
-      .then(lesen)
+    aufruf(konto.id, konto.version)
+      .then(() => lesen())
       .catch((ursache: unknown) => {
-        setzeMeldung(konflikt(ursache) ? serverMeldung(ursache, SCHALTEN_FEHLT) : SCHALTEN_FEHLT);
+        if (istBearbeitungskonflikt(ursache)) {
+          setzeAbweisung(ursache);
+        } else {
+          setzeMeldung(
+            konflikt(ursache) ? serverMeldung(ursache, SCHALTEN_FEHLT) : SCHALTEN_FEHLT,
+          );
+        }
       });
+  };
+
+  /** „Neu laden" nach einer Abweisung: die Liste samt neuer Versionen (#411, Kriterium 3). */
+  const neuLaden = async () => {
+    setzeMeldung(null);
+    await lesen();
+    setzeAbweisung(null);
   };
 
   return (
@@ -210,6 +235,17 @@ export default function MitarbeitendePage() {
           <Alert severity="error" sx={{ marginBottom: 2 }}>
             {meldung}
           </Alert>
+        )}
+        {abweisung === null ? null : (
+          <Box sx={{ marginBottom: 2 }}>
+            <Konfliktmeldung
+              ursache={abweisung}
+              onNeuLaden={() => {
+                void neuLaden();
+              }}
+              uebersicht={UEBERSICHT}
+            />
+          </Box>
         )}
         {inhaltZu(stand, schalte)}
       </Karte>

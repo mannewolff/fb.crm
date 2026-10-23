@@ -130,14 +130,15 @@ class ZeiteintragUseCaseTest {
 
   private static Account konto(
       final long id, final String name, final Role rolle, final boolean aktiv) {
-    return Konten.mit(
+    return Konten.benannt(
+        Konten.mit(
             Long.valueOf(id),
             name.toLowerCase(Locale.ROOT) + "@example.org",
             rolle,
             aktiv,
             0,
-            Zeitdoppel.FRUEHER)
-        .mitNamen(name, Zeitdoppel.FRUEHER);
+            Zeitdoppel.FRUEHER),
+        name);
   }
 
   private void angebotStehtIn(final Angebotsstatus status) {

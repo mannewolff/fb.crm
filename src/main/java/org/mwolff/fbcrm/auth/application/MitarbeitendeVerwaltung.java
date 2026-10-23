@@ -34,6 +34,14 @@ import org.springframework.transaction.annotation.Transactional;
  * ein aktives C-Level-Konto — ihr eigenes. Gesperrt wird auch bei einer Aenderung, die die Rolle
  * nicht beruehrt: Ob sie es tut, steht erst nach dem Lesen fest, und gelesen wird nach der Sperre.
  *
+ * <p><b>Zuerst der Stand</b> (#411, Kriterium 4; Plan #415, E19): Aendern, Stilllegen und
+ * Wiederaktivieren lesen das Konto mit {@link AccountRepository#findByIdMitSperre} und vergleichen
+ * die vorgelegte Version, bevor sie etwas pruefen oder schreiben. Wer auf einem alten Stand
+ * handelt, bekommt {@link KontoGeaendert}. Die Sperre haelt das Konto bis zum Ende der Transaktion
+ * fest: Zwei gleichzeitige Schritte auf demselben Stand warten aufeinander, und der zweite sieht
+ * die Version des ersten. Die Version zaehlt das Konto selbst ({@link Account}); An- und Abmelden
+ * lassen sie stehen.
+ *
  * <p><b>Was eine Sitzung beendet</b> (E5): eine neue Adresse und das Stilllegen — beide zaehlen die
  * Sitzungs-Generation hoch ({@link Account#mitAdresse}, {@link Account#stillgelegt}). Name und
  * Rolle tun es nicht; der Filter liest sie bei jeder Anfrage frisch, sie wirken also beim naechsten
@@ -86,7 +94,7 @@ public class MitarbeitendeVerwaltung {
     pruefeAdresseFrei(adresse, null);
     final Instant jetzt = clock.instant();
     final Account angelegt =
-        speichere(new Account(null, adresse, name.strip(), rolle, true, 0, jetzt, jetzt));
+        speichere(new Account(null, adresse, name.strip(), rolle, true, 0, jetzt, jetzt, 0L, null));
     return new Angelegt(angelegt, begruessung.sende(angelegt.email(), angelegt.displayName()));
   }
 
@@ -97,54 +105,85 @@ public class MitarbeitendeVerwaltung {
    * @param email die kuenftige Anmeldeadresse; eine andere als bisher beendet die Sitzung
    * @param name der kuenftige Anzeigename
    * @param rolle die kuenftige Rolle
+   * @param version der vorgelegte Stand aus {@code If-Match}
+   * @param handelnder Kennung des handelnden Kontos
    * @return das geaenderte Konto
    * @throws KontoNichtGefunden wenn es das Konto nicht gibt
+   * @throws KontoGeaendert wenn das Konto inzwischen einen anderen Stand hat als den vorgelegten
    * @throws AdresseBereitsVergeben wenn ein anderes Konto die Adresse traegt
    * @throws LetzterCLevel wenn das Konto der letzte aktive C-Level ist und eine andere Rolle
    *     bekommen soll
    */
-  public Account aendern(final long id, final String email, final String name, final Role rolle) {
+  public Account aendern(
+      final long id,
+      final String email,
+      final String name,
+      final Role rolle,
+      final long version,
+      final long handelnder) {
     final List<Account> aktiveCLevel = accounts.aktiveCLevelMitSperre();
-    final Account konto = vorhandenes(id);
+    final Account konto = vorhandenes(id, version, handelnder);
     final String adresse = email.strip();
     pruefeAdresseFrei(adresse, id);
     if (rolle != Role.C_LEVEL) {
       schuetzeLetztenCLevel(aktiveCLevel, id);
     }
     final Instant jetzt = clock.instant();
-    final Account umbenannt = konto.mitNamen(name.strip(), jetzt).mitRolle(rolle, jetzt);
+    final Account umbenannt =
+        konto.mitNamen(name.strip(), jetzt, handelnder).mitRolle(rolle, jetzt, handelnder);
     return speichere(
-        konto.email().equals(adresse) ? umbenannt : umbenannt.mitAdresse(adresse, jetzt));
+        konto.email().equals(adresse)
+            ? umbenannt
+            : umbenannt.mitAdresse(adresse, jetzt, handelnder));
   }
 
   /**
    * Legt das Konto still; die Person ist sofort abgemeldet (Kriterium 7).
    *
    * @param id technische Id des Kontos
+   * @param version der vorgelegte Stand aus {@code If-Match}
+   * @param handelnder Kennung des handelnden Kontos
+   * @return das stillgelegte Konto
    * @throws KontoNichtGefunden wenn es das Konto nicht gibt
+   * @throws KontoGeaendert wenn das Konto inzwischen einen anderen Stand hat als den vorgelegten
    * @throws LetzterCLevel wenn das Konto der letzte aktive C-Level ist
    */
-  public void stilllegen(final long id) {
+  public Account stilllegen(final long id, final long version, final long handelnder) {
     final List<Account> aktiveCLevel = accounts.aktiveCLevelMitSperre();
-    final Account konto = vorhandenes(id);
+    final Account konto = vorhandenes(id, version, handelnder);
     schuetzeLetztenCLevel(aktiveCLevel, id);
-    accounts.save(konto.stillgelegt(clock.instant()));
+    return accounts.save(konto.stillgelegt(clock.instant(), handelnder));
   }
 
   /**
    * Nimmt ein stillgelegtes Konto wieder in Betrieb (Kriterium 7).
    *
-   * <p>Ohne Sperre: Ein weiteres aktives Konto nimmt keinem C-Level etwas weg.
+   * <p>Ohne Sperre der C-Level-Konten: Ein weiteres aktives Konto nimmt keinem C-Level etwas weg.
+   * Gesperrt wird nur das Konto selbst, gegen dessen Stand verglichen wird.
    *
    * @param id technische Id des Kontos
+   * @param version der vorgelegte Stand aus {@code If-Match}
+   * @param handelnder Kennung des handelnden Kontos
+   * @return das wieder aktive Konto
    * @throws KontoNichtGefunden wenn es das Konto nicht gibt
+   * @throws KontoGeaendert wenn das Konto inzwischen einen anderen Stand hat als den vorgelegten
    */
-  public void aktivieren(final long id) {
-    accounts.save(vorhandenes(id).aktiviert(clock.instant()));
+  public Account aktivieren(final long id, final long version, final long handelnder) {
+    return accounts.save(
+        vorhandenes(id, version, handelnder).aktiviert(clock.instant(), handelnder));
   }
 
-  private Account vorhandenes(final long id) {
-    return accounts.findById(id).orElseThrow(KontoNichtGefunden::new);
+  /**
+   * Liest das Konto unter Zeilensperre und weist einen veralteten Stand ab.
+   *
+   * @param id technische Id des Kontos
+   * @param version der vorgelegte Stand aus {@code If-Match}
+   * @param handelnder Kennung des handelnden Kontos
+   */
+  private Account vorhandenes(final long id, final long version, final long handelnder) {
+    final Account konto = accounts.findByIdMitSperre(id).orElseThrow(KontoNichtGefunden::new);
+    KontoGeaendert.pruefe(konto, version, handelnder);
+    return konto;
   }
 
   /**

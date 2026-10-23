@@ -132,9 +132,15 @@ class ArbeitszeitMonatUseCaseTest {
 
   private static Account konto(
       final long id, final String name, final Role rolle, final boolean aktiv) {
-    return Konten.mit(
-            id, name.toLowerCase(Locale.ROOT) + "@example.org", rolle, aktiv, 0, Zeitdoppel.FRUEHER)
-        .mitNamen(name, Zeitdoppel.FRUEHER);
+    return Konten.benannt(
+        Konten.mit(
+            id,
+            name.toLowerCase(Locale.ROOT) + "@example.org",
+            rolle,
+            aktiv,
+            0,
+            Zeitdoppel.FRUEHER),
+        name);
   }
 
   private static Account manfred() {
@@ -691,7 +697,7 @@ class ArbeitszeitMonatUseCaseTest {
     when(aktuellesKonto.byId(LEA)).thenReturn(lea());
     when(konten.liste())
         .thenReturn(alleKonten())
-        .thenReturn(List.of(clara().mitNamen("Clara Berg", Zeitdoppel.JETZT), lea()));
+        .thenReturn(List.of(Konten.benannt(clara(), "Clara Berg"), lea()));
     assertThat(november(lea(), Optional.empty()).tage().get(0).buchungen().get(0).person().name())
         .isEqualTo("Clara");
 

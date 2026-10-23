@@ -44,8 +44,9 @@ class PersonenauskunftTest {
 
   private static Account konto(
       final long id, final String name, final Role rolle, final boolean aktiv) {
-    return Konten.mit(id, name.toLowerCase(Locale.ROOT) + "@example.org", rolle, aktiv, 0, JETZT)
-        .mitNamen(name, JETZT);
+    return Konten.benannt(
+        Konten.mit(id, name.toLowerCase(Locale.ROOT) + "@example.org", rolle, aktiv, 0, JETZT),
+        name);
   }
 
   private static Account manfred() {
@@ -116,7 +117,7 @@ class PersonenauskunftTest {
     when(aktuellesKonto.byId(MANFRED)).thenReturn(manfred());
     when(konten.liste())
         .thenReturn(List.of(ben(), manfred()))
-        .thenReturn(List.of(ben().mitNamen("Benjamin", JETZT), manfred()));
+        .thenReturn(List.of(Konten.benannt(ben(), "Benjamin"), manfred()));
     assertThat(auskunft.personen(MANFRED)).extracting(WaehlbarePerson::name).contains("Ben");
 
     // When

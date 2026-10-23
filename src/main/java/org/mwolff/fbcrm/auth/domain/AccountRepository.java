@@ -46,6 +46,18 @@ public interface AccountRepository {
   List<Account> aktiveCLevelMitSperre();
 
   /**
+   * Das Konto zu einer technischen Id, dessen Zeile bis zum Ende der Transaktion des Aufrufers
+   * gesperrt ist, oder leer (Plan #415, E19).
+   *
+   * <p>Die Kontenverwaltung liest so, bevor sie die vorgelegte Version vergleicht: Zwei
+   * gleichzeitige Schritte auf demselben Stand warten aufeinander, und der zweite sieht die
+   * Version, die der erste hinterliess. Ohne Transaktion des Aufrufers wird der Aufruf abgewiesen.
+   *
+   * @param id technische Id des Kontos
+   */
+  Optional<Account> findByIdMitSperre(long id);
+
+  /**
    * Legt das Konto an oder schreibt es fort und liefert es mit gesetzter Id zurueck.
    *
    * <p>Geschrieben wird im Aufruf selbst, nicht erst beim Commit: Traegt ein anderes Konto die

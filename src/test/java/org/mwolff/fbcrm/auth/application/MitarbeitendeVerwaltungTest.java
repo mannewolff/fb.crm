@@ -27,6 +27,7 @@ import org.mwolff.fbcrm.auth.Konten;
 import org.mwolff.fbcrm.auth.domain.Account;
 import org.mwolff.fbcrm.auth.domain.AccountRepository;
 import org.mwolff.fbcrm.auth.domain.Role;
+import org.mwolff.fbcrm.common.Bearbeitungskonflikt;
 import org.springframework.dao.DataIntegrityViolationException;
 
 /**
@@ -48,6 +49,12 @@ class MitarbeitendeVerwaltungTest {
   private static final String CHEFIN_MAIL = "chefin@firma.de";
   private static final String ANNA_MAIL = "anna@firma.de";
 
+  /** Der Stand, den jedes Konto hier traegt und den die Oberflaeche vorlegt (Plan #415, E19). */
+  private static final long STAND = 4L;
+
+  /** Wer das Konto zuletzt verwaltet hat. */
+  private static final long BERTA = 5L;
+
   @Mock private AccountRepository accounts;
   @Mock private BegruessungsmailUseCase begruessung;
   @Captor private ArgumentCaptor<Account> gespeichert;
@@ -62,7 +69,7 @@ class MitarbeitendeVerwaltungTest {
 
   private static Account konto(
       final long id, final String email, final Role rolle, final boolean aktiv) {
-    return Konten.mit(id, email, rolle, aktiv, 3, ANGELEGT);
+    return Konten.imStand(Konten.mit(id, email, rolle, aktiv, 3, ANGELEGT), STAND, BERTA);
   }
 
   private static Account chefin() {
@@ -168,11 +175,11 @@ class MitarbeitendeVerwaltungTest {
   @Test
   void aendern_givenAnUnknownId_thenNotFound() {
     // Given
-    when(accounts.findById(9L)).thenReturn(Optional.empty());
+    when(accounts.findByIdMitSperre(9L)).thenReturn(Optional.empty());
 
     // When / Then
     assertThatExceptionOfType(KontoNichtGefunden.class)
-        .isThrownBy(() -> verwaltung.aendern(9L, ANNA_MAIL, "Anna", Role.EMPLOYEE));
+        .isThrownBy(() -> verwaltung.aendern(9L, ANNA_MAIL, "Anna", Role.EMPLOYEE, STAND, CHEFIN));
     verify(accounts, never()).save(any(Account.class));
   }
 
@@ -180,29 +187,30 @@ class MitarbeitendeVerwaltungTest {
   void aendern_thenLocksTheActiveCLevelsBeforeReadingTheAccount() {
     // Given
     when(accounts.aktiveCLevelMitSperre()).thenReturn(List.of(chefin()));
-    when(accounts.findById(ANNA)).thenReturn(Optional.of(anna(Role.EMPLOYEE)));
+    when(accounts.findByIdMitSperre(ANNA)).thenReturn(Optional.of(anna(Role.EMPLOYEE)));
     when(accounts.findByEmail(ANNA_MAIL)).thenReturn(Optional.of(anna(Role.EMPLOYEE)));
     speichernGibtZurueck();
 
     // When
-    verwaltung.aendern(ANNA, ANNA_MAIL, "Anna Berg", Role.EMPLOYEE);
+    verwaltung.aendern(ANNA, ANNA_MAIL, "Anna Berg", Role.EMPLOYEE, STAND, CHEFIN);
 
     // Then — A6: gelesen wird, was nach der Sperre gilt.
     final InOrder reihenfolge = inOrder(accounts);
     reihenfolge.verify(accounts).aktiveCLevelMitSperre();
-    reihenfolge.verify(accounts).findById(ANNA);
+    reihenfolge.verify(accounts).findByIdMitSperre(ANNA);
   }
 
   @Test
   void aendern_givenANewName_thenRenamesWithoutEndingTheSession() {
     // Given
     when(accounts.aktiveCLevelMitSperre()).thenReturn(List.of(chefin()));
-    when(accounts.findById(ANNA)).thenReturn(Optional.of(anna(Role.EMPLOYEE)));
+    when(accounts.findByIdMitSperre(ANNA)).thenReturn(Optional.of(anna(Role.EMPLOYEE)));
     when(accounts.findByEmail(ANNA_MAIL)).thenReturn(Optional.of(anna(Role.EMPLOYEE)));
     speichernGibtZurueck();
 
     // When
-    final Account geaendert = verwaltung.aendern(ANNA, ANNA_MAIL, " Anna Mueller ", Role.EMPLOYEE);
+    final Account geaendert =
+        verwaltung.aendern(ANNA, ANNA_MAIL, " Anna Mueller ", Role.EMPLOYEE, STAND, CHEFIN);
 
     // Then
     assertThat(geaendert.displayName()).isEqualTo("Anna Mueller");
@@ -216,13 +224,13 @@ class MitarbeitendeVerwaltungTest {
   void aendern_givenANewAddress_thenEndsTheSession() {
     // Given — Kriterium 6: nach einer neuen Adresse meldet sich die Person neu an.
     when(accounts.aktiveCLevelMitSperre()).thenReturn(List.of(chefin()));
-    when(accounts.findById(ANNA)).thenReturn(Optional.of(anna(Role.EMPLOYEE)));
+    when(accounts.findByIdMitSperre(ANNA)).thenReturn(Optional.of(anna(Role.EMPLOYEE)));
     when(accounts.findByEmail("anna.berg@firma.de")).thenReturn(Optional.empty());
     speichernGibtZurueck();
 
     // When
     final Account geaendert =
-        verwaltung.aendern(ANNA, " anna.berg@firma.de ", "Anna Berg", Role.EMPLOYEE);
+        verwaltung.aendern(ANNA, " anna.berg@firma.de ", "Anna Berg", Role.EMPLOYEE, STAND, CHEFIN);
 
     // Then
     assertThat(geaendert.email()).isEqualTo("anna.berg@firma.de");
@@ -233,13 +241,15 @@ class MitarbeitendeVerwaltungTest {
   void aendern_givenTheAddressOfAnotherAccount_thenRefused() {
     // Given — gefunden ohne Ruecksicht auf die Schreibweise, auch stillgelegt.
     when(accounts.aktiveCLevelMitSperre()).thenReturn(List.of(chefin()));
-    when(accounts.findById(ANNA)).thenReturn(Optional.of(anna(Role.EMPLOYEE)));
+    when(accounts.findByIdMitSperre(ANNA)).thenReturn(Optional.of(anna(Role.EMPLOYEE)));
     when(accounts.findByEmail("CHEFIN@firma.de"))
         .thenReturn(Optional.of(konto(CHEFIN, CHEFIN_MAIL, Role.C_LEVEL, false)));
 
     // When / Then
     assertThatExceptionOfType(AdresseBereitsVergeben.class)
-        .isThrownBy(() -> verwaltung.aendern(ANNA, "CHEFIN@firma.de", "Anna", Role.EMPLOYEE));
+        .isThrownBy(
+            () ->
+                verwaltung.aendern(ANNA, "CHEFIN@firma.de", "Anna", Role.EMPLOYEE, STAND, CHEFIN));
     verify(accounts, never()).save(any(Account.class));
   }
 
@@ -249,13 +259,14 @@ class MitarbeitendeVerwaltungTest {
     final DataIntegrityViolationException index =
         new DataIntegrityViolationException("account_email_key");
     when(accounts.aktiveCLevelMitSperre()).thenReturn(List.of(chefin()));
-    when(accounts.findById(ANNA)).thenReturn(Optional.of(anna(Role.EMPLOYEE)));
+    when(accounts.findByIdMitSperre(ANNA)).thenReturn(Optional.of(anna(Role.EMPLOYEE)));
     when(accounts.findByEmail("neu@firma.de")).thenReturn(Optional.empty());
     when(accounts.save(any(Account.class))).thenThrow(index);
 
     // When / Then
     assertThatExceptionOfType(AdresseBereitsVergeben.class)
-        .isThrownBy(() -> verwaltung.aendern(ANNA, "neu@firma.de", "Anna", Role.EMPLOYEE))
+        .isThrownBy(
+            () -> verwaltung.aendern(ANNA, "neu@firma.de", "Anna", Role.EMPLOYEE, STAND, CHEFIN))
         .withCause(index);
   }
 
@@ -263,12 +274,13 @@ class MitarbeitendeVerwaltungTest {
   void aendern_givenANewRole_thenTheRoleChangesWithoutEndingTheSession() {
     // Given — E5: die Rolle wirkt beim naechsten Schritt, ohne Abmeldung.
     when(accounts.aktiveCLevelMitSperre()).thenReturn(List.of(chefin()));
-    when(accounts.findById(ANNA)).thenReturn(Optional.of(anna(Role.EMPLOYEE)));
+    when(accounts.findByIdMitSperre(ANNA)).thenReturn(Optional.of(anna(Role.EMPLOYEE)));
     when(accounts.findByEmail(ANNA_MAIL)).thenReturn(Optional.of(anna(Role.EMPLOYEE)));
     speichernGibtZurueck();
 
     // When
-    final Account geaendert = verwaltung.aendern(ANNA, ANNA_MAIL, "Anna", Role.READ_ONLY);
+    final Account geaendert =
+        verwaltung.aendern(ANNA, ANNA_MAIL, "Anna", Role.READ_ONLY, STAND, CHEFIN);
 
     // Then
     assertThat(geaendert.role()).isEqualTo(Role.READ_ONLY);
@@ -279,12 +291,13 @@ class MitarbeitendeVerwaltungTest {
   void aendern_givenTheLastActiveCLevelDemoted_thenRefused() {
     // Given — Kriterium 8.
     when(accounts.aktiveCLevelMitSperre()).thenReturn(List.of(chefin()));
-    when(accounts.findById(CHEFIN)).thenReturn(Optional.of(chefin()));
+    when(accounts.findByIdMitSperre(CHEFIN)).thenReturn(Optional.of(chefin()));
     when(accounts.findByEmail(CHEFIN_MAIL)).thenReturn(Optional.of(chefin()));
 
     // When / Then
     assertThatExceptionOfType(LetzterCLevel.class)
-        .isThrownBy(() -> verwaltung.aendern(CHEFIN, CHEFIN_MAIL, "Chefin", Role.EMPLOYEE));
+        .isThrownBy(
+            () -> verwaltung.aendern(CHEFIN, CHEFIN_MAIL, "Chefin", Role.EMPLOYEE, STAND, CHEFIN));
     verify(accounts, never()).save(any(Account.class));
   }
 
@@ -292,12 +305,13 @@ class MitarbeitendeVerwaltungTest {
   void aendern_givenTheLastActiveCLevelKeepsTheRole_thenRenames() {
     // Given — ohne Rollenwechsel greift der Riegel nicht.
     when(accounts.aktiveCLevelMitSperre()).thenReturn(List.of(chefin()));
-    when(accounts.findById(CHEFIN)).thenReturn(Optional.of(chefin()));
+    when(accounts.findByIdMitSperre(CHEFIN)).thenReturn(Optional.of(chefin()));
     when(accounts.findByEmail(CHEFIN_MAIL)).thenReturn(Optional.of(chefin()));
     speichernGibtZurueck();
 
     // When
-    final Account geaendert = verwaltung.aendern(CHEFIN, CHEFIN_MAIL, "Chefin", Role.C_LEVEL);
+    final Account geaendert =
+        verwaltung.aendern(CHEFIN, CHEFIN_MAIL, "Chefin", Role.C_LEVEL, STAND, CHEFIN);
 
     // Then
     assertThat(geaendert.displayName()).isEqualTo("Chefin");
@@ -308,12 +322,13 @@ class MitarbeitendeVerwaltungTest {
     // Given — Kriterium 8: auch das eigene Konto, solange ein anderer C-Level bleibt.
     final Account zweite = konto(ANNA, ANNA_MAIL, Role.C_LEVEL, true);
     when(accounts.aktiveCLevelMitSperre()).thenReturn(List.of(chefin(), zweite));
-    when(accounts.findById(CHEFIN)).thenReturn(Optional.of(chefin()));
+    when(accounts.findByIdMitSperre(CHEFIN)).thenReturn(Optional.of(chefin()));
     when(accounts.findByEmail(CHEFIN_MAIL)).thenReturn(Optional.of(chefin()));
     speichernGibtZurueck();
 
     // When
-    final Account geaendert = verwaltung.aendern(CHEFIN, CHEFIN_MAIL, "Chefin", Role.EMPLOYEE);
+    final Account geaendert =
+        verwaltung.aendern(CHEFIN, CHEFIN_MAIL, "Chefin", Role.EMPLOYEE, STAND, CHEFIN);
 
     // Then
     assertThat(geaendert.role()).isEqualTo(Role.EMPLOYEE);
@@ -323,12 +338,13 @@ class MitarbeitendeVerwaltungTest {
   void aendern_givenAnEmployeeWhileOneOtherCLevelIsLeft_thenTheRoleChanges() {
     // Given — die eine Chefin ist nicht betroffen.
     when(accounts.aktiveCLevelMitSperre()).thenReturn(List.of(chefin()));
-    when(accounts.findById(ANNA)).thenReturn(Optional.of(anna(Role.EMPLOYEE)));
+    when(accounts.findByIdMitSperre(ANNA)).thenReturn(Optional.of(anna(Role.EMPLOYEE)));
     when(accounts.findByEmail(ANNA_MAIL)).thenReturn(Optional.of(anna(Role.EMPLOYEE)));
     speichernGibtZurueck();
 
     // When
-    final Account geaendert = verwaltung.aendern(ANNA, ANNA_MAIL, "Anna", Role.READ_ONLY);
+    final Account geaendert =
+        verwaltung.aendern(ANNA, ANNA_MAIL, "Anna", Role.READ_ONLY, STAND, CHEFIN);
 
     // Then
     assertThat(geaendert.role()).isEqualTo(Role.READ_ONLY);
@@ -339,37 +355,38 @@ class MitarbeitendeVerwaltungTest {
   @Test
   void stilllegen_givenAnUnknownId_thenNotFound() {
     // Given
-    when(accounts.findById(9L)).thenReturn(Optional.empty());
+    when(accounts.findByIdMitSperre(9L)).thenReturn(Optional.empty());
 
     // When / Then
-    assertThatExceptionOfType(KontoNichtGefunden.class).isThrownBy(() -> verwaltung.stilllegen(9L));
+    assertThatExceptionOfType(KontoNichtGefunden.class)
+        .isThrownBy(() -> verwaltung.stilllegen(9L, STAND, CHEFIN));
   }
 
   @Test
   void stilllegen_thenLocksTheActiveCLevelsBeforeReadingTheAccount() {
     // Given
     when(accounts.aktiveCLevelMitSperre()).thenReturn(List.of(chefin()));
-    when(accounts.findById(ANNA)).thenReturn(Optional.of(anna(Role.EMPLOYEE)));
+    when(accounts.findByIdMitSperre(ANNA)).thenReturn(Optional.of(anna(Role.EMPLOYEE)));
     speichernGibtZurueck();
 
     // When
-    verwaltung.stilllegen(ANNA);
+    verwaltung.stilllegen(ANNA, STAND, CHEFIN);
 
     // Then
     final InOrder reihenfolge = inOrder(accounts);
     reihenfolge.verify(accounts).aktiveCLevelMitSperre();
-    reihenfolge.verify(accounts).findById(ANNA);
+    reihenfolge.verify(accounts).findByIdMitSperre(ANNA);
   }
 
   @Test
   void stilllegen_thenDeactivatesAndEndsTheSession() {
     // Given — Kriterium 7.
     when(accounts.aktiveCLevelMitSperre()).thenReturn(List.of(chefin()));
-    when(accounts.findById(ANNA)).thenReturn(Optional.of(anna(Role.EMPLOYEE)));
+    when(accounts.findByIdMitSperre(ANNA)).thenReturn(Optional.of(anna(Role.EMPLOYEE)));
     speichernGibtZurueck();
 
     // When
-    verwaltung.stilllegen(ANNA);
+    verwaltung.stilllegen(ANNA, STAND, CHEFIN);
 
     // Then
     verify(accounts).save(gespeichert.capture());
@@ -382,10 +399,11 @@ class MitarbeitendeVerwaltungTest {
   void stilllegen_givenTheLastActiveCLevel_thenRefused() {
     // Given — Kriterium 8, auch fuer das eigene Konto.
     when(accounts.aktiveCLevelMitSperre()).thenReturn(List.of(chefin()));
-    when(accounts.findById(CHEFIN)).thenReturn(Optional.of(chefin()));
+    when(accounts.findByIdMitSperre(CHEFIN)).thenReturn(Optional.of(chefin()));
 
     // When / Then
-    assertThatExceptionOfType(LetzterCLevel.class).isThrownBy(() -> verwaltung.stilllegen(CHEFIN));
+    assertThatExceptionOfType(LetzterCLevel.class)
+        .isThrownBy(() -> verwaltung.stilllegen(CHEFIN, STAND, CHEFIN));
     verify(accounts, never()).save(any(Account.class));
   }
 
@@ -394,11 +412,11 @@ class MitarbeitendeVerwaltungTest {
     // Given
     final Account zweite = konto(ANNA, ANNA_MAIL, Role.C_LEVEL, true);
     when(accounts.aktiveCLevelMitSperre()).thenReturn(List.of(chefin(), zweite));
-    when(accounts.findById(CHEFIN)).thenReturn(Optional.of(chefin()));
+    when(accounts.findByIdMitSperre(CHEFIN)).thenReturn(Optional.of(chefin()));
     speichernGibtZurueck();
 
     // When
-    verwaltung.stilllegen(CHEFIN);
+    verwaltung.stilllegen(CHEFIN, STAND, CHEFIN);
 
     // Then
     verify(accounts).save(gespeichert.capture());
@@ -408,12 +426,12 @@ class MitarbeitendeVerwaltungTest {
   @Test
   void aktivieren_thenReactivatesTheAccount() {
     // Given
-    when(accounts.findById(ANNA))
+    when(accounts.findByIdMitSperre(ANNA))
         .thenReturn(Optional.of(konto(ANNA, ANNA_MAIL, Role.EMPLOYEE, false)));
     speichernGibtZurueck();
 
     // When
-    verwaltung.aktivieren(ANNA);
+    verwaltung.aktivieren(ANNA, STAND, CHEFIN);
 
     // Then
     verify(accounts).save(gespeichert.capture());
@@ -425,10 +443,126 @@ class MitarbeitendeVerwaltungTest {
   @Test
   void aktivieren_givenAnUnknownId_thenNotFound() {
     // Given
-    when(accounts.findById(9L)).thenReturn(Optional.empty());
+    when(accounts.findByIdMitSperre(9L)).thenReturn(Optional.empty());
 
     // When / Then
-    assertThatExceptionOfType(KontoNichtGefunden.class).isThrownBy(() -> verwaltung.aktivieren(9L));
+    assertThatExceptionOfType(KontoNichtGefunden.class)
+        .isThrownBy(() -> verwaltung.aktivieren(9L, STAND, CHEFIN));
     verify(begruessung, never()).sende(anyString(), anyString());
+  }
+
+  // --- Stand des Kontos (#411, Kriterium 4; Plan #415, E19) -------------------------------
+
+  /** Der Konflikt nennt, wer zuletzt verwaltet hat, wer abgewiesen wird und wann. */
+  private static void nenntUrheberHandelndenUndZeitpunkt(final KontoGeaendert konflikt) {
+    assertThat(konflikt.art()).isEqualTo(Bearbeitungskonflikt.Art.VERALTET);
+    assertThat(konflikt.urheberKonto()).hasValue(BERTA);
+    assertThat(konflikt.handelndesKonto()).isEqualTo(CHEFIN);
+    assertThat(konflikt.zeitpunkt()).contains(ANGELEGT);
+  }
+
+  @Test
+  void aendern_givenAnOutdatedVersion_thenRefusedAndNothingSaved() {
+    // Given — Berta hat Annas Konto inzwischen verwaltet; vorgelegt wird der Stand davor.
+    when(accounts.aktiveCLevelMitSperre()).thenReturn(List.of(chefin()));
+    when(accounts.findByIdMitSperre(ANNA)).thenReturn(Optional.of(anna(Role.EMPLOYEE)));
+
+    // When / Then
+    assertThatExceptionOfType(KontoGeaendert.class)
+        .isThrownBy(
+            () ->
+                verwaltung.aendern(ANNA, ANNA_MAIL, "Anna Berg", Role.READ_ONLY, STAND - 1, CHEFIN))
+        .satisfies(MitarbeitendeVerwaltungTest::nenntUrheberHandelndenUndZeitpunkt);
+    verify(accounts, never()).save(any(Account.class));
+    verify(accounts, never()).findByEmail(anyString());
+  }
+
+  @Test
+  void aendern_givenAnOutdatedVersionOfTheLastCLevel_thenTheConflictWinsOverTheLastCLevel() {
+    // Given — auf einem alten Stand zaehlt der Stand, nicht eine Regel ueber ihn.
+    when(accounts.aktiveCLevelMitSperre()).thenReturn(List.of(chefin()));
+    when(accounts.findByIdMitSperre(CHEFIN)).thenReturn(Optional.of(chefin()));
+
+    // When / Then
+    assertThatExceptionOfType(KontoGeaendert.class)
+        .isThrownBy(
+            () ->
+                verwaltung.aendern(
+                    CHEFIN, CHEFIN_MAIL, "Chefin", Role.EMPLOYEE, STAND + 1, CHEFIN));
+  }
+
+  @Test
+  void aendern_givenTheCurrentVersion_thenRaisesTheVersionAndNamesTheActingAccount() {
+    // Given
+    when(accounts.aktiveCLevelMitSperre()).thenReturn(List.of(chefin()));
+    when(accounts.findByIdMitSperre(ANNA)).thenReturn(Optional.of(anna(Role.EMPLOYEE)));
+    when(accounts.findByEmail(ANNA_MAIL)).thenReturn(Optional.of(anna(Role.EMPLOYEE)));
+    speichernGibtZurueck();
+
+    // When
+    final Account geaendert =
+        verwaltung.aendern(ANNA, ANNA_MAIL, "Anna Berg", Role.READ_ONLY, STAND, CHEFIN);
+
+    // Then
+    assertThat(geaendert.version()).isGreaterThan(STAND);
+    assertThat(geaendert.geaendertVon()).isEqualTo(CHEFIN);
+  }
+
+  @Test
+  void stilllegen_givenAnOutdatedVersion_thenRefusedAndNothingSaved() {
+    // Given
+    when(accounts.aktiveCLevelMitSperre()).thenReturn(List.of(chefin()));
+    when(accounts.findByIdMitSperre(ANNA)).thenReturn(Optional.of(anna(Role.EMPLOYEE)));
+
+    // When / Then
+    assertThatExceptionOfType(KontoGeaendert.class)
+        .isThrownBy(() -> verwaltung.stilllegen(ANNA, STAND - 1, CHEFIN))
+        .satisfies(MitarbeitendeVerwaltungTest::nenntUrheberHandelndenUndZeitpunkt);
+    verify(accounts, never()).save(any(Account.class));
+  }
+
+  @Test
+  void stilllegen_givenTheCurrentVersion_thenReturnsTheSavedAccountWithTheNextVersion() {
+    // Given
+    when(accounts.aktiveCLevelMitSperre()).thenReturn(List.of(chefin()));
+    when(accounts.findByIdMitSperre(ANNA)).thenReturn(Optional.of(anna(Role.EMPLOYEE)));
+    speichernGibtZurueck();
+
+    // When
+    final Account stillgelegt = verwaltung.stilllegen(ANNA, STAND, CHEFIN);
+
+    // Then
+    assertThat(stillgelegt.aktiv()).isFalse();
+    assertThat(stillgelegt.version()).isEqualTo(STAND + 1);
+    assertThat(stillgelegt.geaendertVon()).isEqualTo(CHEFIN);
+  }
+
+  @Test
+  void aktivieren_givenAnOutdatedVersion_thenRefusedAndNothingSaved() {
+    // Given
+    when(accounts.findByIdMitSperre(ANNA))
+        .thenReturn(Optional.of(konto(ANNA, ANNA_MAIL, Role.EMPLOYEE, false)));
+
+    // When / Then
+    assertThatExceptionOfType(KontoGeaendert.class)
+        .isThrownBy(() -> verwaltung.aktivieren(ANNA, STAND + 1, CHEFIN))
+        .satisfies(MitarbeitendeVerwaltungTest::nenntUrheberHandelndenUndZeitpunkt);
+    verify(accounts, never()).save(any(Account.class));
+  }
+
+  @Test
+  void aktivieren_givenTheCurrentVersion_thenReturnsTheSavedAccountWithTheNextVersion() {
+    // Given
+    when(accounts.findByIdMitSperre(ANNA))
+        .thenReturn(Optional.of(konto(ANNA, ANNA_MAIL, Role.EMPLOYEE, false)));
+    speichernGibtZurueck();
+
+    // When
+    final Account aktiviert = verwaltung.aktivieren(ANNA, STAND, CHEFIN);
+
+    // Then
+    assertThat(aktiviert.aktiv()).isTrue();
+    assertThat(aktiviert.version()).isEqualTo(STAND + 1);
+    assertThat(aktiviert.geaendertVon()).isEqualTo(CHEFIN);
   }
 }

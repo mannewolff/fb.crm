@@ -12,6 +12,9 @@ import org.mwolff.fbcrm.auth.domain.Role;
  * <p>Die Felder wie in {@link AccountResponse}, dazu der Zustand. Die Sitzungs-Generation steht
  * auch hier nicht drin.
  *
+ * <p>{@code version} ist der Stand, den die Oberflaeche beim Aendern, Stilllegen und
+ * Wiederaktivieren als {@code If-Match} vorlegt (Plan #415, E19).
+ *
  * <p>{@code begruessungMailVersandt} traegt nur die Antwort auf das Anlegen: Ging keine Mail
  * hinaus, weil der Versand ausgeschaltet ist, sagt die Maske es (Plan #414, A13). In der Liste und
  * nach einer Aenderung fehlt das Feld ganz, statt mit {@code null} etwas anzudeuten.
@@ -21,6 +24,7 @@ import org.mwolff.fbcrm.auth.domain.Role;
  * @param email Anmeldeadresse
  * @param role Rolle des Kontos
  * @param aktiv ob sich das Konto anmelden darf; {@code false} heisst stillgelegt
+ * @param version der Stand des Kontos aus Sicht der Kontenverwaltung
  * @param begruessungMailVersandt beim Anlegen, ob eine Begruessung hinausging; sonst {@code null}
  */
 public record MitarbeiterResponse(
@@ -29,6 +33,7 @@ public record MitarbeiterResponse(
     String email,
     Role role,
     boolean aktiv,
+    long version,
     @JsonInclude(JsonInclude.Include.NON_NULL) @Nullable Boolean begruessungMailVersandt) {
 
   /** Die Sicht der Oberflaeche auf ein Konto. */
@@ -49,6 +54,7 @@ public record MitarbeiterResponse(
         konto.email(),
         konto.role(),
         konto.aktiv(),
+        konto.version(),
         begruessungMailVersandt);
   }
 }

@@ -35,8 +35,9 @@ class KontoUrheberauskunftTest {
         .thenReturn(
             Optional.of(
                 AccountEntity.aus(
-                    Konten.gespeichert(9L, "bernd@example.org", 0, ANGELEGT)
-                        .mitNamen("Bernd Muster", ANGELEGT))));
+                    Konten.benannt(
+                        Konten.gespeichert(9L, "bernd@example.org", 0, ANGELEGT),
+                        "Bernd Muster"))));
 
     // When / Then
     assertThat(auskunft.zu(9L)).contains(new Urheber(9L, "Bernd Muster"));

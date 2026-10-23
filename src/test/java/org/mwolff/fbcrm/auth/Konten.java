@@ -89,15 +89,61 @@ public final class Konten {
    * @param vorlage das ungespeicherte Konto
    */
   public static Account mitId(final Long id, final Account vorlage) {
-    return baue(
+    return imStand(
         id,
         vorlage.email(),
         vorlage.displayName(),
+        vorlage,
+        vorlage.version(),
+        vorlage.geaendertVon());
+  }
+
+  /**
+   * Die Vorlage unter einem anderen Anzeigenamen, ohne Version und Urheber zu beruehren.
+   *
+   * <p>Fuer Tests, die nur einen Namen brauchen: {@link Account#mitNamen} ist ein Schritt der
+   * Kontenverwaltung, zaehlt die Version und setzt einen Urheber — der in einem Integrationstest
+   * als Fremdschluessel auf ein Konto zeigte, das es dort nicht gibt.
+   *
+   * @param vorlage das Konto
+   * @param name der Anzeigename
+   */
+  public static Account benannt(final Account vorlage, final String name) {
+    return imStand(
+        vorlage.id(), vorlage.email(), name, vorlage, vorlage.version(), vorlage.geaendertVon());
+  }
+
+  /**
+   * Die Vorlage mit einem Stand der Kontenverwaltung (Plan #415, E19).
+   *
+   * @param vorlage das Konto
+   * @param version die Version, die das Konto tragen soll
+   * @param geaendertVon wer es zuletzt verwaltet hat, oder {@code null}
+   */
+  public static Account imStand(
+      final Account vorlage, final long version, final @Nullable Long geaendertVon) {
+    return imStand(
+        vorlage.id(), vorlage.email(), vorlage.displayName(), vorlage, version, geaendertVon);
+  }
+
+  private static Account imStand(
+      final @Nullable Long id,
+      final String email,
+      final String displayName,
+      final Account vorlage,
+      final long version,
+      final @Nullable Long geaendertVon) {
+    return new Account(
+        id,
+        email,
+        displayName,
         vorlage.role(),
         vorlage.aktiv(),
         vorlage.sessionGeneration(),
         vorlage.createdAt(),
-        vorlage.updatedAt());
+        vorlage.updatedAt(),
+        version,
+        geaendertVon);
   }
 
   private static Account baue(
@@ -109,6 +155,7 @@ public final class Konten {
       final int generation,
       final Instant angelegt,
       final Instant geaendert) {
-    return new Account(id, email, displayName, role, aktiv, generation, angelegt, geaendert);
+    return new Account(
+        id, email, displayName, role, aktiv, generation, angelegt, geaendert, 0L, null);
   }
 }

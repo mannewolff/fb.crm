@@ -14,6 +14,7 @@ const MANFRED = {
   email: 'info@mwolff.org',
   role: 'C_LEVEL',
   aktiv: true,
+  version: 0,
 };
 
 const ANNA = {
@@ -22,6 +23,7 @@ const ANNA = {
   email: 'anna@firma.de',
   role: 'EMPLOYEE',
   aktiv: true,
+  version: 3,
 };
 
 const BEN = {
@@ -30,6 +32,7 @@ const BEN = {
   email: 'ben@firma.de',
   role: 'READ_ONLY',
   aktiv: false,
+  version: 1,
 };
 
 const LETZTER = 'Es muss mindestens ein aktiver C-Level bleiben.';
@@ -56,6 +59,33 @@ function renderListe() {
 /** Die Zeile eines Kontos, gefunden ueber seinen Namen. */
 async function zeileVon(name: string) {
   return screen.findByRole('row', { name: new RegExp(name, 'u') });
+}
+
+/** Heute um die genannte Uhrzeit in der Ortszeit — die Meldung nennt dann nur die Uhrzeit. */
+function heuteUm(stunde: number, minute: number): string {
+  const zeitpunkt = new Date();
+  zeitpunkt.setHours(stunde, minute, 0, 0);
+  return zeitpunkt.toISOString();
+}
+
+/** Die Abweisung des Servers, wie `GlobalExceptionHandler` sie schreibt (Plan #415, E4, E15). */
+function abweisung(geaendertVon: string): () => Response {
+  return json(409, {
+    title: 'Conflict',
+    status: 409,
+    detail: 'Dieser Eintrag wurde inzwischen geändert.',
+    konflikt: { art: 'veraltet', geaendertAm: heuteUm(10, 42), eigenesFenster: false, geaendertVon },
+  });
+}
+
+/** Die Bedingungskoepfe aller Aufrufe des Wegs, in ihrer Reihenfolge. */
+function vorgelegteStaende(
+  fetchMock: ReturnType<typeof fetchNachPfad>,
+  pfad: string,
+): (string | undefined)[] {
+  return fetchMock.mock.calls
+    .filter(([ziel]) => ziel === pfad)
+    .map(([, init]) => (init?.headers as Record<string, string> | undefined)?.['If-Match']);
 }
 
 afterEach(() => {
@@ -128,7 +158,7 @@ describe('MitarbeitendePage', () => {
         json(200, { mitarbeitende: [{ ...ANNA, aktiv: !stillgelegt }] })(),
       'POST /api/mitarbeitende/2/stilllegen': () => {
         stillgelegt = true;
-        return leer(204)();
+        return json(200, { ...ANNA, aktiv: false, version: 4 })();
       },
     });
 
@@ -141,6 +171,7 @@ describe('MitarbeitendePage', () => {
 
     expect(await within(await zeileVon('Anna Berg')).findByText('Stillgelegt')).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith('/api/mitarbeitende/2/stilllegen', expect.anything());
+    expect(vorgelegteStaende(fetchMock, '/api/mitarbeitende/2/stilllegen')).toEqual(['"3"']);
   });
 
   it('nimmt ohne Rueckfrage wieder in Betrieb', async () => {
@@ -150,7 +181,7 @@ describe('MitarbeitendePage', () => {
       'GET /api/mitarbeitende': () => json(200, { mitarbeitende: [{ ...BEN, aktiv }] })(),
       'POST /api/mitarbeitende/3/aktivieren': () => {
         aktiv = true;
-        return leer(204)();
+        return json(200, { ...BEN, aktiv: true, version: 2 })();
       },
     });
 
@@ -196,6 +227,54 @@ describe('MitarbeitendePage', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'Der Stand des Kontos wurde nicht geändert. Bitte später erneut versuchen.',
     );
+  });
+
+  it('Szenario: abgewiesenes Stilllegen — Neu laden holt den neuen Stand (#411, Kriterium 4)', async () => {
+    const nutzer = userEvent.setup();
+    // Berta hat Anna inzwischen umbenannt; die Liste zeigt erst nach „Neu laden" den neuen Stand.
+    let gelesen = 0;
+    const fetchMock = fetchNachPfad({
+      'GET /api/mitarbeitende': () => {
+        gelesen += 1;
+        const anna =
+          gelesen === 1 ? ANNA : { ...ANNA, displayName: 'Anna Adler', version: 4 };
+        return json(200, { mitarbeitende: [anna] })();
+      },
+      'POST /api/mitarbeitende/2/stilllegen': () =>
+        gelesen === 1 ? abweisung('Berta')() : json(200, { ...ANNA, aktiv: false, version: 5 })(),
+    });
+
+    renderListe();
+
+    await nutzer.click(await screen.findByRole('button', { name: 'Aktionen für Anna Berg' }));
+    await nutzer.click(screen.getByRole('menuitem', { name: 'Stilllegen' }));
+    await nutzer.click(
+      within(screen.getByRole('dialog')).getByRole('button', { name: 'Stilllegen' }),
+    );
+
+    // Abgewiesen: Die Meldung nennt Berta, und die Zeile zeigt weiter den gesehenen Stand.
+    const meldung = await screen.findByRole('alert');
+    expect(meldung).toHaveTextContent('Nicht ausgeführt');
+    expect(meldung).toHaveTextContent('Berta hat diesen Eintrag inzwischen geändert (10:42).');
+    expect(within(await zeileVon('Anna Berg')).getByText('Aktiv')).toBeInTheDocument();
+
+    // Neu laden: der neue Stand, die Meldung ist fort.
+    await nutzer.click(screen.getByRole('button', { name: 'Neu laden' }));
+    expect(await zeileVon('Anna Adler')).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+
+    // Erneut stilllegen: vorgelegt wird der neu geladene Stand.
+    await nutzer.click(screen.getByRole('button', { name: 'Aktionen für Anna Adler' }));
+    await nutzer.click(screen.getByRole('menuitem', { name: 'Stilllegen' }));
+    await nutzer.click(
+      within(screen.getByRole('dialog')).getByRole('button', { name: 'Stilllegen' }),
+    );
+    await vi.waitFor(() => {
+      expect(vorgelegteStaende(fetchMock, '/api/mitarbeitende/2/stilllegen')).toEqual([
+        '"3"',
+        '"4"',
+      ]);
+    });
   });
 
   it('meldet einen Ausfall der Liste ohne technische Einzelheiten', async () => {

@@ -68,6 +68,17 @@ class JpaAccountRepository implements AccountRepository {
   /**
    * {@inheritDoc}
    *
+   * <p>{@link Propagation#MANDATORY} aus demselben Grund wie bei {@link #aktiveCLevelMitSperre}.
+   */
+  @Override
+  @Transactional(propagation = Propagation.MANDATORY)
+  public Optional<Account> findByIdMitSperre(final long id) {
+    return jpa.sperreKonto(id).map(JpaAccountRepository::toDomain);
+  }
+
+  /**
+   * {@inheritDoc}
+   *
    * <p>{@code saveAndFlush} statt {@code save}: Eine fortgeschriebene Zeile schriebe Hibernate
    * sonst erst beim Commit, und eine Verletzung von {@code account_email_key} kaeme hinter dem
    * Anwendungsfall an, der sie in seine Abweisung uebersetzen soll (Issue #421).
@@ -86,6 +97,8 @@ class JpaAccountRepository implements AccountRepository {
         zeile.isAktiv(),
         zeile.getSessionGeneration(),
         zeile.getCreatedAt(),
-        zeile.getUpdatedAt());
+        zeile.getUpdatedAt(),
+        zeile.getVersion(),
+        zeile.getGeaendertVon());
   }
 }

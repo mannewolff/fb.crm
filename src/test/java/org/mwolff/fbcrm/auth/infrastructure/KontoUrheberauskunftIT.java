@@ -42,7 +42,7 @@ class KontoUrheberauskunftIT extends AbstractIntegrationTest {
   }
 
   private Account speichereMitNamen(final String email, final String name) {
-    return konten.save(Konten.neu(email, ANGELEGT).mitNamen(name, ANGELEGT));
+    return konten.save(Konten.benannt(Konten.neu(email, ANGELEGT), name));
   }
 
   @Test

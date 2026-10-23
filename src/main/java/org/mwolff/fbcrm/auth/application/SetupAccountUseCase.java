@@ -156,7 +156,8 @@ public class SetupAccountUseCase {
     }
 
     final Instant jetzt = clock.instant();
-    final Account neu = new Account(null, email, displayName, Role.C_LEVEL, true, 0, jetzt, jetzt);
+    final Account neu =
+        new Account(null, email, displayName, Role.C_LEVEL, true, 0, jetzt, jetzt, 0L, null);
 
     final Account angelegt = speichere(neu);
     return new LoginResult(angelegt, cookie(angelegt, jetzt));

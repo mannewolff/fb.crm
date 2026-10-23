@@ -366,6 +366,9 @@ describe('Szenarien des Fachplans (E16)', () => {
     expect(text).toMatch(/„Löschen" im Menü ⋯ einer Zeile der Arbeitszeit löscht nur den Eintrag/u);
     expect(text).toMatch(/„Zur\s+Übersicht" führt zurück zur Liste der Arbeitszeit/u);
     expect(text).toMatch(/seine Zeit ist für einen neuen Eintrag wieder frei/u);
+    // Konten sind geschuetzt; An- und Abmelden der Person weisen nichts ab (Issue #455, E19).
+    expect(text).toMatch(/Unter „Mitarbeitende" gilt es beim Speichern in der Maske „Konto bearbeiten"/u);
+    expect(text).toMatch(/Dass sich die Person selbst an- oder abmeldet, weist nichts ab/u);
     expect(text).toMatch(/\*\*Ergebnis:\*\*/u);
   });
 
