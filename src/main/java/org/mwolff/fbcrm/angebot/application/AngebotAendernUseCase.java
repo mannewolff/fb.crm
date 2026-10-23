@@ -67,6 +67,12 @@ import org.springframework.transaction.annotation.Transactional;
  * Wechsel <b>intern → extern</b> (E19): Der Weg nach innen nimmt keiner Position ihre Stunden, und
  * das Entfernen einer bebuchten Position scheitert weiter am Fremdschluessel.
  *
+ * <p><b>Eine geloeschte Zeit sperrt keine Position</b> (Plan #415, E17). Ein geloeschter
+ * Zeiteintrag steht gekennzeichnet weiter an seiner Zeile und zeigt auf seine Position. Bevor das
+ * Angebot geschrieben wird, entfernt {@link Zeitbindung} solche Eintraege auf den Positionen hart,
+ * die die Einreichung nicht mehr nennt — erst nach allen Pruefungen, damit eine abgewiesene
+ * Aenderung nichts hinterlaesst. Wer keine Position entfernt, bemueht den Port nicht.
+ *
  * <p><b>Das Leistungsjahr einer Position wird hier bestimmt</b> (#302, Kriterium 4; Plan #303, E2).
  * Eine gespeicherte Position behaelt ihr bisheriges Jahr, eine neue ist mit dem Jahr des
  * eingereichten Angebotsdatums vorbelegt. Die Vorbelegung gilt nur beim Anlegen: Wer spaeter das
@@ -96,13 +102,14 @@ import org.springframework.transaction.annotation.Transactional;
  * bekommen, die er gar nicht aendern wollte.
  */
 /*
- * PMD.TooManyMethods: Fuenf Pruefungen, vier Uebersetzer einer Positionsangabe und die Regel fuer
- * ihr Leistungsjahr ergeben zusammen mit dem einen oeffentlichen Weg mehr als die zehn Methoden der
- * Schwelle. Jede Pruefung traegt hier ihren Namen und ihre Begruendung — sie zusammenzuziehen
- * hiesse, die Reihenfolge der Abweisungen in einer langen Methode zu verstecken, und sie auf
- * mehrere Klassen zu verteilen hiesse, denselben geladenen Stand und dieselbe Einreichung durch
- * mehrere Haende zu geben. Beides waere schlechter zu lesen als die Folge kleiner, benannter
- * Schritte an einer Stelle — dasselbe Vorgehen wie bei {@code Rechnungslayout}.
+ * PMD.TooManyMethods: Fuenf Pruefungen, die Freigabe entfallender Positionen, vier Uebersetzer
+ * einer Positionsangabe und die Regel fuer ihr Leistungsjahr ergeben zusammen mit dem einen
+ * oeffentlichen Weg mehr als die zehn Methoden der Schwelle. Jede Pruefung traegt hier ihren Namen
+ * und ihre Begruendung — sie zusammenzuziehen hiesse, die Reihenfolge der Abweisungen in einer
+ * langen Methode zu verstecken, und sie auf mehrere Klassen zu verteilen hiesse, denselben
+ * geladenen Stand und dieselbe Einreichung durch mehrere Haende zu geben. Beides waere schlechter
+ * zu lesen als die Folge kleiner, benannter Schritte an einer Stelle — dasselbe Vorgehen wie bei
+ * {@code Rechnungslayout}.
  */
 @SuppressWarnings("PMD.TooManyMethods")
 @Service
@@ -177,6 +184,7 @@ public class AngebotAendernUseCase {
             daten.intern(),
             Year.from(daten.angebotDatum()));
     pruefeZeit(daten, angebot.intern());
+    gibEntfallendeFrei(daten.positionen(), angebot.positionen());
     final Instant jetzt = clock.instant();
     return angebote.save(
         angebot
@@ -205,6 +213,22 @@ public class AngebotAendernUseCase {
       if (kennung != null && !offen.remove(kennung)) {
         throw new PositionenNichtWaehlbar();
       }
+    }
+  }
+
+  /*
+   * Die Positionen, die die Einreichung nicht mehr nennt, von geloeschter Zeit befreien (E17).
+   * Nicht geloeschte Zeit bleibt stehen; an ihr scheitert das Entfernen wie bisher.
+   */
+  private void gibEntfallendeFrei(
+      final List<Positionsangabe> eingereicht, final List<Angebotsposition> vorhanden) {
+    final Set<Long> entfallend =
+        vorhanden.stream()
+            .map(Angebotsposition::requireId)
+            .collect(Collectors.toCollection(HashSet::new));
+    eingereicht.forEach(angabe -> entfallend.remove(angabe.id()));
+    if (!entfallend.isEmpty()) {
+      zeit.entferneGeloeschte(Set.copyOf(entfallend));
     }
   }
 

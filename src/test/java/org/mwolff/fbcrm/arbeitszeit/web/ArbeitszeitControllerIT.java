@@ -38,10 +38,11 @@ import org.springframework.jdbc.core.JdbcTemplate;
  *
  * <p>Hier stehen die Zusagen, die an der echten Verdrahtung und am echten Schema haengen: Ein
  * erfasster Eintrag kommt mit 201 und seiner gerechneten Dauer zurueck, ein {@code PUT} antwortet
- * 200, ein {@code DELETE} nimmt die Zeile wirklich fort, und eine unbekannte Kennung ist 404. Dazu
- * die beiden Abweisungen, die der Anwendungsfall als Meldung am Feld liefert (Plan #194, A19, A8):
- * 9:10 liegt nicht im Raster, und ein zweiter Eintrag zur selben Zeit nennt den ersten mit Uhrzeit,
- * Position und Firma.
+ * 200, ein {@code DELETE} kennzeichnet die Zeile (Plan #415, E17), und eine unbekannte Kennung ist
+ * 404. Jede weitere Aktion auf den geloeschten Eintrag antwortet 409 mit {@code art = "gelöscht"}
+ * (E16), und er faellt aus Monatsliste und Ueberschneidungspruefung. Dazu die beiden Abweisungen,
+ * die der Anwendungsfall als Meldung am Feld liefert (Plan #194, A19, A8): 9:10 liegt nicht im
+ * Raster, und ein zweiter Eintrag zur selben Zeit nennt den ersten mit Uhrzeit, Position und Firma.
  *
  * <p>Dazu die beiden Lesewege (Plan #194, A20, A15): Die Monatsliste traegt je Eintrag die
  * Bezeichnung seiner Position und den Namen der Firma, je Tag eine Summe und fuer den Monat eine
@@ -350,27 +351,116 @@ class ArbeitszeitControllerIT extends AbstractIntegrationTest {
         .isEqualTo(HttpStatus.NOT_FOUND);
   }
 
+  /** Loescht den Eintrag, wie die Ansicht es tut: auf dem aktuellen Stand der Zeile (E2). */
+  private ResponseEntity<String> loesche(final long id) {
+    return rest.exchange(
+        PFAD + "/" + id,
+        HttpMethod.DELETE,
+        new HttpEntity<>(null, Stand.aktuell(sitzung, jdbc, "arbeitszeit", id)),
+        String.class);
+  }
+
+  /** Die Kopfzeilen der Sitzung mit einem frei gewaehlten Stand. */
+  private HttpHeaders aufStand(final long version) {
+    final HttpHeaders kopf = new HttpHeaders();
+    kopf.putAll(sitzung);
+    kopf.setIfMatch("\"" + version + "\"");
+    return kopf;
+  }
+
   @Test
-  void loeschen_thenTheRowIsGone() {
-    // Given — A5, Antwort 4: geloescht wird wirklich.
+  void loeschen_thenTheRowIsMarkedAndLeavesTheMonth() {
+    // Given — A5, Antwort 4; Plan #415, E17: geloescht wird mit Kennzeichen.
     final long id = erfassteKennung("09:00", "11:00");
 
     // When
-    final ResponseEntity<String> geloescht =
-        ruf(PFAD + "/" + id, HttpMethod.DELETE, null, String.class);
+    final ResponseEntity<String> geloescht = loesche(id);
 
-    // Then — derselbe Eintrag ist danach nicht mehr aenderbar.
+    // Then — die Zeile steht mit Zeitpunkt und Konto der Loeschung, die Monatsliste ist leer.
     assertThat(geloescht.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
-    assertThat(aendere(id, eintrag(konzeptionId, "09:00", "12:00"), String.class).getStatusCode())
-        .isEqualTo(HttpStatus.NOT_FOUND);
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT count(*) FROM arbeitszeit"
+                    + " WHERE id = ? AND geloescht_am IS NOT NULL AND geloescht_von IS NOT NULL",
+                Long.class,
+                Long.valueOf(id)))
+        .isOne();
+    assertThat(lieseDenMonat(MONAT).tage()).isEmpty();
+  }
+
+  @Test
+  void loeschen_thenChangingAndDeletingAgainAnswer409Geloescht() {
+    // Given — #411, Kriterium 6: ein zweites Fenster hatte den Eintrag auf Stand 0 offen.
+    final long id = erfassteKennung("09:00", "11:00");
+    loesche(id);
+
+    // When — aendern und noch einmal loeschen, beides auf dem Stand des zweiten Fensters.
+    final ResponseEntity<String> geaendert =
+        rest.exchange(
+            PFAD + "/" + id,
+            HttpMethod.PUT,
+            new HttpEntity<>(eintrag(konzeptionId, "09:00", "12:00"), aufStand(0L)),
+            String.class);
+    final ResponseEntity<String> nochmals =
+        rest.exchange(
+            PFAD + "/" + id, HttpMethod.DELETE, new HttpEntity<>(null, aufStand(0L)), String.class);
+
+    // Then — beide 409 mit art = "gelöscht", und es entsteht nichts neu.
+    assertThat(geaendert.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+    assertThat(geaendert.getBody()).contains("\"art\":\"gelöscht\"");
+    assertThat(nochmals.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+    assertThat(nochmals.getBody()).contains("\"art\":\"gelöscht\"");
+    assertThat(jdbc.queryForObject("SELECT count(*) FROM arbeitszeit", Long.class)).isOne();
+    assertThat(lieseDenMonat(MONAT).tage()).isEmpty();
+  }
+
+  @Test
+  void loeschen_onAnOutdatedStand_thenAnswers409AndKeepsTheEntry() {
+    // Given — #411, Kriterium 6: ein erstes Aendern hat den Stand von 0 auf 1 gehoben.
+    final long id = erfassteKennung("09:00", "11:00");
+    aendere(id, eintrag(konzeptionId, "09:00", "12:00"), String.class);
+
+    // When — das Loeschen legt noch den Stand 0 vor.
+    final ResponseEntity<String> abgewiesen =
+        rest.exchange(
+            PFAD + "/" + id, HttpMethod.DELETE, new HttpEntity<>(null, aufStand(0L)), String.class);
+
+    // Then
+    assertThat(abgewiesen.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+    assertThat(abgewiesen.getBody()).contains("\"veraltet\"");
+    assertThat(lieseDenMonat(MONAT).tage().get(0).eintraege()).hasSize(1);
+  }
+
+  @Test
+  void loeschen_withoutIfMatch_thenAnswers428AndKeepsTheEntry() {
+    // Given
+    final long id = erfassteKennung("09:00", "11:00");
+
+    // When / Then — E3: ohne vorgelegten Stand wird nicht geloescht.
+    assertThat(ruf(PFAD + "/" + id, HttpMethod.DELETE, null, String.class).getStatusCode())
+        .isEqualTo(HttpStatus.PRECONDITION_REQUIRED);
+    assertThat(lieseDenMonat(MONAT).tage().get(0).eintraege()).hasSize(1);
   }
 
   @Test
   void loeschen_whenTheEntryIsUnknown_thenAnswers404() {
     // Given
     // When / Then
-    assertThat(ruf(PFAD + "/999", HttpMethod.DELETE, null, String.class).getStatusCode())
-        .isEqualTo(HttpStatus.NOT_FOUND);
+    assertThat(loesche(999L).getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+  }
+
+  @Test
+  void anlegen_inTheSlotOfADeletedEntry_thenNoOverlapAndCreated() {
+    // Given — E17: die Ueberschneidungspruefung je Person zaehlt den geloeschten Eintrag nicht.
+    loesche(erfassteKennung("09:00", "11:00"));
+
+    // When
+    final ResponseEntity<String> neu =
+        ruf(PFAD, HttpMethod.POST, eintrag(konzeptionId, "09:00", "11:00"), String.class);
+
+    // Then
+    assertThat(neu.getStatusCode()).as(neu.getBody()).isEqualTo(HttpStatus.CREATED);
+    assertThat(lieseDenMonat(MONAT).tage().get(0).eintraege()).hasSize(1);
   }
 
   private ArbeitszeitMonatResponse lieseDenMonat(final String monat) {

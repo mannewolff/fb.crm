@@ -563,6 +563,113 @@ describe('ArbeitszeitPage — loeschen (Kriterium 6, Antwort 4)', () => {
   });
 });
 
+/** Die Abweisung des Servers, weil der Eintrag inzwischen geaendert oder geloescht ist. */
+function abweisung(art: 'veraltet' | 'gelöscht') {
+  return json(409, {
+    title: 'Conflict',
+    status: 409,
+    detail: 'Dieser Eintrag wurde inzwischen geändert.',
+    konflikt: { art, eigenesFenster: false, geaendertVon: 'Anna Berg' },
+  });
+}
+
+describe('ArbeitszeitPage — gleichzeitig loeschen (#411, Kriterium 6; Plan #415, E16, E17)', () => {
+  it('legt beim Loeschen den Stand der Zeile vor', async () => {
+    const nutzer = userEvent.setup();
+    const aufruf = mitRouten({ [NOVEMBER]: json(200, MONATSLISTE), [LOESCHEN]: leer(204) });
+
+    renderSeite('/arbeitszeit?monat=2026-11');
+    await waehleLoeschen(nutzer);
+    await nutzer.click(await screen.findByRole('button', { name: 'Löschen' }));
+
+    await vi.waitFor(() => {
+      expect(monatsaufrufe(aufruf)).toBe(2);
+    });
+    expect(aufruf).toHaveBeenCalledWith(
+      '/api/arbeitszeit/7',
+      expect.objectContaining({
+        method: 'DELETE',
+        headers: expect.objectContaining({ 'If-Match': '"2"' }) as unknown,
+      }),
+    );
+  });
+
+  it('meldet ein Loeschen auf altem Stand mit Name und „Neu laden" und laedt danach die Liste', async () => {
+    const nutzer = userEvent.setup();
+    const aufruf = mitRouten({
+      [NOVEMBER]: json(200, MONATSLISTE),
+      [LOESCHEN]: abweisung('veraltet'),
+    });
+
+    renderSeite('/arbeitszeit?monat=2026-11');
+    await waehleLoeschen(nutzer);
+    await nutzer.click(await screen.findByRole('button', { name: 'Löschen' }));
+
+    // Die Konfliktmeldung statt des Ausfalls; die Liste bleibt stehen, bis neu geladen wird.
+    expect(await screen.findByText('Nicht ausgeführt')).toBeInTheDocument();
+    expect(screen.getByText('Anna Berg hat diesen Eintrag inzwischen geändert.')).toBeInTheDocument();
+    expect(
+      screen.queryByText('Der Eintrag wurde nicht gelöscht. Bitte später erneut versuchen.'),
+    ).not.toBeInTheDocument();
+    expect(monatsaufrufe(aufruf)).toBe(1);
+
+    await nutzer.click(screen.getByRole('button', { name: 'Neu laden' }));
+
+    await vi.waitFor(() => {
+      expect(monatsaufrufe(aufruf)).toBe(2);
+    });
+    expect(screen.queryByText('Nicht ausgeführt')).not.toBeInTheDocument();
+  });
+
+  it('fuehrt bei einem inzwischen geloeschten Eintrag mit „Zur Übersicht" zurueck zur Liste', async () => {
+    const nutzer = userEvent.setup();
+    const aufruf = mitRouten({
+      [NOVEMBER]: json(200, MONATSLISTE),
+      [LOESCHEN]: abweisung('gelöscht'),
+    });
+
+    renderSeite('/arbeitszeit?monat=2026-11');
+    await waehleLoeschen(nutzer);
+    await nutzer.click(await screen.findByRole('button', { name: 'Löschen' }));
+
+    expect(
+      await screen.findByText('Anna Berg hat diesen Eintrag inzwischen gelöscht.'),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Neu laden' })).not.toBeInTheDocument();
+
+    await nutzer.click(screen.getByRole('link', { name: 'Zur Übersicht' }));
+
+    // Derselbe Monat, neu geladen, und die Meldung ist fort.
+    await vi.waitFor(() => {
+      expect(monatsaufrufe(aufruf)).toBe(2);
+    });
+    expect(screen.getByTestId('adresse')).toHaveTextContent('/arbeitszeit?monat=2026-11');
+    expect(screen.queryByText('Nicht ausgeführt')).not.toBeInTheDocument();
+  });
+
+  it('schliesst nach „Zur Übersicht" im Dialog den Dialog und laedt die Liste', async () => {
+    const nutzer = userEvent.setup();
+    const aufruf = mitRouten({
+      [NOVEMBER]: json(200, MONATSLISTE),
+      [OHNE_MONAT]: json(200, MONATSLISTE),
+      [POSITIONEN]: json(200, [KONZEPTION]),
+      [AENDERN]: abweisung('gelöscht'),
+    });
+
+    renderSeite('/arbeitszeit?monat=2026-11');
+    await nutzer.click(await screen.findByRole('button', { name: '9:00 bis 10:45' }));
+    const dialog = within(await screen.findByRole('dialog'));
+    await dialog.findByRole('option', { name: 'Konzeption' });
+    await nutzer.click(dialog.getByRole('button', { name: 'Speichern' }));
+    await nutzer.click(await dialog.findByRole('link', { name: 'Zur Übersicht' }));
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    await vi.waitFor(() => {
+      expect(aufruf.mock.calls.filter(([ziel]) => ziel === '/api/arbeitszeit')).toHaveLength(1);
+    });
+  });
+});
+
 describe('ArbeitszeitPage — Kennzeichen intern und die Aufteilung (Issue #236, Kriterien 2 und 10)', () => {
   /** Derselbe Monat, aber der Eintrag am 20. liegt auf einem internen Angebot. */
   const GEMISCHT = {

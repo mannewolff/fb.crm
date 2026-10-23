@@ -4,8 +4,10 @@ import java.time.LocalDate;
 import java.util.Collection;
 import java.util.List;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Spring-Data-Zugriff auf {@code arbeitszeit}.
@@ -19,6 +21,12 @@ import org.springframework.data.repository.query.Param;
  *
  * <p>Ein {@code order by} steht in keiner: Die Reihenfolge der Ansicht setzt die Anwendungsschicht,
  * wie bei den Listen der Belege.
+ *
+ * <p><b>Jeder Leseweg laesst gekennzeichnete Zeilen aus</b> (Plan #415, E17): Ein geloeschter
+ * Eintrag steht in keiner Liste, keiner Summe und keiner Ueberschneidungspruefung. Allein {@code
+ * findById} liefert ihn weiter — der Anwendungsfall braucht Urheber und Zeitpunkt der Loeschung, um
+ * eine Aktion darauf abzuweisen (E16). Der eine schreibende Weg hier entfernt gekennzeichnete
+ * Zeilen hart, bevor ihre Angebotsposition entfaellt.
  */
 interface SpringDataZeiteintragRepository extends JpaRepository<ZeiteintragEntity, Long> {
 
@@ -31,7 +39,7 @@ interface SpringDataZeiteintragRepository extends JpaRepository<ZeiteintragEntit
   @Query(
       """
       select z from ZeiteintragEntity z
-      where z.tag between :von and :bis
+      where z.tag between :von and :bis and z.geloeschtAm is null
       """)
   List<ZeiteintragEntity> findImZeitraum(@Param("von") LocalDate von, @Param("bis") LocalDate bis);
 
@@ -45,7 +53,7 @@ interface SpringDataZeiteintragRepository extends JpaRepository<ZeiteintragEntit
   @Query(
       """
       select z from ZeiteintragEntity z
-      where z.accountId = :accountId and z.tag between :von and :bis
+      where z.accountId = :accountId and z.tag between :von and :bis and z.geloeschtAm is null
       """)
   List<ZeiteintragEntity> findImZeitraumFuerKonto(
       @Param("von") LocalDate von, @Param("bis") LocalDate bis, @Param("accountId") long accountId);
@@ -62,7 +70,7 @@ interface SpringDataZeiteintragRepository extends JpaRepository<ZeiteintragEntit
   @Query(
       """
       select z from ZeiteintragEntity z
-      where z.angebotPositionId in :angebotPositionIds
+      where z.angebotPositionId in :angebotPositionIds and z.geloeschtAm is null
       """)
   List<ZeiteintragEntity> findByPositionen(
       @Param("angebotPositionIds") Collection<Long> angebotPositionIds);
@@ -78,9 +86,45 @@ interface SpringDataZeiteintragRepository extends JpaRepository<ZeiteintragEntit
       """
       select z from ZeiteintragEntity z
       where z.angebotPositionId in :angebotPositionIds and z.tag between :von and :bis
+        and z.geloeschtAm is null
       """)
   List<ZeiteintragEntity> findByPositionenImZeitraum(
       @Param("angebotPositionIds") Collection<Long> angebotPositionIds,
       @Param("von") LocalDate von,
       @Param("bis") LocalDate bis);
+
+  /**
+   * Alle Eintraege, die nicht geloescht sind — ueber alle Positionen und alle Zeiten (Issue #211).
+   *
+   * <p>Statt {@code findAll}, das auch gekennzeichnete Zeilen liefert (Plan #415, E17).
+   */
+  @Query(
+      """
+      select z from ZeiteintragEntity z
+      where z.geloeschtAm is null
+      """)
+  List<ZeiteintragEntity> findAlleOffenen();
+
+  /**
+   * Entfernt die gekennzeichneten Eintraege auf den genannten Positionen hart (Plan #415, E17).
+   *
+   * <p>Eine gekennzeichnete Zeile zeigt weiter ohne {@code ON DELETE} auf ihre Position; ohne
+   * diesen Schritt scheiterte das Entfernen der Position am Fremdschluessel. Ein nicht geloeschter
+   * Eintrag bleibt stehen — er haelt seine Position weiter fest.
+   *
+   * @param angebotPositionIds die Kennungen der Positionen, die entfallen
+   */
+  /*
+   * @Transactional aus demselben Grund wie in SpringDataOutboxRepository: Ein @Modifying-Query
+   * verlangt eine Transaktion. Im Betrieb laeuft er in der des Angebots, das die Position entfernt,
+   * und schliesst sich ihr an.
+   */
+  @Transactional
+  @Modifying
+  @Query(
+      """
+      delete from ZeiteintragEntity z
+      where z.angebotPositionId in :angebotPositionIds and z.geloeschtAm is not null
+      """)
+  void loescheGekennzeichnete(@Param("angebotPositionIds") Collection<Long> angebotPositionIds);
 }

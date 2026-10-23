@@ -3,6 +3,7 @@ package org.mwolff.fbcrm.angebot;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -15,6 +16,7 @@ import org.mwolff.fbcrm.Stand;
 import org.mwolff.fbcrm.angebot.application.KennzeichenNichtAenderbar;
 import org.mwolff.fbcrm.angebot.web.AngebotPositionResponse;
 import org.mwolff.fbcrm.angebot.web.AngebotResponse;
+import org.mwolff.fbcrm.arbeitszeit.web.ZeiteintragResponse;
 import org.mwolff.fbcrm.auth.Anmeldung;
 import org.mwolff.fbcrm.auth.Konten;
 import org.mwolff.fbcrm.auth.domain.AccountRepository;
@@ -52,6 +54,11 @@ import org.springframework.jdbc.core.JdbcTemplate;
  * <p><b>Ein geloeschter Entwurf bindet nichts</b> (Plan #415, E17): Seine Positionszeilen sind hart
  * fort, und die gekennzeichnete Kopfzeile zaehlt in keiner der beiden Auskuenfte mit. Die Position
  * laesst sich danach entfernen, und das Kennzeichen der Art wieder wechseln.
+ *
+ * <p><b>Ein geloeschter Zeiteintrag bindet ebenso nichts</b> (Plan #415, E17): Er bleibt
+ * gekennzeichnet an seiner Zeile und zeigt ohne {@code ON DELETE} auf seine Position. Entfernt das
+ * Angebot die Position, raeumt es den gekennzeichneten Eintrag vorher hart ab, und das Speichern
+ * geht durch. Dafuer kommt eine dritte, buchbare Position hinzu.
  */
 class AngebotPositionsbindungIT extends AbstractIntegrationTest {
 
@@ -86,8 +93,8 @@ class AngebotPositionsbindungIT extends AbstractIntegrationTest {
   @BeforeEach
   void legeDenAusgangspunktAn() {
     jdbc.execute(
-        "TRUNCATE rechnung_position, rechnung, angebot_position, angebot, ansprechpartner, firma"
-            + " RESTART IDENTITY CASCADE");
+        "TRUNCATE arbeitszeit, rechnung_position, rechnung, angebot_position, angebot,"
+            + " ansprechpartner, firma RESTART IDENTITY CASCADE");
     jdbc.execute("DELETE FROM rechnung_einstellungen");
     jdbc.execute("INSERT INTO rechnung_einstellungen DEFAULT VALUES");
     leereKonten(jdbc);
@@ -411,6 +418,67 @@ class AngebotPositionsbindungIT extends AbstractIntegrationTest {
                 "SELECT count(*) FROM angebot_position WHERE id = ?",
                 Long.class,
                 Long.valueOf(konzeptionId)))
+        .isZero();
+  }
+
+  @Test
+  void aendern_withoutAPositionThatOnlyADeletedZeiteintragPointsTo_thenOkAndBothRowsAreGone() {
+    // Given — eine dritte Position nach Aufwand in Stunden, darauf ein Zeiteintrag, der danach
+    // ueber den Weg der Ansicht geloescht wird (#415, E17).
+    final List<Map<String, Object>> bisher =
+        List.of(
+            position(
+                Long.valueOf(konzeptionId),
+                KONZEPTION,
+                "AUFWAND",
+                "2.50",
+                "PERSONENTAG",
+                "1000.00"),
+            position(Long.valueOf(schulungId), SCHULUNG, "FESTPREIS", "1", "PAUSCHAL", "1200.00"));
+    final List<Map<String, Object>> mitBeratung = new ArrayList<>(bisher);
+    mitBeratung.add(position(null, "Beratung", "AUFWAND", "10", "STUNDE", "120.00"));
+    final long beratungId =
+        kennung(
+            Objects.requireNonNull(aendere(mitBeratung, AngebotResponse.class).getBody())
+                .positionen()
+                .get(2));
+    final Map<String, Object> eintrag = new LinkedHashMap<>();
+    eintrag.put("angebotPositionId", Long.valueOf(beratungId));
+    eintrag.put("tag", "2026-09-26");
+    eintrag.put("von", "09:00");
+    eintrag.put("bis", "11:00");
+    final ResponseEntity<ZeiteintragResponse> erfasst =
+        ruf("/api/arbeitszeit", HttpMethod.POST, eintrag, ZeiteintragResponse.class);
+    assertThat(erfasst.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+    final long eintragId = Objects.requireNonNull(erfasst.getBody()).id();
+    assertThat(
+            rest.exchange(
+                    "/api/arbeitszeit/" + eintragId,
+                    HttpMethod.DELETE,
+                    new HttpEntity<>(null, Stand.aktuell(sitzung, jdbc, "arbeitszeit", eintragId)),
+                    Void.class)
+                .getStatusCode())
+        .isEqualTo(HttpStatus.NO_CONTENT);
+
+    // When — die Beratung faellt am Angebot weg.
+    final ResponseEntity<AngebotResponse> antwort = aendere(bisher, AngebotResponse.class);
+
+    // Then — das Speichern geht durch; Position und geloeschter Eintrag sind fort.
+    assertThat(antwort.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(Objects.requireNonNull(antwort.getBody()).positionen())
+        .extracting(AngebotPositionResponse::bezeichnung)
+        .containsExactly(KONZEPTION, SCHULUNG);
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT count(*) FROM angebot_position WHERE id = ?",
+                Long.class,
+                Long.valueOf(beratungId)))
+        .isZero();
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT count(*) FROM arbeitszeit WHERE id = ?",
+                Long.class,
+                Long.valueOf(eintragId)))
         .isZero();
   }
 

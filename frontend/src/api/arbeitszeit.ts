@@ -324,7 +324,14 @@ export function zeiteintragAendern(
   );
 }
 
-/** Loescht einen Eintrag (Kriterium 6, Antwort 4) — die Antwort traegt keinen Inhalt. */
-export function zeiteintragLoeschen(id: number): Promise<void> {
-  return apiOhneInhalt(`${PFAD}/${String(id)}`, { methode: 'DELETE' });
+/**
+ * Loescht einen Eintrag (Kriterium 6, Antwort 4) — die Antwort traegt keinen Inhalt.
+ *
+ * Geloescht wird mit Kennzeichen (Plan #415, E17); ist der Eintrag inzwischen geaendert oder
+ * geloescht, weist der Server mit einem Bearbeitungskonflikt ab.
+ *
+ * @param version der Stand, auf dem das Loeschen beruht
+ */
+export function zeiteintragLoeschen(id: number, version: number): Promise<void> {
+  return apiOhneInhalt(`${PFAD}/${String(id)}`, { methode: 'DELETE', version });
 }

@@ -31,10 +31,17 @@ import org.springframework.jdbc.core.JdbcTemplate;
  * <p>Seit Plan #426 gehoert jeder Eintrag einer Person (E1). Gelesen wird darum zusaetzlich je
  * Konto ({@code findImZeitraumFuerKonto}, E8), und die Summen zaehlen weiter ueber alle Personen
  * (E15). Die Eintraege gehoeren Anna, wo ein Fall keine Person nennt; Ben ist die zweite Person.
+ *
+ * <p>Seit Plan #415 (E17) wird mit Kennzeichen geloescht. Je Filterstelle steht ein Fall, dass ein
+ * gekennzeichneter Eintrag nicht mitzaehlt — die Monatsliste aller und einer Person (zugleich die
+ * Ueberschneidungspruefung je Person), die Summen fuer Kontingent, Rechnungsvorschlag und {@code
+ * Zeitbindung} und die Auswertungen fuer Startseite und Jahresabschluss. Allein {@code findById}
+ * liefert ihn weiter, und mit seiner Position entfaellt er hart.
  */
 class JpaZeiteintragRepositoryIT extends AbstractIntegrationTest {
 
   private static final Instant ANGELEGT = Instant.parse("2026-11-12T08:00:00Z");
+  private static final Instant GELOESCHT_UM = Instant.parse("2026-11-14T10:00:00Z");
 
   private final JpaZeiteintragRepository repository;
   private final JdbcTemplate jdbc;
@@ -138,16 +145,142 @@ class JpaZeiteintragRepositoryIT extends AbstractIntegrationTest {
     assertThat(gefunden).contains(angelegt);
   }
 
+  /*
+   * Ein Eintrag, den Ben geloescht hat (E17) — gespeichert ueber denselben Weg wie der
+   * Anwendungsfall: Kennzeichen setzen und schreiben.
+   */
+  private Zeiteintrag geloescht(
+      final long positionId, final String tag, final String von, final String bis) {
+    return repository.save(gesichert(positionId, tag, von, bis).geloescht(ben, GELOESCHT_UM));
+  }
+
   @Test
-  void delete_thenTheRowIsGone() {
-    // Given
-    final Zeiteintrag angelegt = gesichert(konzeption, "2026-11-12", "09:00", "10:45");
+  void findById_givenADeletedEntry_thenStillReturnsItWithTheMark() {
+    // Given — E16: der Anwendungsfall braucht Urheber und Zeitpunkt der Loeschung.
+    final Zeiteintrag gekennzeichnet = geloescht(konzeption, "2026-11-12", "09:00", "10:45");
 
     // When
-    repository.delete(angelegt.requireId());
+    final Optional<Zeiteintrag> gefunden = repository.findById(gekennzeichnet.requireId());
 
     // Then
-    assertThat(repository.findById(angelegt.requireId())).isEmpty();
+    assertThat(gefunden)
+        .get()
+        .extracting(Zeiteintrag::geloeschtAm, Zeiteintrag::geloeschtVon)
+        .containsExactly(GELOESCHT_UM, Long.valueOf(ben));
+  }
+
+  @Test
+  void findImZeitraum_givenADeletedEntry_thenLeavesItOut() {
+    // Given — Filterstelle: Monatsliste in der Sicht „Alle".
+    final Zeiteintrag offener = gesichert(konzeption, "2026-11-12", "09:00", "10:00");
+    geloescht(konzeption, "2026-11-12", "10:00", "11:00");
+
+    // When / Then
+    assertThat(repository.findImZeitraum(LocalDate.of(2026, 11, 1), LocalDate.of(2026, 11, 30)))
+        .containsExactly(offener);
+  }
+
+  @Test
+  void findImZeitraumFuerKonto_givenADeletedEntry_thenLeavesItOut() {
+    // Given — Filterstelle: Monatsliste einer Person und Ueberschneidungspruefung je Person (#410).
+    geloescht(konzeption, "2026-11-12", "09:00", "10:00");
+
+    // When / Then
+    assertThat(
+            repository.findImZeitraumFuerKonto(
+                LocalDate.of(2026, 11, 12), LocalDate.of(2026, 11, 12), anna))
+        .isEmpty();
+  }
+
+  @Test
+  void angefallenJePosition_givenADeletedEntry_thenItDoesNotCount() {
+    // Given — Filterstelle: Kontingent, Rechnungsvorschlag und Zeitbindung.
+    gesichert(konzeption, "2026-11-12", "09:00", "10:00");
+    geloescht(konzeption, "2026-11-13", "09:00", "17:00");
+    geloescht(beratung, "2026-11-13", "09:00", "17:00");
+
+    // When
+    final Map<Long, BigDecimal> angefallen =
+        repository.angefallenJePosition(Set.of(konzeption, beratung));
+
+    // Then — die Beratung traegt nur geloeschte Zeit und steht mit 0,00 darin.
+    assertThat(angefallen.get(konzeption)).isEqualByComparingTo("1.00");
+    assertThat(angefallen.get(beratung)).isEqualByComparingTo("0.00");
+  }
+
+  @Test
+  void stundenJePositionImMonat_givenADeletedEntry_thenItDoesNotCount() {
+    // Given — Filterstelle: Vorschlag des Rechnungsentwurfs.
+    gesichert(konzeption, "2026-11-12", "09:00", "10:00");
+    geloescht(konzeption, "2026-11-13", "09:00", "17:00");
+
+    // When / Then
+    assertThat(
+            repository
+                .stundenJePositionImMonat(Set.of(konzeption), YearMonth.of(2026, 11))
+                .get(konzeption))
+        .isEqualByComparingTo("1.00");
+  }
+
+  @Test
+  void alleAngefallenJePosition_givenADeletedEntry_thenItDoesNotCount() {
+    // Given — Filterstelle: Startseite ueber Arbeitszeitauskunft.
+    gesichert(konzeption, "2026-11-12", "09:00", "10:00");
+    geloescht(konzeption, "2026-11-13", "09:00", "17:00");
+    geloescht(beratung, "2026-11-13", "09:00", "17:00");
+
+    // When / Then — die Beratung traegt nur geloeschte Zeit und fehlt.
+    assertThat(repository.alleAngefallenJePosition())
+        .containsOnlyKeys(Long.valueOf(konzeption))
+        .hasEntrySatisfying(
+            Long.valueOf(konzeption), stunden -> assertThat(stunden).isEqualByComparingTo("1.00"));
+  }
+
+  @Test
+  void alleStundenJePositionImZeitraum_givenADeletedEntry_thenItDoesNotCount() {
+    // Given — Filterstelle: Startseite und Jahresabschluss ueber Arbeitszeitauskunft.
+    gesichert(konzeption, "2026-11-12", "09:00", "10:00");
+    geloescht(konzeption, "2026-11-13", "09:00", "17:00");
+    geloescht(beratung, "2026-11-13", "09:00", "17:00");
+
+    // When
+    final Map<Long, BigDecimal> jahr =
+        repository.alleStundenJePositionImZeitraum(
+            LocalDate.of(2026, 1, 1), LocalDate.of(2026, 12, 31));
+
+    // Then
+    assertThat(jahr).containsOnlyKeys(Long.valueOf(konzeption));
+    assertThat(jahr.get(konzeption)).isEqualByComparingTo("1.00");
+  }
+
+  @Test
+  void monateMitEintragImZeitraum_givenOnlyADeletedEntryInAMonth_thenThatMonthIsMissing() {
+    // Given — Filterstelle: Jahresabschluss ueber Arbeitszeitauskunft.
+    gesichert(konzeption, "2026-11-12", "09:00", "10:00");
+    geloescht(konzeption, "2026-12-03", "09:00", "17:00");
+
+    // When / Then
+    assertThat(
+            repository.monateMitEintragImZeitraum(
+                LocalDate.of(2026, 1, 1), LocalDate.of(2026, 12, 31)))
+        .containsExactly(YearMonth.of(2026, 11));
+  }
+
+  @Test
+  void loescheGekennzeichnete_thenRemovesOnlyTheDeletedEntriesOfThePosition() {
+    // Given — E17: ein geloeschter und ein offener Eintrag auf der Konzeption, ein geloeschter auf
+    // der Beratung.
+    final Zeiteintrag offener = gesichert(konzeption, "2026-11-12", "09:00", "10:00");
+    final Zeiteintrag weg = geloescht(konzeption, "2026-11-13", "09:00", "17:00");
+    final Zeiteintrag bleibt = geloescht(beratung, "2026-11-13", "09:00", "17:00");
+
+    // When
+    repository.loescheGekennzeichnete(Set.of(konzeption));
+
+    // Then — nur der geloeschte Eintrag der Konzeption ist fort.
+    assertThat(repository.findById(weg.requireId())).isEmpty();
+    assertThat(repository.findById(offener.requireId())).isPresent();
+    assertThat(repository.findById(bleibt.requireId())).isPresent();
   }
 
   @Test

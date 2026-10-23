@@ -14,8 +14,9 @@ import org.jspecify.annotations.Nullable;
 import org.mwolff.fbcrm.arbeitszeit.domain.Zeiteintrag;
 
 /**
- * Die Zeile der Tabelle {@code arbeitszeit} aus {@code V19__arbeitszeit.sql}, ergaenzt um V32 und
- * um Version und Urheber aus {@code V33__version.sql}.
+ * Die Zeile der Tabelle {@code arbeitszeit} aus {@code V19__arbeitszeit.sql}, ergaenzt um V32, um
+ * Version und Urheber aus {@code V33__version.sql} und um das Loeschkennzeichen aus {@code
+ * V34__geloescht.sql}.
  *
  * <p>Die Angebotsposition steht als blosse Kennung und nicht als Beziehung, aus demselben Grund wie
  * das Angebot in {@code AngebotKommentarEntity}: Eine Beziehung laedt das Angebot mit jeder
@@ -68,6 +69,12 @@ class ZeiteintragEntity {
   @Column(name = "geaendert_von")
   private @Nullable Long geaendertVon;
 
+  @Column(name = "geloescht_am")
+  private @Nullable Instant geloeschtAm;
+
+  @Column(name = "geloescht_von")
+  private @Nullable Long geloeschtVon;
+
   /*
    * JPA verlangt einen parameterlosen Konstruktor und fuellt die Felder danach selbst; NullAway
    * sieht diesen Weg nicht und meldete sonst nicht initialisierte Felder.
@@ -105,6 +112,8 @@ class ZeiteintragEntity {
     this.updatedAt = eintrag.updatedAt();
     this.version = eintrag.version();
     this.geaendertVon = eintrag.geaendertVon();
+    this.geloeschtAm = eintrag.geloeschtAm();
+    this.geloeschtVon = eintrag.geloeschtVon();
   }
 
   @Nullable Long getId() {
@@ -145,5 +154,13 @@ class ZeiteintragEntity {
 
   @Nullable Long getGeaendertVon() {
     return geaendertVon;
+  }
+
+  @Nullable Instant getGeloeschtAm() {
+    return geloeschtAm;
+  }
+
+  @Nullable Long getGeloeschtVon() {
+    return geloeschtVon;
   }
 }

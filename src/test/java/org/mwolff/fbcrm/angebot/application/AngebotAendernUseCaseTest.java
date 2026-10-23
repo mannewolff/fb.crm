@@ -169,12 +169,19 @@ class AngebotAendernUseCaseTest {
    * Dasselbe fuer die Zeitbindung (Issue #228), und wieder ein Doppel: Gefragt wird nur beim
    * Wechsel von der internen Arbeit zum Angebot an einen Kunden. Das Doppel merkt sich jede Frage
    * samt der Kennungen — nur so laesst sich zeigen, dass die uebrigen Wechsel den Port gar nicht
-   * bemuehen, und dass nach den eingereichten Kennungen gefragt wird.
+   * bemuehen, und dass nach den eingereichten Kennungen gefragt wird. Ebenso merkt es sich, fuer
+   * welche entfallenden Positionen geloeschte Zeit abgeraeumt werden soll (Plan #415, E17).
    */
   private static final class Zeitbindungsdoppel implements Zeitbindung {
 
     private final Set<Long> bebucht = new HashSet<>();
     private final List<Set<Long>> gefragt = new ArrayList<>();
+    private final List<Set<Long>> freigegeben = new ArrayList<>();
+
+    @Override
+    public void entferneGeloeschte(final Set<Long> angebotPositionIds) {
+      freigegeben.add(Set.copyOf(angebotPositionIds));
+    }
 
     @Override
     public Set<Long> mitZeit(final Set<Long> angebotPositionIds) {
@@ -742,6 +749,47 @@ class AngebotAendernUseCaseTest {
 
     // Then
     assertThat(geaendert.positionen()).containsExactly(Angebotsdoppel.KONZEPTION);
+  }
+
+  @Test
+  void aendere_droppingAPosition_thenFreesExactlyThatPositionFromDeletedTime() {
+    // Given — Plan #415, E17: Ein geloeschter Zeiteintrag zeigt weiter auf die Schulung; ohne
+    // Freigabe scheiterte das Entfernen am Fremdschluessel.
+    angebotIst(Angebotsdoppel.ohneAnsprechpartner(Angebotsdoppel.angebot(ANGEBOT)));
+
+    // When
+    aendere(daten(null, angaben(Angebotsdoppel.KONZEPTION)));
+
+    // Then
+    assertThat(zeitbindung.freigegeben).containsExactly(Set.of(Angebotsdoppel.SCHULUNG_ID));
+  }
+
+  @Test
+  void aendere_keepingEveryPositionAndAddingANewOne_thenFreesNothing() {
+    // Given — wer keine Position entfernt, bemueht die Zeiterfassung nicht.
+    angebotIst(Angebotsdoppel.ohneAnsprechpartner(Angebotsdoppel.angebot(ANGEBOT)));
+    final List<Positionsangabe> alleUndEineNeue =
+        new ArrayList<>(angaben(Angebotsdoppel.SCHULUNG, Angebotsdoppel.KONZEPTION));
+    alleUndEineNeue.add(ohneKennung(Angebotsdoppel.KONZEPTION_ANGABE));
+
+    // When
+    aendere(daten(null, alleUndEineNeue));
+
+    // Then
+    assertThat(zeitbindung.freigegeben).isEmpty();
+  }
+
+  @Test
+  void aendere_droppingAPositionButRejected_thenFreesNothing() {
+    // Given — eine abgewiesene Aenderung hinterlaesst nichts, auch keine abgeraeumte Zeit.
+    angebotIst(Angebotsdoppel.ohneAnsprechpartner(Angebotsdoppel.angebot(ANGEBOT)));
+    inEinerRechnung(Angebotsdoppel.KONZEPTION_ID);
+    final AngebotDaten aenderung = daten(null, angaben(Angebotsdoppel.SCHULUNG));
+
+    // When / Then
+    assertThatThrownBy(() -> useCase.aendere(ANGEBOT, aenderung))
+        .isInstanceOf(PositionInRechnungVerwendet.class);
+    assertThat(zeitbindung.freigegeben).isEmpty();
   }
 
   @Test

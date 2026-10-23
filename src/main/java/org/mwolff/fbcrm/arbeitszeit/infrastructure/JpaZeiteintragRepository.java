@@ -18,7 +18,9 @@ import org.springframework.stereotype.Repository;
  *
  * <p>Jeder Zeiteintrag ist eine Zeile fuer sich: Anlegen, Fortschreiben und Loeschen gehen einzeln,
  * wie beim Kommentar am Angebot und anders als bei den Positionen eines Belegs. Die Zeile entsteht
- * aus dem Fachobjekt ({@code ZeiteintragEntity.aus}, Plan #426, E2).
+ * aus dem Fachobjekt ({@code ZeiteintragEntity.aus}, Plan #426, E2). Geloescht wird seit Plan #415
+ * (E17) mit Kennzeichen an der Zeile; jede Abfrage ausser {@code findById} laesst gekennzeichnete
+ * Zeilen aus.
  *
  * <p><b>Die Summen rechnet der Adapter, nicht die Datenbank.</b> Beide Abfragen holen die Zeilen
  * der angefragten Positionen, und addiert werden die <i>Minuten</i> der Eintraege; erst die Summe
@@ -35,9 +37,9 @@ import org.springframework.stereotype.Repository;
  *
  * <p>Die beiden Summen ueber <b>alle</b> Angebote (Issue #211) gehen durch denselben Summierer, nur
  * mit leerer Vorbelegung: Es gibt keine angefragte Position, also steht am Ende genau die darin, zu
- * der eine Zeile gefunden wurde. Sie brauchen auch keine eigene Abfrage — die Zeilen liefern {@code
- * findAll} beziehungsweise das vorhandene {@code findImZeitraum}, das schon die Monatsliste der
- * Ansicht bedient; dessen Grenzen gehen unveraendert durch.
+ * der eine Zeile gefunden wurde. Die Zeilen liefern {@code findAlleOffenen} — {@code findAll}
+ * truege auch geloeschte — beziehungsweise das vorhandene {@code findImZeitraum}, das schon die
+ * Monatsliste der Ansicht bedient; dessen Grenzen gehen unveraendert durch.
  *
  * <p>Die Monate mit Eintrag (Plan #274, E6) lesen dieselben Zeilen ueber {@code findImZeitraum} und
  * behalten von jeder nur ihren Monat — auch dafuer keine eigene Abfrage.
@@ -90,8 +92,8 @@ class JpaZeiteintragRepository implements ZeiteintragRepository {
   }
 
   @Override
-  public void delete(final long id) {
-    zeilen.deleteById(id);
+  public void loescheGekennzeichnete(final Set<Long> angebotPositionIds) {
+    zeilen.loescheGekennzeichnete(List.copyOf(angebotPositionIds));
   }
 
   @Override
@@ -111,7 +113,7 @@ class JpaZeiteintragRepository implements ZeiteintragRepository {
 
   @Override
   public Map<Long, BigDecimal> alleAngefallenJePosition() {
-    return stundenJePosition(Set.of(), zeilen.findAll());
+    return stundenJePosition(Set.of(), zeilen.findAlleOffenen());
   }
 
   @Override
@@ -154,6 +156,8 @@ class JpaZeiteintragRepository implements ZeiteintragRepository {
         zeile.getCreatedAt(),
         zeile.getUpdatedAt(),
         zeile.getVersion(),
-        zeile.getGeaendertVon());
+        zeile.getGeaendertVon(),
+        zeile.getGeloeschtAm(),
+        zeile.getGeloeschtVon());
   }
 }

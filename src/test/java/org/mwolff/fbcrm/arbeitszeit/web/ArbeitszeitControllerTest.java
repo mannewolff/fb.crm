@@ -3,6 +3,7 @@ package org.mwolff.fbcrm.arbeitszeit.web;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.nullValue;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -42,6 +43,7 @@ import org.mwolff.fbcrm.arbeitszeit.application.UhrzeitNichtImRaster;
 import org.mwolff.fbcrm.arbeitszeit.application.WaehlbarePerson;
 import org.mwolff.fbcrm.arbeitszeit.application.Zeitbuchung;
 import org.mwolff.fbcrm.arbeitszeit.application.ZeiteintragGeaendert;
+import org.mwolff.fbcrm.arbeitszeit.application.ZeiteintragGeloescht;
 import org.mwolff.fbcrm.arbeitszeit.application.ZeiteintragNichtGefunden;
 import org.mwolff.fbcrm.arbeitszeit.application.ZeiteintragUseCase;
 import org.mwolff.fbcrm.arbeitszeit.domain.Zeiteintrag;
@@ -164,7 +166,9 @@ class ArbeitszeitControllerTest {
         ANGELEGT,
         ANGELEGT,
         version,
-        Long.valueOf(ANGEMELDET));
+        Long.valueOf(ANGEMELDET),
+        null,
+        null);
   }
 
   private static Zeiteintrag eintragVon(final long accountId) {
@@ -407,10 +411,82 @@ class ArbeitszeitControllerTest {
   }
 
   @Test
-  void loeschen_thenAnswers204AndDelegates() throws Exception {
+  void loeschen_thenAnswers204AndDelegatesWithTheStand() throws Exception {
+    // When / Then — Plan #415, E2, E17: der vorgelegte Stand geht mit dem Konto weiter.
+    mockMvc
+        .perform(
+            delete(PFAD_EINZELN, Long.valueOf(EINTRAG)).header(HttpHeaders.IF_MATCH, VORGELEGT))
+        .andExpect(status().isNoContent());
+    verify(useCase).loeschen(ANGEMELDET, EINTRAG, STAND);
+  }
+
+  @Test
+  void loeschen_withoutIfMatch_thenAnswers428AndDeletesNothing() throws Exception {
+    // When / Then — E3: ohne vorgelegten Stand wird nicht geloescht.
+    mockMvc
+        .perform(delete(PFAD_EINZELN, Long.valueOf(EINTRAG)))
+        .andExpect(status().isPreconditionRequired())
+        .andExpect(jsonPath("$.detail").value(Bedingungskopf.MELDUNG));
+    verifyNoInteractions(useCase);
+  }
+
+  @Test
+  void loeschen_withAnOutdatedStand_thenAnswers409WithTheConflict() throws Exception {
+    // Given — #411, Kriterium 6: Anna hat den Eintrag inzwischen geaendert.
+    doThrow(new ZeiteintragGeaendert(ANNA, ANGEMELDET, VORHIN))
+        .when(useCase)
+        .loeschen(ANGEMELDET, EINTRAG, STAND);
+
     // When / Then
-    mockMvc.perform(delete(PFAD_EINZELN, Long.valueOf(EINTRAG))).andExpect(status().isNoContent());
-    verify(useCase).loeschen(ANGEMELDET, EINTRAG);
+    mockMvc
+        .perform(
+            delete(PFAD_EINZELN, Long.valueOf(EINTRAG)).header(HttpHeaders.IF_MATCH, VORGELEGT))
+        .andExpect(status().isConflict())
+        .andExpect(jsonPath("$.konflikt.art").value("veraltet"))
+        .andExpect(jsonPath("$.konflikt.geaendertVon").value("Anna"))
+        .andExpect(jsonPath("$.konflikt.geaendertAm").value("2026-11-12T09:12:00Z"));
+  }
+
+  @Test
+  void loeschen_onADeletedEntry_thenAnswers409WithArtGeloescht() throws Exception {
+    // Given — E16: Anna hat den Eintrag schon geloescht.
+    doThrow(new ZeiteintragGeloescht(ANNA, ANGEMELDET, VORHIN))
+        .when(useCase)
+        .loeschen(ANGEMELDET, EINTRAG, STAND);
+
+    // When / Then
+    mockMvc
+        .perform(
+            delete(PFAD_EINZELN, Long.valueOf(EINTRAG)).header(HttpHeaders.IF_MATCH, VORGELEGT))
+        .andExpect(status().isConflict())
+        .andExpect(jsonPath("$.konflikt.art").value("gelöscht"))
+        .andExpect(jsonPath("$.konflikt.geaendertVon").value("Anna"))
+        .andExpect(jsonPath("$.konflikt.geaendertAm").value("2026-11-12T09:12:00Z"));
+  }
+
+  @Test
+  void aendern_onADeletedEntry_thenAnswers409WithArtGeloescht() throws Exception {
+    // Given — E16: Speichern auf einen geloeschten Eintrag legt nichts neu an.
+    when(useCase.aendern(
+            ANGEMELDET,
+            EINTRAG,
+            STAND,
+            OHNE_PERSON,
+            POSITION,
+            TAG,
+            LocalTime.of(9, 0),
+            LocalTime.of(10, 45)))
+        .thenThrow(new ZeiteintragGeloescht(ANNA, ANGEMELDET, VORHIN));
+
+    // When / Then
+    mockMvc
+        .perform(
+            put(PFAD_EINZELN, Long.valueOf(EINTRAG))
+                .header(HttpHeaders.IF_MATCH, VORGELEGT)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(RUMPF))
+        .andExpect(status().isConflict())
+        .andExpect(jsonPath("$.konflikt.art").value("gelöscht"));
   }
 
   @Test

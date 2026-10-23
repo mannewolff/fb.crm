@@ -379,10 +379,17 @@ describe('zeiteintragAendern', () => {
 });
 
 describe('zeiteintragLoeschen', () => {
-  it('loescht und erwartet keine Antwort mit Inhalt', async () => {
+  it('loescht auf dem vorgelegten Stand und erwartet keine Antwort mit Inhalt', async () => {
     const aufruf = fetchNachPfad({ 'DELETE /api/arbeitszeit/7': leer(204) });
 
-    await expect(zeiteintragLoeschen(7)).resolves.toBeUndefined();
+    await expect(zeiteintragLoeschen(7, 3)).resolves.toBeUndefined();
     expect(aufruf).toHaveBeenCalledTimes(1);
+    // Plan #415, E2, E17: der Stand geht als starkes Etikett im Kopf If-Match mit.
+    expect(aufruf).toHaveBeenCalledWith(
+      '/api/arbeitszeit/7',
+      expect.objectContaining({
+        headers: expect.objectContaining({ 'If-Match': '"3"' }) as unknown,
+      }),
+    );
   });
 });

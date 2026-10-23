@@ -73,7 +73,8 @@ gilt es beim Speichern der Einstellungen zur Rechnung, bei den Eigenen Angaben i
 „Briefpapier" beim Hochladen, Ersetzen und Entfernen des Briefpapiers und bei „Einstellungen
 speichern". Bei Firmen und Ansprechpartnern gilt es beim Speichern in den Masken „Firma
 bearbeiten" und „Ansprechpartner bearbeiten" und bei „Stilllegen" und „Wieder aktivieren". In der
-Arbeitszeit gilt es beim Speichern im Dialog „Arbeitszeit ändern". Das
+Arbeitszeit gilt es beim Speichern im Dialog „Arbeitszeit ändern" und beim Löschen eines Eintrags.
+Das
 Angebot zählt dabei als Ganzes, mit seinen Positionen und seinem Status; jeder Kommentar ist ein
 Eintrag für sich.
 
@@ -183,6 +184,16 @@ lädt dabei mit. Hat der andere den Eintrag inzwischen in einen anderen Monat od
 Person gegeben, sagt der Dialog das; dann schließt man ihn und öffnet den Eintrag in der Liste neu,
 die eigenen Werte stehen bis dahin unter „Deine Eingaben" zum Kopieren. Eine neue Arbeitszeit erfasst
 man mit „Zeit erfassen" immer ohne Rückfrage.
+
+„Löschen" im Menü ⋯ einer Zeile der Arbeitszeit löscht nur den Eintrag, den man in der Liste gesehen
+hat: Hat ihn ein anderer seither geändert, bleibt er stehen, und die Meldung über der Liste nennt
+die Änderung; „Neu laden" holt den Monat. Ist der Eintrag inzwischen gelöscht — von einem anderen
+oder von einem selbst in einem anderen Fenster —, wird jede Aktion daran abgewiesen, Speichern wie
+Löschen, und es entsteht nichts neu. Die Meldung nennt, wer ihn wann gelöscht hat, und „Zur
+Übersicht" führt zurück zur Liste der Arbeitszeit, die dann frisch geladen ist; im Dialog
+„Arbeitszeit ändern" schließt sich der Dialog dabei. Ein gelöschter Eintrag zählt nirgends mehr
+mit — weder in der Monatsliste noch in den Stunden am Angebot, im Vorschlag einer Rechnung, auf der
+Startseite oder im Jahresabschluss —, und seine Zeit ist für einen neuen Eintrag wieder frei.
 
 **Ergebnis:** Angebot und Rechnung tragen die Änderungen beider, und keine ist unbemerkt verloren
 gegangen.

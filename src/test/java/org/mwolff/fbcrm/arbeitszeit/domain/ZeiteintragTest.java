@@ -21,6 +21,9 @@ import org.junit.jupiter.params.provider.ValueSource;
  *
  * <p>Seit Plan #426 (E1, E8) gehoert jeder Eintrag einer Person: Ueberschneiden koennen sich nur
  * zwei Eintraege desselben Kontos, zwei Personen duerfen zur selben Zeit arbeiten.
+ *
+ * <p>Seit Plan #415 (E14, E17) traegt er den Urheber der letzten Aenderung und das Kennzeichen der
+ * Loeschung; beide Schritte lassen den uebrigen Stand stehen.
  */
 class ZeiteintragTest {
 
@@ -231,5 +234,61 @@ class ZeiteintragTest {
     assertThatThrownBy(() -> eintrag("09:00", "09:00"))
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessageContaining("nach");
+  }
+
+  @Test
+  void neu_thenNeitherChangedNorDeleted() {
+    // When
+    final Zeiteintrag neu = eintrag("09:00", "10:00");
+
+    // Then
+    assertThat(neu)
+        .extracting(
+            Zeiteintrag::version,
+            Zeiteintrag::geaendertVon,
+            Zeiteintrag::geloeschtAm,
+            Zeiteintrag::geloeschtVon)
+        .containsExactly(0L, null, null, null);
+  }
+
+  @Test
+  void geloescht_thenRecordsTimeAndAccountAndKeepsTheRest() {
+    // Given — Plan #415, E17: Ben hat den Eintrag geaendert, Manfred loescht ihn.
+    final Instant geloescht = Instant.parse("2026-11-13T10:00:00Z");
+    final Zeiteintrag geaendert = eintrag("09:00", "10:00").durch(BEN);
+
+    // When
+    final Zeiteintrag gekennzeichnet = geaendert.geloescht(1L, geloescht);
+
+    // Then
+    assertThat(gekennzeichnet)
+        .isEqualTo(
+            new Zeiteintrag(
+                null,
+                ANNA,
+                POSITION,
+                TAG,
+                LocalTime.of(9, 0),
+                LocalTime.of(10, 0),
+                ANGELEGT,
+                ANGELEGT,
+                0L,
+                Long.valueOf(BEN),
+                geloescht,
+                Long.valueOf(1L)));
+  }
+
+  @Test
+  void durch_onADeletedEntry_thenKeepsTheMark() {
+    // Given
+    final Instant geloescht = Instant.parse("2026-11-13T10:00:00Z");
+
+    // When
+    final Zeiteintrag weiter = eintrag("09:00", "10:00").geloescht(1L, geloescht).durch(BEN);
+
+    // Then
+    assertThat(weiter)
+        .extracting(Zeiteintrag::geaendertVon, Zeiteintrag::geloeschtAm, Zeiteintrag::geloeschtVon)
+        .containsExactly(Long.valueOf(BEN), geloescht, Long.valueOf(1L));
   }
 }

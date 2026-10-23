@@ -38,6 +38,11 @@ import org.mwolff.fbcrm.common.Identifiable;
  * korrigiert (#410). Den Zaehler fuehrt der Bestand; {@link #durch(long)} haelt fest, wer zuletzt
  * geaendert hat.
  *
+ * <p><b>Geloescht wird mit Kennzeichen</b> (Plan #415, E16, E17): {@link #geloescht(long, Instant)}
+ * haelt Zeitpunkt und Konto der Loeschung fest, damit ein spaeterer Zugriff beides nennen kann. Aus
+ * jedem Leseweg und jeder Summe faellt ein gekennzeichneter Eintrag heraus; das filtert der
+ * Bestand.
+ *
  * @param id technische Kennung — {@code null}, solange der Eintrag nicht gespeichert ist
  * @param accountId Kennung des Kontos, dem der Eintrag gehoert
  * @param angebotPositionId Kennung der Angebotsposition, auf die gebucht wurde
@@ -50,6 +55,9 @@ import org.mwolff.fbcrm.common.Identifiable;
  *     dem ersten Schreiben, danach fuehrt ihn der Bestand
  * @param geaendertVon Kennung des Kontos, das den Eintrag zuletzt geaendert hat, oder {@code null},
  *     solange er nie geaendert wurde
+ * @param geloeschtAm Zeitpunkt der Loeschung, oder {@code null} fuer einen bestehenden Eintrag
+ *     (E17)
+ * @param geloeschtVon Kennung des Kontos, das den Eintrag geloescht hat, oder {@code null}
  */
 public record Zeiteintrag(
     @Nullable Long id,
@@ -61,7 +69,9 @@ public record Zeiteintrag(
     Instant createdAt,
     Instant updatedAt,
     long version,
-    @Nullable Long geaendertVon)
+    @Nullable Long geaendertVon,
+    @Nullable Instant geloeschtAm,
+    @Nullable Long geloeschtVon)
     implements Identifiable {
 
   /** Die Schrittweite der Erfassung in Minuten (Issue #193, Antwort 6). */
@@ -85,7 +95,7 @@ public record Zeiteintrag(
   }
 
   /**
-   * Ein Eintrag, der nie geaendert wurde — so entsteht jeder neue.
+   * Ein Eintrag, der nie geaendert und nie geloescht wurde — so entsteht jeder neue.
    *
    * @param id technische Kennung, oder {@code null} vor dem Speichern
    * @param accountId Kennung des Kontos, dem der Eintrag gehoert
@@ -105,7 +115,19 @@ public record Zeiteintrag(
       final LocalTime bis,
       final Instant createdAt,
       final Instant updatedAt) {
-    this(id, accountId, angebotPositionId, tag, von, bis, createdAt, updatedAt, 0L, null);
+    this(
+        id,
+        accountId,
+        angebotPositionId,
+        tag,
+        von,
+        bis,
+        createdAt,
+        updatedAt,
+        0L,
+        null,
+        null,
+        null);
   }
 
   /**
@@ -119,7 +141,43 @@ public record Zeiteintrag(
    */
   public Zeiteintrag durch(final long konto) {
     return new Zeiteintrag(
-        id, accountId, angebotPositionId, tag, von, bis, createdAt, updatedAt, version, konto);
+        id,
+        accountId,
+        angebotPositionId,
+        tag,
+        von,
+        bis,
+        createdAt,
+        updatedAt,
+        version,
+        konto,
+        geloeschtAm,
+        geloeschtVon);
+  }
+
+  /**
+   * Der Eintrag mit dem Kennzeichen der Loeschung (Plan #415, E17).
+   *
+   * <p>Person, Position, Zeiten und Urheber der letzten Aenderung bleiben an der Zeile; nur
+   * Zeitpunkt und Konto der Loeschung kommen hinzu.
+   *
+   * @param konto Kennung des loeschenden Kontos
+   * @param zeitpunkt Zeitpunkt der Loeschung
+   */
+  public Zeiteintrag geloescht(final long konto, final Instant zeitpunkt) {
+    return new Zeiteintrag(
+        id,
+        accountId,
+        angebotPositionId,
+        tag,
+        von,
+        bis,
+        createdAt,
+        updatedAt,
+        version,
+        geaendertVon,
+        zeitpunkt,
+        konto);
   }
 
   /**

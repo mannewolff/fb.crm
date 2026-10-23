@@ -13,8 +13,14 @@ import java.util.Set;
  * arbeitszeit.infrastructure}.
  *
  * <p>Jeder Zeiteintrag ist eine Zeile fuer sich — wie der Kommentar am Angebot und anders als die
- * Positionen eines Belegs: Er traegt seine eigene Kennung und wird einzeln angelegt,
- * fortgeschrieben und geloescht (Plan #194, A3).
+ * Positionen eines Belegs: Er traegt seine eigene Kennung und wird einzeln angelegt und
+ * fortgeschrieben (Plan #194, A3).
+ *
+ * <p><b>Geloescht wird mit Kennzeichen</b> (Plan #415, E17): Der Anwendungsfall schreibt den
+ * gekennzeichneten Eintrag mit {@link #save(Zeiteintrag)}. Jeder Leseweg und jede Summe laesst ihn
+ * danach aus; allein {@link #findById(long)} liefert ihn weiter, damit eine Aktion darauf Urheber
+ * und Zeitpunkt der Loeschung nennen kann (E16). Hart entfernt werden gekennzeichnete Eintraege nur
+ * noch mit ihrer Position ({@link #loescheGekennzeichnete(Set)}).
  *
  * <p><b>Vier Summen in zwei Paaren und ein fuenfter Weg ohne Stunden.</b> Die vier Summen liefern
  * Stunden je Angebotsposition, und keine fragt je Zeile einmal — dasselbe Muster wie {@code
@@ -47,7 +53,11 @@ import java.util.Set;
  */
 public interface ZeiteintragRepository {
 
-  /** Der Zeiteintrag zu einer technischen Kennung, oder leer. */
+  /**
+   * Der Zeiteintrag zu einer technischen Kennung, oder leer — auch ein gekennzeichneter (E16).
+   *
+   * @param id Kennung des Zeiteintrags
+   */
   Optional<Zeiteintrag> findById(long id);
 
   /**
@@ -88,15 +98,15 @@ public interface ZeiteintragRepository {
   Zeiteintrag save(Zeiteintrag zeiteintrag);
 
   /**
-   * Loescht den Zeiteintrag — die Zeile ist danach fort.
+   * Entfernt die gekennzeichneten Eintraege auf den genannten Positionen hart (Plan #415, E17).
    *
-   * <p>Loeschen ist immer erlaubt, auch an einem schon abgerechneten Angebot (Plan #194, A7): Wer
-   * sich verschrieben hat, soll den Fehler wegnehmen koennen. Dass der Eintrag existiert, prueft
-   * der Anwendungsfall; eine unbekannte Kennung ist hier kein Fehler.
+   * <p>Der Leser ist das Angebot, wenn es Positionen entfernt: Ein gekennzeichneter Eintrag zeigt
+   * weiter ohne {@code ON DELETE} auf seine Position und sperrte sie sonst fuer immer. Ein nicht
+   * geloeschter Eintrag bleibt stehen und haelt seine Position weiter fest.
    *
-   * @param id Kennung des Zeiteintrags
+   * @param angebotPositionIds die Kennungen der Positionen, die entfallen
    */
-  void delete(long id);
+  void loescheGekennzeichnete(Set<Long> angebotPositionIds);
 
   /**
    * Die insgesamt erfassten Stunden je Angebotsposition (Issue #193, Kriterium 7).

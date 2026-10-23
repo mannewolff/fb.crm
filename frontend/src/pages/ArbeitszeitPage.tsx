@@ -5,7 +5,7 @@ import Typography from '@mui/material/Typography';
 import { IconChevronLeft, IconChevronRight, IconClockPlus, IconTrash } from '@tabler/icons-react';
 import { Fragment, useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useLocation, useSearchParams } from 'react-router-dom';
 
 import { ALLE, arbeitszeitMonat, personen, zeiteintragLoeschen } from '../api/arbeitszeit';
 import type {
@@ -21,6 +21,7 @@ import InternChip from '../components/InternChip';
 import Karte from '../components/Karte';
 import { useKopfPfad } from '../components/KopfPfad';
 import type { PfadVerweis } from '../components/KopfPfad';
+import Konfliktmeldung from '../components/Konfliktmeldung';
 import KupferTaste from '../components/KupferTaste';
 import Tafel, { type TafelSpalte } from '../components/Tafel';
 import { rundeIcontaste } from '../components/rundeIcontaste';
@@ -33,6 +34,7 @@ import {
   vormonat,
   zeitspanneWort,
 } from '../lib/arbeitszeit';
+import { istBearbeitungskonflikt } from '../lib/apifehler';
 import { tagWort } from '../lib/tag';
 import { ABSTAND_BUEHNE, ZAHLEN_KLASSE } from '../theme';
 
@@ -78,6 +80,14 @@ import { ABSTAND_BUEHNE, ZAHLEN_KLASSE } from '../theme';
  * Monatsliste traegt ihn je Eintrag, der Dialog legt ihn vor und zeigt eine Abweisung samt „Neu
  * laden" und den eigenen Eingaben selbst. Holt er dabei einen neuen Stand, laedt auch die Liste
  * dahinter neu.
+ *
+ * <b>Das Loeschen legt den Stand der Zeile ebenso vor</b> (#411, Kriterium 6; Plan #415, E16, E17).
+ * Hat jemand den Eintrag inzwischen geaendert, zeigt die {@link Konfliktmeldung} ueber der Liste,
+ * wer wann, und „Neu laden" holt den Monat. Ist er inzwischen geloescht, fuehrt statt dessen „Zur
+ * Übersicht" zurueck — hier ist das die Liste selbst. <b>Jede Navigation beginnt die Ansicht
+ * neu</b>: Sie raeumt Meldung und Dialog ab und laedt den Monat, auch wenn das Ziel dieselbe
+ * Adresse ist. So fuehrt „Zur Übersicht" aus der Meldung der Liste wie aus dem Dialog zu einem
+ * frischen Stand. Eigene Eingaben gibt es beim Loeschen keine — es hat kein Formular.
  *
  * <b>Nach jeder Schreibung laedt der Monat neu</b> (`runde`), statt die Liste hier
  * fortzuschreiben: Tagessummen und Monatssumme rechnet der Server, und ein Eintrag kann den Monat
@@ -560,8 +570,17 @@ export default function ArbeitszeitPage() {
   const [personenliste, setzePersonenliste] = useState<readonly Person[] | null>(null);
   const [maske, setzeMaske] = useState<Maske | null>(null);
   const [loeschfehler, setzeLoeschfehler] = useState<string | null>(null);
+  /** Die Abweisung eines Loeschens auf altem Stand, ungeprueft — die Konfliktmeldung liest sie. */
+  const [abweisung, setzeAbweisung] = useState<unknown>(null);
   /** Jede Schreibung zaehlt eine Runde weiter — der Effekt holt den Monat dann erneut. */
   const [runde, setzeRunde] = useState(0);
+  const ort = useLocation();
+
+  useEffect(() => {
+    // Eine Navigation — auch „Zur Übersicht" auf dieselbe Adresse — beginnt die Ansicht neu.
+    setzeAbweisung(null);
+    setzeMaske(null);
+  }, [ort.key]);
 
   useEffect(() => {
     let gueltig = true;
@@ -575,7 +594,7 @@ export default function ArbeitszeitPage() {
     return () => {
       gueltig = false;
     };
-  }, [monat, auswahl, runde]);
+  }, [monat, auswahl, runde, ort.key]);
 
   useEffect(() => {
     // Ein Employee bekommt keinen Umschalter und fragt darum auch keine Personen.
@@ -609,18 +628,30 @@ export default function ArbeitszeitPage() {
   };
   const neuLaden = () => {
     setzeLoeschfehler(null);
+    setzeAbweisung(null);
     setzeRunde((alt) => alt + 1);
   };
 
+  /**
+   * Loescht den Eintrag auf dem Stand der Zeile (#411, Kriterium 6; Plan #415, E17).
+   *
+   * Hat inzwischen jemand anderes geaendert oder geloescht, bleibt die Liste stehen, und die
+   * {@link Konfliktmeldung} sagt, was geschehen ist.
+   */
   const loeschen = async (zeile: Zeitzeile) => {
+    setzeLoeschfehler(null);
+    setzeAbweisung(null);
     try {
-      await zeiteintragLoeschen(zeile.id);
+      await zeiteintragLoeschen(zeile.id, zeile.version);
       neuLaden();
-    } catch {
-      // Ein eigener Satz und nicht die Meldung des Servers: Das Loeschen hat keine fachliche
-      // Abweisung, die er begruenden koennte — was hier ankommt, ist ein Ausfall (wie
-      // {@link Kommentare}).
-      setzeLoeschfehler(AUSFALL_LOESCHEN);
+    } catch (ursache) {
+      if (istBearbeitungskonflikt(ursache)) {
+        setzeAbweisung(ursache);
+      } else {
+        // Ein eigener Satz und nicht die Meldung des Servers: Was hier ankommt, ist ein Ausfall
+        // (wie {@link Kommentare}).
+        setzeLoeschfehler(AUSFALL_LOESCHEN);
+      }
     }
   };
 
@@ -668,6 +699,11 @@ export default function ArbeitszeitPage() {
       >
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
           {loeschfehler === null ? null : <Alert severity="error">{loeschfehler}</Alert>}
+          <Konfliktmeldung
+            ursache={abweisung}
+            onNeuLaden={neuLaden}
+            uebersicht={`${ort.pathname}${ort.search}`}
+          />
           {inhaltZu(
             stand,
             darfFachlichSchreiben

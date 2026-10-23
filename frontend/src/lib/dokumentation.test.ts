@@ -359,6 +359,10 @@ describe('Szenarien des Fachplans (E16)', () => {
     // Das Aendern eines Zeiteintrags ist geschuetzt, das Erfassen bleibt frei (Issue #452).
     expect(text).toMatch(/Dialog „Arbeitszeit ändern"/u);
     expect(text).toMatch(/Eine neue Arbeitszeit erfasst\s+man mit „Zeit erfassen" immer ohne Rückfrage/u);
+    // Ein geloeschter Zeiteintrag weist jede Aktion ab und zaehlt nirgends mehr (Issue #453).
+    expect(text).toMatch(/„Löschen" im Menü ⋯ einer Zeile der Arbeitszeit löscht nur den Eintrag/u);
+    expect(text).toMatch(/„Zur\s+Übersicht" führt zurück zur Liste der Arbeitszeit/u);
+    expect(text).toMatch(/seine Zeit ist für einen neuen Eintrag wieder frei/u);
     expect(text).toMatch(/\*\*Ergebnis:\*\*/u);
   });
 

@@ -1,6 +1,7 @@
 package org.mwolff.fbcrm.arbeitszeit.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
@@ -25,6 +26,9 @@ import org.mwolff.fbcrm.arbeitszeit.domain.ZeiteintragRepository;
  *
  * <p>Die leere Anfrage ist der zweite Gegenstand: Ein Angebot, dessen Positionen alle neu sind, hat
  * keine Kennung zu fragen — und dann wird der Bestand gar nicht bemueht.
+ *
+ * <p>Der dritte: Bevor das Angebot Positionen entfernt, raeumt der Port die geloeschten Eintraege
+ * darauf hart ab (Plan #415, E17) — und zwar ueber den Bestand, mit genau diesen Positionen.
  */
 @ExtendWith(MockitoExtension.class)
 class AngebotZeitbindungTest {
@@ -66,5 +70,17 @@ class AngebotZeitbindungTest {
     // Then
     assertThat(mitZeit).isEmpty();
     verifyNoInteractions(zeiten);
+  }
+
+  @Test
+  void entferneGeloeschte_thenAsksTheBestandToRemoveTheMarkedEntriesOfThesePositions() {
+    // Given
+    final Set<Long> entfallend = Set.of(Long.valueOf(Zeitdoppel.KONZEPTION_ID));
+
+    // When
+    new AngebotZeitbindung(zeiten).entferneGeloeschte(entfallend);
+
+    // Then
+    verify(zeiten).loescheGekennzeichnete(entfallend);
   }
 }

@@ -37,11 +37,13 @@ import org.springframework.transaction.annotation.Transactional;
  *   <li>Aendern und Loeschen lesen den Eintrag und weisen ihn als nicht gefunden ab, wenn er dem
  *       anfragenden Konto nicht gehoert und dieses nicht C-Level ist (E7): Eine 403 bestaetigte
  *       einem Employee, dass es die Kennung gibt.
- *   <li>Beim Aendern der vorgelegte Stand (#411, Kriterien 1 und 4; Plan #415, E1, E14): Weicht er
- *       vom Stand des Eintrags ab, wird mit {@link ZeiteintragGeaendert} abgewiesen, vor jeder
- *       fachlichen Pruefung und bevor etwas geschrieben wird — auch wenn ein C-Level einen fremden
- *       Eintrag korrigiert. Erst nach der Rechtepruefung: Einem Konto, das den Eintrag nicht sehen
- *       darf, verriete ein Konflikt Urheber und Zeitpunkt.
+ *   <li>Beim Aendern und Loeschen das Kennzeichen, dann der vorgelegte Stand (#411, Kriterien 1, 4
+ *       und 6; Plan #415, E1, E14, E16, E17): Ist der Eintrag inzwischen geloescht, wird mit {@link
+ *       ZeiteintragGeloescht} samt Urheber und Zeitpunkt der Loeschung abgewiesen; weicht der Stand
+ *       ab, mit {@link ZeiteintragGeaendert}. Beides vor jeder fachlichen Pruefung und bevor etwas
+ *       geschrieben wird — auch wenn ein C-Level einen fremden Eintrag korrigiert. Erst nach der
+ *       Rechtepruefung: Einem Konto, das den Eintrag nicht sehen darf, verriete ein Konflikt
+ *       Urheber und Zeitpunkt.
  *   <li>Die Person bestimmen und als waehlbar pruefen (E12). Beim Anlegen heisst eine fehlende
  *       Angabe „gehoert dem anfragenden Konto", beim Aendern „der Eigentuemer bleibt, der er ist" —
  *       ein Aendern ohne Angabe haengt einen fremden Eintrag nie um. Geprueft wird nur eine Person,
@@ -164,6 +166,7 @@ public class ZeiteintragUseCase {
    * @throws UnknownAccount wenn es das anfragende Konto nicht mehr gibt
    * @throws ZeiteintragNichtGefunden wenn es den Eintrag nicht gibt, er dem anfragenden Konto nicht
    *     gehoert und dieses nicht C-Level ist, oder das anfragende Konto ReadOnly ist
+   * @throws ZeiteintragGeloescht wenn der Eintrag inzwischen geloescht ist (Plan #415, E16)
    * @throws ZeiteintragGeaendert wenn der Eintrag inzwischen einen anderen Stand hat
    * @throws PersonNichtWaehlbar wenn die genannte Person von der bisherigen abweicht und das
    *     anfragende Konto den Eintrag nicht auf sie umhaengen darf
@@ -184,13 +187,7 @@ public class ZeiteintragUseCase {
       final LocalTime von,
       final LocalTime bis) {
     final Account anfragend = aktuellesKonto.byId(accountId);
-    final Zeiteintrag vorhandener = schreibbarer(anfragend, id);
-    Bearbeitungskonflikt.pruefe(
-        version,
-        vorhandener.version(),
-        () ->
-            new ZeiteintragGeaendert(
-                vorhandener.geaendertVon(), accountId, vorhandener.updatedAt()));
+    final Zeiteintrag vorhandener = offener(anfragend, id, version);
     final long eigentuemer = person(anfragend, person, vorhandener.accountId());
     pruefeZeiten(von, bis);
     if (angebotPositionId != vorhandener.angebotPositionId()) {
@@ -207,39 +204,61 @@ public class ZeiteintragUseCase {
                 vorhandener.createdAt(),
                 clock.instant(),
                 vorhandener.version(),
-                vorhandener.geaendertVon())
+                vorhandener.geaendertVon(),
+                vorhandener.geloeschtAm(),
+                vorhandener.geloeschtVon())
             .durch(accountId));
   }
 
   /**
-   * Loescht den Zeiteintrag — die Zeile ist danach fort (A5, Antwort 4).
+   * Loescht den Zeiteintrag mit Kennzeichen (A5, Antwort 4; Plan #415, E17): Die Zeile bleibt mit
+   * Zeitpunkt und Konto der Loeschung und faellt aus jedem Leseweg und jeder Summe.
    *
    * <p>Ohne Blick in das Angebot: Loeschen ist immer erlaubt, auch an einem schon abgerechneten —
-   * fuer den Eigentuemer und fuer ein C-Level (Plan #426, E7).
+   * fuer den Eigentuemer und fuer ein C-Level (Plan #426, E7). Es beruht auf dem vorgelegten Stand
+   * (#411, Kriterium 6).
    *
-   * @param accountId Kennung des anfragenden Kontos
+   * @param accountId Kennung des anfragenden Kontos — zugleich der Urheber der Loeschung (E14)
    * @param id Kennung des Eintrags
+   * @param version der vorgelegte Stand aus {@code If-Match} (Plan #415, E2)
    * @throws UnknownAccount wenn es das anfragende Konto nicht mehr gibt
    * @throws ZeiteintragNichtGefunden wenn es den Eintrag nicht gibt, er dem anfragenden Konto nicht
    *     gehoert und dieses nicht C-Level ist, oder das anfragende Konto ReadOnly ist
+   * @throws ZeiteintragGeloescht wenn der Eintrag inzwischen geloescht ist (E16)
+   * @throws ZeiteintragGeaendert wenn der Eintrag inzwischen einen anderen Stand hat
    */
-  public void loeschen(final long accountId, final long id) {
-    zeiten.delete(schreibbarer(aktuellesKonto.byId(accountId), id).requireId());
+  public void loeschen(final long accountId, final long id, final long version) {
+    zeiten.save(
+        offener(aktuellesKonto.byId(accountId), id, version).geloescht(accountId, clock.instant()));
   }
 
   /*
-   * ReadOnly zuerst und ohne Blick in den Bestand (E19); danach ist ein fremder Eintrag fuer ein
-   * Konto, das nicht C-Level ist, einer, den es nicht gibt (E7).
+   * Der Eintrag, auf dem ein Aendern oder Loeschen beruhen darf: schreibbar, nicht geloescht und
+   * auf dem vorgelegten Stand. ReadOnly zuerst und ohne Blick in den Bestand (E19); danach ist ein
+   * fremder Eintrag fuer ein Konto, das nicht C-Level ist, einer, den es nicht gibt (E7). Erst dann
+   * das Kennzeichen, und es geht dem Stand vor — wer einen geloeschten Eintrag bearbeitet, soll von
+   * der Loeschung erfahren und nicht von einem Stand, den es nicht mehr gibt.
    */
-  private Zeiteintrag schreibbarer(final Account anfragend, final long id) {
+  private Zeiteintrag offener(final Account anfragend, final long id, final long version) {
     if (anfragend.role() == Role.READ_ONLY) {
       throw new ZeiteintragNichtGefunden();
     }
-    final Zeiteintrag eintrag = zeiten.findById(id).orElseThrow(ZeiteintragNichtGefunden::new);
-    if (eintrag.accountId() != anfragend.requireId() && anfragend.role() != Role.C_LEVEL) {
+    final long handelnd = anfragend.requireId();
+    final Zeiteintrag vorhandener = zeiten.findById(id).orElseThrow(ZeiteintragNichtGefunden::new);
+    if (vorhandener.accountId() != handelnd && anfragend.role() != Role.C_LEVEL) {
       throw new ZeiteintragNichtGefunden();
     }
-    return eintrag;
+    final Instant geloeschtAm = vorhandener.geloeschtAm();
+    if (geloeschtAm != null) {
+      throw new ZeiteintragGeloescht(vorhandener.geloeschtVon(), handelnd, geloeschtAm);
+    }
+    Bearbeitungskonflikt.pruefe(
+        version,
+        vorhandener.version(),
+        () ->
+            new ZeiteintragGeaendert(
+                vorhandener.geaendertVon(), handelnd, vorhandener.updatedAt()));
+    return vorhandener;
   }
 
   /*

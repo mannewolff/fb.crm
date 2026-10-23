@@ -10,6 +10,7 @@ import java.util.Set;
 import java.util.TreeMap;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import org.mwolff.fbcrm.arbeitszeit.domain.Zeiteintrag;
 import org.mwolff.fbcrm.arbeitszeit.domain.ZeiteintragRepository;
 
@@ -18,17 +19,24 @@ import org.mwolff.fbcrm.arbeitszeit.domain.ZeiteintragRepository;
  *
  * <p>Die Szenarien sagen etwas ueber das, was danach im Bestand steht und was „angefallen" daraus
  * rechnet. Ein Mock, der beides vorgibt, bewiese nichts; dieser Bestand legt an, schreibt fort,
- * loescht und summiert wirklich. Er kann genau, was die Anwendungsfaelle dieser Szenarien fragen,
- * und weist alles Uebrige ab, statt eine Antwort zu erfinden.
+ * kennzeichnet und summiert wirklich. Er kann genau, was die Anwendungsfaelle dieser Szenarien
+ * fragen, und weist alles Uebrige ab, statt eine Antwort zu erfinden.
+ *
+ * <p>Wie der echte Bestand laesst er gekennzeichnete Eintraege in jedem Leseweg und jeder Summe aus
+ * und liefert sie allein ueber {@link #findById(long)} (Plan #415, E17).
  */
 final class Zeitbestand implements ZeiteintragRepository {
 
   private final Map<Long, Zeiteintrag> zeilen = new TreeMap<>();
   private long naechsteKennung = 1L;
 
-  /** Alle Zeilen in der Reihenfolge ihrer Kennung. */
+  /** Alle Zeilen in der Reihenfolge ihrer Kennung — auch die gekennzeichneten. */
   List<Zeiteintrag> alle() {
     return List.copyOf(zeilen.values());
+  }
+
+  private Stream<Zeiteintrag> offene() {
+    return zeilen.values().stream().filter(eintrag -> eintrag.geloeschtAm() == null);
   }
 
   @Override
@@ -38,7 +46,7 @@ final class Zeitbestand implements ZeiteintragRepository {
 
   @Override
   public List<Zeiteintrag> findImZeitraum(final LocalDate von, final LocalDate bis) {
-    return zeilen.values().stream()
+    return offene()
         .filter(eintrag -> !eintrag.tag().isBefore(von) && !eintrag.tag().isAfter(bis))
         .toList();
   }
@@ -70,14 +78,21 @@ final class Zeitbestand implements ZeiteintragRepository {
             zeiteintrag.createdAt(),
             zeiteintrag.updatedAt(),
             neu ? 0L : zeiteintrag.version() + 1,
-            zeiteintrag.geaendertVon());
+            zeiteintrag.geaendertVon(),
+            zeiteintrag.geloeschtAm(),
+            zeiteintrag.geloeschtVon());
     zeilen.put(id, gespeichert);
     return gespeichert;
   }
 
   @Override
-  public void delete(final long id) {
-    zeilen.remove(id);
+  public void loescheGekennzeichnete(final Set<Long> angebotPositionIds) {
+    zeilen
+        .values()
+        .removeIf(
+            eintrag ->
+                eintrag.geloeschtAm() != null
+                    && angebotPositionIds.contains(eintrag.angebotPositionId()));
   }
 
   @Override
@@ -88,7 +103,7 @@ final class Zeitbestand implements ZeiteintragRepository {
                 Function.identity(),
                 position ->
                     Zeiteintrag.stundenAus(
-                        zeilen.values().stream()
+                        offene()
                             .filter(eintrag -> eintrag.angebotPositionId() == position)
                             .mapToLong(Zeiteintrag::minuten)
                             .sum())));
@@ -103,7 +118,7 @@ final class Zeitbestand implements ZeiteintragRepository {
                 Function.identity(),
                 position ->
                     Zeiteintrag.stundenAus(
-                        zeilen.values().stream()
+                        offene()
                             .filter(eintrag -> eintrag.angebotPositionId() == position)
                             .filter(eintrag -> YearMonth.from(eintrag.tag()).equals(monat))
                             .mapToLong(Zeiteintrag::minuten)

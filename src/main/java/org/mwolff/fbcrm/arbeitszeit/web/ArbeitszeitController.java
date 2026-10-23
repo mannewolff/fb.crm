@@ -41,10 +41,11 @@ import org.springframework.web.bind.annotation.RestController;
  * als 400 zurueck ({@code GlobalExceptionHandler}); eine eigene Pruefung dafuer waere eine zweite
  * Abschrift derselben Regel.
  *
- * <p><b>Aendern legt den Stand vor</b> (#411, Kriterien 1 und 4; Plan #415, E2, E3, E14): {@code
- * PUT} liest {@link Bedingungskopf} und reicht ihn mit der Kennung des angemeldeten Kontos weiter;
- * ohne {@code If-Match} antwortet der Weg 428, ohne den Anwendungsfall zu fragen. {@code POST}
- * bleibt ohne Kopf — ein neuer Zeiteintrag ist nie geschuetzt (Kriterium 7).
+ * <p><b>Aendern und Loeschen legen den Stand vor</b> (#411, Kriterien 1, 4 und 6; Plan #415, E2,
+ * E3, E14, E17): {@code PUT} und {@code DELETE} lesen {@link Bedingungskopf} und reichen ihn mit
+ * der Kennung des angemeldeten Kontos weiter; ohne {@code If-Match} antworten sie 428, ohne den
+ * Anwendungsfall zu fragen. {@code POST} bleibt ohne Kopf — ein neuer Zeiteintrag ist nie
+ * geschuetzt (Kriterium 7).
  *
  * <p>Keine Aenderung an {@code SecurityConfig}: Die Wege fallen unter das bestehende {@code
  * /api/**} fuer angemeldete Benutzer.
@@ -156,12 +157,15 @@ public class ArbeitszeitController {
   }
 
   /**
-   * Loescht einen Zeiteintrag (Kriterium 6, Antwort 4), wenn das angemeldete Konto ihn schreiben
-   * darf (Plan #426, E6, E7).
+   * Loescht einen Zeiteintrag mit Kennzeichen auf dem vorgelegten Stand (Kriterium 6, Antwort 4;
+   * Plan #415, E17), wenn das angemeldete Konto ihn schreiben darf (Plan #426, E6, E7).
    */
   @DeleteMapping("/{id}")
   @ResponseStatus(HttpStatus.NO_CONTENT)
-  public void loeschen(@AuthenticationPrincipal final Long accountId, @PathVariable final long id) {
-    useCase.loeschen(accountId, id);
+  public void loeschen(
+      @AuthenticationPrincipal final Long accountId,
+      @PathVariable final long id,
+      final Bedingungskopf stand) {
+    useCase.loeschen(accountId, id, stand.version());
   }
 }

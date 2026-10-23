@@ -23,8 +23,12 @@ import org.springframework.stereotype.Service;
  * angefragte Position, auch die ohne Eintrag mit {@code 0.00}, und eine zweite Abfrage auf
  * dieselben Zeilen waere eine zweite Stelle, an der „traegt Arbeitszeit" definiert wird.
  *
- * <p>Ohne eigene Transaktionsgrenze: Gelesen wird in der Transaktion des Anwendungsfalls, der
- * fragt.
+ * <p>Ein geloeschter Eintrag zaehlt nicht mit — die Summenauskunft laesst ihn aus (Plan #415, E17).
+ * Bevor das Angebot Positionen entfernt, raeumt {@link #entferneGeloeschte(Set)} die geloeschten
+ * Eintraege darauf hart ab.
+ *
+ * <p>Ohne eigene Transaktionsgrenze: Gelesen und geschrieben wird in der Transaktion des
+ * Anwendungsfalls, der fragt.
  */
 @Service
 class AngebotZeitbindung implements Zeitbindung {
@@ -46,5 +50,10 @@ class AngebotZeitbindung implements Zeitbindung {
         .filter(eintrag -> eintrag.getValue().signum() > 0)
         .map(Map.Entry::getKey)
         .collect(Collectors.toUnmodifiableSet());
+  }
+
+  @Override
+  public void entferneGeloeschte(final Set<Long> angebotPositionIds) {
+    zeiten.loescheGekennzeichnete(angebotPositionIds);
   }
 }

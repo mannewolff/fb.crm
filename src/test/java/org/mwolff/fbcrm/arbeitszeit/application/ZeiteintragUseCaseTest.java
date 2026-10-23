@@ -12,6 +12,7 @@ import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
 import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.ZoneOffset;
@@ -84,6 +85,9 @@ class ZeiteintragUseCaseTest {
   private static final LocalDate DRITTER = LocalDate.of(2026, 11, 3);
   private static final LocalDate VIERTER = LocalDate.of(2026, 11, 4);
   private static final LocalDate FUENFTER = LocalDate.of(2026, 11, 5);
+
+  /** Wann Manfred einen Eintrag geloescht hat (Plan #415, E17). */
+  private static final Instant GELOESCHT_UM = Instant.parse("2026-11-12T16:00:00Z");
 
   @Mock private ZeiteintragRepository zeiten;
   @Mock private AngebotRepository angebote;
@@ -443,7 +447,9 @@ class ZeiteintragUseCaseTest {
                 Zeitdoppel.FRUEHER,
                 Zeitdoppel.JETZT,
                 STAND,
-                Long.valueOf(ANNA)));
+                Long.valueOf(ANNA),
+                null,
+                null));
   }
 
   @Test
@@ -460,7 +466,9 @@ class ZeiteintragUseCaseTest {
             Zeitdoppel.FRUEHER,
             Zeitdoppel.JETZT,
             STAND + 1,
-            Long.valueOf(BEN)));
+            Long.valueOf(BEN),
+            null,
+            null));
 
     // When
     final ZeiteintragGeaendert konflikt =
@@ -490,6 +498,8 @@ class ZeiteintragUseCaseTest {
             Zeitdoppel.FRUEHER,
             Zeitdoppel.JETZT,
             STAND + 2,
+            null,
+            null,
             null));
 
     // When / Then
@@ -512,7 +522,9 @@ class ZeiteintragUseCaseTest {
             Zeitdoppel.FRUEHER,
             Zeitdoppel.JETZT,
             STAND + 1,
-            Long.valueOf(BEN)));
+            Long.valueOf(BEN),
+            null,
+            null));
 
     // When
     final ZeiteintragGeaendert konflikt =
@@ -540,7 +552,9 @@ class ZeiteintragUseCaseTest {
             Zeitdoppel.FRUEHER,
             Zeitdoppel.JETZT,
             STAND + 1,
-            Long.valueOf(BEN)));
+            Long.valueOf(BEN),
+            null,
+            null));
 
     // When / Then
     assertThatExceptionOfType(ZeiteintragNichtGefunden.class)
@@ -709,12 +723,13 @@ class ZeiteintragUseCaseTest {
     // Given — E14, Kriterium 7: Loeschen bleibt am stornierten Angebot erlaubt, ohne Blick ins
     // Angebot.
     eintragGibtEs(konzeption("09:00", "11:00"));
+    speichernGibtZurueck();
 
     // When
-    useCase.loeschen(ANNA, EINTRAG);
+    useCase.loeschen(ANNA, EINTRAG, STAND);
 
     // Then
-    verify(zeiten).delete(EINTRAG);
+    verify(zeiten).save(konzeption("09:00", "11:00").geloescht(ANNA, Zeitdoppel.JETZT));
     verify(angebote, never()).findAlle(any());
   }
 
@@ -730,16 +745,18 @@ class ZeiteintragUseCaseTest {
   }
 
   @Test
-  void loeschen_thenTheEntryIsGone() {
+  void loeschen_thenTheEntryIsMarkedWithAccountAndTime() {
     // Given — A5, Antwort 4: ein falscher Eintrag ist ein Tippfehler und kein Geschaeftsvorfall;
-    // geloescht wird auch an einem abgerechneten Angebot, ohne Blick in dessen Status.
+    // geloescht wird auch an einem abgerechneten Angebot, ohne Blick in dessen Status. Seit Plan
+    // #415 (E17) mit Kennzeichen: Die Zeile bleibt mit Zeitpunkt und Konto der Loeschung.
     eintragGibtEs(konzeption("09:00", "11:00"));
+    speichernGibtZurueck();
 
     // When
-    useCase.loeschen(ANNA, EINTRAG);
+    useCase.loeschen(ANNA, EINTRAG, STAND);
 
     // Then
-    verify(zeiten).delete(EINTRAG);
+    verify(zeiten).save(konzeption("09:00", "11:00").geloescht(ANNA, Zeitdoppel.JETZT));
     verify(angebote, never()).findAlle(any());
   }
 
@@ -750,8 +767,121 @@ class ZeiteintragUseCaseTest {
 
     // When / Then
     assertThatExceptionOfType(ZeiteintragNichtGefunden.class)
-        .isThrownBy(() -> useCase.loeschen(ANNA, EINTRAG));
-    verify(zeiten, never()).delete(EINTRAG);
+        .isThrownBy(() -> useCase.loeschen(ANNA, EINTRAG, STAND));
+    verify(zeiten, never()).save(any());
+  }
+
+  @Test
+  void loeschen_onAnOutdatedStand_thenRejectsWithUrheberAndTimeAndMarksNothing() {
+    // Given — #411, Kriterium 6: Ben hat den Eintrag inzwischen geaendert, sein Stand ist 1.
+    eintragGibtEs(
+        new Zeiteintrag(
+            Long.valueOf(EINTRAG),
+            ANNA,
+            Zeitdoppel.KONZEPTION_ID,
+            Zeitdoppel.TAG,
+            LocalTime.of(9, 0),
+            LocalTime.of(11, 0),
+            Zeitdoppel.FRUEHER,
+            Zeitdoppel.JETZT,
+            STAND + 1,
+            Long.valueOf(BEN),
+            null,
+            null));
+
+    // When
+    final ZeiteintragGeaendert konflikt =
+        catchThrowableOfType(
+            ZeiteintragGeaendert.class, () -> useCase.loeschen(ANNA, EINTRAG, STAND));
+
+    // Then — der Konflikt nennt Urheber, Handelnden und Zeitpunkt; gekennzeichnet wurde nichts.
+    assertThat(konflikt.art()).isEqualTo(Bearbeitungskonflikt.Art.VERALTET);
+    assertThat(konflikt.urheberKonto()).hasValue(BEN);
+    assertThat(konflikt.handelndesKonto()).isEqualTo(ANNA);
+    assertThat(konflikt.zeitpunkt()).hasValue(Zeitdoppel.JETZT);
+    verify(zeiten, never()).save(any());
+  }
+
+  /** Annas Eintrag, den Manfred um {@link #GELOESCHT_UM} geloescht hat (Plan #415, E17). */
+  private static Zeiteintrag vonManfredGeloescht() {
+    return konzeption("09:00", "11:00").geloescht(MANFRED, GELOESCHT_UM);
+  }
+
+  private static void istGeloeschtVonManfred(final ZeiteintragGeloescht konflikt) {
+    assertThat(konflikt.art()).isEqualTo(Bearbeitungskonflikt.Art.GELOESCHT);
+    assertThat(konflikt.urheberKonto()).hasValue(MANFRED);
+    assertThat(konflikt.handelndesKonto()).isEqualTo(ANNA);
+    assertThat(konflikt.zeitpunkt()).hasValue(GELOESCHT_UM);
+  }
+
+  @Test
+  void loeschen_onADeletedEntry_thenRejectsWithTheDeletionAndMarksNothing() {
+    // Given — #411, Kriterium 6; Plan #415, E16: Manfred hat Annas Eintrag schon geloescht.
+    eintragGibtEs(vonManfredGeloescht());
+
+    // When
+    final ZeiteintragGeloescht konflikt =
+        catchThrowableOfType(
+            ZeiteintragGeloescht.class, () -> useCase.loeschen(ANNA, EINTRAG, STAND));
+
+    // Then
+    istGeloeschtVonManfred(konflikt);
+    verify(zeiten, never()).save(any());
+  }
+
+  @Test
+  void aendern_onADeletedEntry_thenRejectsWithTheDeletionBeforeAnyBusinessRule() {
+    // Given — E16: auch Speichern auf einen geloeschten Eintrag wird abgewiesen, und es entsteht
+    // nichts neu. Die Eingabe verstiesse gegen das Raster, gemeldet wird trotzdem die Loeschung.
+    eintragGibtEs(vonManfredGeloescht());
+
+    // When
+    final ZeiteintragGeloescht konflikt =
+        catchThrowableOfType(
+            ZeiteintragGeloescht.class, () -> aendern(Zeitdoppel.KONZEPTION_ID, "09:10", "12:00"));
+
+    // Then
+    istGeloeschtVonManfred(konflikt);
+    verify(zeiten, never()).save(any());
+    verify(zeiten, never()).findImZeitraumFuerKonto(any(), any(), anyLong());
+  }
+
+  @Test
+  void aendern_onADeletedEntryWithAnOutdatedStand_thenTheDeletionComesFirst() {
+    // Given — das Kennzeichen geht dem Stand vor: Wer einen geloeschten Eintrag bearbeitet, soll
+    // von der Loeschung erfahren und nicht von einem Stand, den es nicht mehr gibt.
+    eintragGibtEs(
+        new Zeiteintrag(
+            Long.valueOf(EINTRAG),
+            ANNA,
+            Zeitdoppel.KONZEPTION_ID,
+            Zeitdoppel.TAG,
+            LocalTime.of(9, 0),
+            LocalTime.of(11, 0),
+            Zeitdoppel.FRUEHER,
+            Zeitdoppel.JETZT,
+            STAND + 1,
+            Long.valueOf(BEN),
+            GELOESCHT_UM,
+            Long.valueOf(MANFRED)));
+
+    // When / Then
+    assertThatExceptionOfType(ZeiteintragGeloescht.class)
+        .isThrownBy(() -> aendern(Zeitdoppel.KONZEPTION_ID, "09:00", "12:00"))
+        .satisfies(ZeiteintragUseCaseTest::istGeloeschtVonManfred);
+  }
+
+  @Test
+  void loeschen_aDeletedForeignEntryOfAnEmployee_thenReportsNotFoundBeforeTheDeletion() {
+    // Given — E7 vor E16: einem Employee verriete der Konflikt Urheber und Zeitpunkt der Loeschung
+    // eines Eintrags, den es fuer ihn nicht gibt.
+    eintragGibtEs(
+        Zeitdoppel.zeiteintrag(EINTRAG, BEN, Zeitdoppel.KONZEPTION_ID, "09:00", "11:00")
+            .geloescht(MANFRED, GELOESCHT_UM));
+
+    // When / Then
+    assertThatExceptionOfType(ZeiteintragNichtGefunden.class)
+        .isThrownBy(() -> useCase.loeschen(ANNA, EINTRAG, STAND));
   }
 
   // --- Rechte je Eintrag und je Rolle (Plan #426) --------------------------------------------
@@ -948,7 +1078,7 @@ class ZeiteintragUseCaseTest {
 
     // When / Then
     assertThatExceptionOfType(ZeiteintragNichtGefunden.class)
-        .isThrownBy(() -> anwendungsfall.loeschen(ANNA, bens.requireId()));
+        .isThrownBy(() -> anwendungsfall.loeschen(ANNA, bens.requireId(), bens.version()));
     assertThat(bestand.alle()).containsExactly(bens);
   }
 
@@ -960,10 +1090,57 @@ class ZeiteintragUseCaseTest {
     final Zeiteintrag bens = gebucht(bestand, BEN, DRITTER, "09:00", "12:00");
 
     // When
-    anwendungsfall.loeschen(MANFRED, bens.requireId());
+    anwendungsfall.loeschen(MANFRED, bens.requireId(), bens.version());
+
+    // Then — gekennzeichnet mit Manfred als Urheber; aus Bens Liste ist der Eintrag fort.
+    assertThat(bestand.alle())
+        .singleElement()
+        .extracting(Zeiteintrag::geloeschtVon, Zeiteintrag::geloeschtAm)
+        .containsExactly(Long.valueOf(MANFRED), Zeitdoppel.JETZT);
+    assertThat(bestand.findImZeitraumFuerKonto(DRITTER, DRITTER, BEN)).isEmpty();
+  }
+
+  @Test
+  void loeschen_whenManfredDeletesBensEntryWhileBenStillHasItOpen_thenBenIsToldWhoDeletedIt() {
+    // Given — #411, Kriterium 6: Ben und Manfred haben Bens Eintrag vom 4. November offen.
+    final Zeitbestand bestand = new Zeitbestand();
+    final ZeiteintragUseCase anwendungsfall = useCaseMit(bestand);
+    final Zeiteintrag geoeffnet = gebucht(bestand, BEN, VIERTER, "08:00", "18:00");
+
+    // When — Manfred loescht, Ben speichert danach auf dem Stand, den er geoeffnet hatte.
+    anwendungsfall.loeschen(MANFRED, geoeffnet.requireId(), geoeffnet.version());
+    final ZeiteintragGeloescht konflikt =
+        catchThrowableOfType(
+            ZeiteintragGeloescht.class,
+            () -> aendernIn(anwendungsfall, BEN, geoeffnet, Optional.empty(), "08:00", "16:00"));
+
+    // Then — der Konflikt nennt Manfred und den Zeitpunkt; es entsteht nichts neu.
+    assertThat(konflikt.urheberKonto()).hasValue(MANFRED);
+    assertThat(konflikt.handelndesKonto()).isEqualTo(BEN);
+    assertThat(konflikt.zeitpunkt()).hasValue(Zeitdoppel.JETZT);
+    assertThat(bestand.alle())
+        .singleElement()
+        .extracting(Zeiteintrag::von)
+        .isEqualTo(LocalTime.of(8, 0));
+  }
+
+  @Test
+  void anlegen_inTheSlotOfADeletedEntryOfTheSamePerson_thenNoOverlap() {
+    // Given — Plan #415, E17: die Ueberschneidungspruefung je Person zaehlt den geloeschten Eintrag
+    // nicht mit.
+    final Zeitbestand bestand = new Zeitbestand();
+    final ZeiteintragUseCase anwendungsfall = useCaseMit(bestand);
+    angebotStehtIn(Angebotsstatus.BESTELLT);
+    final Zeiteintrag alter = gebucht(bestand, ANNA, Zeitdoppel.TAG, "09:00", "12:00");
+    anwendungsfall.loeschen(ANNA, alter.requireId(), alter.version());
+
+    // When
+    final Zeiteintrag neu =
+        anlegenIn(anwendungsfall, ANNA, Optional.empty(), Zeitdoppel.TAG, "09:00", "12:00");
 
     // Then
-    assertThat(bestand.alle()).isEmpty();
+    assertThat(bestand.findImZeitraumFuerKonto(Zeitdoppel.TAG, Zeitdoppel.TAG, ANNA))
+        .containsExactly(neu);
   }
 
   @Test
@@ -1003,7 +1180,7 @@ class ZeiteintragUseCaseTest {
 
     // When / Then
     assertThatExceptionOfType(ZeiteintragNichtGefunden.class)
-        .isThrownBy(() -> anwendungsfall.loeschen(LEA, leas.requireId()));
+        .isThrownBy(() -> anwendungsfall.loeschen(LEA, leas.requireId(), leas.version()));
     assertThat(bestand.alle()).containsExactly(leas);
   }
 
