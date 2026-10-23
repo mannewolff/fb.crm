@@ -509,6 +509,116 @@ class ArbeitszeitControllerIT extends AbstractIntegrationTest {
     assertThat(gelesen.stunden()).isEqualByComparingTo("2.75");
   }
 
+  private long legeBenAn() {
+    return accounts
+        .save(
+            Konten.mit(null, "ben@example.org", Role.EMPLOYEE, true, 0, ANGELEGT)
+                .mitNamen("Ben", ANGELEGT))
+        .requireId();
+  }
+
+  private static Map<String, Object> fuer(final long accountId, final Map<String, Object> rumpf) {
+    final Map<String, Object> mitPerson = new LinkedHashMap<>(rumpf);
+    mitPerson.put("accountId", Long.valueOf(accountId));
+    return mitPerson;
+  }
+
+  /*
+   * Die Zeile, wie sie in der Tabelle steht — verglichen wird vorher gegen nachher, nicht gegen
+   * einen erwarteten Text: Wie die Uhrzeit dort steht, ist Sache der Abbildung und nicht dieses
+   * Tests.
+   */
+  private Map<String, Object> zeile(final long id) {
+    return jdbc.queryForMap(
+        "SELECT account_id, angebot_position_id, tag, von, bis, updated_at FROM arbeitszeit"
+            + " WHERE id = ?",
+        id);
+  }
+
+  private long personDerZeile(final long id) {
+    return Objects.requireNonNull(
+            jdbc.queryForObject("SELECT account_id FROM arbeitszeit WHERE id = ?", Long.class, id))
+        .longValue();
+  }
+
+  @Test
+  void anlegen_byACLevelWithAPerson_thenTheEntryBelongsToThatPerson() {
+    // Given — Kriterium 1 von #410: Manne (C-Level) traegt Zeit fuer Ben nach (Plan #426, E12).
+    final long ben = legeBenAn();
+
+    // When
+    final ResponseEntity<ZeiteintragResponse> erfasst =
+        ruf(
+            PFAD,
+            HttpMethod.POST,
+            fuer(ben, eintrag(konzeptionId, "09:00", "12:00")),
+            ZeiteintragResponse.class);
+
+    // Then — die Antwort und die Zeile nennen Ben.
+    assertThat(erfasst.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+    final ZeiteintragResponse angelegt = Objects.requireNonNull(erfasst.getBody());
+    assertThat(angelegt.accountId()).isEqualTo(ben);
+    assertThat(personDerZeile(angelegt.id())).isEqualTo(ben);
+  }
+
+  @Test
+  void aendern_byACLevelWithoutAPerson_thenKeepsTheOwnerUntilAnotherOneIsNamed() {
+    // Given — Ben hat 8:00 bis 18:00 Uhr gebucht; Manne (C-Level) korrigiert (E12, E13).
+    final HttpHeaders manne = sitzung;
+    final long manneId = accounts.findByEmail(MAIL).orElseThrow().requireId();
+    final long ben = legeBenAn();
+    sitzung = Anmeldung.perCode(rest, jdbc, hasher, "ben@example.org");
+    final long bensEintrag = erfassteKennung("08:00", "18:00");
+    sitzung = manne;
+
+    // When — ein PUT ohne Feld accountId
+    final ResponseEntity<ZeiteintragResponse> korrigiert =
+        ruf(
+            PFAD + "/" + bensEintrag,
+            HttpMethod.PUT,
+            eintrag(konzeptionId, "08:00", "16:00"),
+            ZeiteintragResponse.class);
+
+    // Then — die Zeiten sind geaendert, und der Eintrag gehoert weiter Ben.
+    assertThat(korrigiert.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(Objects.requireNonNull(korrigiert.getBody()).stunden()).isEqualByComparingTo("8.00");
+    assertThat(personDerZeile(bensEintrag)).isEqualTo(ben);
+
+    // When — erst ein PUT mit genanntem anderem Konto haengt ihn um.
+    final ResponseEntity<ZeiteintragResponse> umgehaengt =
+        ruf(
+            PFAD + "/" + bensEintrag,
+            HttpMethod.PUT,
+            fuer(manneId, eintrag(konzeptionId, "08:00", "16:00")),
+            ZeiteintragResponse.class);
+
+    // Then
+    assertThat(umgehaengt.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(Objects.requireNonNull(umgehaengt.getBody()).accountId()).isEqualTo(manneId);
+    assertThat(personDerZeile(bensEintrag)).isEqualTo(manneId);
+  }
+
+  @Test
+  void aendern_byAnEmployeeOnAForeignEntry_thenAnswers404AndTheRowIsUnchanged() {
+    // Given — E7: Mannes Eintrag ist fuer Ben einer, den es nicht gibt.
+    final long mannesEintrag = erfassteKennung("09:00", "11:00");
+    final Map<String, Object> vorher = zeile(mannesEintrag);
+    legeBenAn();
+    sitzung = Anmeldung.perCode(rest, jdbc, hasher, "ben@example.org");
+
+    // When
+    final ResponseEntity<String> abgewiesen =
+        ruf(
+            PFAD + "/" + mannesEintrag,
+            HttpMethod.PUT,
+            eintrag(konzeptionId, "09:00", "12:00"),
+            String.class);
+
+    // Then
+    assertThat(abgewiesen.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+    assertThat(zeile(mannesEintrag)).isEqualTo(vorher);
+  }
+
   @Test
   void personen_withoutASession_thenAnswers401() {
     // Given

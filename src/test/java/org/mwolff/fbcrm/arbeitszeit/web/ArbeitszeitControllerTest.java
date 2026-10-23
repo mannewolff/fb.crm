@@ -36,6 +36,7 @@ import org.mwolff.fbcrm.arbeitszeit.application.Buchungsposition;
 import org.mwolff.fbcrm.arbeitszeit.application.PersonNichtWaehlbar;
 import org.mwolff.fbcrm.arbeitszeit.application.Personenauskunft;
 import org.mwolff.fbcrm.arbeitszeit.application.Personenauswahl;
+import org.mwolff.fbcrm.arbeitszeit.application.PersonenauswahlUngueltig;
 import org.mwolff.fbcrm.arbeitszeit.application.PositionNichtBuchbar;
 import org.mwolff.fbcrm.arbeitszeit.application.UhrzeitNichtImRaster;
 import org.mwolff.fbcrm.arbeitszeit.application.WaehlbarePerson;
@@ -88,9 +89,17 @@ class ArbeitszeitControllerTest {
   private static final LocalDate TAG = LocalDate.of(2026, 11, 12);
   private static final Instant ANGELEGT = Instant.parse("2026-11-12T08:00:00Z");
 
+  private static final long BEN = 22L;
+  private static final Optional<Long> OHNE_PERSON = Optional.empty();
+
   private static final String RUMPF =
       """
       {"angebotPositionId":101,"tag":"2026-11-12","von":"09:00","bis":"10:45"}
+      """;
+
+  private static final String RUMPF_FUER_BEN =
+      """
+      {"angebotPositionId":101,"tag":"2026-11-12","von":"09:00","bis":"10:45","accountId":22}
       """;
 
   @Mock private ZeiteintragUseCase useCase;
@@ -122,9 +131,13 @@ class ArbeitszeitControllerTest {
   }
 
   private static Zeiteintrag eintrag() {
+    return eintragVon(ANGEMELDET);
+  }
+
+  private static Zeiteintrag eintragVon(final long accountId) {
     return new Zeiteintrag(
         Long.valueOf(EINTRAG),
-        ANGEMELDET,
+        accountId,
         POSITION,
         TAG,
         LocalTime.of(9, 0),
@@ -136,7 +149,8 @@ class ArbeitszeitControllerTest {
   @Test
   void anlegen_thenAnswers201WithTheEntryAndItsCalculatedHours() throws Exception {
     // Given — die Dauer steht nicht in der Anfrage; sie wird gerechnet (Plan #194, A3).
-    when(useCase.anlegen(ANGEMELDET, POSITION, TAG, LocalTime.of(9, 0), LocalTime.of(10, 45)))
+    when(useCase.anlegen(
+            ANGEMELDET, OHNE_PERSON, POSITION, TAG, LocalTime.of(9, 0), LocalTime.of(10, 45)))
         .thenReturn(eintrag());
 
     // When / Then
@@ -155,7 +169,12 @@ class ArbeitszeitControllerTest {
   void anlegen_thenPassesTheSubmittedTimesToTheUseCase() throws Exception {
     // Given
     when(useCase.anlegen(
-            eq(ANGEMELDET), eq(POSITION), eq(TAG), von.capture(), eq(LocalTime.of(10, 45))))
+            eq(ANGEMELDET),
+            eq(OHNE_PERSON),
+            eq(POSITION),
+            eq(TAG),
+            von.capture(),
+            eq(LocalTime.of(10, 45))))
         .thenReturn(eintrag());
 
     // When
@@ -198,7 +217,8 @@ class ArbeitszeitControllerTest {
   @Test
   void anlegen_whenTheTimeIsOutsideTheGrid_thenAnswers422WithAFieldErrorAtVon() throws Exception {
     // Given — A19: die Meldung kommt am Feld an und nicht als Serverfehler.
-    when(useCase.anlegen(ANGEMELDET, POSITION, TAG, LocalTime.of(9, 0), LocalTime.of(10, 45)))
+    when(useCase.anlegen(
+            ANGEMELDET, OHNE_PERSON, POSITION, TAG, LocalTime.of(9, 0), LocalTime.of(10, 45)))
         .thenThrow(UhrzeitNichtImRaster.anVon());
 
     // When / Then
@@ -212,7 +232,8 @@ class ArbeitszeitControllerTest {
   void anlegen_whenThePositionIsNotBookable_thenAnswers422WithAFieldErrorAtThePosition()
       throws Exception {
     // Given — Antworten 2, 3 und 5.
-    when(useCase.anlegen(ANGEMELDET, POSITION, TAG, LocalTime.of(9, 0), LocalTime.of(10, 45)))
+    when(useCase.anlegen(
+            ANGEMELDET, OHNE_PERSON, POSITION, TAG, LocalTime.of(9, 0), LocalTime.of(10, 45)))
         .thenThrow(PositionNichtBuchbar.amKundenangebot());
 
     // When / Then
@@ -225,7 +246,14 @@ class ArbeitszeitControllerTest {
   @Test
   void aendern_thenAnswers200WithTheChangedEntry() throws Exception {
     // Given — Kriterium 6.
-    when(useCase.aendern(EINTRAG, POSITION, TAG, LocalTime.of(9, 0), LocalTime.of(10, 45)))
+    when(useCase.aendern(
+            ANGEMELDET,
+            EINTRAG,
+            OHNE_PERSON,
+            POSITION,
+            TAG,
+            LocalTime.of(9, 0),
+            LocalTime.of(10, 45)))
         .thenReturn(eintrag());
 
     // When / Then
@@ -242,7 +270,14 @@ class ArbeitszeitControllerTest {
   @Test
   void aendern_whenTheEntryIsUnknown_thenAnswers404() throws Exception {
     // Given
-    when(useCase.aendern(EINTRAG, POSITION, TAG, LocalTime.of(9, 0), LocalTime.of(10, 45)))
+    when(useCase.aendern(
+            ANGEMELDET,
+            EINTRAG,
+            OHNE_PERSON,
+            POSITION,
+            TAG,
+            LocalTime.of(9, 0),
+            LocalTime.of(10, 45)))
         .thenThrow(new ZeiteintragNichtGefunden());
 
     // When / Then
@@ -258,7 +293,85 @@ class ArbeitszeitControllerTest {
   void loeschen_thenAnswers204AndDelegates() throws Exception {
     // When / Then
     mockMvc.perform(delete(PFAD_EINZELN, Long.valueOf(EINTRAG))).andExpect(status().isNoContent());
-    verify(useCase).loeschen(EINTRAG);
+    verify(useCase).loeschen(ANGEMELDET, EINTRAG);
+  }
+
+  @Test
+  void anlegen_withAPerson_thenPassesItAndTheSignedInAccountUnchanged() throws Exception {
+    // Given — Plan #426, E12: die Person ist freiwillig; ob sie waehlbar ist, entscheidet der
+    // Anwendungsfall und nicht der Controller (E6).
+    when(useCase.anlegen(
+            ANGEMELDET,
+            Optional.of(Long.valueOf(BEN)),
+            POSITION,
+            TAG,
+            LocalTime.of(9, 0),
+            LocalTime.of(10, 45)))
+        .thenReturn(eintragVon(BEN));
+
+    // When / Then — die Antwort nennt die Person des gespeicherten Eintrags.
+    mockMvc
+        .perform(post(PFAD).contentType(MediaType.APPLICATION_JSON).content(RUMPF_FUER_BEN))
+        .andExpect(status().isCreated())
+        .andExpect(jsonPath("$.accountId").value(Long.valueOf(BEN)));
+  }
+
+  @Test
+  void anlegen_thenTheAnswerNamesThePersonOfTheEntry() throws Exception {
+    // Given — ohne Feld gehoert der Eintrag dem angemeldeten Konto (E12).
+    when(useCase.anlegen(
+            ANGEMELDET, OHNE_PERSON, POSITION, TAG, LocalTime.of(9, 0), LocalTime.of(10, 45)))
+        .thenReturn(eintrag());
+
+    // When / Then
+    mockMvc
+        .perform(post(PFAD).contentType(MediaType.APPLICATION_JSON).content(RUMPF))
+        .andExpect(status().isCreated())
+        .andExpect(jsonPath("$.accountId").value(Long.valueOf(ANGEMELDET)));
+  }
+
+  @Test
+  void anlegen_whenThePersonIsNotSelectable_thenAnswers422WithAFieldErrorAtThePerson()
+      throws Exception {
+    // Given — E12: die Meldung gehoert an das Feld, an dem ein C-Level die Person waehlt.
+    when(useCase.anlegen(
+            ANGEMELDET,
+            Optional.of(Long.valueOf(BEN)),
+            POSITION,
+            TAG,
+            LocalTime.of(9, 0),
+            LocalTime.of(10, 45)))
+        .thenThrow(new PersonNichtWaehlbar());
+
+    // When / Then
+    mockMvc
+        .perform(post(PFAD).contentType(MediaType.APPLICATION_JSON).content(RUMPF_FUER_BEN))
+        .andExpect(status().isUnprocessableEntity())
+        .andExpect(jsonPath("$.detail").value(PersonNichtWaehlbar.MELDUNG))
+        .andExpect(jsonPath("$.fieldErrors.accountId[0]").value(PersonNichtWaehlbar.MELDUNG));
+  }
+
+  @Test
+  void aendern_withAPerson_thenPassesItAndTheSignedInAccountUnchanged() throws Exception {
+    // Given — E13: Umhaengen ist dasselbe PUT mit genannter Person.
+    when(useCase.aendern(
+            ANGEMELDET,
+            EINTRAG,
+            Optional.of(Long.valueOf(BEN)),
+            POSITION,
+            TAG,
+            LocalTime.of(9, 0),
+            LocalTime.of(10, 45)))
+        .thenReturn(eintragVon(BEN));
+
+    // When / Then
+    mockMvc
+        .perform(
+            put(PFAD_EINZELN, Long.valueOf(EINTRAG))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(RUMPF_FUER_BEN))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.accountId").value(Long.valueOf(BEN)));
   }
 
   private static Buchungsposition position() {
@@ -355,7 +468,7 @@ class ArbeitszeitControllerTest {
   void monat_withAPersonThatIsNotSelectable_thenAnswers400() throws Exception {
     // Given — der Parameter nennt kein Konto und nicht „alle".
     when(monate.monat(ANGEMELDET, Optional.empty(), Optional.of("niemand")))
-        .thenThrow(new PersonNichtWaehlbar());
+        .thenThrow(new PersonenauswahlUngueltig());
 
     // When / Then
     mockMvc

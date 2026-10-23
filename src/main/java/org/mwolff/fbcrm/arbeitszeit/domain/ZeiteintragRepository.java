@@ -53,11 +53,9 @@ public interface ZeiteintragRepository {
   /**
    * Alle Zeiteintraege in einem Zeitraum, beide Grenzen eingeschlossen.
    *
-   * <p>Ueber alle Positionen, denn beide Leser brauchen genau das: die Monatsliste der Ansicht
-   * (Issue #193, Kriterium 5) und die Ueberschneidungspruefung eines einzelnen Tages, die niemanden
-   * zur selben Zeit fuer zwei Kunden arbeiten laesst (Kriterium 4, A8). Fuer den einzelnen Tag
-   * stehen in beiden Grenzen derselbe Tag — ein eigenes {@code findAmTag} waere dieselbe Abfrage
-   * unter zweitem Namen.
+   * <p>Ueber alle Positionen und alle Personen: Der Leser ist die Monatsliste der Ansicht in der
+   * Sicht „Alle" (Issue #193, Kriterium 5; Plan #426, E10). Die Ueberschneidungspruefung gilt je
+   * Person und fragt {@link #findImZeitraumFuerKonto(LocalDate, LocalDate, long)} (E8).
    *
    * <p>Ohne zugesagte Reihenfolge, wie die Listen der Belege: Welche Ordnung die Ansicht zeigt,
    * entscheidet die Anwendungsschicht.

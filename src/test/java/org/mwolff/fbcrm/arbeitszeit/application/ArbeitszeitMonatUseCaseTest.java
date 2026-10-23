@@ -722,7 +722,7 @@ class ArbeitszeitMonatUseCaseTest {
     dieKontenGibtEs();
 
     // When / Then
-    assertThatExceptionOfType(PersonNichtWaehlbar.class)
+    assertThatExceptionOfType(PersonenauswahlUngueltig.class)
         .isThrownBy(() -> november(manfred(), Optional.of(person)));
     verifyNoInteractions(zeiten, angebote, firmen);
   }

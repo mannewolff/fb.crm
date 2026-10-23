@@ -11,6 +11,11 @@ import org.mwolff.fbcrm.angebot.domain.AngebotRepository;
 import org.mwolff.fbcrm.angebot.domain.Angebotsposition;
 import org.mwolff.fbcrm.arbeitszeit.domain.Zeiteintrag;
 import org.mwolff.fbcrm.arbeitszeit.domain.ZeiteintragRepository;
+import org.mwolff.fbcrm.auth.application.GetCurrentAccountUseCase;
+import org.mwolff.fbcrm.auth.application.MitarbeitendeVerwaltung;
+import org.mwolff.fbcrm.auth.application.UnknownAccount;
+import org.mwolff.fbcrm.auth.domain.Account;
+import org.mwolff.fbcrm.auth.domain.Role;
 import org.mwolff.fbcrm.firma.application.FirmaNichtGefunden;
 import org.mwolff.fbcrm.firma.domain.Firma;
 import org.mwolff.fbcrm.firma.domain.FirmaRepository;
@@ -19,11 +24,24 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Die drei Schreibwege eines Zeiteintrags: anlegen, aendern, loeschen (Issue #193, Kriterien 1, 3,
- * 4 und 6).
+ * 4 und 6; Plan #426, E6, E7, E12, E13, E19).
  *
- * <p><b>Die Reihenfolge der Pruefungen ist Absicht</b> (Plan #194, A19, A7, A8):
+ * <p><b>Die Reihenfolge der Pruefungen ist Absicht</b> (Plan #194, A19, A7, A8; Plan #426):
  *
  * <ol>
+ *   <li>Ein Konto mit der Rolle ReadOnly wird vor allem anderen abgewiesen, gleich wem der Eintrag
+ *       gehoert (E19) — auch auf eigenen Eintraegen aus der Zeit vor einem Rollenwechsel, die
+ *       bestehen bleiben (#410, Kriterium 4). Beim Aendern und Loeschen ueber {@link
+ *       ZeiteintragNichtGefunden}, beim Anlegen ueber {@link PersonNichtWaehlbar}.
+ *   <li>Aendern und Loeschen lesen den Eintrag und weisen ihn als nicht gefunden ab, wenn er dem
+ *       anfragenden Konto nicht gehoert und dieses nicht C-Level ist (E7): Eine 403 bestaetigte
+ *       einem Employee, dass es die Kennung gibt.
+ *   <li>Die Person bestimmen und als waehlbar pruefen (E12). Beim Anlegen heisst eine fehlende
+ *       Angabe „gehoert dem anfragenden Konto", beim Aendern „der Eigentuemer bleibt, der er ist" —
+ *       ein Aendern ohne Angabe haengt einen fremden Eintrag nie um. Geprueft wird nur eine Person,
+ *       die von der bisherigen abweicht; bleibt der Eintrag bei seiner Person, ist deren Zustand
+ *       ohne Belang, sonst waere der Eintrag einer stillgelegten Person nicht mehr korrigierbar
+ *       (#410, Kriterium 9). Eine andere Person nennen darf nur ein C-Level, und nur eine aktive.
  *   <li>Raster und {@code bis > von} — beides haengt allein an der Eingabe und braucht keinen Blick
  *       in den Bestand. Verstoesse kommen als Meldung am Feld {@code von} oder {@code bis} an,
  *       nicht als Fehler der Datenbank (A19).
@@ -31,15 +49,21 @@ import org.springframework.transaction.annotation.Transactional;
  *       Uhrzeit eines Eintrags an einem inzwischen abgerechneten Angebot bleiben damit aenderbar,
  *       und Loeschen ist immer erlaubt: Ein vergessener Tippfehler soll korrigierbar bleiben (Issue
  *       #193, Antwort 4).
- *   <li>Die Ueberschneidung — ueber <b>alle</b> Positionen desselben Tages, beim Aendern ohne den
- *       Eintrag selbst (A8).
+ *   <li>Die Ueberschneidung — ueber <b>alle</b> Positionen desselben Tages <b>derselben Person</b>,
+ *       beim Aendern ohne den Eintrag selbst (A8; Plan #426, E8). Beim Umhaengen zaehlen die Zeiten
+ *       der neuen Person, und die Meldung nennt deren kollidierenden Eintrag (E13).
  * </ol>
  *
  * <p><b>Welche Eintraege verglichen werden, entscheidet dieser Anwendungsfall</b>, und ob zwei sich
- * ueberschneiden, sagt {@link Zeiteintrag#ueberschneidet}. Gefragt wird mit {@code findImZeitraum}
- * ueber denselben Tag in beiden Grenzen; eine eigene Abfrage je Tag waere dieselbe unter zweitem
- * Namen. Die Datenbank prueft die Ueberschneidung bewusst nicht: Nur hier ist der kollidierende
- * Eintrag bekannt, den die Meldung nennen muss (A4).
+ * ueberschneiden, sagt {@link Zeiteintrag#ueberschneidet}. Gefragt wird mit {@code
+ * findImZeitraumFuerKonto} ueber denselben Tag in beiden Grenzen und das Konto, dem der Eintrag
+ * gehoeren soll (E8) — fremde Eintraege kommen so gar nicht erst in den Speicher. Die Datenbank
+ * prueft die Ueberschneidung bewusst nicht: Nur hier ist der kollidierende Eintrag bekannt, den die
+ * Meldung nennen muss (A4).
+ *
+ * <p><b>Rolle und Zustand kommen frisch aus dem Konto</b> und nicht aus dem Token (E6), ueber die
+ * Lesewege von {@code auth.application} — dieselbe Richtung wie in {@link Personenauskunft}. Der
+ * Controller reicht allein die Kennung des angemeldeten Kontos weiter.
  *
  * <p>Der Zeitpunkt kommt aus der injizierten {@link Clock} (CLAUDE-java.md §6.2). Beim Aendern
  * bleibt {@code createdAt} stehen.
@@ -51,76 +75,107 @@ public class ZeiteintragUseCase {
   private final ZeiteintragRepository zeiten;
   private final AngebotRepository angebote;
   private final FirmaRepository firmen;
+  private final GetCurrentAccountUseCase aktuellesKonto;
+  private final MitarbeitendeVerwaltung konten;
   private final Clock clock;
 
   ZeiteintragUseCase(
       final ZeiteintragRepository zeiten,
       final AngebotRepository angebote,
       final FirmaRepository firmen,
+      final GetCurrentAccountUseCase aktuellesKonto,
+      final MitarbeitendeVerwaltung konten,
       final Clock clock) {
     this.zeiten = zeiten;
     this.angebote = angebote;
     this.firmen = firmen;
+    this.aktuellesKonto = aktuellesKonto;
+    this.konten = konten;
     this.clock = clock;
   }
 
   /**
    * Erfasst eine Arbeitszeit auf einer Angebotsposition (Kriterium 1).
    *
-   * <p>Der Eintrag gehoert dem anfragenden Konto (Plan #426, E1). Fuer eine andere Person zu
-   * erfassen und die Rechte je Rolle folgen mit dem Paket „Zeiteintraege schreiben".
+   * <p>Der Eintrag gehoert der genannten Person, ohne Angabe dem anfragenden Konto (Plan #426,
+   * E12). Fuer eine andere Person erfasst nur ein C-Level, und nur fuer eine aktive.
    *
-   * @param accountId Kennung des anfragenden Kontos, dem der Eintrag gehoert
+   * @param accountId Kennung des anfragenden Kontos
+   * @param person Kennung der Person, der der Eintrag gehoeren soll, oder leer fuer das anfragende
+   *     Konto
    * @param angebotPositionId Kennung der Position, auf die gebucht wird
    * @param tag der Tag, an dem gearbeitet wurde
    * @param von Beginn, auf einer Viertelstunde
    * @param bis Ende, auf einer Viertelstunde und nach {@code von}
+   * @throws UnknownAccount wenn es das anfragende Konto nicht mehr gibt
+   * @throws PersonNichtWaehlbar wenn das anfragende Konto ReadOnly ist oder fuer die genannte
+   *     Person nicht erfassen darf
    * @throws UhrzeitNichtImRaster wenn Beginn oder Ende nicht auf einer Viertelstunde liegen
    * @throws EndeVorBeginn wenn das Ende nicht nach dem Beginn liegt
    * @throws PositionNichtBuchbar wenn es die Position nicht gibt oder auf sie nicht gebucht werden
    *     darf
-   * @throws ZeitenUeberschneidenSich wenn am selben Tag schon ein Eintrag in diesem Zeitraum liegt
+   * @throws ZeitenUeberschneidenSich wenn am selben Tag schon ein Eintrag dieser Person in diesem
+   *     Zeitraum liegt
    */
   public Zeiteintrag anlegen(
       final long accountId,
+      final Optional<Long> person,
       final long angebotPositionId,
       final LocalDate tag,
       final LocalTime von,
       final LocalTime bis) {
+    final Account anfragend = aktuellesKonto.byId(accountId);
+    if (anfragend.role() == Role.READ_ONLY) {
+      throw new PersonNichtWaehlbar();
+    }
+    final long eigentuemer = person(anfragend, person, anfragend.requireId());
     pruefeZeiten(von, bis);
     pruefeBuchungZulaessig(angebotPositionId);
     final Instant jetzt = clock.instant();
     return gespeichert(
-        new Zeiteintrag(null, accountId, angebotPositionId, tag, von, bis, jetzt, jetzt));
+        new Zeiteintrag(null, eigentuemer, angebotPositionId, tag, von, bis, jetzt, jetzt));
   }
 
   /**
-   * Aendert einen Zeiteintrag (Kriterium 6) — Tag, Uhrzeit und Position.
+   * Aendert einen Zeiteintrag (Kriterium 6) — Tag, Uhrzeit, Position und, fuer ein C-Level, die
+   * Person.
    *
    * <p>„Buchung zulaessig" wird nur geprueft, wenn die Position wechselt (A7); der Eintrag selbst
-   * zaehlt bei der Ueberschneidung nicht mit (A8). Er bleibt bei der Person, der er gehoert (Plan
-   * #426, E1).
+   * zaehlt bei der Ueberschneidung nicht mit (A8). Ohne Angabe bleibt er bei der Person, der er
+   * gehoert (Plan #426, E12); eine genannte andere Person haengt ihn um, und geprueft wird dann
+   * gegen deren Zeiten (E13).
    *
+   * @param accountId Kennung des anfragenden Kontos
    * @param id Kennung des Eintrags
+   * @param person Kennung der Person, der der Eintrag kuenftig gehoeren soll, oder leer fuer die
+   *     bisherige
    * @param angebotPositionId Kennung der Position, auf die gebucht wird
    * @param tag der Tag, an dem gearbeitet wurde
    * @param von Beginn, auf einer Viertelstunde
    * @param bis Ende, auf einer Viertelstunde und nach {@code von}
-   * @throws ZeiteintragNichtGefunden wenn es den Eintrag nicht gibt
+   * @throws UnknownAccount wenn es das anfragende Konto nicht mehr gibt
+   * @throws ZeiteintragNichtGefunden wenn es den Eintrag nicht gibt, er dem anfragenden Konto nicht
+   *     gehoert und dieses nicht C-Level ist, oder das anfragende Konto ReadOnly ist
+   * @throws PersonNichtWaehlbar wenn die genannte Person von der bisherigen abweicht und das
+   *     anfragende Konto den Eintrag nicht auf sie umhaengen darf
    * @throws UhrzeitNichtImRaster wenn Beginn oder Ende nicht auf einer Viertelstunde liegen
    * @throws EndeVorBeginn wenn das Ende nicht nach dem Beginn liegt
    * @throws PositionNichtBuchbar wenn die Position wechselt und auf die neue nicht gebucht werden
    *     darf
-   * @throws ZeitenUeberschneidenSich wenn am selben Tag ein anderer Eintrag in diesem Zeitraum
-   *     liegt
+   * @throws ZeitenUeberschneidenSich wenn am selben Tag ein anderer Eintrag derselben Person in
+   *     diesem Zeitraum liegt
    */
   public Zeiteintrag aendern(
+      final long accountId,
       final long id,
+      final Optional<Long> person,
       final long angebotPositionId,
       final LocalDate tag,
       final LocalTime von,
       final LocalTime bis) {
-    final Zeiteintrag vorhandener = lies(id);
+    final Account anfragend = aktuellesKonto.byId(accountId);
+    final Zeiteintrag vorhandener = schreibbarer(anfragend, id);
+    final long eigentuemer = person(anfragend, person, vorhandener.accountId());
     pruefeZeiten(von, bis);
     if (angebotPositionId != vorhandener.angebotPositionId()) {
       pruefeBuchungZulaessig(angebotPositionId);
@@ -128,7 +183,7 @@ public class ZeiteintragUseCase {
     return gespeichert(
         new Zeiteintrag(
             vorhandener.id(),
-            vorhandener.accountId(),
+            eigentuemer,
             angebotPositionId,
             tag,
             von,
@@ -140,17 +195,52 @@ public class ZeiteintragUseCase {
   /**
    * Loescht den Zeiteintrag — die Zeile ist danach fort (A5, Antwort 4).
    *
-   * <p>Ohne Blick in das Angebot: Loeschen ist immer erlaubt, auch an einem schon abgerechneten.
+   * <p>Ohne Blick in das Angebot: Loeschen ist immer erlaubt, auch an einem schon abgerechneten —
+   * fuer den Eigentuemer und fuer ein C-Level (Plan #426, E7).
    *
+   * @param accountId Kennung des anfragenden Kontos
    * @param id Kennung des Eintrags
-   * @throws ZeiteintragNichtGefunden wenn es den Eintrag nicht gibt
+   * @throws UnknownAccount wenn es das anfragende Konto nicht mehr gibt
+   * @throws ZeiteintragNichtGefunden wenn es den Eintrag nicht gibt, er dem anfragenden Konto nicht
+   *     gehoert und dieses nicht C-Level ist, oder das anfragende Konto ReadOnly ist
    */
-  public void loeschen(final long id) {
-    zeiten.delete(lies(id).requireId());
+  public void loeschen(final long accountId, final long id) {
+    zeiten.delete(schreibbarer(aktuellesKonto.byId(accountId), id).requireId());
   }
 
-  private Zeiteintrag lies(final long id) {
-    return zeiten.findById(id).orElseThrow(ZeiteintragNichtGefunden::new);
+  /*
+   * ReadOnly zuerst und ohne Blick in den Bestand (E19); danach ist ein fremder Eintrag fuer ein
+   * Konto, das nicht C-Level ist, einer, den es nicht gibt (E7).
+   */
+  private Zeiteintrag schreibbarer(final Account anfragend, final long id) {
+    if (anfragend.role() == Role.READ_ONLY) {
+      throw new ZeiteintragNichtGefunden();
+    }
+    final Zeiteintrag eintrag = zeiten.findById(id).orElseThrow(ZeiteintragNichtGefunden::new);
+    if (eintrag.accountId() != anfragend.requireId() && anfragend.role() != Role.C_LEVEL) {
+      throw new ZeiteintragNichtGefunden();
+    }
+    return eintrag;
+  }
+
+  /*
+   * Die Person, der der Eintrag gehoeren soll (E12). Ohne Angabe oder mit der bisherigen bleibt
+   * es bei ihr, ohne Blick auf ihren Zustand (Kriterium 9). Beim Anlegen ist die bisherige das
+   * anfragende Konto selbst — und das ist aktiv, sonst haette es keine Sitzung. Eine andere nennt
+   * nur ein C-Level, und nur eine aktive; die Liste der Konten liest erst er, ein Employee kommt
+   * nie bis dorthin.
+   */
+  private long person(final Account anfragend, final Optional<Long> genannt, final long bisherige) {
+    final long gewuenscht = genannt.map(Long::longValue).orElse(bisherige);
+    if (gewuenscht == bisherige) {
+      return bisherige;
+    }
+    if (anfragend.role() != Role.C_LEVEL
+        || konten.liste().stream()
+            .noneMatch(konto -> konto.requireId() == gewuenscht && konto.aktiv())) {
+      throw new PersonNichtWaehlbar();
+    }
+    return gewuenscht;
   }
 
   private static void pruefeZeiten(final LocalTime von, final LocalTime bis) {
@@ -186,7 +276,9 @@ public class ZeiteintragUseCase {
    */
   private Zeiteintrag gespeichert(final Zeiteintrag kandidat) {
     final Optional<Zeiteintrag> kollision =
-        zeiten.findImZeitraum(kandidat.tag(), kandidat.tag()).stream()
+        zeiten
+            .findImZeitraumFuerKonto(kandidat.tag(), kandidat.tag(), kandidat.accountId())
+            .stream()
             .filter(anderer -> !Objects.equals(anderer.id(), kandidat.id()))
             .filter(kandidat::ueberschneidet)
             .findFirst();
@@ -198,12 +290,13 @@ public class ZeiteintragUseCase {
 
   private ZeitenUeberschneidenSich ueberschneidung(final Zeiteintrag anderer) {
     final Buchungsziel ziel = ziel(anderer.angebotPositionId());
+    final String firmaName =
+        firmen
+            .findById(ziel.angebot().firmaId())
+            .map(Firma::name)
+            .orElseThrow(FirmaNichtGefunden::new);
     return new ZeitenUeberschneidenSich(
-        anderer.von(), anderer.bis(), ziel.position().bezeichnung(), firmaName(ziel.angebot()));
-  }
-
-  private String firmaName(final Angebot angebot) {
-    return firmen.findById(angebot.firmaId()).map(Firma::name).orElseThrow(FirmaNichtGefunden::new);
+        anderer.von(), anderer.bis(), ziel.position().bezeichnung(), firmaName);
   }
 
   /*

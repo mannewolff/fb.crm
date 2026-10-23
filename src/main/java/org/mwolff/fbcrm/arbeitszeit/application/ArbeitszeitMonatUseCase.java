@@ -89,7 +89,7 @@ public class ArbeitszeitMonatUseCase {
    * @param person die Kennung eines Kontos oder {@code alle}, oder leer fuer die Vorauswahl der
    *     Rolle; fuer einen Employee ohne Wirkung
    * @throws UnknownAccount wenn es das anfragende Konto nicht mehr gibt
-   * @throws PersonNichtWaehlbar wenn {@code person} weder {@code alle} noch ein Konto nennt
+   * @throws PersonenauswahlUngueltig wenn {@code person} weder {@code alle} noch ein Konto nennt
    * @throws AngebotNichtGefunden wenn ein gebuchtes Angebot im Bestand fehlt
    * @throws FirmaNichtGefunden wenn die Firma eines beteiligten Angebots fehlt
    */

@@ -101,10 +101,12 @@ public class ArbeitszeitController {
   }
 
   /**
-   * Erfasst eine Arbeitszeit (Kriterium 1) fuer das angemeldete Konto.
+   * Erfasst eine Arbeitszeit (Kriterium 1) fuer das angemeldete Konto oder die genannte Person.
    *
-   * <p>Die Person kommt aus der Sitzung, nicht aus dem Rumpf (Plan #426, E1) — wie der Verfasser
-   * eines Kommentars am Angebot.
+   * <p>Die Kennung des Kontos kommt aus der Sitzung, die Person optional aus dem Rumpf (Plan #426,
+   * E12). Beide gehen unveraendert weiter; ob das Konto fuer die Person erfassen darf, entscheidet
+   * der Anwendungsfall — kein {@code @PreAuthorize}, weil die Rechte am einzelnen Datensatz haengen
+   * (E6).
    */
   @PostMapping
   @ResponseStatus(HttpStatus.CREATED)
@@ -113,22 +115,42 @@ public class ArbeitszeitController {
       @Valid @RequestBody final ZeiteintragRequest anfrage) {
     return ZeiteintragResponse.of(
         useCase.anlegen(
-            accountId, anfrage.angebotPositionId(), anfrage.tag(), anfrage.von(), anfrage.bis()));
+            accountId,
+            Optional.ofNullable(anfrage.accountId()),
+            anfrage.angebotPositionId(),
+            anfrage.tag(),
+            anfrage.von(),
+            anfrage.bis()));
   }
 
-  /** Aendert einen Zeiteintrag (Kriterium 6). */
+  /**
+   * Aendert einen Zeiteintrag (Kriterium 6); mit genannter Person haengt ein C-Level ihn um (Plan
+   * #426, E13). Ob das angemeldete Konto den Eintrag schreiben darf, entscheidet der Anwendungsfall
+   * (E6, E7).
+   */
   @PutMapping("/{id}")
   public ZeiteintragResponse aendern(
-      @PathVariable final long id, @Valid @RequestBody final ZeiteintragRequest anfrage) {
+      @AuthenticationPrincipal final Long accountId,
+      @PathVariable final long id,
+      @Valid @RequestBody final ZeiteintragRequest anfrage) {
     return ZeiteintragResponse.of(
         useCase.aendern(
-            id, anfrage.angebotPositionId(), anfrage.tag(), anfrage.von(), anfrage.bis()));
+            accountId,
+            id,
+            Optional.ofNullable(anfrage.accountId()),
+            anfrage.angebotPositionId(),
+            anfrage.tag(),
+            anfrage.von(),
+            anfrage.bis()));
   }
 
-  /** Loescht einen Zeiteintrag (Kriterium 6, Antwort 4). */
+  /**
+   * Loescht einen Zeiteintrag (Kriterium 6, Antwort 4), wenn das angemeldete Konto ihn schreiben
+   * darf (Plan #426, E6, E7).
+   */
   @DeleteMapping("/{id}")
   @ResponseStatus(HttpStatus.NO_CONTENT)
-  public void loeschen(@PathVariable final long id) {
-    useCase.loeschen(id);
+  public void loeschen(@AuthenticationPrincipal final Long accountId, @PathVariable final long id) {
+    useCase.loeschen(accountId, id);
   }
 }

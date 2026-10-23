@@ -14,6 +14,7 @@ import org.mwolff.fbcrm.arbeitszeit.domain.Zeiteintrag;
  * <p>Ohne die Zeitstempel: Die Ansicht zeigt den Tag der Arbeit, nicht den der Erfassung.
  *
  * @param id technische Kennung des Eintrags
+ * @param accountId Kennung der Person, der der gespeicherte Eintrag gehoert (Plan #426, E12)
  * @param angebotPositionId Kennung der Position, auf die gebucht wurde
  * @param tag der Tag, an dem gearbeitet wurde
  * @param von Beginn
@@ -22,6 +23,7 @@ import org.mwolff.fbcrm.arbeitszeit.domain.Zeiteintrag;
  */
 public record ZeiteintragResponse(
     long id,
+    long accountId,
     long angebotPositionId,
     LocalDate tag,
     LocalTime von,
@@ -32,6 +34,7 @@ public record ZeiteintragResponse(
   static ZeiteintragResponse of(final Zeiteintrag eintrag) {
     return new ZeiteintragResponse(
         eintrag.requireId(),
+        eintrag.accountId(),
         eintrag.angebotPositionId(),
         eintrag.tag(),
         eintrag.von(),

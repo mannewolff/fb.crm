@@ -1,30 +1,38 @@
 package org.mwolff.fbcrm.arbeitszeit.application;
 
+import java.util.List;
+import java.util.Map;
+import org.mwolff.fbcrm.common.Feldfehler;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.ResponseStatus;
 
 /**
- * Der Parameter {@code person} nennt nichts, was das anfragende Konto waehlen kann: weder das Wort
- * {@code alle} noch die Kennung eines Kontos, das es gibt (Plan #426, E10).
+ * Fuer die genannte Person darf das anfragende Konto keine Zeit schreiben (Plan #426, E12, E19;
+ * fachliche Quelle #410, Kriterien 2 bis 4 und 9).
  *
- * <p>400 und nicht 404, weil der Wert ein Anfrageparameter ist und kein Pfad — dieselbe Lage wie
- * ein Monat, den es nicht gibt ({@code GlobalExceptionHandler#handleTypeMismatch}). Ein Employee
- * bekommt diesen Fehler nie: Fuer ihn wertet der Anwendungsfall den Parameter gar nicht aus.
+ * <p><b>Eine Lage fuer „nicht erlaubt", „stillgelegt" und „unbekannt"</b> (E12): Ein Employee nennt
+ * ein anderes Konto als sein eigenes, ein C-Level nennt als neue Person ein stillgelegtes oder
+ * eines, das es nicht gibt, oder ein ReadOnly-Konto will ueberhaupt erfassen. Der Anwender soll
+ * alle Faelle gleich erfahren, und keiner verraet einem Employee, welche Kennungen es gibt —
+ * dieselbe Begruendung wie bei {@code angebot.application.AnsprechpartnerNichtWaehlbar}.
+ *
+ * <p>422 und nicht 404: Die Kennung kommt im Rumpf und nicht im Pfad. Ein {@link Feldfehler}, weil
+ * die Meldung an das Feld gehoert, an dem ein C-Level die Person waehlt (Plan #194, A19).
+ *
+ * <p>Nicht zu verwechseln mit {@link PersonenauswahlUngueltig}: Die gilt dem Parameter {@code
+ * person} der Monatsliste, also dem Lesen.
  */
-@ResponseStatus(code = HttpStatus.BAD_REQUEST, reason = "Diese Person steht nicht zur Wahl.")
-public final class PersonNichtWaehlbar extends RuntimeException {
+@ResponseStatus(code = HttpStatus.UNPROCESSABLE_ENTITY, reason = PersonNichtWaehlbar.MELDUNG)
+public final class PersonNichtWaehlbar extends Feldfehler {
 
-  /** Ohne Ursache: Der Wert war eine Kennung, aber zu keinem Konto. */
-  public PersonNichtWaehlbar() {
-    super();
-  }
+  /** Was der Anwender am Feld liest — derselbe Satz, den die Antwort als {@code detail} traegt. */
+  public static final String MELDUNG = "Für diese Person kann hier keine Zeit erfasst werden.";
 
-  /**
-   * Mit Ursache: Der Wert liess sich nicht als Kennung lesen.
-   *
-   * @param ursache der Fehler beim Lesen der Kennung
-   */
-  public PersonNichtWaehlbar(final Throwable ursache) {
-    super(ursache);
+  /** Das Feld, unter dem die Maske die Wahl der Person fuehrt. */
+  public static final String FELD = "accountId";
+
+  @Override
+  public Map<String, List<String>> felder() {
+    return Map.of(FELD, List.of(MELDUNG));
   }
 }

@@ -72,7 +72,7 @@ public class Personenauskunft {
    * @param person die Kennung eines Kontos oder {@code alle}, oder leer fuer die Vorauswahl der
    *     Rolle
    * @throws UnknownAccount wenn es das Konto nicht mehr gibt
-   * @throws PersonNichtWaehlbar wenn {@code person} weder {@code alle} noch ein Konto nennt
+   * @throws PersonenauswahlUngueltig wenn {@code person} weder {@code alle} noch ein Konto nennt
    */
   Personensicht sicht(final long accountId, final Optional<String> person) {
     final Account anfragend = aktuellesKonto.byId(accountId);
@@ -102,7 +102,7 @@ public class Personenauskunft {
                 () -> anfragend.role() == Role.READ_ONLY ? new Personenauswahl.Alle() : eigene);
     if (auswahl instanceof final Personenauswahl.Einzeln einzeln
         && !personen.containsKey(einzeln.accountId())) {
-      throw new PersonNichtWaehlbar();
+      throw new PersonenauswahlUngueltig();
     }
     return auswahl;
   }

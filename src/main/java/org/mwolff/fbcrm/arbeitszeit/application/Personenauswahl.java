@@ -24,7 +24,7 @@ public sealed interface Personenauswahl {
    * Die Auswahl zu einem Wert des Parameters {@code person}.
    *
    * @param parameter die Kennung eines Kontos oder das Wort {@code alle}
-   * @throws PersonNichtWaehlbar wenn der Wert weder das eine noch das andere ist
+   * @throws PersonenauswahlUngueltig wenn der Wert weder das eine noch das andere ist
    */
   static Personenauswahl aus(final String parameter) {
     if (ALLE.equals(parameter)) {
@@ -33,7 +33,7 @@ public sealed interface Personenauswahl {
     try {
       return new Einzeln(Long.parseLong(parameter));
     } catch (final NumberFormatException keineKennung) {
-      throw new PersonNichtWaehlbar(keineKennung);
+      throw new PersonenauswahlUngueltig(keineKennung);
     }
   }
 
