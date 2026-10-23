@@ -127,7 +127,9 @@ final class Rechnungsdoppel {
         "Neugestaltung der Website",
         positionen,
         ANGELEGT,
-        ANGELEGT);
+        ANGELEGT,
+        0L,
+        null);
   }
 
   /** Der Grund des Stornos aus dem Szenario „Rest eines Auftrags wird nicht abgerufen" (#330). */

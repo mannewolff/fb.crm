@@ -21,6 +21,7 @@ import java.time.Year;
 import java.util.List;
 import java.util.Optional;
 import org.jspecify.annotations.Nullable;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -32,6 +33,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mwolff.fbcrm.angebot.application.AngebotAendernUseCase;
 import org.mwolff.fbcrm.angebot.application.AngebotDaten;
+import org.mwolff.fbcrm.angebot.application.AngebotGeaendert;
 import org.mwolff.fbcrm.angebot.application.AngebotLesenUseCase;
 import org.mwolff.fbcrm.angebot.application.AngebotNichtGefunden;
 import org.mwolff.fbcrm.angebot.application.AngebotStatusUseCase;
@@ -52,8 +54,14 @@ import org.mwolff.fbcrm.angebot.domain.Angebotsposition;
 import org.mwolff.fbcrm.angebot.domain.Angebotsstatus;
 import org.mwolff.fbcrm.common.Abrechnungsmodus;
 import org.mwolff.fbcrm.common.Einheit;
+import org.mwolff.fbcrm.common.Urheber;
+import org.mwolff.fbcrm.common.web.Bedingungskopf;
 import org.mwolff.fbcrm.common.web.GlobalExceptionHandler;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.web.method.annotation.AuthenticationPrincipalArgumentResolver;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
@@ -122,6 +130,18 @@ class AngebotControllerTest {
           new BigDecimal("1000.01"),
           null);
 
+  /** Der Stand, den die Maske vorlegt (Plan #415, E2). */
+  private static final long STAND = 3L;
+
+  /** Derselbe Stand als starkes Etikett im Kopf {@code If-Match}. */
+  private static final String VORGELEGT = "\"" + STAND + "\"";
+
+  /** Das angemeldete Konto. */
+  private static final long ANGEMELDET = 31L;
+
+  /** Das Konto, das vorher gespeichert hat. */
+  private static final long ANNA = 30L;
+
   private static final String RUMPF =
       """
       {"titel":"Wartung","angebotDatum":"2026-09-25","ansprechpartnerId":9,"beschreibung":"Neu",
@@ -145,10 +165,25 @@ class AngebotControllerTest {
         new AngebotController(lesen, aendern, statuswechsel, storno, kunden);
     // Jede Antwort mit einem Angebot fragt die Namen des Kunden hinzu; die Fehlerwege nicht.
     lenient().when(kunden.zu(any())).thenReturn(new Kundenangaben("Adler AG", "Eva Adler"));
+    // Die Sitzung wie im Betrieb: die Kennung des Kontos als Principal (Plan #415, E14).
+    SecurityContextHolder.getContext()
+        .setAuthentication(
+            UsernamePasswordAuthenticationToken.authenticated(
+                Long.valueOf(ANGEMELDET), null, List.of()));
     mockMvc =
         MockMvcBuilders.standaloneSetup(controller)
-            .setControllerAdvice(new GlobalExceptionHandler(konto -> Optional.empty()))
+            .setControllerAdvice(
+                new GlobalExceptionHandler(
+                    konto ->
+                        konto == ANNA ? Optional.of(new Urheber(ANNA, "Anna")) : Optional.empty()))
+            .setCustomArgumentResolvers(
+                new Bedingungskopf.Leser(), new AuthenticationPrincipalArgumentResolver())
             .build();
+  }
+
+  @AfterEach
+  void raeumeDieSitzungAb() {
+    SecurityContextHolder.clearContext();
   }
 
   private static Angebot angebot(final Angebotsstatus status) {
@@ -170,7 +205,9 @@ class AngebotControllerTest {
         "Neugestaltung",
         List.of(KONZEPTION),
         ANGELEGT,
-        ANGELEGT);
+        ANGELEGT,
+        0L,
+        null);
   }
 
   private void aendernAntwortet() {
@@ -255,6 +292,7 @@ class AngebotControllerTest {
     mockMvc
         .perform(
             put("/api/angebote/{id}", Long.valueOf(ANGEBOT))
+                .header(HttpHeaders.IF_MATCH, VORGELEGT)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(ohneKennung))
         .andExpect(status().isOk());
@@ -274,12 +312,108 @@ class AngebotControllerTest {
     mockMvc
         .perform(
             put("/api/angebote/{id}", Long.valueOf(ANGEBOT))
+                .header(HttpHeaders.IF_MATCH, VORGELEGT)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(RUMPF))
         .andExpect(status().isUnprocessableEntity())
         .andExpect(
             jsonPath("$.fieldErrors.positionen[0]")
                 .value("Die eingereichten Positionen passen nicht zu diesem Angebot."));
+  }
+
+  @Test
+  void aendern_withoutIfMatch_thenAnswers428AndChangesNothing() throws Exception {
+    // Given — E3: Ohne vorgelegten Stand wird nicht geschrieben; ein freiwilliger Kopf waere ein
+    // stilles Loch im Schutz.
+
+    // When / Then
+    mockMvc
+        .perform(
+            put("/api/angebote/{id}", Long.valueOf(ANGEBOT))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(RUMPF))
+        .andExpect(status().isPreconditionRequired())
+        .andExpect(jsonPath("$.detail").value(Bedingungskopf.MELDUNG));
+    verifyNoInteractions(aendern);
+  }
+
+  @Test
+  void aendern_withAnOutdatedStand_thenAnswers409WithTheConflict() throws Exception {
+    // Given — #411, Szenario „Zweites Speichern wird abgewiesen": Anna hat inzwischen gespeichert.
+    when(aendern.aendere(eq(ANGEBOT), any()))
+        .thenThrow(new AngebotGeaendert(ANNA, ANGEMELDET, Instant.parse("2026-09-28T08:42:00Z")));
+
+    // When / Then
+    mockMvc
+        .perform(
+            put("/api/angebote/{id}", Long.valueOf(ANGEBOT))
+                .header(HttpHeaders.IF_MATCH, VORGELEGT)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(RUMPF))
+        .andExpect(status().isConflict())
+        .andExpect(jsonPath("$.konflikt.art").value("veraltet"))
+        .andExpect(jsonPath("$.konflikt.geaendertVon").value("Anna"))
+        .andExpect(jsonPath("$.konflikt.geaendertAm").value("2026-09-28T08:42:00Z"))
+        .andExpect(jsonPath("$.konflikt.eigenesFenster").value(false));
+  }
+
+  @Test
+  void aendern_withTheCurrentStand_thenPassesStandAndAccountAndAnswersWithTheRaisedVersion()
+      throws Exception {
+    // Given — #411, Kriterium 8: Mit dem aktuellen Stand geht das Speichern durch, und die Antwort
+    // traegt den neuen Stand, den die Maske beim naechsten Speichern vorlegt.
+    when(aendern.aendere(eq(ANGEBOT), daten.capture()))
+        .thenReturn(mitStand(angebot(Angebotsstatus.ANGELEGT), STAND + 1, ANGEMELDET));
+
+    // When
+    mockMvc
+        .perform(
+            put("/api/angebote/{id}", Long.valueOf(ANGEBOT))
+                .header(HttpHeaders.IF_MATCH, VORGELEGT)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(RUMPF))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.version").value(STAND + 1))
+        .andExpect(jsonPath("$.geaendertVon").value(ANGEMELDET));
+
+    // Then — der vorgelegte Stand aus dem Kopf, das handelnde Konto aus der Sitzung.
+    assertThat(daten.getValue())
+        .satisfies(
+            d -> assertThat(d.version()).isEqualTo(STAND),
+            d -> assertThat(d.geaendertVon()).isEqualTo(ANGEMELDET));
+  }
+
+  @Test
+  void lesen_thenAnswersWithTheStandOfTheAngebot() throws Exception {
+    // Given — E2: Die Leseantwort gibt den Stand heraus, den die Maske wieder vorlegt.
+    when(lesen.lese(ANGEBOT)).thenReturn(mitStand(angebot(Angebotsstatus.ANGELEGT), STAND, ANNA));
+
+    // When / Then
+    mockMvc
+        .perform(get("/api/angebote/{id}", Long.valueOf(ANGEBOT)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.version").value(STAND))
+        .andExpect(jsonPath("$.geaendertVon").value(ANNA));
+  }
+
+  /** Dasselbe Angebot auf einem anderen Stand, zuletzt geaendert von {@code urheber}. */
+  private static Angebot mitStand(final Angebot angebot, final long version, final long urheber) {
+    return new Angebot(
+        angebot.id(),
+        angebot.firmaId(),
+        angebot.ansprechpartnerId(),
+        angebot.intern(),
+        angebot.status(),
+        angebot.storniert(),
+        angebot.stornoGrund(),
+        angebot.angebotDatum(),
+        angebot.titel(),
+        angebot.beschreibung(),
+        angebot.positionen(),
+        angebot.createdAt(),
+        angebot.updatedAt(),
+        version,
+        Long.valueOf(urheber));
   }
 
   @Test
@@ -302,6 +436,7 @@ class AngebotControllerTest {
     mockMvc
         .perform(
             put("/api/angebote/{id}", Long.valueOf(ANGEBOT))
+                .header(HttpHeaders.IF_MATCH, VORGELEGT)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(RUMPF))
         .andExpect(status().isOk())
@@ -318,6 +453,7 @@ class AngebotControllerTest {
     mockMvc
         .perform(
             put("/api/angebote/{id}", Long.valueOf(ANGEBOT))
+                .header(HttpHeaders.IF_MATCH, VORGELEGT)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(RUMPF))
         .andExpect(status().isOk());
@@ -345,6 +481,7 @@ class AngebotControllerTest {
     mockMvc
         .perform(
             put("/api/angebote/{id}", Long.valueOf(ANGEBOT))
+                .header(HttpHeaders.IF_MATCH, VORGELEGT)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(RUMPF))
         .andExpect(status().isUnprocessableEntity())
@@ -366,6 +503,7 @@ class AngebotControllerTest {
     mockMvc
         .perform(
             put("/api/angebote/{id}", Long.valueOf(ANGEBOT))
+                .header(HttpHeaders.IF_MATCH, VORGELEGT)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(leer))
         .andExpect(status().isBadRequest())
@@ -386,6 +524,7 @@ class AngebotControllerTest {
     mockMvc
         .perform(
             put("/api/angebote/{id}", Long.valueOf(ANGEBOT))
+                .header(HttpHeaders.IF_MATCH, VORGELEGT)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(negativ))
         .andExpect(status().isBadRequest())
@@ -401,6 +540,7 @@ class AngebotControllerTest {
     mockMvc
         .perform(
             put("/api/angebote/{id}", Long.valueOf(ANGEBOT))
+                .header(HttpHeaders.IF_MATCH, VORGELEGT)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(ohneDatum))
         .andExpect(status().isBadRequest())
@@ -480,6 +620,7 @@ class AngebotControllerTest {
     mockMvc
         .perform(
             put("/api/angebote/{id}", Long.valueOf(ANGEBOT))
+                .header(HttpHeaders.IF_MATCH, VORGELEGT)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(intern))
         .andExpect(status().isOk())
@@ -501,6 +642,7 @@ class AngebotControllerTest {
     mockMvc
         .perform(
             put("/api/angebote/{id}", Long.valueOf(ANGEBOT))
+                .header(HttpHeaders.IF_MATCH, VORGELEGT)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(ohneArt))
         .andExpect(status().isOk());
@@ -522,6 +664,7 @@ class AngebotControllerTest {
     mockMvc
         .perform(
             put("/api/angebote/{id}", Long.valueOf(ANGEBOT))
+                .header(HttpHeaders.IF_MATCH, VORGELEGT)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(ausdruecklichNull))
         .andExpect(status().isOk());
@@ -540,6 +683,7 @@ class AngebotControllerTest {
     mockMvc
         .perform(
             put("/api/angebote/{id}", Long.valueOf(ANGEBOT))
+                .header(HttpHeaders.IF_MATCH, VORGELEGT)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(RUMPF))
         .andExpect(status().isUnprocessableEntity())
@@ -572,6 +716,7 @@ class AngebotControllerTest {
     mockMvc
         .perform(
             put("/api/angebote/{id}", Long.valueOf(ANGEBOT))
+                .header(HttpHeaders.IF_MATCH, VORGELEGT)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(ohneMenge))
         .andExpect(status().isUnprocessableEntity())
@@ -614,6 +759,7 @@ class AngebotControllerTest {
     mockMvc
         .perform(
             put("/api/angebote/{id}", Long.valueOf(ANGEBOT))
+                .header(HttpHeaders.IF_MATCH, VORGELEGT)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(mitLeistungsjahr(jahr)))
         .andExpect(status().isOk());
@@ -635,6 +781,7 @@ class AngebotControllerTest {
     mockMvc
         .perform(
             put("/api/angebote/{id}", Long.valueOf(ANGEBOT))
+                .header(HttpHeaders.IF_MATCH, VORGELEGT)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(mitLeistungsjahr(jahr)))
         .andExpect(status().isBadRequest())
@@ -652,6 +799,7 @@ class AngebotControllerTest {
     mockMvc
         .perform(
             put("/api/angebote/{id}", Long.valueOf(ANGEBOT))
+                .header(HttpHeaders.IF_MATCH, VORGELEGT)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(RUMPF))
         .andExpect(status().isOk());
@@ -672,6 +820,7 @@ class AngebotControllerTest {
     mockMvc
         .perform(
             put("/api/angebote/{id}", Long.valueOf(ANGEBOT))
+                .header(HttpHeaders.IF_MATCH, VORGELEGT)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(RUMPF))
         .andExpect(status().isOk())
@@ -694,6 +843,7 @@ class AngebotControllerTest {
     mockMvc
         .perform(
             put("/api/angebote/{id}", Long.valueOf(ANGEBOT))
+                .header(HttpHeaders.IF_MATCH, VORGELEGT)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(rumpf))
         .andExpect(status().isBadRequest())
@@ -712,6 +862,7 @@ class AngebotControllerTest {
     mockMvc
         .perform(
             put("/api/angebote/{id}", Long.valueOf(ANGEBOT))
+                .header(HttpHeaders.IF_MATCH, VORGELEGT)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(zuLang))
         .andExpect(status().isBadRequest())
@@ -874,6 +1025,7 @@ class AngebotControllerTest {
     mockMvc
         .perform(
             put("/api/angebote/{id}", Long.valueOf(ANGEBOT))
+                .header(HttpHeaders.IF_MATCH, VORGELEGT)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(RUMPF))
         .andExpect(status().isConflict())

@@ -11,6 +11,7 @@ import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mwolff.fbcrm.AbstractIntegrationTest;
+import org.mwolff.fbcrm.Stand;
 import org.mwolff.fbcrm.angebot.application.KennzeichenNichtAenderbar;
 import org.mwolff.fbcrm.angebot.web.AngebotPositionResponse;
 import org.mwolff.fbcrm.angebot.web.AngebotResponse;
@@ -161,7 +162,11 @@ class AngebotPositionsbindungIT extends AbstractIntegrationTest {
     rumpf.put("beschreibung", "Neugestaltung der Website");
     rumpf.put("intern", intern);
     rumpf.put("positionen", positionen);
-    return ruf("/api/angebote/" + angebotId, HttpMethod.PUT, rumpf, typ);
+    return rest.exchange(
+        "/api/angebote/" + angebotId,
+        HttpMethod.PUT,
+        new HttpEntity<>(rumpf, Stand.aktuell(sitzung, jdbc, "angebot", angebotId)),
+        typ);
   }
 
   /*

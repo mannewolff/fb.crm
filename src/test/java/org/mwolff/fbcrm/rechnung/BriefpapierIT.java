@@ -23,6 +23,7 @@ import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mwolff.fbcrm.AbstractIntegrationTest;
+import org.mwolff.fbcrm.Stand;
 import org.mwolff.fbcrm.angebot.web.AngebotResponse;
 import org.mwolff.fbcrm.auth.Anmeldung;
 import org.mwolff.fbcrm.auth.Konten;
@@ -383,7 +384,11 @@ class BriefpapierIT extends AbstractIntegrationTest {
     angebot.put("angebotDatum", heute.toString());
     angebot.put("titel", "Beratung");
     angebot.put("positionen", List.of(position));
-    ruf("/api/angebote/" + angebotId, HttpMethod.PUT, angebot, AngebotResponse.class);
+    rest.exchange(
+        "/api/angebote/" + angebotId,
+        HttpMethod.PUT,
+        new HttpEntity<>(angebot, Stand.aktuell(sitzung, jdbc, "angebot", angebotId)),
+        AngebotResponse.class);
     ruf("/api/angebote/" + angebotId + "/status/weiter", HttpMethod.POST, null, String.class);
     ruf("/api/angebote/" + angebotId + "/status/weiter", HttpMethod.POST, null, String.class);
     final RechnungResponse entwurf =

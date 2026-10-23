@@ -18,6 +18,7 @@ import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mwolff.fbcrm.AbstractIntegrationTest;
+import org.mwolff.fbcrm.Stand;
 import org.mwolff.fbcrm.angebot.web.AngebotResponse;
 import org.mwolff.fbcrm.auth.Anmeldung;
 import org.mwolff.fbcrm.auth.Konten;
@@ -206,7 +207,11 @@ class RechnungNummerIT extends AbstractIntegrationTest {
     rumpf.put("ansprechpartnerId", null);
     rumpf.put("beschreibung", "Neugestaltung der Website");
     rumpf.put("positionen", List.of(position));
-    ruf("/api/angebote/" + angebotId, HttpMethod.PUT, rumpf, AngebotResponse.class);
+    rest.exchange(
+        "/api/angebote/" + angebotId,
+        HttpMethod.PUT,
+        new HttpEntity<>(rumpf, Stand.aktuell(sitzung, jdbc, "angebot", angebotId)),
+        AngebotResponse.class);
     ruf("/api/angebote/" + angebotId + "/status/weiter", HttpMethod.POST, null, String.class);
     ruf("/api/angebote/" + angebotId + "/status/weiter", HttpMethod.POST, null, String.class);
     return angebotId;

@@ -127,7 +127,9 @@ class AngebotPersistenceIT extends AbstractIntegrationTest {
         BESCHREIBUNG,
         positionen,
         ANGELEGT,
-        ANGELEGT);
+        ANGELEGT,
+        0L,
+        null);
   }
 
   private Angebot geschrieben(final Angebot angebot) {
@@ -165,7 +167,9 @@ class AngebotPersistenceIT extends AbstractIntegrationTest {
         angebot.beschreibung(),
         angebot.positionen(),
         angebot.createdAt(),
-        angebot.updatedAt());
+        angebot.updatedAt(),
+        0L,
+        null);
   }
 
   private static Angebotsposition umbenannt(final Angebotsposition position, final String name) {

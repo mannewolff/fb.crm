@@ -13,6 +13,7 @@ import java.util.Objects;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mwolff.fbcrm.AbstractIntegrationTest;
+import org.mwolff.fbcrm.Stand;
 import org.mwolff.fbcrm.angebot.web.AngebotPositionResponse;
 import org.mwolff.fbcrm.angebot.web.AngebotResponse;
 import org.mwolff.fbcrm.auth.Anmeldung;
@@ -154,7 +155,11 @@ class ArbeitszeitControllerIT extends AbstractIntegrationTest {
     rumpf.put("ansprechpartnerId", null);
     rumpf.put("beschreibung", "Neugestaltung der Website");
     rumpf.put("positionen", positionen);
-    return ruf("/api/angebote/" + angebotId, HttpMethod.PUT, rumpf, AngebotResponse.class);
+    return rest.exchange(
+        "/api/angebote/" + angebotId,
+        HttpMethod.PUT,
+        new HttpEntity<>(rumpf, Stand.aktuell(sitzung, jdbc, "angebot", angebotId)),
+        AngebotResponse.class);
   }
 
   private static Map<String, Object> eintrag(

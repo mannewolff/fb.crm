@@ -235,7 +235,9 @@ class ArbeitszeitMonatUseCaseTest {
                 new BigDecimal("100.00"),
                 Year.of(2026))),
         Zeitdoppel.FRUEHER,
-        Zeitdoppel.FRUEHER);
+        Zeitdoppel.FRUEHER,
+        0L,
+        null);
   }
 
   /** Ein internes Angebot derselben Firma mit einer buchbaren Position (Issue #229). */
@@ -261,7 +263,9 @@ class ArbeitszeitMonatUseCaseTest {
                 BigDecimal.ZERO,
                 Year.of(2026))),
         Zeitdoppel.FRUEHER,
-        Zeitdoppel.FRUEHER);
+        Zeitdoppel.FRUEHER,
+        0L,
+        null);
   }
 
   /** Ein Eintrag auf der internen Position, am Tag des Beispiels. */

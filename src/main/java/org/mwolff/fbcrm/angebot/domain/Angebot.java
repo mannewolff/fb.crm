@@ -58,6 +58,10 @@ import org.mwolff.fbcrm.common.Identifiable;
  * @param positionen die Positionen in ihrer Reihenfolge; die Liste ist die Reihenfolge (E24)
  * @param createdAt Zeitpunkt der Anlage
  * @param updatedAt Zeitpunkt der letzten Aenderung
+ * @param version der Stand des Angebots, wie ihn {@code If-Match} vorlegt (Plan #415, E1, E9); 0
+ *     vor der ersten Aenderung, danach fuehrt ihn der Bestand
+ * @param geaendertVon Kennung des Kontos, das das Angebot zuletzt geaendert hat, oder {@code null},
+ *     solange es das nicht weiss (Plan #415, E14)
  */
 public record Angebot(
     @Nullable Long id,
@@ -72,7 +76,9 @@ public record Angebot(
     @Nullable String beschreibung,
     List<Angebotsposition> positionen,
     Instant createdAt,
-    Instant updatedAt)
+    Instant updatedAt,
+    long version,
+    @Nullable Long geaendertVon)
     implements Identifiable {
 
   /**
@@ -196,7 +202,37 @@ public record Angebot(
         neueBeschreibung,
         neuePositionen,
         createdAt,
-        zeitpunkt);
+        zeitpunkt,
+        version,
+        geaendertVon);
+  }
+
+  /**
+   * Das Angebot mit dem Konto, das es gerade geaendert hat (Plan #415, E14).
+   *
+   * <p>Ein eigener Schritt neben den Uebergaengen und kein weiterer Parameter an jedem davon: Wer
+   * aendert, ist eine Angabe des Anwendungsfalls, nicht der fachlichen Regel. Die Version bleibt,
+   * wie sie ist — sie zaehlt der Bestand beim Schreiben weiter.
+   *
+   * @param konto Kennung des handelnden Kontos
+   */
+  public Angebot durch(final long konto) {
+    return new Angebot(
+        id,
+        firmaId,
+        ansprechpartnerId,
+        intern,
+        status,
+        storniert,
+        stornoGrund,
+        angebotDatum,
+        titel,
+        beschreibung,
+        positionen,
+        createdAt,
+        updatedAt,
+        version,
+        konto);
   }
 
   /**
@@ -268,7 +304,9 @@ public record Angebot(
         beschreibung,
         positionen,
         createdAt,
-        zeitpunkt);
+        zeitpunkt,
+        version,
+        geaendertVon);
   }
 
   /**
@@ -329,7 +367,9 @@ public record Angebot(
         beschreibung,
         positionen,
         createdAt,
-        zeitpunkt);
+        zeitpunkt,
+        version,
+        geaendertVon);
   }
 
   private Angebot mitStatus(final Angebotsstatus ziel, final Instant zeitpunkt) {
@@ -346,6 +386,8 @@ public record Angebot(
         beschreibung,
         positionen,
         createdAt,
-        zeitpunkt);
+        zeitpunkt,
+        version,
+        geaendertVon);
   }
 }

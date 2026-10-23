@@ -343,7 +343,9 @@ class AbrechnungsstandTest {
         null,
         positionen,
         ANGELEGT,
-        ANGELEGT);
+        ANGELEGT,
+        0L,
+        null);
   }
 
   /** Dasselbe Angebot, aus „bestellt" storniert (#330, Szenario „Rest eines Auftrags"). */

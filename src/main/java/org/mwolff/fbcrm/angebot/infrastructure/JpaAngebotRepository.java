@@ -94,9 +94,16 @@ class JpaAngebotRepository implements AngebotRepository {
         .toList();
   }
 
+  /*
+   * saveAndFlush statt save: Den Zaehler version erhoeht Hibernate erst beim Schreiben der Zeile
+   * (Plan #415, E1). Ohne das Schreiben hier truege die Antwort den alten Stand, und die Maske
+   * legte beim naechsten Speichern eine Version vor, die es nicht mehr gibt — sie wiese sich selbst
+   * ab. Ein veralteter Stand faellt dabei als ObjectOptimisticLockingFailureException auf, schon
+   * beim Zusammenfuehren mit der geladenen Zeile oder spaetestens an der Bedingung des UPDATE.
+   */
   @Override
   public Angebot save(final Angebot angebot) {
-    final AngebotEntity zeile = angebote.save(AngebotEntity.aus(angebot));
+    final AngebotEntity zeile = angebote.saveAndFlush(AngebotEntity.aus(angebot));
     final long angebotId = Objects.requireNonNull(zeile.getId());
     return toDomain(zeile, fortgeschrieben(angebotId, angebot.positionen()));
   }
@@ -167,7 +174,9 @@ class JpaAngebotRepository implements AngebotRepository {
         zeile.getBeschreibung(),
         positionszeilen.stream().map(JpaAngebotRepository::toDomain).toList(),
         zeile.getCreatedAt(),
-        zeile.getUpdatedAt());
+        zeile.getUpdatedAt(),
+        zeile.getVersion(),
+        zeile.getGeaendertVon());
   }
 
   private static Angebotsposition toDomain(final AngebotPositionEntity zeile) {

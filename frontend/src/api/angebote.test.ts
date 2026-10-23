@@ -43,6 +43,8 @@ const ANGEBOT = {
   stornoGrund: null,
   positionen: [POSITION],
   summe: 2500.03,
+  version: 4,
+  geaendertVon: 30,
 };
 
 /** Dieselbe Position nach dem Verengen: Menge in Hundertsteln, Geld in Cent (E5). */
@@ -72,6 +74,8 @@ const ANGEBOT_VERENGT = {
   stornoGrund: null,
   positionen: [POSITION_VERENGT],
   summeInCent: 250003,
+  version: 4,
+  geaendertVon: 30,
 };
 
 const ZEILE = {
@@ -524,7 +528,7 @@ describe('die Wege', () => {
   it('aendert das Angebot als Ganzes und nimmt die Antwort (E8)', async () => {
     const fetchMock = fetchNachPfad({ 'PUT /api/angebote/9': json(200, ANGEBOT) });
 
-    expect(await angebotAendern(9, EINGABE)).toEqual(ANGEBOT_VERENGT);
+    expect(await angebotAendern(9, 4, EINGABE)).toEqual(ANGEBOT_VERENGT);
     // Menge und Preis gehen als Dezimaltext hinaus und nicht als Gleitkommazahl (E5, geld.ts).
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/angebote/9',
@@ -532,10 +536,34 @@ describe('die Wege', () => {
     );
   });
 
+  it('legt den Stand, auf dem die Aenderung beruht, als If-Match vor (Plan #415, E2)', async () => {
+    const fetchMock = fetchNachPfad({ 'PUT /api/angebote/9': json(200, ANGEBOT) });
+
+    await angebotAendern(9, 4, EINGABE);
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/angebote/9',
+      expect.objectContaining({
+        headers: expect.objectContaining({ 'If-Match': '"4"' }) as unknown,
+      }),
+    );
+  });
+
+  it('liest den Stand und den Urheber des Angebots (Plan #415, E2)', () => {
+    expect(parseAngebot({ ...ANGEBOT, version: 7, geaendertVon: null })).toMatchObject({
+      version: 7,
+      geaendertVon: null,
+    });
+  });
+
+  it('weist ein Angebot ohne Stand ab — ohne ihn liesse es sich nicht speichern', () => {
+    expect(() => parseAngebot({ ...ANGEBOT, version: undefined })).toThrow(TypeError);
+  });
+
   it('schickt die Kennung einer bestehenden Position mit und laesst sie an einer neuen leer', async () => {
     const fetchMock = fetchNachPfad({ 'PUT /api/angebote/9': json(200, ANGEBOT) });
 
-    await angebotAendern(9, EINGABE_MIT_NEUER_POSITION);
+    await angebotAendern(9, 4, EINGABE_MIT_NEUER_POSITION);
 
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/angebote/9',
@@ -552,7 +580,7 @@ describe('die Wege', () => {
       },
     });
 
-    await angebotAendern(9, { ...EINGABE, intern: true });
+    await angebotAendern(9, 4, { ...EINGABE, intern: true });
 
     // Die interne Arbeit hat keine Menge, keine Einheit, keinen Preis und keine Abrechnungsart
     // (Plan #218, E7) — ein mitgeschickter Wert waere eine Angabe, die es nicht gibt. Auch das

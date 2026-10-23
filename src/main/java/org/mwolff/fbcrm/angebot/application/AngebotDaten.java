@@ -26,6 +26,9 @@ import org.jspecify.annotations.Nullable;
  * @param beschreibung der Text des Angebots, oder {@code null}
  * @param intern ob das Angebot danach die eigene interne Arbeit festhaelt
  * @param positionen die vollstaendige Positionsliste in der gewuenschten Reihenfolge
+ * @param version der Stand, auf dem die Aenderung beruht — vorgelegt mit {@code If-Match} (Plan
+ *     #415, E2)
+ * @param geaendertVon Kennung des handelnden Kontos; es steht danach als Urheber am Angebot (E14)
  */
 public record AngebotDaten(
     LocalDate angebotDatum,
@@ -33,7 +36,9 @@ public record AngebotDaten(
     String titel,
     @Nullable String beschreibung,
     boolean intern,
-    List<Positionsangabe> positionen) {
+    List<Positionsangabe> positionen,
+    long version,
+    long geaendertVon) {
 
   /** Nimmt die Positionen als Kopie: Der Aufrufer darf seine Liste danach weiterverwenden. */
   public AngebotDaten {

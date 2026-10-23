@@ -1,9 +1,9 @@
 # Bedienung
 
-Dieser Teil der Dokumentation führt durch die Oberfläche von fb.crm. Er beginnt mit dem Einstieg
-und den beiden Bereichen, die eine Rechnung voraussetzt: den eigenen Angaben und den
-Rechnungseinstellungen. Wie fb.crm eingerichtet, gesichert und aktualisiert wird, steht im Teil
-„Betrieb".
+Dieser Teil der Dokumentation führt durch die Oberfläche von fb.crm. Er beginnt mit dem Einstieg,
+sagt, was geschieht, wenn zwei Personen dasselbe zugleich bearbeiten, und folgt dann den beiden
+Bereichen, die eine Rechnung voraussetzt: den eigenen Angaben und den Rechnungseinstellungen. Wie
+fb.crm eingerichtet, gesichert und aktualisiert wird, steht im Teil „Betrieb".
 
 ## Erste Schritte
 
@@ -55,6 +55,34 @@ und zurück. Die Karte „Inhalt" führt jeden Abschnitt des gezeigten Teils auf
 ihm. Im Projekt liegt derselbe Text als Datei unter `docs/`.
 
 **Ergebnis:** Man ist angemeldet, sieht die Startseite und findet jeden Bereich über die Schiene.
+
+## Gleichzeitig arbeiten
+
+**Zweck:** Mehrere Personen arbeiten mit fb.crm, und manchmal haben zwei dasselbe Angebot offen.
+Speichern beide nacheinander, überschreibt fb.crm die Änderung des Ersten nicht still: Es weist
+das zweite Speichern ab, sagt, wer wann geändert hat, und niemand verliert seine Eingaben. Dieser
+Abschnitt zeigt, was dann geschieht und wie man weitermacht. Bisher gilt das beim Speichern in der
+Maske „Angebot bearbeiten"; das Angebot zählt dabei als Ganzes, mit seinen Positionen.
+
+**Einstieg:** Die Abweisung erscheint von selbst, wenn man „Speichern" wählt und jemand anderes
+das Angebot seit dem Öffnen gespeichert hat. Solange der geöffnete Stand aktuell ist, merkt man vom
+Schutz nichts.
+
+1. Oben in der Maske steht „Nicht ausgeführt" mit einem Satz wie „Anna hat diesen Eintrag
+   inzwischen geändert (10:42)." Am selben Tag nennt er die Uhrzeit, sonst Datum und Uhrzeit. War
+   es die eigene Änderung aus einem anderen Fenster, lautet er „Du hast diesen Eintrag inzwischen in
+   einem anderen Fenster geändert". Die eigenen Eingaben stehen weiter im Formular.
+2. „Neu laden" wählen. Das Formular zeigt nun den aktuellen Stand, so wie der andere ihn
+   gespeichert hat. Daneben stehen unter „Deine Eingaben" die eigenen Werte Feld für Feld zum
+   Kopieren.
+3. Die eigene Änderung auf dem neuen Stand erneut eintragen, etwa den Titel aus „Deine Eingaben"
+   in das Feld „Titel" kopieren.
+4. „Speichern" wählen. Gespeichert wird jetzt auf dem aktuellen Stand, und die Änderung des anderen
+   bleibt erhalten.
+5. „Verwerfen" unter „Deine Eingaben" nimmt die eigenen Werte weg, sobald man sie nicht mehr
+   braucht.
+
+**Ergebnis:** Das Angebot trägt die Änderungen beider, und keine ist unbemerkt verloren gegangen.
 
 ## Eigene Angaben
 

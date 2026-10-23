@@ -121,7 +121,9 @@ class FirmaAngeboteControllerTest {
                 new BigDecimal("1000.01"),
                 Year.of(2026))),
         ANGELEGT,
-        ANGELEGT);
+        ANGELEGT,
+        0L,
+        null);
   }
 
   private static MockHttpServletRequestBuilder anlegenMit(final String rumpf) {

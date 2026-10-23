@@ -8,7 +8,7 @@ import { KEIN_JAHR } from '../components/Positionsmaske';
 import { KopfPfadProvider } from '../components/KopfPfad';
 import { NICHT_OFFEN } from '../routes/RollenRoute';
 import { appAlsRolle } from '../test/appAlsRolle';
-import { fetchNachPfad, json, leer, problem } from '../test/fetchNachPfad';
+import { alsJson, fetchNachPfad, json, leer, problem } from '../test/fetchNachPfad';
 import type { Routen } from '../test/fetchNachPfad';
 import { renderMitTheme } from '../test/render';
 
@@ -39,6 +39,8 @@ const ANGEBOT = {
   stornoGrund: null,
   positionen: [POSITION],
   summe: 2500.03,
+  version: 0,
+  geaendertVon: null,
 };
 
 /** Eine Firma, wie `GET /api/firmen/5` sie liefert — ein aktiver und ein stillgelegter Partner. */
@@ -1389,5 +1391,258 @@ describe('AngebotMaske — der Titel beim Bearbeiten (Issue #318, Kriterien 3, 4
     expect(titelFeld()).toHaveAccessibleDescription(TITEL_FEHLT);
     expect(screen.getByText('Bitte das Datum des Angebots angeben.')).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+});
+
+/** Heute um die genannte Uhrzeit in der Ortszeit — die Meldung nennt dann nur die Uhrzeit. */
+function heuteUm(stunde: number, minute: number): string {
+  const zeitpunkt = new Date();
+  zeitpunkt.setHours(stunde, minute, 0, 0);
+  return zeitpunkt.toISOString();
+}
+
+/** Die Abweisung des Servers, wie `GlobalExceptionHandler` sie schreibt (Plan #415, E4, E15). */
+function abweisung(konflikt: Readonly<Record<string, unknown>>): () => Response {
+  return json(409, {
+    title: 'Conflict',
+    status: 409,
+    detail: 'Dieser Eintrag wurde inzwischen geändert.',
+    konflikt: { art: 'veraltet', geaendertAm: heuteUm(10, 42), eigenesFenster: false, ...konflikt },
+  });
+}
+
+/** Annas Stand: derselbe Titel, ein neuer Preis an der Konzeption, Stand 1. */
+const ANNAS_STAND = {
+  ...ANGEBOT,
+  positionen: [{ ...POSITION, einzelpreis: 1200, betrag: 3000 }],
+  summe: 3000,
+  version: 1,
+  geaendertVon: 30,
+};
+
+/** Antwortet der Reihe nach mit den Antworten — beim ersten Aufruf mit der ersten. */
+function nacheinander(...antworten: readonly (() => Response)[]): () => Response {
+  let aufruf = 0;
+  return () => {
+    const antwort = antworten[Math.min(aufruf, antworten.length - 1)];
+    aufruf += 1;
+    return antwort();
+  };
+}
+
+/** Die Rumpfe und Bedingungskoepfe aller Speicheraufrufe, in ihrer Reihenfolge. */
+function speicherAufrufe(
+  fetchMock: ReturnType<typeof fetchNachPfad>,
+): { readonly stand: string | undefined; readonly rumpf: Record<string, unknown> }[] {
+  return fetchMock.mock.calls
+    .map(([, init]) => ({ ...init }))
+    .filter((init) => init.method === 'PUT')
+    .map((init) => ({
+      stand: (init.headers as Record<string, string> | undefined)?.['If-Match'],
+      rumpf: alsJson(init.body as BodyInit | null) as Record<string, unknown>,
+    }));
+}
+
+/** Der Einzelpreis der ersten Position im geschickten Rumpf. */
+function preisImRumpf(rumpf: Record<string, unknown>): unknown {
+  return (rumpf.positionen as { einzelpreis: unknown }[])[0].einzelpreis;
+}
+
+describe('AngebotMaske — gleichzeitig arbeiten (#411, Plan #415)', () => {
+  it('legt beim Speichern den gelesenen Stand als If-Match vor (E2)', async () => {
+    const nutzer = userEvent.setup();
+    const fetchMock = lesen(
+      { ...ANGEBOT, version: 4 },
+      { 'PUT /api/angebote/9': json(200, { ...ANGEBOT, version: 5 }) },
+    );
+
+    renderMaske('/angebote/9/bearbeiten');
+    await bereit();
+    await nutzer.click(screen.getByRole('button', { name: 'Speichern' }));
+    await screen.findByRole('status');
+    // Der zweite Zug legt den Stand aus der Antwort vor, nicht den zuerst gelesenen.
+    await nutzer.click(screen.getByRole('button', { name: 'Speichern' }));
+    await screen.findByRole('status');
+
+    expect(speicherAufrufe(fetchMock).map((aufruf) => aufruf.stand)).toEqual(['"4"', '"5"']);
+  });
+
+  it('Szenario: Zweites Speichern wird abgewiesen', async () => {
+    // Anna hat um 10:42 Uhr den Preis geaendert; Ben aendert danach den Titel auf dem alten Stand.
+    const nutzer = userEvent.setup();
+    const fetchMock = lesen(ANGEBOT, {
+      'PUT /api/angebote/9': abweisung({ geaendertVon: 'Anna' }),
+    });
+
+    renderMaske('/angebote/9/bearbeiten');
+    await bereit();
+    await nutzer.clear(titelFeld());
+    await nutzer.type(titelFeld(), 'Bens Titel');
+    await nutzer.click(screen.getByRole('button', { name: 'Speichern' }));
+
+    // Bens Aenderung ist abgewiesen, und er liest, dass Anna um 10:42 Uhr geaendert hat.
+    const meldung = await screen.findByRole('alert');
+    expect(meldung).toHaveTextContent('Nicht ausgeführt');
+    expect(meldung).toHaveTextContent('Anna hat diesen Eintrag inzwischen geändert (10:42).');
+    expect(screen.getByRole('button', { name: 'Neu laden' })).toBeInTheDocument();
+    // Nichts behauptet, gespeichert zu sein; Bens Eingabe steht weiter im Feld (Kriterium 3).
+    expect(screen.queryByText('Gespeichert.')).not.toBeInTheDocument();
+    expect(titelFeld()).toHaveValue('Bens Titel');
+    // Annas Preis ist erhalten: Hinaus ging nur der eine abgewiesene Zug, kein zweiter Versuch.
+    // Dass der Server dabei nichts schreibt, belegt AngebotIT.
+    expect(speicherAufrufe(fetchMock)).toHaveLength(1);
+  });
+
+  it('Szenario: Weiterarbeiten nach der Abweisung', async () => {
+    const nutzer = userEvent.setup();
+    const fetchMock = fetchNachPfad({
+      'GET /api/angebote/9': nacheinander(json(200, ANGEBOT), json(200, ANNAS_STAND)),
+      'GET /api/firmen/5': json(200, FIRMA),
+      'PUT /api/angebote/9': nacheinander(
+        abweisung({ geaendertVon: 'Anna' }),
+        json(200, { ...ANNAS_STAND, titel: 'Bens Titel', version: 2 }),
+      ),
+    });
+
+    renderMaske('/angebote/9/bearbeiten');
+    await bereit();
+    await nutzer.clear(titelFeld());
+    await nutzer.type(titelFeld(), 'Bens Titel');
+    await nutzer.click(screen.getByRole('button', { name: 'Speichern' }));
+    await nutzer.click(await screen.findByRole('button', { name: 'Neu laden' }));
+
+    // Das Formular zeigt Annas Stand, Bens Werte stehen daneben zum Kopieren.
+    const eigene = await screen.findByRole('region', { name: 'Deine Eingaben' });
+    expect(titelFeld()).toHaveValue('Relaunch');
+    expect(gruppe(1).getByRole('textbox', { name: /^Einzelpreis/ })).toHaveValue('1200,00');
+    expect(eigene).toHaveTextContent('TitelBens Titel');
+    expect(eigene).toHaveTextContent('Angebotsdatum24.09.2026');
+    expect(eigene).toHaveTextContent('Ansprechpartner(leer)');
+    expect(eigene).toHaveTextContent('Internes Projektnein');
+    expect(eigene).toHaveTextContent(
+      'Position 1Konzeption · Aufwand · 2,50 Personentag · 1000,01 € · 2026',
+    );
+    expect(screen.queryByRole('button', { name: 'Neu laden' })).not.toBeInTheDocument();
+
+    // Ben uebernimmt seinen Titel und speichert auf Annas Stand.
+    await nutzer.clear(titelFeld());
+    await nutzer.type(titelFeld(), 'Bens Titel');
+    await nutzer.click(screen.getByRole('button', { name: 'Speichern' }));
+
+    expect(await screen.findByRole('status')).toHaveTextContent('Gespeichert');
+    const zweiter = speicherAufrufe(fetchMock)[1];
+    expect(zweiter.stand).toBe('"1"');
+    expect(zweiter.rumpf.titel).toBe('Bens Titel');
+    expect(preisImRumpf(zweiter.rumpf)).toBe('1200.00');
+    // Die eigenen Werte bleiben, bis Ben sie selbst verwirft.
+    expect(screen.getByRole('region', { name: 'Deine Eingaben' })).toBeInTheDocument();
+  });
+
+  it('behaelt den fremden Preis, wenn nach „Neu laden" ohne erneute Eingabe gespeichert wird', async () => {
+    const nutzer = userEvent.setup();
+    const fetchMock = fetchNachPfad({
+      'GET /api/angebote/9': nacheinander(json(200, ANGEBOT), json(200, ANNAS_STAND)),
+      'GET /api/firmen/5': json(200, FIRMA),
+      'PUT /api/angebote/9': nacheinander(
+        abweisung({ geaendertVon: 'Anna' }),
+        json(200, { ...ANNAS_STAND, version: 2 }),
+      ),
+    });
+
+    renderMaske('/angebote/9/bearbeiten');
+    await bereit();
+    await nutzer.clear(titelFeld());
+    await nutzer.type(titelFeld(), 'Bens Titel');
+    await nutzer.click(screen.getByRole('button', { name: 'Speichern' }));
+    await nutzer.click(await screen.findByRole('button', { name: 'Neu laden' }));
+    await screen.findByRole('region', { name: 'Deine Eingaben' });
+    await nutzer.click(screen.getByRole('button', { name: 'Speichern' }));
+
+    await screen.findByRole('status');
+    const zweiter = speicherAufrufe(fetchMock)[1];
+    expect(preisImRumpf(zweiter.rumpf)).toBe('1200.00');
+    expect(zweiter.rumpf.titel).toBe('Relaunch');
+  });
+
+  it('Szenario: Zwei Fenster derselben Person', async () => {
+    const nutzer = userEvent.setup();
+    lesen(ANGEBOT, {
+      'PUT /api/angebote/9': abweisung({ geaendertVon: 'Anna', eigenesFenster: true }),
+    });
+
+    renderMaske('/angebote/9/bearbeiten');
+    await bereit();
+    await nutzer.clear(titelFeld());
+    await nutzer.type(titelFeld(), 'Aus dem zweiten Fenster');
+    await nutzer.click(screen.getByRole('button', { name: 'Speichern' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Du hast diesen Eintrag inzwischen in einem anderen Fenster geändert (10:42).',
+    );
+    expect(titelFeld()).toHaveValue('Aus dem zweiten Fenster');
+  });
+
+  it('nimmt die eigenen Eingaben mit „Verwerfen" weg', async () => {
+    const nutzer = userEvent.setup();
+    fetchNachPfad({
+      'GET /api/angebote/9': nacheinander(json(200, ANGEBOT), json(200, ANNAS_STAND)),
+      'GET /api/firmen/5': json(200, FIRMA),
+      'PUT /api/angebote/9': abweisung({ geaendertVon: 'Anna' }),
+    });
+
+    renderMaske('/angebote/9/bearbeiten');
+    await bereit();
+    await nutzer.click(screen.getByRole('button', { name: 'Speichern' }));
+    await nutzer.click(await screen.findByRole('button', { name: 'Neu laden' }));
+    await nutzer.click(await screen.findByRole('button', { name: 'Verwerfen' }));
+
+    expect(screen.queryByRole('region', { name: 'Deine Eingaben' })).not.toBeInTheDocument();
+  });
+
+  it('zeigt am internen Angebot Ansprechpartner, Art und nur die Bezeichnung der Position', async () => {
+    const nutzer = userEvent.setup();
+    const intern = {
+      ...ANGEBOT,
+      intern: true,
+      status: 'LAEUFT',
+      ansprechpartnerId: 8,
+      ansprechpartnerName: 'Eva Adler',
+    };
+    fetchNachPfad({
+      'GET /api/angebote/9': json(200, intern),
+      'GET /api/firmen/5': json(200, FIRMA),
+      'PUT /api/angebote/9': abweisung({ geaendertVon: 'Anna' }),
+    });
+
+    renderMaske('/angebote/9/bearbeiten');
+    await bereit();
+    await nutzer.click(screen.getByRole('button', { name: 'Speichern' }));
+    await nutzer.click(await screen.findByRole('button', { name: 'Neu laden' }));
+
+    const eigene = await screen.findByRole('region', { name: 'Deine Eingaben' });
+    expect(eigene).toHaveTextContent('AnsprechpartnerEva Adler');
+    expect(eigene).toHaveTextContent('Internes Projektja');
+    expect(eigene).toHaveTextContent('Position 1Konzeption');
+    expect(eigene).not.toHaveTextContent('Personentag');
+  });
+
+  it('meldet den Ausfall, wenn „Neu laden" scheitert, und laesst die Eingaben stehen', async () => {
+    const nutzer = userEvent.setup();
+    fetchNachPfad({
+      'GET /api/angebote/9': nacheinander(json(200, ANGEBOT), leer(500)),
+      'GET /api/firmen/5': json(200, FIRMA),
+      'PUT /api/angebote/9': abweisung({ geaendertVon: 'Anna' }),
+    });
+
+    renderMaske('/angebote/9/bearbeiten');
+    await bereit();
+    await nutzer.clear(titelFeld());
+    await nutzer.type(titelFeld(), 'Bens Titel');
+    await nutzer.click(screen.getByRole('button', { name: 'Speichern' }));
+    await nutzer.click(await screen.findByRole('button', { name: 'Neu laden' }));
+
+    expect(await screen.findByText(/Das Angebot ist gerade nicht zu erreichen/)).toBeInTheDocument();
+    expect(titelFeld()).toHaveValue('Bens Titel');
+    expect(screen.queryByRole('region', { name: 'Deine Eingaben' })).not.toBeInTheDocument();
   });
 });

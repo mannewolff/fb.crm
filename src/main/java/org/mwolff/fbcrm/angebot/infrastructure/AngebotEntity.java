@@ -8,6 +8,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 import java.time.Instant;
 import java.time.LocalDate;
 import org.jspecify.annotations.Nullable;
@@ -15,7 +16,8 @@ import org.mwolff.fbcrm.angebot.domain.Angebot;
 import org.mwolff.fbcrm.angebot.domain.Angebotsstatus;
 
 /**
- * Die Zeile der Tabelle {@code angebot} nach {@code V25__angebot_storno.sql}.
+ * Die Zeile der Tabelle {@code angebot} nach {@code V25__angebot_storno.sql} und {@code
+ * V33__version.sql}.
  *
  * <p>Firma und Ansprechpartner stehen als blosse Kennungen und nicht als Beziehung: Angebot und
  * Firma sind eigene Wurzeln mit eigenem Lebenszyklus, und eine Beziehung laedt das eine mit dem
@@ -78,6 +80,20 @@ class AngebotEntity {
   private Instant updatedAt;
 
   /*
+   * Der Stand der Zeile, gefuehrt von Hibernate (Plan #415, E1, E9): Jedes Schreiben erhoeht ihn,
+   * und ein UPDATE mit einem anderen Stand als dem gelesenen trifft keine Zeile und scheitert. Er
+   * kommt aus dem Fachobjekt mit, damit eine Zeile, die auf einem alten Stand beruht, nicht still
+   * geschrieben wird. Ein long und kein Long: Ob die Zeile neu ist, entscheidet so weiter die
+   * Kennung, und ein neues Angebot beginnt bei 0 wie die Vorbelegung der Spalte (V33).
+   */
+  @Version
+  @Column(name = "version", nullable = false)
+  private long version;
+
+  @Column(name = "geaendert_von")
+  private @Nullable Long geaendertVon;
+
+  /*
    * JPA verlangt einen parameterlosen Konstruktor und fuellt die Felder danach selbst; NullAway
    * sieht diesen Weg nicht und meldete sonst nicht initialisierte Felder.
    */
@@ -115,6 +131,8 @@ class AngebotEntity {
     this.beschreibung = angebot.beschreibung();
     this.createdAt = angebot.createdAt();
     this.updatedAt = angebot.updatedAt();
+    this.version = angebot.version();
+    this.geaendertVon = angebot.geaendertVon();
   }
 
   @Nullable Long getId() {
@@ -163,5 +181,13 @@ class AngebotEntity {
 
   Instant getUpdatedAt() {
     return updatedAt;
+  }
+
+  long getVersion() {
+    return version;
+  }
+
+  @Nullable Long getGeaendertVon() {
+    return geaendertVon;
   }
 }

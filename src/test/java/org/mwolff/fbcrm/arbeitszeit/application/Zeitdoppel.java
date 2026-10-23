@@ -113,7 +113,9 @@ final class Zeitdoppel {
         "Neugestaltung der Website",
         List.of(KONZEPTION, WARTUNG, SCHULUNG),
         FRUEHER,
-        FRUEHER);
+        FRUEHER,
+        0L,
+        null);
   }
 
   /**
@@ -134,7 +136,9 @@ final class Zeitdoppel {
         "Neugestaltung der Website",
         List.of(KONZEPTION, WARTUNG, SCHULUNG),
         FRUEHER,
-        FRUEHER);
+        FRUEHER,
+        0L,
+        null);
   }
 
   /** Die Firma des Angebots, wie der Bestand sie fuehrt. */

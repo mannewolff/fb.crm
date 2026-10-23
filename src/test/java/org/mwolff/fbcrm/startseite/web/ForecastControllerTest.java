@@ -86,7 +86,9 @@ class ForecastControllerTest {
                 "Schulungen 2027",
                 List.of(position),
                 ANGELEGT,
-                ANGELEGT),
+                ANGELEGT,
+                0L,
+                null),
             FIRMA);
     return new Forecastposition(angebot, position, new BigDecimal(netto));
   }

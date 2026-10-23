@@ -16,22 +16,28 @@ import { angebotAendern, angebotAnlegen, angebotLesen } from '../api/angebote';
 import type { Angebot, PositionEingabe } from '../api/angebote';
 import { firmaLesen } from '../api/firmen';
 import type { Ansprechpartner } from '../api/firmen';
+import EigeneEingaben from '../components/EigeneEingaben';
+import type { EigeneEingabe } from '../components/EigeneEingaben';
 import Karte from '../components/Karte';
+import Konfliktmeldung from '../components/Konfliktmeldung';
 import { useKopfPfad } from '../components/KopfPfad';
 import type { PfadVerweis } from '../components/KopfPfad';
 import KupferTaste from '../components/KupferTaste';
 import Positionsmaske, {
+  EINHEIT_WORT,
+  MODUS_WORT,
   betragDerPosition,
   frischePosition,
   jahrUnlesbar,
 } from '../components/Positionsmaske';
 import type { Maskenposition } from '../components/Positionsmaske';
 import WeicheTaste from '../components/WeicheTaste';
-import { feldMeldungen, nichtGefunden } from '../lib/apifehler';
+import { feldMeldungen, istBearbeitungskonflikt, nichtGefunden } from '../lib/apifehler';
 import { meldungAm } from '../lib/feldmeldung';
 import { dezimal, euro, hundertstel } from '../lib/geld';
 import { kennungAus } from '../lib/kennung';
 import { namensZug } from '../lib/namenszug';
+import { tagWort } from '../lib/tag';
 import { ABSTAND_BUEHNE, ZAHLEN_KLASSE } from '../theme';
 
 /**
@@ -107,6 +113,15 @@ import { ABSTAND_BUEHNE, ZAHLEN_KLASSE } from '../theme';
  * speichern, wenn der Titel nachgetragen ist (Kriterium 4).
  *
  * <b>Der Kopfpfad nennt die Firma beim Namen</b>, sobald sie bekannt ist.
+ *
+ * <b>Gespeichert wird auf dem gelesenen Stand</b> (#411, Kriterien 1 bis 3; Plan #415, E2). Die
+ * Maske fuehrt die Version des Angebots mit und legt sie beim Speichern vor. Hat inzwischen jemand
+ * anderes gespeichert — oder dieselbe Person in einem anderen Fenster —, weist der Server ab, und
+ * die {@link Konfliktmeldung} sagt, wer wann geaendert hat. Die eigenen Eingaben bleiben dabei im
+ * Formular stehen. „Neu laden" holt den Stand des Servers samt neuer Version ins Formular und
+ * stellt die eigenen Werte daneben in {@link EigeneEingaben}, bis „Verwerfen" gewaehlt wird. So
+ * ueberschreibt das naechste Speichern den fremden Stand nie still: Was davon bleiben soll, traegt
+ * man auf dem neuen Stand selbst wieder ein.
  */
 
 const NICHT_GEFUNDEN_FIRMA = 'Diese Firma gibt es nicht.';
@@ -125,6 +140,8 @@ const GESPEICHERT = 'Gespeichert.';
 const ZAHLEN_UNKLAR =
   'Solange eine Menge oder ein Einzelpreis keine Zahl ist, kann nicht gespeichert werden.';
 const LAEDT = 'Das Angebot wird geladen …';
+/** Wohin „Zur Übersicht" fuehrt, wenn das Angebot nicht mehr da ist (#411, Kriterium 6). */
+const UEBERSICHT = '/angebote';
 const OHNE_POSITION = 'Noch keine Position. „Position hinzufügen“ legt die erste an.';
 const KEINE_PERSON = '';
 
@@ -143,6 +160,8 @@ type Stand =
       readonly firmaId: number;
       readonly firmaName: string;
       readonly angebotId: number;
+      /** Der Stand des gelesenen Angebots — er geht beim Speichern als `If-Match` hinaus (E2). */
+      readonly version: number;
       /** Die aktiven Ansprechpartner der Firma und der gespeicherte, auch wenn stillgelegt. */
       readonly personen: readonly Ansprechpartner[];
       /**
@@ -330,6 +349,49 @@ function verschoben(
   return neu;
 }
 
+/** Die Beschriftung des Kennzeichens — in beiden Schritten dieselbe (Kriterium 1). */
+const INTERN_WORT = 'Internes Projekt';
+
+/** Wie eine Position in den eigenen Eingaben steht — am internen Angebot nur ihre Bezeichnung. */
+function positionWort(position: Maskenposition, intern: boolean): string {
+  if (intern) {
+    return position.bezeichnung;
+  }
+  return [
+    position.bezeichnung,
+    MODUS_WORT[position.abrechnungsmodus],
+    `${position.menge} ${EINHEIT_WORT[position.einheit]}`,
+    `${position.einzelpreis} €`,
+    position.leistungsjahr,
+  ].join(' · ');
+}
+
+/**
+ * Was gerade im Formular steht, als eigene Eingaben zum Kopieren (#411, Kriterium 3).
+ *
+ * Beschriftet wie die Felder der Maske, damit sich jeder Wert seinem Feld zuordnen laesst. Der
+ * Ansprechpartner steht mit Namen und nicht mit Kennung: Die Kennung sagt dem Menschen nichts.
+ */
+function eigeneEingabenAus(
+  texte: Texte,
+  personen: readonly Ansprechpartner[],
+  intern: boolean,
+  positionen: readonly Maskenposition[],
+): readonly EigeneEingabe[] {
+  const person = personen.find((kandidat) => String(kandidat.id) === texte.ansprechpartner);
+  return [
+    { bezeichnung: 'Titel', wert: texte.titel },
+    { bezeichnung: 'Angebotsdatum', wert: tagWort(texte.angebotDatum) },
+    { bezeichnung: 'Ansprechpartner', wert: person === undefined ? '' : namensZug(person) },
+    { bezeichnung: 'Beschreibung', wert: texte.beschreibung },
+    { bezeichnung: INTERN_WORT, wert: intern ? 'ja' : 'nein' },
+    ...positionen.map((position, stelle) => ({
+      bezeichnung: `Position ${String(stelle + 1)}`,
+      wert: positionWort(position, intern),
+    })),
+  ];
+}
+
 /** Die erste Stufe des Kopfpfads ueber jeder Angebotsansicht. */
 const ZU_FIRMEN: PfadVerweis = { titel: 'Firmen', ziel: '/firmen' };
 
@@ -363,6 +425,7 @@ function uebernahme(angebot: Angebot, alle: readonly Ansprechpartner[]): Ueberna
       firmaId: angebot.firmaId,
       firmaName: angebot.firmaName,
       angebotId: angebot.id,
+      version: angebot.version,
       personen: waehlbare(alle, angebot.ansprechpartnerId),
       alle,
     },
@@ -379,9 +442,6 @@ function waehlbare(
 ): readonly Ansprechpartner[] {
   return personen.filter((person) => person.aktiv || person.id === gespeichert);
 }
-
-/** Die Beschriftung des Kennzeichens — in beiden Schritten dieselbe (Kriterium 1). */
-const INTERN_WORT = 'Internes Projekt';
 
 /**
  * Das Kaestchen „Internes Projekt" samt Meldung des Servers.
@@ -472,6 +532,10 @@ export default function AngebotMaske() {
   const [fehler, setzeFehler] = useState<string | null>(null);
   const [gespeichert, setzeGespeichert] = useState(false);
   const [laeuft, setzeLaeuft] = useState(false);
+  /** Die Abweisung des letzten Speicherns, weil sich der Stand geaendert hat — oder keine. */
+  const [abweisung, setzeAbweisung] = useState<unknown>(null);
+  /** Die eigenen Werte nach „Neu laden", bis „Verwerfen" gewaehlt wird (#411, Kriterium 3). */
+  const [eigene, setzeEigene] = useState<readonly EigeneEingabe[] | null>(null);
   /**
    * Der Zaehler, aus dem die Schluessel frischer Zeilen entstehen.
    *
@@ -566,10 +630,11 @@ export default function AngebotMaske() {
     }
   };
 
-  const speichern = async (angebot: number, alle: readonly Ansprechpartner[]) => {
+  const speichern = async (angebot: number, version: number, alle: readonly Ansprechpartner[]) => {
     setzeGespeichert(false);
     setzeFehler(null);
     setzeFeldFehler({});
+    setzeAbweisung(null);
     const fehlendesDatum = texte.angebotDatum === '';
     const fehlenderTitel = titelFehler(texte.titel);
     // Beide Meldungen koennen zugleich stehen: Wer speichert, soll alles Fehlende auf einmal sehen.
@@ -585,7 +650,7 @@ export default function AngebotMaske() {
     setzeLaeuft(true);
     try {
       const neu = uebernahme(
-        await angebotAendern(angebot, {
+        await angebotAendern(angebot, version, {
           angebotDatum: texte.angebotDatum,
           titel: texte.titel.trim(),
           ansprechpartnerId:
@@ -603,11 +668,44 @@ export default function AngebotMaske() {
       setzeGespeichert(true);
     } catch (ursache) {
       const felder = feldMeldungen(ursache);
-      if (Object.keys(felder).length > 0) {
+      if (istBearbeitungskonflikt(ursache)) {
+        // Die Eingaben bleiben stehen; den Weg weiter zeigt die Konfliktmeldung (Kriterium 3).
+        setzeAbweisung(ursache);
+      } else if (Object.keys(felder).length > 0) {
         setzeFeldFehler(felder);
       } else {
         setzeFehler(AUSFALL_SPEICHERN);
       }
+    } finally {
+      setzeLaeuft(false);
+    }
+  };
+
+  /**
+   * „Neu laden" nach einer Abweisung: der Stand des Servers ins Formular, die eigenen Werte daneben
+   * (#411, Kriterium 3; Plan #415, E12).
+   *
+   * Die eigenen Werte werden genommen, wie sie in diesem Augenblick im Formular stehen — auch was
+   * nach der Abweisung noch getippt wurde, soll nicht verloren gehen.
+   */
+  const neuLaden = async (angebot: number, personen: readonly Ansprechpartner[]) => {
+    const meine = eigeneEingabenAus(texte, personen, intern, positionen);
+    setzeLaeuft(true);
+    try {
+      const gelesen = await angebotLesen(angebot);
+      const firma = await firmaLesen(gelesen.firmaId);
+      const neu = uebernahme(gelesen, firma.ansprechpartner);
+      setzeStand(neu.stand);
+      setzeTexte(neu.texte);
+      setzePositionen(neu.positionen);
+      setzeIntern(neu.intern);
+      setzeEigene(meine);
+      setzeAbweisung(null);
+      setzeEigeneFehler({});
+      setzeFeldFehler({});
+      setzeGespeichert(false);
+    } catch {
+      setzeFehler(AUSFALL_LESEN);
     } finally {
       setzeLaeuft(false);
     }
@@ -709,6 +807,7 @@ export default function AngebotMaske() {
   }
 
   const zuAendern = stand.angebotId;
+  const gelesenerStand = stand.version;
   const personen = stand.personen;
   const allePersonen = stand.alle;
   return (
@@ -717,13 +816,28 @@ export default function AngebotMaske() {
       noValidate
       onSubmit={(ereignis: FormEvent<HTMLFormElement>) => {
         ereignis.preventDefault();
-        void speichern(zuAendern, allePersonen);
+        void speichern(zuAendern, gelesenerStand, allePersonen);
       }}
       sx={spalten}
     >
       <Karte titel="Angebot bearbeiten" titelEbene={1}>
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           {fehler === null ? null : <Alert severity="error">{fehler}</Alert>}
+          <Konfliktmeldung
+            ursache={abweisung}
+            onNeuLaden={() => {
+              void neuLaden(zuAendern, personen);
+            }}
+            uebersicht={UEBERSICHT}
+          />
+          {eigene === null ? null : (
+            <EigeneEingaben
+              werte={eigene}
+              onVerwerfen={() => {
+                setzeEigene(null);
+              }}
+            />
+          )}
           {gespeichert ? (
             <Typography
               role="status"

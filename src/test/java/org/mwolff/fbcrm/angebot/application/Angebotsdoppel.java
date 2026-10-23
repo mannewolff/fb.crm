@@ -121,7 +121,9 @@ final class Angebotsdoppel {
         BESCHREIBUNG,
         List.of(KONZEPTION, SCHULUNG),
         ANGELEGT,
-        ANGELEGT);
+        ANGELEGT,
+        0L,
+        null);
   }
 
   /** Dasselbe Angebot ohne Ansprechpartner — der Ansprechpartner ist optional (Issue #126). */
@@ -139,7 +141,9 @@ final class Angebotsdoppel {
         angebot.beschreibung(),
         angebot.positionen(),
         angebot.createdAt(),
-        angebot.updatedAt());
+        angebot.updatedAt(),
+        angebot.version(),
+        angebot.geaendertVon());
   }
 
   /** Dasselbe Angebot ohne Titel — ein Angebot von vor Issue #316 (#314, Kriterium 4). */
@@ -157,6 +161,8 @@ final class Angebotsdoppel {
         angebot.beschreibung(),
         angebot.positionen(),
         angebot.createdAt(),
-        angebot.updatedAt());
+        angebot.updatedAt(),
+        angebot.version(),
+        angebot.geaendertVon());
   }
 }

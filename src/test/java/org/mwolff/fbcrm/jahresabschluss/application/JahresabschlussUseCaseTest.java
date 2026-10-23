@@ -160,7 +160,9 @@ class JahresabschlussUseCaseTest {
             "Neugestaltung der Website",
             List.of(positionen),
             ANGELEGT,
-            ANGELEGT),
+            ANGELEGT,
+            0L,
+            null),
         ADLER);
   }
 

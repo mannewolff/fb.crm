@@ -129,7 +129,9 @@ final class Webdoppel {
         "Neugestaltung der Website",
         List.of(BERATUNG),
         ANGELEGT,
-        ANGELEGT);
+        ANGELEGT,
+        0L,
+        null);
   }
 
   /** Ein Rechnungsentwurf ueber die angegebene Menge Beratung. */

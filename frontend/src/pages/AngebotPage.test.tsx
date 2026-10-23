@@ -37,6 +37,8 @@ const ANGEBOT = {
   stornoGrund: null,
   positionen: [POSITION],
   summe: 2500.03,
+  version: 0,
+  geaendertVon: null,
 };
 
 const KOMMENTARE = 'GET /api/angebote/9/kommentare';

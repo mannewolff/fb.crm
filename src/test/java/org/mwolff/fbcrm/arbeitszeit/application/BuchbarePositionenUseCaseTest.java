@@ -104,7 +104,9 @@ class BuchbarePositionenUseCaseTest {
         "Wartungsvertrag",
         List.of(positionen),
         Zeitdoppel.FRUEHER,
-        Zeitdoppel.FRUEHER);
+        Zeitdoppel.FRUEHER,
+        0L,
+        null);
   }
 
   private static Firma firma(final long id, final String name) {

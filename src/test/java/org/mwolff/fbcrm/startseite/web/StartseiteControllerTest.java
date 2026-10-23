@@ -142,7 +142,9 @@ class StartseiteControllerTest {
                     new BigDecimal("100.00"),
                     Year.of(2026))),
             ANGELEGT,
-            ANGELEGT),
+            ANGELEGT,
+            0L,
+            null),
         firmaName);
   }
 

@@ -109,6 +109,13 @@ export interface Angebot {
   readonly positionen: readonly AngebotPosition[];
   /** Netto-Summe in ganzen Cent, vom Server gerechnet (E5). */
   readonly summeInCent: number;
+  /**
+   * Der Stand des Angebots — die Maske legt ihn beim Speichern als `If-Match` wieder vor (Plan
+   * #415, E2).
+   */
+  readonly version: number;
+  /** Kennung des Kontos, das das Angebot zuletzt geaendert hat — `null`, wo der Server es nicht weiss. */
+  readonly geaendertVon: number | null;
 }
 
 /** Eine Zeile der Angebotsliste an der Firma (Kriterium 7). */
@@ -253,6 +260,8 @@ export function parseAngebot(wert: unknown): Angebot {
     stornoGrund: textOderNull(angebot.stornoGrund),
     positionen: liste(angebot.positionen).map(parsePosition),
     summeInCent: inHundertsteln(angebot.summe),
+    version: zahl(angebot.version),
+    geaendertVon: zahlOderNull(angebot.geaendertVon),
   };
 }
 
@@ -350,11 +359,23 @@ export function angebotLesen(id: number): Promise<Angebot> {
 /**
  * Aendert das Angebot als Ganzes, in jedem Status (Kriterium 5, E8).
  *
- * Die Antwort traegt das Angebot mit den neu gerechneten Betraegen — die Maske zeigt sie ohne
- * zweiten Aufruf.
+ * Die Antwort traegt das Angebot mit den neu gerechneten Betraegen und seinem neuen Stand — die
+ * Maske zeigt sie ohne zweiten Aufruf.
+ *
+ * @param version der Stand, auf dem die Aenderung beruht; er geht als `If-Match` hinaus, und hat
+ *   inzwischen jemand anderes gespeichert, weist der Server mit einem Bearbeitungskonflikt ab (Plan
+ *   #415, E2, E4)
  */
-export function angebotAendern(id: number, eingabe: AngebotEingabe): Promise<Angebot> {
-  return apiJson(`/api/angebote/${String(id)}`, { methode: 'PUT', rumpf: rumpf(eingabe) }, parseAngebot);
+export function angebotAendern(
+  id: number,
+  version: number,
+  eingabe: AngebotEingabe,
+): Promise<Angebot> {
+  return apiJson(
+    `/api/angebote/${String(id)}`,
+    { methode: 'PUT', rumpf: rumpf(eingabe), version },
+    parseAngebot,
+  );
 }
 
 /**

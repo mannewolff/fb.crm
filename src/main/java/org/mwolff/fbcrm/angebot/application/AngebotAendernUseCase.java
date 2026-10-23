@@ -16,6 +16,7 @@ import org.mwolff.fbcrm.angebot.domain.Angebot;
 import org.mwolff.fbcrm.angebot.domain.AngebotRepository;
 import org.mwolff.fbcrm.angebot.domain.Angebotsposition;
 import org.mwolff.fbcrm.common.Abrechnungsmodus;
+import org.mwolff.fbcrm.common.Bearbeitungskonflikt;
 import org.mwolff.fbcrm.common.Einheit;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -77,15 +78,22 @@ import org.springframework.transaction.annotation.Transactional;
  * mit {@link AngebotStorniert} ab. Kommentare und Anlagen sind davon nicht beruehrt — sie laufen
  * ueber eigene Anwendungsfaelle und entstehen weiter.
  *
- * <p><b>Die Reihenfolge der Pruefungen</b> ist Absicht: erst das Angebot, dann das Storno, dann der
- * Ansprechpartner, die Positionskennungen, die Rechnungsbindung beim Artwechsel, die Bindung der
- * berechneten Positionen, die Angaben nach Zielart und zuletzt die erfasste Arbeitszeit. Das Storno
- * steht vor allen uebrigen, weil es die gruendlichste Aussage ist: Am stornierten Angebot geht gar
- * keine Aenderung durch, und wer eine versucht, soll das erfahren und nicht zuerst einen Fehler zu
- * einer Angabe bekommen, deren Korrektur ihm danach nichts nuetzte. Aus demselben Grund steht die
- * Sperre aus Kriterium 8 vor den Feldpruefungen — wer bei bestehender Rechnung umstellen will, soll
- * das erfahren und nicht zuerst vier Feldfehler zu Positionen bekommen, die er gar nicht aendern
- * wollte.
+ * <p><b>Zuerst der Stand</b> (#411, Kriterium 1; Plan #415, E1, E9). Bevor irgendeine fachliche
+ * Regel gefragt wird, vergleicht der Anwendungsfall den vorgelegten Stand mit dem des Angebots: Wer
+ * auf einem alten Stand speichert, bekommt {@link AngebotGeaendert} mit Urheber und Zeitpunkt der
+ * fremden Aenderung — und nicht eine Abweisung zu Angaben, die ein anderer inzwischen geaendert
+ * hat. Das Angebot zaehlt als Ganzes, Kopf und Positionen tragen eine Version (E9). Das handelnde
+ * Konto steht danach als Urheber am Angebot (E14).
+ *
+ * <p><b>Die Reihenfolge der Pruefungen</b> ist Absicht: erst das Angebot und sein Stand, dann das
+ * Storno, dann der Ansprechpartner, die Positionskennungen, die Rechnungsbindung beim Artwechsel,
+ * die Bindung der berechneten Positionen, die Angaben nach Zielart und zuletzt die erfasste
+ * Arbeitszeit. Das Storno steht vor allen uebrigen, weil es die gruendlichste Aussage ist: Am
+ * stornierten Angebot geht gar keine Aenderung durch, und wer eine versucht, soll das erfahren und
+ * nicht zuerst einen Fehler zu einer Angabe bekommen, deren Korrektur ihm danach nichts nuetzte.
+ * Aus demselben Grund steht die Sperre aus Kriterium 8 vor den Feldpruefungen — wer bei bestehender
+ * Rechnung umstellen will, soll das erfahren und nicht zuerst vier Feldfehler zu Positionen
+ * bekommen, die er gar nicht aendern wollte.
  */
 /*
  * PMD.TooManyMethods: Fuenf Pruefungen, vier Uebersetzer einer Positionsangabe und die Regel fuer
@@ -130,8 +138,11 @@ public class AngebotAendernUseCase {
    * Aendert das Angebot und liefert es in seinem neuen Stand.
    *
    * @param angebotId Kennung des Angebots
-   * @param daten die eingereichten Angaben samt vollstaendiger Positionsliste
+   * @param daten die eingereichten Angaben samt vollstaendiger Positionsliste, vorgelegtem Stand
+   *     und handelndem Konto
    * @throws AngebotNichtGefunden wenn es das Angebot nicht gibt
+   * @throws AngebotGeaendert wenn das Angebot inzwischen einen anderen Stand hat als den
+   *     vorgelegten (Plan #415, E1)
    * @throws AngebotStorniert wenn das Angebot storniert ist (Kriterium 10)
    * @throws AnsprechpartnerNichtWaehlbar wenn der gewaehlte Ansprechpartner nicht zur Wahl steht
    * @throws PositionenNichtWaehlbar wenn eine Positionskennung nicht zu diesem Angebot gehoert oder
@@ -145,6 +156,12 @@ public class AngebotAendernUseCase {
    */
   public Angebot aendere(final long angebotId, final AngebotDaten daten) {
     final Angebot angebot = angebote.findById(angebotId).orElseThrow(AngebotNichtGefunden::new);
+    Bearbeitungskonflikt.pruefe(
+        daten.version(),
+        angebot.version(),
+        () ->
+            new AngebotGeaendert(
+                angebot.geaendertVon(), daten.geaendertVon(), angebot.updatedAt()));
     if (angebot.storniert()) {
       throw new AngebotStorniert();
     }
@@ -170,7 +187,8 @@ public class AngebotAendernUseCase {
                 daten.titel(),
                 daten.beschreibung(),
                 positionen,
-                jetzt));
+                jetzt)
+            .durch(daten.geaendertVon()));
   }
 
   /*

@@ -25,6 +25,8 @@ const ANGEBOT = {
   stornoGrund: null,
   positionen: [],
   summe: 0,
+  version: 0,
+  geaendertVon: null,
 };
 
 /** Eine gestellte Rechnung, wie das Backend sie schreibt (Issue #184). */

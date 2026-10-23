@@ -312,6 +312,21 @@ describe('Szenarien des Fachplans (E16)', () => {
     expect(erste).toMatch(/Fuß der Schiene stehen „Mitarbeitende"/u);
   });
 
+  it('Szenario: Gleichzeitig arbeiten (#411, Kriterium 9)', () => {
+    const namen = abschnittsnamen('bedienung');
+    // Gleich nach dem Einstieg, vor den Bereichen, in denen die Abweisung erscheint.
+    expect(namen.indexOf('Gleichzeitig arbeiten')).toBe(namen.indexOf('Erste Schritte') + 1);
+    const text = abschnitt('bedienung', 'Gleichzeitig arbeiten');
+
+    expect(text).toMatch(/^\*\*Zweck:\*\*/u);
+    expect(text).toMatch(/Nicht ausgeführt/u);
+    expect(text).toMatch(/in einem anderen Fenster geändert/u);
+    expect(text).toMatch(/„Neu laden"/u);
+    expect(text).toMatch(/„Deine Eingaben"/u);
+    expect(text).toMatch(/„Verwerfen"/u);
+    expect(text).toMatch(/\*\*Ergebnis:\*\*/u);
+  });
+
   it('Szenario: Arbeitszeit je Person (Kriterium 10, #410)', () => {
     const text = abschnitt('bedienung', 'Arbeitszeit');
 

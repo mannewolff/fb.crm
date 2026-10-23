@@ -8,6 +8,8 @@ import org.mwolff.fbcrm.angebot.application.AngebotStatusUseCase;
 import org.mwolff.fbcrm.angebot.application.AngebotStornoUseCase;
 import org.mwolff.fbcrm.angebot.application.KundenangabenUseCase;
 import org.mwolff.fbcrm.angebot.domain.Angebot;
+import org.mwolff.fbcrm.common.web.Bedingungskopf;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -66,11 +68,20 @@ public class AngebotController {
     return antwort(lesenUseCase.lese(id));
   }
 
-  /** Aendert das Angebot als Ganzes und liefert seinen neuen Stand (Kriterium 5, E8). */
+  /**
+   * Aendert das Angebot als Ganzes und liefert seinen neuen Stand (Kriterium 5, E8).
+   *
+   * <p>Der vorgelegte Stand kommt aus {@code If-Match}, das handelnde Konto aus der Sitzung (Plan
+   * #415, E2, E14). Der Kopf steht vor dem Rumpf: Fehlt er, weist der Weg mit 428 ab, bevor der
+   * Rumpf gelesen und geprueft wird (E3).
+   */
   @PutMapping
   public AngebotResponse aendern(
-      @PathVariable final long id, @Valid @RequestBody final AngebotRequest anfrage) {
-    return antwort(aendernUseCase.aendere(id, anfrage.daten()));
+      @PathVariable final long id,
+      final Bedingungskopf stand,
+      @AuthenticationPrincipal final Long accountId,
+      @Valid @RequestBody final AngebotRequest anfrage) {
+    return antwort(aendernUseCase.aendere(id, anfrage.daten(stand.version(), accountId)));
   }
 
   /** Schaltet den Status eine Stufe weiter (Kriterium 4). */
