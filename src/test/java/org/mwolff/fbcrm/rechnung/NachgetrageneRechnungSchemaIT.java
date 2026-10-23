@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mwolff.fbcrm.AbstractIntegrationTest;
+import org.mwolff.fbcrm.Schutzspalten;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -32,6 +33,8 @@ class NachgetrageneRechnungSchemaIT extends AbstractIntegrationTest {
 
   private long firmaId;
 
+  private long kontoId;
+
   @Autowired
   NachgetrageneRechnungSchemaIT(final JdbcTemplate jdbc) {
     this.jdbc = jdbc;
@@ -42,6 +45,8 @@ class NachgetrageneRechnungSchemaIT extends AbstractIntegrationTest {
     jdbc.execute("TRUNCATE rechnung_nachgetragen, ansprechpartner, firma RESTART IDENTITY CASCADE");
     jdbc.update("INSERT INTO firma (name) VALUES ('Adler AG')");
     firmaId = jdbc.queryForObject("SELECT id FROM firma LIMIT 1", Long.class).longValue();
+    leereKonten(jdbc);
+    kontoId = Schutzspalten.konto(jdbc);
   }
 
   private int nachgetragen(
@@ -144,5 +149,72 @@ class NachgetrageneRechnungSchemaIT extends AbstractIntegrationTest {
 
     // Then
     assertThat(spalten).isZero();
+  }
+
+  @Test
+  void migration_thenTheVersionStartsAtZeroAndTheAuthorReferencesTheAccount() {
+    // When — V33 (Plan #415, E1): ein eigener Zaehler und der letzte Urheber.
+    final String version = Schutzspalten.spalte(jdbc, "rechnung_nachgetragen", "version");
+    final String urheber = Schutzspalten.spalte(jdbc, "rechnung_nachgetragen", "geaendert_von");
+    final String verweis = Schutzspalten.verweis(jdbc, "rechnung_nachgetragen", "geaendert_von");
+
+    // Then — ohne ON DELETE wie jeder Fremdschluessel dieses Schemas.
+    assertThat(version).isEqualTo("bigint NO 0");
+    assertThat(urheber).isEqualTo("bigint YES -");
+    assertThat(verweis).isEqualTo("account.id NO ACTION");
+  }
+
+  @Test
+  void migration_thenTheDeletionMarkIsOptionalAndNamesTheAccount() {
+    // When — V34 (Plan #415, E17): Zeitpunkt und Urheber der Loeschung.
+    final String zeitpunkt = Schutzspalten.spalte(jdbc, "rechnung_nachgetragen", "geloescht_am");
+    final String urheber = Schutzspalten.spalte(jdbc, "rechnung_nachgetragen", "geloescht_von");
+    final String verweis = Schutzspalten.verweis(jdbc, "rechnung_nachgetragen", "geloescht_von");
+
+    // Then
+    assertThat(zeitpunkt).isEqualTo("timestamp with time zone YES -");
+    assertThat(urheber).isEqualTo("bigint YES -");
+    assertThat(verweis).isEqualTo("account.id NO ACTION");
+  }
+
+  @Test
+  void geloeschtVon_givenNoDeletionTime_thenRejectedByTheDatabase() {
+    // Given
+    nachgetragen("RE-9", "100.00", "119.00", GESTELLT);
+    final Long konto = Long.valueOf(kontoId);
+
+    // When / Then — ein Urheber der Loeschung steht nur an einer geloeschten Zeile.
+    assertThatThrownBy(
+            () -> jdbc.update("UPDATE rechnung_nachgetragen SET geloescht_von = ?", konto))
+        .isInstanceOf(DataIntegrityViolationException.class)
+        .hasMessageContaining("rechnung_nachgetragen_geloescht_bindung");
+  }
+
+  @Test
+  void geloeschtVon_givenADeletionTime_thenAccepted() {
+    // Given
+    nachgetragen("RE-9", "100.00", "119.00", GESTELLT);
+
+    // When
+    final int betroffen =
+        jdbc.update(
+            "UPDATE rechnung_nachgetragen SET geloescht_am = now(), geloescht_von = ?",
+            Long.valueOf(kontoId));
+
+    // Then
+    assertThat(betroffen).isEqualTo(1);
+  }
+
+  @Test
+  void nummer_givenTheSameNumberAsADeletedInvoice_thenAccepted() {
+    // Given — V35: eine gekennzeichnete Rechnung haelt ihre Nummer nicht mehr fest.
+    nachgetragen("RE-9", "100.00", "119.00", GESTELLT);
+    jdbc.update("UPDATE rechnung_nachgetragen SET geloescht_am = now()");
+
+    // When — auch in anderer Schreibweise, der Index bleibt einer ueber lower(nummer).
+    final int betroffen = nachgetragen("re-9", "100.00", "119.00", GESTELLT);
+
+    // Then
+    assertThat(betroffen).isEqualTo(1);
   }
 }

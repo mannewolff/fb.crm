@@ -101,7 +101,7 @@ class BriefpapierIT extends AbstractIntegrationTest {
   void stelleDenStandDerMigrationHerUndMeldeAn() {
     jdbc.execute("DELETE FROM briefbogen");
     jdbc.execute("INSERT INTO briefbogen DEFAULT VALUES");
-    jdbc.execute("TRUNCATE outbox_message, account RESTART IDENTITY CASCADE");
+    leereKonten(jdbc);
     accounts.save(Konten.neu(MAIL, ANGELEGT));
     sitzung = Anmeldung.perCode(rest, jdbc, hasher, MAIL);
   }

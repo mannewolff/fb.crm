@@ -119,7 +119,7 @@ class JpaAccountRepositoryIT extends AbstractIntegrationTest {
 
   @BeforeEach
   void leereFachtabellen() {
-    jdbc.execute("TRUNCATE outbox_message, account RESTART IDENTITY CASCADE");
+    leereKonten(jdbc);
   }
 
   @Test

@@ -108,7 +108,8 @@ class MehrereKontenIT extends AbstractIntegrationTest {
     jdbc.execute(
         "TRUNCATE angebot_kommentar, angebot_position, angebot, ansprechpartner, firma"
             + " RESTART IDENTITY CASCADE");
-    jdbc.execute("TRUNCATE outbox_message, login_code, account RESTART IDENTITY CASCADE");
+    jdbc.execute("TRUNCATE login_code RESTART IDENTITY");
+    leereKonten(jdbc);
   }
 
   // --- Szenarien ----------------------------------------------------------------------------

@@ -66,7 +66,7 @@ class JpaZeiteintragRepositoryIT extends AbstractIntegrationTest {
         jdbc.queryForObject("SELECT id FROM angebot LIMIT 1", Long.class).longValue();
     konzeption = position(angebotId, 1, "Konzeption");
     beratung = position(angebotId, 2, "Beratung");
-    jdbc.execute("TRUNCATE outbox_message, account RESTART IDENTITY CASCADE");
+    leereKonten(jdbc);
     anna = konto("anna@firma.de", "Anna");
     ben = konto("ben@firma.de", "Ben");
   }

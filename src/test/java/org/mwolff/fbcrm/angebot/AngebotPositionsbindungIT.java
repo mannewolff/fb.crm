@@ -85,7 +85,7 @@ class AngebotPositionsbindungIT extends AbstractIntegrationTest {
             + " RESTART IDENTITY CASCADE");
     jdbc.execute("DELETE FROM rechnung_einstellungen");
     jdbc.execute("INSERT INTO rechnung_einstellungen DEFAULT VALUES");
-    jdbc.execute("TRUNCATE outbox_message, account RESTART IDENTITY CASCADE");
+    leereKonten(jdbc);
     accounts.save(Konten.neu(MAIL, ANGELEGT));
     sitzung = Anmeldung.perCode(rest, jdbc, hasher, MAIL);
     jdbc.update("INSERT INTO firma (name) VALUES (?)", "Adler AG");

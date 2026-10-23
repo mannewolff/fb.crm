@@ -84,7 +84,7 @@ class AngebotStornoSzenarienIT extends AbstractIntegrationTest {
         Objects.requireNonNull(
                 jdbc.queryForObject("SELECT id FROM firma WHERE name = ?", Long.class, "Adler AG"))
             .longValue();
-    jdbc.execute("TRUNCATE outbox_message, account RESTART IDENTITY CASCADE");
+    leereKonten(jdbc);
     accounts.save(Konten.neu(MAIL, ANGELEGT));
     sitzung = Anmeldung.perCode(rest, jdbc, hasher, MAIL);
   }

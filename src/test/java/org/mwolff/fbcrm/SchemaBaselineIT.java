@@ -38,9 +38,8 @@ class SchemaBaselineIT extends AbstractIntegrationTest {
 
   @BeforeEach
   void leereFachtabellen() {
-    jdbc.execute(
-        "TRUNCATE outbox_message, login_code, account, ansprechpartner,"
-            + " firma RESTART IDENTITY CASCADE");
+    jdbc.execute("TRUNCATE login_code, ansprechpartner, firma RESTART IDENTITY CASCADE");
+    leereKonten(jdbc);
   }
 
   private Long firmaId(final String name) {
@@ -328,5 +327,19 @@ class SchemaBaselineIT extends AbstractIntegrationTest {
 
     // Then
     assertThat(betroffen).isEqualTo(1);
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"firma", "ansprechpartner", "account"})
+  void migration_thenTheVersionStartsAtZeroAndTheAuthorReferencesTheAccount(final String tabelle) {
+    // When — V33 (Plan #415, E1 und E19): ein eigener Zaehler und der letzte Urheber.
+    final String version = Schutzspalten.spalte(jdbc, tabelle, "version");
+    final String urheber = Schutzspalten.spalte(jdbc, tabelle, "geaendert_von");
+    final String verweis = Schutzspalten.verweis(jdbc, tabelle, "geaendert_von");
+
+    // Then — ohne ON DELETE wie jeder Fremdschluessel dieses Schemas.
+    assertThat(version).isEqualTo("bigint NO 0");
+    assertThat(urheber).isEqualTo("bigint YES -");
+    assertThat(verweis).isEqualTo("account.id NO ACTION");
   }
 }

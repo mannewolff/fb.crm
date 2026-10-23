@@ -66,7 +66,7 @@ class AngeboteUebersichtIT extends AbstractIntegrationTest {
     angebot(adler, "ANGELEGT", "2026-09-20", null);
     angebot(biber, "BESTELLT", "2026-09-25", "Java-Grundkurs");
     angebot(adler, "BESTELLT", "2026-09-22", null);
-    jdbc.execute("TRUNCATE outbox_message, account RESTART IDENTITY CASCADE");
+    leereKonten(jdbc);
     accounts.save(Konten.neu(MAIL, ANGELEGT));
     sitzung = Anmeldung.perCode(rest, jdbc, hasher, MAIL);
   }

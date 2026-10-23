@@ -232,8 +232,9 @@ class MehrereKontenMigrationIT extends AbstractIntegrationTest {
     // denn der CHECK bindet jeden neuen Kommentar; alles in einer Transaktion, damit der Stand
     // ohne CHECK nie sichtbar wird.
     jdbc.execute(
-        "TRUNCATE outbox_message, login_code, account, angebot_kommentar, angebot_position,"
-            + " angebot, ansprechpartner, firma RESTART IDENTITY CASCADE");
+        "TRUNCATE login_code, angebot_position, angebot, ansprechpartner, firma"
+            + " RESTART IDENTITY CASCADE");
+    leereKonten(jdbc);
     transaktion.executeWithoutResult(
         status -> {
           jdbc.execute("ALTER TABLE angebot_kommentar DROP CONSTRAINT angebot_kommentar_verfasser");

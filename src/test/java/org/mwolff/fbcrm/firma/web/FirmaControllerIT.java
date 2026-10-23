@@ -62,7 +62,7 @@ class FirmaControllerIT extends AbstractIntegrationTest {
   @BeforeEach
   void leereDenBestandUndMeldeAn() {
     jdbc.execute("TRUNCATE ansprechpartner, firma RESTART IDENTITY CASCADE");
-    jdbc.execute("TRUNCATE outbox_message, account RESTART IDENTITY CASCADE");
+    leereKonten(jdbc);
     accounts.save(Konten.neu(MAIL, ANGELEGT));
     sitzung = Anmeldung.perCode(rest, jdbc, hasher, MAIL);
   }

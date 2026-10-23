@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mwolff.fbcrm.AbstractIntegrationTest;
+import org.mwolff.fbcrm.Schutzspalten;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -41,6 +42,8 @@ class AngebotAnlageSchemaIT extends AbstractIntegrationTest {
 
   private long angebotId;
 
+  private long kontoId;
+
   @Autowired
   AngebotAnlageSchemaIT(final JdbcTemplate jdbc) {
     this.jdbc = jdbc;
@@ -59,6 +62,8 @@ class AngebotAnlageSchemaIT extends AbstractIntegrationTest {
             + " VALUES (?, 'ANGELEGT', DATE '2026-09-20')",
         firmaId);
     angebotId = jdbc.queryForObject("SELECT id FROM angebot LIMIT 1", Long.class).longValue();
+    leereKonten(jdbc);
+    kontoId = Schutzspalten.konto(jdbc);
   }
 
   private int anlage(final long groesse, final String vorschauArt) {
@@ -171,5 +176,45 @@ class AngebotAnlageSchemaIT extends AbstractIntegrationTest {
     final Integer verbleibend =
         jdbc.queryForObject("SELECT count(*) FROM angebot_anlage", Integer.class);
     assertThat(verbleibend).isZero();
+  }
+
+  @Test
+  void migration_thenTheDeletionMarkIsOptionalAndNamesTheAccount() {
+    // When — V34 (Plan #415, E17): Zeitpunkt und Urheber der Loeschung.
+    final String zeitpunkt = Schutzspalten.spalte(jdbc, "angebot_anlage", "geloescht_am");
+    final String urheber = Schutzspalten.spalte(jdbc, "angebot_anlage", "geloescht_von");
+    final String verweis = Schutzspalten.verweis(jdbc, "angebot_anlage", "geloescht_von");
+
+    // Then
+    assertThat(zeitpunkt).isEqualTo("timestamp with time zone YES -");
+    assertThat(urheber).isEqualTo("bigint YES -");
+    assertThat(verweis).isEqualTo("account.id NO ACTION");
+  }
+
+  @Test
+  void geloeschtVon_givenNoDeletionTime_thenRejectedByTheDatabase() {
+    // Given
+    anlage(1024L, "PDF");
+    final Long konto = Long.valueOf(kontoId);
+
+    // When / Then — ein Urheber der Loeschung steht nur an einer geloeschten Zeile.
+    assertThatThrownBy(() -> jdbc.update("UPDATE angebot_anlage SET geloescht_von = ?", konto))
+        .isInstanceOf(DataIntegrityViolationException.class)
+        .hasMessageContaining("angebot_anlage_geloescht_bindung");
+  }
+
+  @Test
+  void geloeschtVon_givenADeletionTime_thenAccepted() {
+    // Given
+    anlage(1024L, "PDF");
+
+    // When
+    final int betroffen =
+        jdbc.update(
+            "UPDATE angebot_anlage SET geloescht_am = now(), geloescht_von = ?",
+            Long.valueOf(kontoId));
+
+    // Then
+    assertThat(betroffen).isEqualTo(1);
   }
 }

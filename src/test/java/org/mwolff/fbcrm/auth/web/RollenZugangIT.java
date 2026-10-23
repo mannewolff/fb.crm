@@ -110,7 +110,8 @@ class RollenZugangIT extends AbstractIntegrationTest {
     jdbc.execute(
         "TRUNCATE rechnung_position, rechnung, angebot_position, angebot, ansprechpartner, firma"
             + " RESTART IDENTITY CASCADE");
-    jdbc.execute("TRUNCATE outbox_message, login_code, account RESTART IDENTITY CASCADE");
+    jdbc.execute("TRUNCATE login_code RESTART IDENTITY");
+    leereKonten(jdbc);
     accounts.save(Konten.mit(null, C_LEVEL, Role.C_LEVEL, true, 0, ANGELEGT));
     accounts.save(Konten.mit(null, EMPLOYEE, Role.EMPLOYEE, true, 0, ANGELEGT));
     accounts.save(Konten.mit(null, READ_ONLY, Role.READ_ONLY, true, 0, ANGELEGT));

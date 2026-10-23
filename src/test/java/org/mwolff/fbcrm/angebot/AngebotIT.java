@@ -89,7 +89,7 @@ class AngebotIT extends AbstractIntegrationTest {
     firmaId = firma("Adler AG");
     ansprechpartnerId = ansprechpartner(firmaId, "Adler");
     fremderAnsprechpartnerId = ansprechpartner(firma("Biber GmbH"), "Biber");
-    jdbc.execute("TRUNCATE outbox_message, account RESTART IDENTITY CASCADE");
+    leereKonten(jdbc);
     accounts.save(Konten.neu(MAIL, ANGELEGT));
     sitzung = Anmeldung.perCode(rest, jdbc, hasher, MAIL);
   }

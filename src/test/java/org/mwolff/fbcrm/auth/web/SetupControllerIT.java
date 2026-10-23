@@ -92,7 +92,8 @@ class SetupControllerIT extends AbstractIntegrationTest {
 
   /** Leert alles, was eine Einrichtung hinterlaesst. */
   static void leere(final JdbcTemplate jdbc) {
-    jdbc.execute("TRUNCATE outbox_message, login_code, account RESTART IDENTITY CASCADE");
+    jdbc.execute("TRUNCATE login_code RESTART IDENTITY");
+    leereKonten(jdbc);
   }
 
   @BeforeEach

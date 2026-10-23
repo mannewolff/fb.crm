@@ -77,7 +77,7 @@ class AngebotKommentarIT extends AbstractIntegrationTest {
         Objects.requireNonNull(
                 jdbc.queryForObject("SELECT id FROM firma WHERE name = ?", Long.class, FIRMA))
             .longValue();
-    jdbc.execute("TRUNCATE outbox_message, account RESTART IDENTITY CASCADE");
+    leereKonten(jdbc);
     kontoId = accounts.save(Konten.neu(MAIL, ANGELEGT)).requireId();
     sitzung = Anmeldung.perCode(rest, jdbc, hasher, MAIL);
   }

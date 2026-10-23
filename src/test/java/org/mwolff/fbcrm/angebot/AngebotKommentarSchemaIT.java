@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mwolff.fbcrm.AbstractIntegrationTest;
+import org.mwolff.fbcrm.Schutzspalten;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -53,7 +54,7 @@ class AngebotKommentarSchemaIT extends AbstractIntegrationTest {
             + " VALUES (?, 'ANGELEGT', DATE '2026-09-20')",
         firmaId);
     angebotId = jdbc.queryForObject("SELECT id FROM angebot LIMIT 1", Long.class).longValue();
-    jdbc.execute("TRUNCATE outbox_message, account RESTART IDENTITY CASCADE");
+    leereKonten(jdbc);
     verfasserId =
         jdbc.queryForObject(
                 "INSERT INTO account (email, display_name, role)"
@@ -169,5 +170,58 @@ class AngebotKommentarSchemaIT extends AbstractIntegrationTest {
     final Integer verbleibend =
         jdbc.queryForObject("SELECT count(*) FROM angebot_kommentar", Integer.class);
     assertThat(verbleibend).isZero();
+  }
+
+  @Test
+  void migration_thenTheVersionStartsAtZeroAndTheAuthorReferencesTheAccount() {
+    // When — V33 (Plan #415, E1): ein eigener Zaehler und der letzte Urheber.
+    final String version = Schutzspalten.spalte(jdbc, "angebot_kommentar", "version");
+    final String urheber = Schutzspalten.spalte(jdbc, "angebot_kommentar", "geaendert_von");
+    final String verweis = Schutzspalten.verweis(jdbc, "angebot_kommentar", "geaendert_von");
+
+    // Then — ohne ON DELETE wie jeder Fremdschluessel dieses Schemas.
+    assertThat(version).isEqualTo("bigint NO 0");
+    assertThat(urheber).isEqualTo("bigint YES -");
+    assertThat(verweis).isEqualTo("account.id NO ACTION");
+  }
+
+  @Test
+  void migration_thenTheDeletionMarkIsOptionalAndNamesTheAccount() {
+    // When — V34 (Plan #415, E17): Zeitpunkt und Urheber der Loeschung.
+    final String zeitpunkt = Schutzspalten.spalte(jdbc, "angebot_kommentar", "geloescht_am");
+    final String urheber = Schutzspalten.spalte(jdbc, "angebot_kommentar", "geloescht_von");
+    final String verweis = Schutzspalten.verweis(jdbc, "angebot_kommentar", "geloescht_von");
+
+    // Then
+    assertThat(zeitpunkt).isEqualTo("timestamp with time zone YES -");
+    assertThat(urheber).isEqualTo("bigint YES -");
+    assertThat(verweis).isEqualTo("account.id NO ACTION");
+  }
+
+  @Test
+  void geloeschtVon_givenNoDeletionTime_thenRejectedByTheDatabase() {
+    // Given
+    kommentar("Kunde ruft zurueck.");
+    final Long konto = Long.valueOf(verfasserId);
+
+    // When / Then — ein Urheber der Loeschung steht nur an einer geloeschten Zeile.
+    assertThatThrownBy(() -> jdbc.update("UPDATE angebot_kommentar SET geloescht_von = ?", konto))
+        .isInstanceOf(DataIntegrityViolationException.class)
+        .hasMessageContaining("angebot_kommentar_geloescht_bindung");
+  }
+
+  @Test
+  void geloeschtVon_givenADeletionTime_thenAccepted() {
+    // Given
+    kommentar("Kunde ruft zurueck.");
+
+    // When
+    final int betroffen =
+        jdbc.update(
+            "UPDATE angebot_kommentar SET geloescht_am = now(), geloescht_von = ?",
+            Long.valueOf(verfasserId));
+
+    // Then
+    assertThat(betroffen).isEqualTo(1);
   }
 }

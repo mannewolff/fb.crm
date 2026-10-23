@@ -9,6 +9,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mwolff.fbcrm.AbstractIntegrationTest;
+import org.mwolff.fbcrm.Schutzspalten;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -65,7 +66,7 @@ class ArbeitszeitSchemaIT extends AbstractIntegrationTest {
         Long.valueOf(angebotId));
     angebotPositionId =
         jdbc.queryForObject("SELECT id FROM angebot_position LIMIT 1", Long.class).longValue();
-    jdbc.execute("TRUNCATE outbox_message, account RESTART IDENTITY CASCADE");
+    leereKonten(jdbc);
     accountId =
         jdbc.queryForObject(
                 "INSERT INTO account (email, display_name, role)"
@@ -221,5 +222,58 @@ class ArbeitszeitSchemaIT extends AbstractIntegrationTest {
 
     // Then
     assertThat(definition).endsWith("(account_id, tag)");
+  }
+
+  @Test
+  void migration_thenTheVersionStartsAtZeroAndTheAuthorReferencesTheAccount() {
+    // When — V33 (Plan #415, E1): ein eigener Zaehler und der letzte Urheber.
+    final String version = Schutzspalten.spalte(jdbc, "arbeitszeit", "version");
+    final String urheber = Schutzspalten.spalte(jdbc, "arbeitszeit", "geaendert_von");
+    final String verweis = Schutzspalten.verweis(jdbc, "arbeitszeit", "geaendert_von");
+
+    // Then — ohne ON DELETE wie jeder Fremdschluessel dieses Schemas.
+    assertThat(version).isEqualTo("bigint NO 0");
+    assertThat(urheber).isEqualTo("bigint YES -");
+    assertThat(verweis).isEqualTo("account.id NO ACTION");
+  }
+
+  @Test
+  void migration_thenTheDeletionMarkIsOptionalAndNamesTheAccount() {
+    // When — V34 (Plan #415, E17): Zeitpunkt und Urheber der Loeschung.
+    final String zeitpunkt = Schutzspalten.spalte(jdbc, "arbeitszeit", "geloescht_am");
+    final String urheber = Schutzspalten.spalte(jdbc, "arbeitszeit", "geloescht_von");
+    final String verweis = Schutzspalten.verweis(jdbc, "arbeitszeit", "geloescht_von");
+
+    // Then
+    assertThat(zeitpunkt).isEqualTo("timestamp with time zone YES -");
+    assertThat(urheber).isEqualTo("bigint YES -");
+    assertThat(verweis).isEqualTo("account.id NO ACTION");
+  }
+
+  @Test
+  void geloeschtVon_givenNoDeletionTime_thenRejectedByTheDatabase() {
+    // Given
+    eintrag(angebotPositionId, "09:00", "11:00");
+    final Long konto = Long.valueOf(accountId);
+
+    // When / Then — ein Urheber der Loeschung steht nur an einer geloeschten Zeile.
+    assertThatThrownBy(() -> jdbc.update("UPDATE arbeitszeit SET geloescht_von = ?", konto))
+        .isInstanceOf(DataIntegrityViolationException.class)
+        .hasMessageContaining("arbeitszeit_geloescht_bindung");
+  }
+
+  @Test
+  void geloeschtVon_givenADeletionTime_thenAccepted() {
+    // Given
+    eintrag(angebotPositionId, "09:00", "11:00");
+
+    // When
+    final int betroffen =
+        jdbc.update(
+            "UPDATE arbeitszeit SET geloescht_am = now(), geloescht_von = ?",
+            Long.valueOf(accountId));
+
+    // Then
+    assertThat(betroffen).isEqualTo(1);
   }
 }
