@@ -5,6 +5,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { Ansprechpartner, Firma } from '../api/firmen';
 import KopfPfad, { KopfPfadProvider } from '../components/KopfPfad';
+import { NICHT_OFFEN } from '../routes/RollenRoute';
+import { appAlsRolle } from '../test/appAlsRolle';
 import { fetchNachPfad, json, leer, problem } from '../test/fetchNachPfad';
 import { renderMitTheme } from '../test/render';
 import AnsprechpartnerMaske from './AnsprechpartnerMaske';
@@ -393,6 +395,27 @@ describe('AnsprechpartnerMaske — unsinnige Kennung, Unbekanntes, Ausfall', () 
     renderMaske('/firmen/7/ansprechpartner/neu');
 
     expect(await screen.findByRole('alert')).toHaveTextContent('nicht zu erreichen');
+  });
+});
+
+describe('AnsprechpartnerMaske — nur mit Schreibrecht (Kriterium 10 von #409, Plan #414, A11)', () => {
+  it.each([
+    ['/firmen/7/ansprechpartner/neu', 'Neuer Ansprechpartner'],
+    ['/firmen/7/ansprechpartner/11/bearbeiten', 'Ansprechpartner bearbeiten'],
+  ])('zeigt ReadOnly auf „%s" den Satz statt der Maske „%s"', async (adresse, titel) => {
+    const aufruf = appAlsRolle('READ_ONLY', adresse);
+
+    expect(await screen.findByText(new RegExp(NICHT_OFFEN))).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: titel })).not.toBeInTheDocument();
+    // Die Maske entsteht gar nicht — sie liest auch nichts.
+    expect(aufruf).toHaveBeenCalledTimes(2);
+  });
+
+  it('zeigt einem Employee die Maske, denn er darf fachlich schreiben', async () => {
+    appAlsRolle('EMPLOYEE', '/firmen/7/ansprechpartner/neu', { 'GET /api/firmen/7': json(200, FIRMA) });
+
+    expect(await screen.findByRole('heading', { name: 'Neuer Ansprechpartner' })).toBeInTheDocument();
+    expect(screen.queryByText(new RegExp(NICHT_OFFEN))).not.toBeInTheDocument();
   });
 });
 

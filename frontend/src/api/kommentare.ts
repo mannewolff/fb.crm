@@ -24,6 +24,8 @@ export interface Kommentar {
   readonly text: string;
   /** Zeitpunkt der Anlage als Zeitstempel-Text, wie Jackson einen `Instant` schreibt. */
   readonly createdAt: string;
+  /** Der aktuelle Anzeigename des Kontos, das ihn geschrieben hat (Kriterium 11 von #409). */
+  readonly verfasser: string;
 }
 
 /** Die Kommentare eines Angebots, neuester zuerst (Kriterium 4). */
@@ -38,6 +40,7 @@ export function parseKommentar(wert: unknown): Kommentar {
     id: zahl(kommentar.id),
     text: text(kommentar.text),
     createdAt: text(kommentar.createdAt),
+    verfasser: text(kommentar.verfasser),
   };
 }
 

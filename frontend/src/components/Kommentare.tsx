@@ -13,6 +13,7 @@ import {
   kommentareLesen,
 } from '../api/kommentare';
 import type { Kommentar } from '../api/kommentare';
+import { useRechte } from '../auth/rechte';
 import { feldMeldungen } from '../lib/apifehler';
 import { meldungAm } from '../lib/feldmeldung';
 import { zeitpunktWort } from '../lib/zeitpunkt';
@@ -43,6 +44,10 @@ import WeicheTaste from './WeicheTaste';
  * Text (E7): Fuer den Nutzer zaehlt, was gespeichert wird. Scheitert die Pruefung, steht die
  * Meldung am Feld und der Text bleibt stehen (Kriterien 6, 7). Eine Feldmeldung des Servers landet
  * an derselben Stelle; jeder andere Fehlschlag steht als Meldung im Bereich.
+ *
+ * <b>Jeder Eintrag nennt seinen Verfasser</b> (Kriterium 11 von #409) — den Namen, den der Server
+ * mitschickt. <b>Ohne Schreibrecht</b> fehlen Formular und ⋯-Menue ganz (Kriterium 10 von #409,
+ * Plan #414, A10): Wer nur liest, sieht die Kommentare und keine Taste, die ins Leere fuehrte.
  */
 
 export interface KommentareProps {
@@ -109,6 +114,7 @@ function feldMeldung(ursache: unknown): string | undefined {
 }
 
 export default function Kommentare({ angebotId }: KommentareProps) {
+  const { darfFachlichSchreiben } = useRechte();
   const [stand, setzeStand] = useState<Stand>('laedt');
   const [kommentare, setzeKommentare] = useState<readonly Kommentar[]>([]);
   const [entwurf, setzeEntwurf] = useState('');
@@ -213,7 +219,7 @@ export default function Kommentare({ angebotId }: KommentareProps) {
     }
   };
 
-  /** Ein Eintrag: Zeitpunkt mit ⋯-Menue, darunter der Text oder das Feld zum Aendern. */
+  /** Ein Eintrag: Verfasser und Zeitpunkt mit ⋯-Menue, darunter der Text oder das Feld zum Aendern. */
   function eintragZu(kommentar: Kommentar): ReactNode {
     const wort = zeitpunktWort(kommentar.createdAt);
     // Der offene Bearbeitungsplatz, wenn er diesem Kommentar gehoert — als Wert und nicht als
@@ -234,6 +240,9 @@ export default function Kommentare({ angebotId }: KommentareProps) {
         })}
       >
         <Box sx={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <Typography data-testid="kommentar-verfasser" sx={{ fontSize: 12.5, fontWeight: 600 }}>
+            {kommentar.verfasser}
+          </Typography>
           <Typography
             data-testid="kommentar-zeit"
             className={ZAHLEN_KLASSE}
@@ -244,29 +253,31 @@ export default function Kommentare({ angebotId }: KommentareProps) {
           >
             {wort}
           </Typography>
-          <Box sx={{ marginLeft: 'auto', flex: 'none' }}>
-            <AktionsMenue
-              name={`Aktionen für Kommentar vom ${wort}`}
-              objekt={`Kommentar vom ${wort}`}
-              eintraege={[
-                {
-                  titel: 'Bearbeiten',
-                  symbol: <IconPencil size={SYMBOL} stroke={1.8} />,
-                  onAuswahl: () => {
-                    setzeBearbeitung({ id: kommentar.id, text: kommentar.text });
+          {darfFachlichSchreiben ? (
+            <Box sx={{ marginLeft: 'auto', flex: 'none' }}>
+              <AktionsMenue
+                name={`Aktionen für Kommentar vom ${wort}`}
+                objekt={`Kommentar vom ${wort}`}
+                eintraege={[
+                  {
+                    titel: 'Bearbeiten',
+                    symbol: <IconPencil size={SYMBOL} stroke={1.8} />,
+                    onAuswahl: () => {
+                      setzeBearbeitung({ id: kommentar.id, text: kommentar.text });
+                    },
                   },
-                },
-                {
-                  titel: 'Löschen',
-                  symbol: <IconTrash size={SYMBOL} stroke={1.8} />,
-                  rueckfrage: LOESCHEN_FRAGE,
-                  onAuswahl: () => {
-                    void loeschen(kommentar);
+                  {
+                    titel: 'Löschen',
+                    symbol: <IconTrash size={SYMBOL} stroke={1.8} />,
+                    rueckfrage: LOESCHEN_FRAGE,
+                    onAuswahl: () => {
+                      void loeschen(kommentar);
+                    },
                   },
-                },
-              ]}
-            />
-          </Box>
+                ]}
+              />
+            </Box>
+          ) : null}
         </Box>
         {offen === null ? (
           <Typography
@@ -345,30 +356,34 @@ export default function Kommentare({ angebotId }: KommentareProps) {
     <Karte titel="Kommentare" anzahl={stand === 'gelesen' ? kommentare.length : undefined}>
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
         {meldung === null ? null : <Alert severity="error">{meldung}</Alert>}
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: '10px', alignItems: 'flex-start' }}>
-          <TextField
-            label="Neuer Kommentar"
-            value={entwurf}
-            onChange={(ereignis) => {
-              setzeEntwurf(ereignis.target.value);
-            }}
-            error={entwurfFehler !== undefined}
-            helperText={entwurfFehler}
-            multiline
-            minRows={3}
-            fullWidth
-          />
-          <WeicheTaste
-            onClick={() => {
-              void schreiben();
-            }}
-            // Solange der Bestand nicht gelesen ist, gibt es keine Liste, an deren Spitze der neue
-            // Kommentar treten koennte — er waere der einzige sichtbare und damit ein falsches Bild.
-            disabled={laeuft || stand !== 'gelesen'}
+        {darfFachlichSchreiben ? (
+          <Box
+            sx={{ display: 'flex', flexDirection: 'column', gap: '10px', alignItems: 'flex-start' }}
           >
-            Kommentar speichern
-          </WeicheTaste>
-        </Box>
+            <TextField
+              label="Neuer Kommentar"
+              value={entwurf}
+              onChange={(ereignis) => {
+                setzeEntwurf(ereignis.target.value);
+              }}
+              error={entwurfFehler !== undefined}
+              helperText={entwurfFehler}
+              multiline
+              minRows={3}
+              fullWidth
+            />
+            <WeicheTaste
+              onClick={() => {
+                void schreiben();
+              }}
+              // Solange der Bestand nicht gelesen ist, gibt es keine Liste, an deren Spitze der neue
+              // Kommentar treten koennte — er waere der einzige sichtbare und damit ein falsches Bild.
+              disabled={laeuft || stand !== 'gelesen'}
+            >
+              Kommentar speichern
+            </WeicheTaste>
+          </Box>
+        ) : null}
         {bestand}
       </Box>
     </Karte>

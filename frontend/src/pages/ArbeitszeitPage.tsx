@@ -8,6 +8,7 @@ import { useSearchParams } from 'react-router-dom';
 
 import { arbeitszeitMonat, zeiteintragLoeschen } from '../api/arbeitszeit';
 import type { Arbeitsmonat, Arbeitstag, Zeitzeile } from '../api/arbeitszeit';
+import { useRechte } from '../auth/rechte';
 import AktionsMenue from '../components/AktionsMenue';
 import InternChip from '../components/InternChip';
 import Karte from '../components/Karte';
@@ -68,6 +69,8 @@ const PARAM_MONAT = 'monat';
 const LAEDT = 'Die Arbeitszeit wird geladen …';
 const AUSFALL = 'Die Arbeitszeit ist gerade nicht zu erreichen. Bitte später erneut versuchen.';
 const LEER = 'Noch keine Arbeitszeit in diesem Monat. Erfassen Sie die erste über „Zeit erfassen".';
+/** Derselbe Satz ohne Einladung — wer nicht schreiben darf, findet „Zeit erfassen" nicht vor. */
+const LEER_LESEND = 'Noch keine Arbeitszeit in diesem Monat.';
 
 const LOESCHEN_FRAGE = 'Der Eintrag wird gelöscht. Das lässt sich nicht zurücknehmen.';
 const AUSFALL_LOESCHEN = 'Der Eintrag wurde nicht gelöscht. Bitte später erneut versuchen.';
@@ -248,21 +251,28 @@ function Aufteilung({ monatsliste }: { readonly monatsliste: Arbeitsmonat }) {
   );
 }
 
+/** Die zwei Wege einer Zeile, die etwas aendern. */
+interface ZeilenAktionen {
+  readonly onAendern: () => void;
+  readonly onLoeschen: () => void;
+}
+
 /**
  * Ein Eintrag: Zeitspanne, Dauer, Position mit ihrer Firma, ⋯-Menue (A14).
  *
  * Die Zeitspanne ist eine <b>Textschaltflaeche</b> und kein Link: Sie oeffnet einen Dialog und
  * wechselt keinen Weg — ein `a` ohne Ziel waere ein Versprechen, das es nicht haelt. Ihre Gestalt
  * ist die der Zeilenverweise der anderen Tafeln (Kupfer im Hover), ihre Rolle die eines Schalters.
+ *
+ * Ohne Schreibrecht ({@link ZeilenAktionen} fehlt) steht die Zeitspanne als Text da und das
+ * ⋯-Menue fehlt (Kriterium 10 von #409): Beide fuehrten nur zu einer Aenderung.
  */
 function Zeile({
   zeile,
-  onAendern,
-  onLoeschen,
+  aktionen,
 }: {
   readonly zeile: Zeitzeile;
-  readonly onAendern: () => void;
-  readonly onLoeschen: () => void;
+  readonly aktionen: ZeilenAktionen | null;
 }) {
   const wort = `${tagWort(zeile.tag)}, ${zeitspanneWort(zeile.von, zeile.bis)}`;
   return (
@@ -272,22 +282,26 @@ function Zeile({
         className={ZAHLEN_KLASSE}
         sx={{ fontWeight: 500, whiteSpace: 'nowrap' }}
       >
-        <Box
-          component="button"
-          type="button"
-          onClick={onAendern}
-          sx={(theme) => ({
-            padding: 0,
-            border: 0,
-            background: 'transparent',
-            cursor: 'pointer',
-            font: 'inherit',
-            color: 'inherit',
-            '&:hover': { color: theme.vars.palette.kupferwolke.kupfer },
-          })}
-        >
-          {zeitspanneWort(zeile.von, zeile.bis)}
-        </Box>
+        {aktionen === null ? (
+          zeitspanneWort(zeile.von, zeile.bis)
+        ) : (
+          <Box
+            component="button"
+            type="button"
+            onClick={aktionen.onAendern}
+            sx={(theme) => ({
+              padding: 0,
+              border: 0,
+              background: 'transparent',
+              cursor: 'pointer',
+              font: 'inherit',
+              color: 'inherit',
+              '&:hover': { color: theme.vars.palette.kupferwolke.kupfer },
+            })}
+          >
+            {zeitspanneWort(zeile.von, zeile.bis)}
+          </Box>
+        )}
       </Box>
       <Box
         component="td"
@@ -311,18 +325,20 @@ function Zeile({
         </Typography>
       </Box>
       <Box component="td" sx={{ textAlign: 'right' }}>
-        <AktionsMenue
-          name={`Aktionen für ${wort}`}
-          objekt={wort}
-          eintraege={[
-            {
-              titel: 'Löschen',
-              symbol: <IconTrash size={SYMBOL_MENUE} stroke={1.8} />,
-              rueckfrage: LOESCHEN_FRAGE,
-              onAuswahl: onLoeschen,
-            },
-          ]}
-        />
+        {aktionen === null ? null : (
+          <AktionsMenue
+            name={`Aktionen für ${wort}`}
+            objekt={wort}
+            eintraege={[
+              {
+                titel: 'Löschen',
+                symbol: <IconTrash size={SYMBOL_MENUE} stroke={1.8} />,
+                rueckfrage: LOESCHEN_FRAGE,
+                onAuswahl: aktionen.onLoeschen,
+              },
+            ]}
+          />
+        )}
       </Box>
     </Box>
   );
@@ -348,11 +364,18 @@ function Monatssumme({ monatsliste }: { readonly monatsliste: Arbeitsmonat }) {
   );
 }
 
-/** Was in der Karte steht: Ladehinweis, Meldung, Einladung oder die Tafel. */
+/**
+ * Was in der Karte steht: Ladehinweis, Meldung, Einladung oder die Tafel.
+ *
+ * `schreibend` ist `null`, wo die Rolle nicht schreiben darf — dann gibt es weder Einladung noch
+ * einen Weg zum Aendern oder Loeschen.
+ */
 function inhaltZu(
   stand: Stand,
-  oeffneMaske: (maske: Maske) => void,
-  loesche: (zeile: Zeitzeile) => void,
+  schreibend: {
+    readonly oeffneMaske: (maske: Maske) => void;
+    readonly loesche: (zeile: Zeitzeile) => void;
+  } | null,
 ): ReactNode {
   if (stand.art === 'laedt') {
     return (
@@ -372,7 +395,7 @@ function inhaltZu(
         role="status"
         sx={(theme) => ({ fontSize: 12.5, color: theme.vars.palette.kupferwolke.textMatt })}
       >
-        {LEER}
+        {schreibend === null ? LEER_LESEND : LEER}
       </Typography>
     );
   }
@@ -385,12 +408,18 @@ function inhaltZu(
             <Zeile
               key={zeile.id}
               zeile={zeile}
-              onAendern={() => {
-                oeffneMaske({ art: 'aendern', zeile });
-              }}
-              onLoeschen={() => {
-                loesche(zeile);
-              }}
+              aktionen={
+                schreibend === null
+                  ? null
+                  : {
+                      onAendern: () => {
+                        schreibend.oeffneMaske({ art: 'aendern', zeile });
+                      },
+                      onLoeschen: () => {
+                        schreibend.loesche(zeile);
+                      },
+                    }
+              }
             />
           ))}
         </Fragment>
@@ -402,6 +431,7 @@ function inhaltZu(
 }
 
 export default function ArbeitszeitPage() {
+  const { darfFachlichSchreiben } = useRechte();
   useKopfPfad(KEIN_WEG, 'Arbeitszeit');
   const [parameter, setzeParameter] = useSearchParams();
   const monat = alsMonat(parameter.get(PARAM_MONAT));
@@ -462,22 +492,32 @@ export default function ArbeitszeitPage() {
                 }}
               />
             )}
-            <KupferTaste
-              onClick={() => {
-                setzeMaske({ art: 'neu' });
-              }}
-              symbol={<IconClockPlus size={SYMBOL_TASTE} stroke={1.8} />}
-            >
-              Zeit erfassen
-            </KupferTaste>
+            {darfFachlichSchreiben ? (
+              <KupferTaste
+                onClick={() => {
+                  setzeMaske({ art: 'neu' });
+                }}
+                symbol={<IconClockPlus size={SYMBOL_TASTE} stroke={1.8} />}
+              >
+                Zeit erfassen
+              </KupferTaste>
+            ) : null}
           </>
         }
       >
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
           {loeschfehler === null ? null : <Alert severity="error">{loeschfehler}</Alert>}
-          {inhaltZu(stand, setzeMaske, (zeile) => {
-            void loeschen(zeile);
-          })}
+          {inhaltZu(
+            stand,
+            darfFachlichSchreiben
+              ? {
+                  oeffneMaske: setzeMaske,
+                  loesche: (zeile) => {
+                    void loeschen(zeile);
+                  },
+                }
+              : null,
+          )}
         </Box>
       </Karte>
       {maske === null ? null : (

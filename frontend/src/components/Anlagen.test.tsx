@@ -1,11 +1,14 @@
 import { fireEvent, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeEach, describe, expect, it, test, vi } from 'vitest';
 
 import Anlagen from './Anlagen';
 import { MAX_UPLOAD_BYTE } from '../lib/dateigroesse';
 import { fetchNachPfad, formularWeg, json, leer, problem } from '../test/fetchNachPfad';
+import { alsRolle } from '../test/rechteDoppel';
 import { renderMitTheme } from '../test/render';
+
+vi.mock('../auth/rechte', () => import('../test/rechteDoppel'));
 
 /**
  * Der Bereich „Anlagen" in der Angebotsansicht (Issue #148, Kriterien 1 bis 14).
@@ -230,6 +233,40 @@ describe('Anlagen — was der Bereich zeigt (Kriterien 1, 4, 11)', () => {
     });
 
     expect(fehler).not.toHaveBeenCalled();
+  });
+});
+
+describe('Anlagen — je Rolle (Kriterium 10 von #409, Plan #414, E4)', () => {
+  test('Szenario: ReadOnly liest, ändert aber nichts', async () => {
+    alsRolle('READ_ONLY');
+    fetchNachPfad({ [`GET ${WEG}`]: json(200, { anlagen: [NEUE, TABELLE] }) });
+
+    renderBereich();
+
+    expect(await screen.findByText(NEUE.dateiName)).toBeInTheDocument();
+    expect(namen()).toEqual([NEUE.dateiName, TABELLE.dateiName]);
+    expect(screen.getByTestId('karte-anzahl')).toHaveTextContent('2');
+    // Lesen bleibt: Anzeigen und Herunterladen sind keine Aenderung (E4).
+    expect(screen.getByRole('button', { name: `Anzeigen: ${NEUE.dateiName}` })).toBeInTheDocument();
+    expect(
+      screen.getByRole('link', { name: `Herunterladen: ${TABELLE.dateiName}` }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Datei hochladen' })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Datei auswählen')).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: `Aktionen für ${NEUE.dateiName}` }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('zeigt einem Employee Hochladen und ⋯-Menue, denn er darf fachlich schreiben', async () => {
+    alsRolle('EMPLOYEE');
+    fetchNachPfad({ [`GET ${WEG}`]: json(200, { anlagen: [NEUE] }) });
+
+    renderBereich();
+
+    await screen.findByText(NEUE.dateiName);
+    expect(ladeTaste()).toBeEnabled();
+    expect(screen.getByRole('button', { name: `Aktionen für ${NEUE.dateiName}` })).toBeInTheDocument();
   });
 });
 

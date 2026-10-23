@@ -10,7 +10,12 @@ import {
 } from './kommentare';
 import { alsJson, fetchNachPfad, json, leer } from '../test/fetchNachPfad';
 
-const KOMMENTAR = { id: 3, text: 'Kunde ruft zurueck.', createdAt: '2026-09-30T12:05:00Z' };
+const KOMMENTAR = {
+  id: 3,
+  text: 'Kunde ruft zurueck.',
+  createdAt: '2026-09-30T12:05:00Z',
+  verfasser: 'Anna Berg',
+};
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -28,6 +33,8 @@ describe('parseKommentar', () => {
     ['ohne Text', { ...KOMMENTAR, text: null }],
     ['createdAt als Zahl', { ...KOMMENTAR, createdAt: 17590000 }],
     ['ohne createdAt', { ...KOMMENTAR, createdAt: undefined }],
+    ['ohne verfasser', { ...KOMMENTAR, verfasser: undefined }],
+    ['verfasser als Zahl', { ...KOMMENTAR, verfasser: 7 }],
   ])('weist eine Antwort ab: %s', (_fall, rumpf) => {
     expect(() => parseKommentar(rumpf)).toThrow(TypeError);
   });

@@ -8,8 +8,11 @@ import { AuthProvider } from '../auth/AuthContext';
 import AppShell from '../components/AppShell';
 import KopfPfad, { KopfPfadProvider } from '../components/KopfPfad';
 import { fetchNachPfad, json, leer } from '../test/fetchNachPfad';
+import { alsRolle } from '../test/rechteDoppel';
 import { renderMitTheme } from '../test/render';
 import FirmaPage from './FirmaPage';
+
+vi.mock('../auth/rechte', () => import('../test/rechteDoppel'));
 
 const ANNA: Ansprechpartner = {
   id: 11,
@@ -602,6 +605,41 @@ describe('FirmaPage — die Angebote der Firma (Kriterium 7)', () => {
 
     await screen.findByRole('alert');
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('FirmaPage — je Rolle (Kriterium 10 von #409, Plan #414, A10)', () => {
+  it('zeigt ReadOnly Firma, Ansprechpartner und Angebote ohne eine Taste, die etwas aendert', async () => {
+    alsRolle('READ_ONLY');
+    firmaDoppel({ ...FIRMA, ansprechpartner: [ANNA, { ...BRUNO, aktiv: false }] });
+
+    renderSeite();
+    await screen.findByRole('heading', { level: 1, name: 'Beispiel GmbH' });
+
+    expect(screen.getByText('Anna Berg')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'anna.berg@beispiel.de' })).toBeInTheDocument();
+    expect(await screen.findByText('Schulung Java')).toBeInTheDocument();
+    for (const name of ['Bearbeiten', 'Neuer Ansprechpartner', 'Angebot anlegen']) {
+      expect(screen.queryByRole('link', { name })).not.toBeInTheDocument();
+    }
+    expect(screen.queryByRole('link', { name: /Ansprechpartner hinzufügen/ })).not.toBeInTheDocument();
+    // Kein ⋯-Menue — weder an der Firma noch an einem Ansprechpartner: Es traegt nur Aenderungen.
+    expect(screen.queryByRole('button', { name: /^Aktionen für/ })).not.toBeInTheDocument();
+  });
+
+  it('zeigt einem Employee die Aktionen, denn er darf fachlich schreiben', async () => {
+    alsRolle('EMPLOYEE');
+    firmaDoppel({ ...FIRMA, ansprechpartner: [ANNA] });
+
+    renderSeite();
+    await screen.findByRole('heading', { level: 1, name: 'Beispiel GmbH' });
+
+    for (const name of ['Bearbeiten', 'Neuer Ansprechpartner', 'Angebot anlegen']) {
+      expect(within(kopfkarte()).getByRole('link', { name })).toBeInTheDocument();
+    }
+    expect(screen.getByRole('link', { name: /Ansprechpartner hinzufügen/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Aktionen für Beispiel GmbH' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Aktionen für Anna Berg' })).toBeInTheDocument();
   });
 });
 

@@ -27,6 +27,7 @@ import {
 import type { Ansprechpartner, Firma } from '../api/firmen';
 import { angeboteDerFirma } from '../api/angebote';
 import type { AngebotZeile } from '../api/angebote';
+import { useRechte } from '../auth/rechte';
 import AktionsMenue from '../components/AktionsMenue';
 import Angebotsliste from '../components/Angebotsliste';
 import type { AktionsEintrag } from '../components/AktionsMenue';
@@ -69,6 +70,9 @@ import { ABSTAND_BUEHNE } from '../theme';
  * Nach dem Stilllegen oder Wiederaktivieren liest die Ansicht die Firma neu, statt den Stand
  * selbst umzuschalten: Der Server ist die Quelle der Wahrheit, und nur so sieht der Benutzer, was
  * dort tatsaechlich steht.
+ *
+ * Ohne Schreibrecht fehlen die Aktionen der Kopfkarte, die ⋯-Menues der Ansprechpartner und die
+ * Hinzufuegen-Kachel (Kriterium 10 von #409, Plan #414, A10); Kontaktwege und Angebote bleiben.
  */
 
 const NICHT_GEFUNDEN = 'Diese Firma gibt es nicht.';
@@ -250,7 +254,8 @@ function Partnerkachel({
 }: {
   readonly partner: Ansprechpartner;
   readonly firmaId: number;
-  readonly schalte: (partner: Ansprechpartner) => void;
+  /** Stilllegen und Wiederaktivieren — fehlt ohne Schreibrecht, und mit ihm das ⋯-Menue. */
+  readonly schalte: ((partner: Ansprechpartner) => void) | null;
 }) {
   const navigate = useNavigate();
   const name = namensZug(partner);
@@ -262,24 +267,26 @@ function Partnerkachel({
       zustand={partner.aktiv ? undefined : zustandsChip(false)}
       unterzeile={partner.rolle ?? undefined}
       aktion={
-        <AktionsMenue
-          name={`Aktionen für ${name}`}
-          objekt={name}
-          eintraege={[
-            {
-              titel: 'Bearbeiten',
-              symbol: <IconPencil size={SYMBOL_TASTE} stroke={1.8} />,
-              onAuswahl: () => {
-                navigate(
-                  `/firmen/${String(firmaId)}/ansprechpartner/${String(partner.id)}/bearbeiten`,
-                );
+        schalte === null ? undefined : (
+          <AktionsMenue
+            name={`Aktionen für ${name}`}
+            objekt={name}
+            eintraege={[
+              {
+                titel: 'Bearbeiten',
+                symbol: <IconPencil size={SYMBOL_TASTE} stroke={1.8} />,
+                onAuswahl: () => {
+                  navigate(
+                    `/firmen/${String(firmaId)}/ansprechpartner/${String(partner.id)}/bearbeiten`,
+                  );
+                },
               },
-            },
-            schaltEintrag(partner.aktiv, PARTNER_FRAGE, () => {
-              schalte(partner);
-            }),
-          ]}
-        />
+              schaltEintrag(partner.aktiv, PARTNER_FRAGE, () => {
+                schalte(partner);
+              }),
+            ]}
+          />
+        )
       }
     >
       {kontakte.length === 0
@@ -291,14 +298,15 @@ function Partnerkachel({
 
 /**
  * Die Ansprechpartner der Firma: aktive zuerst, die stillgelegten danach (Kriterium 10), und als
- * letzte Kachel die Hinzufuegen-Kachel (Vorlage `.neu` Z. 91–92).
+ * letzte Kachel die Hinzufuegen-Kachel (Vorlage `.neu` Z. 91–92) — sie und die ⋯-Menues nur mit
+ * Schreibrecht (Kriterium 10 von #409).
  */
 function Ansprechpartnerkarte({
   firma,
   schalte,
 }: {
   readonly firma: Firma;
-  readonly schalte: (partner: Ansprechpartner) => void;
+  readonly schalte: ((partner: Ansprechpartner) => void) | null;
 }) {
   const geordnet = [
     ...firma.ansprechpartner.filter((einer) => einer.aktiv),
@@ -327,12 +335,14 @@ function Ansprechpartnerkarte({
             schalte={schalte}
           />
         ))}
-        <HinzufuegenKachel
-          to={`/firmen/${String(firma.id)}/ansprechpartner/neu`}
-          symbol={<IconUserPlus size={18} stroke={1.8} />}
-        >
-          Ansprechpartner hinzufügen
-        </HinzufuegenKachel>
+        {schalte === null ? null : (
+          <HinzufuegenKachel
+            to={`/firmen/${String(firma.id)}/ansprechpartner/neu`}
+            symbol={<IconUserPlus size={18} stroke={1.8} />}
+          >
+            Ansprechpartner hinzufügen
+          </HinzufuegenKachel>
+        )}
       </InnenkartenRaster>
     </Karte>
   );
@@ -381,6 +391,7 @@ function Angebotekarte({ stand }: { readonly stand: AngebotStand }) {
 const ZU_FIRMEN: readonly PfadVerweis[] = [{ titel: 'Firmen', ziel: '/firmen' }];
 
 export default function FirmaPage() {
+  const { darfFachlichSchreiben } = useRechte();
   const { id } = useParams();
   const kennung = kennungAus(id);
   const [stand, setzeStand] = useState<Stand>({ art: 'laedt' });
@@ -460,44 +471,50 @@ export default function FirmaPage() {
           zeile={adressZeile(firma)}
           chips={zustandsChip(firma.aktiv)}
           aktionen={
-            <>
-              <WeicheTaste
-                to={`/firmen/${String(firma.id)}/bearbeiten`}
-                symbol={<IconPencil size={SYMBOL_TASTE} stroke={1.8} />}
-              >
-                Bearbeiten
-              </WeicheTaste>
-              <WeicheTaste
-                to={`/firmen/${String(firma.id)}/ansprechpartner/neu`}
-                symbol={<IconUserPlus size={SYMBOL_TASTE} stroke={1.8} />}
-              >
-                Neuer Ansprechpartner
-              </WeicheTaste>
-              {firma.aktiv ? (
-                <KupferTaste
-                  to={`/firmen/${String(firma.id)}/angebote/neu`}
-                  symbol={<IconFilePlus size={SYMBOL_TASTE} stroke={1.8} />}
+            darfFachlichSchreiben ? (
+              <>
+                <WeicheTaste
+                  to={`/firmen/${String(firma.id)}/bearbeiten`}
+                  symbol={<IconPencil size={SYMBOL_TASTE} stroke={1.8} />}
                 >
-                  Angebot anlegen
-                </KupferTaste>
-              ) : null}
-              <AktionsMenue
-                name={`Aktionen für ${firma.name}`}
-                objekt={firma.name}
-                eintraege={[
-                  schaltEintrag(firma.aktiv, FIRMA_FRAGE, () => {
-                    void schalten(firma);
-                  }),
-                ]}
-              />
-            </>
+                  Bearbeiten
+                </WeicheTaste>
+                <WeicheTaste
+                  to={`/firmen/${String(firma.id)}/ansprechpartner/neu`}
+                  symbol={<IconUserPlus size={SYMBOL_TASTE} stroke={1.8} />}
+                >
+                  Neuer Ansprechpartner
+                </WeicheTaste>
+                {firma.aktiv ? (
+                  <KupferTaste
+                    to={`/firmen/${String(firma.id)}/angebote/neu`}
+                    symbol={<IconFilePlus size={SYMBOL_TASTE} stroke={1.8} />}
+                  >
+                    Angebot anlegen
+                  </KupferTaste>
+                ) : null}
+                <AktionsMenue
+                  name={`Aktionen für ${firma.name}`}
+                  objekt={firma.name}
+                  eintraege={[
+                    schaltEintrag(firma.aktiv, FIRMA_FRAGE, () => {
+                      void schalten(firma);
+                    }),
+                  ]}
+                />
+              </>
+            ) : undefined
           }
         />
         <Ansprechpartnerkarte
           firma={firma}
-          schalte={(partner) => {
-            void schaltePartner(firma, partner);
-          }}
+          schalte={
+            darfFachlichSchreiben
+              ? (partner) => {
+                  void schaltePartner(firma, partner);
+                }
+              : null
+          }
         />
         <Stammdatenkarte firma={firma} />
         <Karte

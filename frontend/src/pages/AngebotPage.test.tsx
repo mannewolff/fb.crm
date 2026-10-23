@@ -1,12 +1,15 @@
 import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, test, vi } from 'vitest';
 
 import AngebotPage from './AngebotPage';
 import KopfPfad, { KopfPfadProvider } from '../components/KopfPfad';
 import { alsJson, fetchNachPfad, json, leer, problem } from '../test/fetchNachPfad';
+import { alsRolle } from '../test/rechteDoppel';
 import { renderMitTheme } from '../test/render';
+
+vi.mock('../auth/rechte', () => import('../test/rechteDoppel'));
 
 const POSITION = {
   id: 3,
@@ -422,6 +425,103 @@ describe('AngebotPage — die Aktionen (Issue #127, Kriterien 4, 5)', () => {
     expect(within(screen.getByTestId('angebot-angaben')).getByTestId('chip')).toHaveTextContent(
       'Abgegeben',
     );
+  });
+});
+
+describe('AngebotPage — je Rolle (Kriterium 10 von #409, Plan #414, A10)', () => {
+  const KOMMENTAR = {
+    id: 1,
+    text: 'Kunde wartet auf das Konzept',
+    createdAt: '2026-09-30T12:05:00Z',
+    verfasser: 'Anna Berg',
+  };
+  const ANLAGE = {
+    id: 2,
+    dateiName: 'Lastenheft.pdf',
+    groesse: 2048,
+    vorschauArt: 'PDF',
+    createdAt: '2026-09-30T12:05:00Z',
+  };
+  /** Jede Taste, die am Angebot etwas aendert — keine davon steht fuer ReadOnly da. */
+  const SCHREIBENDE_TASTEN = [
+    'Status weiter',
+    'Status zurück',
+    'Stornieren',
+    'Storno zurücknehmen',
+    'Abschließen',
+    'Wieder öffnen',
+    'Rechnung schreiben',
+    'Datei hochladen',
+    'Kommentar speichern',
+  ];
+
+  function bestandDoppel(angebot: object) {
+    fetchNachPfad({
+      [KOMMENTARE]: json(200, { kommentare: [KOMMENTAR] }),
+      [ANLAGEN]: json(200, { anlagen: [ANLAGE] }),
+      [ABRECHNUNG]: json(200, STAND_TEIL),
+      'GET /api/angebote/9': json(200, angebot),
+    });
+  }
+
+  function keineSchreibendeTaste() {
+    for (const name of SCHREIBENDE_TASTEN) {
+      expect(screen.queryByRole('button', { name })).not.toBeInTheDocument();
+    }
+    expect(screen.queryByRole('link', { name: 'Bearbeiten' })).not.toBeInTheDocument();
+    expect(screen.queryByTestId('angebot-aktionen')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Neuer Kommentar')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Aktionen für/ })).not.toBeInTheDocument();
+  }
+
+  test('Szenario: ReadOnly liest, ändert aber nichts', async () => {
+    alsRolle('READ_ONLY');
+    bestandDoppel(BESTELLT);
+
+    renderSeite();
+    await screen.findByRole('heading', { level: 1, name: UEBERSCHRIFT });
+
+    // Dann sieht er Positionen, Status, Kommentare und Anlagen …
+    expect(screen.getByText('Konzeption')).toBeInTheDocument();
+    expect(within(screen.getByTestId('angebot-angaben')).getByTestId('chip')).toHaveTextContent(
+      'Bestellt',
+    );
+    expect(await screen.findByText(KOMMENTAR.text)).toBeInTheDocument();
+    expect(screen.getByText('Anna Berg')).toBeInTheDocument();
+    expect(await screen.findByText(ANLAGE.dateiName)).toBeInTheDocument();
+    expect(
+      screen.getByRole('link', { name: `Herunterladen: ${ANLAGE.dateiName}` }),
+    ).toBeInTheDocument();
+    // … und es gibt keine Schaltflaeche zum Aendern, Kommentieren oder Hochladen.
+    keineSchreibendeTaste();
+  });
+
+  it.each([
+    ['das interne Angebot', { ...ANGEBOT, intern: true, status: 'LAEUFT' }],
+    ['das stornierte Angebot', { ...BESTELLT, storniert: true, stornoGrund: 'Kein Budget' }],
+  ])('zeigt ReadOnly auch an %s keine schreibende Taste', async (_fall, angebot) => {
+    alsRolle('READ_ONLY');
+    bestandDoppel(angebot);
+
+    renderSeite();
+    await screen.findByRole('heading', { level: 1, name: UEBERSCHRIFT });
+    await screen.findByText(KOMMENTAR.text);
+
+    keineSchreibendeTaste();
+  });
+
+  it('zeigt einem Employee die Aktionen, denn er darf fachlich schreiben', async () => {
+    alsRolle('EMPLOYEE');
+    bestandDoppel(BESTELLT);
+
+    renderSeite();
+    await screen.findByRole('heading', { level: 1, name: UEBERSCHRIFT });
+
+    expect(aktionen().getByRole('link', { name: 'Bearbeiten' })).toBeInTheDocument();
+    expect(aktionen().getByRole('button', { name: 'Status weiter' })).toBeInTheDocument();
+    expect(await aktionen().findByRole('button', { name: 'Rechnung schreiben' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Datei hochladen' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Kommentar speichern' })).toBeInTheDocument();
   });
 });
 

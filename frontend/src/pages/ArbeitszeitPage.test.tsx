@@ -7,7 +7,10 @@ import ArbeitszeitPage from './ArbeitszeitPage';
 import { KopfPfadProvider } from '../components/KopfPfad';
 import { fetchNachPfad, json, leer, problem } from '../test/fetchNachPfad';
 import type { Routen } from '../test/fetchNachPfad';
+import { alsRolle } from '../test/rechteDoppel';
 import { renderMitTheme } from '../test/render';
+
+vi.mock('../auth/rechte', () => import('../test/rechteDoppel'));
 
 const OHNE_MONAT = 'GET /api/arbeitszeit';
 const WEG_NOVEMBER = '/api/arbeitszeit?monat=2026-11';
@@ -371,6 +374,47 @@ describe('ArbeitszeitPage — erfassen und aendern (Kriterien 1 und 6, Plan A14)
     ]);
     // Und kein Verweis, der die Zeile als Ganzes anfasst.
     expect(tafel.queryAllByRole('link')).toHaveLength(0);
+  });
+});
+
+describe('ArbeitszeitPage — je Rolle (Kriterium 10 von #409, Plan #414, A10)', () => {
+  it('zeigt ReadOnly den Monat ohne „Zeit erfassen", ohne ⋯-Menue und ohne Weg zum Aendern', async () => {
+    alsRolle('READ_ONLY');
+    mitRouten({ [NOVEMBER]: json(200, MONATSLISTE) });
+
+    renderSeite('/arbeitszeit?monat=2026-11');
+
+    expect(await screen.findByText('9:00 bis 10:45')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Zeit erfassen' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Aktionen für/ })).not.toBeInTheDocument();
+    // Die Zeitspanne steht als Text da, nicht als Schalter, der den Dialog oeffnete.
+    expect(screen.queryByRole('button', { name: '9:00 bis 10:45' })).not.toBeInTheDocument();
+    // Der Monatswechsel liest nur — er bleibt.
+    expect(screen.getByRole('button', { name: 'Vorheriger Monat' })).toBeInTheDocument();
+  });
+
+  it('laedt ReadOnly bei leerem Monat nicht zum Erfassen ein', async () => {
+    alsRolle('READ_ONLY');
+    mitRouten({ [NOVEMBER]: json(200, LEERER_MONAT) });
+
+    renderSeite('/arbeitszeit?monat=2026-11');
+
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      /^Noch keine Arbeitszeit in diesem Monat\.$/,
+    );
+  });
+
+  it('zeigt einem Employee „Zeit erfassen", das ⋯-Menue und den Weg zum Aendern', async () => {
+    alsRolle('EMPLOYEE');
+    mitRouten({ [NOVEMBER]: json(200, MONATSLISTE) });
+
+    renderSeite('/arbeitszeit?monat=2026-11');
+
+    expect(await screen.findByRole('button', { name: '9:00 bis 10:45' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Zeit erfassen' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Aktionen für 12.11.2026, 9:00 bis 10:45' }),
+    ).toBeInTheDocument();
   });
 });
 

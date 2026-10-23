@@ -7,6 +7,7 @@ import type { ChangeEvent, ReactNode } from 'react';
 
 import { anlageHochladen, anlageInhaltPfad, anlageLoeschen, anlagenLesen } from '../api/anlagen';
 import type { Anlage } from '../api/anlagen';
+import { useRechte } from '../auth/rechte';
 import { feldMeldungen } from '../lib/apifehler';
 import { dateigroesse, MAX_UPLOAD_BYTE } from '../lib/dateigroesse';
 import { ersteDatei } from '../lib/dateiwahl';
@@ -140,6 +141,7 @@ function vorpruefung(datei: File): string | null {
 }
 
 export default function Anlagen({ angebotId }: AnlagenProps) {
+  const { darfFachlichSchreiben } = useRechte();
   const [stand, setzeStand] = useState<Stand>('laedt');
   const [anlagen, setzeAnlagen] = useState<readonly Anlage[]>([]);
   const [meldung, setzeMeldung] = useState<string | null>(null);
@@ -315,20 +317,22 @@ export default function Anlagen({ angebotId }: AnlagenProps) {
         >
           <IconDownload size={18} stroke={1.8} aria-hidden />
         </Box>
-        <AktionsMenue
-          name={`Aktionen für ${anlage.dateiName}`}
-          objekt={anlage.dateiName}
-          eintraege={[
-            {
-              titel: 'Löschen',
-              symbol: <IconTrash size={SYMBOL} stroke={1.8} />,
-              rueckfrage: LOESCHEN_FRAGE,
-              onAuswahl: () => {
-                void loeschen(anlage);
+        {darfFachlichSchreiben ? (
+          <AktionsMenue
+            name={`Aktionen für ${anlage.dateiName}`}
+            objekt={anlage.dateiName}
+            eintraege={[
+              {
+                titel: 'Löschen',
+                symbol: <IconTrash size={SYMBOL} stroke={1.8} />,
+                rueckfrage: LOESCHEN_FRAGE,
+                onAuswahl: () => {
+                  void loeschen(anlage);
+                },
               },
-            },
-          ]}
-        />
+            ]}
+          />
+        ) : null}
       </Box>
     );
   }
@@ -361,7 +365,9 @@ export default function Anlagen({ angebotId }: AnlagenProps) {
     );
   }
 
-  const werkzeug = (
+  // Ohne Schreibrecht fehlen Dateifeld und Taste ganz; Anzeigen und Herunterladen bleiben, denn
+  // sie aendern nichts (Kriterium 10 von #409, Plan #414, E4).
+  const werkzeug = darfFachlichSchreiben ? (
     <>
       <Box
         component="input"
@@ -386,7 +392,7 @@ export default function Anlagen({ angebotId }: AnlagenProps) {
         </WeicheTaste>
       )}
     </>
-  );
+  ) : undefined;
 
   return (
     <Karte

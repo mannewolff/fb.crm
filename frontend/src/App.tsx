@@ -50,7 +50,9 @@ const DokumentationPage = lazy(async () => import('./pages/DokumentationPage'));
  *
  * Die Einstellungen — `/eigene-angaben` und `/administration` — liegen zusaetzlich in
  * {@link RollenRoute}: Sie stehen nur einer Rolle offen, die sie sehen darf (Plan #414, A11).
- * Ebenso `/mitarbeitende` mit seinen Masken, die nur einem C-Level offenstehen (A12).
+ * Ebenso `/mitarbeitende` mit seinen Masken, die nur einem C-Level offenstehen (A12), und die
+ * Masken zu Firma, Ansprechpartner und Angebot, die nur einer Rolle offenstehen, die fachlich
+ * schreiben darf (Kriterium 10 von #409).
  *
  * Die unbekannte Adresse bekommt keine eigene Ansicht: Mit Sitzung fuehrt sie auf die
  * Startadresse, ohne Sitzung uebernimmt {@link ProtectedRoute} und fuehrt auf die
@@ -77,7 +79,14 @@ export default function App() {
             <Route path="/" element={<StartseitePage />} />
             <Route path="/angebote" element={<AngebotePage />} />
             <Route path="/angebote/:angebotId" element={<AngebotPage />} />
-            <Route path="/angebote/:angebotId/bearbeiten" element={<AngebotMaske />} />
+            <Route
+              path="/angebote/:angebotId/bearbeiten"
+              element={
+                <RollenRoute recht="darfFachlichSchreiben">
+                  <AngebotMaske />
+                </RollenRoute>
+              }
+            />
             {/* Die Arbeitszeit traegt ihren Monat als Parameter (`?monat=`) und nicht im Pfad:
                 Er filtert eine Ansicht, er benennt kein eigenes Objekt (Plan #194, A13). */}
             <Route path="/arbeitszeit" element={<ArbeitszeitPage />} />
@@ -99,17 +108,46 @@ export default function App() {
             <Route path="/jahresabschluesse/:jahr" element={<JahresabschlussPage />} />
             <Route path="/firmen" element={<FirmenPage />} />
             {/* Statisch vor dynamisch: `/firmen/neu` ist die Maske, nicht die Firma „neu". */}
-            <Route path="/firmen/neu" element={<FirmaMaske />} />
+            <Route
+              path="/firmen/neu"
+              element={
+                <RollenRoute recht="darfFachlichSchreiben">
+                  <FirmaMaske />
+                </RollenRoute>
+              }
+            />
             <Route path="/firmen/:id" element={<FirmaPage />} />
-            <Route path="/firmen/:id/bearbeiten" element={<FirmaMaske />} />
-            <Route path="/firmen/:id/angebote/neu" element={<AngebotMaske />} />
+            <Route
+              path="/firmen/:id/bearbeiten"
+              element={
+                <RollenRoute recht="darfFachlichSchreiben">
+                  <FirmaMaske />
+                </RollenRoute>
+              }
+            />
+            <Route
+              path="/firmen/:id/angebote/neu"
+              element={
+                <RollenRoute recht="darfFachlichSchreiben">
+                  <AngebotMaske />
+                </RollenRoute>
+              }
+            />
             <Route
               path="/firmen/:id/ansprechpartner/neu"
-              element={<AnsprechpartnerMaske />}
+              element={
+                <RollenRoute recht="darfFachlichSchreiben">
+                  <AnsprechpartnerMaske />
+                </RollenRoute>
+              }
             />
             <Route
               path="/firmen/:id/ansprechpartner/:ansprechpartnerId/bearbeiten"
-              element={<AnsprechpartnerMaske />}
+              element={
+                <RollenRoute recht="darfFachlichSchreiben">
+                  <AnsprechpartnerMaske />
+                </RollenRoute>
+              }
             />
             <Route
               path="/eigene-angaben"

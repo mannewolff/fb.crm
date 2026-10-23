@@ -236,7 +236,8 @@ wieder her.
 
 **Kommentare:** In der Karte „Kommentare" den Text in das Feld „Neuer Kommentar" schreiben und
 „Kommentar speichern" wählen. Ein Kommentar hat höchstens 2.000 Zeichen und steht danach oben in
-der Liste. Über das Menü ⋯ am Kommentar lässt er sich bearbeiten oder nach einer Rückfrage löschen.
+der Liste. Jeder Kommentar nennt über seinem Zeitpunkt den Namen seines Verfassers. Über das Menü
+⋯ am Kommentar lässt er sich bearbeiten oder nach einer Rückfrage löschen.
 
 **Anlagen:** In der Karte „Anlagen" „Datei hochladen" wählen und eine Datei auswählen; sie darf
 höchstens 25 MB groß sein. Die Anlage steht danach mit Dateiname und Zeitpunkt in der Liste. Das
@@ -446,7 +447,9 @@ Person meldet sich danach wieder mit ihrer Adresse an.
   stellen und die Arbeitszeit bedienen. „Mitarbeitende", „Eigene Angaben" und „Administration"
   stehen einem Employee nicht offen.
 - ReadOnly liest alles, auch die eigenen Angaben und die Rechnungseinstellungen, und ändert nichts.
-  „Mitarbeitende" steht ReadOnly nicht offen.
+  „Mitarbeitende" steht ReadOnly nicht offen. Bei Firmen, Angeboten und in der Arbeitszeit fehlen
+  ReadOnly die Tasten zum Anlegen, Ändern, Stornieren, Hochladen, Kommentieren und „Zeit erfassen";
+  Anlagen lassen sich weiter ansehen und herunterladen.
 
 **Der letzte C-Level:** Es bleibt immer mindestens ein aktiver C-Level. Das letzte aktive
 C-Level-Konto lässt sich weder stilllegen noch auf eine andere Rolle setzen; fb.crm sagt dann „Es

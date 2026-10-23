@@ -6,7 +6,10 @@ import ZeiteintragMaske from './ZeiteintragMaske';
 import type { Zeitzeile } from '../api/arbeitszeit';
 import { heute } from '../lib/tag';
 import { alsJson, fetchNachPfad, json, problem } from '../test/fetchNachPfad';
+import { alsRolle } from '../test/rechteDoppel';
 import { renderMitTheme } from '../test/render';
+
+vi.mock('../auth/rechte', () => import('../test/rechteDoppel'));
 
 /**
  * Der Dialog zum Erfassen und Aendern einer Arbeitszeit (Issue #202; Plan #194, A14 bis A16, A19).
@@ -162,6 +165,29 @@ async function fuelle(nutzer: Nutzer) {
 
 afterEach(() => {
   vi.restoreAllMocks();
+});
+
+describe('ZeiteintragMaske — je Rolle (Kriterium 10 von #409, Plan #414, A10)', () => {
+  it.each([null, ZEILE])('oeffnet sich fuer ReadOnly nicht und fragt nichts ab (Zeile %#)', (zeile) => {
+    alsRolle('READ_ONLY');
+    const aufruf = fetchNachPfad({ [POSITIONEN]: json(200, [KONZEPTION]) });
+
+    renderMaske(zeile);
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Speichern' })).not.toBeInTheDocument();
+    expect(aufruf).not.toHaveBeenCalled();
+  });
+
+  it('oeffnet sich fuer einen Employee, denn er darf fachlich schreiben', async () => {
+    alsRolle('EMPLOYEE');
+    fetchNachPfad({ [POSITIONEN]: json(200, [KONZEPTION]) });
+
+    renderMaske();
+
+    expect(await screen.findByRole('dialog', { name: 'Zeit erfassen' })).toBeInTheDocument();
+    expect(speicherTaste()).toBeInTheDocument();
+  });
 });
 
 describe('ZeiteintragMaske — Erfassen (Kriterium 1, A16)', () => {

@@ -12,6 +12,7 @@ import type { FormEvent, ReactNode } from 'react';
 import { buchbarePositionen, zeiteintragAendern, zeiteintragAnlegen } from '../api/arbeitszeit';
 import type { Buchungsposition, ZeiteintragEingabe, Zeitzeile } from '../api/arbeitszeit';
 import type { FieldErrors } from '../api/client';
+import { useRechte } from '../auth/rechte';
 import { feldMeldungen } from '../lib/apifehler';
 import { dauerInHundertsteln, stundenWort, uhrzeitFeld } from '../lib/arbeitszeit';
 import { meldungAm } from '../lib/feldmeldung';
@@ -49,6 +50,10 @@ import WeicheTaste from './WeicheTaste';
  * Formfehler ohne Feldbezug abweisen koennte. Alles Fachliche — Raster, Reihenfolge, Buchbarkeit,
  * Ueberschneidung — entscheidet der Server, und seine Meldungen landen aus `fieldErrors` am
  * jeweiligen Feld (A19, A8).
+ *
+ * <b>Ohne Schreibrecht entsteht der Dialog gar nicht</b> (Kriterium 10 von #409, Plan #414, A10):
+ * Er dient nur dem Schreiben, und die Monatsliste oeffnet ihn dann ohnehin nicht. Die Huelle fragt
+ * das Recht vor dem eigentlichen Dialog, damit auch seine Auswahlliste nicht geladen wird.
  */
 
 /** Die Schrittweite der Zeitfelder in Sekunden — eine Viertelstunde (A16, Antwort 6). */
@@ -222,11 +227,13 @@ function hinweisZu(wahlstand: Wahlstand): ReactNode {
   return null;
 }
 
-export default function ZeiteintragMaske({
-  zeile,
-  onGespeichert,
-  onSchliessen,
-}: ZeiteintragMaskeProps) {
+export default function ZeiteintragMaske(props: ZeiteintragMaskeProps) {
+  const { darfFachlichSchreiben } = useRechte();
+  return darfFachlichSchreiben ? <Zeiteintragsdialog {...props} /> : null;
+}
+
+/** Der Dialog selbst — nur fuer eine Rolle, die fachlich schreiben darf. */
+function Zeiteintragsdialog({ zeile, onGespeichert, onSchliessen }: ZeiteintragMaskeProps) {
   const titelId = useId();
   const [wahlstand, setzeWahlstand] = useState<Wahlstand>({ art: 'laedt' });
   const [werte, setzeWerte] = useState<Werte>(() => werteAus(zeile));

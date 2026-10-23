@@ -30,6 +30,7 @@ import {
   angebotStornoZuruecknehmen,
 } from '../api/angebote';
 import type { Angebot, AngebotPosition } from '../api/angebote';
+import { useRechte } from '../auth/rechte';
 import { angebotAbrechnung, rechnungAnlegen } from '../api/rechnungen';
 import type {
   Abrechnungsposition,
@@ -128,6 +129,10 @@ import { ABSTAND_BUEHNE, RADIUS_RUND, TASTE_INNENABSTAND, ZAHLEN_KLASSE } from '
  * Ganzes: intern die zwei Tasten der internen Kette, extern die des Kundenangebots — und nur dort
  * steht „Rechnung schreiben". Storniert wird intern ebenso wenig: Storniert wird ein Angebot an
  * einen Kunden (#330, Kriterium 1).
+ *
+ * <b>Ohne Schreibrecht fehlt die Aktionsreihe ganz</b> (Kriterium 10 von #409, Plan #414, A10):
+ * Wer nur liest, sieht Angaben, Positionen, Rechnungen, Anlagen und Kommentare, aber keine Taste,
+ * die etwas aendert. Ob sie steht, fragt die Ansicht das Recht und nie die Rolle.
  */
 
 const NICHT_GEFUNDEN = 'Dieses Angebot gibt es nicht.';
@@ -650,6 +655,7 @@ function Stornodialog({
 const ZU_FIRMEN: PfadVerweis = { titel: 'Firmen', ziel: '/firmen' };
 
 export default function AngebotPage() {
+  const { darfFachlichSchreiben } = useRechte();
   const { angebotId } = useParams();
   const kennung = kennungAus(angebotId);
   const navigate = useNavigate();
@@ -974,7 +980,11 @@ export default function AngebotPage() {
     };
     return (
       <>
-        <Karte titel={ueberschriftZu(angebot)} titelEbene={1} werkzeug={aktionenZu(angebot)}>
+        <Karte
+          titel={ueberschriftZu(angebot)}
+          titelEbene={1}
+          werkzeug={darfFachlichSchreiben ? aktionenZu(angebot) : undefined}
+        >
           <Angaben angebot={angebot} />
         </Karte>
         {wahlOffen ? wahlZu(angebot) : null}

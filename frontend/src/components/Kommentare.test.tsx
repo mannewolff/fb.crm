@@ -1,10 +1,13 @@
 import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, test, vi } from 'vitest';
 
 import { alsJson, fetchNachPfad, json, leer, problem } from '../test/fetchNachPfad';
+import { alsRolle } from '../test/rechteDoppel';
 import { renderMitTheme } from '../test/render';
 import Kommentare from './Kommentare';
+
+vi.mock('../auth/rechte', () => import('../test/rechteDoppel'));
 
 /**
  * Der Bereich „Kommentare" in der Angebotsansicht (Issue #146, Kriterien 1, 2, 4 bis 7, 9 bis 12).
@@ -20,12 +23,14 @@ const NEUER = {
   id: 2,
   text: 'Kunde am Telefon: Start erst im November',
   createdAt: '2026-09-30T12:05:00Z',
+  verfasser: 'Anna Berg',
 };
 
 const ALTER = {
   id: 1,
   text: 'Erste Zeile\nZweite Zeile',
   createdAt: '2026-09-28T08:30:00Z',
+  verfasser: 'Ben Krause',
 };
 
 const NEUER_WORT = '30.09.2026, 14:05';
@@ -168,6 +173,51 @@ describe('Kommentare — was der Bereich zeigt (Kriterien 1, 4, 5, 11)', () => {
     });
 
     expect(fehler).not.toHaveBeenCalled();
+  });
+});
+
+describe('Kommentare — Verfasser und Rolle (Kriterien 10, 11 von #409)', () => {
+  it('zeigt je Kommentar den Verfasser', async () => {
+    fetchNachPfad({ [`GET ${WEG}`]: json(200, { kommentare: [NEUER, ALTER] }) });
+
+    renderBereich();
+
+    await screen.findByText(NEUER.text);
+    const verfasser = screen.getAllByTestId('kommentar-verfasser').map((teil) => teil.textContent);
+    expect(verfasser).toEqual(['Anna Berg', 'Ben Krause']);
+    const [erster] = screen.getAllByTestId('kommentar');
+    expect(within(erster).getByText('Anna Berg')).toBeInTheDocument();
+  });
+
+  test('Szenario: ReadOnly liest, ändert aber nichts', async () => {
+    alsRolle('READ_ONLY');
+    fetchNachPfad({ [`GET ${WEG}`]: json(200, { kommentare: [NEUER, ALTER] }) });
+
+    renderBereich();
+
+    expect(await screen.findByText(NEUER.text)).toBeInTheDocument();
+    expect(screen.getByTestId('karte-anzahl')).toHaveTextContent('2');
+    expect(screen.getAllByTestId('kommentar-verfasser')).toHaveLength(2);
+    expect(screen.queryByLabelText('Neuer Kommentar')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Kommentar speichern' })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: `Aktionen für Kommentar vom ${NEUER_WORT}` }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByRole('button')).not.toBeInTheDocument();
+  });
+
+  it('zeigt einem Employee Formular und ⋯-Menue, denn er darf fachlich schreiben', async () => {
+    alsRolle('EMPLOYEE');
+    fetchNachPfad({ [`GET ${WEG}`]: json(200, { kommentare: [NEUER] }) });
+
+    renderBereich();
+
+    await screen.findByText(NEUER.text);
+    expect(neuesFeld()).toBeInTheDocument();
+    expect(speicherTaste()).toBeEnabled();
+    expect(
+      screen.getByRole('button', { name: `Aktionen für Kommentar vom ${NEUER_WORT}` }),
+    ).toBeInTheDocument();
   });
 });
 
