@@ -45,6 +45,12 @@ public interface AccountRepository {
    */
   List<Account> aktiveCLevelMitSperre();
 
-  /** Legt das Konto an oder schreibt es fort und liefert es mit gesetzter Id zurueck. */
+  /**
+   * Legt das Konto an oder schreibt es fort und liefert es mit gesetzter Id zurueck.
+   *
+   * <p>Geschrieben wird im Aufruf selbst, nicht erst beim Commit: Traegt ein anderes Konto die
+   * Adresse schon, scheitert der Aufruf — innerhalb der Transaktion des Aufrufers, der den Fehler
+   * so noch in seine eigene Abweisung uebersetzen kann.
+   */
   Account save(Account account);
 }

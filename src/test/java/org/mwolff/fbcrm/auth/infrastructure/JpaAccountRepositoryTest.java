@@ -50,13 +50,13 @@ class JpaAccountRepositoryTest {
   @Test
   void save_thenWritesEveryFieldOfTheAccountIntoTheRow() {
     // Given
-    when(jpa.save(any(AccountEntity.class))).thenReturn(zeile(11L));
+    when(jpa.saveAndFlush(any(AccountEntity.class))).thenReturn(zeile(11L));
 
     // When
     repository.save(konto(null));
 
     // Then
-    verify(jpa).save(gespeicherte.capture());
+    verify(jpa).saveAndFlush(gespeicherte.capture());
     assertThat(gespeicherte.getValue())
         .satisfies(
             zeile -> assertThat(zeile.getId()).isNull(),
@@ -72,7 +72,7 @@ class JpaAccountRepositoryTest {
   @Test
   void save_thenReturnsTheAccountWithTheGeneratedId() {
     // Given
-    when(jpa.save(any(AccountEntity.class))).thenReturn(zeile(11L));
+    when(jpa.saveAndFlush(any(AccountEntity.class))).thenReturn(zeile(11L));
 
     // When
     final Account gesichert = repository.save(konto(null));
@@ -134,13 +134,13 @@ class JpaAccountRepositoryTest {
     // Given
     final Account stillgelegt =
         Konten.mit(null, "anna@firma.de", Role.EMPLOYEE, false, 0, ANGELEGT);
-    when(jpa.save(any(AccountEntity.class))).thenReturn(AccountEntity.aus(stillgelegt));
+    when(jpa.saveAndFlush(any(AccountEntity.class))).thenReturn(AccountEntity.aus(stillgelegt));
 
     // When
     final Account gesichert = repository.save(stillgelegt);
 
     // Then — in beide Richtungen: die Zeile traegt den Zustand, und das Konto kommt so zurueck.
-    verify(jpa).save(gespeicherte.capture());
+    verify(jpa).saveAndFlush(gespeicherte.capture());
     assertThat(gespeicherte.getValue().isAktiv()).isFalse();
     assertThat(gesichert.aktiv()).isFalse();
   }

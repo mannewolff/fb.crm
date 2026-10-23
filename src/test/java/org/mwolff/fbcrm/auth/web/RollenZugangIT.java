@@ -265,15 +265,15 @@ class RollenZugangIT extends AbstractIntegrationTest {
   }
 
   @Test
-  void cLevel_givenTheSettingsAndTheAccounts_thenIsNotForbidden() {
-    // When — C-Level darf alles; /api/mitarbeitende antwortet, solange es ihn nicht gibt, 404.
+  void cLevel_givenTheSettingsAndTheAccounts_thenReadsBoth() {
+    // When — C-Level darf alles, auch die Liste der Konten lesen (Issue #421).
     final ResponseEntity<String> einstellungen =
         ruf(cLevel, "/api/rechnung/einstellungen", HttpMethod.GET, null);
     final ResponseEntity<String> konten = ruf(cLevel, MITARBEITENDE, HttpMethod.GET, null);
 
     // Then
     assertThat(einstellungen.getStatusCode()).isEqualTo(HttpStatus.OK);
-    assertThat(konten.getStatusCode()).isNotEqualTo(HttpStatus.FORBIDDEN);
+    assertThat(konten.getStatusCode()).isEqualTo(HttpStatus.OK);
   }
 
   /** Ein Aufruf: Methode und Pfad, jede Kennung schon durch {@code 1} ersetzt. */

@@ -340,6 +340,28 @@ class JpaAccountRepositoryIT extends AbstractIntegrationTest {
   }
 
   @Test
+  void save_givenATakenAddressInsideATransaction_thenRejectedAtTheCallNotAtTheCommit() {
+    // Given — Issue #421: die Verwaltung der Konten uebersetzt die Verletzung selbst, also muss
+    // sie innerhalb ihrer Transaktion ankommen, nicht erst beim Commit dahinter.
+    repository.save(neuesKonto("manne@example.org"));
+    final Account anna = repository.save(neuesKonto("anna@firma.de"));
+
+    // When
+    final Throwable fehler =
+        transaktion.execute(
+            status -> {
+              final Throwable beimAufruf =
+                  catchThrowable(
+                      () -> repository.save(anna.mitAdresse("MANNE@example.org", ANGELEGT)));
+              status.setRollbackOnly();
+              return beimAufruf;
+            });
+
+    // Then
+    assertThat(fehler).isInstanceOf(DataIntegrityViolationException.class);
+  }
+
+  @Test
   void save_givenTheNextGeneration_thenStoresTheHigherSessionGeneration() {
     // Given
     final Account gesichert = repository.save(neuesKonto("manne@example.org"));

@@ -65,9 +65,16 @@ class JpaAccountRepository implements AccountRepository {
         .toList();
   }
 
+  /**
+   * {@inheritDoc}
+   *
+   * <p>{@code saveAndFlush} statt {@code save}: Eine fortgeschriebene Zeile schriebe Hibernate
+   * sonst erst beim Commit, und eine Verletzung von {@code account_email_key} kaeme hinter dem
+   * Anwendungsfall an, der sie in seine Abweisung uebersetzen soll (Issue #421).
+   */
   @Override
   public Account save(final Account account) {
-    return toDomain(jpa.save(AccountEntity.aus(account)));
+    return toDomain(jpa.saveAndFlush(AccountEntity.aus(account)));
   }
 
   private static Account toDomain(final AccountEntity zeile) {
