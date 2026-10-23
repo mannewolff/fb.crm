@@ -26,6 +26,9 @@ class SchemaBaselineIT extends AbstractIntegrationTest {
   private static final String INSERT_ANSPRECHPARTNER =
       "INSERT INTO ansprechpartner (firma_id, nachname) VALUES (?, ?)";
 
+  private static final String INSERT_KOMMENTAR =
+      "INSERT INTO angebot_kommentar (angebot_id, verfasser_id, text) VALUES (?, ?, ?)";
+
   private final JdbcTemplate jdbc;
 
   @Autowired
@@ -274,5 +277,56 @@ class SchemaBaselineIT extends AbstractIntegrationTest {
 
     // Then
     assertThat(aktive).isEqualTo(1);
+  }
+
+  private Long angebotId() {
+    final Long firmaId = firmaId("Adler AG");
+    return jdbc.queryForObject(
+        "INSERT INTO angebot (firma_id, status, angebot_datum)"
+            + " VALUES (?, 'ANGELEGT', DATE '2026-10-23') RETURNING id",
+        Long.class,
+        firmaId);
+  }
+
+  @Test
+  void kommentarVerfasser_givenAnUnknownAccount_thenRejectedByTheDatabase() {
+    // Given — Plan #414, A7: der Verfasser ist ein Konto, das es gibt.
+    final Long angebotId = angebotId();
+
+    // When / Then
+    assertThatThrownBy(() -> jdbc.update(INSERT_KOMMENTAR, angebotId, 4711L, "Kunde ruft an."))
+        .isInstanceOf(DataIntegrityViolationException.class)
+        .hasMessageContaining("angebot_kommentar_verfasser_id_fkey");
+  }
+
+  @Test
+  void kommentarVerfasser_givenNone_thenRejectedByTheDatabase() {
+    // Given — E13: der CHECK ist NOT VALID, bindet aber jeden neuen Kommentar.
+    final Long angebotId = angebotId();
+
+    // When / Then
+    assertThatThrownBy(
+            () ->
+                jdbc.update(
+                    "INSERT INTO angebot_kommentar (angebot_id, text) VALUES (?, ?)",
+                    angebotId,
+                    "Kunde ruft an."))
+        .isInstanceOf(DataIntegrityViolationException.class)
+        .hasMessageContaining("check constraint \"angebot_kommentar_verfasser\"");
+  }
+
+  @Test
+  void kommentarVerfasser_givenAnExistingAccount_thenAccepted() {
+    // Given
+    final Long angebotId = angebotId();
+    final Long kontoId =
+        jdbc.queryForObject(
+            INSERT_ACCOUNT + " RETURNING id", Long.class, "manne@example.org", "Manne", "C_LEVEL");
+
+    // When
+    final int betroffen = jdbc.update(INSERT_KOMMENTAR, angebotId, kontoId, "Kunde ruft an.");
+
+    // Then
+    assertThat(betroffen).isEqualTo(1);
   }
 }

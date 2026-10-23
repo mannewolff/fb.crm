@@ -1,5 +1,7 @@
 package org.mwolff.fbcrm;
 
+import static com.tngtech.archunit.core.domain.JavaClass.Predicates.resideInAPackage;
+import static com.tngtech.archunit.core.domain.JavaClass.Predicates.resideOutsideOfPackage;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.classes;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 import static com.tngtech.archunit.library.dependencies.SlicesRuleDefinition.slices;
@@ -18,6 +20,7 @@ import jakarta.persistence.Entity;
 import java.security.MessageDigest;
 import java.util.Arrays;
 import org.junit.jupiter.api.Test;
+import org.mwolff.fbcrm.angebot.application.VerbotenerKontozugriff;
 import org.mwolff.fbcrm.angebot.application.VerbotenerZeitzugriff;
 
 /**
@@ -141,6 +144,47 @@ class ArchitectureTest {
         .because(
             "das Angebot erfaehrt die erfasste Arbeitszeit nur ueber den Port Zeitbindung; die"
                 + " Richtung der Abhaengigkeit ist arbeitszeit -> angebot (Plan #218, E6)")
+        .allowEmptyShould(true);
+  }
+
+  @Test
+  void angebotModule_thenReachesAuthOnlyThroughItsDomain() {
+    angebotNurUeberDieDomaeneVonAuth().check(CLASSES);
+  }
+
+  /**
+   * Dass die Regel ueberhaupt greift (Issue #420), nach dem Muster der Gegenprobe zu {@code
+   * arbeitszeit}: {@code VerbotenerKontozugriff} liegt im Testbaum und haengt an {@code
+   * auth.application} — genau das, was die Regel finden soll.
+   */
+  @Test
+  void angebotModule_givenAClassThatReachesPastTheDomainOfAuth_thenTheRuleFails() {
+    final JavaClasses mitVerstoss =
+        new ClassFileImporter().importClasses(VerbotenerKontozugriff.class);
+
+    assertThatThrownBy(() -> angebotNurUeberDieDomaeneVonAuth().check(mitVerstoss))
+        .isInstanceOf(AssertionError.class)
+        .hasMessageContaining(VerbotenerKontozugriff.class.getName())
+        .hasMessageContaining("GetCurrentAccountUseCase")
+        .hasMessageContaining("auth.domain");
+  }
+
+  /*
+   * Eine Methode fuer beide Laeufe, aus demselben Grund wie bei angebotOhneArbeitszeit: zwei
+   * Abschriften liefen beim ersten Nachziehen des Textes auseinander.
+   */
+  private static ArchRule angebotNurUeberDieDomaeneVonAuth() {
+    return noClasses()
+        .that()
+        .resideInAPackage("org.mwolff.fbcrm.angebot..")
+        .should()
+        .dependOnClassesThat(
+            resideInAPackage("org.mwolff.fbcrm.auth..")
+                .and(resideOutsideOfPackage("org.mwolff.fbcrm.auth.domain..")))
+        .because(
+            "das Angebot liest Konten nur ueber die Ports in auth.domain — die Namen der Verfasser"
+                + " ueber AccountRepository, die Uebernahme ueber ErstesKontoFolge; die Richtung"
+                + " der Abhaengigkeit ist angebot -> auth.domain (Plan #414, A7, E13)")
         .allowEmptyShould(true);
   }
 

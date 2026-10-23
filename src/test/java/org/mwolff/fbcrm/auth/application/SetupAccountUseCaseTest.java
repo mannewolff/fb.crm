@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.clearInvocations;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.spy;
@@ -19,6 +20,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.IntStream;
@@ -33,6 +35,7 @@ import org.mwolff.fbcrm.auth.Konten;
 import org.mwolff.fbcrm.auth.SetupProperties;
 import org.mwolff.fbcrm.auth.domain.Account;
 import org.mwolff.fbcrm.auth.domain.AccountRepository;
+import org.mwolff.fbcrm.auth.domain.ErstesKontoFolge;
 import org.mwolff.fbcrm.auth.domain.LoginCode;
 import org.mwolff.fbcrm.auth.domain.LoginCodeRepository;
 import org.mwolff.fbcrm.auth.domain.Role;
@@ -41,6 +44,8 @@ import org.mwolff.fbcrm.auth.domain.SessionTokens;
 import org.mwolff.fbcrm.auth.infrastructure.FailedLoginDelay;
 import org.mwolff.fbcrm.auth.infrastructure.LoginAttemptLimiter;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.transaction.support.TransactionCallback;
+import org.springframework.transaction.support.TransactionOperations;
 
 /**
  * Die Einrichtung der frischen Instanz per Einmal-Schluessel und Code (E5, E9, K3).
@@ -78,6 +83,27 @@ class SetupAccountUseCaseTest {
   @Mock private RequestLoginCodeUseCase ausstellung;
   @Mock private LoginCodeRepository loginCodes;
   @Mock private FailedLoginDelay delay;
+  @Mock private ErstesKontoFolge folge;
+
+  /** Wie oft die Einrichtung gerade in ihrer Transaktion steht; 0 heisst ausserhalb. */
+  private int offeneTransaktionen;
+
+  /**
+   * Eine Transaktion ohne Datenbank: Sie zaehlt nur mit, ob der Rueckruf in ihr laeuft — so zeigt
+   * der Test, dass Anlage und Folge in derselben Klammer stehen (E13).
+   */
+  private final TransactionOperations transaktion =
+      new TransactionOperations() {
+        @Override
+        public <T> T execute(final TransactionCallback<T> rueckruf) {
+          offeneTransaktionen++;
+          try {
+            return rueckruf.doInTransaction(null);
+          } finally {
+            offeneTransaktionen--;
+          }
+        }
+      };
 
   private final LoginAttemptLimiter zaehler =
       spy(new LoginAttemptLimiter(schalter(), Clock.fixed(JETZT, ZoneOffset.UTC)));
@@ -110,6 +136,8 @@ class SetupAccountUseCaseTest {
             loginCodes, hasher, zaehler, schalter(), Clock.fixed(JETZT, ZoneOffset.UTC)),
         schalter(),
         new SetupProperties(konfigurierterSchluessel),
+        folge,
+        transaktion,
         Clock.fixed(JETZT, ZoneOffset.UTC));
   }
 
@@ -321,6 +349,52 @@ class SetupAccountUseCaseTest {
   }
 
   @Test
+  void initialize_givenTheRightKeyOnAFreshInstance_thenHandsTheNewAccountToTheFolge() {
+    // Given — E13: Kommentare ohne Verfasser bekommt das erste Konto.
+    final SetupAccountUseCase einrichtung = frischeInstanz();
+
+    // When
+    richteEin(einrichtung);
+
+    // Then
+    final InOrder reihenfolge = inOrder(accounts, folge);
+    reihenfolge.verify(accounts).save(any(Account.class));
+    reihenfolge.verify(folge).erstesKontoAngelegt(KONTO_ID);
+  }
+
+  @Test
+  void initialize_givenTheRightKeyOnAFreshInstance_thenSavesAndHandsOverInOneTransaction() {
+    // Given — E13: scheitert die Folge, entsteht auch das Konto nicht.
+    when(accounts.existsAnyAccount()).thenReturn(false);
+    codeStimmt();
+    when(tokens.encode(KONTO_ID, 0L, JETZT, Duration.ofDays(1))).thenReturn(TOKEN);
+    final SetupAccountUseCase einrichtung = einrichtung(SCHLUESSEL);
+    final List<Integer> beimSpeichern = new ArrayList<>();
+    final List<Integer> beiDerFolge = new ArrayList<>();
+    when(accounts.save(any(Account.class)))
+        .thenAnswer(
+            aufruf -> {
+              beimSpeichern.add(offeneTransaktionen);
+              return Konten.mitId(KONTO_ID, aufruf.getArgument(0));
+            });
+    doAnswer(
+            aufruf -> {
+              beiDerFolge.add(offeneTransaktionen);
+              return null;
+            })
+        .when(folge)
+        .erstesKontoAngelegt(KONTO_ID);
+
+    // When
+    richteEin(einrichtung);
+
+    // Then — beide in derselben einen Klammer, danach ist sie geschlossen.
+    assertThat(beimSpeichern).containsExactly(1);
+    assertThat(beiDerFolge).containsExactly(1);
+    assertThat(offeneTransaktionen).isZero();
+  }
+
+  @Test
   void initialize_givenAWrongKey_thenRefuses() {
     // Given
     final SetupAccountUseCase einrichtung = einrichtung(SCHLUESSEL);
@@ -438,6 +512,22 @@ class SetupAccountUseCaseTest {
 
     // Then
     verify(tokens, never()).encode(anyLong(), anyLong(), any(Instant.class), any(Duration.class));
+  }
+
+  @Test
+  void initialize_givenALostRaceAgainstTheUniqueIndex_thenNeverCallsTheFolge() {
+    // Given — ohne neues Konto gibt es keines, dem Kommentare zufallen koennten (E13).
+    when(accounts.existsAnyAccount()).thenReturn(false);
+    codeStimmt();
+    when(accounts.save(any(Account.class)))
+        .thenThrow(new DataIntegrityViolationException("account_email_key"));
+    final SetupAccountUseCase einrichtung = einrichtung(SCHLUESSEL);
+
+    // When
+    assertThatExceptionOfType(SetupRefused.class).isThrownBy(() -> richteEin(einrichtung));
+
+    // Then
+    verify(folge, never()).erstesKontoAngelegt(anyLong());
   }
 
   @Test

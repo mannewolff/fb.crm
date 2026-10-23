@@ -48,6 +48,7 @@ class JpaAngebotskommentarRepository implements AngebotskommentarRepository {
     return new Angebotskommentar(
         zeile.getId(),
         zeile.getAngebotId(),
+        zeile.getVerfasserId(),
         zeile.getText(),
         zeile.getCreatedAt(),
         zeile.getUpdatedAt());
@@ -57,6 +58,7 @@ class JpaAngebotskommentarRepository implements AngebotskommentarRepository {
     return new AngebotKommentarEntity(
         kommentar.id(),
         kommentar.angebotId(),
+        kommentar.verfasserId(),
         kommentar.text(),
         kommentar.createdAt(),
         kommentar.updatedAt());

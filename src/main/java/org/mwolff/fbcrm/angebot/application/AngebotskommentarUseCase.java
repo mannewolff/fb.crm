@@ -3,9 +3,14 @@ package org.mwolff.fbcrm.angebot.application;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.stream.Collectors;
 import org.mwolff.fbcrm.angebot.domain.AngebotRepository;
 import org.mwolff.fbcrm.angebot.domain.Angebotskommentar;
 import org.mwolff.fbcrm.angebot.domain.AngebotskommentarRepository;
+import org.mwolff.fbcrm.auth.domain.AccountRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -23,6 +28,12 @@ import org.springframework.transaction.annotation.Transactional;
  * 2.000 Zeichen prueft dagegen die Schnittstelle am eingereichten Text ({@code
  * AngebotKommentarRequest}) und die Tabelle am gespeicherten.
  *
+ * <p><b>Der Verfasser</b> (Plan #414, A7). Beim Schreiben ist es das angemeldete Konto — die
+ * Kennung kommt aus der Sitzung, nie aus dem Rumpf. Beim Lesen holt der Anwendungsfall den
+ * <b>aktuellen</b> Namen ueber {@link AccountRepository#displayNamesByIds}, fuer eine ganze Liste
+ * in einem Zug (fachliche Quelle #409, Kriterium 11). Aendern und Loeschen kennen keine Rechte je
+ * Verfasser, und der Verfasser bleibt beim Aendern derselbe.
+ *
  * <p>Der Zeitpunkt kommt aus der injizierten {@link Clock} (CLAUDE-java.md §6.2). Beim Aendern
  * bleibt {@code createdAt} stehen: Die Ansicht zeigt den Zeitpunkt der Anlage, und einen Hinweis
  * „bearbeitet" gibt es nicht (Kriterium 9, E8).
@@ -33,44 +44,57 @@ public class AngebotskommentarUseCase {
 
   private final AngebotRepository angebote;
   private final AngebotskommentarRepository kommentare;
+  private final AccountRepository konten;
   private final Clock clock;
 
   AngebotskommentarUseCase(
       final AngebotRepository angebote,
       final AngebotskommentarRepository kommentare,
+      final AccountRepository konten,
       final Clock clock) {
     this.angebote = angebote;
     this.kommentare = kommentare;
+    this.konten = konten;
     this.clock = clock;
   }
 
   /**
-   * Die Kommentare des Angebots, neuester zuerst (Kriterium 4).
+   * Die Kommentare des Angebots, neuester zuerst (Kriterium 4), jeder mit dem aktuellen Namen
+   * seines Verfassers.
    *
    * @param angebotId Kennung des Angebots
    * @throws AngebotNichtGefunden wenn es das Angebot nicht gibt
    */
   @Transactional(readOnly = true)
-  public List<Angebotskommentar> liste(final long angebotId) {
+  public List<KommentarMitVerfasser> liste(final long angebotId) {
     pruefeAngebot(angebotId);
-    return kommentare.findByAngebot(angebotId).stream()
-        .sorted(Kommentarreihenfolge.NEUESTE_ZUERST)
-        .toList();
+    final List<Angebotskommentar> sortiert =
+        kommentare.findByAngebot(angebotId).stream()
+            .sorted(Kommentarreihenfolge.NEUESTE_ZUERST)
+            .toList();
+    final Map<Long, String> namen =
+        konten.displayNamesByIds(
+            sortiert.stream().map(Angebotskommentar::verfasserId).collect(Collectors.toSet()));
+    return sortiert.stream().map(kommentar -> mitVerfasser(kommentar, namen)).toList();
   }
 
   /**
    * Schreibt einen Kommentar an das Angebot (Kriterium 2) — in jedem Status (Kriterium 8).
    *
    * @param angebotId Kennung des Angebots
+   * @param verfasserId Kennung des angemeldeten Kontos — aus der Sitzung, nicht aus dem Rumpf
    * @param text der eingereichte Text; Leerraum am Rand faellt weg
    * @throws AngebotNichtGefunden wenn es das Angebot nicht gibt
    * @throws IllegalArgumentException wenn vom Text nur Leerraum uebrig bleibt
    */
-  public Angebotskommentar schreibe(final long angebotId, final String text) {
+  public KommentarMitVerfasser schreibe(
+      final long angebotId, final long verfasserId, final String text) {
     pruefeAngebot(angebotId);
     final String sauberer = bereinigt(text);
     final Instant jetzt = clock.instant();
-    return kommentare.save(new Angebotskommentar(null, angebotId, sauberer, jetzt, jetzt));
+    return mitVerfasser(
+        kommentare.save(
+            new Angebotskommentar(null, angebotId, verfasserId, sauberer, jetzt, jetzt)));
   }
 
   /**
@@ -83,10 +107,10 @@ public class AngebotskommentarUseCase {
    * @throws AngebotskommentarNichtGefunden wenn es den Kommentar an diesem Angebot nicht gibt
    * @throws IllegalArgumentException wenn vom Text nur Leerraum uebrig bleibt
    */
-  public Angebotskommentar aendere(
+  public KommentarMitVerfasser aendere(
       final long angebotId, final long kommentarId, final String text) {
     final Angebotskommentar vorhandener = lies(angebotId, kommentarId);
-    return kommentare.save(vorhandener.geaendert(bereinigt(text), clock.instant()));
+    return mitVerfasser(kommentare.save(vorhandener.geaendert(bereinigt(text), clock.instant())));
   }
 
   /**
@@ -115,6 +139,24 @@ public class AngebotskommentarUseCase {
       throw new AngebotskommentarNichtGefunden();
     }
     return vorhandener;
+  }
+
+  private KommentarMitVerfasser mitVerfasser(final Angebotskommentar kommentar) {
+    return mitVerfasser(kommentar, konten.displayNamesByIds(Set.of(kommentar.verfasserId())));
+  }
+
+  /*
+   * Ein Verfasser ohne Konto kann es nicht geben: Der Fremdschluessel auf account haelt jede
+   * Kennung fest, und Konten werden nicht geloescht (A7). Fehlt der Name doch, ist das ein Bruch
+   * dieser Zusage und kein Fall fuer einen Platzhalter.
+   */
+  private static KommentarMitVerfasser mitVerfasser(
+      final Angebotskommentar kommentar, final Map<Long, String> namen) {
+    return new KommentarMitVerfasser(
+        kommentar,
+        Objects.requireNonNull(
+            namen.get(kommentar.verfasserId()),
+            "Verfasser ohne Konto: " + kommentar.verfasserId()));
   }
 
   private static String bereinigt(final String text) {

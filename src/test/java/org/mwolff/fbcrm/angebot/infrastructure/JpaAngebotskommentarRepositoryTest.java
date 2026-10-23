@@ -30,6 +30,7 @@ class JpaAngebotskommentarRepositoryTest {
   private static final Instant ANGELEGT = Instant.parse("2026-09-28T08:00:00Z");
   private static final Instant GEAENDERT = Instant.parse("2026-09-30T14:05:00Z");
   private static final String TEXT = "Kunde ruft zurueck.";
+  private static final long VERFASSER = 3L;
 
   @Mock private SpringDataAngebotKommentarRepository zeilen;
 
@@ -38,11 +39,11 @@ class JpaAngebotskommentarRepositoryTest {
   @InjectMocks private JpaAngebotskommentarRepository repository;
 
   private static Angebotskommentar kommentar() {
-    return new Angebotskommentar(7L, 11L, TEXT, ANGELEGT, GEAENDERT);
+    return new Angebotskommentar(7L, 11L, VERFASSER, TEXT, ANGELEGT, GEAENDERT);
   }
 
   private static AngebotKommentarEntity zeile(final long id, final String text) {
-    return new AngebotKommentarEntity(Long.valueOf(id), 11L, text, ANGELEGT, GEAENDERT);
+    return new AngebotKommentarEntity(Long.valueOf(id), 11L, VERFASSER, text, ANGELEGT, GEAENDERT);
   }
 
   @Test
@@ -59,6 +60,7 @@ class JpaAngebotskommentarRepositoryTest {
         .satisfies(
             zeile -> assertThat(zeile.getId()).isEqualTo(7L),
             zeile -> assertThat(zeile.getAngebotId()).isEqualTo(11L),
+            zeile -> assertThat(zeile.getVerfasserId()).isEqualTo(VERFASSER),
             zeile -> assertThat(zeile.getText()).isEqualTo(TEXT),
             zeile -> assertThat(zeile.getCreatedAt()).isEqualTo(ANGELEGT),
             zeile -> assertThat(zeile.getUpdatedAt()).isEqualTo(GEAENDERT));
@@ -71,7 +73,7 @@ class JpaAngebotskommentarRepositoryTest {
 
     // When
     final Angebotskommentar gesichert =
-        repository.save(new Angebotskommentar(null, 11L, TEXT, ANGELEGT, ANGELEGT));
+        repository.save(new Angebotskommentar(null, 11L, VERFASSER, TEXT, ANGELEGT, ANGELEGT));
 
     // Then
     verify(zeilen).save(gespeicherte.capture());

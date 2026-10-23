@@ -17,20 +17,23 @@ import org.springframework.jdbc.core.JdbcTemplate;
  * PostgreSQL-Instanz.
  *
  * <p>Gegenstand sind die Zusagen, die allein die Datenbank haelt: der Text ist nie leer und nie
- * laenger als 2.000 Zeichen, und ein Kommentar haengt an einem vorhandenen Angebot. Gearbeitet wird
- * mit {@link JdbcTemplate} und direkten Anweisungen — der Weg ueber die Entities kaeme an einigen
- * dieser Faelle gar nicht vorbei.
+ * laenger als 2.000 Zeichen, und ein Kommentar haengt an einem vorhandenen Angebot. Seit {@code
+ * V31} traegt jeder Kommentar einen Verfasser; die Faelle dazu stehen in {@code SchemaBaselineIT}
+ * und {@code MehrereKontenMigrationIT}, hier haengt jeder Kommentar am Konto aus dem Vorlauf.
+ * Gearbeitet wird mit {@link JdbcTemplate} und direkten Anweisungen — der Weg ueber die Entities
+ * kaeme an einigen dieser Faelle gar nicht vorbei.
  */
 class AngebotKommentarSchemaIT extends AbstractIntegrationTest {
 
   private static final String INSERT_KOMMENTAR =
-      "INSERT INTO angebot_kommentar (angebot_id, text) VALUES (?, ?)";
+      "INSERT INTO angebot_kommentar (angebot_id, verfasser_id, text) VALUES (?, ?, ?)";
 
   private static final String FIRMA = "Adler AG";
 
   private final JdbcTemplate jdbc;
 
   private long angebotId;
+  private long verfasserId;
 
   @Autowired
   AngebotKommentarSchemaIT(final JdbcTemplate jdbc) {
@@ -50,10 +53,17 @@ class AngebotKommentarSchemaIT extends AbstractIntegrationTest {
             + " VALUES (?, 'ANGELEGT', DATE '2026-09-20')",
         firmaId);
     angebotId = jdbc.queryForObject("SELECT id FROM angebot LIMIT 1", Long.class).longValue();
+    jdbc.execute("TRUNCATE outbox_message, account RESTART IDENTITY CASCADE");
+    verfasserId =
+        jdbc.queryForObject(
+                "INSERT INTO account (email, display_name, role)"
+                    + " VALUES ('manne@example.org', 'Manne', 'C_LEVEL') RETURNING id",
+                Long.class)
+            .longValue();
   }
 
   private int kommentar(final String text) {
-    return jdbc.update(INSERT_KOMMENTAR, angebotId, text);
+    return jdbc.update(INSERT_KOMMENTAR, angebotId, verfasserId, text);
   }
 
   private static String zeichen(final int laenge) {
@@ -119,27 +129,30 @@ class AngebotKommentarSchemaIT extends AbstractIntegrationTest {
   @Test
   void kommentarAngebotId_givenAnUnknownOffer_thenRejectedByTheDatabase() {
     // When / Then
-    assertThatThrownBy(() -> jdbc.update(INSERT_KOMMENTAR, 4711L, "Kunde ruft zurueck."))
+    assertThatThrownBy(
+            () -> jdbc.update(INSERT_KOMMENTAR, 4711L, verfasserId, "Kunde ruft zurueck."))
         .isInstanceOf(DataIntegrityViolationException.class);
   }
 
   @Test
-  void migration_thenTheOfferIndexExistsAndNoAuthorColumn() {
+  void migration_thenBothIndexesExistAndTheVerfasserIsAnIdNotAName() {
     // When
     final Integer indizes =
         jdbc.queryForObject(
             "SELECT count(*) FROM pg_indexes WHERE schemaname = 'public'"
-                + " AND indexname = 'angebot_kommentar_angebot_idx'",
+                + " AND indexname IN ('angebot_kommentar_angebot_idx',"
+                + " 'angebot_kommentar_verfasser_idx')",
             Integer.class);
     final Integer verfasser =
         jdbc.queryForObject(
             "SELECT count(*) FROM information_schema.columns WHERE table_schema = 'public'"
                 + " AND table_name = 'angebot_kommentar'"
-                + " AND column_name IN ('verfasser', 'verfasser_id', 'benutzer_id')",
+                + " AND column_name IN ('verfasser', 'verfasser_name', 'benutzer_id')",
             Integer.class);
 
-    // Then — E3: keine Verfasser-Spalte, weder angezeigt noch fuer Rechte.
-    assertThat(indizes).isEqualTo(1);
+    // Then — Plan #414, A7: verfasser_id und kein kopierter Name, der nach einer Umbenennung
+    // veraltete.
+    assertThat(indizes).isEqualTo(2);
     assertThat(verfasser).isZero();
   }
 

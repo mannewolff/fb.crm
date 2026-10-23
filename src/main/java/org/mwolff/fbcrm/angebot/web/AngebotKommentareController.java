@@ -3,6 +3,7 @@ package org.mwolff.fbcrm.angebot.web;
 import jakarta.validation.Valid;
 import org.mwolff.fbcrm.angebot.application.AngebotskommentarUseCase;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -30,6 +31,9 @@ import org.springframework.web.bind.annotation.RestController;
  *
  * <p>Keine Aenderung an {@code SecurityConfig}: Die Wege fallen unter das bestehende {@code
  * /api/**} fuer angemeldete Benutzer (E11).
+ *
+ * <p>Der Verfasser eines neuen Kommentars ist das angemeldete Konto: Seine Kennung kommt aus der
+ * Sitzung ({@link AuthenticationPrincipal}) und nicht aus dem Rumpf (Plan #414, A7).
  */
 @RestController
 @RequestMapping("/api/angebote/{angebotId}/kommentare")
@@ -52,8 +56,9 @@ public class AngebotKommentareController {
   @ResponseStatus(HttpStatus.CREATED)
   public AngebotKommentarResponse schreiben(
       @PathVariable final long angebotId,
+      @AuthenticationPrincipal final Long accountId,
       @Valid @RequestBody final AngebotKommentarRequest anfrage) {
-    return AngebotKommentarResponse.of(useCase.schreibe(angebotId, anfrage.text()));
+    return AngebotKommentarResponse.of(useCase.schreibe(angebotId, accountId, anfrage.text()));
   }
 
   /** Aendert den Text eines Kommentars (Kriterium 9). */

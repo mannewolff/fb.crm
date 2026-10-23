@@ -120,18 +120,22 @@ unter „Erste Schritte" beschrieben.
 Der Schlüssel wirkt nur, solange es noch kein Konto gibt — ein zweiter Aufruf wird abgewiesen.
 
 **Verlorenes Postfach:** Jede Anmeldung braucht einen Code an die Adresse des Kontos. Wer den
-Zugang zu diesem Postfach verliert, kommt mit eingeschaltetem Mailversand nicht mehr hinein; eine
-Profilbearbeitung gibt es nicht, und der Einmal-Schlüssel greift nicht mehr, sobald ein Konto
-existiert. Der Weg zurück ist das Löschen der Kontozeile:
+Zugang zu diesem Postfach verliert, kommt mit eingeschaltetem Mailversand nicht mehr hinein, und der
+Einmal-Schlüssel greift nicht mehr, sobald ein Konto existiert. Der Weg zurück ist, die Adresse des
+Kontos auf ein Postfach umzusetzen, das man erreicht:
 
 ```bash
-docker compose exec postgres psql -U fbcrm -d fbcrm -c "DELETE FROM account;"
+docker compose exec postgres psql -U fbcrm -d fbcrm -c "UPDATE account SET email = 'neu@firma.de' WHERE lower(email) = lower('alt@firma.de');"
 ```
 
-Danach greift der Schlüssel wieder, sofern `FBCRM_BOOTSTRAP_ADMIN_TOKEN` in der `.env` gesetzt ist,
-und die Einrichtung läuft erneut mit der neuen Adresse. Der Befehl entfernt **jedes** Konto und
-beendet damit jede Sitzung; Kunden, Angebote und Rechnungen hängen nicht am Konto und bleiben. Wer
-`POSTGRES_USER` oder `POSTGRES_DB` in der `.env` geändert hat, setzt dort die eigenen Werte ein.
+Dabei ist `alt@firma.de` die bisherige Adresse des Kontos und `neu@firma.de` die neue. Die neue
+Adresse darf an keinem anderen Konto hängen, auch nicht an einem stillgelegten: Sonst weist die
+Datenbank den Befehl ab (`account_email_key`), und nichts ändert sich. Meldet `psql` `UPDATE 0`,
+stimmte die bisherige Adresse nicht. Danach meldet man sich mit einem Code an die neue Adresse an,
+wie im Teil „Bedienung" unter „Erste Schritte" beschrieben; der Einmal-Schlüssel wird dafür nicht
+gebraucht. Das Konto bleibt dasselbe, mit Rolle, Namen und seinen Kommentaren am Angebot. Ein Konto
+wird dafür nicht gelöscht: Seine Kommentare hängen an ihm, und die Datenbank wiese das Löschen ab.
+Wer `POSTGRES_USER` oder `POSTGRES_DB` in der `.env` geändert hat, setzt dort die eigenen Werte ein.
 
 ## Betrieb unter eigenem Namen
 

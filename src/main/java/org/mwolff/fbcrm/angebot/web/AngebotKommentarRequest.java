@@ -13,8 +13,9 @@ import jakarta.validation.constraints.Size;
  * Grenze steht ein zweites Mal als CHECK an der Tabelle, gemessen am gespeicherten Text — das eine
  * ersetzt das andere nicht.
  *
- * <p>Kein Feld fuer das Angebot und keines fuer einen Verfasser: Das Angebot steht im Pfad, und
- * einen Verfasser kennt die Anwendung nicht (E11).
+ * <p>Kein Feld fuer das Angebot und keines fuer einen Verfasser: Das Angebot steht im Pfad, und der
+ * Verfasser kommt aus der Sitzung, nicht aus dem Rumpf (Plan #414, A7). Ein Feld {@code verfasser}
+ * im Rumpf liesse jeden im Namen eines anderen schreiben.
  *
  * @param text der Text des Kommentars
  */

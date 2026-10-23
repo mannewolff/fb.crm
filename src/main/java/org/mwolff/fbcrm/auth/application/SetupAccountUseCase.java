@@ -5,10 +5,12 @@ import java.security.MessageDigest;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Objects;
 import org.mwolff.fbcrm.auth.AuthProperties;
 import org.mwolff.fbcrm.auth.SetupProperties;
 import org.mwolff.fbcrm.auth.domain.Account;
 import org.mwolff.fbcrm.auth.domain.AccountRepository;
+import org.mwolff.fbcrm.auth.domain.ErstesKontoFolge;
 import org.mwolff.fbcrm.auth.domain.Role;
 import org.mwolff.fbcrm.auth.domain.SessionTokens;
 import org.mwolff.fbcrm.auth.infrastructure.FailedLoginDelay;
@@ -16,6 +18,7 @@ import org.mwolff.fbcrm.auth.infrastructure.LoginAttemptLimiter;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionOperations;
 
 /**
  * Die Einrichtung der frischen Instanz per Einmal-Schluessel und Code (K3, E5, E9).
@@ -54,6 +57,11 @@ import org.springframework.transaction.annotation.Transactional;
  * vor dem Zaehlen gepruefter Schluessel liesse die Einrichtungsseite ungebremst (Kriterium 6,
  * letzter Satz zu Kriterium 5). Den Code prueft {@link CodeEinloesung} nach derselben Regel wie bei
  * der Anmeldung — fuenf Fehleingaben, und er verfaellt.
+ *
+ * <p><b>Was dem ersten Konto folgt</b> (Plan #414, E13). In derselben Transaktion, in der das Konto
+ * entsteht, ruft die Einrichtung {@link ErstesKontoFolge} mit seiner Kennung: Ein Bestand, der
+ * Kommentare ohne Konto mitbringt, gibt sie so dem neuen Konto. Scheitert die Folge, entsteht auch
+ * das Konto nicht — und umgekehrt.
  */
 @Service
 public class SetupAccountUseCase {
@@ -66,8 +74,17 @@ public class SetupAccountUseCase {
   private final CodeEinloesung einloesung;
   private final AuthProperties authProperties;
   private final SetupProperties setupProperties;
+  private final ErstesKontoFolge folge;
+  private final TransactionOperations transaktion;
   private final Clock clock;
 
+  /*
+   * PMD.ExcessiveParameterList: Elf Mitspieler. Die zwei juengsten — die Folge des ersten Kontos
+   * und die Transaktion um Anlage und Folge — gehoeren an genau die Stelle, an der das Konto
+   * entsteht (E13); eine eigene Klasse nur fuer diese zwei Zeilen truege die Zusage „in derselben
+   * Transaktion" aus dem Anwendungsfall heraus, der sie gibt.
+   */
+  @SuppressWarnings("PMD.ExcessiveParameterList")
   public SetupAccountUseCase(
       final AccountRepository accounts,
       final SessionTokens tokens,
@@ -77,6 +94,8 @@ public class SetupAccountUseCase {
       final CodeEinloesung einloesung,
       final AuthProperties authProperties,
       final SetupProperties setupProperties,
+      final ErstesKontoFolge folge,
+      final TransactionOperations transaktion,
       final Clock clock) {
     this.accounts = accounts;
     this.tokens = tokens;
@@ -86,6 +105,8 @@ public class SetupAccountUseCase {
     this.einloesung = einloesung;
     this.authProperties = authProperties;
     this.setupProperties = setupProperties;
+    this.folge = folge;
+    this.transaktion = transaktion;
     this.clock = clock;
   }
 
@@ -105,8 +126,9 @@ public class SetupAccountUseCase {
    *
    * <p><b>Bewusst ohne {@code @Transactional}</b>, aus demselben Grund wie bei {@link
    * LoginUseCase}: Eine Transaktion, die mit {@link LoginFailed} zurueckrollt, naehme die gezaehlte
-   * Fehleingabe wieder weg. Das Konto entsteht in der Transaktion seines Speicherns; das verlorene
-   * Wettrennen an {@code account_email_key} faengt {@link #speichere} wie bisher.
+   * Fehleingabe wieder weg. Das Konto entsteht in einer eigenen Transaktion, die auch {@link
+   * ErstesKontoFolge} umschliesst (E13); das verlorene Wettrennen an {@code account_email_key}
+   * faengt {@link #speichere} wie bisher.
    *
    * @param email die Anmeldeadresse des ersten Kontos — dieselbe, an die der Code ging
    * @param displayName der Anzeigename
@@ -184,9 +206,19 @@ public class SetupAccountUseCase {
             presentedKey.getBytes(StandardCharsets.UTF_8));
   }
 
+  /*
+   * TransactionOperations#execute sagt keinen Wert zu, weil ein Rueckruf null liefern darf; dieser
+   * liefert immer das gespeicherte Konto.
+   */
   private Account speichere(final Account neu) {
     try {
-      return accounts.save(neu);
+      return Objects.requireNonNull(
+          transaktion.execute(
+              status -> {
+                final Account angelegt = accounts.save(neu);
+                folge.erstesKontoAngelegt(angelegt.requireId());
+                return angelegt;
+              }));
     } catch (final DataIntegrityViolationException wettrennenVerloren) {
       throw new SetupRefused(wettrennenVerloren);
     }

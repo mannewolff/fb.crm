@@ -17,9 +17,10 @@ class AngebotskommentarTest {
   private static final Instant ANGELEGT = Instant.parse("2026-09-28T08:00:00Z");
   private static final Instant GEAENDERT = Instant.parse("2026-09-30T14:05:00Z");
   private static final Instant SPAETER = Instant.parse("2026-10-01T09:15:00Z");
+  private static final long VERFASSER = 3L;
 
   private static Angebotskommentar kommentar() {
-    return new Angebotskommentar(7L, 11L, "Kunde ruft zurueck.", ANGELEGT, GEAENDERT);
+    return new Angebotskommentar(7L, 11L, VERFASSER, "Kunde ruft zurueck.", ANGELEGT, GEAENDERT);
   }
 
   @Test
@@ -35,15 +36,16 @@ class AngebotskommentarTest {
   }
 
   @Test
-  void geaendert_thenLeavesIdOfferAndCreationTimeUntouched() {
+  void geaendert_thenLeavesIdOfferVerfasserAndCreationTimeUntouched() {
     // When
     final Angebotskommentar geaendert = kommentar().geaendert("Kunde hat zugesagt.", SPAETER);
 
-    // Then
+    // Then — der Kommentar gehoert weiter seinem Verfasser, gleich wer ihn aendert (A7).
     assertThat(geaendert)
         .satisfies(
             k -> assertThat(k.id()).isEqualTo(7L),
             k -> assertThat(k.angebotId()).isEqualTo(11L),
+            k -> assertThat(k.verfasserId()).isEqualTo(VERFASSER),
             k -> assertThat(k.createdAt()).isEqualTo(ANGELEGT));
   }
 
@@ -72,7 +74,7 @@ class AngebotskommentarTest {
   void id_givenAnUnsavedComment_thenNull() {
     // Given
     final Angebotskommentar frisch =
-        new Angebotskommentar(null, 11L, "Kunde ruft zurueck.", ANGELEGT, ANGELEGT);
+        new Angebotskommentar(null, 11L, VERFASSER, "Kunde ruft zurueck.", ANGELEGT, ANGELEGT);
 
     // When / Then
     assertThat(frisch.id()).isNull();

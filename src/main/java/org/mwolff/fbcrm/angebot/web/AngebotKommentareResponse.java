@@ -1,7 +1,7 @@
 package org.mwolff.fbcrm.angebot.web;
 
 import java.util.List;
-import org.mwolff.fbcrm.angebot.domain.Angebotskommentar;
+import org.mwolff.fbcrm.angebot.application.KommentarMitVerfasser;
 
 /**
  * Die Kommentare eines Angebots (Issue #140, Kriterium 4).
@@ -15,7 +15,7 @@ import org.mwolff.fbcrm.angebot.domain.Angebotskommentar;
 public record AngebotKommentareResponse(List<AngebotKommentarResponse> kommentare) {
 
   /** Die Sicht der Oberflaeche auf die Kommentare eines Angebots. */
-  static AngebotKommentareResponse of(final List<Angebotskommentar> kommentare) {
+  static AngebotKommentareResponse of(final List<KommentarMitVerfasser> kommentare) {
     return new AngebotKommentareResponse(
         kommentare.stream().map(AngebotKommentarResponse::of).toList());
   }

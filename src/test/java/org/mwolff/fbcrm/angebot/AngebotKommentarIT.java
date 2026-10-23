@@ -35,6 +35,10 @@ import org.springframework.jdbc.core.JdbcTemplate;
  * {@code PUT} laesst {@code createdAt} stehen (Kriterium 9). Dazu die Grenzen: 401 ohne Sitzung,
  * 404 bei unbekanntem Angebot und bei einem Kommentar eines anderen Angebots (E5), und 201 auch an
  * einem Angebot im Status ABGERECHNET (Kriterium 8).
+ *
+ * <p>Dazu der Verfasser (Issue #420; Plan #414, A7; fachliche Quelle #409, Kriterium 11): Er kommt
+ * aus der Sitzung, nicht aus dem Rumpf, und die Liste traegt seinen aktuellen Namen — auch nach
+ * einer Umbenennung des Kontos.
  */
 class AngebotKommentarIT extends AbstractIntegrationTest {
 
@@ -49,6 +53,7 @@ class AngebotKommentarIT extends AbstractIntegrationTest {
 
   private HttpHeaders sitzung = new HttpHeaders();
   private long firmaId;
+  private long kontoId;
 
   @Autowired
   AngebotKommentarIT(
@@ -73,7 +78,7 @@ class AngebotKommentarIT extends AbstractIntegrationTest {
                 jdbc.queryForObject("SELECT id FROM firma WHERE name = ?", Long.class, FIRMA))
             .longValue();
     jdbc.execute("TRUNCATE outbox_message, account RESTART IDENTITY CASCADE");
-    accounts.save(Konten.neu(MAIL, ANGELEGT));
+    kontoId = accounts.save(Konten.neu(MAIL, ANGELEGT)).requireId();
     sitzung = Anmeldung.perCode(rest, jdbc, hasher, MAIL);
   }
 
@@ -263,5 +268,89 @@ class AngebotKommentarIT extends AbstractIntegrationTest {
             ruf(pfad(angebotId), HttpMethod.POST, Map.of("text", "Ohne Sitzung"), String.class)
                 .getStatusCode())
         .isEqualTo(HttpStatus.UNAUTHORIZED);
+  }
+
+  private long verfasserIdIn(final long kommentarId) {
+    return Objects.requireNonNull(
+            jdbc.queryForObject(
+                "SELECT verfasser_id FROM angebot_kommentar WHERE id = ?",
+                Long.class,
+                Long.valueOf(kommentarId)))
+        .longValue();
+  }
+
+  @Test
+  void schreiben_thenTheVerfasserIsTheAccountOfTheSession() {
+    // Given — A7: der Verfasser kommt aus der Sitzung.
+    final long angebotId = angebot();
+
+    // When
+    final AngebotKommentarResponse geschrieben =
+        Objects.requireNonNull(schreibe(angebotId, "Bitte melden.").getBody());
+
+    // Then
+    assertThat(geschrieben.verfasser()).isEqualTo("Manne");
+    assertThat(verfasserIdIn(geschrieben.id())).isEqualTo(kontoId);
+  }
+
+  @Test
+  void schreiben_withAnotherAccountInTheBody_thenTheVerfasserIsStillTheAccountOfTheSession() {
+    // Given — wer im Rumpf einen anderen nennt, schreibt trotzdem unter eigenem Namen.
+    final long angebotId = angebot();
+    final Long fremdesKonto =
+        jdbc.queryForObject(
+            "INSERT INTO account (email, display_name, role)"
+                + " VALUES ('bert@example.org', 'Bert', 'EMPLOYEE') RETURNING id",
+            Long.class);
+
+    // When
+    final ResponseEntity<AngebotKommentarResponse> antwort =
+        ruf(
+            pfad(angebotId),
+            HttpMethod.POST,
+            Map.of("text", "Bitte melden.", "verfasserId", fremdesKonto, "verfasser", "Bert"),
+            AngebotKommentarResponse.class);
+
+    // Then
+    assertThat(antwort.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+    final AngebotKommentarResponse geschrieben = Objects.requireNonNull(antwort.getBody());
+    assertThat(geschrieben.verfasser()).isEqualTo("Manne");
+    assertThat(verfasserIdIn(geschrieben.id())).isEqualTo(kontoId);
+  }
+
+  @Test
+  void liste_afterTheAccountWasRenamed_thenCarriesTheCurrentName() {
+    // Given — #409, Kriterium 11: auch die bisherigen Kommentare zeigen den neuen Namen.
+    final long angebotId = angebot();
+    schreibe(angebotId, "Erster");
+    schreibe(angebotId, "Zweiter");
+    jdbc.update(
+        "UPDATE account SET display_name = 'Manfred Wolff' WHERE id = ?", Long.valueOf(kontoId));
+
+    // When
+    final List<AngebotKommentarResponse> kommentare = liste(angebotId);
+
+    // Then
+    assertThat(kommentare)
+        .extracting(AngebotKommentarResponse::verfasser)
+        .containsExactly("Manfred Wolff", "Manfred Wolff");
+  }
+
+  @Test
+  void liste_afterTheAccountWasRetired_thenStillCarriesItsName() {
+    // Given — #409, Kriterium 11: die Zuordnung bleibt auch nach dem Stilllegen.
+    final long angebotId = angebot();
+    schreibe(angebotId, "Vor dem Abschied");
+    jdbc.update(
+        "INSERT INTO account (email, display_name, role)"
+            + " VALUES ('chefin@example.org', 'Chefin', 'C_LEVEL')");
+    sitzung = Anmeldung.perCode(rest, jdbc, hasher, "chefin@example.org");
+    jdbc.update("UPDATE account SET aktiv = false WHERE id = ?", Long.valueOf(kontoId));
+
+    // When
+    final List<AngebotKommentarResponse> kommentare = liste(angebotId);
+
+    // Then
+    assertThat(kommentare).extracting(AngebotKommentarResponse::verfasser).containsExactly("Manne");
   }
 }

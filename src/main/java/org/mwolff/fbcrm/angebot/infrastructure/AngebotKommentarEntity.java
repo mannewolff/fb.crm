@@ -14,7 +14,9 @@ import org.jspecify.annotations.Nullable;
  *
  * <p>Das Angebot steht als blosse Kennung und nicht als Beziehung, aus demselben Grund wie Firma
  * und Ansprechpartner in {@link AngebotEntity}: Eine Beziehung laedt das Angebot mit jedem
- * Kommentar, ohne dass es gebraucht wuerde.
+ * Kommentar, ohne dass es gebraucht wuerde. Ebenso der Verfasser aus {@code
+ * V31__verfasser_am_kommentar.sql}: eine Kennung des Kontos, keine Beziehung in das Modul {@code
+ * auth} (Plan #414, A7).
  *
  * <p>{@code updated_at} hat hier eine Spalte und einen Getter, aber keinen Leser ausserhalb der
  * Uebersetzung: Keine Antwort traegt den Aenderungszeitpunkt (Kriterium 9). Die Spalte folgt der
@@ -30,6 +32,9 @@ class AngebotKommentarEntity {
 
   @Column(name = "angebot_id", nullable = false)
   private long angebotId;
+
+  @Column(name = "verfasser_id", nullable = false)
+  private long verfasserId;
 
   @Column(name = "text", nullable = false, columnDefinition = "text")
   private String text;
@@ -52,11 +57,13 @@ class AngebotKommentarEntity {
   AngebotKommentarEntity(
       final @Nullable Long id,
       final long angebotId,
+      final long verfasserId,
       final String text,
       final Instant createdAt,
       final Instant updatedAt) {
     this.id = id;
     this.angebotId = angebotId;
+    this.verfasserId = verfasserId;
     this.text = text;
     this.createdAt = createdAt;
     this.updatedAt = updatedAt;
@@ -68,6 +75,10 @@ class AngebotKommentarEntity {
 
   long getAngebotId() {
     return angebotId;
+  }
+
+  long getVerfasserId() {
+    return verfasserId;
   }
 
   String getText() {
