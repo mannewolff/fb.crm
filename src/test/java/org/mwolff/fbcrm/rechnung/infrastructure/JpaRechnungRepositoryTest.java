@@ -108,7 +108,9 @@ class JpaRechnungRepositoryTest {
         null,
         null,
         ANGELEGT,
-        ANGELEGT);
+        ANGELEGT,
+        0L,
+        null);
   }
 
   private static Rechnung gestellt(final List<Rechnungsposition> positionen) {
@@ -152,6 +154,63 @@ class JpaRechnungRepositoryTest {
     when(rechnungen.save(any(RechnungEntity.class))).thenReturn(zeile);
     when(positionen.findByRechnung(RECHNUNG_ID)).thenReturn(vorhandene);
     when(positionen.saveAll(any())).thenAnswer(aufruf -> aufruf.getArgument(0));
+  }
+
+  /* Ein Entwurf auf Stand 4, zuletzt geaendert von Konto 30 (Plan #415, E1, E14). */
+  private static Rechnung aufStand(final List<Rechnungsposition> positionen) {
+    final Rechnung entwurf = entwurf(positionen);
+    return new Rechnung(
+            entwurf.id(),
+            entwurf.angebotId(),
+            entwurf.zustand(),
+            entwurf.rechnungDatum(),
+            entwurf.leistungszeitraum(),
+            entwurf.positionen(),
+            entwurf.nummer(),
+            entwurf.steuersatz(),
+            entwurf.zahlungszielTage(),
+            entwurf.gestelltAm(),
+            entwurf.pdfSchluessel(),
+            entwurf.empfaenger(),
+            entwurf.absender(),
+            entwurf.createdAt(),
+            entwurf.updatedAt(),
+            4L,
+            null)
+        .durch(30L);
+  }
+
+  @Test
+  void save_thenWritesTheStandAndTheUrheberIntoTheRow() {
+    // Given — E1: Der Stand reist mit in die Zeile; nur so erkennt Hibernate eine Zeile, die auf
+    // einem alten Stand beruht.
+    erwarteSchreibenDerZeile(entwurfszeile());
+
+    // When
+    repository.save(aufStand(List.of(BERATUNG)));
+
+    // Then
+    verify(rechnungen).save(gespeicherte.capture());
+    assertThat(gespeicherte.getValue())
+        .satisfies(
+            zeile -> assertThat(zeile.getVersion()).isEqualTo(4L),
+            zeile -> assertThat(zeile.getGeaendertVon()).isEqualTo(30L));
+  }
+
+  @Test
+  void findById_thenTranslatesTheStandAndTheUrheberBack() {
+    // Given — E2: Die Leseantwort gibt den Stand heraus, den die Maske wieder vorlegt.
+    when(rechnungen.findById(RECHNUNG_ID))
+        .thenReturn(Optional.of(RechnungEntity.aus(aufStand(List.of()))));
+    when(positionen.findByRechnung(RECHNUNG_ID)).thenReturn(List.of());
+
+    // When / Then
+    assertThat(repository.findById(RECHNUNG_ID))
+        .hasValueSatisfying(
+            rechnung -> {
+              assertThat(rechnung.version()).isEqualTo(4L);
+              assertThat(rechnung.geaendertVon()).isEqualTo(30L);
+            });
   }
 
   @Test

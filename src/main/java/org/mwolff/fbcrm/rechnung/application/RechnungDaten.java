@@ -14,9 +14,17 @@ import org.jspecify.annotations.Nullable;
  * @param rechnungDatum Datum der Rechnung
  * @param leistungszeitraum Zeitraum der Leistung als Text, oder {@code null}
  * @param angaben je Angebotsposition hoechstens eine Angabe
+ * @param version der Stand, auf dem die Aenderung beruht — vorgelegt mit {@code If-Match} (Plan
+ *     #415, E2)
+ * @param geaendertVon Kennung des handelnden Kontos; es steht danach als Urheber an der Rechnung
+ *     (E14)
  */
 public record RechnungDaten(
-    LocalDate rechnungDatum, @Nullable String leistungszeitraum, List<Abrechnungsangabe> angaben) {
+    LocalDate rechnungDatum,
+    @Nullable String leistungszeitraum,
+    List<Abrechnungsangabe> angaben,
+    long version,
+    long geaendertVon) {
 
   /** Nimmt die Angaben als Kopie: Der Aufrufer darf seine Liste danach weiterverwenden. */
   public RechnungDaten {

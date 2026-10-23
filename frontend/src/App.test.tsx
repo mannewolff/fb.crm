@@ -48,6 +48,7 @@ const RECHNUNG = {
   empfaenger: null,
   absender: null,
   zeilen: [],
+  version: 2,
 };
 
 /** Eine nachgetragene Rechnung, wie das Backend sie schreibt (Issue #270). */

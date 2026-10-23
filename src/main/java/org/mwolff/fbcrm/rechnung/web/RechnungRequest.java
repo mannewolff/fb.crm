@@ -34,11 +34,18 @@ public record RechnungRequest(
   /** Die Meldung am Feld, wenn der Leistungszeitraum fehlt oder nur aus Leerzeichen besteht. */
   static final String ZEITRAUM_FEHLT = "Die Rechnung braucht einen Leistungszeitraum.";
 
-  /** Dieselben Angaben in der Sprache der Anwendungsschicht. */
-  RechnungDaten daten() {
+  /**
+   * Dieselben Angaben in der Sprache der Anwendungsschicht.
+   *
+   * @param version der vorgelegte Stand aus {@code If-Match} (Plan #415, E2)
+   * @param konto Kennung des handelnden Kontos (E14)
+   */
+  RechnungDaten daten(final long version, final long konto) {
     return new RechnungDaten(
         rechnungDatum,
         leistungszeitraum,
-        positionen.stream().map(RechnungPositionRequest::angabe).toList());
+        positionen.stream().map(RechnungPositionRequest::angabe).toList(),
+        version,
+        konto);
   }
 }

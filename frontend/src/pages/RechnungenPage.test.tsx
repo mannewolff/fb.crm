@@ -103,6 +103,7 @@ const NEUER_ENTWURF = {
   empfaenger: null,
   absender: null,
   zeilen: [],
+  version: 0,
 };
 
 /** Die Adresse — daran haengt, ob die Wahl auf die neue Rechnung gefuehrt hat. */

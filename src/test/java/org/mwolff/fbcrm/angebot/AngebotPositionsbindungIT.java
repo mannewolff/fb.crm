@@ -133,6 +133,23 @@ class AngebotPositionsbindungIT extends AbstractIntegrationTest {
     return rest.exchange(pfad, methode, new HttpEntity<>(rumpf, sitzung), typ);
   }
 
+  /**
+   * Ein schreibender Weg an der Rechnung, auf ihrem aktuellen Stand (Plan #415, E2, E3): so, wie
+   * die Maske ihn vorlegt.
+   */
+  private <T> ResponseEntity<T> rufAufStand(
+      final String pfad,
+      final HttpMethod methode,
+      final @Nullable Object rumpf,
+      final Class<T> typ,
+      final long rechnungId) {
+    return rest.exchange(
+        pfad,
+        methode,
+        new HttpEntity<>(rumpf, Stand.aktuell(sitzung, jdbc, "rechnung", rechnungId)),
+        typ);
+  }
+
   private static long kennung(final AngebotPositionResponse position) {
     return Objects.requireNonNull(position.id()).longValue();
   }
@@ -199,7 +216,12 @@ class AngebotPositionsbindungIT extends AbstractIntegrationTest {
     rumpf.put("rechnungDatum", "2026-09-30");
     rumpf.put("leistungszeitraum", "September 2026");
     rumpf.put("positionen", List.of(angabe));
-    ruf("/api/rechnungen/" + entwurf.id(), HttpMethod.PUT, rumpf, RechnungResponse.class);
+    rufAufStand(
+        "/api/rechnungen/" + entwurf.id(),
+        HttpMethod.PUT,
+        rumpf,
+        RechnungResponse.class,
+        entwurf.id());
     assertThat(
             jdbc.queryForObject(
                 "SELECT count(*) FROM rechnung_position WHERE angebot_position_id = ?",

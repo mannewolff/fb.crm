@@ -334,6 +334,11 @@ describe('Szenarien des Fachplans (E16)', () => {
     // Eine geloeschte Anlage nennt beim zweiten Loeschen Urheber und Zeitpunkt (Issue #445).
     expect(text).toMatch(/Löschen einer Anlage/u);
     expect(text).toMatch(/Karte „Anlagen"/u);
+    // Der Rechnungsentwurf, das Stellen und der Ausgang der Forderung sind geschuetzt; beim Stellen
+    // zaehlt allein der Entwurf (Kriterium 5, Issue #446).
+    expect(text).toMatch(/„Rechnung stellen"/u);
+    expect(text).toMatch(/„Als bezahlt markieren"/u);
+    expect(text).toMatch(/zählt allein der\s+Entwurf/u);
     expect(text).toMatch(/\*\*Ergebnis:\*\*/u);
   });
 

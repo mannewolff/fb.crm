@@ -50,6 +50,10 @@ import org.mwolff.fbcrm.rechnung.application.RechnungszustandPasstNicht;
  * @param absender Kopie der eigenen Angaben, wie sie beim Stellen galten, oder {@code null}
  * @param createdAt Zeitpunkt der Anlage
  * @param updatedAt Zeitpunkt der letzten Aenderung
+ * @param version der Stand der Rechnung, wie ihn {@code If-Match} vorlegt (Plan #415, E1); 0 vor
+ *     der ersten Aenderung, danach fuehrt ihn der Bestand
+ * @param geaendertVon Kennung des Kontos, das die Rechnung zuletzt geaendert hat, oder {@code
+ *     null}, solange sie das nicht weiss (Plan #415, E14)
  */
 public record Rechnung(
     @Nullable Long id,
@@ -66,7 +70,9 @@ public record Rechnung(
     @Nullable Belegempfaenger empfaenger,
     @Nullable Belegabsender absender,
     Instant createdAt,
-    Instant updatedAt)
+    Instant updatedAt,
+    long version,
+    @Nullable Long geaendertVon)
     implements Identifiable {
 
   /** Der Teiler, der aus einem Satz in Prozent einen Faktor macht: zwei Stellen nach links. */
@@ -134,7 +140,9 @@ public record Rechnung(
         empfaenger,
         absender,
         createdAt,
-        zeitpunkt);
+        zeitpunkt,
+        version,
+        geaendertVon);
   }
 
   /**
@@ -175,7 +183,9 @@ public record Rechnung(
         neuerEmpfaenger,
         neuerAbsender,
         createdAt,
-        zeitpunkt);
+        zeitpunkt,
+        version,
+        geaendertVon);
   }
 
   /**
@@ -206,7 +216,9 @@ public record Rechnung(
         empfaenger,
         absender,
         createdAt,
-        updatedAt);
+        updatedAt,
+        version,
+        geaendertVon);
   }
 
   /**
@@ -240,7 +252,39 @@ public record Rechnung(
         empfaenger,
         absender,
         createdAt,
-        jetzt);
+        jetzt,
+        version,
+        geaendertVon);
+  }
+
+  /**
+   * Die Rechnung mit dem Konto, das sie gerade geaendert hat (Plan #415, E14).
+   *
+   * <p>Ein eigener Schritt neben den Uebergaengen, wie am Angebot: Wer aendert, ist eine Angabe des
+   * Anwendungsfalls, nicht der fachlichen Regel. Die Version bleibt, wie sie ist — sie zaehlt der
+   * Bestand beim Schreiben weiter.
+   *
+   * @param konto Kennung des handelnden Kontos
+   */
+  public Rechnung durch(final long konto) {
+    return new Rechnung(
+        id,
+        angebotId,
+        zustand,
+        rechnungDatum,
+        leistungszeitraum,
+        positionen,
+        nummer,
+        steuersatz,
+        zahlungszielTage,
+        gestelltAm,
+        pdfSchluessel,
+        empfaenger,
+        absender,
+        createdAt,
+        updatedAt,
+        version,
+        konto);
   }
 
   /* Die Kantenregel steht im Aufzaehlungstyp; die nachgetragene Rechnung fragt dort dieselbe (E4). */

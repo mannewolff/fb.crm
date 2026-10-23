@@ -227,6 +227,8 @@ public class RechnungAnlegenUseCase {
             null,
             null,
             jetzt,
-            jetzt));
+            jetzt,
+            0L,
+            null));
   }
 }

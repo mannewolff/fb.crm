@@ -60,6 +60,11 @@ class JpaAngebotRepository implements AngebotRepository {
   }
 
   @Override
+  public Optional<Angebot> findByIdMitSperre(final long id) {
+    return angebote.sperreUndLies(id).map(zeile -> toDomain(zeile, positionen.findByAngebot(id)));
+  }
+
+  @Override
   public List<Angebot> findByFirma(final long firmaId) {
     return mitPositionen(angebote.findByFirma(firmaId));
   }

@@ -5,6 +5,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
@@ -28,6 +30,7 @@ import org.mwolff.fbcrm.angebot.domain.Angebot;
 import org.mwolff.fbcrm.angebot.domain.AngebotRepository;
 import org.mwolff.fbcrm.angebot.domain.Angebotsposition;
 import org.mwolff.fbcrm.angebot.domain.Angebotsstatus;
+import org.mwolff.fbcrm.common.Bearbeitungskonflikt;
 import org.mwolff.fbcrm.rechnung.domain.Rechnung;
 import org.mwolff.fbcrm.rechnung.domain.RechnungRepository;
 import org.mwolff.fbcrm.rechnung.domain.Rechnungsposition;
@@ -40,6 +43,10 @@ import org.mwolff.fbcrm.rechnung.domain.Rechnungsposition;
  * spaetere Preisaenderung am Angebot gilt erst fuer eine Position, die der Entwurf noch nicht trug
  * (Frage 15). Eine Menge 0 laesst die Position wegfallen (Kriterium 5); mehr abzurechnen als offen
  * ist bleibt erlaubt (Frage 4). Eine gestellte Rechnung wird abgewiesen (Kriterium 14).
+ *
+ * <p>Dazu der Schutz vor dem alten Stand (#411, Kriterium 1; Plan #415, E1, E14): Wer auf einem
+ * Stand speichert, den es nicht mehr gibt, wird vor jeder fachlichen Pruefung abgewiesen, und ein
+ * gelungenes Speichern traegt das handelnde Konto als Urheber.
  */
 @ExtendWith(MockitoExtension.class)
 class RechnungAendernUseCaseTest {
@@ -47,6 +54,17 @@ class RechnungAendernUseCaseTest {
   private static final long ENTWURF = 2L;
   private static final Instant JETZT = Instant.parse("2026-10-05T09:00:00Z");
   private static final LocalDate NEUES_DATUM = LocalDate.of(2026, 10, 5);
+
+  /** Der Stand, auf dem Manfred den Entwurf geoeffnet hat — der des frischen Entwurfs. */
+  private static final long GELESEN = 0L;
+
+  /** Das handelnde Konto. */
+  private static final long MANFRED = 31L;
+
+  /** Das Konto, das inzwischen geaendert hat. */
+  private static final long ANNA = 30L;
+
+  private static final Instant ANNAS_AENDERUNG = Instant.parse("2026-10-05T08:42:00Z");
 
   private final Clock uhr = Clock.fixed(JETZT, ZoneOffset.UTC);
 
@@ -60,7 +78,7 @@ class RechnungAendernUseCaseTest {
   }
 
   private static RechnungDaten daten(final Abrechnungsangabe... angaben) {
-    return new RechnungDaten(NEUES_DATUM, "Oktober 2026", List.of(angaben));
+    return new RechnungDaten(NEUES_DATUM, "Oktober 2026", List.of(angaben), GELESEN, MANFRED);
   }
 
   private static Abrechnungsangabe angabe(final long positionId, final String menge) {
@@ -266,9 +284,69 @@ class RechnungAendernUseCaseTest {
             rechnung -> assertThat(rechnung.rechnungDatum()).isEqualTo(NEUES_DATUM),
             rechnung -> assertThat(rechnung.leistungszeitraum()).isEqualTo("Oktober 2026"),
             rechnung -> assertThat(rechnung.updatedAt()).isEqualTo(JETZT),
+            rechnung -> assertThat(rechnung.geaendertVon()).isEqualTo(MANFRED),
             rechnung ->
                 assertThat(rechnung.positionen().getFirst().bezeichnung())
                     .isEqualTo("KI-Beratung am 15.09.2026"));
+  }
+
+  @Test
+  void aendere_givenTheCurrentStand_thenKeepsTheStandForTheRepository() {
+    // Given — #411, Kriterium 8: auf dem aktuellen Stand merkt man vom Schutz nichts.
+    when(rechnungen.findById(ENTWURF))
+        .thenReturn(
+            Optional.of(
+                Rechnungsdoppel.aufStand(
+                    Rechnungsdoppel.entwurf(ENTWURF, List.of(Rechnungsdoppel.beratung("80.00"))),
+                    2L,
+                    ANNA,
+                    ANNAS_AENDERUNG)));
+    when(angebote.findById(Rechnungsdoppel.ANGEBOT))
+        .thenReturn(Optional.of(Rechnungsdoppel.angebot()));
+    final RechnungDaten daten =
+        new RechnungDaten(
+            NEUES_DATUM,
+            "Oktober 2026",
+            List.of(angabe(Rechnungsdoppel.BERATUNG_ID, "60.00")),
+            2L,
+            MANFRED);
+
+    // When
+    useCase().aendere(ENTWURF, daten);
+
+    // Then
+    assertThat(geschriebeneRechnung())
+        .satisfies(
+            rechnung -> assertThat(rechnung.version()).isEqualTo(2L),
+            rechnung -> assertThat(rechnung.geaendertVon()).isEqualTo(MANFRED));
+  }
+
+  @Test
+  void aendere_givenAnOutdatedStand_thenRejectsWithTheConflictBeforeAnyCheck() {
+    // Given — Anna hat den Entwurf inzwischen gestellt; der Konflikt kommt vor dem Zustand.
+    when(rechnungen.findById(ENTWURF))
+        .thenReturn(
+            Optional.of(
+                Rechnungsdoppel.aufStand(
+                    Rechnungsdoppel.gestellt(
+                        ENTWURF, "R26-0001", List.of(Rechnungsdoppel.beratung("80.00"))),
+                    1L,
+                    ANNA,
+                    ANNAS_AENDERUNG)));
+    final RechnungAendernUseCase useCase = useCase();
+    final RechnungDaten daten = daten(angabe(Rechnungsdoppel.BERATUNG_ID, "10.00"));
+
+    // When / Then
+    assertThatThrownBy(() -> useCase.aendere(ENTWURF, daten))
+        .asInstanceOf(InstanceOfAssertFactories.type(RechnungGeaendert.class))
+        .satisfies(
+            konflikt -> assertThat(konflikt.art()).isEqualTo(Bearbeitungskonflikt.Art.VERALTET),
+            konflikt -> assertThat(konflikt.urheberKonto()).hasValue(ANNA),
+            konflikt -> assertThat(konflikt.handelndesKonto()).isEqualTo(MANFRED),
+            konflikt -> assertThat(konflikt.zeitpunkt()).hasValue(ANNAS_AENDERUNG));
+    verify(rechnungen).findById(ENTWURF);
+    verifyNoMoreInteractions(rechnungen);
+    verifyNoInteractions(angebote);
   }
 
   private static Angebot umgepreistesAngebot() {

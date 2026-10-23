@@ -274,6 +274,34 @@ class JpaAngebotRepositoryTest {
   }
 
   @Test
+  void findByIdMitSperre_thenReadsTheLockedRowWithItsPositions() {
+    // Given — der Lesepfad des Stellens einer Rechnung (Plan #415, E10): dieselbe Abbildung, nur
+    // mit Sperre auf der Zeile.
+    when(angebote.sperreUndLies(11L))
+        .thenReturn(Optional.of(AngebotEntity.aus(aufStand(angebot(List.of())))));
+    when(positionen.findByAngebot(11L)).thenReturn(List.of());
+
+    // When / Then
+    assertThat(repository.findByIdMitSperre(11L))
+        .hasValueSatisfying(
+            angebot -> {
+              assertThat(angebot.requireId()).isEqualTo(11L);
+              assertThat(angebot.version()).isEqualTo(4L);
+            });
+    verify(angebote, never()).findById(anyLong());
+  }
+
+  @Test
+  void findByIdMitSperre_givenAnUnknownId_thenEmpty() {
+    // Given
+    when(angebote.sperreUndLies(11L)).thenReturn(Optional.empty());
+
+    // When / Then — keine zweite Abfrage nach Positionen eines Angebots, das es nicht gibt.
+    assertThat(repository.findByIdMitSperre(11L)).isEmpty();
+    verify(positionen, never()).findByAngebot(anyLong());
+  }
+
+  @Test
   void save_thenWritesEveryFieldIntoTheRow() {
     // Given
     erwarteSchreibenDerZeile(zeile());

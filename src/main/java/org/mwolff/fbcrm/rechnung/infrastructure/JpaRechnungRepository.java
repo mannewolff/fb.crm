@@ -196,7 +196,9 @@ class JpaRechnungRepository implements RechnungRepository {
         zeile.getEmpfaenger(),
         zeile.getAbsender(),
         zeile.getCreatedAt(),
-        zeile.getUpdatedAt());
+        zeile.getUpdatedAt(),
+        zeile.getVersion(),
+        zeile.getGeaendertVon());
   }
 
   private static Rechnungsposition toDomain(final RechnungPositionEntity zeile) {

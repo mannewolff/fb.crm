@@ -96,6 +96,23 @@ class RechnungEntwurfIT extends AbstractIntegrationTest {
     return rest.exchange(pfad, methode, new HttpEntity<>(rumpf, sitzung), typ);
   }
 
+  /**
+   * Ein schreibender Weg an der Rechnung, auf ihrem aktuellen Stand (Plan #415, E2, E3): so, wie
+   * die Maske ihn vorlegt.
+   */
+  private <T> ResponseEntity<T> rufAufStand(
+      final String pfad,
+      final HttpMethod methode,
+      final @Nullable Object rumpf,
+      final Class<T> typ,
+      final long rechnungId) {
+    return rest.exchange(
+        pfad,
+        methode,
+        new HttpEntity<>(rumpf, Stand.aktuell(sitzung, jdbc, "rechnung", rechnungId)),
+        typ);
+  }
+
   /** Ein Angebot mit einer Position ueber die angegebene Menge Beratung, im Status ANGELEGT. */
   private long angebotMit(final String menge, final String einzelpreis) {
     final long angebotId =
@@ -221,7 +238,12 @@ class RechnungEntwurfIT extends AbstractIntegrationTest {
     rumpf.put("rechnungDatum", "2026-09-30");
     rumpf.put("leistungszeitraum", "September 2026");
     rumpf.put("positionen", List.of(position));
-    return ruf("/api/rechnungen/" + entwurf.id(), HttpMethod.PUT, rumpf, RechnungResponse.class);
+    return rufAufStand(
+        "/api/rechnungen/" + entwurf.id(),
+        HttpMethod.PUT,
+        rumpf,
+        RechnungResponse.class,
+        entwurf.id());
   }
 
   private AngebotAbrechnungResponse abrechnung(final long angebotId) {

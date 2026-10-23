@@ -102,6 +102,23 @@ class RechnungDokumentIT extends AbstractIntegrationTest {
     return rest.exchange(pfad, methode, new HttpEntity<>(rumpf, sitzung), typ);
   }
 
+  /**
+   * Ein schreibender Weg an der Rechnung, auf ihrem aktuellen Stand (Plan #415, E2, E3): so, wie
+   * die Maske ihn vorlegt.
+   */
+  private <T> ResponseEntity<T> rufAufStand(
+      final String pfad,
+      final HttpMethod methode,
+      final @Nullable Object rumpf,
+      final Class<T> typ,
+      final long rechnungId) {
+    return rest.exchange(
+        pfad,
+        methode,
+        new HttpEntity<>(rumpf, Stand.aktuell(sitzung, jdbc, "rechnung", rechnungId)),
+        typ);
+  }
+
   private void eigeneAngabenSetzen(final String steuernummer, final String bankverbindung) {
     final Map<String, Object> rumpf = new LinkedHashMap<>();
     rumpf.put("name", "Manfred Wolff");
@@ -230,17 +247,23 @@ class RechnungDokumentIT extends AbstractIntegrationTest {
     rumpf.put("leistungszeitraum", ZEITRAUM);
     rumpf.put("positionen", List.of(position));
     return Objects.requireNonNull(
-        ruf("/api/rechnungen/" + entwurf.id(), HttpMethod.PUT, rumpf, RechnungResponse.class)
+        rufAufStand(
+                "/api/rechnungen/" + entwurf.id(),
+                HttpMethod.PUT,
+                rumpf,
+                RechnungResponse.class,
+                entwurf.id())
             .getBody());
   }
 
   private RechnungResponse gestellt(final long rechnungId) {
     final ResponseEntity<RechnungResponse> antwort =
-        ruf(
+        rufAufStand(
             "/api/rechnungen/" + rechnungId + "/stellen",
             HttpMethod.POST,
             null,
-            RechnungResponse.class);
+            RechnungResponse.class,
+            rechnungId);
     assertThat(antwort.getStatusCode()).isEqualTo(HttpStatus.OK);
     return Objects.requireNonNull(antwort.getBody());
   }

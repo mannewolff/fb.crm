@@ -17,6 +17,23 @@ public interface AngebotRepository {
   Optional<Angebot> findById(long id);
 
   /**
+   * Das Angebot zu einer technischen Id samt seinen Positionen, mit <b>Sperre</b> auf seiner Zeile,
+   * oder leer.
+   *
+   * <p>Fuer das Stellen einer Rechnung, das das Angebot im selben Zug auf „abgerechnet"
+   * fortschreibt (Plan #415, E10): Die Sperre haelt bis zum Ende der Transaktion des Aufrufers, und
+   * kein anderer Schritt schreibt das Angebot zwischen Lesen und Fortschreiben. Ohne sie wiese der
+   * Zaehler der Zeile das Stellen ab, sobald jemand das Angebot inzwischen geaendert hat — dabei
+   * ist das Angebot beim Stellen kein Grund fuer eine Abweisung (#411, Kriterium 5).
+   *
+   * <p>Nicht der Standardweg, aus demselben Grund wie an der Rechnung: Jedes Lesen zu sperren
+   * machte aus jeder Ansicht einen Engpass.
+   *
+   * @param id Kennung des Angebots
+   */
+  Optional<Angebot> findByIdMitSperre(long id);
+
+  /**
    * Alle Angebote einer Firma, jedes mit seinen Positionen.
    *
    * <p>Ohne zugesagte Reihenfolge: Welche Ordnung die Ansicht zeigt, entscheidet die

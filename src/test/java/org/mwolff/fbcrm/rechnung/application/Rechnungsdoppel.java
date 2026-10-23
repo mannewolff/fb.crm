@@ -167,7 +167,66 @@ final class Rechnungsdoppel {
         null,
         null,
         ANGELEGT,
-        ANGELEGT);
+        ANGELEGT,
+        0L,
+        null);
+  }
+
+  /**
+   * Dieselbe Rechnung auf einem anderen Stand, zuletzt geaendert von einem Konto (Plan #415, E1,
+   * E14).
+   *
+   * @param rechnung die Rechnung, deren Angaben bleiben
+   * @param version der Stand, den die Zeile traegt
+   * @param urheber das Konto, das zuletzt geaendert hat
+   * @param zeitpunkt wann es geaendert hat
+   */
+  static Rechnung aufStand(
+      final Rechnung rechnung, final long version, final long urheber, final Instant zeitpunkt) {
+    return new Rechnung(
+        rechnung.id(),
+        rechnung.angebotId(),
+        rechnung.zustand(),
+        rechnung.rechnungDatum(),
+        rechnung.leistungszeitraum(),
+        rechnung.positionen(),
+        rechnung.nummer(),
+        rechnung.steuersatz(),
+        rechnung.zahlungszielTage(),
+        rechnung.gestelltAm(),
+        rechnung.pdfSchluessel(),
+        rechnung.empfaenger(),
+        rechnung.absender(),
+        rechnung.createdAt(),
+        zeitpunkt,
+        version,
+        Long.valueOf(urheber));
+  }
+
+  /**
+   * Dasselbe Angebot auf einem anderen Stand, zuletzt geaendert von einem Konto.
+   *
+   * @param angebot das Angebot, dessen Angaben bleiben
+   * @param version der Stand, den die Zeile traegt
+   * @param urheber das Konto, das zuletzt geaendert hat
+   */
+  static Angebot aufStand(final Angebot angebot, final long version, final long urheber) {
+    return new Angebot(
+        angebot.id(),
+        angebot.firmaId(),
+        angebot.ansprechpartnerId(),
+        angebot.intern(),
+        angebot.status(),
+        angebot.storniert(),
+        angebot.stornoGrund(),
+        angebot.angebotDatum(),
+        angebot.titel(),
+        angebot.beschreibung(),
+        angebot.positionen(),
+        angebot.createdAt(),
+        angebot.updatedAt(),
+        version,
+        Long.valueOf(urheber));
   }
 
   /** Die Kopie des Empfaengers an einer gestellten Rechnung — die Firma hiess damals anders. */
@@ -218,7 +277,9 @@ final class Rechnungsdoppel {
         null,
         null,
         ANGELEGT,
-        ANGELEGT);
+        ANGELEGT,
+        0L,
+        null);
   }
 
   /** Dieselbe gestellte Rechnung, festgeschrieben mit den Kopien von Empfaenger und Absender. */

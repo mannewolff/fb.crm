@@ -318,6 +318,23 @@ class BriefpapierIT extends AbstractIntegrationTest {
     return rest.exchange(pfad, methode, new HttpEntity<>(rumpf, sitzung), typ);
   }
 
+  /**
+   * Ein schreibender Weg an der Rechnung, auf ihrem aktuellen Stand (Plan #415, E2, E3): so, wie
+   * die Maske ihn vorlegt.
+   */
+  private <T> ResponseEntity<T> rufAufStand(
+      final String pfad,
+      final HttpMethod methode,
+      final @Nullable Object rumpf,
+      final Class<T> typ,
+      final long rechnungId) {
+    return rest.exchange(
+        pfad,
+        methode,
+        new HttpEntity<>(rumpf, Stand.aktuell(sitzung, jdbc, "rechnung", rechnungId)),
+        typ);
+  }
+
   /** Ein einseitiges Briefpapier in A4 hochkant mit einer Aufschrift oben links. */
   private static byte[] briefpapier(final String aufschrift) throws IOException {
     try (PDDocument dokument = new PDDocument()) {
@@ -415,13 +432,19 @@ class BriefpapierIT extends AbstractIntegrationTest {
     rechnung.put("rechnungDatum", heute.toString());
     rechnung.put("leistungszeitraum", "Oktober 2026");
     rechnung.put("positionen", List.of(zeile));
-    ruf("/api/rechnungen/" + entwurf.id(), HttpMethod.PUT, rechnung, RechnungResponse.class);
+    rufAufStand(
+        "/api/rechnungen/" + entwurf.id(),
+        HttpMethod.PUT,
+        rechnung,
+        RechnungResponse.class,
+        entwurf.id());
     final ResponseEntity<RechnungResponse> gestellt =
-        ruf(
+        rufAufStand(
             "/api/rechnungen/" + entwurf.id() + "/stellen",
             HttpMethod.POST,
             null,
-            RechnungResponse.class);
+            RechnungResponse.class,
+            entwurf.id());
     assertThat(gestellt.getStatusCode()).isEqualTo(HttpStatus.OK);
     return entwurf.id();
   }

@@ -78,7 +78,9 @@ class RechnungTest {
         null,
         null,
         ANGELEGT,
-        ANGELEGT);
+        ANGELEGT,
+        0L,
+        null);
   }
 
   private static Rechnung gestellt() {

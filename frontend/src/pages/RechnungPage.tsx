@@ -35,9 +35,12 @@ import {
 import type { AbrechnungsangabeEingabe, Rechnung, Rechnungsmaskenzeile } from '../api/rechnungen';
 import { useRechte } from '../auth/rechte';
 import AktionsMenue from '../components/AktionsMenue';
+import EigeneEingaben from '../components/EigeneEingaben';
+import type { EigeneEingabe } from '../components/EigeneEingaben';
 import Karte from '../components/Karte';
 import { useKopfPfad } from '../components/KopfPfad';
 import type { PfadVerweis } from '../components/KopfPfad';
+import Konfliktmeldung from '../components/Konfliktmeldung';
 import KupferTaste, { kupferSx } from '../components/KupferTaste';
 import { EINHEIT_WORT } from '../components/Positionsmaske';
 import RechnungszustandChip from '../components/RechnungszustandChip';
@@ -47,7 +50,12 @@ import TastenSymbol from '../components/TastenSymbol';
 import WeicheTaste from '../components/WeicheTaste';
 import { rechnungssummen, ueberschreitung } from '../lib/abrechnung';
 import type { Rechnungssummen } from '../lib/abrechnung';
-import { feldMeldungen, nichtGefunden, serverMeldung } from '../lib/apifehler';
+import {
+  feldMeldungen,
+  istBearbeitungskonflikt,
+  nichtGefunden,
+  serverMeldung,
+} from '../lib/apifehler';
 import { meldungAm } from '../lib/feldmeldung';
 import { betrag, dezimal, euro, hundertstel } from '../lib/geld';
 import { kennungAus } from '../lib/kennung';
@@ -115,6 +123,15 @@ import { ABSTAND_BUEHNE, RADIUS_RUND, TASTE_INNENABSTAND, ZAHLEN_KLASSE } from '
  *
  * Ohne Schreibrecht fehlen die Aktionen des Entwurfs und der Ausgang der Forderung (Kriterium 10
  * von #409, Plan #414, A10); „Herunterladen" bleibt (E4).
+ *
+ * <b>Jeder Schritt legt den gelesenen Stand vor</b> (#411, Kriterien 1 bis 5; Plan #415, E2, E10):
+ * Speichern, Stellen und der Ausgang der Forderung schicken die Version der gezeigten Rechnung mit.
+ * Beim Stellen zaehlt allein der Entwurf — nie wird ein Entwurf festgeschrieben, den der Mensch
+ * nicht gesehen hat. Hat inzwischen jemand anderes geaendert, weist der Server ab, und statt der
+ * Ausfallmeldung steht die {@link Konfliktmeldung} ueber der Ansicht, mit Namen und Zeitpunkt der
+ * fremden Aenderung. Die Eingaben bleiben dabei in der Maske stehen. „Neu laden" holt den Stand
+ * des Servers samt neuer Version und stellt die eigenen Werte daneben in {@link EigeneEingaben},
+ * bis „Verwerfen" gewaehlt wird — den Schritt loest man danach auf dem neuen Stand erneut aus.
  */
 
 const NICHT_GEFUNDEN = 'Diese Rechnung gibt es nicht.';
@@ -122,6 +139,10 @@ const AUSFALL = 'Die Rechnung ist gerade nicht zu erreichen. Bitte später erneu
 const AUSFALL_SPEICHERN = 'Die Rechnung wurde nicht gespeichert. Bitte später erneut versuchen.';
 const AUSFALL_LOESCHEN = 'Der Entwurf wurde nicht gelöscht. Bitte später erneut versuchen.';
 const AUSFALL_STELLEN = 'Die Rechnung wurde nicht gestellt. Bitte später erneut versuchen.';
+/** Wo „Neu laden" nach einer Abweisung scheitert. */
+const AUSFALL_NEU_LADEN = 'Der aktuelle Stand ist gerade nicht zu erreichen. Bitte erneut versuchen.';
+/** Wohin die Konfliktmeldung fuehrt, wenn die Rechnung inzwischen geloescht ist. */
+const UEBERSICHT = '/rechnungen';
 const LAEDT = 'Die Rechnung wird geladen …';
 const GESPEICHERT = 'Gespeichert.';
 const DATUM_FEHLT = 'Bitte das Datum der Rechnung angeben.';
@@ -338,6 +359,23 @@ function gerechnetesAus(
  * Stelle, an der das Speichern daran scheitert, ist {@link gerechnetesAus}. Clientseitige Pruefung
  * ist Nutzerfuehrung und kein Ersatz fuer die Pruefung des Servers (CLAUDE-react.md).
  */
+/**
+ * Was gerade in der Maske steht, als eigene Eingaben zum Kopieren (#411, Kriterium 3).
+ *
+ * Beschriftet wie die Felder der Maske, damit sich jeder Wert seinem Feld zuordnen laesst; je
+ * Position Leistung, Menge und Einheit — der Preis steht fest und ist keine Eingabe.
+ */
+function eigeneEingabenAus(texte: Texte, zeilen: readonly Maskenzeile[]): readonly EigeneEingabe[] {
+  return [
+    { bezeichnung: 'Rechnungsdatum', wert: tagWort(texte.rechnungDatum) },
+    { bezeichnung: 'Leistungszeitraum', wert: texte.leistungszeitraum },
+    ...zeilen.map((zeile, stelle) => ({
+      bezeichnung: `Position ${String(stelle + 1)}`,
+      wert: `${zeile.bezeichnung} · ${zeile.menge} ${EINHEIT_WORT[zeile.einheit]}`,
+    })),
+  ];
+}
+
 function eigenePruefung(texte: Texte, zeilen: readonly Maskenzeile[]): FieldErrors {
   const fehler: Record<string, readonly string[]> = {};
   if (texte.rechnungDatum === '') {
@@ -763,6 +801,10 @@ export default function RechnungPage() {
   const [frage, setzeFrage] = useState<number | null>(null);
   // Ob die Rueckfrage vor dem Abschreiben offen ist (Issue #253).
   const [abschreibfrage, setzeAbschreibfrage] = useState(false);
+  // Die Abweisung eines Schritts auf altem Stand, ungeprueft — die Konfliktmeldung liest sie selbst.
+  const [abweisung, setzeAbweisung] = useState<unknown>(null);
+  // Die eigenen Werte nach „Neu laden", bis „Verwerfen" gewaehlt wird (#411, Kriterium 3).
+  const [eigene, setzeEigene] = useState<readonly EigeneEingabe[] | null>(null);
   useKopfPfad(
     [ZU_RECHNUNGEN],
     stand.art === 'daten' ? ueberschriftZu(stand.rechnung) : 'Rechnung',
@@ -819,9 +861,10 @@ export default function RechnungPage() {
     setzeFehler(null);
     setzeFehlende(null);
     setzeFeldFehler({});
-    const eigene = eigenePruefung(texte, zeilen);
-    setzeEigeneFehler(eigene);
-    if (Object.keys(eigene).length > 0 || gerechnet === null) {
+    setzeAbweisung(null);
+    const pruefung = eigenePruefung(texte, zeilen);
+    setzeEigeneFehler(pruefung);
+    if (Object.keys(pruefung).length > 0 || gerechnet === null) {
       // Was fehlt, steht am Feld beziehungsweise an der Zeile; hinaus geht nichts.
       return null;
     }
@@ -830,7 +873,7 @@ export default function RechnungPage() {
     // einen zweiten Weg durch die Funktion an, den keine Probe erreichen kann.
     let gesichert: Rechnung | null = null;
     try {
-      const neu = await rechnungAendern(rechnung.id, {
+      const neu = await rechnungAendern(rechnung.id, rechnung.version, {
         rechnungDatum: texte.rechnungDatum,
         leistungszeitraum: texte.leistungszeitraum.trim(),
         positionen: gerechnet.eingaben,
@@ -840,7 +883,10 @@ export default function RechnungPage() {
       gesichert = neu;
     } catch (ursache) {
       const felder = feldMeldungen(ursache);
-      if (Object.keys(felder).length > 0) {
+      if (istBearbeitungskonflikt(ursache)) {
+        // Die Eingaben bleiben stehen; den Weg weiter zeigt die Konfliktmeldung (Kriterium 3).
+        setzeAbweisung(ursache);
+      } else if (Object.keys(felder).length > 0) {
         setzeFeldFehler(felder);
       } else {
         setzeFehler(AUSFALL_SPEICHERN);
@@ -869,17 +915,23 @@ export default function RechnungPage() {
     setzeFrage(rechnung.bruttoInCent);
   };
 
-  /** Stellt die Rechnung; die Antwort traegt die gestellte Rechnung mit ihrer Nummer. */
+  /**
+   * Stellt die Rechnung auf dem Stand des gezeigten Entwurfs (Plan #415, E10); die Antwort traegt
+   * die gestellte Rechnung mit ihrer Nummer.
+   */
   const stellen = async (rechnung: Rechnung) => {
     setzeGespeichert(false);
     setzeFehler(null);
     setzeFehlende(null);
+    setzeAbweisung(null);
     setzeLaeuft(true);
     try {
-      uebernimm(await rechnungStellen(rechnung.id));
+      uebernimm(await rechnungStellen(rechnung.id, rechnung.version));
     } catch (ursache) {
       const felder = feldMeldungen(ursache);
-      if (Object.keys(felder).length > 0) {
+      if (istBearbeitungskonflikt(ursache)) {
+        setzeAbweisung(ursache);
+      } else if (Object.keys(felder).length > 0) {
         setzeFehlende(felder);
       } else {
         setzeFehler(serverMeldung(ursache, AUSFALL_STELLEN));
@@ -898,11 +950,43 @@ export default function RechnungPage() {
    */
   const umstellen = async (rechnung: Rechnung, ziel: Rechnungszustand) => {
     setzeFehler(null);
+    setzeAbweisung(null);
     setzeLaeuft(true);
     try {
-      uebernimm(await setzeRechnungszustand(rechnung.id, ziel));
+      uebernimm(await setzeRechnungszustand(rechnung.id, rechnung.version, ziel));
     } catch (ursache) {
-      setzeFehler(serverMeldung(ursache, AUSFALL_ZUSTAND));
+      if (istBearbeitungskonflikt(ursache)) {
+        setzeAbweisung(ursache);
+      } else {
+        setzeFehler(serverMeldung(ursache, AUSFALL_ZUSTAND));
+      }
+    } finally {
+      setzeLaeuft(false);
+    }
+  };
+
+  /**
+   * „Neu laden" nach einer Abweisung (#411, Kriterium 3; Plan #415, E12): der Stand des Servers
+   * samt neuer Version in die Ansicht, die eigenen Werte daneben.
+   *
+   * Die eigenen Werte werden genommen, wie sie in diesem Augenblick in der Maske stehen — auch was
+   * nach der Abweisung noch getippt wurde, soll nicht verloren gehen. Die gestellte Rechnung hat
+   * keine Maske; dort gibt es keine eigenen Werte, die daneben stehen muessten.
+   */
+  const neuLaden = async (rechnung: Rechnung) => {
+    const meine = istGestellt(rechnung.zustand) ? null : eigeneEingabenAus(texte, zeilen);
+    setzeFehler(null);
+    setzeLaeuft(true);
+    try {
+      uebernimm(await rechnungLesen(rechnung.id));
+      setzeEigene(meine);
+      setzeAbweisung(null);
+      setzeEigeneFehler({});
+      setzeFeldFehler({});
+      setzeFehlende(null);
+      setzeGespeichert(false);
+    } catch {
+      setzeFehler(AUSFALL_NEU_LADEN);
     } finally {
       setzeLaeuft(false);
     }
@@ -1143,6 +1227,27 @@ export default function RechnungPage() {
 
   const { rechnung } = stand;
 
+  /** Die Abweisung und die eigenen Werte ueber der Ansicht — im Entwurf wie am Beleg. */
+  const gleichzeitig = (
+    <>
+      <Konfliktmeldung
+        ursache={abweisung}
+        onNeuLaden={() => {
+          void neuLaden(rechnung);
+        }}
+        uebersicht={UEBERSICHT}
+      />
+      {eigene === null ? null : (
+        <EigeneEingaben
+          werte={eigene}
+          onVerwerfen={() => {
+            setzeEigene(null);
+          }}
+        />
+      )}
+    </>
+  );
+
   // Die Leseansicht gilt fuer jeden gestellten Zustand: Bezahlt und Abgeschrieben sind gestellte
   // Rechnungen und zeigen denselben Beleg (Issue #253).
   if (istGestellt(rechnung.zustand)) {
@@ -1150,6 +1255,7 @@ export default function RechnungPage() {
     return (
       <Box sx={spalten}>
         {fehler === null ? null : <Alert severity="error">{fehler}</Alert>}
+        {gleichzeitig}
         <Karte
           titel={ueberschriftZu(rechnung)}
           titelEbene={1}
@@ -1205,6 +1311,7 @@ export default function RechnungPage() {
   return (
     <Box sx={spalten}>
       {fehler === null ? null : <Alert severity="error">{fehler}</Alert>}
+      {gleichzeitig}
       {fehlende === null ? null : <Pflichtangaben felder={fehlende} rechnung={rechnung} />}
       <Karte
         titel={ueberschriftZu(rechnung)}

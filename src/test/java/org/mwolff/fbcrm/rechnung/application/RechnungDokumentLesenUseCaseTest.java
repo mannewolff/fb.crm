@@ -171,7 +171,9 @@ class RechnungDokumentLesenUseCaseTest {
         rechnung.empfaenger(),
         rechnung.absender(),
         rechnung.createdAt(),
-        rechnung.updatedAt());
+        rechnung.updatedAt(),
+        rechnung.version(),
+        rechnung.geaendertVon());
   }
 
   private static Rechnung ohneNummer(final Rechnung rechnung) {
@@ -190,6 +192,8 @@ class RechnungDokumentLesenUseCaseTest {
         rechnung.empfaenger(),
         rechnung.absender(),
         rechnung.createdAt(),
-        rechnung.updatedAt());
+        rechnung.updatedAt(),
+        rechnung.version(),
+        rechnung.geaendertVon());
   }
 }

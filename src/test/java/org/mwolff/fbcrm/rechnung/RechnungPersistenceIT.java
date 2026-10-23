@@ -148,7 +148,9 @@ class RechnungPersistenceIT extends AbstractIntegrationTest {
         null,
         null,
         ANGELEGT,
-        ANGELEGT);
+        ANGELEGT,
+        0L,
+        null);
   }
 
   private Rechnung geschrieben(final Rechnung rechnung) {

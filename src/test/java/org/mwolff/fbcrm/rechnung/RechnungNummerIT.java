@@ -122,6 +122,23 @@ class RechnungNummerIT extends AbstractIntegrationTest {
     return rest.exchange(pfad, methode, new HttpEntity<>(rumpf, sitzung), typ);
   }
 
+  /**
+   * Ein schreibender Weg an der Rechnung, auf ihrem aktuellen Stand (Plan #415, E2, E3): so, wie
+   * die Maske ihn vorlegt.
+   */
+  private <T> ResponseEntity<T> rufAufStand(
+      final String pfad,
+      final HttpMethod methode,
+      final @Nullable Object rumpf,
+      final Class<T> typ,
+      final long rechnungId) {
+    return rest.exchange(
+        pfad,
+        methode,
+        new HttpEntity<>(rumpf, Stand.aktuell(sitzung, jdbc, "rechnung", rechnungId)),
+        typ);
+  }
+
   /** Die eigenen Angaben, vollstaendig bis auf die Steuernummer, die der Test waehlt. */
   private void eigeneAngabenSetzen(final @Nullable String steuernummer) {
     final Map<String, Object> rumpf = new LinkedHashMap<>();
@@ -245,24 +262,35 @@ class RechnungNummerIT extends AbstractIntegrationTest {
     rumpf.put("leistungszeitraum", ZEITRAUM);
     rumpf.put("positionen", List.of(position));
     assertThat(
-            ruf("/api/rechnungen/" + angelegt.id(), HttpMethod.PUT, rumpf, RechnungResponse.class)
+            rufAufStand(
+                    "/api/rechnungen/" + angelegt.id(),
+                    HttpMethod.PUT,
+                    rumpf,
+                    RechnungResponse.class,
+                    angelegt.id())
                 .getStatusCode())
         .isEqualTo(HttpStatus.OK);
     return angelegt.id();
   }
 
   private ResponseEntity<String> stelle(final long rechnungId) {
-    return ruf("/api/rechnungen/" + rechnungId + "/stellen", HttpMethod.POST, null, String.class);
+    return rufAufStand(
+        "/api/rechnungen/" + rechnungId + "/stellen",
+        HttpMethod.POST,
+        null,
+        String.class,
+        rechnungId);
   }
 
   /** Stellt und liefert die Nummer; ein anderer Ausgang als 200 ist hier ein Fehlschlag. */
   private String stelleUndNimmDieNummer(final long rechnungId) {
     final ResponseEntity<RechnungResponse> antwort =
-        ruf(
+        rufAufStand(
             "/api/rechnungen/" + rechnungId + "/stellen",
             HttpMethod.POST,
             null,
-            RechnungResponse.class);
+            RechnungResponse.class,
+            rechnungId);
     assertThat(antwort.getStatusCode()).isEqualTo(HttpStatus.OK);
     return Objects.requireNonNull(Objects.requireNonNull(antwort.getBody()).nummer());
   }

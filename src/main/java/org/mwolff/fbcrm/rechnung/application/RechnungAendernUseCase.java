@@ -12,6 +12,7 @@ import org.mwolff.fbcrm.angebot.application.AngebotNichtGefunden;
 import org.mwolff.fbcrm.angebot.domain.Angebot;
 import org.mwolff.fbcrm.angebot.domain.AngebotRepository;
 import org.mwolff.fbcrm.angebot.domain.Angebotsposition;
+import org.mwolff.fbcrm.common.Bearbeitungskonflikt;
 import org.mwolff.fbcrm.rechnung.domain.Rechnung;
 import org.mwolff.fbcrm.rechnung.domain.RechnungRepository;
 import org.mwolff.fbcrm.rechnung.domain.Rechnungsposition;
@@ -37,6 +38,12 @@ import org.springframework.transaction.annotation.Transactional;
  * eine gestellte Rechnung soll weder das Angebot geladen noch eine Angabe geprueft werden, und die
  * Abweisung soll den Zustand nennen und nicht eine Position. Die Domaene haelt die Grenze trotzdem
  * — dort fuehrt kein Weg daran vorbei.
+ *
+ * <p><b>Davor steht nur der Stand</b> (#411, Kriterium 1; Plan #415, E1, E14). Bevor irgendeine
+ * fachliche Regel gefragt wird — auch der Zustand —, vergleicht der Anwendungsfall den vorgelegten
+ * Stand mit dem der Rechnung: Wer auf einem alten Stand speichert, bekommt {@link
+ * RechnungGeaendert} mit Urheber und Zeitpunkt der fremden Aenderung, denn der andere kann den
+ * Entwurf eben erst gestellt haben. Das handelnde Konto steht danach als Urheber an der Rechnung.
  */
 @Service
 @Transactional
@@ -57,8 +64,11 @@ public class RechnungAendernUseCase {
    * Aendert den Entwurf und liefert ihn in seinem neuen Stand.
    *
    * @param rechnungId Kennung der Rechnung
-   * @param daten die eingereichten Angaben samt vollstaendiger Positionsliste
+   * @param daten die eingereichten Angaben samt vollstaendiger Positionsliste, vorgelegtem Stand
+   *     und handelndem Konto
    * @throws RechnungNichtGefunden wenn es die Rechnung nicht gibt
+   * @throws RechnungGeaendert wenn die Rechnung inzwischen einen anderen Stand hat als den
+   *     vorgelegten
    * @throws RechnungszustandPasstNicht wenn die Rechnung schon gestellt ist
    * @throws AngebotNichtGefunden wenn es das Angebot der Rechnung nicht gibt
    * @throws AbrechnungsangabenNichtWaehlbar wenn eine Menge negativ ist oder eine Angabe sich auf
@@ -67,6 +77,12 @@ public class RechnungAendernUseCase {
   public Rechnung aendere(final long rechnungId, final RechnungDaten daten) {
     final Rechnung rechnung =
         rechnungen.findById(rechnungId).orElseThrow(RechnungNichtGefunden::new);
+    Bearbeitungskonflikt.pruefe(
+        daten.version(),
+        rechnung.version(),
+        () ->
+            new RechnungGeaendert(
+                rechnung.geaendertVon(), daten.geaendertVon(), rechnung.updatedAt()));
     if (rechnung.zustand() != Rechnungszustand.ENTWURF) {
       throw new RechnungszustandPasstNicht();
     }
@@ -95,8 +111,9 @@ public class RechnungAendernUseCase {
       }
     }
     return rechnungen.save(
-        rechnung.geaendert(
-            daten.rechnungDatum(), daten.leistungszeitraum(), neue, clock.instant()));
+        rechnung
+            .geaendert(daten.rechnungDatum(), daten.leistungszeitraum(), neue, clock.instant())
+            .durch(daten.geaendertVon()));
   }
 
   /*

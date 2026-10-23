@@ -73,7 +73,9 @@ class AbrechnungsstandTest {
         null,
         null,
         ANGELEGT,
-        ANGELEGT);
+        ANGELEGT,
+        0L,
+        null);
   }
 
   private static Rechnungsposition abrechnung(final long angebotPositionId, final String menge) {

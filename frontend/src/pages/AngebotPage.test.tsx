@@ -1004,6 +1004,7 @@ describe('AngebotPage — „Rechnung schreiben" (Issue #187, Kriterium 3)', () 
     empfaenger: null,
     absender: null,
     zeilen: [],
+    version: 0,
   };
 
   /** Die Wege eines bestellten Angebots mit einer Teilabrechnung. */

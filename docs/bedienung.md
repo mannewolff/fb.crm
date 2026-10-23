@@ -64,8 +64,10 @@ das zweite Speichern ab, sagt, wer wann geändert hat, und niemand verliert sein
 Abschnitt zeigt, was dann geschieht und wie man weitermacht. Bisher gilt das beim Speichern in der
 Maske „Angebot bearbeiten" und in der Ansicht eines Angebots bei „Status weiter", „Status zurück",
 „Abschließen", „Wieder öffnen", „Stornieren" und „Storno zurücknehmen", dazu beim Bearbeiten und
-Löschen eines Kommentars und beim Löschen einer Anlage. Das Angebot zählt dabei als Ganzes, mit seinen Positionen und seinem
-Status; jeder Kommentar ist ein Eintrag für sich.
+Löschen eines Kommentars und beim Löschen einer Anlage. An einer Rechnung gilt es beim Speichern
+des Entwurfs, bei „Rechnung stellen" und bei „Als bezahlt markieren", „Abschreiben" und „Zurück auf
+gestellt". Das Angebot zählt dabei als Ganzes, mit seinen Positionen und seinem Status; jeder
+Kommentar ist ein Eintrag für sich.
 
 **Einstieg:** Die Abweisung erscheint von selbst, wenn man „Speichern" wählt und jemand anderes
 das Angebot seit dem Öffnen gespeichert hat. Solange der geöffnete Stand aktuell ist, merkt man vom
@@ -105,7 +107,19 @@ nennt, wer die Anlage wann gelöscht hat, und „Zur Übersicht" führt zur List
 Anlage ändert sich nie; darum gibt es bei ihr nichts neu zu laden. Eine neue Anlage lädt man immer
 ohne Rückfrage hoch.
 
-**Ergebnis:** Das Angebot trägt die Änderungen beider, und keine ist unbemerkt verloren gegangen.
+An einer Rechnung steht die Meldung oben über der Kopfkarte. Wird das Speichern des Entwurfs
+abgewiesen, bleiben die eigenen Mengen und Texte in der Maske; „Neu laden" zeigt den aktuellen
+Entwurf und die eigenen Werte unter „Deine Eingaben", wie in der Maske eines Angebots. Bei „Rechnung
+stellen" zählt allein der Entwurf: Hat ihn ein anderer seit dem Öffnen geändert, wird nichts
+gestellt und keine Nummer verbraucht. Man lädt neu, sieht sich den Entwurf an und stellt ihn
+erneut. Hat dagegen jemand inzwischen das Angebot, die Einstellungen zur Rechnung, die Eigenen
+Angaben oder den Briefbogen geändert, wird trotzdem gestellt — mit dem Stand von diesem Augenblick.
+Dasselbe gilt für „Als bezahlt markieren", „Abschreiben" und „Zurück auf gestellt": Nach einer
+Abweisung holt „Neu laden" den aktuellen Zustand der Rechnung, danach wählt man die Taste erneut,
+wenn sie noch passt.
+
+**Ergebnis:** Angebot und Rechnung tragen die Änderungen beider, und keine ist unbemerkt verloren
+gegangen.
 
 ## Eigene Angaben
 
