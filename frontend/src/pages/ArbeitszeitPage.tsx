@@ -679,6 +679,7 @@ export default function ArbeitszeitPage() {
       {maske === null ? null : (
         <ZeiteintragMaske
           zeile={maske.art === 'neu' ? null : maske.zeile}
+          auswahl={gezeigteAuswahl}
           onGespeichert={() => {
             setzeMaske(null);
             neuLaden();

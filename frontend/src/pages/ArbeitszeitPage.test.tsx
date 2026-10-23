@@ -7,10 +7,10 @@ import ArbeitszeitPage from './ArbeitszeitPage';
 import { KopfPfadProvider } from '../components/KopfPfad';
 import { fetchNachPfad, json, leer, problem } from '../test/fetchNachPfad';
 import type { Routen } from '../test/fetchNachPfad';
-import { alsRolle } from '../test/rechteDoppel';
 import { renderMitTheme } from '../test/render';
+import { alsRolle } from '../test/sitzungDoppel';
 
-vi.mock('../auth/rechte', () => import('../test/rechteDoppel'));
+vi.mock('../auth/AuthContext', () => import('../test/sitzungDoppel'));
 
 const OHNE_MONAT = 'GET /api/arbeitszeit';
 const WEG_NOVEMBER = '/api/arbeitszeit?monat=2026-11';
@@ -664,6 +664,24 @@ describe('ArbeitszeitPage — Personen (Plan #426, E10, E14, E17)', () => {
       expect(aufruf.mock.calls.map(([ziel]) => ziel)).toContain(
         '/api/arbeitszeit?monat=2026-11&person=2',
       );
+    });
+  });
+
+  it('belegt im Dialog die umgeschaltete Person vor (Kriterium 3 von #410)', async () => {
+    const aktiverBen = { ...BEN, aktiv: true };
+    mitRouten({
+      [NOVEMBER_BEN]: json(200, { ...MONATSLISTE, auswahl: '2' }),
+      [PERSONEN]: json(200, [PERSON, aktiverBen]),
+      [POSITIONEN]: json(200, [KONZEPTION]),
+    });
+    const nutzer = userEvent.setup();
+
+    renderSeite('/arbeitszeit?monat=2026-11&person=2');
+    await nutzer.click(await screen.findByRole('button', { name: 'Zeit erfassen' }));
+    const dialog = within(await screen.findByRole('dialog', { name: 'Zeit erfassen' }));
+
+    await vi.waitFor(() => {
+      expect(dialog.getByRole('combobox', { name: 'Person' })).toHaveValue('2');
     });
   });
 

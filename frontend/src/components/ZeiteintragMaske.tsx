@@ -9,9 +9,22 @@ import Typography from '@mui/material/Typography';
 import { useEffect, useId, useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
 
-import { buchbarePositionen, zeiteintragAendern, zeiteintragAnlegen } from '../api/arbeitszeit';
-import type { Buchungsposition, ZeiteintragEingabe, Zeitzeile } from '../api/arbeitszeit';
+import {
+  ALLE,
+  buchbarePositionen,
+  personen,
+  zeiteintragAendern,
+  zeiteintragAnlegen,
+} from '../api/arbeitszeit';
+import type {
+  Buchungsposition,
+  Person,
+  Personenauswahl,
+  ZeiteintragEingabe,
+  Zeitzeile,
+} from '../api/arbeitszeit';
 import type { FieldErrors } from '../api/client';
+import { useAuth } from '../auth/AuthContext';
 import { useRechte } from '../auth/rechte';
 import { feldMeldungen } from '../lib/apifehler';
 import { dauerInHundertsteln, stundenWort, uhrzeitFeld } from '../lib/arbeitszeit';
@@ -51,6 +64,16 @@ import WeicheTaste from './WeicheTaste';
  * Ueberschneidung — entscheidet der Server, und seine Meldungen landen aus `fieldErrors` am
  * jeweiligen Feld (A19, A8).
  *
+ * <b>Ein C-Level waehlt die Person, fuer die er erfasst</b> (Plan #426, E12; Kriterium 3 von
+ * #410), ueber der Position; ein Employee sieht die Auswahl nicht und nennt nie eine Person — sein
+ * Rumpf traegt kein `accountId`, und der Eintrag gehoert ihm. Die Personen holt der Dialog selbst,
+ * wie seine Positionen. Beim Anlegen ist vorbelegt, worauf die Ansicht umgeschaltet ist: eine
+ * aktive Person, bei „Alle" das angemeldete Konto, bei einer stillgelegten niemand — stillgelegte
+ * Personen stehen beim Anlegen nicht zur Wahl. Beim Aendern steht die Person der Zeile voran, auch
+ * eine stillgelegte, aus demselben Grund wie bei der Position (A15): Fehlte sie, haenge ein
+ * Speichern den Eintrag stillschweigend um. Der Server taete das nicht (E12) — die Maske verlaesst
+ * sich nicht darauf.
+ *
  * <b>Ohne Schreibrecht entsteht der Dialog gar nicht</b> (Kriterium 10 von #409, Plan #414, A10):
  * Er dient nur dem Schreiben, und die Monatsliste oeffnet ihn dann ohnehin nicht. Die Huelle fragt
  * das Recht vor dem eigentlichen Dialog, damit auch seine Auswahlliste nicht geladen wird.
@@ -65,33 +88,45 @@ const AUSFALL_LESEN =
 const LEER =
   'Keine Position ist buchbar. Eine Position muss nach Aufwand in Stunden abgerechnet werden, und' +
   ' ihr Angebot muss bestellt oder erledigt sein.';
+const AUSFALL_PERSONEN =
+  'Die Personen sind gerade nicht zu erreichen. Bitte später erneut versuchen.';
 const AUSFALL_SPEICHERN = 'Die Arbeitszeit wurde nicht gespeichert. Bitte später erneut versuchen.';
 
 /** Was an einem Feld steht, das eine Angabe braucht und keine hat. */
 const PFLICHT = 'Bitte ausfüllen.';
 
-/** Die Aufschrift der Auswahl, solange keine Position gewaehlt ist. */
+/** Die Aufschrift einer Auswahl, solange nichts gewaehlt ist. */
 const KEINE_WAHL = 'Bitte wählen';
 
 export interface ZeiteintragMaskeProps {
   /** Der Eintrag, der geaendert wird — `null` beim Erfassen. */
   readonly zeile: Zeitzeile | null;
+  /**
+   * Worauf die Ansicht umgeschaltet ist — die Vorbelegung der Person beim Erfassen; `null`, solange
+   * die Ansicht keine Auswahl kennt, gilt wie „Alle". Beim Aendern ohne Belang.
+   */
+  readonly auswahl: Personenauswahl | null;
   /** Gespeichert: Die Monatsliste ist nicht mehr aktuell und der Dialog hat seinen Zweck erfuellt. */
   readonly onGespeichert: () => void;
   /** Abgebrochen — ohne Wirkung auf den Bestand. */
   readonly onSchliessen: () => void;
 }
 
-/** Die vier Felder des Dialogs, jedes als Zeichenkette — leer heisst „keine Angabe". */
+/** Die Felder des Dialogs, jedes als Zeichenkette — leer heisst „keine Angabe". */
 interface Werte {
   readonly tag: string;
   readonly von: string;
   readonly bis: string;
   readonly angebotPositionId: string;
+  /** Die gewaehlte Person; nur fuer ein C-Level von Belang, sonst bleibt es leer. */
+  readonly accountId: string;
 }
 
 /** Die vier Angaben, und keine davon darf fehlen (`ZeiteintragRequest`). */
 const PFLICHTFELDER: readonly (keyof Werte)[] = ['tag', 'von', 'bis', 'angebotPositionId'];
+
+/** Mit Personenauswahl ist auch die Person Pflicht — ohne sie wuesste der Dialog nicht, fuer wen. */
+const PFLICHTFELDER_MIT_PERSON: readonly (keyof Werte)[] = [...PFLICHTFELDER, 'accountId'];
 
 /** Was die Auswahlliste gerade weiss. */
 type Wahlstand =
@@ -106,6 +141,21 @@ interface Gruppe {
   readonly positionen: Buchungsposition[];
 }
 
+/** Was die Personenauswahl gerade weiss. */
+type Personenstand =
+  | { readonly art: 'laedt' }
+  | { readonly art: 'daten'; readonly personen: readonly Person[] }
+  | { readonly art: 'fehler' };
+
+/** Holt die Personen und macht auch aus dem Fehlschlag einen Stand. */
+async function personenLaden(): Promise<Personenstand> {
+  try {
+    return { art: 'daten', personen: await personen() };
+  } catch {
+    return { art: 'fehler' };
+  }
+}
+
 /** Holt die buchbaren Positionen und macht auch aus dem Fehlschlag einen Stand. */
 async function wahlLaden(): Promise<Wahlstand> {
   try {
@@ -115,23 +165,56 @@ async function wahlLaden(): Promise<Wahlstand> {
   }
 }
 
-/** Die Vorbelegung: beim Aendern die Zeile, beim Erfassen der heutige Tag und sonst nichts. */
+/**
+ * Die Vorbelegung: beim Aendern die Zeile samt ihrer Person, beim Erfassen der heutige Tag und
+ * sonst nichts — die Person beim Erfassen setzt {@link personBeimErfassen}, sobald die Personen da
+ * sind.
+ */
 function werteAus(zeile: Zeitzeile | null): Werte {
   if (zeile === null) {
-    return { tag: heute(), von: '', bis: '', angebotPositionId: '' };
+    return { tag: heute(), von: '', bis: '', angebotPositionId: '', accountId: '' };
   }
   return {
     tag: zeile.tag,
     von: uhrzeitFeld(zeile.von),
     bis: uhrzeitFeld(zeile.bis),
     angebotPositionId: String(zeile.position.id),
+    accountId: String(zeile.person.id),
   };
 }
 
+/**
+ * Wen das Erfassen vorbelegt (Kriterium 3 von #410, E12): bei „Alle" das angemeldete Konto, sonst
+ * die umgeschaltete Person, wenn sie aktiv ist — und niemanden, wenn sie stillgelegt ist oder der
+ * Server sie nicht nennt.
+ */
+function personBeimErfassen(
+  auswahl: Personenauswahl | null,
+  kontoId: number,
+  liste: readonly Person[],
+): string {
+  if (auswahl === null || auswahl === ALLE) {
+    return String(kontoId);
+  }
+  return liste.some((person) => person.id === auswahl && person.aktiv) ? String(auswahl) : '';
+}
+
+/**
+ * Die Personen, fuer die erfasst werden darf: die aktiven, und beim Aendern die Person der Zeile
+ * vorn, wenn sie nicht darunter ist — die einzige Ausnahme fuer eine stillgelegte (wie A15).
+ */
+function waehlbarePersonen(zeile: Zeitzeile | null, liste: readonly Person[]): readonly Person[] {
+  const aktive = liste.filter((person) => person.aktiv);
+  if (zeile === null || aktive.some((person) => person.id === zeile.person.id)) {
+    return aktive;
+  }
+  return [zeile.person, ...aktive];
+}
+
 /** Die Felder ohne Angabe, jedes mit seiner Meldung — leer heisst „vollstaendig". */
-function fehlendeAngaben(werte: Werte): FieldErrors {
+function fehlendeAngaben(werte: Werte, mitPerson: boolean): FieldErrors {
   const fehlen: Record<string, readonly string[]> = {};
-  for (const feld of PFLICHTFELDER) {
+  for (const feld of mitPerson ? PFLICHTFELDER_MIT_PERSON : PFLICHTFELDER) {
     if (werte[feld] === '') {
       fehlen[feld] = [PFLICHT];
     }
@@ -227,15 +310,47 @@ function hinweisZu(wahlstand: Wahlstand): ReactNode {
   return null;
 }
 
+/**
+ * Die Huelle: Sie fragt Recht und Sitzung, bevor der Dialog entsteht.
+ *
+ * <b>Die Personenauswahl bekommt, wer schreiben und die Zeiten aller sehen darf</b> — das ist
+ * allein ein C-Level (`auth/rechte`); gefragt wird das Recht, nicht die Rolle. Das angemeldete
+ * Konto kommt aus der Sitzung, verengt ueber `status === 'angemeldet'` (E17).
+ */
 export default function ZeiteintragMaske(props: ZeiteintragMaskeProps) {
-  const { darfFachlichSchreiben } = useRechte();
-  return darfFachlichSchreiben ? <Zeiteintragsdialog {...props} /> : null;
+  const { darfFachlichSchreiben, darfZeitenAllerSehen } = useRechte();
+  const { sitzung } = useAuth();
+  if (!darfFachlichSchreiben || sitzung.status !== 'angemeldet') {
+    return null;
+  }
+  return (
+    <Zeiteintragsdialog
+      {...props}
+      kontoId={sitzung.konto.id}
+      mitPerson={darfZeitenAllerSehen}
+    />
+  );
+}
+
+interface DialogProps extends ZeiteintragMaskeProps {
+  /** Die Kennung des angemeldeten Kontos — die Vorbelegung bei „Alle". */
+  readonly kontoId: number;
+  /** Ob der Dialog die Person waehlen laesst (nur ein C-Level). */
+  readonly mitPerson: boolean;
 }
 
 /** Der Dialog selbst — nur fuer eine Rolle, die fachlich schreiben darf. */
-function Zeiteintragsdialog({ zeile, onGespeichert, onSchliessen }: ZeiteintragMaskeProps) {
+function Zeiteintragsdialog({
+  zeile,
+  auswahl,
+  kontoId,
+  mitPerson,
+  onGespeichert,
+  onSchliessen,
+}: DialogProps) {
   const titelId = useId();
   const [wahlstand, setzeWahlstand] = useState<Wahlstand>({ art: 'laedt' });
+  const [personenstand, setzePersonenstand] = useState<Personenstand>({ art: 'laedt' });
   const [werte, setzeWerte] = useState<Werte>(() => werteAus(zeile));
   const [eigeneFehler, setzeEigeneFehler] = useState<FieldErrors>({});
   const [feldFehler, setzeFeldFehler] = useState<FieldErrors>({});
@@ -255,6 +370,29 @@ function Zeiteintragsdialog({ zeile, onGespeichert, onSchliessen }: ZeiteintragM
     };
   }, []);
 
+  useEffect(() => {
+    // Ein Employee waehlt keine Person und fragt darum auch keine.
+    if (!mitPerson) {
+      return undefined;
+    }
+    let gueltig = true;
+    void personenLaden().then((neu) => {
+      if (!gueltig) {
+        return;
+      }
+      setzePersonenstand(neu);
+      // Beim Aendern steht die Person der Zeile schon; beim Erfassen entscheidet erst die Liste,
+      // ob die umgeschaltete Person aktiv ist.
+      if (zeile === null && neu.art === 'daten') {
+        const vorbelegt = personBeimErfassen(auswahl, kontoId, neu.personen);
+        setzeWerte((alt) => ({ ...alt, accountId: vorbelegt }));
+      }
+    });
+    return () => {
+      gueltig = false;
+    };
+  }, [mitPerson, zeile, auswahl, kontoId]);
+
   const setze = (feld: keyof Werte, wert: string) => {
     setzeWerte((alt) => ({ ...alt, [feld]: wert }));
   };
@@ -263,7 +401,7 @@ function Zeiteintragsdialog({ zeile, onGespeichert, onSchliessen }: ZeiteintragM
     ereignis.preventDefault();
     setzeFehler(null);
     setzeFeldFehler({});
-    const fehlen = fehlendeAngaben(werte);
+    const fehlen = fehlendeAngaben(werte, mitPerson);
     setzeEigeneFehler(fehlen);
     if (Object.keys(fehlen).length > 0) {
       return;
@@ -274,6 +412,7 @@ function Zeiteintragsdialog({ zeile, onGespeichert, onSchliessen }: ZeiteintragM
       tag: werte.tag,
       von: werte.von,
       bis: werte.bis,
+      ...(mitPerson ? { accountId: Number(werte.accountId) } : {}),
     };
     try {
       if (zeile === null) {
@@ -300,6 +439,10 @@ function Zeiteintragsdialog({ zeile, onGespeichert, onSchliessen }: ZeiteintragM
     meldungAm(eigeneFehler, feld) ?? meldungAm(feldFehler, feld);
 
   const dauer = dauerInHundertsteln(werte.von, werte.bis);
+  const personenwahl = waehlbarePersonen(
+    zeile,
+    personenstand.art === 'daten' ? personenstand.personen : [],
+  );
   const gruppen = gruppiert(
     mitZeilenposition(zeile, wahlstand.art === 'daten' ? wahlstand.positionen : []),
   );
@@ -318,6 +461,9 @@ function Zeiteintragsdialog({ zeile, onGespeichert, onSchliessen }: ZeiteintragM
       >
         <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
           {fehler === null ? null : <Alert severity="error">{fehler}</Alert>}
+          {mitPerson && personenstand.art === 'fehler' ? (
+            <Alert severity="error">{AUSFALL_PERSONEN}</Alert>
+          ) : null}
           {hinweisZu(wahlstand)}
           <TextField
             label="Tag"
@@ -385,6 +531,28 @@ function Zeiteintragsdialog({ zeile, onGespeichert, onSchliessen }: ZeiteintragM
               </Box>
             )}
           </Box>
+          {mitPerson ? (
+            <TextField
+              select
+              label="Person"
+              value={werte.accountId}
+              onChange={(ereignis) => {
+                setze('accountId', ereignis.target.value);
+              }}
+              error={meldung('accountId') !== undefined}
+              helperText={meldung('accountId')}
+              required
+              fullWidth
+              slotProps={{ select: { native: true }, inputLabel: { shrink: true } }}
+            >
+              <option value="">{KEINE_WAHL}</option>
+              {personenwahl.map((person) => (
+                <option key={person.id} value={String(person.id)}>
+                  {person.name}
+                </option>
+              ))}
+            </TextField>
+          ) : null}
           <TextField
             select
             label="Position"
