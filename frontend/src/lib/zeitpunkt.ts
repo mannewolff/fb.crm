@@ -32,3 +32,29 @@ export function zeitpunktWort(zeitstempel: string): string {
   const tag = `${zweistellig(zeit.getDate())}.${zweistellig(zeit.getMonth() + 1)}.${String(zeit.getFullYear())}`;
   return `${tag}, ${zweistellig(zeit.getHours())}:${zweistellig(zeit.getMinutes())}`;
 }
+
+/** Wahr, wenn beide Zeitpunkte in der Ortszeit des Betrachters auf denselben Kalendertag fallen. */
+function selberTag(a: Date, b: Date): boolean {
+  return (
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate()
+  );
+}
+
+/**
+ * Der Zeitpunkt so knapp, wie er sich noch eindeutig liest: am Tag von `jetzt` nur die Uhrzeit
+ * („14:05"), sonst mit Datum wie {@link zeitpunktWort} (#411, Kriterium 2).
+ *
+ * `jetzt` ist ein Parameter und keine Uhr im Inneren: Der Vergleich gehoert zum Augenblick, in dem
+ * die Meldung erscheint, und ein Test braucht ihn fest. Der Tag wird in der Ortszeit verglichen —
+ * kurz nach Mitternacht ist ein Zeitstempel vom Vorabend in UTC derselbe Tag, fuer den Betrachter
+ * aber gestern.
+ */
+export function zeitpunktKurz(zeitstempel: string, jetzt: Date): string {
+  const zeit = new Date(zeitstempel);
+  if (Number.isNaN(zeit.getTime()) || !selberTag(zeit, jetzt)) {
+    return zeitpunktWort(zeitstempel);
+  }
+  return `${zweistellig(zeit.getHours())}:${zweistellig(zeit.getMinutes())}`;
+}

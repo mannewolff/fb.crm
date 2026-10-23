@@ -25,12 +25,21 @@ export const ALLGEMEINE_MELDUNG = 'Die Anfrage konnte nicht ausgeführt werden.'
 export class ApiError extends Error {
   readonly status: number;
   readonly fieldErrors: FieldErrors;
+  /**
+   * Der gelesene Rumpf der Antwort, ungeprueft — oder `null`, wenn sie keinen JSON-Rumpf trug.
+   *
+   * Er steht hier fuer die Erweiterungen eines Problems, die nur eine Stelle kennt: den
+   * Bearbeitungskonflikt mit `konflikt` (Plan #415, E4). Verengt wird er dort, wo er gelesen
+   * wird (`lib/apifehler.ts`), nicht hier — sonst wuchse dieses Modul mit jeder Erweiterung.
+   */
+  readonly problem: unknown;
 
-  constructor(status: number, meldung: string, fieldErrors: FieldErrors) {
+  constructor(status: number, meldung: string, fieldErrors: FieldErrors, problem: unknown = null) {
     super(meldung);
     this.name = 'ApiError';
     this.status = status;
     this.fieldErrors = fieldErrors;
+    this.problem = problem;
   }
 }
 
@@ -63,6 +72,15 @@ export interface Anfrage {
    * den `fetch`, den es abbricht — ein Abbruch weiter oben wuerde die Leitung offen lassen.
    */
   readonly signal?: AbortSignal;
+  /**
+   * Der Stand, auf dem die Aenderung beruht — geht als `If-Match: "<version>"` hinaus (Plan #415,
+   * E2).
+   *
+   * Ein Kopf und kein Feld im Rumpf, weil rund die Haelfte der geschuetzten Aufrufe gar keinen
+   * Rumpf hat: Loeschen und Zustandswechsel. Ohne Version geht kein Kopf hinaus — Anlegen bleibt
+   * frei (#411, Kriterium 7).
+   */
+  readonly version?: number;
 }
 
 function istObjekt(wert: unknown): wert is Record<string, unknown> {
@@ -109,10 +127,10 @@ async function rumpfLesen(antwort: Response): Promise<unknown> {
 async function fehlerAus(antwort: Response): Promise<ApiError> {
   const problem = await rumpfLesen(antwort);
   if (!istObjekt(problem)) {
-    return new ApiError(antwort.status, ALLGEMEINE_MELDUNG, {});
+    return new ApiError(antwort.status, ALLGEMEINE_MELDUNG, {}, problem);
   }
   const meldung = textOder(problem.detail, textOder(problem.title, ALLGEMEINE_MELDUNG));
-  return new ApiError(antwort.status, meldung, feldFehler(problem.fieldErrors));
+  return new ApiError(antwort.status, meldung, feldFehler(problem.fieldErrors), problem);
 }
 
 /** Was von der Anfrage hinausgeht: Rumpf und der Kopf, der zu ihm gehoert — oder nichts. */
@@ -139,6 +157,21 @@ function nutzlast(anfrage: Anfrage): Nutzlast {
   return {};
 }
 
+/**
+ * Die Nutzlast samt Bedingungskopf, wenn die Anfrage eine Version vorlegt.
+ *
+ * Das Etikett steht in Anfuehrungszeichen, weil `If-Match` ein starkes Etikett erwartet (RFC 9110);
+ * der Server weist alles andere mit 428 ab. Ohne Version bleibt die Nutzlast, wie sie ist — auch
+ * ohne leeres `headers`.
+ */
+function mitBedingung(anfrage: Anfrage): Nutzlast {
+  const last = nutzlast(anfrage);
+  if (anfrage.version === undefined) {
+    return last;
+  }
+  return { ...last, headers: { ...last.headers, 'If-Match': `"${String(anfrage.version)}"` } };
+}
+
 /** Der Rueckruf fuer eine Abweisung durch die Rolle — oder keiner. */
 let beiVerbotenRueckruf: (() => void) | null = null;
 
@@ -159,7 +192,7 @@ async function anfragen(pfad: string, anfrage: Anfrage): Promise<Response> {
   const antwort = await fetch(pfad, {
     method: anfrage.methode,
     credentials: 'same-origin',
-    ...nutzlast(anfrage),
+    ...mitBedingung(anfrage),
     signal: anfrage.signal,
   });
   if (!antwort.ok) {

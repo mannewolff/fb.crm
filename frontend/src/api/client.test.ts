@@ -278,3 +278,71 @@ describe('beiVerboten (Plan #414, E5)', () => {
     expect(rueckruf).not.toHaveBeenCalled();
   });
 });
+
+describe('Version als If-Match (Plan #415, E2)', () => {
+  it('legt die Version als starkes Etikett vor', async () => {
+    const fetchMock = fetchLiefert(() => new Response(null, { status: 204 }));
+
+    await apiOhneInhalt('/api/firmen/7', { methode: 'DELETE', version: 4 });
+
+    expect(fetchMock.mock.calls[0][1]?.headers).toEqual({ 'If-Match': '"4"' });
+  });
+
+  it('legt die Version neben dem Inhaltstyp eines JSON-Rumpfs vor', async () => {
+    const fetchMock = fetchLiefert(() => problemAntwort(200, {}));
+
+    await apiJson('/api/firmen/7', { methode: 'PUT', rumpf: { a: 1 }, version: 0 }, durchreichen);
+
+    expect(fetchMock.mock.calls[0][1]?.headers).toEqual({
+      'Content-Type': 'application/json',
+      'If-Match': '"0"',
+    });
+  });
+
+  it('legt die Version auch zu Formulardaten vor, ohne einen Inhaltstyp zu setzen', async () => {
+    const fetchMock = fetchLiefert(() => problemAntwort(200, {}));
+
+    await apiJson(
+      '/api/rechnungen/3/pdf',
+      { methode: 'PUT', formular: new FormData(), version: 2 },
+      durchreichen,
+    );
+
+    expect(fetchMock.mock.calls[0][1]?.headers).toEqual({ 'If-Match': '"2"' });
+  });
+
+  it('schickt ohne Version keinen Bedingungskopf', async () => {
+    const fetchMock = fetchLiefert(() => problemAntwort(200, {}));
+
+    await apiJson('/api/firmen/7', { methode: 'PUT', rumpf: { a: 1 } }, durchreichen);
+
+    expect(fetchMock.mock.calls[0][1]?.headers).toEqual({ 'Content-Type': 'application/json' });
+  });
+});
+
+describe('Problem-Rumpf am ApiError (Plan #415, E4)', () => {
+  it('traegt den gelesenen Rumpf der Antwort', async () => {
+    const problem = {
+      detail: 'Inzwischen geaendert.',
+      konflikt: { art: 'veraltet', geaendertVon: 'Anna Muster', eigenesFenster: false },
+    };
+    fetchLiefert(() => problemAntwort(409, problem));
+
+    await expect(apiJson('/api/test', { methode: 'PUT' }, durchreichen)).rejects.toMatchObject({
+      status: 409,
+      problem,
+    });
+  });
+
+  it('traegt null, wenn die Antwort keinen JSON-Rumpf hat', async () => {
+    fetchLiefert(() => new Response('kein json', { status: 500 }));
+
+    await expect(apiJson('/api/test', { methode: 'GET' }, durchreichen)).rejects.toMatchObject({
+      problem: null,
+    });
+  });
+
+  it('traegt null, wenn ein Fehler ohne Rumpf gebaut wird', () => {
+    expect(new ApiError(404, 'Weg', {}).problem).toBeNull();
+  });
+});
