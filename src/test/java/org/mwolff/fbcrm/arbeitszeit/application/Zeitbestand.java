@@ -90,7 +90,17 @@ final class Zeitbestand implements ZeiteintragRepository {
   @Override
   public Map<Long, BigDecimal> stundenJePositionImMonat(
       final Set<Long> angebotPositionIds, final YearMonth monat) {
-    throw new UnsupportedOperationException("In den Szenarien nicht gefragt.");
+    return angebotPositionIds.stream()
+        .collect(
+            Collectors.toMap(
+                Function.identity(),
+                position ->
+                    Zeiteintrag.stundenAus(
+                        zeilen.values().stream()
+                            .filter(eintrag -> eintrag.angebotPositionId() == position)
+                            .filter(eintrag -> YearMonth.from(eintrag.tag()).equals(monat))
+                            .mapToLong(Zeiteintrag::minuten)
+                            .sum())));
   }
 
   @Override

@@ -12,12 +12,15 @@ import static org.mockito.Mockito.when;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.LocalTime;
 import java.time.Year;
 import java.time.YearMonth;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -31,6 +34,7 @@ import org.mwolff.fbcrm.angebot.domain.AngebotRepository;
 import org.mwolff.fbcrm.angebot.domain.Angebotsposition;
 import org.mwolff.fbcrm.angebot.domain.Angebotsstatus;
 import org.mwolff.fbcrm.arbeitszeit.application.Arbeitszeitauskunft;
+import org.mwolff.fbcrm.arbeitszeit.domain.Zeiteintrag;
 import org.mwolff.fbcrm.rechnung.domain.Rechnung;
 import org.mwolff.fbcrm.rechnung.domain.RechnungRepository;
 import org.mwolff.fbcrm.rechnung.domain.Rechnungsposition;
@@ -63,6 +67,11 @@ class RechnungAnlegenUseCaseTest {
 
   /** Der Monat des Beispiels aus #193 — und nicht der laufende. */
   private static final YearMonth NOVEMBER = YearMonth.of(2026, 11);
+
+  /** Die beiden Personen aus dem Szenario von Plan #426. */
+  private static final long ANNA = 21L;
+
+  private static final long BEN = 22L;
 
   private final Clock uhr = Clock.fixed(SPAETABENDS, ZoneOffset.UTC);
 
@@ -516,5 +525,57 @@ class RechnungAnlegenUseCaseTest {
     assertThatThrownBy(() -> useCase.anlegen(Rechnungsdoppel.ANGEBOT, Optional.of(NOVEMBER)))
         .isInstanceOf(AngebotNichtAbrechenbar.class);
     verify(rechnungen, never()).save(any());
+  }
+
+  /**
+   * Die Stunden zweier Personen auf die Beratung, so wie die Zeiterfassung sie ueber alle Personen
+   * zusammenzaehlt (Plan #426, E15): Anna 10, Ben 6. Dass die Auskunft wirklich summiert, weist
+   * {@code ArbeitszeitauskunftTest} nach; hier zaehlt, was der Anwendungsfall daraus macht.
+   */
+  private static Map<Long, BigDecimal> stundenVonAnnaUndBen() {
+    final LocalDate tag = LocalDate.of(2026, 11, 12);
+    final Instant erfasst = Instant.parse("2026-11-12T18:00:00Z");
+    final List<Zeiteintrag> eintraege =
+        List.of(
+            new Zeiteintrag(
+                1L,
+                ANNA,
+                Rechnungsdoppel.BERATUNG_ID,
+                tag,
+                LocalTime.of(8, 0),
+                LocalTime.of(18, 0),
+                erfasst,
+                erfasst),
+            new Zeiteintrag(
+                2L,
+                BEN,
+                Rechnungsdoppel.BERATUNG_ID,
+                tag,
+                LocalTime.of(9, 0),
+                LocalTime.of(15, 0),
+                erfasst,
+                erfasst));
+    return Map.of(
+        Long.valueOf(Rechnungsdoppel.BERATUNG_ID),
+        Zeiteintrag.stundenAus(eintraege.stream().mapToLong(Zeiteintrag::minuten).sum()));
+  }
+
+  @Test
+  @DisplayName("Szenario: Rechnungsvorschlag ueber alle Personen")
+  void anlegen_withAMonatAndHoursOfTwoPersonen_thenTheVorschlagIsTheirSumWithoutANameOfThem() {
+    // Given — Anna hat im November 10 Stunden und Ben 6 Stunden auf die Beratung gebucht.
+    gegebenesAngebot(List.of(Rechnungsdoppel.beratungUeber("20.00")));
+    when(rechnungen.findByAngebot(Rechnungsdoppel.ANGEBOT)).thenReturn(List.of());
+    gemeldeteStunden(stundenVonAnnaUndBen());
+
+    // When — Manfred legt zu diesem Angebot eine Rechnung fuer November an.
+    useCase().anlegen(Rechnungsdoppel.ANGEBOT, Optional.of(NOVEMBER));
+
+    // Then — 16 Stunden als Vorschlag, und kein Name aus den Zeiteintraegen im Rumpf.
+    final Rechnung entwurf = angelegt();
+    assertThat(entwurf.positionen())
+        .singleElement()
+        .satisfies(position -> assertThat(position.menge()).isEqualByComparingTo("16.00"));
+    assertThat(entwurf.toString()).doesNotContain("Anna", "Ben");
   }
 }
