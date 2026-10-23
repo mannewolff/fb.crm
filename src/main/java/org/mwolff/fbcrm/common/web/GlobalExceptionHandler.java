@@ -18,6 +18,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.ErrorResponse;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -34,6 +35,14 @@ import org.springframework.web.multipart.MaxUploadSizeExceededException;
  * generischer 500 beantwortet, damit weder Stacktrace noch interne Meldung nach aussen gelangt
  * (CLAUDE-security.md).
  */
+/*
+ * PMD.TooManyMethods: Die Klasse ist die einzige Stelle, an der Fehler auf HTTP-Antworten
+ * abgebildet werden (CLAUDE-java.md §6.3), und traegt darum je Fehlerart einen Zweig. Mit dem
+ * Zweig fuer die verweigerte Rolle (Plan #414, A9) sind es elf Methoden; die Schwelle der Regel
+ * liegt bei zehn. Sie zu halten hiesse, die Abbildung auf zwei Klassen zu verteilen — gegen genau
+ * die eine Stelle, um derentwillen es die Klasse gibt.
+ */
+@SuppressWarnings("PMD.TooManyMethods")
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
@@ -48,6 +57,12 @@ public class GlobalExceptionHandler {
 
   /** Antworttext, wenn der Rumpf der Anfrage sich nicht lesen laesst. */
   public static final String UNLESBARER_RUMPF = "Der Rumpf der Anfrage ist ungueltig.";
+
+  /**
+   * Antworttext, wenn die Rolle der Sitzung einen Weg nicht erlaubt (Plan #414, A9). Er nennt die
+   * Rolle nicht beim Namen; gelesen wird er auch von {@code auth.web.VerbotenAntwort}.
+   */
+  public static final String VERBOTEN_DETAIL = "Das steht deiner Rolle nicht offen.";
 
   private static final Logger LOG = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
@@ -141,6 +156,21 @@ public class GlobalExceptionHandler {
   @ExceptionHandler(MaxUploadSizeExceededException.class)
   public ProblemDetail handleMaxUploadSize(final MaxUploadSizeExceededException exception) {
     return ProblemDetail.forStatusAndDetail(HttpStatus.PAYLOAD_TOO_LARGE, Uploadgrenze.MELDUNG);
+  }
+
+  /**
+   * Ein Anwendungsfall weist einen Schritt ab, den die Rolle der Sitzung nicht erlaubt (Plan #414,
+   * A9).
+   *
+   * <p>Die Zugangsregel selbst antwortet ueber {@code VerbotenAntwort}, bevor ein Controller zum
+   * Zuge kommt. Kommt die Ausnahme dagegen aus einem Anwendungsfall hoch, fiele sie ohne diesen
+   * Zweig in {@link #handleUnexpected} und kaeme als 500 zurueck. Beide Wege antworten mit
+   * demselben Satz {@link #VERBOTEN_DETAIL}, nach dem Muster von {@link Uploadgrenze#MELDUNG}; die
+   * Meldung der Ausnahme bleibt drinnen.
+   */
+  @ExceptionHandler(AccessDeniedException.class)
+  public ProblemDetail handleAccessDenied(final AccessDeniedException exception) {
+    return ProblemDetail.forStatusAndDetail(HttpStatus.FORBIDDEN, VERBOTEN_DETAIL);
   }
 
   /**

@@ -18,6 +18,7 @@ import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.mock.http.MockHttpInputMessage;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.validation.BeanPropertyBindingResult;
 import org.springframework.validation.BindingResult;
 import org.springframework.validation.FieldError;
@@ -287,6 +288,48 @@ class GlobalExceptionHandlerTest {
 
     // Then
     assertThat(problem.getDetail()).isEqualTo(Uploadgrenze.MELDUNG);
+  }
+
+  @Test
+  void handleAccessDenied_thenAnswersForbidden() {
+    // Given — Plan #414, A9: kommt die Ausnahme aus einem Anwendungsfall hoch, machte
+    // handleUnexpected ohne diesen Zweig einen 500 daraus.
+
+    // When
+    final ProblemDetail problem =
+        handler.handleAccessDenied(new AccessDeniedException("Zugriff verweigert"));
+
+    // Then
+    assertThat(problem.getStatus()).isEqualTo(HttpStatus.FORBIDDEN.value());
+  }
+
+  @Test
+  void handleAccessDenied_thenDetailIsTheOneSentenceForAForbiddenStep() {
+    // Given — derselbe Satz wie in VerbotenAntwort; die Meldung der Ausnahme bleibt drinnen.
+
+    // When
+    final ProblemDetail problem =
+        handler.handleAccessDenied(new AccessDeniedException("interne Begruendung"));
+
+    // Then
+    assertThat(problem.getDetail()).isEqualTo(GlobalExceptionHandler.VERBOTEN_DETAIL);
+  }
+
+  @Test
+  void verbotenDetail_thenDoesNotNameARole() {
+    // Given — A9: der Satz nennt die Rolle nicht beim Namen.
+
+    // When
+    final String satz = GlobalExceptionHandler.VERBOTEN_DETAIL;
+
+    // Then
+    assertThat(satz)
+        .isNotBlank()
+        .doesNotContainIgnoringCase("C-Level")
+        .doesNotContainIgnoringCase("C_LEVEL")
+        .doesNotContainIgnoringCase("Employee")
+        .doesNotContainIgnoringCase("ReadOnly")
+        .doesNotContainIgnoringCase("READ_ONLY");
   }
 
   @Test
