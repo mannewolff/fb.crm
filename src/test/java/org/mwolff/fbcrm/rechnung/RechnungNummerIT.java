@@ -212,8 +212,16 @@ class RechnungNummerIT extends AbstractIntegrationTest {
         HttpMethod.PUT,
         new HttpEntity<>(rumpf, Stand.aktuell(sitzung, jdbc, "angebot", angebotId)),
         AngebotResponse.class);
-    ruf("/api/angebote/" + angebotId + "/status/weiter", HttpMethod.POST, null, String.class);
-    ruf("/api/angebote/" + angebotId + "/status/weiter", HttpMethod.POST, null, String.class);
+    rest.exchange(
+        "/api/angebote/" + angebotId + "/status/weiter",
+        HttpMethod.POST,
+        new HttpEntity<>(null, Stand.aktuell(sitzung, jdbc, "angebot", angebotId)),
+        String.class);
+    rest.exchange(
+        "/api/angebote/" + angebotId + "/status/weiter",
+        HttpMethod.POST,
+        new HttpEntity<>(null, Stand.aktuell(sitzung, jdbc, "angebot", angebotId)),
+        String.class);
     return angebotId;
   }
 

@@ -115,8 +115,16 @@ class AngebotPositionsbindungIT extends AbstractIntegrationTest {
     konzeptionId = kennung(mitPositionen.positionen().get(0));
     schulungId = kennung(mitPositionen.positionen().get(1));
 
-    ruf("/api/angebote/" + angebotId + "/status/weiter", HttpMethod.POST, null, String.class);
-    ruf("/api/angebote/" + angebotId + "/status/weiter", HttpMethod.POST, null, String.class);
+    rest.exchange(
+        "/api/angebote/" + angebotId + "/status/weiter",
+        HttpMethod.POST,
+        new HttpEntity<>(null, Stand.aktuell(sitzung, jdbc, "angebot", angebotId)),
+        String.class);
+    rest.exchange(
+        "/api/angebote/" + angebotId + "/status/weiter",
+        HttpMethod.POST,
+        new HttpEntity<>(null, Stand.aktuell(sitzung, jdbc, "angebot", angebotId)),
+        String.class);
     entwurfUeberDieKonzeption();
   }
 

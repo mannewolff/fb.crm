@@ -146,6 +146,30 @@ final class Angebotsdoppel {
         angebot.geaendertVon());
   }
 
+  /**
+   * Dasselbe Angebot auf einem anderen Stand, zuletzt geaendert von {@code urheber} um {@code am}
+   * (Plan #415, E9).
+   */
+  static Angebot aufStand(
+      final Angebot angebot, final long version, final long urheber, final Instant am) {
+    return new Angebot(
+        angebot.id(),
+        angebot.firmaId(),
+        angebot.ansprechpartnerId(),
+        angebot.intern(),
+        angebot.status(),
+        angebot.storniert(),
+        angebot.stornoGrund(),
+        angebot.angebotDatum(),
+        angebot.titel(),
+        angebot.beschreibung(),
+        angebot.positionen(),
+        angebot.createdAt(),
+        am,
+        version,
+        Long.valueOf(urheber));
+  }
+
   /** Dasselbe Angebot ohne Titel — ein Angebot von vor Issue #316 (#314, Kriterium 4). */
   static Angebot ohneTitel(final Angebot angebot) {
     return new Angebot(

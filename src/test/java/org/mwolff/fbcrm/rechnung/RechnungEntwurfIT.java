@@ -144,8 +144,16 @@ class RechnungEntwurfIT extends AbstractIntegrationTest {
   /** Dasselbe Angebot, zweimal weitergeschaltet: von ANGELEGT ueber ABGEGEBEN auf BESTELLT. */
   private long bestelltesAngebot(final String menge) {
     final long angebotId = angebotMit(menge, STUNDENSATZ);
-    ruf("/api/angebote/" + angebotId + "/status/weiter", HttpMethod.POST, null, String.class);
-    ruf("/api/angebote/" + angebotId + "/status/weiter", HttpMethod.POST, null, String.class);
+    rest.exchange(
+        "/api/angebote/" + angebotId + "/status/weiter",
+        HttpMethod.POST,
+        new HttpEntity<>(null, Stand.aktuell(sitzung, jdbc, "angebot", angebotId)),
+        String.class);
+    rest.exchange(
+        "/api/angebote/" + angebotId + "/status/weiter",
+        HttpMethod.POST,
+        new HttpEntity<>(null, Stand.aktuell(sitzung, jdbc, "angebot", angebotId)),
+        String.class);
     return angebotId;
   }
 

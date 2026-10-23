@@ -389,8 +389,16 @@ class BriefpapierIT extends AbstractIntegrationTest {
         HttpMethod.PUT,
         new HttpEntity<>(angebot, Stand.aktuell(sitzung, jdbc, "angebot", angebotId)),
         AngebotResponse.class);
-    ruf("/api/angebote/" + angebotId + "/status/weiter", HttpMethod.POST, null, String.class);
-    ruf("/api/angebote/" + angebotId + "/status/weiter", HttpMethod.POST, null, String.class);
+    rest.exchange(
+        "/api/angebote/" + angebotId + "/status/weiter",
+        HttpMethod.POST,
+        new HttpEntity<>(null, Stand.aktuell(sitzung, jdbc, "angebot", angebotId)),
+        String.class);
+    rest.exchange(
+        "/api/angebote/" + angebotId + "/status/weiter",
+        HttpMethod.POST,
+        new HttpEntity<>(null, Stand.aktuell(sitzung, jdbc, "angebot", angebotId)),
+        String.class);
     final RechnungResponse entwurf =
         Objects.requireNonNull(
             ruf(

@@ -31,6 +31,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.stubbing.OngoingStubbing;
 import org.mwolff.fbcrm.angebot.application.AngebotAendernUseCase;
 import org.mwolff.fbcrm.angebot.application.AngebotDaten;
 import org.mwolff.fbcrm.angebot.application.AngebotGeaendert;
@@ -63,6 +64,7 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.method.annotation.AuthenticationPrincipalArgumentResolver;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 /**
@@ -94,6 +96,11 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
  * auf {@code /storno} antworten 200 mit dem neuen Stand samt {@code storniert} und {@code
  * stornoGrund}; der Grund ist freiwillig und hat hoechstens 2000 Zeichen. Die drei Konflikte sind
  * 409, je mit ihrem Satz im {@code detail}.
+ *
+ * <p><b>Jeder Zustandswechsel legt den Stand vor</b> (#411, Kriterien 4 und 5; Plan #415, E3): Fuer
+ * beide Statuswege, das Storno und die Ruecknahme gilt je dasselbe Dreigespann — ohne {@code
+ * If-Match} 428, auf einem alten Stand 409 mit {@code konflikt}, auf dem aktuellen 200 mit dem
+ * erhoehten Stand; die vier Wege laufen je durch dieselben drei parametrisierten Tests.
  */
 @ExtendWith(MockitoExtension.class)
 class AngebotControllerTest {
@@ -550,11 +557,14 @@ class AngebotControllerTest {
   @Test
   void statusWeiter_thenAnswers200WithTheNewStatus() throws Exception {
     // Given
-    when(statuswechsel.weiter(ANGEBOT)).thenReturn(angebot(Angebotsstatus.ERLEDIGT));
+    when(statuswechsel.weiter(ANGEBOT, STAND, ANGEMELDET))
+        .thenReturn(angebot(Angebotsstatus.ERLEDIGT));
 
     // When / Then
     mockMvc
-        .perform(post("/api/angebote/{id}/status/weiter", Long.valueOf(ANGEBOT)))
+        .perform(
+            post("/api/angebote/{id}/status/weiter", Long.valueOf(ANGEBOT))
+                .header(HttpHeaders.IF_MATCH, VORGELEGT))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.status").value("ERLEDIGT"))
         .andExpect(jsonPath("$.firmaName").value("Adler AG"))
@@ -564,11 +574,14 @@ class AngebotControllerTest {
   @Test
   void statusZurueck_thenAnswers200WithTheNewStatus() throws Exception {
     // Given
-    when(statuswechsel.zurueck(ANGEBOT)).thenReturn(angebot(Angebotsstatus.ABGEGEBEN));
+    when(statuswechsel.zurueck(ANGEBOT, STAND, ANGEMELDET))
+        .thenReturn(angebot(Angebotsstatus.ABGEGEBEN));
 
     // When / Then
     mockMvc
-        .perform(post("/api/angebote/{id}/status/zurueck", Long.valueOf(ANGEBOT)))
+        .perform(
+            post("/api/angebote/{id}/status/zurueck", Long.valueOf(ANGEBOT))
+                .header(HttpHeaders.IF_MATCH, VORGELEGT))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.status").value("ABGEGEBEN"));
   }
@@ -576,33 +589,39 @@ class AngebotControllerTest {
   @Test
   void statusWeiter_atTheEnd_thenAnswers409() throws Exception {
     // Given
-    when(statuswechsel.weiter(ANGEBOT)).thenThrow(new StatusGrenzeErreicht());
+    when(statuswechsel.weiter(ANGEBOT, STAND, ANGEMELDET)).thenThrow(new StatusGrenzeErreicht());
 
     // When / Then
     mockMvc
-        .perform(post("/api/angebote/{id}/status/weiter", Long.valueOf(ANGEBOT)))
+        .perform(
+            post("/api/angebote/{id}/status/weiter", Long.valueOf(ANGEBOT))
+                .header(HttpHeaders.IF_MATCH, VORGELEGT))
         .andExpect(status().isConflict());
   }
 
   @Test
   void statusZurueck_atTheStart_thenAnswers409() throws Exception {
     // Given
-    when(statuswechsel.zurueck(ANGEBOT)).thenThrow(new StatusGrenzeErreicht());
+    when(statuswechsel.zurueck(ANGEBOT, STAND, ANGEMELDET)).thenThrow(new StatusGrenzeErreicht());
 
     // When / Then
     mockMvc
-        .perform(post("/api/angebote/{id}/status/zurueck", Long.valueOf(ANGEBOT)))
+        .perform(
+            post("/api/angebote/{id}/status/zurueck", Long.valueOf(ANGEBOT))
+                .header(HttpHeaders.IF_MATCH, VORGELEGT))
         .andExpect(status().isConflict());
   }
 
   @Test
   void statusWeiter_whenTheAngebotIsUnknown_thenAnswers404() throws Exception {
     // Given
-    when(statuswechsel.weiter(ANGEBOT)).thenThrow(new AngebotNichtGefunden());
+    when(statuswechsel.weiter(ANGEBOT, STAND, ANGEMELDET)).thenThrow(new AngebotNichtGefunden());
 
     // When / Then
     mockMvc
-        .perform(post("/api/angebote/{id}/status/weiter", Long.valueOf(ANGEBOT)))
+        .perform(
+            post("/api/angebote/{id}/status/weiter", Long.valueOf(ANGEBOT))
+                .header(HttpHeaders.IF_MATCH, VORGELEGT))
         .andExpect(status().isNotFound());
   }
 
@@ -891,13 +910,14 @@ class AngebotControllerTest {
   @Test
   void stornieren_withAGrund_thenPassesItOnAndAnswers200WithTheStorno() throws Exception {
     // Given — #330, Kriterien 1 und 5.
-    when(storno.storniere(ANGEBOT, "vom Kunden abgelehnt"))
+    when(storno.storniere(ANGEBOT, "vom Kunden abgelehnt", STAND, ANGEMELDET))
         .thenReturn(storniert(Angebotsstatus.ABGEGEBEN, "vom Kunden abgelehnt"));
 
     // When / Then
     mockMvc
         .perform(
             post("/api/angebote/{id}/storno", Long.valueOf(ANGEBOT))
+                .header(HttpHeaders.IF_MATCH, VORGELEGT)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"grund\":\"vom Kunden abgelehnt\"}"))
         .andExpect(status().isOk())
@@ -911,12 +931,14 @@ class AngebotControllerTest {
   @ValueSource(strings = {"{\"grund\":null}", "{}"})
   void stornieren_withoutAGrund_thenPassesNullAndAnswers200(final String rumpf) throws Exception {
     // Given — E4: der Grund ist freiwillig.
-    when(storno.storniere(ANGEBOT, null)).thenReturn(storniert(Angebotsstatus.BESTELLT, null));
+    when(storno.storniere(ANGEBOT, null, STAND, ANGEMELDET))
+        .thenReturn(storniert(Angebotsstatus.BESTELLT, null));
 
     // When / Then
     mockMvc
         .perform(
             post("/api/angebote/{id}/storno", Long.valueOf(ANGEBOT))
+                .header(HttpHeaders.IF_MATCH, VORGELEGT)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(rumpf))
         .andExpect(status().isOk())
@@ -927,11 +949,14 @@ class AngebotControllerTest {
   @Test
   void stornieren_withoutABody_thenPassesNullAndAnswers200() throws Exception {
     // Given — ein ganz fehlender Rumpf heisst ebenfalls „ohne Grund".
-    when(storno.storniere(ANGEBOT, null)).thenReturn(storniert(Angebotsstatus.BESTELLT, null));
+    when(storno.storniere(ANGEBOT, null, STAND, ANGEMELDET))
+        .thenReturn(storniert(Angebotsstatus.BESTELLT, null));
 
     // When / Then
     mockMvc
-        .perform(post("/api/angebote/{id}/storno", Long.valueOf(ANGEBOT)))
+        .perform(
+            post("/api/angebote/{id}/storno", Long.valueOf(ANGEBOT))
+                .header(HttpHeaders.IF_MATCH, VORGELEGT))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.storniert").value(true))
         .andExpect(jsonPath("$.stornoGrund").value(nullValue()));
@@ -941,12 +966,14 @@ class AngebotControllerTest {
   void stornieren_withAGrundOf2000Characters_thenAnswers200() throws Exception {
     // Given — genau an der Grenze.
     final String grund = "x".repeat(2000);
-    when(storno.storniere(ANGEBOT, grund)).thenReturn(storniert(Angebotsstatus.BESTELLT, grund));
+    when(storno.storniere(ANGEBOT, grund, STAND, ANGEMELDET))
+        .thenReturn(storniert(Angebotsstatus.BESTELLT, grund));
 
     // When / Then
     mockMvc
         .perform(
             post("/api/angebote/{id}/storno", Long.valueOf(ANGEBOT))
+                .header(HttpHeaders.IF_MATCH, VORGELEGT)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"grund\":\"" + grund + "\"}"))
         .andExpect(status().isOk());
@@ -958,6 +985,7 @@ class AngebotControllerTest {
     mockMvc
         .perform(
             post("/api/angebote/{id}/storno", Long.valueOf(ANGEBOT))
+                .header(HttpHeaders.IF_MATCH, VORGELEGT)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"grund\":\"" + "x".repeat(2001) + "\"}"))
         .andExpect(status().isBadRequest())
@@ -968,11 +996,13 @@ class AngebotControllerTest {
   @Test
   void stornieren_whenTheAngebotCannotBeStornoed_thenAnswers409WithItsSentence() throws Exception {
     // Given — E16, E17.
-    when(storno.storniere(ANGEBOT, null)).thenThrow(new StornoNichtMoeglich());
+    when(storno.storniere(ANGEBOT, null, STAND, ANGEMELDET)).thenThrow(new StornoNichtMoeglich());
 
     // When / Then
     mockMvc
-        .perform(post("/api/angebote/{id}/storno", Long.valueOf(ANGEBOT)))
+        .perform(
+            post("/api/angebote/{id}/storno", Long.valueOf(ANGEBOT))
+                .header(HttpHeaders.IF_MATCH, VORGELEGT))
         .andExpect(status().isConflict())
         .andExpect(
             jsonPath("$.detail")
@@ -982,22 +1012,27 @@ class AngebotControllerTest {
   @Test
   void stornieren_whenTheAngebotIsUnknown_thenAnswers404() throws Exception {
     // Given
-    when(storno.storniere(ANGEBOT, null)).thenThrow(new AngebotNichtGefunden());
+    when(storno.storniere(ANGEBOT, null, STAND, ANGEMELDET)).thenThrow(new AngebotNichtGefunden());
 
     // When / Then
     mockMvc
-        .perform(post("/api/angebote/{id}/storno", Long.valueOf(ANGEBOT)))
+        .perform(
+            post("/api/angebote/{id}/storno", Long.valueOf(ANGEBOT))
+                .header(HttpHeaders.IF_MATCH, VORGELEGT))
         .andExpect(status().isNotFound());
   }
 
   @Test
   void stornoZuruecknehmen_thenAnswers200WithoutStornoAndGrund() throws Exception {
     // Given — #330, Kriterium 9.
-    when(storno.nimmStornoZurueck(ANGEBOT)).thenReturn(angebot(Angebotsstatus.BESTELLT));
+    when(storno.nimmStornoZurueck(ANGEBOT, STAND, ANGEMELDET))
+        .thenReturn(angebot(Angebotsstatus.BESTELLT));
 
     // When / Then
     mockMvc
-        .perform(delete("/api/angebote/{id}/storno", Long.valueOf(ANGEBOT)))
+        .perform(
+            delete("/api/angebote/{id}/storno", Long.valueOf(ANGEBOT))
+                .header(HttpHeaders.IF_MATCH, VORGELEGT))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.storniert").value(false))
         .andExpect(jsonPath("$.stornoGrund").value(nullValue()))
@@ -1007,11 +1042,13 @@ class AngebotControllerTest {
   @Test
   void stornoZuruecknehmen_whenThereIsNoStorno_thenAnswers409WithItsSentence() throws Exception {
     // Given — E16, E17.
-    when(storno.nimmStornoZurueck(ANGEBOT)).thenThrow(new KeinStornoVorhanden());
+    when(storno.nimmStornoZurueck(ANGEBOT, STAND, ANGEMELDET)).thenThrow(new KeinStornoVorhanden());
 
     // When / Then
     mockMvc
-        .perform(delete("/api/angebote/{id}/storno", Long.valueOf(ANGEBOT)))
+        .perform(
+            delete("/api/angebote/{id}/storno", Long.valueOf(ANGEBOT))
+                .header(HttpHeaders.IF_MATCH, VORGELEGT))
         .andExpect(status().isConflict())
         .andExpect(jsonPath("$.detail").value("Dieses Angebot ist nicht storniert."));
   }
@@ -1033,5 +1070,77 @@ class AngebotControllerTest {
             jsonPath("$.detail")
                 .value(
                     "Am stornierten Angebot ändert sich nichts; nimm zuerst das Storno zurück."));
+  }
+
+  /** Die Anfrage des Wegs, noch ohne {@code If-Match}. */
+  private static MockHttpServletRequestBuilder anfrageZu(final String weg) {
+    final Long id = Long.valueOf(ANGEBOT);
+    return switch (weg) {
+      case "weiter" -> post("/api/angebote/{id}/status/weiter", id);
+      case "zurueck" -> post("/api/angebote/{id}/status/zurueck", id);
+      case "storno" -> post("/api/angebote/{id}/storno", id);
+      case "ruecknahme" -> delete("/api/angebote/{id}/storno", id);
+      default -> throw new IllegalArgumentException(weg);
+    };
+  }
+
+  /** Der Anwendungsfall des Wegs, mit Stand und Konto, die der Controller weitergeben muss. */
+  private OngoingStubbing<Angebot> wennGerufen(final String weg) {
+    return switch (weg) {
+      case "weiter" -> when(statuswechsel.weiter(ANGEBOT, STAND, ANGEMELDET));
+      case "zurueck" -> when(statuswechsel.zurueck(ANGEBOT, STAND, ANGEMELDET));
+      case "storno" -> when(storno.storniere(ANGEBOT, null, STAND, ANGEMELDET));
+      case "ruecknahme" -> when(storno.nimmStornoZurueck(ANGEBOT, STAND, ANGEMELDET));
+      default -> throw new IllegalArgumentException(weg);
+    };
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"weiter", "zurueck", "storno", "ruecknahme"})
+  void zustandswechsel_withoutIfMatch_thenAnswers428AndChangesNothing(final String weg)
+      throws Exception {
+    // Given — E3: Ohne vorgelegten Stand wird nicht geschaltet.
+
+    // When / Then
+    mockMvc
+        .perform(anfrageZu(weg))
+        .andExpect(status().isPreconditionRequired())
+        .andExpect(jsonPath("$.detail").value(Bedingungskopf.MELDUNG));
+    verifyNoInteractions(statuswechsel, storno);
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"weiter", "zurueck", "storno", "ruecknahme"})
+  void zustandswechsel_withAnOutdatedStand_thenAnswers409WithTheConflict(final String weg)
+      throws Exception {
+    // Given — #411, Kriterium 5: Anna hat das Angebot inzwischen geaendert.
+    wennGerufen(weg)
+        .thenThrow(new AngebotGeaendert(ANNA, ANGEMELDET, Instant.parse("2026-09-28T08:42:00Z")));
+
+    // When / Then
+    mockMvc
+        .perform(anfrageZu(weg).header(HttpHeaders.IF_MATCH, VORGELEGT))
+        .andExpect(status().isConflict())
+        .andExpect(jsonPath("$.konflikt.art").value("veraltet"))
+        .andExpect(jsonPath("$.konflikt.geaendertVon").value("Anna"))
+        .andExpect(jsonPath("$.konflikt.geaendertAm").value("2026-09-28T08:42:00Z"))
+        .andExpect(jsonPath("$.konflikt.eigenesFenster").value(false));
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"weiter", "zurueck", "storno", "ruecknahme"})
+  void zustandswechsel_withTheCurrentStand_thenAnswers200WithTheRaisedVersion(final String weg)
+      throws Exception {
+    // Given — #411, Kriterium 8: Auf dem aktuellen Stand geht der Wechsel unveraendert durch; der
+    // Anwendungsfall bekommt Stand und Konto, die Antwort traegt den erhoehten Stand.
+    wennGerufen(weg).thenReturn(mitStand(angebot(Angebotsstatus.BESTELLT), STAND + 1, ANGEMELDET));
+
+    // When / Then
+    mockMvc
+        .perform(anfrageZu(weg).header(HttpHeaders.IF_MATCH, VORGELEGT))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("BESTELLT"))
+        .andExpect(jsonPath("$.version").value(STAND + 1))
+        .andExpect(jsonPath("$.geaendertVon").value(ANGEMELDET));
   }
 }

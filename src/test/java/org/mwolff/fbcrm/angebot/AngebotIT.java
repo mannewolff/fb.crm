@@ -393,21 +393,29 @@ class AngebotIT extends AbstractIntegrationTest {
     assertThat(gelesen.beschreibung()).isEqualTo("Neugestaltung der Website");
   }
 
+  /** Schaltet den Status in die Richtung, auf dem aktuellen Stand des Angebots (Plan #415, E3). */
+  private <T> ResponseEntity<T> schalte(
+      final long angebotId, final String richtung, final Class<T> typ) {
+    return rest.exchange(
+        "/api/angebote/" + angebotId + "/status/" + richtung,
+        HttpMethod.POST,
+        new HttpEntity<>(null, Stand.aktuell(sitzung, jdbc, "angebot", angebotId)),
+        typ);
+  }
+
   @Test
   void status_forwardThroughEveryStepAndBack_thenStoredAndBoundedByTheEnds() {
     // Given — Kriterium 4: frei weiter und zurueck, immer genau eine Stufe.
     final long angebotId = angebot().id();
-    final String pfad = "/api/angebote/" + angebotId + "/status/";
 
     // When — viermal weiter bis ABGERECHNET, dann noch einmal.
     for (int schritt = 0; schritt < 4; schritt++) {
-      assertThat(ruf(pfad + "weiter", HttpMethod.POST, null, AngebotResponse.class).getStatusCode())
+      assertThat(schalte(angebotId, "weiter", AngebotResponse.class).getStatusCode())
           .isEqualTo(HttpStatus.OK);
     }
-    final ResponseEntity<String> ueberDasEnde =
-        ruf(pfad + "weiter", HttpMethod.POST, null, String.class);
+    final ResponseEntity<String> ueberDasEnde = schalte(angebotId, "weiter", String.class);
     final ResponseEntity<AngebotResponse> zurueck =
-        ruf(pfad + "zurueck", HttpMethod.POST, null, AngebotResponse.class);
+        schalte(angebotId, "zurueck", AngebotResponse.class);
 
     // Then
     assertThat(ueberDasEnde.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
@@ -426,7 +434,11 @@ class AngebotIT extends AbstractIntegrationTest {
 
     // When
     final ResponseEntity<String> antwort =
-        ruf("/api/angebote/" + angebotId + "/status/zurueck", HttpMethod.POST, null, String.class);
+        rest.exchange(
+            "/api/angebote/" + angebotId + "/status/zurueck",
+            HttpMethod.POST,
+            new HttpEntity<>(null, Stand.aktuell(sitzung, jdbc, "angebot", angebotId)),
+            String.class);
 
     // Then
     assertThat(antwort.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);

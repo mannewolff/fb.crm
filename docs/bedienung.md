@@ -62,7 +62,9 @@ ihm. Im Projekt liegt derselbe Text als Datei unter `docs/`.
 Speichern beide nacheinander, überschreibt fb.crm die Änderung des Ersten nicht still: Es weist
 das zweite Speichern ab, sagt, wer wann geändert hat, und niemand verliert seine Eingaben. Dieser
 Abschnitt zeigt, was dann geschieht und wie man weitermacht. Bisher gilt das beim Speichern in der
-Maske „Angebot bearbeiten"; das Angebot zählt dabei als Ganzes, mit seinen Positionen.
+Maske „Angebot bearbeiten" und in der Ansicht eines Angebots bei „Status weiter", „Status zurück",
+„Abschließen", „Wieder öffnen", „Stornieren" und „Storno zurücknehmen". Das Angebot zählt dabei als
+Ganzes, mit seinen Positionen und seinem Status.
 
 **Einstieg:** Die Abweisung erscheint von selbst, wenn man „Speichern" wählt und jemand anderes
 das Angebot seit dem Öffnen gespeichert hat. Solange der geöffnete Stand aktuell ist, merkt man vom
@@ -81,6 +83,12 @@ Schutz nichts.
    bleibt erhalten.
 5. „Verwerfen" unter „Deine Eingaben" nimmt die eigenen Werte weg, sobald man sie nicht mehr
    braucht.
+
+In der Ansicht eines Angebots steht dieselbe Meldung über der Karte, wenn ein Statuswechsel, ein
+Storno oder die Rücknahme eines Stornos abgewiesen wird. Die Ansicht zeigt dann weiter den Stand,
+den man gesehen hat. „Neu laden" holt den aktuellen Stand samt Status; danach wählt man die Taste
+erneut, wenn der Wechsel auf dem neuen Stand noch passt. Einen Grund für das Storno trägt man dabei
+im Dialog neu ein.
 
 **Ergebnis:** Das Angebot trägt die Änderungen beider, und keine ist unbemerkt verloren gegangen.
 

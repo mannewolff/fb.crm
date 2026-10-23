@@ -428,12 +428,13 @@ describe('die Wege', () => {
       'POST /api/angebote/7/storno': json(200, { ...ANGEBOT, id: 7, storniert: true }),
     });
 
-    expect((await angebotStornieren(7, 'vom Kunden abgelehnt')).storniert).toBe(true);
+    expect((await angebotStornieren(7, 4, 'vom Kunden abgelehnt')).storniert).toBe(true);
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/angebote/7/storno',
       expect.objectContaining({
         method: 'POST',
         body: JSON.stringify({ grund: 'vom Kunden abgelehnt' }),
+        headers: expect.objectContaining({ 'If-Match': '"4"' }) as unknown,
       }),
     );
   });
@@ -443,7 +444,7 @@ describe('die Wege', () => {
       'POST /api/angebote/7/storno': json(200, { ...ANGEBOT, id: 7, storniert: true }),
     });
 
-    await angebotStornieren(7, null);
+    await angebotStornieren(7, 4, null);
 
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/angebote/7/storno',
@@ -456,10 +457,13 @@ describe('die Wege', () => {
       'DELETE /api/angebote/7/storno': json(200, { ...ANGEBOT, id: 7 }),
     });
 
-    expect((await angebotStornoZuruecknehmen(7)).storniert).toBe(false);
+    expect((await angebotStornoZuruecknehmen(7, 4)).storniert).toBe(false);
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/angebote/7/storno',
-      expect.objectContaining({ method: 'DELETE' }),
+      expect.objectContaining({
+        method: 'DELETE',
+        headers: expect.objectContaining({ 'If-Match': '"4"' }) as unknown,
+      }),
     );
   });
 
@@ -602,10 +606,13 @@ describe('die Wege', () => {
   ])('schaltet den Status %s und nimmt die Antwort', async (_name, weg, schluessel) => {
     const fetchMock = fetchNachPfad({ [schluessel]: json(200, { ...ANGEBOT, status: 'ABGEGEBEN' }) });
 
-    expect((await weg(9)).status).toBe('ABGEGEBEN');
+    expect((await weg(9, 4)).status).toBe('ABGEGEBEN');
     expect(fetchMock).toHaveBeenCalledWith(
       schluessel.slice('POST '.length),
-      expect.objectContaining({ method: 'POST' }),
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({ 'If-Match': '"4"' }) as unknown,
+      }),
     );
   });
 });

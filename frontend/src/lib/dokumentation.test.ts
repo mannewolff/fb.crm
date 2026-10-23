@@ -324,6 +324,9 @@ describe('Szenarien des Fachplans (E16)', () => {
     expect(text).toMatch(/„Neu laden"/u);
     expect(text).toMatch(/„Deine Eingaben"/u);
     expect(text).toMatch(/„Verwerfen"/u);
+    // Statuswechsel und Storno sind ebenso geschuetzt wie das Speichern (Kriterium 5, Issue #443).
+    expect(text).toMatch(/„Status weiter"/u);
+    expect(text).toMatch(/„Storno zurücknehmen"/u);
     expect(text).toMatch(/\*\*Ergebnis:\*\*/u);
   });
 
