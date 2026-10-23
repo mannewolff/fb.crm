@@ -13,6 +13,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -48,6 +49,11 @@ import org.springframework.web.multipart.MultipartFile;
  *
  * <p>Keine Aenderung an {@code SecurityConfig}: Die Wege fallen unter das bestehende {@code
  * /api/**} fuer angemeldete Benutzer (E6, E13).
+ *
+ * <p><b>Loeschen nimmt das angemeldete Konto, aber keinen Bedingungskopf</b> (#411, Kriterium 6;
+ * Plan #415, E7, E14): Eine Anlage aendert sich nie und traegt keine Version; ein zweites Loeschen
+ * antwortet 409 mit Urheber und Zeitpunkt. {@code POST} bleibt frei — eine neue Anlage ist nie
+ * geschuetzt (Kriterium 7).
  */
 @RestController
 @RequestMapping("/api/angebote/{angebotId}/anlagen")
@@ -108,11 +114,14 @@ public class AngebotAnlagenController {
         .body(new InputStreamResource(anlage.inhalt()));
   }
 
-  /** Loescht die Anlage (Kriterium 10). */
+  /** Loescht die Anlage mit Kennzeichen (Kriterium 10; Plan #415, E7). */
   @DeleteMapping("/{anlageId}")
   @ResponseStatus(HttpStatus.NO_CONTENT)
-  public void loeschen(@PathVariable final long angebotId, @PathVariable final long anlageId) {
-    useCase.loesche(angebotId, anlageId);
+  public void loeschen(
+      @PathVariable final long angebotId,
+      @PathVariable final long anlageId,
+      @AuthenticationPrincipal final Long accountId) {
+    useCase.loesche(angebotId, anlageId, accountId);
   }
 
   /*

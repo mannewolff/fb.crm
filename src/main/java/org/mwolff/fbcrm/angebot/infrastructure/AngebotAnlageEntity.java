@@ -10,10 +10,12 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.Instant;
 import org.jspecify.annotations.Nullable;
+import org.mwolff.fbcrm.angebot.domain.Angebotsanlage;
 import org.mwolff.fbcrm.angebot.domain.Vorschauart;
 
 /**
- * Die Zeile der Tabelle {@code angebot_anlage} aus {@code V13__angebot_anlage.sql}.
+ * Die Zeile der Tabelle {@code angebot_anlage} aus {@code V13__angebot_anlage.sql}, mit dem
+ * Loeschkennzeichen aus {@code V34__geloescht.sql}.
  *
  * <p>Das Angebot steht als blosse Kennung und nicht als Beziehung, aus demselben Grund wie in
  * {@link AngebotKommentarEntity}: Eine Beziehung laedt das Angebot mit jeder Anlage, ohne dass es
@@ -53,6 +55,12 @@ class AngebotAnlageEntity {
   @Column(name = "created_at", nullable = false)
   private Instant createdAt;
 
+  @Column(name = "geloescht_am")
+  private @Nullable Instant geloeschtAm;
+
+  @Column(name = "geloescht_von")
+  private @Nullable Long geloeschtVon;
+
   /*
    * JPA verlangt einen parameterlosen Konstruktor und fuellt die Felder danach selbst; NullAway
    * sieht diesen Weg nicht und meldete sonst nicht initialisierte Felder.
@@ -62,21 +70,17 @@ class AngebotAnlageEntity {
     // Von Hibernate benutzt.
   }
 
-  AngebotAnlageEntity(
-      final @Nullable Long id,
-      final long angebotId,
-      final String dateiName,
-      final long groesse,
-      final @Nullable Vorschauart vorschauArt,
-      final String objektSchluessel,
-      final Instant createdAt) {
-    this.id = id;
-    this.angebotId = angebotId;
-    this.dateiName = dateiName;
-    this.groesse = groesse;
-    this.vorschauArt = vorschauArt;
-    this.objektSchluessel = objektSchluessel;
-    this.createdAt = createdAt;
+  /** Die Zeile zu einer Anlage, mit allen Feldern. */
+  AngebotAnlageEntity(final Angebotsanlage anlage) {
+    this.id = anlage.id();
+    this.angebotId = anlage.angebotId();
+    this.dateiName = anlage.dateiName();
+    this.groesse = anlage.groesse();
+    this.vorschauArt = anlage.vorschauArt();
+    this.objektSchluessel = anlage.objektSchluessel();
+    this.createdAt = anlage.createdAt();
+    this.geloeschtAm = anlage.geloeschtAm();
+    this.geloeschtVon = anlage.geloeschtVon();
   }
 
   @Nullable Long getId() {
@@ -105,5 +109,13 @@ class AngebotAnlageEntity {
 
   Instant getCreatedAt() {
     return createdAt;
+  }
+
+  @Nullable Instant getGeloeschtAm() {
+    return geloeschtAm;
+  }
+
+  @Nullable Long getGeloeschtVon() {
+    return geloeschtVon;
   }
 }

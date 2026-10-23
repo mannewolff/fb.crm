@@ -13,6 +13,10 @@ import org.junit.jupiter.api.Test;
  * Vorschauart bereits am Inhalt erkannt ({@link Vorschauart}), und die Groesse hat der
  * Anwendungsfall geprueft. Geprueft wird darum, was der Record zusagt — die Felder und der
  * Uebergang von der ungespeicherten zur gespeicherten Anlage.
+ *
+ * <p>Seit Plan #415 (E7, E17) kommt das Kennzeichen der Loeschung hinzu: Eine neue Anlage traegt
+ * keins, und {@link Angebotsanlage#geloescht(long, Instant)} setzt Zeitpunkt und Konto, ohne den
+ * Rest der Zeile anzuruehren.
  */
 class AngebotsanlageTest {
 
@@ -76,5 +80,35 @@ class AngebotsanlageTest {
 
     // When / Then
     assertThat(tabelle.vorschauArt()).isNull();
+  }
+
+  @Test
+  void anlage_givenTheShortConstructor_thenIsNotDeleted() {
+    // When / Then — so entsteht jede neue Anlage.
+    assertThat(anlage().geloeschtAm()).isNull();
+    assertThat(anlage().geloeschtVon()).isNull();
+  }
+
+  @Test
+  void geloescht_thenCarriesInstantAndAccountAndKeepsEverythingElse() {
+    // Given — Plan #415, E7: das Kennzeichen haelt fest, wer wann geloescht hat.
+    final Instant geloescht = Instant.parse("2026-10-01T10:00:00Z");
+
+    // When
+    final Angebotsanlage gekennzeichnet = anlage().geloescht(30L, geloescht);
+
+    // Then
+    assertThat(gekennzeichnet)
+        .isEqualTo(
+            new Angebotsanlage(
+                7L,
+                11L,
+                "Bericht.pdf",
+                1024L,
+                Vorschauart.PDF,
+                SCHLUESSEL,
+                ANGELEGT,
+                geloescht,
+                30L));
   }
 }

@@ -64,7 +64,7 @@ das zweite Speichern ab, sagt, wer wann geändert hat, und niemand verliert sein
 Abschnitt zeigt, was dann geschieht und wie man weitermacht. Bisher gilt das beim Speichern in der
 Maske „Angebot bearbeiten" und in der Ansicht eines Angebots bei „Status weiter", „Status zurück",
 „Abschließen", „Wieder öffnen", „Stornieren" und „Storno zurücknehmen", dazu beim Bearbeiten und
-Löschen eines Kommentars. Das Angebot zählt dabei als Ganzes, mit seinen Positionen und seinem
+Löschen eines Kommentars und beim Löschen einer Anlage. Das Angebot zählt dabei als Ganzes, mit seinen Positionen und seinem
 Status; jeder Kommentar ist ein Eintrag für sich.
 
 **Einstieg:** Die Abweisung erscheint von selbst, wenn man „Speichern" wählt und jemand anderes
@@ -98,6 +98,12 @@ inzwischen gelöscht, nennt die Meldung, wer ihn wann gelöscht hat. Statt „Ne
 „Zur Übersicht" zur Liste der Angebote, und der eigene Text bleibt im Feld zum Kopieren. Einen neuen
 Kommentar schreibt man immer ohne Rückfrage, auch wenn ein anderer das Angebot gerade bearbeitet;
 dessen Speichern wird dadurch nicht abgewiesen.
+
+In der Karte „Anlagen" steht die Meldung über der Liste, wenn man eine Anlage löschen will, die
+inzwischen gelöscht ist — von einem anderen oder von einem selbst in einem anderen Fenster. Sie
+nennt, wer die Anlage wann gelöscht hat, und „Zur Übersicht" führt zur Liste der Angebote. Eine
+Anlage ändert sich nie; darum gibt es bei ihr nichts neu zu laden. Eine neue Anlage lädt man immer
+ohne Rückfrage hoch.
 
 **Ergebnis:** Das Angebot trägt die Änderungen beider, und keine ist unbemerkt verloren gegangen.
 

@@ -1,5 +1,6 @@
 import { fireEvent, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { MemoryRouter } from 'react-router-dom';
 import { afterAll, afterEach, beforeEach, describe, expect, it, test, vi } from 'vitest';
 
 import Anlagen from './Anlagen';
@@ -59,7 +60,29 @@ const ZU_GROSS = 'Die Datei darf höchstens 25 MB groß sein.';
 type Nutzer = ReturnType<typeof userEvent.setup>;
 
 function renderBereich() {
-  return renderMitTheme(<Anlagen angebotId={9} />);
+  // Im Router wie in der Angebotsansicht: „Zur Übersicht" ist ein Verweis (#411, Kriterium 6).
+  return renderMitTheme(
+    <MemoryRouter>
+      <Anlagen angebotId={9} />
+    </MemoryRouter>,
+  );
+}
+
+/** Heute um die genannte Uhrzeit in der Ortszeit — die Meldung nennt dann nur die Uhrzeit. */
+function heuteUm(stunde: number, minute: number): string {
+  const zeitpunkt = new Date();
+  zeitpunkt.setHours(stunde, minute, 0, 0);
+  return zeitpunkt.toISOString();
+}
+
+/** Die Abweisung des Servers, wie `GlobalExceptionHandler` sie schreibt (Plan #415, E4, E16). */
+function abweisung(konflikt: Readonly<Record<string, unknown>>): () => Response {
+  return json(409, {
+    title: 'Conflict',
+    status: 409,
+    detail: 'Dieser Eintrag wurde inzwischen gelöscht.',
+    konflikt: { art: 'gelöscht', geaendertAm: heuteUm(10, 42), eigenesFenster: false, ...konflikt },
+  });
 }
 
 /** Das Dateifeld, das die Taste „Datei hochladen" oeffnet. */
@@ -452,6 +475,115 @@ describe('Anlagen — loeschen (Kriterien 9, 10)', () => {
 
     expect(await screen.findByText(AUSFALL_LOESCHEN)).toBeInTheDocument();
     expect(screen.getByTestId('anlage')).toBeInTheDocument();
+  });
+});
+
+describe('Anlagen — abgewiesenes Loeschen (#411, Kriterium 6; Plan #415, E7)', () => {
+  /** Loescht die aeltere Anlage ueber das ⋯-Menue und bestaetigt die Rueckfrage. */
+  async function loesche(nutzer: Nutzer) {
+    await screen.findByText(ALTE.dateiName);
+    await waehle(nutzer, ALTE.dateiName, 'Löschen');
+    const frage = await screen.findByRole('dialog');
+    await nutzer.click(within(frage).getByRole('button', { name: 'Löschen' }));
+  }
+
+  it('nennt nach einem abgewiesenen Loeschen Urheber und Zeitpunkt und fuehrt „Zur Übersicht"', async () => {
+    const nutzer = userEvent.setup();
+    const fetchMock = fetchNachPfad({
+      [`GET ${WEG}`]: json(200, { anlagen: [ALTE] }),
+      [`DELETE ${WEG}/1`]: abweisung({ geaendertVon: 'Anna' }),
+    });
+
+    renderBereich();
+    await loesche(nutzer);
+
+    expect(
+      await screen.findByText('Anna hat diesen Eintrag inzwischen gelöscht (10:42).'),
+    ).toBeInTheDocument();
+    expect(screen.getByText('Nicht ausgeführt')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Zur Übersicht' })).toHaveAttribute(
+      'href',
+      '/angebote',
+    );
+    expect(screen.queryByRole('button', { name: 'Neu laden' })).not.toBeInTheDocument();
+    expect(screen.queryByText(AUSFALL_LOESCHEN)).not.toBeInTheDocument();
+    // Ohne Bedingungskopf: Eine Anlage traegt keine Version (E7).
+    const aufruf = fetchMock.mock.calls.find(([, init]) => init?.method === 'DELETE');
+    expect(new Headers(aufruf?.[1]?.headers).has('If-Match')).toBe(false);
+  });
+
+  it('meldet die eigene Loeschung aus einem anderen Fenster', async () => {
+    const nutzer = userEvent.setup();
+    fetchNachPfad({
+      [`GET ${WEG}`]: json(200, { anlagen: [ALTE] }),
+      [`DELETE ${WEG}/1`]: abweisung({ eigenesFenster: true }),
+    });
+
+    renderBereich();
+    await loesche(nutzer);
+
+    expect(
+      await screen.findByText(
+        'Du hast diesen Eintrag inzwischen in einem anderen Fenster gelöscht (10:42).',
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Zur Übersicht' })).toBeInTheDocument();
+  });
+
+  it('holt bei „Neu laden" die Liste des Servers und nimmt die Meldung weg', async () => {
+    // Ein veralteter Stand kommt fuer eine Anlage nicht vor; zeigt die Meldung ihn dennoch, fuehrt
+    // „Neu laden" zum Bestand des Servers statt ins Leere.
+    const nutzer = userEvent.setup();
+    let gelesen = 0;
+    fetchNachPfad({
+      [`GET ${WEG}`]: () => {
+        gelesen += 1;
+        return gelesen === 1 ? json(200, { anlagen: [ALTE] })() : json(200, { anlagen: [] })();
+      },
+      [`DELETE ${WEG}/1`]: abweisung({ art: 'veraltet', geaendertVon: 'Anna' }),
+    });
+
+    renderBereich();
+    await loesche(nutzer);
+    await nutzer.click(await screen.findByRole('button', { name: 'Neu laden' }));
+
+    expect(await screen.findByRole('status')).toHaveTextContent(LEER);
+    expect(screen.queryByText('Nicht ausgeführt')).not.toBeInTheDocument();
+  });
+
+  it('meldet einen Ausfall bei „Neu laden" und behaelt die Meldung', async () => {
+    const nutzer = userEvent.setup();
+    let gelesen = 0;
+    fetchNachPfad({
+      [`GET ${WEG}`]: () => {
+        gelesen += 1;
+        return gelesen === 1 ? json(200, { anlagen: [ALTE] })() : leer(503)();
+      },
+      [`DELETE ${WEG}/1`]: abweisung({ art: 'veraltet', geaendertVon: 'Anna' }),
+    });
+
+    renderBereich();
+    await loesche(nutzer);
+    await nutzer.click(await screen.findByRole('button', { name: 'Neu laden' }));
+
+    expect(await screen.findByText(AUSFALL_LESEN)).toBeInTheDocument();
+    expect(screen.getByText('Nicht ausgeführt')).toBeInTheDocument();
+    expect(screen.getByTestId('anlage')).toBeInTheDocument();
+  });
+
+  it('nimmt die Meldung beim naechsten Schritt weg', async () => {
+    const nutzer = userEvent.setup();
+    fetchNachPfad({
+      [`GET ${WEG}`]: json(200, { anlagen: [ALTE] }),
+      [`DELETE ${WEG}/1`]: abweisung({ geaendertVon: 'Anna' }),
+    });
+
+    renderBereich();
+    await loesche(nutzer);
+    await screen.findByText('Nicht ausgeführt');
+    fireEvent.change(dateifeld(), { target: { files: [] } });
+
+    expect(screen.queryByText('Nicht ausgeführt')).not.toBeInTheDocument();
   });
 });
 

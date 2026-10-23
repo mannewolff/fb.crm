@@ -5,6 +5,7 @@ import java.io.InputStream;
 import java.io.PushbackInputStream;
 import java.io.UncheckedIOException;
 import java.time.Clock;
+import java.time.Instant;
 import java.util.List;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.fbcrm.angebot.domain.AngebotRepository;
@@ -38,6 +39,13 @@ import org.springframework.transaction.annotation.Transactional;
  *       dem Commit geloescht, liesse ein gescheiterter Commit genau die Zeile ohne Objekt zurueck,
  *       die der Punkt davor vermeidet.
  * </ul>
+ *
+ * <p><b>Geloescht wird mit Kennzeichen</b> (#411, Kriterium 6; Plan #415, E7, E16, E17): Die Zeile
+ * bleibt mit Zeitpunkt und Konto der Loeschung stehen und faellt aus Liste und Abruf; das Objekt
+ * geht weiter nach dem Commit. Ein zweites Loeschen derselben Anlage wirft {@link
+ * AngebotsanlageGeloescht} mit Urheber und Zeitpunkt statt {@link AngebotsanlageNichtGefunden}.
+ * Eine Version gibt es nicht — die Anlage aendert sich nie, und Loeschen ist ihr einziger
+ * schreibender Weg (E7).
  *
  * <p>Jeder der vier Wege prueft zuerst, dass es das Angebot gibt — auch die, die ohne diese Abfrage
  * bereits 404 liefern wuerden. Das ist die Aussage der Pfade: Sie liegen unter {@code
@@ -141,28 +149,38 @@ public class AngebotsanlageUseCase {
    * @param angebotId Kennung des Angebots
    * @param anlageId Kennung der Anlage
    * @throws AngebotNichtGefunden wenn es das Angebot nicht gibt
-   * @throws AngebotsanlageNichtGefunden wenn es die Anlage an diesem Angebot nicht gibt oder der
-   *     Objektspeicher ihren Schluessel nicht kennt
+   * @throws AngebotsanlageNichtGefunden wenn es die Anlage an diesem Angebot nicht gibt, sie
+   *     geloescht ist oder der Objektspeicher ihren Schluessel nicht kennt
    */
   @Transactional(readOnly = true)
   public Anlageninhalt liesInhalt(final long angebotId, final long anlageId) {
     final Angebotsanlage anlage = lies(angebotId, anlageId);
+    if (anlage.geloeschtAm() != null) {
+      throw new AngebotsanlageNichtGefunden();
+    }
     final InputStream inhalt =
         speicher.lesen(anlage.objektSchluessel()).orElseThrow(AngebotsanlageNichtGefunden::new);
     return new Anlageninhalt(anlage.dateiName(), anlage.groesse(), anlage.vorschauArt(), inhalt);
   }
 
   /**
-   * Loescht die Anlage — die Zeile ist danach fort, das Objekt nach dem Commit (Kriterium 10).
+   * Loescht die Anlage mit Kennzeichen — die Zeile faellt aus der Liste, das Objekt geht nach dem
+   * Commit (Kriterium 10; Plan #415, E7).
    *
    * @param angebotId Kennung des Angebots
    * @param anlageId Kennung der Anlage
+   * @param konto Kennung des handelnden Kontos — aus der Sitzung (E14)
    * @throws AngebotNichtGefunden wenn es das Angebot nicht gibt
    * @throws AngebotsanlageNichtGefunden wenn es die Anlage an diesem Angebot nicht gibt
+   * @throws AngebotsanlageGeloescht wenn die Anlage bereits geloescht ist (E16)
    */
-  public void loesche(final long angebotId, final long anlageId) {
+  public void loesche(final long angebotId, final long anlageId, final long konto) {
     final Angebotsanlage anlage = lies(angebotId, anlageId);
-    anlagen.deleteById(anlage.requireId());
+    final Instant geloeschtAm = anlage.geloeschtAm();
+    if (geloeschtAm != null) {
+      throw new AngebotsanlageGeloescht(anlage.geloeschtVon(), konto, geloeschtAm);
+    }
+    anlagen.save(anlage.geloescht(konto, clock.instant()));
     NachDemCommit.fuehreAus(() -> entferneObjekt(anlage.objektSchluessel()));
   }
 
@@ -184,8 +202,9 @@ public class AngebotsanlageUseCase {
 
   /*
    * Ein Fehlschlag wird protokolliert und nicht gemeldet (E9): Die Zeile ist zu diesem Zeitpunkt
-   * fort, und ein Objekt ohne Zeile ist unerreichbar. Im Log steht allein der Objektschluessel —
-   * er traegt keinen Teil des Dateinamens und verraet damit nichts ueber den Inhalt.
+   * gekennzeichnet, und ein Objekt einer geloeschten Anlage ist unerreichbar. Im Log steht allein
+   * der Objektschluessel — er traegt keinen Teil des Dateinamens und verraet damit nichts ueber den
+   * Inhalt.
    */
   private void entferneObjekt(final String objektSchluessel) {
     try {

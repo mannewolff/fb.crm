@@ -23,7 +23,8 @@ import org.mwolff.fbcrm.angebot.domain.Vorschauart;
  * Die Uebersetzung zwischen Anlage und Zeile — in beide Richtungen.
  *
  * <p>Der Adapter steht hier gegen ein gemocktes Spring-Data-Repository, damit die Abbildung selbst
- * geprueft ist; dass sein SQL-Weg traegt, belegt {@code AngebotAnlageSchemaIT}.
+ * geprueft ist; dass sein SQL-Weg traegt, belegt {@code AngebotAnlageSchemaIT}, dass die Liste
+ * gekennzeichnete Zeilen auslaesst, {@code AngebotAnlageIT}.
  */
 @ExtendWith(MockitoExtension.class)
 class JpaAngebotsanlageRepositoryTest {
@@ -31,6 +32,7 @@ class JpaAngebotsanlageRepositoryTest {
   private static final Instant ANGELEGT = Instant.parse("2026-09-30T08:00:00Z");
   private static final String NAME = "Bericht.pdf";
   private static final String SCHLUESSEL = "angebot/11/anlage/3f2c";
+  private static final Instant GELOESCHT = Instant.parse("2026-10-01T10:00:00Z");
 
   @Mock private SpringDataAngebotAnlageRepository zeilen;
 
@@ -44,7 +46,8 @@ class JpaAngebotsanlageRepositoryTest {
 
   private static AngebotAnlageEntity zeile(final long id, final String name) {
     return new AngebotAnlageEntity(
-        Long.valueOf(id), 11L, name, 1024L, Vorschauart.PDF, SCHLUESSEL, ANGELEGT);
+        new Angebotsanlage(
+            Long.valueOf(id), 11L, name, 1024L, Vorschauart.PDF, SCHLUESSEL, ANGELEGT));
   }
 
   @Test
@@ -65,7 +68,26 @@ class JpaAngebotsanlageRepositoryTest {
             zeile -> assertThat(zeile.getGroesse()).isEqualTo(1024L),
             zeile -> assertThat(zeile.getVorschauArt()).isEqualTo(Vorschauart.PDF),
             zeile -> assertThat(zeile.getObjektSchluessel()).isEqualTo(SCHLUESSEL),
-            zeile -> assertThat(zeile.getCreatedAt()).isEqualTo(ANGELEGT));
+            zeile -> assertThat(zeile.getCreatedAt()).isEqualTo(ANGELEGT),
+            zeile -> assertThat(zeile.getGeloeschtAm()).isNull(),
+            zeile -> assertThat(zeile.getGeloeschtVon()).isNull());
+  }
+
+  @Test
+  void save_givenADeletedAttachment_thenWritesTheMarkAndReadsItBack() {
+    // Given — Plan #415, E7: geloescht wird mit Kennzeichen, nicht durch Entfernen der Zeile.
+    final Angebotsanlage gekennzeichnet = anlage().geloescht(30L, GELOESCHT);
+    when(zeilen.save(any(AngebotAnlageEntity.class)))
+        .thenReturn(new AngebotAnlageEntity(gekennzeichnet));
+
+    // When
+    final Angebotsanlage gesichert = repository.save(gekennzeichnet);
+
+    // Then
+    verify(zeilen).save(gespeicherte.capture());
+    assertThat(gespeicherte.getValue().getGeloeschtAm()).isEqualTo(GELOESCHT);
+    assertThat(gespeicherte.getValue().getGeloeschtVon()).isEqualTo(30L);
+    assertThat(gesichert).isEqualTo(gekennzeichnet);
   }
 
   @Test
@@ -88,7 +110,8 @@ class JpaAngebotsanlageRepositoryTest {
   void save_givenNoPreviewType_thenKeepsItEmptyInBothDirections() {
     // Given
     final AngebotAnlageEntity ohneVorschau =
-        new AngebotAnlageEntity(7L, 11L, "Zahlen.xlsx", 4096L, null, SCHLUESSEL, ANGELEGT);
+        new AngebotAnlageEntity(
+            new Angebotsanlage(7L, 11L, "Zahlen.xlsx", 4096L, null, SCHLUESSEL, ANGELEGT));
     when(zeilen.save(any(AngebotAnlageEntity.class))).thenReturn(ohneVorschau);
 
     // When
@@ -150,14 +173,5 @@ class JpaAngebotsanlageRepositoryTest {
 
     // Then
     assertThat(gefunden).isEmpty();
-  }
-
-  @Test
-  void deleteById_thenRemovesTheRow() {
-    // When
-    repository.deleteById(7L);
-
-    // Then
-    verify(zeilen).deleteById(7L);
   }
 }

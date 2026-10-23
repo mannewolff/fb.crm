@@ -331,6 +331,9 @@ describe('Szenarien des Fachplans (E16)', () => {
     expect(text).toMatch(/Löschen eines Kommentars/u);
     expect(text).toMatch(/„Zur Übersicht"/u);
     expect(text).toMatch(/Einen neuen\s+Kommentar schreibt man immer ohne Rückfrage/u);
+    // Eine geloeschte Anlage nennt beim zweiten Loeschen Urheber und Zeitpunkt (Issue #445).
+    expect(text).toMatch(/Löschen einer Anlage/u);
+    expect(text).toMatch(/Karte „Anlagen"/u);
     expect(text).toMatch(/\*\*Ergebnis:\*\*/u);
   });
 

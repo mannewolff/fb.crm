@@ -10,7 +10,8 @@ import org.springframework.stereotype.Repository;
  * Setzt den Port {@link AngebotsanlageRepository} auf JPA um und uebersetzt in beide Richtungen.
  *
  * <p>Jede Anlage ist eine Zeile fuer sich: Anlegen und Loeschen gehen einzeln, anders als beim
- * Angebot mit seinen Positionen (Plan #150, E1). Geloescht wird wirklich — kein Stilllegen-Merkmal.
+ * Angebot mit seinen Positionen (Plan #150, E1). Geloescht wird seit Plan #415 (E7, E17) mit
+ * Kennzeichen an der Zeile; die Liste laesst gekennzeichnete Zeilen aus.
  *
  * <p>Der Inhalt der Anlage steht nicht in dieser Zeile, sondern im Objektspeicher; hier steht nur
  * sein Schluessel.
@@ -38,12 +39,7 @@ class JpaAngebotsanlageRepository implements AngebotsanlageRepository {
 
   @Override
   public Angebotsanlage save(final Angebotsanlage anlage) {
-    return toDomain(zeilen.save(toEntity(anlage)));
-  }
-
-  @Override
-  public void deleteById(final long id) {
-    zeilen.deleteById(id);
+    return toDomain(zeilen.save(new AngebotAnlageEntity(anlage)));
   }
 
   private static Angebotsanlage toDomain(final AngebotAnlageEntity zeile) {
@@ -54,17 +50,8 @@ class JpaAngebotsanlageRepository implements AngebotsanlageRepository {
         zeile.getGroesse(),
         zeile.getVorschauArt(),
         zeile.getObjektSchluessel(),
-        zeile.getCreatedAt());
-  }
-
-  private static AngebotAnlageEntity toEntity(final Angebotsanlage anlage) {
-    return new AngebotAnlageEntity(
-        anlage.id(),
-        anlage.angebotId(),
-        anlage.dateiName(),
-        anlage.groesse(),
-        anlage.vorschauArt(),
-        anlage.objektSchluessel(),
-        anlage.createdAt());
+        zeile.getCreatedAt(),
+        zeile.getGeloeschtAm(),
+        zeile.getGeloeschtVon());
   }
 }

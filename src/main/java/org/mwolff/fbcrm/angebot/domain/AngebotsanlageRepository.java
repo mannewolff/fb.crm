@@ -10,11 +10,15 @@ import java.util.Optional;
  * <p>Der Port fuehrt nur die Zeile. Die Bytes der Anlage stehen im Objektspeicher und gehen ueber
  * einen eigenen Port (Plan #150, E3); {@link Angebotsanlage#objektSchluessel()} verbindet beide. In
  * welcher Reihenfolge beide beschrieben werden, entscheidet der Anwendungsfall (E9).
+ *
+ * <p>Geloescht wird mit Kennzeichen (Plan #415, E7, E17): {@link #save(Angebotsanlage)} schreibt
+ * es. Die Liste laesst gekennzeichnete Anlagen aus; {@link #findById} liefert sie dagegen mit,
+ * damit der Anwendungsfall Urheber und Zeitpunkt der Loeschung nennen kann (E16).
  */
 public interface AngebotsanlageRepository {
 
   /**
-   * Alle Anlagen eines Angebots.
+   * Alle nicht geloeschten Anlagen eines Angebots (E7).
    *
    * <p>Ohne zugesagte Reihenfolge, wie {@link AngebotskommentarRepository#findByAngebot(long)}:
    * Welche Ordnung die Ansicht zeigt, entscheidet die Anwendungsschicht — der Bestand liefert den
@@ -25,7 +29,7 @@ public interface AngebotsanlageRepository {
   List<Angebotsanlage> findByAngebot(long angebotId);
 
   /**
-   * Die Anlage zu einer technischen Id, oder leer.
+   * Die Anlage zu einer technischen Id, oder leer — auch eine geloeschte, samt Kennzeichen.
    *
    * <p>Ob sie zu dem Angebot gehoert, nach dem gefragt wurde, prueft der Anwendungsfall — der Port
    * kennt nur die Kennung.
@@ -34,13 +38,4 @@ public interface AngebotsanlageRepository {
 
   /** Legt die Anlage an oder schreibt sie fort und liefert sie mit gesetzter Id zurueck. */
   Angebotsanlage save(Angebotsanlage anlage);
-
-  /**
-   * Loescht die Anlage — die Zeile ist danach fort.
-   *
-   * <p>Das Objekt im Speicher raeumt der Anwendungsfall weg, und zwar erst nach dem Commit (E9).
-   *
-   * @param id Kennung der Anlage
-   */
-  void deleteById(long id);
 }
