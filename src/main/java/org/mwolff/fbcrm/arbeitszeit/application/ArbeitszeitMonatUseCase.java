@@ -2,6 +2,7 @@ package org.mwolff.fbcrm.arbeitszeit.application;
 
 import java.math.BigDecimal;
 import java.time.Clock;
+import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -15,6 +16,7 @@ import org.mwolff.fbcrm.angebot.application.AngebotNichtGefunden;
 import org.mwolff.fbcrm.angebot.domain.AngebotRepository;
 import org.mwolff.fbcrm.arbeitszeit.domain.Zeiteintrag;
 import org.mwolff.fbcrm.arbeitszeit.domain.ZeiteintragRepository;
+import org.mwolff.fbcrm.auth.application.UnknownAccount;
 import org.mwolff.fbcrm.common.Geschaeftszone;
 import org.mwolff.fbcrm.firma.application.FirmaNichtGefunden;
 import org.mwolff.fbcrm.firma.domain.FirmaRepository;
@@ -29,9 +31,24 @@ import org.springframework.transaction.annotation.Transactional;
  * der Ansicht und keine Eigenschaft der Zeilen (dieselbe Begruendung wie {@code
  * angebot.application.Angebotsreihenfolge}).
  *
- * <p><b>Drei Zuege in den Bestand und keiner je Zeile:</b> die Eintraege des Monats, die Angebote
- * und die Namen aller beteiligten Firmen auf einmal ({@link Buchungspositionen}). Ein leerer Monat
- * fragt gar nicht weiter.
+ * <p><b>Wessen Zeiten die Liste zeigt, entscheidet die Rolle des anfragenden Kontos</b> (Plan #426,
+ * E6, E10; fachliche Quelle #410, Kriterien 2 bis 4) — hier und nicht im Browser, aus demselben
+ * Grund wie beim laufenden Monat (E4): Die Vorauswahl ist eine fachliche Regel. Ohne Angabe sieht
+ * ein C-Level und ein Employee die eigenen Zeiten, ReadOnly die aller. Ein Employee bekommt immer
+ * nur seine eigenen, gleich was der Parameter nennt; ein C-Level und ReadOnly duerfen auf jede
+ * Person umschalten, auch auf eine stillgelegte (Kriterium 9), oder auf „Alle". Die Regel steht in
+ * {@link Personenauskunft#sicht}, neben der Liste der waehlbaren Personen, die an ihr haengt; die
+ * Rolle kommt dort frisch aus dem Konto und nicht aus dem Token.
+ *
+ * <p><b>Gefiltert wird im Bestand</b> (E8): Fuer eine Person fragt die Liste nur deren Eintraege
+ * ({@link ZeiteintragRepository#findImZeitraumFuerKonto}), nur fuer „Alle" alle. Ein Employee
+ * bekommt so keinen fremden Eintrag in den Speicher, und kein fremdes Konto: Seine Personen sind
+ * allein sein eigenes Konto, die Liste aller Konten liest erst ein C-Level oder ReadOnly.
+ *
+ * <p><b>Keine Zuege je Zeile:</b> das anfragende Konto, die Konten (ausser fuer einen Employee),
+ * die Eintraege des Monats, die Angebote und die Namen aller beteiligten Firmen auf einmal ({@link
+ * Buchungspositionen}). Ein leerer Monat fragt nach den Eintraegen nicht weiter. Der Name an jeder
+ * Zeile ist der aktuelle des Kontos und keine Kopie (E5, Kriterium 9).
  *
  * <p>Welcher Monat laeuft, entscheidet die injizierte {@link Clock} in der {@link Geschaeftszone}
  * (E4): Am 1. November um 00:30 Ortszeit ist am Nullmeridian noch Oktober, und die Ansicht zeigte
@@ -44,16 +61,19 @@ public class ArbeitszeitMonatUseCase {
   private final ZeiteintragRepository zeiten;
   private final AngebotRepository angebote;
   private final FirmaRepository firmen;
+  private final Personenauskunft personenauskunft;
   private final Clock clock;
 
   ArbeitszeitMonatUseCase(
       final ZeiteintragRepository zeiten,
       final AngebotRepository angebote,
       final FirmaRepository firmen,
+      final Personenauskunft personenauskunft,
       final Clock clock) {
     this.zeiten = zeiten;
     this.angebote = angebote;
     this.firmen = firmen;
+    this.personenauskunft = personenauskunft;
     this.clock = clock;
   }
 
@@ -62,29 +82,47 @@ public class ArbeitszeitMonatUseCase {
    *
    * <p>Die Monatssumme kommt zusaetzlich aufgeteilt in den Teil fuer Kunden und den internen (Issue
    * #230, Kriterium 10 von #207). Beide entstehen wie die Gesamtsumme aus addierten Minuten; die
-   * Tagessummen bleiben ungeteilt.
+   * Tagessummen bleiben ungeteilt. Alle Summen gelten fuer die Eintraege der geltenden Auswahl.
    *
+   * @param accountId Kennung des anfragenden Kontos
    * @param gewaehlt der gesuchte Monat, oder leer fuer den laufenden
+   * @param person die Kennung eines Kontos oder {@code alle}, oder leer fuer die Vorauswahl der
+   *     Rolle; fuer einen Employee ohne Wirkung
+   * @throws UnknownAccount wenn es das anfragende Konto nicht mehr gibt
+   * @throws PersonNichtWaehlbar wenn {@code person} weder {@code alle} noch ein Konto nennt
    * @throws AngebotNichtGefunden wenn ein gebuchtes Angebot im Bestand fehlt
    * @throws FirmaNichtGefunden wenn die Firma eines beteiligten Angebots fehlt
    */
-  public Arbeitsmonat monat(final Optional<YearMonth> gewaehlt) {
+  public Arbeitsmonat monat(
+      final long accountId, final Optional<YearMonth> gewaehlt, final Optional<String> person) {
     final YearMonth monat =
         gewaehlt.orElseGet(() -> YearMonth.now(clock.withZone(Geschaeftszone.ZONE)));
-    final List<Zeiteintrag> eintraege = zeiten.findImZeitraum(monat.atDay(1), monat.atEndOfMonth());
+    final Personensicht sicht = personenauskunft.sicht(accountId, person);
+    final Personenauswahl auswahl = sicht.auswahl();
+    final List<Zeiteintrag> eintraege = eintraege(auswahl, monat.atDay(1), monat.atEndOfMonth());
     if (eintraege.isEmpty()) {
       final BigDecimal nichts = Zeiteintrag.stundenAus(0L);
-      return new Arbeitsmonat(monat, List.of(), nichts, nichts, nichts);
+      return new Arbeitsmonat(monat, auswahl, List.of(), nichts, nichts, nichts);
     }
     final Map<Long, Buchungsposition> positionen =
         Buchungspositionen.beschreibe(
             angebote.findAlle(Optional.empty()), kennungen(eintraege), firmen);
     return new Arbeitsmonat(
         monat,
-        tage(eintraege, positionen),
+        auswahl,
+        tage(eintraege, positionen, sicht),
         summe(eintraege),
         summeDerArt(eintraege, positionen, false),
         summeDerArt(eintraege, positionen, true));
+  }
+
+  private List<Zeiteintrag> eintraege(
+      final Personenauswahl auswahl, final LocalDate von, final LocalDate bis) {
+    return switch (auswahl) {
+      case Personenauswahl.Alle _ -> zeiten.findImZeitraum(von, bis);
+      case Personenauswahl.Einzeln einzeln ->
+          zeiten.findImZeitraumFuerKonto(von, bis, einzeln.accountId());
+    };
   }
 
   /*
@@ -119,7 +157,9 @@ public class ArbeitszeitMonatUseCase {
    * aussen die Tage und innen die Zeilen, waere dieselbe Aussage an zwei Stellen.
    */
   private static List<Arbeitstag> tage(
-      final List<Zeiteintrag> eintraege, final Map<Long, Buchungsposition> positionen) {
+      final List<Zeiteintrag> eintraege,
+      final Map<Long, Buchungsposition> positionen,
+      final Personensicht sicht) {
     return eintraege.stream()
         .sorted(Comparator.comparing(Zeiteintrag::tag).thenComparing(Zeiteintrag::von))
         .collect(Collectors.groupingBy(Zeiteintrag::tag, LinkedHashMap::new, Collectors.toList()))
@@ -128,7 +168,9 @@ public class ArbeitszeitMonatUseCase {
         .map(
             tag ->
                 new Arbeitstag(
-                    tag.getKey(), buchungen(tag.getValue(), positionen), summe(tag.getValue())))
+                    tag.getKey(),
+                    buchungen(tag.getValue(), positionen, sicht),
+                    summe(tag.getValue())))
         .toList();
   }
 
@@ -136,14 +178,19 @@ public class ArbeitszeitMonatUseCase {
    * Die Beschreibung ist da: Buchungspositionen.beschreibe liefert jede angefragte Kennung oder
    * wirft. Dass sie nie fehlt, sagt hier requireNonNull — nicht als Pruefung, sondern damit die
    * Zusage des Aufgerufenen an der Nahtstelle steht und nicht nur in seinem Javadoc.
+   * Dieselbe Zusage fuer die Person steht in Personensicht.person.
    */
   private static List<Zeitbuchung> buchungen(
-      final List<Zeiteintrag> eintraege, final Map<Long, Buchungsposition> positionen) {
+      final List<Zeiteintrag> eintraege,
+      final Map<Long, Buchungsposition> positionen,
+      final Personensicht sicht) {
     return eintraege.stream()
         .map(
             eintrag ->
                 new Zeitbuchung(
-                    eintrag, Objects.requireNonNull(positionen.get(eintrag.angebotPositionId()))))
+                    eintrag,
+                    Objects.requireNonNull(positionen.get(eintrag.angebotPositionId())),
+                    sicht.person(eintrag.accountId())))
         .toList();
   }
 

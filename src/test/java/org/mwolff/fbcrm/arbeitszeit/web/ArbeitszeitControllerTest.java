@@ -33,7 +33,9 @@ import org.mwolff.fbcrm.arbeitszeit.application.Arbeitstag;
 import org.mwolff.fbcrm.arbeitszeit.application.ArbeitszeitMonatUseCase;
 import org.mwolff.fbcrm.arbeitszeit.application.BuchbarePositionenUseCase;
 import org.mwolff.fbcrm.arbeitszeit.application.Buchungsposition;
+import org.mwolff.fbcrm.arbeitszeit.application.PersonNichtWaehlbar;
 import org.mwolff.fbcrm.arbeitszeit.application.Personenauskunft;
+import org.mwolff.fbcrm.arbeitszeit.application.Personenauswahl;
 import org.mwolff.fbcrm.arbeitszeit.application.PositionNichtBuchbar;
 import org.mwolff.fbcrm.arbeitszeit.application.UhrzeitNichtImRaster;
 import org.mwolff.fbcrm.arbeitszeit.application.WaehlbarePerson;
@@ -276,11 +278,20 @@ class ArbeitszeitControllerTest {
   }
 
   private static Arbeitsmonat november() {
+    return november(new Personenauswahl.Einzeln(ANGEMELDET));
+  }
+
+  private static Arbeitsmonat november(final Personenauswahl auswahl) {
     return new Arbeitsmonat(
         YearMonth.of(2026, 11),
+        auswahl,
         List.of(
             new Arbeitstag(
-                TAG, List.of(new Zeitbuchung(eintrag(), position())), new BigDecimal("1.75"))),
+                TAG,
+                List.of(
+                    new Zeitbuchung(
+                        eintrag(), position(), new WaehlbarePerson(ANGEMELDET, "Manne", true))),
+                new BigDecimal("1.75"))),
         new BigDecimal("1.75"),
         new BigDecimal("1.00"),
         new BigDecimal("0.75"));
@@ -289,7 +300,8 @@ class ArbeitszeitControllerTest {
   @Test
   void monat_thenAnswers200WithTheDaysTheirSumsAndThePositionOfEachEntry() throws Exception {
     // Given — A20: die Zeile zeigt Position, Angebot und Firma, der Tag seine Summe.
-    when(monate.monat(Optional.of(YearMonth.of(2026, 11)))).thenReturn(november());
+    when(monate.monat(ANGEMELDET, Optional.of(YearMonth.of(2026, 11)), Optional.empty()))
+        .thenReturn(november());
 
     // When / Then
     mockMvc
@@ -306,17 +318,50 @@ class ArbeitszeitControllerTest {
         .andExpect(jsonPath("$.tage[0].eintraege[0].position.angebotId").value(11))
         .andExpect(jsonPath("$.tage[0].eintraege[0].position.angebotDatum").exists())
         .andExpect(jsonPath("$.tage[0].eintraege[0].position.intern").value(true))
-        .andExpect(jsonPath("$.tage[0].eintraege[0].position.firmaName").value("IT Bildungshaus"));
+        .andExpect(jsonPath("$.tage[0].eintraege[0].position.firmaName").value("IT Bildungshaus"))
+        // Plan #426, E14 und E10: jede Zeile traegt ihre Person, der Monat die geltende Auswahl.
+        .andExpect(jsonPath("$.tage[0].eintraege[0].person.id").value(Long.valueOf(ANGEMELDET)))
+        .andExpect(jsonPath("$.tage[0].eintraege[0].person.name").value("Manne"))
+        .andExpect(jsonPath("$.tage[0].eintraege[0].person.aktiv").value(true))
+        .andExpect(jsonPath("$.auswahl").value(String.valueOf(ANGEMELDET)));
   }
 
   @Test
   void monat_withoutTheParameter_thenAsksWithoutAMonth() throws Exception {
     // Given — welcher Monat der laufende ist, entscheidet der Anwendungsfall an seiner Uhr (E4).
-    when(monate.monat(Optional.empty())).thenReturn(november());
+    when(monate.monat(ANGEMELDET, Optional.empty(), Optional.empty())).thenReturn(november());
 
     // When / Then
     mockMvc.perform(get(PFAD)).andExpect(status().isOk());
-    verify(monate).monat(Optional.empty());
+    verify(monate).monat(ANGEMELDET, Optional.empty(), Optional.empty());
+  }
+
+  @Test
+  void monat_withAPerson_thenPassesItAndTheSignedInAccountUnchanged() throws Exception {
+    // Given — Plan #426, E10: der Controller entscheidet nichts; auch „alle" geht so weiter, und
+    // ob es fuer dieses Konto gilt, sagt der Anwendungsfall.
+    when(monate.monat(ANGEMELDET, Optional.empty(), Optional.of("alle")))
+        .thenReturn(november(new Personenauswahl.Alle()));
+
+    // When / Then — die Antwort nennt die geltende Auswahl.
+    mockMvc
+        .perform(get(PFAD).param("person", "alle"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.auswahl").value("alle"));
+    verify(monate).monat(ANGEMELDET, Optional.empty(), Optional.of("alle"));
+  }
+
+  @Test
+  void monat_withAPersonThatIsNotSelectable_thenAnswers400() throws Exception {
+    // Given — der Parameter nennt kein Konto und nicht „alle".
+    when(monate.monat(ANGEMELDET, Optional.empty(), Optional.of("niemand")))
+        .thenThrow(new PersonNichtWaehlbar());
+
+    // When / Then
+    mockMvc
+        .perform(get(PFAD).param("person", "niemand"))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.detail").value("Diese Person steht nicht zur Wahl."));
   }
 
   @Test

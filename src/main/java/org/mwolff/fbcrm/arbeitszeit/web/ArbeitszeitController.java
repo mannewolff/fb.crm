@@ -64,14 +64,24 @@ public class ArbeitszeitController {
   }
 
   /**
-   * Die Eintraege eines Monats nach Tagen, mit den Summen (Kriterium 5).
+   * Die Eintraege eines Monats nach Tagen, mit den Summen (Kriterium 5), fuer die Person, deren
+   * Zeiten das angemeldete Konto sehen darf (Plan #426, E10).
    *
+   * <p>Der Controller entscheidet nichts: Welche Vorauswahl ohne {@code person} gilt und dass ein
+   * Employee immer nur seine eigenen Zeiten bekommt, entscheidet {@link ArbeitszeitMonatUseCase}
+   * aus der Rolle des Kontos. Beide Parameter gehen unveraendert weiter.
+   *
+   * @param accountId Kennung des angemeldeten Kontos
    * @param monat der gesuchte Monat als {@code JJJJ-MM}, oder weggelassen fuer den laufenden
+   * @param person die Kennung eines Kontos oder {@code alle}, oder weggelassen fuer die Vorauswahl
+   *     der Rolle
    */
   @GetMapping
   public ArbeitszeitMonatResponse monat(
-      @RequestParam(required = false) final Optional<YearMonth> monat) {
-    return ArbeitszeitMonatResponse.of(monate.monat(monat));
+      @AuthenticationPrincipal final Long accountId,
+      @RequestParam(required = false) final Optional<YearMonth> monat,
+      @RequestParam(required = false) final Optional<String> person) {
+    return ArbeitszeitMonatResponse.of(monate.monat(accountId, monat, person));
   }
 
   /** Die Positionen, auf die gebucht werden darf — die Auswahlliste des Dialogs (A15). */

@@ -45,7 +45,9 @@ import org.springframework.jdbc.core.JdbcTemplate;
  * Bezeichnung seiner Position und den Namen der Firma, je Tag eine Summe und fuer den Monat eine
  * weitere; ohne Parameter antwortet sie fuer den laufenden Monat, und ein Monat, den es nicht gibt,
  * ist eine fehlerhafte Anfrage. Die buchbaren Positionen nennen nur, was nach Aufwand in Stunden
- * abrechnet. Die waehlbaren Personen (Plan #426, E11) nennt ein eigener Weg.
+ * abrechnet. Die waehlbaren Personen (Plan #426, E11) nennt ein eigener Weg. Welche Zeilen die
+ * Monatsliste zeigt, entscheidet die Rolle (E10): Ein Employee bekommt auch mit {@code person=alle}
+ * nur seine eigenen.
  *
  * <p>Der Ausgangspunkt ist ein bestelltes Angebot mit zwei Positionen: „Konzeption" nach Aufwand in
  * Stunden, auf die gebucht werden darf, und daneben eine Pauschale, auf die nicht gebucht werden
@@ -439,6 +441,72 @@ class ArbeitszeitControllerIT extends AbstractIntegrationTest {
         .containsExactly(
             tuple(ben, "Ben", false),
             tuple(accounts.findByEmail(MAIL).orElseThrow().requireId(), "Manne", true));
+  }
+
+  @Test
+  void monat_asAnEmployeeAskingForAll_thenOnlyTheOwnEntries() {
+    // Given — Kriterium 2 von #410: Manne (C-Level) und Ben (Employee) haben am selben Tag Zeit
+    // erfasst; Ben meldet sich an und fragt ausdruecklich nach „Alle".
+    erfasse("09:00", "10:45", ZeiteintragResponse.class);
+    final long ben =
+        accounts
+            .save(
+                Konten.mit(null, "ben@example.org", Role.EMPLOYEE, true, 0, ANGELEGT)
+                    .mitNamen("Ben", ANGELEGT))
+            .requireId();
+    sitzung = Anmeldung.perCode(rest, jdbc, hasher, "ben@example.org");
+    final long bensEintrag = erfassteKennung("11:00", "12:00");
+
+    // When
+    final ArbeitszeitMonatResponse gelesen =
+        Objects.requireNonNull(
+            ruf(
+                    PFAD + "?monat=" + MONAT + "&person=alle",
+                    HttpMethod.GET,
+                    null,
+                    ArbeitszeitMonatResponse.class)
+                .getBody());
+
+    // Then — nur Bens Eintrag mit seinem Namen, seine Summen, und die Auswahl nennt ihn.
+    assertThat(gelesen.tage())
+        .singleElement()
+        .satisfies(tag -> assertThat(tag.stunden()).isEqualByComparingTo("1.00"));
+    assertThat(gelesen.tage().get(0).eintraege())
+        .extracting(
+            zeile -> zeile.id(), zeile -> zeile.person().id(), zeile -> zeile.person().name())
+        .containsExactly(tuple(bensEintrag, ben, "Ben"));
+    assertThat(gelesen.stunden()).isEqualByComparingTo("1.00");
+    assertThat(gelesen.auswahl()).isEqualTo(String.valueOf(ben));
+  }
+
+  @Test
+  void monat_asACLevelAskingForAll_thenTheEntriesOfEveryPersonWithTheirNames() {
+    // Given — Kriterium 3 von #410: bei „Alle" steht an jedem Eintrag der Name der Person.
+    final HttpHeaders manne = sitzung;
+    erfasse("09:00", "10:45", ZeiteintragResponse.class);
+    accounts.save(
+        Konten.mit(null, "ben@example.org", Role.EMPLOYEE, true, 0, ANGELEGT)
+            .mitNamen("Ben", ANGELEGT));
+    sitzung = Anmeldung.perCode(rest, jdbc, hasher, "ben@example.org");
+    erfasse("11:00", "12:00", ZeiteintragResponse.class);
+    sitzung = manne;
+
+    // When
+    final ArbeitszeitMonatResponse gelesen =
+        Objects.requireNonNull(
+            ruf(
+                    PFAD + "?monat=" + MONAT + "&person=alle",
+                    HttpMethod.GET,
+                    null,
+                    ArbeitszeitMonatResponse.class)
+                .getBody());
+
+    // Then — zwei Personen am selben Tag, und die Summen gelten fuer beide.
+    assertThat(gelesen.auswahl()).isEqualTo("alle");
+    assertThat(gelesen.tage().get(0).eintraege())
+        .extracting(zeile -> zeile.person().name())
+        .containsExactly("Manne", "Ben");
+    assertThat(gelesen.stunden()).isEqualByComparingTo("2.75");
   }
 
   @Test
