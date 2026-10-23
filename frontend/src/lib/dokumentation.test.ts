@@ -311,4 +311,13 @@ describe('Szenarien des Fachplans (E16)', () => {
     expect(erste).toMatch(/eigenen E-Mail-Adresse/u);
     expect(erste).toMatch(/Fuß der Schiene stehen „Mitarbeitende"/u);
   });
+
+  it('Szenario: Arbeitszeit je Person (Kriterium 10, #410)', () => {
+    const text = abschnitt('bedienung', 'Arbeitszeit');
+
+    expect(text).toMatch(/Employee sieht und pflegt nur die eigenen Zeiten/u);
+    expect(text).toMatch(/C-Level sieht zunächst die eigenen Zeiten/u);
+    expect(text).toMatch(/ReadOnly sieht beim Öffnen „Alle"/u);
+    expect(text).toMatch(/Überschneidungen prüft fb\.crm je Person/u);
+  });
 });

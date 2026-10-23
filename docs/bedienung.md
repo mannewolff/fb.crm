@@ -356,6 +356,16 @@ mit den bisherigen Werten. Löschen steht im Menü ⋯ der Zeile unter „Lösch
 **Ergebnis:** Der Eintrag steht unter seinem Tag mit „Zeit", „Dauer" und „Position"; Tagessumme
 und Monatssumme rechnen ihn mit.
 
+**Wer welche Zeiten sieht:** Jeder Eintrag gehört einer Person. Ein Employee sieht und pflegt nur
+die eigenen Zeiten. Ein C-Level sieht zunächst die eigenen Zeiten, schaltet oben in der Ansicht auf
+eine andere Person oder auf „Alle" um, ändert und löscht jeden Eintrag und wählt beim Erfassen die
+Person, für die die Zeit gilt. ReadOnly sieht beim Öffnen „Alle", kann ebenso umschalten und ändert
+nichts. Bei „Alle" steht an jedem Eintrag der Name der Person.
+
+**Überschneidungen:** Überschneidungen prüft fb.crm je Person: Dieselbe Zeit für zwei Personen ist
+erlaubt, für eine Person nicht. Dann speichert fb.crm den Eintrag nicht und nennt den
+kollidierenden Eintrag.
+
 ## Jahresabschlüsse
 
 **Zweck:** Ein Jahresabschluss fasst ein Jahr zusammen: Einnahmen, Umsatzsteuer, Umsatz je Kunde,
