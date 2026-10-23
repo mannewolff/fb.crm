@@ -21,6 +21,7 @@ import org.mwolff.fbcrm.auth.application.LoginUseCase;
 import org.mwolff.fbcrm.auth.application.LogoutUseCase;
 import org.mwolff.fbcrm.auth.application.SessionCookie;
 import org.mwolff.fbcrm.auth.domain.Account;
+import org.mwolff.fbcrm.auth.domain.Role;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -90,8 +91,9 @@ class AuthControllerTest {
     // When
     final ResponseEntity<AccountResponse> antwort = meldeAn(sitzungsCookie());
 
-    // Then — Id, Anzeigename und Adresse, sonst nichts.
-    assertThat(antwort.getBody()).isEqualTo(new AccountResponse(KONTO_ID, "Manne", MAIL));
+    // Then — Id, Anzeigename, Adresse und Rolle, sonst nichts (A8).
+    assertThat(antwort.getBody())
+        .isEqualTo(new AccountResponse(KONTO_ID, "Manne", MAIL, Role.C_LEVEL));
   }
 
   @Test
@@ -179,7 +181,20 @@ class AuthControllerTest {
     final AccountResponse antwort = controller.me(KONTO_ID);
 
     // Then
-    assertThat(antwort).isEqualTo(new AccountResponse(KONTO_ID, "Manne", MAIL));
+    assertThat(antwort).isEqualTo(new AccountResponse(KONTO_ID, "Manne", MAIL, Role.C_LEVEL));
+  }
+
+  @Test
+  void me_thenAnswersWithTheRoleTheAccountCarriesNow() {
+    // Given — A8: die Oberflaeche liest die Rolle der eigenen Sitzung, E5: die jetzige.
+    when(currentAccount.byId(KONTO_ID))
+        .thenReturn(Konten.mit(KONTO_ID, MAIL, Role.READ_ONLY, true, 3, JETZT));
+
+    // When
+    final AccountResponse antwort = controller.me(KONTO_ID);
+
+    // Then
+    assertThat(antwort.role()).isEqualTo(Role.READ_ONLY);
   }
 
   /*

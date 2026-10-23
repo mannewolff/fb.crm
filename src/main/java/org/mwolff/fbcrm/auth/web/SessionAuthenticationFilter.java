@@ -30,19 +30,23 @@ import org.springframework.web.filter.OncePerRequestFilter;
 /**
  * Prueft bei jedem Aufruf das Session-Cookie (E3) und verlaengert die Sitzung (Kriterium 9).
  *
- * <p>Vier Dinge muessen stimmen, damit die Anfrage als angemeldet gilt: Das Cookie ist da, seine
- * Signatur passt, seine Laufzeit ist nicht abgelaufen — und die Sitzungs-Generation im Token ist
- * die, die das Konto <b>jetzt</b> traegt. Deshalb wird das Konto je Anfrage ueber den
- * Primaerschluessel geladen und nicht zwischengespeichert (E3): Ein Cache verzoegerte genau die
- * Wirkung, um derentwillen es die Generation gibt — das Abmelden beendet jede bestehende Sitzung
- * sofort (K8, E7, CLAUDE-security.md), ebenso das Update auf die Anmeldung per Code (E18).
+ * <p>Fuenf Dinge muessen stimmen, damit die Anfrage als angemeldet gilt: Das Cookie ist da, seine
+ * Signatur passt, seine Laufzeit ist nicht abgelaufen, die Sitzungs-Generation im Token ist die,
+ * die das Konto <b>jetzt</b> traegt — und das Konto ist <b>jetzt</b> aktiv. Deshalb wird das Konto
+ * je Anfrage ueber den Primaerschluessel geladen und nicht zwischengespeichert (E3): Ein Cache
+ * verzoegerte genau die Wirkung, um derentwillen es die Generation gibt — das Abmelden beendet jede
+ * bestehende Sitzung sofort (K8, E7, CLAUDE-security.md), ebenso das Update auf die Anmeldung per
+ * Code (E18). Der fuenfte Punkt haelt ein stillgelegtes Konto draussen, auch mit einem Token
+ * passender Generation (fachliche Quelle #409, Kriterium 7); das Stilllegen zaehlt die Generation
+ * zwar ohnehin hoch, die Sitzung haengt aber nicht allein daran. Weil das Konto je Anfrage frisch
+ * geladen wird, wirkt auch eine geaenderte Rolle beim naechsten Schritt (Plan #414, E5).
  *
- * <p>Scheitert einer der vier Punkte, setzt der Filter schlicht keine Authentifizierung und laesst
+ * <p>Scheitert einer der fuenf Punkte, setzt der Filter schlicht keine Authentifizierung und laesst
  * die Kette weiterlaufen. Die Antwort erzeugt dann der {@code AuthenticationEntryPoint} der {@link
- * SecurityConfig}: fuer jeden Fehlschlag derselbe nackte 401, ohne Hinweis darauf, welcher der vier
- * Punkte nicht stimmte.
+ * SecurityConfig}: fuer jeden Fehlschlag derselbe nackte 401, ohne Hinweis darauf, welcher der
+ * fuenf Punkte nicht stimmte.
  *
- * <p><b>Jede Anfrage verlaengert die Sitzung</b> (Kriterium 9, E4, E5): Stimmen alle vier Punkte,
+ * <p><b>Jede Anfrage verlaengert die Sitzung</b> (Kriterium 9, E4, E5): Stimmen alle fuenf Punkte,
  * setzt der Filter ein frisches Cookie mit einem jetzt ausgestellten Token und der vollen Laufzeit.
  * Die Frist laeuft damit ab der letzten Nutzung, nicht ab der Anmeldung. „Jede Anfrage" ist genau
  * „jede Bedienung", weil das Frontend keine Anfrage ohne Anlass stellt — das haelt der Waechter
@@ -140,6 +144,7 @@ public class SessionAuthenticationFilter extends OncePerRequestFilter {
     }
     return accounts
         .findById(gueltig.accountId())
+        .filter(Account::aktiv)
         .filter(konto -> konto.matchesGeneration(gueltig.sessionGeneration()));
   }
 

@@ -39,6 +39,7 @@ import org.mwolff.fbcrm.auth.domain.Account;
 import org.mwolff.fbcrm.auth.domain.AccountRepository;
 import org.mwolff.fbcrm.auth.domain.LoginCode;
 import org.mwolff.fbcrm.auth.domain.LoginCodeRepository;
+import org.mwolff.fbcrm.auth.domain.Role;
 import org.mwolff.fbcrm.auth.domain.SecretHasher;
 import org.mwolff.fbcrm.auth.domain.SessionTokens;
 import org.mwolff.fbcrm.auth.infrastructure.FailedLoginDelay;
@@ -157,6 +158,13 @@ class LoginUseCaseTest {
 
   private void kontoUnbekannt() {
     kontoUnbekannt(MAIL);
+  }
+
+  /** Zu MAIL gibt es ein Konto, aber es ist stillgelegt (#409, Kriterium 7). */
+  private void kontoStillgelegt() {
+    when(accounts.findByEmail(MAIL))
+        .thenReturn(
+            Optional.of(Konten.mit(KONTO_ID, MAIL, Role.C_LEVEL, false, GENERATION, JETZT)));
   }
 
   /** Zu MAIL liegt ein frischer Code, dessen Hash HASH ist. */
@@ -313,6 +321,23 @@ class LoginUseCaseTest {
   }
 
   @Test
+  void login_givenTheRightCodeForADeactivatedAccount_thenFailsLikeAnUnknownAddress() {
+    // Given — ein Code, ausgestellt vor dem Stilllegen: Er meldet niemanden mehr an (E6).
+    kontoUnbekannt();
+    codeStimmt();
+    final Throwable ohneKonto = catchThrowable(() -> useCase.login(MAIL, CODE, IP));
+    kontoStillgelegt();
+
+    // When
+    final Throwable stillgelegt = catchThrowable(() -> useCase.login(MAIL, CODE, IP));
+
+    // Then — dieselbe Abweisung, dieselbe Verzoegerung, keine Sitzung.
+    assertThat(stillgelegt).isInstanceOf(LoginFailed.class).hasMessage(ohneKonto.getMessage());
+    verify(delay, times(2)).apply();
+    verify(tokens, never()).encode(anyLong(), anyLong(), any(), any());
+  }
+
+  @Test
   void login_thenCountsTheInputAtTheOriginBeforeTheCodeIsLookedAt() {
     // Given — Kriterium 5: Eingaben zaehlen je Herkunft, die gescheiterten wie die gelungenen.
     kontoVorhanden();
@@ -458,6 +483,44 @@ class LoginUseCaseTest {
     // Then — E13: derselbe Rechenaufwand wie fuer das Konto, gegen einen verworfenen Code.
     verify(hasher, times(1)).hash(gehasht.capture());
     assertThat(gehasht.getValue()).matches("\\d{6}");
+  }
+
+  @Test
+  void codeAnfordern_givenADeactivatedAccount_thenIssuesNoCodeAndSendsNoMail() {
+    // Given — E6: die Adresse bleibt blockiert, aber angemeldet wird mit ihr nicht mehr.
+    final LoginUseCase anforderung = useCase;
+    kontoStillgelegt();
+
+    // When
+    anforderung.codeAnfordern(MAIL, IP);
+
+    // Then
+    verify(loginCodes, never()).save(any(LoginCode.class));
+    verify(loginCodes, never()).deleteByEmail(anyString());
+    verifyNoInteractions(postausgang);
+  }
+
+  @Test
+  void codeAnfordern_givenADeactivatedAccount_thenAnswersAndHashesLikeForAnUnknownAddress() {
+    // Given — #409, Kriterium 7: dieselbe Antwort wie fuer eine unbekannte Adresse, und E6:
+    // derselbe Argon2-Durchlauf, sonst verriete die Laufzeit das stillgelegte Konto.
+    final LoginUseCase anforderung = useCase;
+    kontoUnbekannt(FREMD);
+    final Throwable unbekannt = catchThrowable(() -> anforderung.codeAnfordern(FREMD, IP));
+    final ArgumentCaptor<String> fuerUnbekannt = ArgumentCaptor.forClass(String.class);
+    verify(hasher, times(1)).hash(fuerUnbekannt.capture());
+    clearInvocations(hasher);
+    kontoStillgelegt();
+    final ArgumentCaptor<String> fuerStillgelegt = ArgumentCaptor.forClass(String.class);
+
+    // When
+    final Throwable stillgelegt = catchThrowable(() -> anforderung.codeAnfordern(MAIL, IP));
+
+    // Then
+    assertThat(stillgelegt).isEqualTo(unbekannt).isNull();
+    verify(hasher, times(1)).hash(fuerStillgelegt.capture());
+    assertThat(fuerStillgelegt.getValue()).matches("\\d{6}");
+    assertThat(fuerUnbekannt.getValue()).matches("\\d{6}");
   }
 
   @Test
