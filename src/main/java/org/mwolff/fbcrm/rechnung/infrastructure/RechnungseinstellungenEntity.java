@@ -4,12 +4,14 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 import java.math.BigDecimal;
 import java.time.Instant;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Die eine Zeile der Tabelle {@code rechnung_einstellungen} aus {@code
- * V14__rechnung_einstellungen.sql}.
+ * V14__rechnung_einstellungen.sql} und {@code V33__version.sql}.
  *
  * <p>Die Kennung wird nicht erzeugt, sondern gesetzt: Es gibt genau die Zeile {@link #ZEILE}, und
  * die Datenbank laesst ueber ihren CHECK keine zweite zu. Dass die Kennung von Anfang an steht,
@@ -39,6 +41,18 @@ class RechnungseinstellungenEntity {
   private Instant updatedAt;
 
   /*
+   * Der Stand der Zeile, gefuehrt von Hibernate (Plan #415, E1): Jedes Schreiben erhoeht ihn, und
+   * ein UPDATE mit einem anderen Stand als dem vorgelegten trifft keine Zeile und scheitert. Ein
+   * long und kein Long: Ob die Zeile neu ist, entscheidet so weiter die Kennung.
+   */
+  @Version
+  @Column(name = "version", nullable = false)
+  private long version;
+
+  @Column(name = "geaendert_von")
+  private @Nullable Long geaendertVon;
+
+  /*
    * JPA verlangt einen parameterlosen Konstruktor und fuellt die Felder danach selbst; NullAway
    * sieht diesen Weg nicht und meldete sonst nicht initialisierte Felder.
    */
@@ -51,12 +65,16 @@ class RechnungseinstellungenEntity {
       final String nummerMuster,
       final BigDecimal steuersatz,
       final int zahlungszielTage,
-      final Instant updatedAt) {
+      final Instant updatedAt,
+      final long version,
+      final @Nullable Long geaendertVon) {
     this.id = ZEILE;
     this.nummerMuster = nummerMuster;
     this.steuersatz = steuersatz;
     this.zahlungszielTage = zahlungszielTage;
     this.updatedAt = updatedAt;
+    this.version = version;
+    this.geaendertVon = geaendertVon;
   }
 
   Short getId() {
@@ -77,5 +95,13 @@ class RechnungseinstellungenEntity {
 
   Instant getUpdatedAt() {
     return updatedAt;
+  }
+
+  long getVersion() {
+    return version;
+  }
+
+  @Nullable Long getGeaendertVon() {
+    return geaendertVon;
   }
 }

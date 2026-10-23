@@ -6,6 +6,7 @@ import org.mwolff.fbcrm.common.Geschaeftszone;
 import org.mwolff.fbcrm.rechnung.domain.Nummernkreis;
 import org.mwolff.fbcrm.rechnung.domain.Rechnungseinstellungen;
 import org.mwolff.fbcrm.rechnung.domain.RechnungseinstellungenRepository;
+import org.mwolff.fbcrm.rechnung.domain.Zeilenstand;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -30,6 +31,12 @@ import org.springframework.transaction.annotation.Transactional;
  * Anwender den Zaehler widerspruchsfrei auf eine Zahl setzen, an der das naechste Stellen
  * unvermeidlich scheitern muesste — und er erfuehre es an einer Maske, an der die Ursache nicht
  * steht.
+ *
+ * <p><b>Davor steht nur der Stand</b> (#411, Kriterium 4; Plan #415, E1, E14): Bevor die Nummer
+ * gefragt wird, vergleicht der Anwendungsfall den vorgelegten Stand mit dem der Zeile. Wer auf
+ * einem alten Stand speichert, bekommt {@link RechnungseinstellungenGeaendert} mit Urheber und
+ * Zeitpunkt der fremden Aenderung, und weder Einstellungen noch Zaehler werden geschrieben. Das
+ * handelnde Konto steht danach als Urheber an der Zeile.
  */
 @Service
 @Transactional
@@ -56,9 +63,19 @@ public class RechnungseinstellungenPflegenUseCase {
    *
    * @param einstellungen die eingereichten Einstellungen, an der Schnittstelle bereits geprueft
    * @param naechsteNummer die eingereichte naechste laufende Nummer, ab 1
+   * @param version der vorgelegte Stand aus {@code If-Match}
+   * @param konto Kennung des handelnden Kontos
+   * @return der neue Stand samt Nummer und erhoehter Version
+   * @throws RechnungseinstellungenGeaendert wenn die Einstellungen inzwischen einen anderen Stand
+   *     haben als den vorgelegten
    * @throws NaechsteNummerSchonVergeben wenn die Nummer eine vergebene Rechnungsnummer ergaebe
    */
-  public void pflege(final Rechnungseinstellungen einstellungen, final int naechsteNummer) {
+  public RechnungseinstellungenMitNummer pflege(
+      final Rechnungseinstellungen einstellungen,
+      final int naechsteNummer,
+      final long version,
+      final long konto) {
+    RechnungseinstellungenGeaendert.pruefe(bestand.stand(), version, konto);
     final int jahr = LocalDate.now(clock.withZone(Geschaeftszone.ZONE)).getYear();
     final int zaehlerjahr = einstellungen.nummerMuster().zaehlerjahr(jahr);
     // Gefragt wird mit dem Zaehlerjahr und nicht mit dem Kalenderjahr: Traegt das Muster ein Jahr,
@@ -68,7 +85,10 @@ public class RechnungseinstellungenPflegenUseCase {
     if (rechnungsnummern.vergeben(wuerdeEntstehen)) {
       throw new NaechsteNummerSchonVergeben(wuerdeEntstehen);
     }
-    bestand.speichere(einstellungen, clock.instant());
+    final Zeilenstand gespeichert =
+        bestand.speichere(einstellungen, clock.instant(), version, konto);
     nummernkreis.setze(zaehlerjahr, naechsteNummer);
+    return new RechnungseinstellungenMitNummer(
+        einstellungen, naechsteNummer, gespeichert.version());
   }
 }

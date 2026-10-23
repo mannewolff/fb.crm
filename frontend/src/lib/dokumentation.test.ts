@@ -348,6 +348,10 @@ describe('Szenarien des Fachplans (E16)', () => {
     // Eine geloeschte nachgetragene Rechnung weist jede Taste ab, ihre Nummer ist frei (Issue #449).
     expect(text).toMatch(/„Löschen" an einer nachgetragenen Rechnung löscht nur die Rechnung/u);
     expect(text).toMatch(/Nummer ist wieder frei/u);
+    // Einstellungen zur Rechnung und Briefbogen sind geschuetzt; der Briefbogen zaehlt als ein
+    // Eintrag, auch zwischen Briefpapier und Raendern (Issue #450, E11).
+    expect(text).toMatch(/Speichern der\s+Einstellungen zur Rechnung/u);
+    expect(text).toMatch(/Der Briefbogen zählt als ein\s+Eintrag/u);
     expect(text).toMatch(/\*\*Ergebnis:\*\*/u);
   });
 

@@ -181,9 +181,16 @@ class RechnungNummerIT extends AbstractIntegrationTest {
     rumpf.put("naechsteNummer", Integer.valueOf(naechsteNummer));
     rumpf.put("steuersatz", "19.00");
     rumpf.put("zahlungszielTage", Integer.valueOf(10));
+    // Auf dem aktuellen Stand der Einstellungen, wie die Maske (Plan #415, E2).
     assertThat(
-            ruf("/api/rechnung/einstellungen", HttpMethod.PUT, rumpf, String.class).getStatusCode())
-        .isEqualTo(HttpStatus.NO_CONTENT);
+            rest.exchange(
+                    "/api/rechnung/einstellungen",
+                    HttpMethod.PUT,
+                    new HttpEntity<>(
+                        rumpf, Stand.aktuell(sitzung, jdbc, "rechnung_einstellungen", 1L)),
+                    String.class)
+                .getStatusCode())
+        .isEqualTo(HttpStatus.OK);
   }
 
   /** Die naechste laufende Nummer des laufenden Jahres, wie die Maske sie zeigt. */

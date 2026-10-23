@@ -61,6 +61,7 @@ const BRIEFBOGEN = {
   unten: 200,
   folgeOben: 200,
   folgeUnten: 200,
+  version: 0,
 };
 
 /**

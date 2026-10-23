@@ -20,6 +20,7 @@ import org.mwolff.fbcrm.rechnung.domain.Randmasse;
  * @param absenderzeile ob die kleine Absenderzeile ueber der Anschrift eingedruckt wird
  * @param steuerBankZeile ob die Zeile mit Steuer- und Bankangaben eingedruckt wird
  * @param raender die sechs Raender
+ * @param version der Stand der ganzen Zeile, wie ihn {@code If-Match} vorlegt (Plan #415, E11)
  */
 public record Briefbogenstand(
     boolean briefpapier,
@@ -28,19 +29,28 @@ public record Briefbogenstand(
     @Nullable Integer seiten,
     boolean absenderzeile,
     boolean steuerBankZeile,
-    Randmasse raender) {
+    Randmasse raender,
+    long version) {
 
   /**
    * Der Stand eines Briefbogens, ohne den Schluessel seines Briefpapiers.
    *
    * @param bogen der Briefbogen aus dem Bestand
+   * @param version der Stand der Zeile
    * @return was die Maske davon sieht
    */
-  static Briefbogenstand von(final Briefbogen bogen) {
+  static Briefbogenstand von(final Briefbogen bogen, final long version) {
     final Briefpapierblatt blatt = bogen.blatt();
     if (blatt == null) {
       return new Briefbogenstand(
-          false, null, null, null, bogen.absenderzeile(), bogen.steuerBankZeile(), bogen.raender());
+          false,
+          null,
+          null,
+          null,
+          bogen.absenderzeile(),
+          bogen.steuerBankZeile(),
+          bogen.raender(),
+          version);
     }
     return new Briefbogenstand(
         true,
@@ -49,6 +59,7 @@ public record Briefbogenstand(
         blatt.seiten(),
         bogen.absenderzeile(),
         bogen.steuerBankZeile(),
-        bogen.raender());
+        bogen.raender(),
+        version);
   }
 }

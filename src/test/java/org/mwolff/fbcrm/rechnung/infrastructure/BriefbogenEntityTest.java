@@ -24,11 +24,22 @@ class BriefbogenEntityTest {
   void aus_thenCarriesTheFixedKeyAndTheTime() {
     // When
     final BriefbogenEntity zeile =
-        BriefbogenEntity.aus(new Briefbogen(null, true, false, RAENDER), GEAENDERT);
+        BriefbogenEntity.aus(new Briefbogen(null, true, false, RAENDER), GEAENDERT, 3L, 31L);
 
     // Then
     assertThat(zeile.getId()).isEqualTo(BriefbogenEntity.ZEILE);
     assertThat(zeile.getUpdatedAt()).isEqualTo(GEAENDERT);
+  }
+
+  @Test
+  void aus_thenCarriesTheStandItIsBasedOnAndTheActingKonto() {
+    // When — Plan #415, E1, E14: die Version, auf der das Schreiben beruht, und der Urheber.
+    final BriefbogenEntity zeile =
+        BriefbogenEntity.aus(new Briefbogen(null, true, false, RAENDER), GEAENDERT, 3L, 31L);
+
+    // Then
+    assertThat(zeile.getVersion()).isEqualTo(3L);
+    assertThat(zeile.getGeaendertVon()).isEqualTo(31L);
   }
 
   @Test
@@ -42,7 +53,8 @@ class BriefbogenEntityTest {
             RAENDER);
 
     // When / Then
-    assertThat(BriefbogenEntity.aus(briefbogen, GEAENDERT).alsBriefbogen()).isEqualTo(briefbogen);
+    assertThat(BriefbogenEntity.aus(briefbogen, GEAENDERT, 0L, 31L).alsBriefbogen())
+        .isEqualTo(briefbogen);
   }
 
   @Test
@@ -51,6 +63,7 @@ class BriefbogenEntityTest {
     final Briefbogen briefbogen = new Briefbogen(null, true, false, RAENDER);
 
     // When / Then
-    assertThat(BriefbogenEntity.aus(briefbogen, GEAENDERT).alsBriefbogen()).isEqualTo(briefbogen);
+    assertThat(BriefbogenEntity.aus(briefbogen, GEAENDERT, 0L, 31L).alsBriefbogen())
+        .isEqualTo(briefbogen);
   }
 }

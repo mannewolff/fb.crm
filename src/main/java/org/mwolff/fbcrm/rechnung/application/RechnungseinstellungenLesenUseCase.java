@@ -43,6 +43,8 @@ public class RechnungseinstellungenLesenUseCase {
     final Rechnungseinstellungen einstellungen = bestand.lies();
     final int jahr = LocalDate.now(clock.withZone(Geschaeftszone.ZONE)).getYear();
     return new RechnungseinstellungenMitNummer(
-        einstellungen, nummernkreis.lies(einstellungen.nummerMuster().zaehlerjahr(jahr)));
+        einstellungen,
+        nummernkreis.lies(einstellungen.nummerMuster().zaehlerjahr(jahr)),
+        bestand.stand().version());
   }
 }

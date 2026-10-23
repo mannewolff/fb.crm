@@ -21,9 +21,15 @@ import org.mwolff.fbcrm.rechnung.application.RechnungseinstellungenMitNummer;
  * @param naechsteNummer die naechste laufende Nummer
  * @param steuersatz Mehrwertsteuersatz in Prozent
  * @param zahlungszielTage Zahlungsziel in Tagen
+ * @param version der Stand der Einstellungen, den die Maske beim Speichern als {@code If-Match}
+ *     vorlegt (Plan #415, E1, E2)
  */
 public record RechnungseinstellungenResponse(
-    String nummerMuster, int naechsteNummer, BigDecimal steuersatz, int zahlungszielTage) {
+    String nummerMuster,
+    int naechsteNummer,
+    BigDecimal steuersatz,
+    int zahlungszielTage,
+    long version) {
 
   /** Die Sicht der Oberflaeche auf die Einstellungen. */
   static RechnungseinstellungenResponse of(final RechnungseinstellungenMitNummer stand) {
@@ -31,6 +37,7 @@ public record RechnungseinstellungenResponse(
         stand.einstellungen().nummerMuster().text(),
         stand.naechsteNummer(),
         stand.einstellungen().steuersatz(),
-        stand.einstellungen().zahlungszielTage());
+        stand.einstellungen().zahlungszielTage(),
+        stand.version());
   }
 }

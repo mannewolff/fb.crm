@@ -64,6 +64,10 @@ import org.springframework.util.MultiValueMap;
  * <p>Ebenso nur hier: dass ein ausgetauschtes Briefpapier eine schon gestellte Rechnung nicht
  * beruehrt und erst die naechste traegt (Kriterium 10).
  *
+ * <p>Jeder schreibende Weg legt den Stand der Zeile vor, wie die Maske (Plan #415, E2, E11). Hier
+ * zu sehen: dass ein {@code PUT} auf dem Stand vor einem Hochladen abgewiesen wird, obwohl beide
+ * Wege in getrennte Spalten schreiben.
+ *
  * <p>Die eine Zeile wird vor jeder Methode auf den Stand der Migration zurueckgesetzt; die
  * Datenbank der Suite ist geteilt.
  */
@@ -107,9 +111,20 @@ class BriefpapierIT extends AbstractIntegrationTest {
     sitzung = Anmeldung.perCode(rest, jdbc, hasher, MAIL);
   }
 
+  /** Liest ohne Stand; jeder schreibende Weg legt den aktuellen Stand der Zeile vor (E2). */
   private <T> ResponseEntity<T> ruf(
-      final HttpMethod methode, final Object rumpf, final Class<T> typ) {
-    return rest.exchange(PFAD, methode, new HttpEntity<>(rumpf, sitzung), typ);
+      final HttpMethod methode, final @Nullable Object rumpf, final Class<T> typ) {
+    final HttpHeaders kopf =
+        HttpMethod.GET.equals(methode) ? sitzung : Stand.aktuell(sitzung, jdbc, "briefbogen", 1L);
+    return rest.exchange(PFAD, methode, new HttpEntity<>(rumpf, kopf), typ);
+  }
+
+  /** Die Kopfzeilen der Sitzung samt {@code If-Match} auf einen frei gewaehlten Stand. */
+  private HttpHeaders aufStand(final long version) {
+    final HttpHeaders kopf = new HttpHeaders();
+    kopf.putAll(sitzung);
+    kopf.setIfMatch("\"" + version + "\"");
+    return kopf;
   }
 
   private BriefbogenResponse lies() {
@@ -143,14 +158,17 @@ class BriefpapierIT extends AbstractIntegrationTest {
               }
             },
             dateikopf));
-    final HttpHeaders kopf = new HttpHeaders();
-    kopf.addAll(sitzung);
+    final HttpHeaders kopf = Stand.aktuell(sitzung, jdbc, "briefbogen", 1L);
     kopf.setContentType(MediaType.MULTIPART_FORM_DATA);
     return rest.exchange(PFAD + "/datei", HttpMethod.POST, new HttpEntity<>(felder, kopf), typ);
   }
 
   private <T> ResponseEntity<T> entferne(final Class<T> typ) {
-    return rest.exchange(PFAD + "/datei", HttpMethod.DELETE, new HttpEntity<>(sitzung), typ);
+    return rest.exchange(
+        PFAD + "/datei",
+        HttpMethod.DELETE,
+        new HttpEntity<>(Stand.aktuell(sitzung, jdbc, "briefbogen", 1L)),
+        typ);
   }
 
   private String schluessel() {
@@ -189,7 +207,7 @@ class BriefpapierIT extends AbstractIntegrationTest {
     assertThat(lies())
         .isEqualTo(
             new BriefbogenResponse(
-                false, null, null, null, true, true, 250, 200, 985, 200, 200, 200));
+                false, null, null, null, true, true, 250, 200, 985, 200, 200, 200, 0L));
   }
 
   @Test
@@ -204,7 +222,7 @@ class BriefpapierIT extends AbstractIntegrationTest {
     // Then
     final BriefbogenResponse erwartet =
         new BriefbogenResponse(
-            false, null, null, null, false, true, 300, 150, 1_000, 250, 180, 220);
+            false, null, null, null, false, true, 300, 150, 1_000, 250, 180, 220, 1L);
     assertThat(antwort.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(antwort.getBody()).isEqualTo(erwartet);
     assertThat(lies()).isEqualTo(erwartet);
@@ -222,7 +240,72 @@ class BriefpapierIT extends AbstractIntegrationTest {
     assertThat(lies())
         .isEqualTo(
             new BriefbogenResponse(
-                false, null, null, null, true, true, 250, 200, 985, 200, 200, 200));
+                false, null, null, null, true, true, 250, 200, 985, 200, 200, 200, 0L));
+  }
+
+  @Test
+  void pflegen_withoutIfMatch_thenAnswers428AndKeepsTheRow() {
+    // When — Plan #415, E3: ohne vorgelegten Stand wird nicht geschrieben.
+    final ResponseEntity<String> antwort =
+        rest.exchange(
+            PFAD,
+            HttpMethod.PUT,
+            new HttpEntity<>(satz(false, true, 300, 150, 1_000, 250, 180, 220), sitzung),
+            String.class);
+
+    // Then
+    assertThat(antwort.getStatusCode()).isEqualTo(HttpStatus.PRECONDITION_REQUIRED);
+    assertThat(lies().absenderzeile()).isTrue();
+    assertThat(lies().version()).isZero();
+  }
+
+  @Test
+  void pflegen_afterAnUploadOnThePreviousVersion_thenAnswers409AndKeepsTheBlatt()
+      throws IOException {
+    // Given — E11: die Maske ist auf Stand 0 geoeffnet; inzwischen wird ein Briefpapier
+    // hochgeladen. Das schreibt in andere Spalten als Schalter und Raender, erhoeht aber denselben
+    // Stand.
+    final long geoeffnet = lies().version();
+    final ResponseEntity<BriefbogenResponse> hochgeladen =
+        ladeHoch("kopf.pdf", pdf(PDRectangle.A4), BriefbogenResponse.class);
+    assertThat(Objects.requireNonNull(hochgeladen.getBody()).version()).isEqualTo(geoeffnet + 1);
+    final BriefbogenResponse nachDemHochladen = lies();
+
+    // When — Schalter und Raender auf dem Stand vor dem Hochladen.
+    final ResponseEntity<String> antwort =
+        rest.exchange(
+            PFAD,
+            HttpMethod.PUT,
+            new HttpEntity<>(
+                satz(false, false, 300, 150, 1_000, 250, 180, 220), aufStand(geoeffnet)),
+            String.class);
+
+    // Then — abgewiesen mit der Erweiterung konflikt; Briefpapier, Schalter und Raender bleiben.
+    assertThat(antwort.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+    assertThat(antwort.getBody()).contains("\"konflikt\"").contains("veraltet");
+    assertThat(lies()).isEqualTo(nachDemHochladen);
+  }
+
+  @Test
+  void entfernen_onAnOutdatedStand_thenAnswers409AndKeepsTheBlatt() throws IOException {
+    // Given — ein Briefpapier, danach ein geaenderter Rand: der Stand ist weitergezaehlt.
+    ladeHoch("kopf.pdf", pdf(PDRectangle.A4), BriefbogenResponse.class);
+    final long geoeffnet = lies().version();
+    ruf(HttpMethod.PUT, satz(true, true, 300, 150, 1_000, 250, 180, 220), BriefbogenResponse.class);
+    final String schluessel = schluessel();
+
+    // When
+    final ResponseEntity<String> antwort =
+        rest.exchange(
+            PFAD + "/datei",
+            HttpMethod.DELETE,
+            new HttpEntity<>(aufStand(geoeffnet)),
+            String.class);
+
+    // Then
+    assertThat(antwort.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+    assertThat(schluessel()).isEqualTo(schluessel);
+    assertThat(speicher.lies(schluessel)).isNotEmpty();
   }
 
   @Test
@@ -295,7 +378,7 @@ class BriefpapierIT extends AbstractIntegrationTest {
     // Then — Kriterium 16: allein das Briefpapier ist fort, auch aus dem Speicher.
     final BriefbogenResponse erwartet =
         new BriefbogenResponse(
-            false, null, null, null, false, true, 300, 150, 1_000, 250, 180, 220);
+            false, null, null, null, false, true, 300, 150, 1_000, 250, 180, 220, 3L);
     assertThat(antwort.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(antwort.getBody()).isEqualTo(erwartet);
     assertThat(lies()).isEqualTo(erwartet);

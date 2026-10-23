@@ -1,4 +1,4 @@
-import { apiJson, apiOhneInhalt } from './client';
+import { apiJson } from './client';
 import { inHundertsteln, objekt, text, zahl } from './verengen';
 import { dezimal } from '../lib/geld';
 
@@ -26,6 +26,11 @@ import { dezimal } from '../lib/geld';
  *
  * Kein Anlegen und kein Loeschen: Die eine Zeile gibt es von der Migration an, und sie verschwindet
  * nicht wieder.
+ *
+ * **Das Speichern legt den Stand vor** (#411, Kriterium 4; Plan #415, E2): Die Version der Antwort
+ * geht beim naechsten Speichern als `If-Match` hinaus. Hat inzwischen jemand anderes gespeichert,
+ * weist der Server mit einem Bearbeitungskonflikt ab; ein gelungenes Speichern antwortet mit dem
+ * neuen Stand samt erhoehter Version.
  */
 
 /** Die Rechnungseinstellungen mit ihren vier Werten (#159, Kriterium 5). */
@@ -40,19 +45,26 @@ export interface Rechnungseinstellungen {
   readonly zahlungszielTage: number;
 }
 
+/** Die Einstellungen, wie der Server sie liefert: samt dem Stand, den das Speichern vorlegt. */
+export interface GespeicherteRechnungseinstellungen extends Rechnungseinstellungen {
+  /** Der Stand der Zeile (Plan #415, E1). */
+  readonly version: number;
+}
+
 /** Verengt die Antwort oder scheitert. */
-export function parseRechnungseinstellungen(wert: unknown): Rechnungseinstellungen {
+export function parseRechnungseinstellungen(wert: unknown): GespeicherteRechnungseinstellungen {
   const einstellungen = objekt(wert);
   return {
     nummerMuster: text(einstellungen.nummerMuster),
     naechsteNummer: zahl(einstellungen.naechsteNummer),
     steuersatzInHundertsteln: inHundertsteln(einstellungen.steuersatz),
     zahlungszielTage: zahl(einstellungen.zahlungszielTage),
+    version: zahl(einstellungen.version),
   };
 }
 
 /** Liest die Einstellungen; auf einer frischen Instanz die Vorbelegungen der Migration. */
-export function rechnungseinstellungenLesen(): Promise<Rechnungseinstellungen> {
+export function rechnungseinstellungenLesen(): Promise<GespeicherteRechnungseinstellungen> {
   return apiJson(
     '/api/rechnung/einstellungen',
     { methode: 'GET' },
@@ -60,17 +72,27 @@ export function rechnungseinstellungenLesen(): Promise<Rechnungseinstellungen> {
   );
 }
 
-/** Schreibt die Einstellungen fort; die Antwort traegt keinen Rumpf. */
+/**
+ * Schreibt die Einstellungen fort; die Antwort traegt den neuen Stand.
+ *
+ * @param version der Stand, auf dem die Aenderung beruht
+ */
 export function rechnungseinstellungenPflegen(
+  version: number,
   einstellungen: Rechnungseinstellungen,
-): Promise<void> {
-  return apiOhneInhalt('/api/rechnung/einstellungen', {
-    methode: 'PUT',
-    rumpf: {
-      nummerMuster: einstellungen.nummerMuster,
-      naechsteNummer: einstellungen.naechsteNummer,
-      steuersatz: dezimal(einstellungen.steuersatzInHundertsteln, '.'),
-      zahlungszielTage: einstellungen.zahlungszielTage,
+): Promise<GespeicherteRechnungseinstellungen> {
+  return apiJson(
+    '/api/rechnung/einstellungen',
+    {
+      methode: 'PUT',
+      rumpf: {
+        nummerMuster: einstellungen.nummerMuster,
+        naechsteNummer: einstellungen.naechsteNummer,
+        steuersatz: dezimal(einstellungen.steuersatzInHundertsteln, '.'),
+        zahlungszielTage: einstellungen.zahlungszielTage,
+      },
+      version,
     },
-  });
+    parseRechnungseinstellungen,
+  );
 }

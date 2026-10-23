@@ -12,6 +12,7 @@ import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mwolff.fbcrm.AbstractIntegrationTest;
+import org.mwolff.fbcrm.Stand;
 import org.mwolff.fbcrm.auth.Anmeldung;
 import org.mwolff.fbcrm.auth.Konten;
 import org.mwolff.fbcrm.auth.domain.AccountRepository;
@@ -95,8 +96,23 @@ class RechnungseinstellungenIT extends AbstractIntegrationTest {
         ruf(HttpMethod.GET, null, RechnungseinstellungenResponse.class, sitzung).getBody());
   }
 
+  /** Schreibt auf dem aktuellen Stand der Zeile, wie die Maske (Plan #415, E2). */
   private ResponseEntity<String> schreibe(
       final String muster, final int nummer, final String steuersatz, final int ziel) {
+    return schreibe(
+        muster,
+        nummer,
+        steuersatz,
+        ziel,
+        Stand.aktuell(sitzung, jdbc, "rechnung_einstellungen", 1L));
+  }
+
+  private ResponseEntity<String> schreibe(
+      final String muster,
+      final int nummer,
+      final String steuersatz,
+      final int ziel,
+      final HttpHeaders kopf) {
     return ruf(
         HttpMethod.PUT,
         Map.of(
@@ -109,7 +125,15 @@ class RechnungseinstellungenIT extends AbstractIntegrationTest {
             "zahlungszielTage",
             ziel),
         String.class,
-        sitzung);
+        kopf);
+  }
+
+  /** Die Kopfzeilen der Sitzung samt {@code If-Match} auf einen frei gewaehlten Stand. */
+  private HttpHeaders aufStand(final long version) {
+    final HttpHeaders kopf = new HttpHeaders();
+    kopf.putAll(sitzung);
+    kopf.setIfMatch("\"" + version + "\"");
+    return kopf;
   }
 
   private static void pruefe(
@@ -184,8 +208,65 @@ class RechnungseinstellungenIT extends AbstractIntegrationTest {
     final ResponseEntity<String> antwort = schreibe("R{JJ}-{NNNN}", 4, "19.50", 14);
 
     // Then
-    assertThat(antwort.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
+    assertThat(antwort.getStatusCode()).isEqualTo(HttpStatus.OK);
     pruefe(lies(), "R{JJ}-{NNNN}", 4, "19.50", 14);
+  }
+
+  @Test
+  void pflegen_thenAnswersWithTheNewStandAndARaisedVersion() {
+    // Given
+    final long vorher = lies().version();
+
+    // When — Plan #415, E2: die Antwort traegt den Stand, den die Maske beim naechsten Speichern
+    // vorlegt.
+    final ResponseEntity<RechnungseinstellungenResponse> antwort =
+        ruf(
+            HttpMethod.PUT,
+            Map.of(
+                "nummerMuster",
+                "R{JJ}-{NNNN}",
+                "naechsteNummer",
+                4,
+                "steuersatz",
+                "19.50",
+                "zahlungszielTage",
+                14),
+            RechnungseinstellungenResponse.class,
+            aufStand(vorher));
+
+    // Then
+    assertThat(antwort.getStatusCode()).isEqualTo(HttpStatus.OK);
+    final RechnungseinstellungenResponse neu = Objects.requireNonNull(antwort.getBody());
+    pruefe(neu, "R{JJ}-{NNNN}", 4, "19.50", 14);
+    assertThat(neu.version()).isEqualTo(vorher + 1);
+    assertThat(lies()).isEqualTo(neu);
+  }
+
+  @Test
+  void pflegen_withoutIfMatch_thenAnswers428AndLeavesTheStoredValues() {
+    // When — Plan #415, E3: ohne vorgelegten Stand wird nicht geschrieben.
+    final ResponseEntity<String> antwort = schreibe("R{JJ}-{NNNN}", 4, "19.50", 14, sitzung);
+
+    // Then
+    assertThat(antwort.getStatusCode()).isEqualTo(HttpStatus.PRECONDITION_REQUIRED);
+    pruefe(lies(), "{NNNN}-{JJJJ}", 1, "19", 10);
+    assertThat(zaehler(LocalDate.now(Geschaeftszone.ZONE).getYear())).isNull();
+  }
+
+  @Test
+  void pflegen_onAnOutdatedStand_thenAnswers409AndKeepsTheFirstChange() {
+    // Given — #411, Kriterium 1: zwei Masken auf demselben Stand; die erste speichert.
+    final long geoeffnet = lies().version();
+    assertThat(schreibe("A-{NNNN}", 3, "19.00", 10, aufStand(geoeffnet)).getStatusCode())
+        .isEqualTo(HttpStatus.OK);
+
+    // When — die zweite speichert auf dem Stand, den sie geoeffnet hat.
+    final ResponseEntity<String> antwort = schreibe("B-{NNNN}", 9, "7.00", 0, aufStand(geoeffnet));
+
+    // Then — abgewiesen mit der Erweiterung konflikt, und der Stand der ersten bleibt.
+    assertThat(antwort.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+    assertThat(antwort.getBody()).contains("\"konflikt\"").contains("veraltet");
+    pruefe(lies(), "A-{NNNN}", 3, "19.00", 10);
   }
 
   @Test
@@ -271,8 +352,7 @@ class RechnungseinstellungenIT extends AbstractIntegrationTest {
     rechnungMitNummer(nummerImLaufendenJahr(1));
 
     // When / Then
-    assertThat(schreibe("{NNNN}-{JJJJ}", 2, "19.50", 14).getStatusCode())
-        .isEqualTo(HttpStatus.NO_CONTENT);
+    assertThat(schreibe("{NNNN}-{JJJJ}", 2, "19.50", 14).getStatusCode()).isEqualTo(HttpStatus.OK);
     pruefe(lies(), "{NNNN}-{JJJJ}", 2, "19.50", 14);
   }
 
@@ -283,8 +363,7 @@ class RechnungseinstellungenIT extends AbstractIntegrationTest {
     rechnungMitNummer(nummerImLaufendenJahr(1));
 
     // When / Then
-    assertThat(schreibe("R{JJ}-{NNNN}", 1, "19.50", 14).getStatusCode())
-        .isEqualTo(HttpStatus.NO_CONTENT);
+    assertThat(schreibe("R{JJ}-{NNNN}", 1, "19.50", 14).getStatusCode()).isEqualTo(HttpStatus.OK);
     pruefe(lies(), "R{JJ}-{NNNN}", 1, "19.50", 14);
   }
 }

@@ -6,6 +6,7 @@ import org.mwolff.fbcrm.rechnung.application.Randgrenzen.Rand;
 import org.mwolff.fbcrm.rechnung.domain.Briefbogen;
 import org.mwolff.fbcrm.rechnung.domain.BriefbogenRepository;
 import org.mwolff.fbcrm.rechnung.domain.Randmasse;
+import org.mwolff.fbcrm.rechnung.domain.Zeilenstand;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -23,6 +24,12 @@ import org.springframework.transaction.annotation.Transactional;
  * Folgeseite oben, Folgeseite unten (E9). Weicht keiner ab, hat allein ein Schalter den Platz
  * genommen; dann haengt sie am ersten Rand, der durch Verkleinern wieder passt, und gibt es keinen,
  * am linken.
+ *
+ * <p><b>Davor steht nur der Stand</b> (#411, Kriterium 4; Plan #415, E1, E11, E14): Bevor die
+ * Raender geprueft werden, vergleicht der Anwendungsfall den vorgelegten Stand mit dem der Zeile.
+ * Der Stand gilt fuer den ganzen Briefbogen: Wer Raender auf dem Stand vor einem Hochladen
+ * speichert, bekommt {@link BriefbogenGeaendert}. Das handelnde Konto steht danach als Urheber an
+ * der Zeile.
  *
  * <p>Der Zeitpunkt der Aenderung kommt aus der injizierten {@link Clock} (CLAUDE-java.md §6.2).
  */
@@ -44,11 +51,20 @@ public class BriefbogenPflegenUseCase {
    * @param absenderzeile ob die Absenderzeile eingedruckt wird
    * @param steuerBankZeile ob die Steuer- und Bankzeile eingedruckt wird
    * @param raender die sechs Raender, an der Schnittstelle bereits auf nicht negativ geprueft
-   * @return der neue Stand
+   * @param version der vorgelegte Stand aus {@code If-Match}
+   * @param konto Kennung des handelnden Kontos
+   * @return der neue Stand mit erhoehter Version
+   * @throws BriefbogenGeaendert wenn der Briefbogen inzwischen einen anderen Stand hat als den
+   *     vorgelegten
    * @throws RandNichtMoeglich wenn die Raender dem Inhalt keinen Platz mehr lassen
    */
   public Briefbogenstand pflege(
-      final boolean absenderzeile, final boolean steuerBankZeile, final Randmasse raender) {
+      final boolean absenderzeile,
+      final boolean steuerBankZeile,
+      final Randmasse raender,
+      final long version,
+      final long konto) {
+    BriefbogenGeaendert.pruefe(bestand.stand(), version, konto);
     final Briefbogen bisher = bestand.lies();
     if (!Randgrenzen.passt(raender, absenderzeile, steuerBankZeile)) {
       final Rand rand =
@@ -58,8 +74,8 @@ public class BriefbogenPflegenUseCase {
           rand, Randgrenzen.groesstZulaessig(rand, raender, absenderzeile, steuerBankZeile));
     }
     final Briefbogen neu = new Briefbogen(bisher.blatt(), absenderzeile, steuerBankZeile, raender);
-    bestand.speichere(neu, clock.instant());
-    return Briefbogenstand.von(neu);
+    final Zeilenstand gespeichert = bestand.speichere(neu, clock.instant(), version, konto);
+    return Briefbogenstand.von(neu, gespeichert.version());
   }
 
   /** Der erste Rand, mit dem der Satz durch Verkleinern wieder passt; sonst der linke. */

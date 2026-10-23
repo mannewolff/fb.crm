@@ -11,8 +11,13 @@ import org.mwolff.fbcrm.rechnung.domain.Rechnungseinstellungen;
  * gehoert — ein Muster ohne Jahres-Platzhalter zaehlt unter 0, eines mit Jahr im laufenden Jahr der
  * Geschaeftszone.
  *
+ * <p>Die Version ist die der Zeile der Einstellungen (Plan #415, E1): Die Maske legt sie beim
+ * Speichern vor. Der Zaehler des Nummernkreises traegt keinen eigenen Stand — er wird mit den
+ * Einstellungen zusammen geschrieben und ist durch ihren Stand mit geschuetzt.
+ *
  * @param einstellungen die gespeicherten Einstellungen
  * @param naechsteNummer der Stand des zugehoerigen Zaehlers, ab 1
+ * @param version der Stand der Einstellungen, wie ihn {@code If-Match} vorlegt
  */
 public record RechnungseinstellungenMitNummer(
-    Rechnungseinstellungen einstellungen, int naechsteNummer) {}
+    Rechnungseinstellungen einstellungen, int naechsteNummer, long version) {}

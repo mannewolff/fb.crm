@@ -168,7 +168,12 @@ class RechnungDokumentIT extends AbstractIntegrationTest {
     rumpf.put("naechsteNummer", Integer.valueOf(naechsteNummer));
     rumpf.put("steuersatz", steuersatz);
     rumpf.put("zahlungszielTage", Integer.valueOf(30));
-    ruf("/api/rechnung/einstellungen", HttpMethod.PUT, rumpf, Void.class);
+    // Auf dem aktuellen Stand der Einstellungen, wie die Maske (Plan #415, E2).
+    rest.exchange(
+        "/api/rechnung/einstellungen",
+        HttpMethod.PUT,
+        new HttpEntity<>(rumpf, Stand.aktuell(sitzung, jdbc, "rechnung_einstellungen", 1L)),
+        Void.class);
   }
 
   /** Die Nummer, die das Standardmuster zur laufenden Nummer bildet. */

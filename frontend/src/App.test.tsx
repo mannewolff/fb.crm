@@ -427,6 +427,7 @@ describe('App', () => {
         naechsteNummer: 1,
         steuersatz: 19,
         zahlungszielTage: 10,
+        version: 0,
       }),
     });
 

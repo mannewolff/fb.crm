@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -17,6 +17,16 @@ const EINSTELLUNGEN = {
   naechsteNummer: 3,
   steuersatz: 19,
   zahlungszielTage: 10,
+  version: 3,
+};
+
+/** Was Anna inzwischen gespeichert hat (#411, Kriterium 1). */
+const ANNAS_STAND = {
+  nummerMuster: 'A-{NNNN}',
+  naechsteNummer: 8,
+  steuersatz: 7,
+  zahlungszielTage: 21,
+  version: 4,
 };
 
 const PFAD = 'GET /api/rechnung/einstellungen';
@@ -48,6 +58,40 @@ function speichern() {
 
 function vorschau() {
   return screen.getByTestId('nummer-vorschau');
+}
+
+/** Heute um die genannte Uhrzeit in der Ortszeit — die Meldung nennt dann nur die Uhrzeit. */
+function heuteUm(stunde: number, minute: number): string {
+  const zeitpunkt = new Date();
+  zeitpunkt.setHours(stunde, minute, 0, 0);
+  return zeitpunkt.toISOString();
+}
+
+/** Die Abweisung des Servers, wie `GlobalExceptionHandler` sie schreibt (Plan #415, E4). */
+function abweisung(geaendertVon: string): () => Response {
+  return json(409, {
+    title: 'Conflict',
+    status: 409,
+    detail: 'Dieser Eintrag wurde inzwischen geändert.',
+    konflikt: { art: 'veraltet', geaendertAm: heuteUm(10, 42), eigenesFenster: false, geaendertVon },
+  });
+}
+
+/** Antwortet der Reihe nach mit den Antworten — beim ersten Aufruf mit der ersten. */
+function nacheinander(...antworten: readonly (() => Response)[]): () => Response {
+  let aufruf = 0;
+  return () => {
+    const antwort = antworten[Math.min(aufruf, antworten.length - 1)];
+    aufruf += 1;
+    return antwort();
+  };
+}
+
+/** Die Staende, die die PUT-Aufrufe als `If-Match` vorgelegt haben, in ihrer Reihenfolge. */
+function vorgelegteStaende(fetchMock: ReturnType<typeof fetchNachPfad>): readonly unknown[] {
+  return fetchMock.mock.calls
+    .filter(([, init]) => init?.method === 'PUT')
+    .map(([, init]) => (init?.headers as Record<string, string> | undefined)?.['If-Match']);
 }
 
 /**
@@ -298,7 +342,13 @@ describe('AdministrationPage', () => {
     const nutzer = userEvent.setup();
     const fetchMock = fetchNachPfad({
       [PFAD]: json(200, EINSTELLUNGEN),
-      [SCHREIBEN]: leer(204),
+      [SCHREIBEN]: json(200, {
+        nummerMuster: 'R{JJ}-{NNNN}',
+        naechsteNummer: 4,
+        steuersatz: 19.5,
+        zahlungszielTage: 14,
+        version: 4,
+      }),
     });
 
     renderSeite();
@@ -322,6 +372,100 @@ describe('AdministrationPage', () => {
         }),
       }),
     );
+    // Plan #415, E2: vorgelegt wird der gelesene Stand.
+    expect(vorgelegteStaende(fetchMock)).toEqual(['"3"']);
+  });
+
+  it('legt beim zweiten Speichern den Stand aus der Antwort des ersten vor', async () => {
+    const nutzer = userEvent.setup();
+    const fetchMock = fetchNachPfad({
+      [PFAD]: json(200, EINSTELLUNGEN),
+      [SCHREIBEN]: nacheinander(
+        json(200, { ...EINSTELLUNGEN, zahlungszielTage: 14, version: 4 }),
+        json(200, { ...EINSTELLUNGEN, zahlungszielTage: 21, version: 5 }),
+      ),
+    });
+
+    renderSeite();
+    await screen.findByRole('textbox', { name: MUSTER });
+    await ersetze(nutzer, ZIEL, '14');
+    await nutzer.click(speichern());
+    await screen.findByText('Die Einstellungen sind gespeichert.');
+    await ersetze(nutzer, ZIEL, '21');
+    await nutzer.click(speichern());
+
+    // #411, Kriterium 8: Wer nacheinander speichert, merkt vom Schutz nichts.
+    await waitFor(() => {
+      expect(vorgelegteStaende(fetchMock)).toEqual(['"3"', '"4"']);
+    });
+    expect(screen.queryByText('Nicht ausgeführt')).not.toBeInTheDocument();
+  });
+
+  it('Szenario: abgewiesenes Speichern — die Eingaben bleiben, Neu laden stellt sie daneben', async () => {
+    const nutzer = userEvent.setup();
+    const fetchMock = fetchNachPfad({
+      [PFAD]: nacheinander(json(200, EINSTELLUNGEN), json(200, ANNAS_STAND)),
+      [SCHREIBEN]: nacheinander(abweisung('Anna'), json(200, { ...ANNAS_STAND, version: 5 })),
+    });
+
+    renderSeite();
+    await screen.findByRole('textbox', { name: MUSTER });
+    await ersetze(nutzer, MUSTER, 'R{JJ}-{NNNN}');
+    await ersetze(nutzer, ZIEL, '14');
+    await nutzer.click(speichern());
+
+    // Abgewiesen: Die Meldung nennt Anna, und die eigenen Werte stehen weiter in den Feldern.
+    const meldung = await screen.findByRole('alert');
+    expect(meldung).toHaveTextContent('Nicht ausgeführt');
+    expect(meldung).toHaveTextContent('Anna hat diesen Eintrag inzwischen geändert (10:42).');
+    expect(screen.queryByText(/nicht gespeichert/u)).not.toBeInTheDocument();
+    expect(screen.queryByText('Die Einstellungen sind gespeichert.')).not.toBeInTheDocument();
+    expect(feld(MUSTER)).toHaveValue('R{JJ}-{NNNN}');
+    expect(feld(ZIEL)).toHaveValue('14');
+
+    // Neu laden: Annas Stand steht in der Maske, die eigenen Werte daneben zum Kopieren.
+    await nutzer.click(screen.getByRole('button', { name: 'Neu laden' }));
+    await waitFor(() => {
+      expect(feld(MUSTER)).toHaveValue('A-{NNNN}');
+    });
+    expect(feld(ZIEL)).toHaveValue('21');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    const eigene = screen.getByRole('region', { name: 'Deine Eingaben' });
+    expect(eigene).toHaveTextContent(MUSTER);
+    expect(eigene).toHaveTextContent('R{JJ}-{NNNN}');
+    expect(eigene).toHaveTextContent('14');
+
+    // Auf Annas Stand geht das Speichern durch; vorgelegt wird der neu geladene Stand.
+    await nutzer.click(speichern());
+    expect(await screen.findByText('Die Einstellungen sind gespeichert.')).toBeInTheDocument();
+    expect(vorgelegteStaende(fetchMock)).toEqual(['"3"', '"4"']);
+
+    // „Verwerfen" nimmt die eigenen Werte weg.
+    await nutzer.click(screen.getByRole('button', { name: 'Verwerfen' }));
+    expect(screen.queryByRole('region', { name: 'Deine Eingaben' })).not.toBeInTheDocument();
+  });
+
+  it('meldet einen Ausfall beim Neu laden und laesst die Konfliktmeldung stehen', async () => {
+    const nutzer = userEvent.setup();
+    fetchNachPfad({
+      [PFAD]: nacheinander(json(200, EINSTELLUNGEN), leer(503)),
+      [SCHREIBEN]: abweisung('Anna'),
+    });
+
+    renderSeite();
+    await screen.findByRole('textbox', { name: MUSTER });
+    await ersetze(nutzer, ZIEL, '14');
+    await nutzer.click(speichern());
+    await nutzer.click(await screen.findByRole('button', { name: 'Neu laden' }));
+
+    expect(
+      await screen.findByText(
+        'Der aktuelle Stand ist gerade nicht zu erreichen. Bitte später erneut versuchen.',
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Neu laden' })).toBeInTheDocument();
+    expect(feld(ZIEL)).toHaveValue('14');
+    expect(screen.queryByRole('region', { name: 'Deine Eingaben' })).not.toBeInTheDocument();
   });
 
   it('nimmt mit „Abbrechen" die Aenderungen auf den gespeicherten Stand zurueck', async () => {
@@ -349,7 +493,7 @@ describe('AdministrationPage', () => {
       [SCHREIBEN]: () =>
         new Promise<Response>((fertig) => {
           loese = () => {
-            fertig(new Response(null, { status: 204 }));
+            fertig(json(200, { ...EINSTELLUNGEN, version: 4 })());
           };
         }),
     });

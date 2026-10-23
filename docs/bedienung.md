@@ -68,8 +68,11 @@ Löschen eines Kommentars und beim Löschen einer Anlage. An einer Rechnung gilt
 und Löschen des Entwurfs, bei „Rechnung stellen" und bei „Als bezahlt markieren", „Abschreiben" und
 „Zurück auf gestellt". An einer nachgetragenen Rechnung gilt es in jedem Zustand beim Speichern in
 der Maske „Nachgetragene Rechnung bearbeiten", beim Ersetzen oder Entfernen ihres PDFs, beim Löschen
-und bei „Als bezahlt markieren", „Abschreiben" und „Zurück auf gestellt". Das Angebot zählt dabei als Ganzes, mit
-seinen Positionen und seinem Status; jeder Kommentar ist ein Eintrag für sich.
+und bei „Als bezahlt markieren", „Abschreiben" und „Zurück auf gestellt". Unter „Administration"
+gilt es beim Speichern der Einstellungen zur Rechnung, bei den Eigenen Angaben in der Karte
+„Briefpapier" beim Hochladen, Ersetzen und Entfernen des Briefpapiers und bei „Einstellungen
+speichern". Das Angebot zählt dabei als Ganzes, mit seinen Positionen und seinem Status; jeder
+Kommentar ist ein Eintrag für sich.
 
 **Einstieg:** Die Abweisung erscheint von selbst, wenn man „Speichern" wählt und jemand anderes
 das Angebot seit dem Öffnen gespeichert hat. Solange der geöffnete Stand aktuell ist, merkt man vom
@@ -145,6 +148,18 @@ hat, „Zur Übersicht" führt zur Liste der Rechnungen, und in der Maske stehen
 im Formular und unter „Deine Eingaben" zum Kopieren. Eine gelöschte nachgetragene Rechnung zählt
 nirgends mehr mit, weder in der Übersicht noch auf der Startseite oder im Jahresabschluss, und ihre
 Nummer ist wieder frei.
+
+Unter „Administration" steht die Meldung oben in der Karte „Rechnung", wenn ein anderer die
+Einstellungen zur Rechnung seit dem Öffnen gespeichert hat. Muster, nächste Nummer, Steuersatz und
+Zahlungsziel bleiben in den Feldern; „Neu laden" zeigt den aktuellen Stand und die eigenen Werte
+unter „Deine Eingaben".
+
+In der Karte „Briefpapier" steht die Meldung über dem Briefpapier. Der Briefbogen zählt als ein
+Eintrag: Hat ein anderer inzwischen ein Briefpapier hochgeladen, ersetzt oder entfernt, wird auch
+„Einstellungen speichern" für Schalter und Ränder abgewiesen, und umgekehrt. Schalter und Ränder
+bleiben in den Feldern; „Neu laden" zeigt den aktuellen Briefbogen und die eigenen Werte unter
+„Deine Eingaben", nach einem abgewiesenen Hochladen auch den Namen der gewählten Datei. Das eigene
+Hochladen weist das eigene Speichern danach nicht ab.
 
 **Ergebnis:** Angebot und Rechnung tragen die Änderungen beider, und keine ist unbemerkt verloren
 gegangen.

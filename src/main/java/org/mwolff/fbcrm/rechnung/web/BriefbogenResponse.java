@@ -22,6 +22,8 @@ import org.mwolff.fbcrm.rechnung.application.Briefbogenstand;
  * @param unten unterer Rand auf Seite 1
  * @param folgeOben oberer Rand auf Folgeseiten
  * @param folgeUnten unterer Rand auf Folgeseiten
+ * @param version der Stand der ganzen Zeile, den die Maske bei jedem der drei schreibenden Wege als
+ *     {@code If-Match} vorlegt (Plan #415, E2, E11)
  */
 public record BriefbogenResponse(
     boolean briefpapier,
@@ -35,7 +37,8 @@ public record BriefbogenResponse(
     int inhaltOben,
     int unten,
     int folgeOben,
-    int folgeUnten) {
+    int folgeUnten,
+    long version) {
 
   /** Die Sicht der Oberflaeche auf den Stand. */
   static BriefbogenResponse of(final Briefbogenstand stand) {
@@ -51,6 +54,7 @@ public record BriefbogenResponse(
         stand.raender().inhaltOben(),
         stand.raender().unten(),
         stand.raender().folgeOben(),
-        stand.raender().folgeUnten());
+        stand.raender().folgeUnten(),
+        stand.version());
   }
 }

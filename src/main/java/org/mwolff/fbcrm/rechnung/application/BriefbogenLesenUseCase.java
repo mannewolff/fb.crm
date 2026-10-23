@@ -23,6 +23,6 @@ public class BriefbogenLesenUseCase {
 
   /** Der Stand, ohne den Schluessel des Briefpapiers im Objektspeicher. */
   public Briefbogenstand lese() {
-    return Briefbogenstand.von(bestand.lies());
+    return Briefbogenstand.von(bestand.lies(), bestand.stand().version());
   }
 }

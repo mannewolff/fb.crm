@@ -263,7 +263,12 @@ class RechnungStellenIT extends AbstractIntegrationTest {
     rumpf.put("naechsteNummer", Integer.valueOf(naechsteNummer));
     rumpf.put("steuersatz", steuersatz);
     rumpf.put("zahlungszielTage", Integer.valueOf(zahlungszielTage));
-    ruf("/api/rechnung/einstellungen", HttpMethod.PUT, rumpf, Void.class);
+    // Auf dem aktuellen Stand der Einstellungen, wie die Maske (Plan #415, E2).
+    rest.exchange(
+        "/api/rechnung/einstellungen",
+        HttpMethod.PUT,
+        new HttpEntity<>(rumpf, Stand.aktuell(sitzung, jdbc, "rechnung_einstellungen", 1L)),
+        Void.class);
   }
 
   /** Die naechste laufende Nummer, wie die Maske der Einstellungen sie zeigt. */
@@ -570,8 +575,8 @@ class RechnungStellenIT extends AbstractIntegrationTest {
               }
             },
             dateikopf));
-    final HttpHeaders kopf = new HttpHeaders();
-    kopf.addAll(sitzung);
+    // Auf dem aktuellen Stand des Briefbogens, wie die Maske (Plan #415, E2, E11).
+    final HttpHeaders kopf = Stand.aktuell(sitzung, jdbc, "briefbogen", 1L);
     kopf.setContentType(MediaType.MULTIPART_FORM_DATA);
     final ResponseEntity<String> antwort =
         rest.exchange(
@@ -999,7 +1004,13 @@ class RechnungStellenIT extends AbstractIntegrationTest {
     bogen.put("unten", Integer.valueOf(200));
     bogen.put("folgeOben", Integer.valueOf(200));
     bogen.put("folgeUnten", Integer.valueOf(200));
-    assertThat(ruf("/api/briefpapier", HttpMethod.PUT, bogen, String.class).getStatusCode())
+    assertThat(
+            rest.exchange(
+                    "/api/briefpapier",
+                    HttpMethod.PUT,
+                    new HttpEntity<>(bogen, Stand.aktuell(sitzung, jdbc, "briefbogen", 1L)),
+                    String.class)
+                .getStatusCode())
         .isEqualTo(HttpStatus.OK);
 
     // When — Manfred stellt auf dem Stand des Entwurfs, den er geoeffnet hat.

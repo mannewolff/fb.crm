@@ -16,6 +16,10 @@ import { jaNein, objekt, text, zahl } from './verengen';
  *
  * Hochladen, Entfernen und Pflegen antworten mit dem ganzen neuen Stand; die Karte braucht danach
  * keinen zweiten Leseaufruf.
+ *
+ * **Alle drei schreibenden Wege legen den Stand vor** (#411, Kriterium 4; Plan #415, E2, E11): Der
+ * Briefbogen traegt eine Version fuer die ganze Zeile. Wer Raender auf dem Stand vor einem Hochladen
+ * speichert, wird mit einem Bearbeitungskonflikt abgewiesen.
  */
 
 /** Schalter und Raender — was die Maske schickt und was jeder Stand traegt. */
@@ -52,6 +56,8 @@ export interface Briefpapier {
 export interface Briefbogen extends BriefbogenEingabe {
   /** Das hinterlegte Briefpapier, oder `null`, solange keines hinterlegt ist. */
   readonly papier: Briefpapier | null;
+  /** Der Stand der ganzen Zeile, den jeder schreibende Weg vorlegt (Plan #415, E11). */
+  readonly version: number;
 }
 
 /**
@@ -85,6 +91,7 @@ export function parseBriefbogen(wert: unknown): Briefbogen {
     unten: zahl(stand.unten),
     folgeOben: zahl(stand.folgeOben),
     folgeUnten: zahl(stand.folgeUnten),
+    version: zahl(stand.version),
   };
 }
 
@@ -99,9 +106,11 @@ export function briefbogenLesen(): Promise<Briefbogen> {
 /**
  * Schreibt Schalter und Raender fort (Kriterien 6, 7, 8, 13). Ein Rand, der dem Inhalt keinen
  * Platz laesst, kommt als 422 mit der Meldung an seinem Feld zurueck.
+ *
+ * @param version der Stand, auf dem die Aenderung beruht
  */
-export function briefbogenPflegen(eingabe: BriefbogenEingabe): Promise<Briefbogen> {
-  return apiJson(WURZEL, { methode: 'PUT', rumpf: eingabe }, parseBriefbogen);
+export function briefbogenPflegen(version: number, eingabe: BriefbogenEingabe): Promise<Briefbogen> {
+  return apiJson(WURZEL, { methode: 'PUT', rumpf: eingabe, version }, parseBriefbogen);
 }
 
 /**
@@ -109,16 +118,22 @@ export function briefbogenPflegen(eingabe: BriefbogenEingabe): Promise<Briefboge
  *
  * Der Teil heisst `datei`, wie ihn `BriefbogenController` erwartet. Ob die Datei angenommen wird,
  * entscheidet der Server am Inhalt; eine Abweisung kommt als 422 mit der Meldung zu `datei`.
+ *
+ * @param version der Stand, auf dem das Hochladen beruht
  */
-export function briefpapierHochladen(datei: File): Promise<Briefbogen> {
+export function briefpapierHochladen(version: number, datei: File): Promise<Briefbogen> {
   const formular = new FormData();
   formular.append('datei', datei);
-  return apiJson(DATEI, { methode: 'POST', formular }, parseBriefbogen);
+  return apiJson(DATEI, { methode: 'POST', formular, version }, parseBriefbogen);
 }
 
-/** Entfernt das Briefpapier; Schalter und Raender bleiben (Kriterium 16). */
-export function briefpapierEntfernen(): Promise<Briefbogen> {
-  return apiJson(DATEI, { methode: 'DELETE' }, parseBriefbogen);
+/**
+ * Entfernt das Briefpapier; Schalter und Raender bleiben (Kriterium 16).
+ *
+ * @param version der Stand, auf dem das Entfernen beruht
+ */
+export function briefpapierEntfernen(version: number): Promise<Briefbogen> {
+  return apiJson(DATEI, { methode: 'DELETE', version }, parseBriefbogen);
 }
 
 /** Der Probedruck als PDF (Kriterium 9); ohne Briefpapier antwortet der Weg mit 404. */
