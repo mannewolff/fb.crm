@@ -33,7 +33,16 @@ final class Kundendoppel {
   /** Die Firma des Angebots. */
   static Firma firma() {
     return new Firma(
-        Long.valueOf(FIRMA), FIRMENNAME, FIRMENANSCHRIFT, null, null, true, ANGELEGT, ANGELEGT);
+        Long.valueOf(FIRMA),
+        FIRMENNAME,
+        FIRMENANSCHRIFT,
+        null,
+        null,
+        true,
+        ANGELEGT,
+        ANGELEGT,
+        0L,
+        null);
   }
 
   /** Der Ansprechpartner des Angebots. */
@@ -49,6 +58,8 @@ final class Kundendoppel {
         null,
         true,
         ANGELEGT,
-        ANGELEGT);
+        ANGELEGT,
+        0L,
+        null);
   }
 }

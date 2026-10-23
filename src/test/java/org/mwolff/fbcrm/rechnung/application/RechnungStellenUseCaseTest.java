@@ -385,7 +385,9 @@ class RechnungStellenUseCaseTest {
             null,
             true,
             Rechnungsdoppel.ANGELEGT,
-            Rechnungsdoppel.ANGELEGT),
+            Rechnungsdoppel.ANGELEGT,
+            0L,
+            null),
         OHNE_ANGABEN);
 
     // When

@@ -18,6 +18,8 @@ import org.mwolff.fbcrm.firma.domain.Ansprechpartner;
  * @param telefonFestnetz Festnetznummer, oder {@code null}
  * @param telefonMobil Mobilnummer, oder {@code null}
  * @param aktiv {@code false}, solange der Ansprechpartner stillgelegt ist
+ * @param version der Stand des Ansprechpartners, den die Oberflaeche beim naechsten schreibenden
+ *     Schritt mit {@code If-Match} vorlegt (Plan #415, E2)
  */
 public record AnsprechpartnerResponse(
     long id,
@@ -27,7 +29,8 @@ public record AnsprechpartnerResponse(
     @Nullable String email,
     @Nullable String telefonFestnetz,
     @Nullable String telefonMobil,
-    boolean aktiv) {
+    boolean aktiv,
+    long version) {
 
   /** Die Sicht der Oberflaeche auf einen Ansprechpartner. */
   static AnsprechpartnerResponse of(final Ansprechpartner partner) {
@@ -39,6 +42,7 @@ public record AnsprechpartnerResponse(
         partner.email(),
         partner.telefonFestnetz(),
         partner.telefonMobil(),
-        partner.aktiv());
+        partner.aktiv(),
+        partner.version());
   }
 }

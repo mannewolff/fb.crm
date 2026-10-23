@@ -72,19 +72,21 @@ class JpaAnsprechpartnerRepositoryTest {
         "0170 123456",
         true,
         ANGELEGT,
-        GEAENDERT);
+        GEAENDERT,
+        4L,
+        2L);
   }
 
   @Test
   void save_thenWritesEveryFieldOfTheAnsprechpartnerIntoTheRow() {
     // Given
-    when(jpa.save(any(AnsprechpartnerEntity.class))).thenReturn(zeile(3L));
+    when(jpa.saveAndFlush(any(AnsprechpartnerEntity.class))).thenReturn(zeile(3L));
 
     // When
     repository.save(ansprechpartner(null));
 
     // Then
-    verify(jpa).save(gespeicherte.capture());
+    verify(jpa).saveAndFlush(gespeicherte.capture());
     assertThat(gespeicherte.getValue())
         .satisfies(
             zeile -> assertThat(zeile.getId()).isNull(),
@@ -97,7 +99,9 @@ class JpaAnsprechpartnerRepositoryTest {
             zeile -> assertThat(zeile.getTelefonMobil()).isEqualTo("0170 123456"),
             zeile -> assertThat(zeile.isAktiv()).isTrue(),
             zeile -> assertThat(zeile.getCreatedAt()).isEqualTo(ANGELEGT),
-            zeile -> assertThat(zeile.getUpdatedAt()).isEqualTo(GEAENDERT));
+            zeile -> assertThat(zeile.getUpdatedAt()).isEqualTo(GEAENDERT),
+            zeile -> assertThat(zeile.getVersion()).isEqualTo(4L),
+            zeile -> assertThat(zeile.getGeaendertVon()).isEqualTo(2L));
   }
 
   @Test
@@ -105,14 +109,26 @@ class JpaAnsprechpartnerRepositoryTest {
     // Given
     final Ansprechpartner ohneAngaben =
         new Ansprechpartner(
-            null, 7L, null, "Mustermann", null, null, null, null, false, ANGELEGT, GEAENDERT);
-    when(jpa.save(any(AnsprechpartnerEntity.class))).thenReturn(zeile(3L));
+            null,
+            7L,
+            null,
+            "Mustermann",
+            null,
+            null,
+            null,
+            null,
+            false,
+            ANGELEGT,
+            GEAENDERT,
+            0L,
+            null);
+    when(jpa.saveAndFlush(any(AnsprechpartnerEntity.class))).thenReturn(zeile(3L));
 
     // When
     repository.save(ohneAngaben);
 
     // Then
-    verify(jpa).save(gespeicherte.capture());
+    verify(jpa).saveAndFlush(gespeicherte.capture());
     assertThat(gespeicherte.getValue())
         .satisfies(
             zeile -> assertThat(zeile.getVorname()).isNull(),
@@ -126,7 +142,7 @@ class JpaAnsprechpartnerRepositoryTest {
   @Test
   void save_thenReturnsTheAnsprechpartnerWithTheGeneratedId() {
     // Given
-    when(jpa.save(any(AnsprechpartnerEntity.class))).thenReturn(zeile(3L));
+    when(jpa.saveAndFlush(any(AnsprechpartnerEntity.class))).thenReturn(zeile(3L));
 
     // When
     final Ansprechpartner gesichert = repository.save(ansprechpartner(null));

@@ -71,8 +71,10 @@ der Maske „Nachgetragene Rechnung bearbeiten", beim Ersetzen oder Entfernen ih
 und bei „Als bezahlt markieren", „Abschreiben" und „Zurück auf gestellt". Unter „Administration"
 gilt es beim Speichern der Einstellungen zur Rechnung, bei den Eigenen Angaben in der Karte
 „Briefpapier" beim Hochladen, Ersetzen und Entfernen des Briefpapiers und bei „Einstellungen
-speichern". Das Angebot zählt dabei als Ganzes, mit seinen Positionen und seinem Status; jeder
-Kommentar ist ein Eintrag für sich.
+speichern". Bei Firmen und Ansprechpartnern gilt es beim Speichern in den Masken „Firma
+bearbeiten" und „Ansprechpartner bearbeiten" und bei „Stilllegen" und „Wieder aktivieren". Das
+Angebot zählt dabei als Ganzes, mit seinen Positionen und seinem Status; jeder Kommentar ist ein
+Eintrag für sich.
 
 **Einstieg:** Die Abweisung erscheint von selbst, wenn man „Speichern" wählt und jemand anderes
 das Angebot seit dem Öffnen gespeichert hat. Solange der geöffnete Stand aktuell ist, merkt man vom
@@ -160,6 +162,17 @@ Eintrag: Hat ein anderer inzwischen ein Briefpapier hochgeladen, ersetzt oder en
 bleiben in den Feldern; „Neu laden" zeigt den aktuellen Briefbogen und die eigenen Werte unter
 „Deine Eingaben", nach einem abgewiesenen Hochladen auch den Namen der gewählten Datei. Das eigene
 Hochladen weist das eigene Speichern danach nicht ab.
+
+In den Masken „Firma bearbeiten" und „Ansprechpartner bearbeiten" steht die Meldung oben im
+Formular, wenn ein anderer die Firma beziehungsweise den Ansprechpartner seit dem Öffnen geändert
+hat — seine Angaben oder seinen Stand als aktiv oder stillgelegt. Die eigenen Angaben bleiben in den
+Feldern; „Neu laden" zeigt den aktuellen Stand und die eigenen Werte unter „Deine Eingaben". In der
+Ansicht einer Firma steht die Meldung über der Kopfkarte, wenn „Stilllegen" oder „Wieder
+aktivieren" an der Firma oder an einem Ansprechpartner abgewiesen wird; „Neu laden" holt den
+aktuellen Stand, danach wählt man den Eintrag erneut, wenn er noch passt. Firma und
+Ansprechpartner sind getrennte Einträge: Wer die Firma ändert, weist das Speichern eines
+Ansprechpartners nicht ab. Eine neue Firma und einen neuen Ansprechpartner legt man immer ohne
+Rückfrage an.
 
 **Ergebnis:** Angebot und Rechnung tragen die Änderungen beider, und keine ist unbemerkt verloren
 gegangen.

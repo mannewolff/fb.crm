@@ -19,6 +19,7 @@ import org.mockito.Captor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mwolff.fbcrm.common.Anschrift;
+import org.mwolff.fbcrm.common.Bearbeitungskonflikt;
 import org.mwolff.fbcrm.firma.domain.Firma;
 import org.mwolff.fbcrm.firma.domain.FirmaRepository;
 
@@ -34,6 +35,9 @@ class FirmaAendernUseCaseTest {
 
   private static final Instant ANGELEGT = Instant.parse("2026-09-01T08:00:00Z");
   private static final Instant JETZT = Instant.parse("2026-09-25T09:30:00Z");
+  private static final long STAND = 3L;
+  private static final long URHEBER = 2L;
+  private static final long KONTO = 9L;
 
   @Mock private FirmaRepository firmen;
   @Captor private ArgumentCaptor<Firma> gespeicherte;
@@ -54,7 +58,9 @@ class FirmaAendernUseCaseTest {
         "DE123456789",
         aktiv,
         ANGELEGT,
-        ANGELEGT);
+        ANGELEGT,
+        STAND,
+        URHEBER);
   }
 
   private static FirmaDaten neueDaten(final String name) {
@@ -68,7 +74,7 @@ class FirmaAendernUseCaseTest {
   private Firma aendereUndFange(final Firma vorher, final FirmaDaten daten) {
     when(firmen.findById(7L)).thenReturn(Optional.of(vorher));
     when(firmen.save(any(Firma.class))).thenAnswer(aufruf -> aufruf.getArgument(0));
-    useCase.aendern(7L, daten);
+    useCase.aendern(7L, daten, STAND, KONTO);
     verify(firmen).save(gespeicherte.capture());
     return gespeicherte.getValue();
   }
@@ -146,7 +152,8 @@ class FirmaAendernUseCaseTest {
     final FirmaDaten daten = neueDaten("Adler GmbH");
 
     // When / Then
-    assertThatThrownBy(() -> useCase.aendern(4711L, daten)).isInstanceOf(FirmaNichtGefunden.class);
+    assertThatThrownBy(() -> useCase.aendern(4711L, daten, STAND, KONTO))
+        .isInstanceOf(FirmaNichtGefunden.class);
   }
 
   @Test
@@ -157,7 +164,8 @@ class FirmaAendernUseCaseTest {
     final FirmaDaten daten = neueDaten("Adler GmbH");
 
     // When
-    assertThatThrownBy(() -> useCase.aendern(4711L, daten)).isInstanceOf(FirmaNichtGefunden.class);
+    assertThatThrownBy(() -> useCase.aendern(4711L, daten, STAND, KONTO))
+        .isInstanceOf(FirmaNichtGefunden.class);
 
     // Then
     verify(firmen, never()).save(any(Firma.class));
@@ -168,7 +176,50 @@ class FirmaAendernUseCaseTest {
     final FirmaDaten daten = neueDaten("   ");
 
     // When / Then — E9: die Normalisierung steht vor dem Zugriff auf den Bestand.
-    assertThatThrownBy(() -> useCase.aendern(7L, daten))
+    assertThatThrownBy(() -> useCase.aendern(7L, daten, STAND, KONTO))
         .isInstanceOf(IllegalArgumentException.class);
+  }
+
+  @Test
+  void aendern_thenRecordsTheActingAccountAsAuthor() {
+    // When — Plan #415, E14.
+    final Firma gespeichert = aendereUndFange(bestand(true), neueDaten("Adler GmbH"));
+
+    // Then
+    assertThat(gespeichert)
+        .extracting(Firma::geaendertVon, Firma::version)
+        .containsExactly(KONTO, STAND);
+  }
+
+  @Test
+  void aendern_givenAnOutdatedVersion_thenThrowsFirmaGeaendertWithAuthorAndTime() {
+    // Given — #411, Kriterium 1.
+    when(firmen.findById(7L)).thenReturn(Optional.of(bestand(true)));
+    final FirmaDaten daten = neueDaten("Adler GmbH");
+
+    // When / Then
+    assertThatThrownBy(() -> useCase.aendern(7L, daten, STAND - 1, KONTO))
+        .isInstanceOfSatisfying(
+            FirmaGeaendert.class,
+            konflikt -> {
+              assertThat(konflikt.art()).isEqualTo(Bearbeitungskonflikt.Art.VERALTET);
+              assertThat(konflikt.urheberKonto()).hasValue(URHEBER);
+              assertThat(konflikt.handelndesKonto()).isEqualTo(KONTO);
+              assertThat(konflikt.zeitpunkt()).contains(ANGELEGT);
+            });
+  }
+
+  @Test
+  void aendern_givenAnOutdatedVersion_thenStoresNothing() {
+    // Given — der Stand des Ersten bleibt erhalten (#411, Kriterium 1).
+    when(firmen.findById(7L)).thenReturn(Optional.of(bestand(true)));
+    final FirmaDaten daten = neueDaten("Adler GmbH");
+
+    // When
+    assertThatThrownBy(() -> useCase.aendern(7L, daten, STAND + 1, KONTO))
+        .isInstanceOf(FirmaGeaendert.class);
+
+    // Then
+    verify(firmen, never()).save(any(Firma.class));
   }
 }

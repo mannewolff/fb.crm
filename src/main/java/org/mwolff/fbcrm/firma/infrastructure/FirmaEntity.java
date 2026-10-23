@@ -7,13 +7,17 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 import java.time.Instant;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.fbcrm.common.Anschrift;
 import org.mwolff.fbcrm.common.infrastructure.AnschriftSpalten;
 import org.mwolff.fbcrm.firma.domain.Firma;
 
-/** Die Zeile der Tabelle {@code firma} aus {@code V2__firma_und_ansprechpartner.sql}. */
+/**
+ * Die Zeile der Tabelle {@code firma} aus {@code V2__firma_und_ansprechpartner.sql} und {@code
+ * V33__version.sql}.
+ */
 @Entity
 @Table(name = "firma")
 class FirmaEntity {
@@ -48,6 +52,20 @@ class FirmaEntity {
   private Instant updatedAt;
 
   /*
+   * Der Stand der Zeile, gefuehrt von Hibernate (Plan #415, E1): Jedes Schreiben erhoeht ihn, und
+   * ein UPDATE mit einem anderen Stand als dem gelesenen trifft keine Zeile und scheitert. Er kommt
+   * aus dem Fachobjekt mit, damit eine Zeile, die auf einem alten Stand beruht, nicht still
+   * geschrieben wird. Ein long und kein Long: Ob die Zeile neu ist, entscheidet so weiter die
+   * Kennung, und eine neue Zeile beginnt bei 0 wie die Vorbelegung der Spalte (V33).
+   */
+  @Version
+  @Column(name = "version", nullable = false)
+  private long version;
+
+  @Column(name = "geaendert_von")
+  private @Nullable Long geaendertVon;
+
+  /*
    * JPA verlangt einen parameterlosen Konstruktor und fuellt die Felder danach selbst; NullAway
    * sieht diesen Weg nicht und meldete sonst nicht initialisierte Felder.
    */
@@ -80,6 +98,8 @@ class FirmaEntity {
     this.aktiv = firma.aktiv();
     this.createdAt = firma.createdAt();
     this.updatedAt = firma.updatedAt();
+    this.version = firma.version();
+    this.geaendertVon = firma.geaendertVon();
   }
 
   @Nullable Long getId() {
@@ -112,5 +132,13 @@ class FirmaEntity {
 
   Instant getUpdatedAt() {
     return updatedAt;
+  }
+
+  long getVersion() {
+    return version;
+  }
+
+  @Nullable Long getGeaendertVon() {
+    return geaendertVon;
   }
 }

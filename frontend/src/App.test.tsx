@@ -92,6 +92,7 @@ const FIRMA = {
   umsatzsteuerId: null,
   aktiv: true,
   ansprechpartner: [],
+  version: 0,
 };
 
 /** Die Fensterbreite, gegen die `matchMedia` auswertet — nur der Rahmen fragt danach. */

@@ -100,11 +100,48 @@ class AnsprechpartnerControllerIT extends AbstractIntegrationTest {
     return Objects.requireNonNull(anlegenAntwort(firmaId, rumpf(nachname)).getBody()).id();
   }
 
+  /** Die Sitzung samt {@code If-Match} auf dem genannten Stand (Plan #415, E2). */
+  private HttpHeaders mitStand(final long version) {
+    final HttpHeaders kopf = new HttpHeaders();
+    kopf.addAll(sitzung);
+    kopf.setIfMatch("\"" + version + "\"");
+    return kopf;
+  }
+
+  /** Der Stand des Ansprechpartners, wie ihn die Detailantwort seiner Firma gerade nennt. */
+  private long standVon(final long firmaId, final long id) {
+    return detail(firmaId).ansprechpartner().stream()
+        .filter(partner -> partner.id() == id)
+        .findFirst()
+        .orElseThrow()
+        .version();
+  }
+
+  /** Ein schreibender Schritt am Ansprechpartner auf seinem aktuellen Stand. */
+  private <T> ResponseEntity<T> schreibePartner(
+      final long firmaId,
+      final long id,
+      final String weg,
+      final HttpMethod methode,
+      final Object rumpf,
+      final Class<T> typ) {
+    return rest.exchange(
+        "/api/firmen/" + firmaId + "/ansprechpartner/" + id + weg,
+        methode,
+        new HttpEntity<>(rumpf, mitStand(standVon(firmaId, id))),
+        typ);
+  }
+
   private void schaltePartner(final long firmaId, final long id, final String weg) {
-    ruf(
-        "/api/firmen/" + firmaId + "/ansprechpartner/" + id + "/" + weg,
+    schreibePartner(firmaId, id, "/" + weg, HttpMethod.POST, null, Void.class);
+  }
+
+  /** Stilllegen oder Wiederaktivieren der Firma auf ihrem aktuellen Stand. */
+  private void schalteFirma(final long firmaId, final String weg) {
+    rest.exchange(
+        "/api/firmen/" + firmaId + "/" + weg,
         HttpMethod.POST,
-        null,
+        new HttpEntity<>(null, mitStand(detail(firmaId).version())),
         Void.class);
   }
 
@@ -144,7 +181,15 @@ class AnsprechpartnerControllerIT extends AbstractIntegrationTest {
     assertThat(gelesen.ansprechpartner())
         .containsExactly(
             new AnsprechpartnerResponse(
-                id, "Max", "Mueller", "Einkauf", "max@firma.de", "0421 1234", "0170 1234", true));
+                id,
+                "Max",
+                "Mueller",
+                "Einkauf",
+                "max@firma.de",
+                "0421 1234",
+                "0170 1234",
+                true,
+                0L));
   }
 
   @Test
@@ -154,16 +199,50 @@ class AnsprechpartnerControllerIT extends AbstractIntegrationTest {
     final long id = legePartnerAn(firmaId, "Mueller");
 
     // When — Kriterium 11.
-    ruf(
-        "/api/firmen/" + firmaId + "/ansprechpartner/" + id,
-        HttpMethod.PUT,
-        rumpf("Maier"),
-        Void.class);
+    schreibePartner(firmaId, id, "", HttpMethod.PUT, rumpf("Maier"), Void.class);
 
     // Then
     assertThat(detail(firmaId).ansprechpartner())
         .extracting(AnsprechpartnerResponse::nachname)
         .containsExactly("Maier");
+  }
+
+  @Test
+  void aendern_thenAnswersWithTheRaisedVersion() {
+    // Given
+    final long firmaId = legeFirmaAn("Adler AG");
+    final long id = legePartnerAn(firmaId, "Mueller");
+
+    // When — Plan #415, E2: die Antwort traegt den Stand fuer den naechsten Schritt.
+    final ResponseEntity<AnsprechpartnerResponse> antwort =
+        schreibePartner(
+            firmaId, id, "", HttpMethod.PUT, rumpf("Maier"), AnsprechpartnerResponse.class);
+
+    // Then
+    assertThat(antwort.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(Objects.requireNonNull(antwort.getBody()).version()).isEqualTo(1L);
+  }
+
+  @Test
+  void stilllegen_givenAnOutdatedStand_thenAnswersConflictAndChangesNothing() {
+    // Given — #411, Kriterium 4: inzwischen hat jemand den Ansprechpartner geaendert.
+    final long firmaId = legeFirmaAn("Adler AG");
+    final long id = legePartnerAn(firmaId, "Mueller");
+    schreibePartner(firmaId, id, "", HttpMethod.PUT, rumpf("Maier"), Void.class);
+
+    // When — das Stilllegen beruht noch auf Stand 0.
+    final ResponseEntity<String> antwort =
+        rest.exchange(
+            "/api/firmen/" + firmaId + "/ansprechpartner/" + id + "/stilllegen",
+            HttpMethod.POST,
+            new HttpEntity<>(null, mitStand(0L)),
+            String.class);
+
+    // Then
+    assertThat(antwort.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+    assertThat(detail(firmaId).ansprechpartner())
+        .extracting(AnsprechpartnerResponse::aktiv)
+        .containsExactly(true);
   }
 
   @Test
@@ -249,10 +328,10 @@ class AnsprechpartnerControllerIT extends AbstractIntegrationTest {
 
     // When
     final ResponseEntity<String> antwort =
-        ruf(
+        rest.exchange(
             "/api/firmen/" + baum + "/ansprechpartner/" + id,
             HttpMethod.PUT,
-            rumpf("Maier"),
+            new HttpEntity<>(rumpf("Maier"), mitStand(0L)),
             String.class);
 
     // Then
@@ -263,7 +342,7 @@ class AnsprechpartnerControllerIT extends AbstractIntegrationTest {
   void anlegen_givenARetiredFirma_thenIsStillPossible() {
     // Given — Kriterium 14.
     final long firmaId = legeFirmaAn("Adler AG");
-    ruf("/api/firmen/" + firmaId + "/stilllegen", HttpMethod.POST, null, Void.class);
+    schalteFirma(firmaId, "stilllegen");
 
     // When
     final ResponseEntity<AnsprechpartnerResponse> antwort =
@@ -299,8 +378,8 @@ class AnsprechpartnerControllerIT extends AbstractIntegrationTest {
     schaltePartner(firmaId, ruhend, "stilllegen");
 
     // When — die Firma geht in beide Richtungen.
-    ruf("/api/firmen/" + firmaId + "/stilllegen", HttpMethod.POST, null, Void.class);
-    ruf("/api/firmen/" + firmaId + "/aktivieren", HttpMethod.POST, null, Void.class);
+    schalteFirma(firmaId, "stilllegen");
+    schalteFirma(firmaId, "aktivieren");
 
     // Then — der Stilllegungsstand gehoert dem Ansprechpartner allein (E2).
     assertThat(detail(firmaId).ansprechpartner())
@@ -317,7 +396,7 @@ class AnsprechpartnerControllerIT extends AbstractIntegrationTest {
     schaltePartner(firmaId, ruhend, "stilllegen");
 
     // When
-    ruf("/api/firmen/" + firmaId + "/stilllegen", HttpMethod.POST, null, Void.class);
+    schalteFirma(firmaId, "stilllegen");
 
     // Then
     assertThat(detail(firmaId).ansprechpartner())

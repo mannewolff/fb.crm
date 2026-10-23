@@ -118,7 +118,9 @@ class BuchbarePositionenUseCaseTest {
         null,
         true,
         Instant.EPOCH,
-        Instant.EPOCH);
+        Instant.EPOCH,
+        0L,
+        null);
   }
 
   private void imBestandStehen(final Angebot... gefunden) {

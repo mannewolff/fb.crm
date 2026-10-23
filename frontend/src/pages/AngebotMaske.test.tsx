@@ -64,6 +64,7 @@ const FIRMA = {
       telefonFestnetz: null,
       telefonMobil: null,
       aktiv: true,
+      version: 0,
     },
     {
       id: 7,
@@ -74,8 +75,10 @@ const FIRMA = {
       telefonFestnetz: null,
       telefonMobil: null,
       aktiv: false,
+      version: 0,
     },
   ],
+  version: 0,
 };
 
 /** Die Adresse, an der sich ablesen laesst, wohin ein Weg gefuehrt hat. */

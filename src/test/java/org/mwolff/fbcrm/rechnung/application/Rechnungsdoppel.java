@@ -382,7 +382,9 @@ final class Rechnungsdoppel {
         null,
         true,
         ANGELEGT,
-        ANGELEGT);
+        ANGELEGT,
+        0L,
+        null);
   }
 
   /** Vollstaendige eigene Angaben: alles, was das Stellen verlangt, und die freiwilligen dazu. */

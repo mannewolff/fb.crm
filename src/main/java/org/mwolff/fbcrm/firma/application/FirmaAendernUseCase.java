@@ -14,6 +14,10 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * <p>Die Normalisierung steht <b>vor</b> dem Zugriff auf den Bestand — eine Eingabe, die ohnehin
  * abgewiesen wird, soll keine Abfrage kosten.
+ *
+ * <p><b>Danach zuerst der Stand</b> (#411, Kriterium 4; Plan #415, E1, E14): Wer auf einem alten
+ * Stand speichert, bekommt {@link FirmaGeaendert} mit Urheber und Zeitpunkt der fremden Aenderung.
+ * Das handelnde Konto steht danach als Urheber an der Firma.
  */
 @Service
 @Transactional
@@ -32,18 +36,24 @@ public class FirmaAendernUseCase {
    *
    * @param id technische Id der Firma
    * @param daten die eingereichten Angaben; normalisiert werden sie hier (E9)
+   * @param version der vorgelegte Stand aus {@code If-Match}
+   * @param konto Kennung des handelnden Kontos
    * @throws FirmaNichtGefunden wenn es die Firma nicht gibt
+   * @throws FirmaGeaendert wenn die Firma inzwischen einen anderen Stand hat als den vorgelegten
    * @throws IllegalArgumentException wenn vom Namen nur Leerraum uebrig bleibt
    */
-  public void aendern(final long id, final FirmaDaten daten) {
+  public void aendern(final long id, final FirmaDaten daten, final long version, final long konto) {
     final FirmaDaten sauber = daten.normalisiert();
     final Firma vorhanden = firmen.findById(id).orElseThrow(FirmaNichtGefunden::new);
+    FirmaGeaendert.pruefe(vorhanden, version, konto);
     firmen.save(
-        vorhanden.geaendert(
-            sauber.name(),
-            sauber.anschrift(),
-            sauber.steuernummer(),
-            sauber.umsatzsteuerId(),
-            clock.instant()));
+        vorhanden
+            .geaendert(
+                sauber.name(),
+                sauber.anschrift(),
+                sauber.steuernummer(),
+                sauber.umsatzsteuerId(),
+                clock.instant())
+            .durch(konto));
   }
 }

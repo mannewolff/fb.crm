@@ -74,7 +74,9 @@ class AngeboteUebersichtUseCaseTest {
         null,
         true,
         ANGELEGT,
-        ANGELEGT);
+        ANGELEGT,
+        0L,
+        null);
   }
 
   @Test

@@ -23,6 +23,7 @@ const ANNA: Ansprechpartner = {
   telefonFestnetz: '+49 421 123456',
   telefonMobil: null,
   aktiv: true,
+  version: 2,
 };
 
 const BRUNO: Ansprechpartner = {
@@ -34,6 +35,7 @@ const BRUNO: Ansprechpartner = {
   telefonFestnetz: 'Durchwahl über die Zentrale',
   telefonMobil: '0170 9876543',
   aktiv: false,
+  version: 0,
 };
 
 const FIRMA: Firma = {
@@ -47,6 +49,7 @@ const FIRMA: Firma = {
   umsatzsteuerId: 'DE123456789',
   aktiv: true,
   ansprechpartner: [ANNA, BRUNO],
+  version: 3,
 };
 
 const KONTO = { id: 1, displayName: 'Manfred Wolff', email: 'info@mwolff.org', role: 'C_LEVEL' };
@@ -168,6 +171,14 @@ async function bestaetige(nutzer: ReturnType<typeof userEvent.setup>, aktion: st
   await nutzer.click(within(dialog).getByRole('button', { name: aktion }));
 }
 
+/** Ein Rumpf als JSON-Antwort mit Status 200. */
+function alsJson(rumpf: unknown): Response {
+  return new Response(JSON.stringify(rumpf), {
+    status: 200,
+    headers: { 'Content-Type': 'application/json' },
+  });
+}
+
 /**
  * Ein Doppel, dessen Firma sich mit dem Stilllegen aendert.
  *
@@ -185,25 +196,24 @@ function firmaDoppel(start: Firma = FIRMA, angebote: readonly AngebotRoh[] = ANG
   const schaltePartner = (aktiv: boolean) => {
     firma = {
       ...firma,
-      ansprechpartner: firma.ansprechpartner.map((einer) => ({ ...einer, aktiv })),
+      ansprechpartner: firma.ansprechpartner.map((einer) => ({
+        ...einer,
+        aktiv,
+        version: einer.version + 1,
+      })),
     };
-    return new Response(null, { status: 204 });
+    return alsJson(firma.ansprechpartner[0]);
+  };
+  /** Schaltet die Firma und zaehlt ihren Stand weiter — die Antwort ist der neue Stand. */
+  const schalteFirma = (aktiv: boolean) => {
+    firma = { ...firma, aktiv, version: firma.version + 1 };
+    return alsJson(firma);
   };
   return fetchNachPfad({
-    'GET /api/firmen/7': () =>
-      new Response(JSON.stringify(firma), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      }),
+    'GET /api/firmen/7': () => alsJson(firma),
     'GET /api/firmen/7/angebote': json(200, { angebote }),
-    'POST /api/firmen/7/stilllegen': () => {
-      firma = { ...firma, aktiv: false };
-      return new Response(null, { status: 204 });
-    },
-    'POST /api/firmen/7/aktivieren': () => {
-      firma = { ...firma, aktiv: true };
-      return new Response(null, { status: 204 });
-    },
+    'POST /api/firmen/7/stilllegen': () => schalteFirma(false),
+    'POST /api/firmen/7/aktivieren': () => schalteFirma(true),
     'POST /api/firmen/7/ansprechpartner/11/stilllegen': () => schaltePartner(false),
     'POST /api/firmen/7/ansprechpartner/11/aktivieren': () => schaltePartner(true),
   });
@@ -743,5 +753,150 @@ describe('FirmaPage — Kopf und Tastatur', () => {
       await nutzer.tab();
       expect(element).toHaveFocus();
     }
+  });
+});
+
+/** Heute um die genannte Uhrzeit in der Ortszeit — die Meldung nennt dann nur die Uhrzeit. */
+function heuteUm(stunde: number, minute: number): string {
+  const zeitpunkt = new Date();
+  zeitpunkt.setHours(stunde, minute, 0, 0);
+  return zeitpunkt.toISOString();
+}
+
+/** Die Abweisung des Servers, wie `GlobalExceptionHandler` sie schreibt (Plan #415, E4, E15). */
+function abweisung(geaendertVon: string): () => Response {
+  return json(409, {
+    title: 'Conflict',
+    status: 409,
+    detail: 'Dieser Eintrag wurde inzwischen geändert.',
+    konflikt: { art: 'veraltet', geaendertAm: heuteUm(10, 42), eigenesFenster: false, geaendertVon },
+  });
+}
+
+/** Antwortet der Reihe nach mit den Antworten — beim ersten Aufruf mit der ersten. */
+function nacheinander(...antworten: readonly (() => Response)[]): () => Response {
+  let aufruf = 0;
+  return () => {
+    const antwort = antworten[Math.min(aufruf, antworten.length - 1)];
+    aufruf += 1;
+    return antwort();
+  };
+}
+
+/** Die Bedingungskoepfe aller Aufrufe des Wegs, in ihrer Reihenfolge. */
+function vorgelegteStaende(fetchMock: ReturnType<typeof fetchNachPfad>, pfad: string) {
+  return fetchMock.mock.calls
+    .filter(([ziel, init]) => ziel === pfad && init?.method === 'POST')
+    .map(([, init]) => (init?.headers as Record<string, string> | undefined)?.['If-Match']);
+}
+
+describe('FirmaPage — gleichzeitig arbeiten (#411, Kriterium 4; Plan #415, E18)', () => {
+  it('legt beim Umschalten der Firma ihren gezeigten Stand vor und uebernimmt den neuen', async () => {
+    const nutzer = userEvent.setup();
+    const fetchMock = firmaDoppel();
+
+    renderSeite();
+    await screen.findByRole('heading', { level: 1, name: 'Beispiel GmbH' });
+    await waehle(nutzer, 'Aktionen für Beispiel GmbH', 'Stilllegen');
+    await bestaetige(nutzer, 'Stilllegen');
+    await within(kopfkarte()).findByText('Stillgelegt');
+    await waehle(nutzer, 'Aktionen für Beispiel GmbH', 'Wieder aktivieren');
+    await within(kopfkarte()).findByText('Aktiv');
+
+    expect(vorgelegteStaende(fetchMock, '/api/firmen/7/stilllegen')).toEqual(['"3"']);
+    // Die Antwort des Stilllegens trug Stand 4 — und den legt das Wiederaktivieren vor.
+    expect(vorgelegteStaende(fetchMock, '/api/firmen/7/aktivieren')).toEqual(['"4"']);
+  });
+
+  it('legt beim Umschalten eines Ansprechpartners dessen Stand vor', async () => {
+    const nutzer = userEvent.setup();
+    const fetchMock = firmaDoppel({ ...FIRMA, ansprechpartner: [ANNA] });
+
+    renderSeite();
+    await screen.findByTestId('innenkarten-raster');
+    await waehle(nutzer, 'Aktionen für Anna Berg', 'Stilllegen');
+    await bestaetige(nutzer, 'Stilllegen');
+    await screen.findByTestId('innenkarte-zustand');
+
+    expect(vorgelegteStaende(fetchMock, '/api/firmen/7/ansprechpartner/11/stilllegen')).toEqual([
+      '"2"',
+    ]);
+  });
+
+  it('Szenario: abgewiesenes Stilllegen der Firma — Meldung statt Ausfall, Neu laden holt den Stand', async () => {
+    const nutzer = userEvent.setup();
+    const annasStand: Firma = { ...FIRMA, name: 'Beispiel AG', version: 4 };
+    const fetchMock = fetchNachPfad({
+      'GET /api/firmen/7': nacheinander(json(200, FIRMA), json(200, annasStand)),
+      'GET /api/firmen/7/angebote': json(200, { angebote: ANGEBOTE }),
+      'POST /api/firmen/7/stilllegen': nacheinander(
+        abweisung('Anna'),
+        json(200, { ...annasStand, aktiv: false, version: 5 }),
+      ),
+    });
+
+    renderSeite();
+    await screen.findByRole('heading', { level: 1, name: 'Beispiel GmbH' });
+    await waehle(nutzer, 'Aktionen für Beispiel GmbH', 'Stilllegen');
+    await bestaetige(nutzer, 'Stilllegen');
+
+    const meldung = await screen.findByRole('alert');
+    expect(meldung).toHaveTextContent('Nicht ausgeführt');
+    expect(meldung).toHaveTextContent('Anna hat diesen Eintrag inzwischen geändert (10:42).');
+    expect(meldung).not.toHaveTextContent('nicht geändert');
+    expect(within(kopfkarte()).getByText('Aktiv')).toBeInTheDocument();
+
+    await nutzer.click(within(meldung).getByRole('button', { name: 'Neu laden' }));
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Beispiel AG' }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+
+    // Auf dem neuen Stand geht das Stilllegen durch.
+    await waehle(nutzer, 'Aktionen für Beispiel AG', 'Stilllegen');
+    await bestaetige(nutzer, 'Stilllegen');
+    await within(kopfkarte()).findByText('Stillgelegt');
+    expect(vorgelegteStaende(fetchMock, '/api/firmen/7/stilllegen')).toEqual(['"3"', '"4"']);
+  });
+
+  it('zeigt die Meldung auch, wenn das Umschalten eines Ansprechpartners abgewiesen wird', async () => {
+    const nutzer = userEvent.setup();
+    fetchNachPfad({
+      'GET /api/firmen/7': json(200, { ...FIRMA, ansprechpartner: [ANNA] }),
+      'GET /api/firmen/7/angebote': json(200, { angebote: ANGEBOTE }),
+      'POST /api/firmen/7/ansprechpartner/11/stilllegen': abweisung('Bernd'),
+    });
+
+    renderSeite();
+    await screen.findByTestId('innenkarten-raster');
+    await waehle(nutzer, 'Aktionen für Anna Berg', 'Stilllegen');
+    await bestaetige(nutzer, 'Stilllegen');
+
+    const meldung = await screen.findByRole('alert');
+    expect(meldung).toHaveTextContent('Bernd hat diesen Eintrag inzwischen geändert (10:42).');
+    expect(meldung).not.toHaveTextContent('Der Stand des Ansprechpartners wurde nicht geändert');
+  });
+
+  it('meldet einen Ausfall beim Neu laden und laesst die Konfliktmeldung stehen', async () => {
+    const nutzer = userEvent.setup();
+    fetchNachPfad({
+      'GET /api/firmen/7': nacheinander(json(200, FIRMA), leer(503)),
+      'GET /api/firmen/7/angebote': json(200, { angebote: ANGEBOTE }),
+      'POST /api/firmen/7/stilllegen': abweisung('Anna'),
+    });
+
+    renderSeite();
+    await screen.findByRole('heading', { level: 1, name: 'Beispiel GmbH' });
+    await waehle(nutzer, 'Aktionen für Beispiel GmbH', 'Stilllegen');
+    await bestaetige(nutzer, 'Stilllegen');
+    await nutzer.click(await screen.findByRole('button', { name: 'Neu laden' }));
+
+    expect(
+      await screen.findByText(
+        'Der aktuelle Stand ist gerade nicht zu erreichen. Bitte erneut versuchen.',
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Neu laden' })).toBeInTheDocument();
   });
 });

@@ -18,6 +18,10 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * <p>Die Normalisierung steht <b>vor</b> dem Zugriff auf den Bestand — eine Eingabe, die ohnehin
  * abgewiesen wird, soll keine Abfrage kosten.
+ *
+ * <p><b>Danach zuerst der Stand</b> (#411, Kriterium 4; Plan #415, E1, E14): Wer auf einem alten
+ * Stand speichert, bekommt {@link AnsprechpartnerGeaendert} mit Urheber und Zeitpunkt der fremden
+ * Aenderung. Das handelnde Konto steht danach als Urheber am Ansprechpartner.
  */
 @Service
 @Transactional
@@ -38,24 +42,36 @@ public class AnsprechpartnerAendernUseCase {
    * @param firmaId Kennung der Firma aus dem Pfad
    * @param id technische Id des Ansprechpartners
    * @param daten die eingereichten Angaben; normalisiert werden sie hier (E9)
+   * @param version der vorgelegte Stand aus {@code If-Match}
+   * @param konto Kennung des handelnden Kontos
+   * @return der Ansprechpartner mit dem neuen Stand
    * @throws AnsprechpartnerNichtGefunden wenn es ihn unter dieser Firma nicht gibt
+   * @throws AnsprechpartnerGeaendert wenn er inzwischen einen anderen Stand hat als den vorgelegten
    * @throws IllegalArgumentException wenn vom Nachnamen nur Leerraum uebrig bleibt
    */
-  public void aendern(final long firmaId, final long id, final AnsprechpartnerDaten daten) {
+  public Ansprechpartner aendern(
+      final long firmaId,
+      final long id,
+      final AnsprechpartnerDaten daten,
+      final long version,
+      final long konto) {
     final AnsprechpartnerDaten sauber = daten.normalisiert();
     final Ansprechpartner vorhanden =
         ansprechpartner
             .findById(id)
             .filter(partner -> partner.firmaId() == firmaId)
             .orElseThrow(AnsprechpartnerNichtGefunden::new);
-    ansprechpartner.save(
-        vorhanden.geaendert(
-            sauber.vorname(),
-            sauber.nachname(),
-            sauber.rolle(),
-            sauber.email(),
-            sauber.telefonFestnetz(),
-            sauber.telefonMobil(),
-            clock.instant()));
+    AnsprechpartnerGeaendert.pruefe(vorhanden, version, konto);
+    return ansprechpartner.save(
+        vorhanden
+            .geaendert(
+                sauber.vorname(),
+                sauber.nachname(),
+                sauber.rolle(),
+                sauber.email(),
+                sauber.telefonFestnetz(),
+                sauber.telefonMobil(),
+                clock.instant())
+            .durch(konto));
   }
 }

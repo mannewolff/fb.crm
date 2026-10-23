@@ -60,7 +60,9 @@ class AnsprechpartnerAnlegenUseCaseTest {
         null,
         aktiv,
         ANGELEGT,
-        ANGELEGT);
+        ANGELEGT,
+        0L,
+        null);
   }
 
   private static AnsprechpartnerDaten daten(final String nachname) {
@@ -137,7 +139,7 @@ class AnsprechpartnerAnlegenUseCaseTest {
     // Given
     final Ansprechpartner mitId =
         new Ansprechpartner(
-            3L, FIRMA, "Max", "Mueller", null, null, null, null, true, JETZT, JETZT);
+            3L, FIRMA, "Max", "Mueller", null, null, null, null, true, JETZT, JETZT, 0L, null);
     when(firmen.findById(FIRMA)).thenReturn(Optional.of(adlerAg(true)));
     when(ansprechpartner.save(any(Ansprechpartner.class))).thenReturn(mitId);
 

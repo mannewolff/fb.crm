@@ -36,6 +36,9 @@ class AnsprechpartnerStilllegenUseCaseTest {
   private static final long ID = 3L;
   private static final Instant ANGELEGT = Instant.parse("2026-09-01T08:00:00Z");
   private static final Instant JETZT = Instant.parse("2026-09-25T09:30:00Z");
+  private static final long STAND = 3L;
+  private static final long URHEBER = 2L;
+  private static final long KONTO = 9L;
 
   @Mock private AnsprechpartnerRepository ansprechpartner;
   @Captor private ArgumentCaptor<Ansprechpartner> gespeicherte;
@@ -50,7 +53,8 @@ class AnsprechpartnerStilllegenUseCaseTest {
 
   private static Ansprechpartner bestand(final long firmaId, final boolean aktiv) {
     return new Ansprechpartner(
-        ID, firmaId, "Max", "Mueller", null, null, null, null, aktiv, ANGELEGT, ANGELEGT);
+        ID, firmaId, "Max", "Mueller", null, null, null, null, aktiv, ANGELEGT, ANGELEGT, STAND,
+        URHEBER);
   }
 
   private Ansprechpartner schalteUndFange(final Ansprechpartner vorher, final boolean stilllegen) {
@@ -58,9 +62,9 @@ class AnsprechpartnerStilllegenUseCaseTest {
     when(ansprechpartner.save(any(Ansprechpartner.class)))
         .thenAnswer(aufruf -> aufruf.getArgument(0));
     if (stilllegen) {
-      useCase.stilllegen(FIRMA, ID);
+      useCase.stilllegen(FIRMA, ID, STAND, KONTO);
     } else {
-      useCase.aktivieren(FIRMA, ID);
+      useCase.aktivieren(FIRMA, ID, STAND, KONTO);
     }
     verify(ansprechpartner).save(gespeicherte.capture());
     return gespeicherte.getValue();
@@ -108,7 +112,7 @@ class AnsprechpartnerStilllegenUseCaseTest {
     when(ansprechpartner.findById(ID)).thenReturn(Optional.empty());
 
     // When / Then
-    assertThatThrownBy(() -> useCase.stilllegen(FIRMA, ID))
+    assertThatThrownBy(() -> useCase.stilllegen(FIRMA, ID, STAND, KONTO))
         .isInstanceOf(AnsprechpartnerNichtGefunden.class);
   }
 
@@ -118,7 +122,7 @@ class AnsprechpartnerStilllegenUseCaseTest {
     when(ansprechpartner.findById(ID)).thenReturn(Optional.empty());
 
     // When / Then
-    assertThatThrownBy(() -> useCase.aktivieren(FIRMA, ID))
+    assertThatThrownBy(() -> useCase.aktivieren(FIRMA, ID, STAND, KONTO))
         .isInstanceOf(AnsprechpartnerNichtGefunden.class);
   }
 
@@ -128,7 +132,7 @@ class AnsprechpartnerStilllegenUseCaseTest {
     when(ansprechpartner.findById(ID)).thenReturn(Optional.of(bestand(ANDERE_FIRMA, true)));
 
     // When / Then
-    assertThatThrownBy(() -> useCase.stilllegen(FIRMA, ID))
+    assertThatThrownBy(() -> useCase.stilllegen(FIRMA, ID, STAND, KONTO))
         .isInstanceOf(AnsprechpartnerNichtGefunden.class);
   }
 
@@ -138,7 +142,7 @@ class AnsprechpartnerStilllegenUseCaseTest {
     when(ansprechpartner.findById(ID)).thenReturn(Optional.of(bestand(ANDERE_FIRMA, false)));
 
     // When / Then
-    assertThatThrownBy(() -> useCase.aktivieren(FIRMA, ID))
+    assertThatThrownBy(() -> useCase.aktivieren(FIRMA, ID, STAND, KONTO))
         .isInstanceOf(AnsprechpartnerNichtGefunden.class);
   }
 
@@ -148,8 +152,79 @@ class AnsprechpartnerStilllegenUseCaseTest {
     when(ansprechpartner.findById(ID)).thenReturn(Optional.of(bestand(ANDERE_FIRMA, true)));
 
     // When
-    assertThatThrownBy(() -> useCase.stilllegen(FIRMA, ID))
+    assertThatThrownBy(() -> useCase.stilllegen(FIRMA, ID, STAND, KONTO))
         .isInstanceOf(AnsprechpartnerNichtGefunden.class);
+
+    // Then
+    verify(ansprechpartner, never()).save(any(Ansprechpartner.class));
+  }
+
+  @Test
+  void stilllegen_thenRecordsTheActingAccountAsAuthor() {
+    // When — Plan #415, E14.
+    final Ansprechpartner gespeichert = schalteUndFange(bestand(FIRMA, true), true);
+
+    // Then
+    assertThat(gespeichert.geaendertVon()).isEqualTo(KONTO);
+  }
+
+  @Test
+  void aktivieren_thenRecordsTheActingAccountAsAuthor() {
+    // When
+    final Ansprechpartner gespeichert = schalteUndFange(bestand(FIRMA, false), false);
+
+    // Then
+    assertThat(gespeichert.geaendertVon()).isEqualTo(KONTO);
+  }
+
+  @Test
+  void stilllegen_thenReturnsWhatTheRepositoryStored() {
+    // Given
+    final Ansprechpartner geschrieben = bestand(FIRMA, false);
+    when(ansprechpartner.findById(ID)).thenReturn(Optional.of(bestand(FIRMA, true)));
+    when(ansprechpartner.save(any(Ansprechpartner.class))).thenReturn(geschrieben);
+
+    // When / Then
+    assertThat(useCase.stilllegen(FIRMA, ID, STAND, KONTO)).isSameAs(geschrieben);
+  }
+
+  @Test
+  void aktivieren_thenReturnsWhatTheRepositoryStored() {
+    // Given
+    final Ansprechpartner geschrieben = bestand(FIRMA, true);
+    when(ansprechpartner.findById(ID)).thenReturn(Optional.of(bestand(FIRMA, false)));
+    when(ansprechpartner.save(any(Ansprechpartner.class))).thenReturn(geschrieben);
+
+    // When / Then
+    assertThat(useCase.aktivieren(FIRMA, ID, STAND, KONTO)).isSameAs(geschrieben);
+  }
+
+  @Test
+  void stilllegen_givenAnOutdatedVersion_thenThrowsAnsprechpartnerGeaendertAndStoresNothing() {
+    // Given — Plan #415, E18: auch der Zustandswechsel wird geprueft.
+    when(ansprechpartner.findById(ID)).thenReturn(Optional.of(bestand(FIRMA, true)));
+
+    // When
+    assertThatThrownBy(() -> useCase.stilllegen(FIRMA, ID, STAND - 1, KONTO))
+        .isInstanceOfSatisfying(
+            AnsprechpartnerGeaendert.class,
+            konflikt -> {
+              assertThat(konflikt.urheberKonto()).hasValue(URHEBER);
+              assertThat(konflikt.handelndesKonto()).isEqualTo(KONTO);
+            });
+
+    // Then
+    verify(ansprechpartner, never()).save(any(Ansprechpartner.class));
+  }
+
+  @Test
+  void aktivieren_givenAnOutdatedVersion_thenThrowsAnsprechpartnerGeaendertAndStoresNothing() {
+    // Given
+    when(ansprechpartner.findById(ID)).thenReturn(Optional.of(bestand(FIRMA, false)));
+
+    // When
+    assertThatThrownBy(() -> useCase.aktivieren(FIRMA, ID, STAND + 1, KONTO))
+        .isInstanceOf(AnsprechpartnerGeaendert.class);
 
     // Then
     verify(ansprechpartner, never()).save(any(Ansprechpartner.class));

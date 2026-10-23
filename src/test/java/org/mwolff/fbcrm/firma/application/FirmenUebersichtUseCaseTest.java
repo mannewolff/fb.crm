@@ -48,7 +48,9 @@ class FirmenUebersichtUseCaseTest {
         null,
         aktiv,
         ANGELEGT,
-        ANGELEGT);
+        ANGELEGT,
+        0L,
+        null);
   }
 
   @Test
@@ -101,7 +103,9 @@ class FirmenUebersichtUseCaseTest {
                     null,
                     true,
                     ANGELEGT,
-                    ANGELEGT)));
+                    ANGELEGT,
+                    0L,
+                    null)));
     when(ansprechpartner.zaehleAktiveJeFirma(List.of(1L))).thenReturn(Map.of(1L, 0L));
     when(firmen.zaehleAlle()).thenReturn(1L);
 

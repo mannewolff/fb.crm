@@ -84,7 +84,9 @@ class AngebotAnlegenUseCaseTest {
         null,
         aktiv,
         Angebotsdoppel.ANGELEGT,
-        Angebotsdoppel.ANGELEGT);
+        Angebotsdoppel.ANGELEGT,
+        0L,
+        null);
   }
 
   private static Ansprechpartner person(final long firmaId, final boolean aktiv) {
@@ -99,7 +101,9 @@ class AngebotAnlegenUseCaseTest {
         null,
         aktiv,
         Angebotsdoppel.ANGELEGT,
-        Angebotsdoppel.ANGELEGT);
+        Angebotsdoppel.ANGELEGT,
+        0L,
+        null);
   }
 
   private void firmaIstAktiv() {

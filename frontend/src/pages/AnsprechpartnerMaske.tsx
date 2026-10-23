@@ -7,13 +7,17 @@ import type { Dispatch, FormEvent, ReactNode, SetStateAction } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 
 import { ansprechpartnerAendern, ansprechpartnerAnlegen, firmaLesen } from '../api/firmen';
+import type { Ansprechpartner } from '../api/firmen';
 import type { FieldErrors } from '../api/client';
+import EigeneEingaben from '../components/EigeneEingaben';
+import type { EigeneEingabe } from '../components/EigeneEingaben';
 import { useKopfPfad } from '../components/KopfPfad';
 import type { PfadVerweis } from '../components/KopfPfad';
 import Karte from '../components/Karte';
+import Konfliktmeldung from '../components/Konfliktmeldung';
 import KupferTaste from '../components/KupferTaste';
 import WeicheTaste from '../components/WeicheTaste';
-import { feldMeldungen, nichtGefunden } from '../lib/apifehler';
+import { feldMeldungen, istBearbeitungskonflikt, nichtGefunden } from '../lib/apifehler';
 import { istEmailForm } from '../lib/emailform';
 import { meldungAm } from '../lib/feldmeldung';
 import { kennungAus } from '../lib/kennung';
@@ -38,6 +42,12 @@ import { ABSTAND_BUEHNE } from '../theme';
  * Die Pruefung der E-Mail-Form ist Nutzerfuehrung, nicht die Entscheidung (E8): Sie spart den
  * Weg zum Server bei einem offensichtlichen Vertipper, aber die Quelle der Wahrheit bleibt der
  * Server, dessen Meldungen hier genauso am Feld landen.
+ *
+ * <b>Gespeichert wird auf dem gelesenen Stand</b> (#411, Kriterien 1 bis 4; Plan #415, E2) — wie
+ * in der Firma-Maske: Die Maske fuehrt die Version des Ansprechpartners mit und legt sie beim
+ * Speichern vor. Bei einer Abweisung bleiben die Eingaben stehen, die {@link Konfliktmeldung} sagt,
+ * wer wann geaendert hat, und „Neu laden" holt den Stand des Servers ins Formular, waehrend die
+ * eigenen Werte daneben in {@link EigeneEingaben} stehen, bis „Verwerfen" gewaehlt wird.
  */
 
 const NACHNAME_FEHLT = 'Bitte einen Nachnamen angeben.';
@@ -47,6 +57,8 @@ const PARTNER_FEHLT = 'Diesen Ansprechpartner gibt es nicht.';
 const AUSFALL_LESEN = 'Die Firma ist gerade nicht zu erreichen. Bitte später erneut versuchen.';
 const AUSFALL_SPEICHERN =
   'Der Ansprechpartner wurde nicht gespeichert. Bitte später erneut versuchen.';
+/** Wo „Neu laden" nach einer Abweisung scheitert. */
+const AUSFALL_NEU_LADEN = 'Der aktuelle Stand ist gerade nicht zu erreichen. Bitte erneut versuchen.';
 
 /** Die sechs Felder der Maske, jedes als Zeichenkette — leer heisst „keine Angabe". */
 interface Werte {
@@ -76,6 +88,33 @@ type Stand =
 /** Eine fehlende Angabe wird zum leeren Feld — nie zu einem Platzhalter im Eingabefeld. */
 function alsText(wert: string | null): string {
   return wert ?? '';
+}
+
+/** Die Werte der Maske aus dem Stand des Servers. */
+function werteAus(partner: Ansprechpartner): Werte {
+  return {
+    vorname: alsText(partner.vorname),
+    nachname: partner.nachname,
+    rolle: alsText(partner.rolle),
+    email: alsText(partner.email),
+    telefonFestnetz: alsText(partner.telefonFestnetz),
+    telefonMobil: alsText(partner.telefonMobil),
+  };
+}
+
+/**
+ * Was gerade in der Maske steht, als eigene Eingaben zum Kopieren (#411, Kriterium 3) — beschriftet
+ * wie die Felder, damit sich jeder Wert seinem Feld zuordnen laesst.
+ */
+function eigeneEingabenAus(werte: Werte): readonly EigeneEingabe[] {
+  return [
+    { bezeichnung: 'Vorname', wert: werte.vorname },
+    { bezeichnung: 'Nachname', wert: werte.nachname },
+    { bezeichnung: 'Rolle', wert: werte.rolle },
+    { bezeichnung: 'E-Mail-Adresse', wert: werte.email },
+    { bezeichnung: 'Telefon Festnetz', wert: werte.telefonFestnetz },
+    { bezeichnung: 'Telefon Mobil', wert: werte.telefonMobil },
+  ];
 }
 
 /**
@@ -154,6 +193,12 @@ export default function AnsprechpartnerMaske() {
   const [feldFehler, setzeFeldFehler] = useState<FieldErrors>({});
   const [fehler, setzeFehler] = useState<string | null>(null);
   const [laeuft, setzeLaeuft] = useState(false);
+  // Der Stand, den das naechste Speichern vorlegt: gelesen, oder aus „Neu laden".
+  const [version, setzeVersion] = useState(0);
+  // Die Abweisung eines Speicherns auf altem Stand, ungeprueft — die Konfliktmeldung liest sie selbst.
+  const [abweisung, setzeAbweisung] = useState<unknown>(null);
+  // Die eigenen Werte nach „Neu laden", bis „Verwerfen" gewaehlt wird (#411, Kriterium 3).
+  const [eigene, setzeEigene] = useState<readonly EigeneEingabe[] | null>(null);
 
   useEffect(() => {
     // Eine Kennung, die keine ist, geht gar nicht erst ans Netz (kennung.ts).
@@ -176,14 +221,8 @@ export default function AnsprechpartnerMaske() {
           setzeStand({ art: 'fehlt', meldung: PARTNER_FEHLT });
           return;
         }
-        setzeWerte({
-          vorname: alsText(partner.vorname),
-          nachname: partner.nachname,
-          rolle: alsText(partner.rolle),
-          email: alsText(partner.email),
-          telefonFestnetz: alsText(partner.telefonFestnetz),
-          telefonMobil: alsText(partner.telefonMobil),
-        });
+        setzeWerte(werteAus(partner));
+        setzeVersion(partner.version);
         setzeStand({ art: 'bereit', firmaId: firma.id, firmaName: firma.name });
       })
       .catch((ursache: unknown) => {
@@ -201,6 +240,7 @@ export default function AnsprechpartnerMaske() {
   const absenden = async (ereignis: FormEvent<HTMLFormElement>, firmaId: number) => {
     ereignis.preventDefault();
     setzeFehler(null);
+    setzeAbweisung(null);
     setzeFeldFehler({});
     const eigene: Record<string, readonly string[]> = {};
     if (werte.nachname.trim() === '') {
@@ -226,17 +266,49 @@ export default function AnsprechpartnerMaske() {
       if (partnerKennung === null) {
         await ansprechpartnerAnlegen(firmaId, eingabe);
       } else {
-        await ansprechpartnerAendern(firmaId, partnerKennung, eingabe);
+        await ansprechpartnerAendern(firmaId, partnerKennung, version, eingabe);
       }
       navigate(`/firmen/${String(firmaId)}`, { replace: true });
     } catch (ursache) {
       setzeLaeuft(false);
       const felder = feldMeldungen(ursache);
-      if (Object.keys(felder).length > 0) {
+      if (istBearbeitungskonflikt(ursache)) {
+        // Die Eingaben bleiben stehen; den Weg weiter zeigt die Konfliktmeldung (Kriterium 3).
+        setzeAbweisung(ursache);
+      } else if (Object.keys(felder).length > 0) {
         setzeFeldFehler(felder);
       } else {
         setzeFehler(AUSFALL_SPEICHERN);
       }
+    }
+  };
+
+  /**
+   * „Neu laden" nach einer Abweisung: der Stand des Servers ins Formular, die eigenen Werte daneben
+   * (#411, Kriterium 3; Plan #415, E12). Gelesen wird ueber die Firma — einen eigenen Leseweg hat
+   * der Ansprechpartner nicht (E7).
+   */
+  const neuLaden = async (firmaId: number, partnerId: number) => {
+    const meine = eigeneEingabenAus(werte);
+    setzeFehler(null);
+    setzeLaeuft(true);
+    try {
+      const firma = await firmaLesen(firmaId);
+      const partner = firma.ansprechpartner.find((einer) => einer.id === partnerId);
+      if (partner === undefined) {
+        setzeFehler(PARTNER_FEHLT);
+        return;
+      }
+      setzeWerte(werteAus(partner));
+      setzeVersion(partner.version);
+      setzeEigene(meine);
+      setzeAbweisung(null);
+      setzeEigeneFehler({});
+      setzeFeldFehler({});
+    } catch {
+      setzeFehler(AUSFALL_NEU_LADEN);
+    } finally {
+      setzeLaeuft(false);
     }
   };
 
@@ -270,6 +342,23 @@ export default function AnsprechpartnerMaske() {
             sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}
           >
             {fehler === null ? null : <Alert severity="error">{fehler}</Alert>}
+            {partnerKennung === null ? null : (
+              <Konfliktmeldung
+                ursache={abweisung}
+                onNeuLaden={() => {
+                  void neuLaden(stand.firmaId, partnerKennung);
+                }}
+                uebersicht={`/firmen/${String(stand.firmaId)}`}
+              />
+            )}
+            {eigene === null ? null : (
+              <EigeneEingaben
+                werte={eigene}
+                onVerwerfen={() => {
+                  setzeEigene(null);
+                }}
+              />
+            )}
             <Eingabe
               label="Vorname"
               feld="vorname"

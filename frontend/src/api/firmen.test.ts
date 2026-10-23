@@ -15,7 +15,7 @@ import {
   parseFirma,
   parseFirmenUebersicht,
 } from './firmen';
-import { fetchNachPfad, json, leer } from '../test/fetchNachPfad';
+import { fetchNachPfad, json } from '../test/fetchNachPfad';
 
 const ZEILE = { id: 7, name: 'Beispiel GmbH', ort: 'Bremen', aktiveAnsprechpartner: 2, aktiv: true };
 
@@ -28,6 +28,7 @@ const PARTNER = {
   telefonFestnetz: '0421/1234',
   telefonMobil: null,
   aktiv: true,
+  version: 2,
 };
 
 const FIRMA = {
@@ -41,7 +42,11 @@ const FIRMA = {
   umsatzsteuerId: null,
   aktiv: true,
   ansprechpartner: [PARTNER],
+  version: 3,
 };
+
+/** Der Stand, den ein schreibender Schritt als starkes Etikett vorlegt (Plan #415, E2). */
+const VORGELEGT = { 'If-Match': '"3"' };
 
 const FIRMA_EINGABE = {
   name: 'Beispiel GmbH',
@@ -106,6 +111,7 @@ describe('parseFirma', () => {
     ['mit falscher strasse', { ...FIRMA, strasse: 7 }],
     ['ohne aktiv', { ...FIRMA, aktiv: undefined }],
     ['ohne Liste der Ansprechpartner', { ...FIRMA, ansprechpartner: undefined }],
+    ['ohne version', { ...FIRMA, version: undefined }],
   ])('weist eine Antwort %s ab', (_fall, antwort) => {
     expect(() => parseFirma(antwort)).toThrow(TypeError);
   });
@@ -121,6 +127,7 @@ describe('parseAnsprechpartner', () => {
     ['ohne nachname', { ...PARTNER, nachname: undefined }],
     ['mit falschem vorname', { ...PARTNER, vorname: 7 }],
     ['ohne aktiv', { ...PARTNER, aktiv: undefined }],
+    ['ohne version', { ...PARTNER, version: undefined }],
   ])('weist eine Antwort %s ab', (_fall, antwort) => {
     expect(() => parseAnsprechpartner(antwort)).toThrow(TypeError);
   });
@@ -170,25 +177,48 @@ describe('die Wege der Firma', () => {
     expect((await firmaLesen(7)).ansprechpartner).toHaveLength(1);
   });
 
-  it('schreibt die Angaben mit PUT und Rumpf fort', async () => {
-    const fetchMock = fetchNachPfad({ 'PUT /api/firmen/7': leer(204) });
+  it('schreibt die Angaben mit PUT, Rumpf und vorgelegtem Stand fort', async () => {
+    const fetchMock = fetchNachPfad({ 'PUT /api/firmen/7': json(200, { ...FIRMA, version: 4 }) });
 
-    await firmaAendern(7, FIRMA_EINGABE);
+    const antwort = await firmaAendern(7, 3, FIRMA_EINGABE);
 
+    expect(antwort.version).toBe(4);
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/firmen/7',
-      expect.objectContaining({ method: 'PUT', body: JSON.stringify(FIRMA_EINGABE) }),
+      expect.objectContaining({
+        method: 'PUT',
+        body: JSON.stringify(FIRMA_EINGABE),
+        headers: expect.objectContaining(VORGELEGT) as unknown,
+      }),
     );
   });
 
-  it('legt still und aktiviert wieder', async () => {
-    fetchNachPfad({
-      'POST /api/firmen/7/stilllegen': leer(204),
-      'POST /api/firmen/7/aktivieren': leer(204),
+  it('legt still und aktiviert wieder, jeweils auf dem vorgelegten Stand', async () => {
+    const fetchMock = fetchNachPfad({
+      'POST /api/firmen/7/stilllegen': json(200, { ...FIRMA, aktiv: false, version: 4 }),
+      'POST /api/firmen/7/aktivieren': json(200, { ...FIRMA, version: 5 }),
     });
 
-    await expect(firmaStilllegen(7)).resolves.toBeUndefined();
-    await expect(firmaAktivieren(7)).resolves.toBeUndefined();
+    expect((await firmaStilllegen(7, 3)).aktiv).toBe(false);
+    expect((await firmaAktivieren(7, 3)).version).toBe(5);
+    expect(fetchMock.mock.calls).toEqual([
+      [
+        '/api/firmen/7/stilllegen',
+        expect.objectContaining({ headers: expect.objectContaining(VORGELEGT) as unknown }),
+      ],
+      [
+        '/api/firmen/7/aktivieren',
+        expect.objectContaining({ headers: expect.objectContaining(VORGELEGT) as unknown }),
+      ],
+    ]);
+  });
+
+  it('legt eine Firma ohne vorgelegten Stand an (#411, Kriterium 7)', async () => {
+    const fetchMock = fetchNachPfad({ 'POST /api/firmen': json(201, FIRMA) });
+
+    await firmaAnlegen(FIRMA_EINGABE);
+
+    expect(fetchMock.mock.calls[0][1]?.headers).not.toHaveProperty('If-Match');
   });
 });
 
@@ -202,24 +232,35 @@ describe('die Wege des Ansprechpartners', () => {
     expect(fetchMock.mock.calls[0][1]?.body).toBe(JSON.stringify(PARTNER_EINGABE));
   });
 
-  it('schreibt die Angaben mit PUT fort', async () => {
-    const fetchMock = fetchNachPfad({ 'PUT /api/firmen/7/ansprechpartner/3': leer(204) });
+  it('schreibt die Angaben mit PUT und vorgelegtem Stand fort', async () => {
+    const fetchMock = fetchNachPfad({
+      'PUT /api/firmen/7/ansprechpartner/3': json(200, { ...PARTNER, version: 4 }),
+    });
 
-    await ansprechpartnerAendern(7, 3, PARTNER_EINGABE);
+    const antwort = await ansprechpartnerAendern(7, 3, 3, PARTNER_EINGABE);
 
+    expect(antwort.version).toBe(4);
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/firmen/7/ansprechpartner/3',
-      expect.objectContaining({ method: 'PUT', body: JSON.stringify(PARTNER_EINGABE) }),
+      expect.objectContaining({
+        method: 'PUT',
+        body: JSON.stringify(PARTNER_EINGABE),
+        headers: expect.objectContaining(VORGELEGT) as unknown,
+      }),
     );
   });
 
-  it('legt still und aktiviert wieder', async () => {
-    fetchNachPfad({
-      'POST /api/firmen/7/ansprechpartner/3/stilllegen': leer(204),
-      'POST /api/firmen/7/ansprechpartner/3/aktivieren': leer(204),
+  it('legt still und aktiviert wieder, jeweils auf dem vorgelegten Stand', async () => {
+    const fetchMock = fetchNachPfad({
+      'POST /api/firmen/7/ansprechpartner/3/stilllegen': json(200, { ...PARTNER, aktiv: false }),
+      'POST /api/firmen/7/ansprechpartner/3/aktivieren': json(200, PARTNER),
     });
 
-    await expect(ansprechpartnerStilllegen(7, 3)).resolves.toBeUndefined();
-    await expect(ansprechpartnerAktivieren(7, 3)).resolves.toBeUndefined();
+    expect((await ansprechpartnerStilllegen(7, 3, 3)).aktiv).toBe(false);
+    expect((await ansprechpartnerAktivieren(7, 3, 3)).aktiv).toBe(true);
+    expect(fetchMock.mock.calls.map((aufruf) => aufruf[1]?.headers)).toEqual([
+      expect.objectContaining(VORGELEGT),
+      expect.objectContaining(VORGELEGT),
+    ]);
   });
 });

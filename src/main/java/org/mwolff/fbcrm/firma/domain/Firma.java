@@ -23,6 +23,10 @@ import org.mwolff.fbcrm.common.Identifiable;
  * @param aktiv {@code false}, solange die Firma stillgelegt ist
  * @param createdAt Zeitpunkt der Anlage
  * @param updatedAt Zeitpunkt der letzten Aenderung
+ * @param version der Stand der Firma, wie ihn {@code If-Match} vorlegt (Plan #415, E1); 0 vor der
+ *     ersten Aenderung, danach fuehrt ihn der Bestand
+ * @param geaendertVon Kennung des Kontos, das die Firma zuletzt geaendert hat, oder {@code null},
+ *     solange sie das nicht weiss (Plan #415, E14)
  */
 public record Firma(
     @Nullable Long id,
@@ -32,7 +36,9 @@ public record Firma(
     @Nullable String umsatzsteuerId,
     boolean aktiv,
     Instant createdAt,
-    Instant updatedAt)
+    Instant updatedAt,
+    long version,
+    @Nullable Long geaendertVon)
     implements Identifiable {
 
   /**
@@ -51,7 +57,16 @@ public record Firma(
       final @Nullable String umsatzsteuerId,
       final Instant geaendertAm) {
     return new Firma(
-        id, name, anschrift, steuernummer, umsatzsteuerId, aktiv, createdAt, geaendertAm);
+        id,
+        name,
+        anschrift,
+        steuernummer,
+        umsatzsteuerId,
+        aktiv,
+        createdAt,
+        geaendertAm,
+        version,
+        geaendertVon);
   }
 
   /**
@@ -61,7 +76,16 @@ public record Firma(
    */
   public Firma stillgelegt(final Instant zeitpunkt) {
     return new Firma(
-        id, name, anschrift, steuernummer, umsatzsteuerId, false, createdAt, zeitpunkt);
+        id,
+        name,
+        anschrift,
+        steuernummer,
+        umsatzsteuerId,
+        false,
+        createdAt,
+        zeitpunkt,
+        version,
+        geaendertVon);
   }
 
   /**
@@ -70,6 +94,39 @@ public record Firma(
    * @param zeitpunkt Zeitpunkt der Wiederaktivierung
    */
   public Firma aktiviert(final Instant zeitpunkt) {
-    return new Firma(id, name, anschrift, steuernummer, umsatzsteuerId, true, createdAt, zeitpunkt);
+    return new Firma(
+        id,
+        name,
+        anschrift,
+        steuernummer,
+        umsatzsteuerId,
+        true,
+        createdAt,
+        zeitpunkt,
+        version,
+        geaendertVon);
+  }
+
+  /**
+   * Die Firma mit dem Konto, das sie gerade geaendert hat (Plan #415, E14).
+   *
+   * <p>Ein eigener Schritt neben den Uebergaengen: Wer aendert, ist eine Angabe des
+   * Anwendungsfalls, nicht der fachlichen Regel. Die Version bleibt, wie sie ist — sie zaehlt der
+   * Bestand beim Schreiben weiter.
+   *
+   * @param konto Kennung des handelnden Kontos
+   */
+  public Firma durch(final long konto) {
+    return new Firma(
+        id,
+        name,
+        anschrift,
+        steuernummer,
+        umsatzsteuerId,
+        aktiv,
+        createdAt,
+        updatedAt,
+        version,
+        konto);
   }
 }

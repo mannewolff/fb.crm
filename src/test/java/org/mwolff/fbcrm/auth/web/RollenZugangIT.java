@@ -258,7 +258,10 @@ class RollenZugangIT extends AbstractIntegrationTest {
   void employee_givenBusinessData_thenWrites() {
     // When — Kriterium 9: Employee legt Kunden an und aendert sie.
     final ResponseEntity<String> anlegen = ruf(employee, "/api/firmen", HttpMethod.POST, firma());
-    final ResponseEntity<String> aendern = ruf(employee, "/api/firmen/1", HttpMethod.PUT, firma());
+    final HttpHeaders aufStand0 = new HttpHeaders();
+    aufStand0.addAll(employee);
+    aufStand0.setIfMatch("\"0\"");
+    final ResponseEntity<String> aendern = ruf(aufStand0, "/api/firmen/1", HttpMethod.PUT, firma());
 
     // Then
     assertThat(anlegen.getStatusCode()).isEqualTo(HttpStatus.CREATED);

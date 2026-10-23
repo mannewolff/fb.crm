@@ -62,7 +62,9 @@ class FirmaPersistenceIT extends AbstractIntegrationTest {
                     "DE123456789",
                     false,
                     ANGELEGT,
-                    ANGELEGT))
+                    ANGELEGT,
+                    0L,
+                    null))
             .requireId();
     ansprechpartner.save(partner("Aktiv", true));
     ansprechpartner.save(partner("Ruhend", false));
@@ -80,7 +82,9 @@ class FirmaPersistenceIT extends AbstractIntegrationTest {
         "0170 1234",
         aktiv,
         ANGELEGT,
-        ANGELEGT);
+        ANGELEGT,
+        0L,
+        null);
   }
 
   /**

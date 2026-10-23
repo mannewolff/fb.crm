@@ -16,6 +16,10 @@ import org.springframework.transaction.annotation.Transactional;
  * <p>Sein Stand gehoert ihm allein: Das Stilllegen seiner Firma laesst ihn unberuehrt, und sein
  * eigenes Stilllegen sagt nichts ueber die Firma (E2, Kriterium 16). Beide Wege stehen auch bei
  * stillgelegter Firma offen (Kriterium 14) — die Firma wird dafuer gar nicht erst befragt.
+ *
+ * <p><b>Zuerst der Stand</b> (#411, Kriterium 4; Plan #415, E18): Wer auf einem alten Stand
+ * umschaltet, bekommt {@link AnsprechpartnerGeaendert}; das handelnde Konto steht danach als
+ * Urheber am Ansprechpartner.
  */
 @Service
 @Transactional
@@ -35,10 +39,16 @@ public class AnsprechpartnerStilllegenUseCase {
    *
    * @param firmaId Kennung der Firma aus dem Pfad
    * @param id technische Id des Ansprechpartners
+   * @param version der vorgelegte Stand aus {@code If-Match}
+   * @param konto Kennung des handelnden Kontos
+   * @return der Ansprechpartner mit dem neuen Stand
    * @throws AnsprechpartnerNichtGefunden wenn es ihn unter dieser Firma nicht gibt
+   * @throws AnsprechpartnerGeaendert wenn er inzwischen einen anderen Stand hat als den vorgelegten
    */
-  public void stilllegen(final long firmaId, final long id) {
-    ansprechpartner.save(vorhandener(firmaId, id).stillgelegt(clock.instant()));
+  public Ansprechpartner stilllegen(
+      final long firmaId, final long id, final long version, final long konto) {
+    return ansprechpartner.save(
+        vorhandener(firmaId, id, version, konto).stillgelegt(clock.instant()).durch(konto));
   }
 
   /**
@@ -46,16 +56,26 @@ public class AnsprechpartnerStilllegenUseCase {
    *
    * @param firmaId Kennung der Firma aus dem Pfad
    * @param id technische Id des Ansprechpartners
+   * @param version der vorgelegte Stand aus {@code If-Match}
+   * @param konto Kennung des handelnden Kontos
+   * @return der Ansprechpartner mit dem neuen Stand
    * @throws AnsprechpartnerNichtGefunden wenn es ihn unter dieser Firma nicht gibt
+   * @throws AnsprechpartnerGeaendert wenn er inzwischen einen anderen Stand hat als den vorgelegten
    */
-  public void aktivieren(final long firmaId, final long id) {
-    ansprechpartner.save(vorhandener(firmaId, id).aktiviert(clock.instant()));
+  public Ansprechpartner aktivieren(
+      final long firmaId, final long id, final long version, final long konto) {
+    return ansprechpartner.save(
+        vorhandener(firmaId, id, version, konto).aktiviert(clock.instant()).durch(konto));
   }
 
-  private Ansprechpartner vorhandener(final long firmaId, final long id) {
-    return ansprechpartner
-        .findById(id)
-        .filter(partner -> partner.firmaId() == firmaId)
-        .orElseThrow(AnsprechpartnerNichtGefunden::new);
+  private Ansprechpartner vorhandener(
+      final long firmaId, final long id, final long version, final long konto) {
+    final Ansprechpartner partner =
+        ansprechpartner
+            .findById(id)
+            .filter(einer -> einer.firmaId() == firmaId)
+            .orElseThrow(AnsprechpartnerNichtGefunden::new);
+    AnsprechpartnerGeaendert.pruefe(partner, version, konto);
+    return partner;
   }
 }

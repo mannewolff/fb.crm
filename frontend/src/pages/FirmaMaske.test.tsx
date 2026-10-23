@@ -1,4 +1,4 @@
-import { screen, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -22,6 +22,7 @@ const FIRMA: Firma = {
   umsatzsteuerId: 'DE123456789',
   aktiv: true,
   ansprechpartner: [],
+  version: 3,
 };
 
 /** Die Adresse, an der sich ablesen laesst, wohin die Maske gefuehrt hat. */
@@ -182,7 +183,7 @@ describe('FirmaMaske — Ändern', () => {
     const nutzer = userEvent.setup();
     const fetchMock = fetchNachPfad({
       'GET /api/firmen/7': json(200, FIRMA),
-      'PUT /api/firmen/7': leer(204),
+      'PUT /api/firmen/7': json(200, { ...FIRMA, version: 4 }),
     });
 
     renderMaske('/firmen/7/bearbeiten');
@@ -224,7 +225,7 @@ describe('FirmaMaske — Ändern', () => {
     const nutzer = userEvent.setup();
     const fetchMock = fetchNachPfad({
       'GET /api/firmen/7': json(200, { ...FIRMA, strasse: null }),
-      'PUT /api/firmen/7': leer(204),
+      'PUT /api/firmen/7': json(200, { ...FIRMA, version: 4 }),
     });
 
     renderMaske('/firmen/7/bearbeiten');
@@ -346,5 +347,153 @@ describe('FirmaMaske — Tastatur und Benennung', () => {
       await nutzer.tab();
       expect(element).toHaveFocus();
     }
+  });
+});
+
+/** Heute um die genannte Uhrzeit in der Ortszeit — die Meldung nennt dann nur die Uhrzeit. */
+function heuteUm(stunde: number, minute: number): string {
+  const zeitpunkt = new Date();
+  zeitpunkt.setHours(stunde, minute, 0, 0);
+  return zeitpunkt.toISOString();
+}
+
+/** Die Abweisung des Servers, wie `GlobalExceptionHandler` sie schreibt (Plan #415, E4, E15). */
+function abweisung(geaendertVon: string): () => Response {
+  return json(409, {
+    title: 'Conflict',
+    status: 409,
+    detail: 'Dieser Eintrag wurde inzwischen geändert.',
+    konflikt: { art: 'veraltet', geaendertAm: heuteUm(10, 42), eigenesFenster: false, geaendertVon },
+  });
+}
+
+/** Antwortet der Reihe nach mit den Antworten — beim ersten Aufruf mit der ersten. */
+function nacheinander(...antworten: readonly (() => Response)[]): () => Response {
+  let aufruf = 0;
+  return () => {
+    const antwort = antworten[Math.min(aufruf, antworten.length - 1)];
+    aufruf += 1;
+    return antwort();
+  };
+}
+
+/** Die Bedingungskoepfe aller Aufrufe des Wegs, in ihrer Reihenfolge. */
+function vorgelegteStaende(
+  fetchMock: ReturnType<typeof fetchNachPfad>,
+  methode: string,
+  pfad: string,
+): (string | undefined)[] {
+  return fetchMock.mock.calls
+    .filter(([ziel, init]) => ziel === pfad && init?.method === methode)
+    .map(([, init]) => (init?.headers as Record<string, string> | undefined)?.['If-Match']);
+}
+
+describe('FirmaMaske — gleichzeitig arbeiten (#411, Kriterien 1 bis 4; Plan #415)', () => {
+  /** Annas Stand: Sie hat Name und Ort inzwischen geaendert. */
+  const ANNAS_STAND: Firma = { ...FIRMA, name: 'Beispiel AG', ort: 'Hamburg', version: 4 };
+
+  it('legt beim Speichern den gelesenen Stand vor', async () => {
+    const nutzer = userEvent.setup();
+    const fetchMock = fetchNachPfad({
+      'GET /api/firmen/7': json(200, FIRMA),
+      'PUT /api/firmen/7': json(200, { ...FIRMA, version: 4 }),
+    });
+
+    renderMaske('/firmen/7/bearbeiten');
+    await screen.findByRole('heading', { name: 'Firma bearbeiten' });
+    await nutzer.click(screen.getByRole('button', { name: 'Speichern' }));
+
+    await screen.findByText('Detailansicht');
+    expect(vorgelegteStaende(fetchMock, 'PUT', '/api/firmen/7')).toEqual(['"3"']);
+  });
+
+  it('legt beim Anlegen keinen Stand vor (Kriterium 7)', async () => {
+    const nutzer = userEvent.setup();
+    const fetchMock = fetchNachPfad({ 'POST /api/firmen': json(201, FIRMA) });
+
+    renderMaske('/firmen/neu');
+    await nutzer.type(feld('Name'), 'Neue GmbH');
+    await nutzer.click(screen.getByRole('button', { name: 'Anlegen' }));
+
+    await screen.findByText('Detailansicht');
+    expect(vorgelegteStaende(fetchMock, 'POST', '/api/firmen')).toEqual([undefined]);
+  });
+
+  it('Szenario: abgewiesenes Speichern — die Eingaben bleiben, Neu laden stellt sie daneben', async () => {
+    const nutzer = userEvent.setup();
+    const fetchMock = fetchNachPfad({
+      'GET /api/firmen/7': nacheinander(json(200, FIRMA), json(200, ANNAS_STAND)),
+      'PUT /api/firmen/7': nacheinander(abweisung('Anna'), json(200, { ...ANNAS_STAND, version: 5 })),
+    });
+
+    renderMaske('/firmen/7/bearbeiten');
+    await screen.findByRole('heading', { name: 'Firma bearbeiten' });
+    await nutzer.clear(feld('Ort'));
+    await nutzer.type(feld('Ort'), 'Oldenburg');
+    await nutzer.click(screen.getByRole('button', { name: 'Speichern' }));
+
+    // Abgewiesen: Die Meldung nennt Anna, und der eigene Ort steht weiter im Feld.
+    const meldung = await screen.findByRole('alert');
+    expect(meldung).toHaveTextContent('Nicht ausgeführt');
+    expect(meldung).toHaveTextContent('Anna hat diesen Eintrag inzwischen geändert (10:42).');
+    expect(meldung).not.toHaveTextContent('Bitte später erneut versuchen');
+    expect(feld('Ort')).toHaveValue('Oldenburg');
+    expect(adresse()).toBe('/firmen/7/bearbeiten');
+
+    // Neu laden: Annas Stand steht in der Maske, die eigenen Werte daneben zum Kopieren.
+    await nutzer.click(screen.getByRole('button', { name: 'Neu laden' }));
+    await waitFor(() => {
+      expect(feld('Ort')).toHaveValue('Hamburg');
+    });
+    expect(feld('Name')).toHaveValue('Beispiel AG');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    const eigene = screen.getByRole('region', { name: 'Deine Eingaben' });
+    expect(eigene).toHaveTextContent('Oldenburg');
+    expect(eigene).toHaveTextContent('Beispiel GmbH');
+    expect(within(eigene).getByText('Postleitzahl')).toBeInTheDocument();
+
+    // Auf Annas Stand geht das Speichern durch; vorgelegt wird der neu geladene Stand.
+    await nutzer.click(screen.getByRole('button', { name: 'Speichern' }));
+    await screen.findByText('Detailansicht');
+    expect(vorgelegteStaende(fetchMock, 'PUT', '/api/firmen/7')).toEqual(['"3"', '"4"']);
+  });
+
+  it('raeumt die eigenen Eingaben mit „Verwerfen" ab', async () => {
+    const nutzer = userEvent.setup();
+    fetchNachPfad({
+      'GET /api/firmen/7': nacheinander(json(200, FIRMA), json(200, ANNAS_STAND)),
+      'PUT /api/firmen/7': abweisung('Anna'),
+    });
+
+    renderMaske('/firmen/7/bearbeiten');
+    await screen.findByRole('heading', { name: 'Firma bearbeiten' });
+    await nutzer.click(screen.getByRole('button', { name: 'Speichern' }));
+    await nutzer.click(await screen.findByRole('button', { name: 'Neu laden' }));
+    const eigene = await screen.findByRole('region', { name: 'Deine Eingaben' });
+
+    await nutzer.click(within(eigene).getByRole('button', { name: 'Verwerfen' }));
+
+    expect(screen.queryByRole('region', { name: 'Deine Eingaben' })).not.toBeInTheDocument();
+  });
+
+  it('meldet einen Ausfall beim Neu laden und laesst die Konfliktmeldung stehen', async () => {
+    const nutzer = userEvent.setup();
+    fetchNachPfad({
+      'GET /api/firmen/7': nacheinander(json(200, FIRMA), problem(503, 'kaputt')),
+      'PUT /api/firmen/7': abweisung('Anna'),
+    });
+
+    renderMaske('/firmen/7/bearbeiten');
+    await screen.findByRole('heading', { name: 'Firma bearbeiten' });
+    await nutzer.click(screen.getByRole('button', { name: 'Speichern' }));
+    await nutzer.click(await screen.findByRole('button', { name: 'Neu laden' }));
+
+    expect(
+      await screen.findByText(
+        'Der aktuelle Stand ist gerade nicht zu erreichen. Bitte erneut versuchen.',
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Neu laden' })).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Deine Eingaben' })).not.toBeInTheDocument();
   });
 });

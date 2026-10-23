@@ -302,7 +302,9 @@ class AngebotAendernUseCaseTest {
         null,
         aktiv,
         Angebotsdoppel.ANGELEGT,
-        Angebotsdoppel.ANGELEGT);
+        Angebotsdoppel.ANGELEGT,
+        0L,
+        null);
   }
 
   /** Dieselbe Position mit einem anderen Leistungsjahr. */
