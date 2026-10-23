@@ -18,6 +18,7 @@ class AngebotskommentarTest {
   private static final Instant GEAENDERT = Instant.parse("2026-09-30T14:05:00Z");
   private static final Instant SPAETER = Instant.parse("2026-10-01T09:15:00Z");
   private static final long VERFASSER = 3L;
+  private static final long BEN = 4L;
 
   private static Angebotskommentar kommentar() {
     return new Angebotskommentar(7L, 11L, VERFASSER, "Kunde ruft zurueck.", ANGELEGT, GEAENDERT);
@@ -78,5 +79,92 @@ class AngebotskommentarTest {
 
     // When / Then
     assertThat(frisch.id()).isNull();
+  }
+
+  @Test
+  void neu_thenStartsAtVersionZeroWithoutUrheberAndNotDeleted() {
+    // Given — ein neuer Kommentar hat noch keinen Stand und kein Kennzeichen (Plan #415, E8).
+    final Angebotskommentar frisch =
+        new Angebotskommentar(null, 11L, VERFASSER, "Kunde ruft zurueck.", ANGELEGT, ANGELEGT);
+
+    // When / Then
+    assertThat(frisch)
+        .satisfies(
+            k -> assertThat(k.version()).isZero(),
+            k -> assertThat(k.geaendertVon()).isNull(),
+            k -> assertThat(k.geloeschtAm()).isNull(),
+            k -> assertThat(k.geloeschtVon()).isNull());
+  }
+
+  @Test
+  void durch_thenSetsTheUrheberAndKeepsEverythingElse() {
+    // Given
+    final Angebotskommentar ausgangspunkt =
+        new Angebotskommentar(
+            7L, 11L, VERFASSER, "Kunde ruft zurueck.", ANGELEGT, GEAENDERT, 5L, null, null, null);
+
+    // When — E14: wer aendert, steht danach als Urheber am Kommentar.
+    final Angebotskommentar geaendert = ausgangspunkt.geaendert("Neu", SPAETER).durch(BEN);
+
+    // Then — die Version zaehlt der Bestand, nicht das Fachobjekt.
+    assertThat(geaendert)
+        .isEqualTo(
+            new Angebotskommentar(
+                7L, 11L, VERFASSER, "Neu", ANGELEGT, SPAETER, 5L, BEN, null, null));
+  }
+
+  @Test
+  void geloescht_thenCarriesTheKennzeichenAndKeepsTheRest() {
+    // Given — E17: geloescht wird mit Kennzeichen, die Zeile bleibt.
+    final Angebotskommentar ausgangspunkt =
+        new Angebotskommentar(
+            7L,
+            11L,
+            VERFASSER,
+            "Kunde ruft zurueck.",
+            ANGELEGT,
+            GEAENDERT,
+            2L,
+            VERFASSER,
+            null,
+            null);
+
+    // When
+    final Angebotskommentar geloescht = ausgangspunkt.geloescht(BEN, SPAETER);
+
+    // Then
+    assertThat(geloescht)
+        .isEqualTo(
+            new Angebotskommentar(
+                7L,
+                11L,
+                VERFASSER,
+                "Kunde ruft zurueck.",
+                ANGELEGT,
+                GEAENDERT,
+                2L,
+                VERFASSER,
+                SPAETER,
+                BEN));
+    assertThat(ausgangspunkt.geloeschtAm()).isNull();
+  }
+
+  @Test
+  void geaendert_thenKeepsVersionUrheberAndKennzeichen() {
+    // Given
+    final Angebotskommentar ausgangspunkt =
+        new Angebotskommentar(
+            7L, 11L, VERFASSER, "Alt", ANGELEGT, GEAENDERT, 4L, BEN, SPAETER, BEN);
+
+    // When
+    final Angebotskommentar geaendert = ausgangspunkt.geaendert("Neu", SPAETER);
+
+    // Then
+    assertThat(geaendert)
+        .satisfies(
+            k -> assertThat(k.version()).isEqualTo(4L),
+            k -> assertThat(k.geaendertVon()).isEqualTo(BEN),
+            k -> assertThat(k.geloeschtAm()).isEqualTo(SPAETER),
+            k -> assertThat(k.geloeschtVon()).isEqualTo(BEN));
   }
 }

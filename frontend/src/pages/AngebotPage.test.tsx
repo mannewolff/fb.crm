@@ -436,6 +436,7 @@ describe('AngebotPage — je Rolle (Kriterium 10 von #409, Plan #414, A10)', () 
     text: 'Kunde wartet auf das Konzept',
     createdAt: '2026-09-30T12:05:00Z',
     verfasser: 'Anna Berg',
+    version: 0,
   };
   const ANLAGE = {
     id: 2,

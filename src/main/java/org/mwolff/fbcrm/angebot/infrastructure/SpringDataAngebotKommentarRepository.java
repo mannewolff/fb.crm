@@ -19,7 +19,8 @@ import org.springframework.data.repository.query.Param;
 interface SpringDataAngebotKommentarRepository extends JpaRepository<AngebotKommentarEntity, Long> {
 
   /**
-   * Die Kommentare eines Angebots, in keiner zugesagten Reihenfolge.
+   * Die nicht geloeschten Kommentare eines Angebots, in keiner zugesagten Reihenfolge (Plan #415,
+   * E17).
    *
    * @param angebotId Kennung des Angebots
    */
@@ -27,6 +28,7 @@ interface SpringDataAngebotKommentarRepository extends JpaRepository<AngebotKomm
       """
       select k from AngebotKommentarEntity k
       where k.angebotId = :angebotId
+        and k.geloeschtAm is null
       """)
   List<AngebotKommentarEntity> findByAngebot(@Param("angebotId") long angebotId);
 

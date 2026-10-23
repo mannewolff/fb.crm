@@ -31,10 +31,15 @@ import org.springframework.jdbc.core.JdbcTemplate;
  *
  * <p>Hier stehen die Zusagen, die an der echten Transaktion und am echten Schema haengen: Ein
  * geschriebener Kommentar steht anschliessend in der Liste, zwei kommen neuester zuerst zurueck
- * (Kriterium 4), ein {@code DELETE} nimmt die Zeile wirklich fort (Kriterium 10, E6), und ein
+ * (Kriterium 4), ein {@code DELETE} nimmt den Kommentar aus der Liste (Kriterium 10), und ein
  * {@code PUT} laesst {@code createdAt} stehen (Kriterium 9). Dazu die Grenzen: 401 ohne Sitzung,
  * 404 bei unbekanntem Angebot und bei einem Kommentar eines anderen Angebots (E5), und 201 auch an
  * einem Angebot im Status ABGERECHNET (Kriterium 8).
+ *
+ * <p>Dazu der Schutz gegen gleichzeitiges Bearbeiten (#411, Kriterien 1, 6 und 7; Plan #415, E8,
+ * E16, E17): Aendern und Loeschen legen den Stand des Kommentars vor, ein alter Stand und ein
+ * geloeschter Kommentar werden mit 409 abgewiesen, und es entsteht nichts neu. Ein neuer Kommentar
+ * laesst die Version des Angebots stehen. Geloescht wird mit Kennzeichen an der Zeile.
  *
  * <p>Dazu der Verfasser (Issue #420; Plan #414, A7; fachliche Quelle #409, Kriterium 11): Er kommt
  * aus der Sitzung, nicht aus dem Rumpf, und die Liste traegt seinen aktuellen Namen — auch nach
@@ -45,6 +50,7 @@ class AngebotKommentarIT extends AbstractIntegrationTest {
   private static final String MAIL = "manne@example.org";
   private static final Instant ANGELEGT = Instant.parse("2026-09-01T08:00:00Z");
   private static final String FIRMA = "Adler AG";
+  private static final String KOMMENTARE = "angebot_kommentar";
 
   private final TestRestTemplate rest;
   private final AccountRepository accounts;
@@ -85,6 +91,27 @@ class AngebotKommentarIT extends AbstractIntegrationTest {
   private <T> ResponseEntity<T> ruf(
       final String pfad, final HttpMethod methode, final Object rumpf, final Class<T> typ) {
     return rest.exchange(pfad, methode, new HttpEntity<>(rumpf, sitzung), typ);
+  }
+
+  /** Der Stand, den die Zeile gerade traegt — der, den die Ansicht beim Oeffnen sah. */
+  private long version(final String tabelle, final long id) {
+    return Objects.requireNonNull(
+            jdbc.queryForObject(
+                "SELECT version FROM " + tabelle + " WHERE id = ?", Long.class, Long.valueOf(id)))
+        .longValue();
+  }
+
+  /** Ein Aufruf auf dem genannten Stand, vorgelegt als {@code If-Match}. */
+  private <T> ResponseEntity<T> aufStand(
+      final long version,
+      final String pfad,
+      final HttpMethod methode,
+      final Object rumpf,
+      final Class<T> typ) {
+    final HttpHeaders kopf = new HttpHeaders();
+    kopf.putAll(sitzung);
+    kopf.setIfMatch("\"" + version + "\"");
+    return rest.exchange(pfad, methode, new HttpEntity<>(rumpf, kopf), typ);
   }
 
   private long angebot() {
@@ -185,7 +212,8 @@ class AngebotKommentarIT extends AbstractIntegrationTest {
 
     // When
     final ResponseEntity<String> antwort =
-        ruf(
+        aufStand(
+            version(KOMMENTARE, kommentarId),
             pfad(eigenes) + "/" + kommentarId,
             HttpMethod.PUT,
             Map.of("text", "Uebernahme"),
@@ -212,25 +240,31 @@ class AngebotKommentarIT extends AbstractIntegrationTest {
   }
 
   @Test
-  void loeschen_thenTheKommentarIsGoneFromTheListAndFromTheTable() {
-    // Given — Kriterium 10, E6.
+  void loeschen_thenTheKommentarIsGoneFromTheListAndMarkedInTheTable() {
+    // Given — Kriterium 10; Plan #415, E17: die Zeile bleibt mit Zeitpunkt und Konto der Loeschung.
     final long angebotId = angebot();
     final long kommentarId =
         Objects.requireNonNull(schreibe(angebotId, "Weg damit").getBody()).id();
 
     // When
     final ResponseEntity<Void> antwort =
-        ruf(pfad(angebotId) + "/" + kommentarId, HttpMethod.DELETE, null, Void.class);
+        aufStand(
+            version(KOMMENTARE, kommentarId),
+            pfad(angebotId) + "/" + kommentarId,
+            HttpMethod.DELETE,
+            null,
+            Void.class);
 
     // Then
     assertThat(antwort.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
     assertThat(liste(angebotId)).isEmpty();
     assertThat(
-            jdbc.queryForObject(
-                "SELECT count(*) FROM angebot_kommentar WHERE id = ?",
-                Long.class,
+            jdbc.queryForMap(
+                "SELECT geloescht_von, geloescht_am IS NOT NULL AS gekennzeichnet"
+                    + " FROM angebot_kommentar WHERE id = ?",
                 Long.valueOf(kommentarId)))
-        .isEqualTo(Long.valueOf(0L));
+        .containsEntry("geloescht_von", Long.valueOf(kontoId))
+        .containsEntry("gekennzeichnet", true);
   }
 
   @Test
@@ -242,17 +276,19 @@ class AngebotKommentarIT extends AbstractIntegrationTest {
 
     // When
     final ResponseEntity<AngebotKommentarResponse> antwort =
-        ruf(
+        aufStand(
+            angelegt.version(),
             pfad(angebotId) + "/" + angelegt.id(),
             HttpMethod.PUT,
             Map.of("text", "Zweiter Stand"),
             AngebotKommentarResponse.class);
 
-    // Then
+    // Then — die Antwort traegt den erhoehten Stand, den die Ansicht beim naechsten Mal vorlegt.
     assertThat(antwort.getStatusCode()).isEqualTo(HttpStatus.OK);
     final AngebotKommentarResponse geaendert = Objects.requireNonNull(antwort.getBody());
     assertThat(geaendert.text()).isEqualTo("Zweiter Stand");
     assertThat(geaendert.createdAt()).isEqualTo(angelegt.createdAt());
+    assertThat(geaendert.version()).isEqualTo(angelegt.version() + 1);
   }
 
   @Test
@@ -352,5 +388,159 @@ class AngebotKommentarIT extends AbstractIntegrationTest {
 
     // Then
     assertThat(kommentare).extracting(AngebotKommentarResponse::verfasser).containsExactly("Manne");
+  }
+
+  /** Meldet ein zweites Konto an; die Sitzung des ersten bleibt in {@code mannesSitzung}. */
+  private HttpHeaders bensSitzung() {
+    jdbc.update(
+        "INSERT INTO account (email, display_name, role)"
+            + " VALUES ('ben@example.org', 'Ben', 'EMPLOYEE')");
+    return Anmeldung.perCode(rest, jdbc, hasher, "ben@example.org");
+  }
+
+  @Test
+  void schreiben_whileAnotherHasTheAngebotOpen_thenTheAngebotKeepsItsVersionAndSavesLater() {
+    // Given — #411, Szenario „Kommentar trotz geöffnetem Angebot"; Plan #415, E8: Manne hat das
+    // Angebot auf seinem Stand geoeffnet.
+    final long angebotId = angebot();
+    final long geoeffnet = version("angebot", angebotId);
+    final HttpHeaders mannesSitzung = sitzung;
+    sitzung = bensSitzung();
+
+    // When — Ben schreibt zum selben Angebot einen Kommentar.
+    final ResponseEntity<AngebotKommentarResponse> kommentar =
+        schreibe(angebotId, "Kunde hat Zeit.");
+
+    // Then — sofort gespeichert, und die Version des Angebots steht unveraendert.
+    assertThat(kommentar.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+    assertThat(version("angebot", angebotId)).isEqualTo(geoeffnet);
+
+    // And — Mannes Speichern auf dem beim Oeffnen gelesenen Stand geht danach durch.
+    sitzung = mannesSitzung;
+    final ResponseEntity<String> gespeichert =
+        aufStand(
+            geoeffnet,
+            "/api/angebote/" + angebotId,
+            HttpMethod.PUT,
+            Map.of(
+                "titel", "Website-Relaunch", "angebotDatum", "2026-09-25", "positionen", List.of()),
+            String.class);
+    assertThat(gespeichert.getStatusCode()).isEqualTo(HttpStatus.OK);
+  }
+
+  @Test
+  void aendern_withoutIfMatch_thenAnswers428AndChangesNothing() {
+    // Given — E3: ohne vorgelegten Stand wird nicht geschrieben.
+    final long angebotId = angebot();
+    final long kommentarId =
+        Objects.requireNonNull(schreibe(angebotId, "Erster Stand").getBody()).id();
+
+    // When
+    final ResponseEntity<String> antwort =
+        ruf(
+            pfad(angebotId) + "/" + kommentarId,
+            HttpMethod.PUT,
+            Map.of("text", "Neu"),
+            String.class);
+
+    // Then
+    assertThat(antwort.getStatusCode()).isEqualTo(HttpStatus.PRECONDITION_REQUIRED);
+    assertThat(liste(angebotId))
+        .extracting(AngebotKommentarResponse::text)
+        .containsExactly("Erster Stand");
+  }
+
+  @Test
+  void aendern_onAnOutdatedStand_thenAnswers409AndKeepsTheOtherText() {
+    // Given — Kriterium 1: Ben und Manne haben denselben Kommentar offen; Ben speichert zuerst.
+    final long angebotId = angebot();
+    final AngebotKommentarResponse geoeffnet =
+        Objects.requireNonNull(schreibe(angebotId, "Erster Stand").getBody());
+    final HttpHeaders mannesSitzung = sitzung;
+    sitzung = bensSitzung();
+    final String einzeln = pfad(angebotId) + "/" + geoeffnet.id();
+    aufStand(
+        geoeffnet.version(), einzeln, HttpMethod.PUT, Map.of("text", "Bens Stand"), String.class);
+    sitzung = mannesSitzung;
+
+    // When — Manne speichert auf dem Stand, den er beim Oeffnen sah.
+    final ResponseEntity<String> antwort =
+        aufStand(
+            geoeffnet.version(),
+            einzeln,
+            HttpMethod.PUT,
+            Map.of("text", "Mannes Stand"),
+            String.class);
+
+    // Then — abgewiesen mit Bens Namen; Bens Stand bleibt erhalten.
+    assertThat(antwort.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+    assertThat(antwort.getBody())
+        .contains("\"art\":\"veraltet\"")
+        .contains("\"geaendertVon\":\"Ben\"");
+    assertThat(liste(angebotId))
+        .extracting(AngebotKommentarResponse::text)
+        .containsExactly("Bens Stand");
+  }
+
+  @Test
+  void loeschen_onAnOutdatedStand_thenAnswers409AndDeletesNothing() {
+    // Given — Kriterium 6: ein inzwischen geaenderter Kommentar wird nicht geloescht.
+    final long angebotId = angebot();
+    final AngebotKommentarResponse geoeffnet =
+        Objects.requireNonNull(schreibe(angebotId, "Erster Stand").getBody());
+    final String einzeln = pfad(angebotId) + "/" + geoeffnet.id();
+    aufStand(
+        geoeffnet.version(), einzeln, HttpMethod.PUT, Map.of("text", "Neuer Stand"), String.class);
+
+    // When
+    final ResponseEntity<String> antwort =
+        aufStand(geoeffnet.version(), einzeln, HttpMethod.DELETE, null, String.class);
+
+    // Then
+    assertThat(antwort.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+    assertThat(liste(angebotId))
+        .extracting(AngebotKommentarResponse::text)
+        .containsExactly("Neuer Stand");
+  }
+
+  @Test
+  void aendern_aDeletedKommentar_thenAnswers409AsDeletedByTheOtherAndCreatesNothing() {
+    // Given — Kriterium 6, E16: Ben hat den Kommentar geloescht, waehrend Manne ihn offen hatte.
+    final long angebotId = angebot();
+    final AngebotKommentarResponse geoeffnet =
+        Objects.requireNonNull(schreibe(angebotId, "Erster Stand").getBody());
+    final String einzeln = pfad(angebotId) + "/" + geoeffnet.id();
+    final HttpHeaders mannesSitzung = sitzung;
+    sitzung = bensSitzung();
+    aufStand(geoeffnet.version(), einzeln, HttpMethod.DELETE, null, Void.class);
+    sitzung = mannesSitzung;
+
+    // When — Manne speichert, und er loescht ein zweites Mal.
+    final ResponseEntity<String> speichern =
+        aufStand(
+            geoeffnet.version(),
+            einzeln,
+            HttpMethod.PUT,
+            Map.of("text", "Mannes Stand"),
+            String.class);
+    final ResponseEntity<String> loeschen =
+        aufStand(geoeffnet.version(), einzeln, HttpMethod.DELETE, null, String.class);
+
+    // Then — beide abgewiesen, mit Bens Namen; kein Kommentar entsteht neu.
+    assertThat(speichern.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+    assertThat(speichern.getBody())
+        .contains("\"art\":\"gelöscht\"")
+        .contains("\"geaendertVon\":\"Ben\"")
+        .contains("\"eigenesFenster\":false");
+    assertThat(loeschen.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+    assertThat(liste(angebotId)).isEmpty();
+    assertThat(jdbc.queryForObject("SELECT count(*) FROM angebot_kommentar", Long.class))
+        .isEqualTo(Long.valueOf(1L));
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT text FROM angebot_kommentar WHERE id = ?",
+                String.class,
+                Long.valueOf(geoeffnet.id())))
+        .isEqualTo("Erster Stand");
   }
 }

@@ -63,8 +63,9 @@ Speichern beide nacheinander, überschreibt fb.crm die Änderung des Ersten nich
 das zweite Speichern ab, sagt, wer wann geändert hat, und niemand verliert seine Eingaben. Dieser
 Abschnitt zeigt, was dann geschieht und wie man weitermacht. Bisher gilt das beim Speichern in der
 Maske „Angebot bearbeiten" und in der Ansicht eines Angebots bei „Status weiter", „Status zurück",
-„Abschließen", „Wieder öffnen", „Stornieren" und „Storno zurücknehmen". Das Angebot zählt dabei als
-Ganzes, mit seinen Positionen und seinem Status.
+„Abschließen", „Wieder öffnen", „Stornieren" und „Storno zurücknehmen", dazu beim Bearbeiten und
+Löschen eines Kommentars. Das Angebot zählt dabei als Ganzes, mit seinen Positionen und seinem
+Status; jeder Kommentar ist ein Eintrag für sich.
 
 **Einstieg:** Die Abweisung erscheint von selbst, wenn man „Speichern" wählt und jemand anderes
 das Angebot seit dem Öffnen gespeichert hat. Solange der geöffnete Stand aktuell ist, merkt man vom
@@ -89,6 +90,14 @@ Storno oder die Rücknahme eines Stornos abgewiesen wird. Die Ansicht zeigt dann
 den man gesehen hat. „Neu laden" holt den aktuellen Stand samt Status; danach wählt man die Taste
 erneut, wenn der Wechsel auf dem neuen Stand noch passt. Einen Grund für das Storno trägt man dabei
 im Dialog neu ein.
+
+In der Karte „Kommentare" steht die Meldung über dem Feld „Neuer Kommentar", wenn ein anderer den
+Kommentar inzwischen bearbeitet hat. Der eigene Text bleibt im Feld. „Neu laden" setzt den
+aktuellen Text ins Feld und zeigt den eigenen unter „Deine Eingaben". Hat ein anderer den Kommentar
+inzwischen gelöscht, nennt die Meldung, wer ihn wann gelöscht hat. Statt „Neu laden" führt dann
+„Zur Übersicht" zur Liste der Angebote, und der eigene Text bleibt im Feld zum Kopieren. Einen neuen
+Kommentar schreibt man immer ohne Rückfrage, auch wenn ein anderer das Angebot gerade bearbeitet;
+dessen Speichern wird dadurch nicht abgewiesen.
 
 **Ergebnis:** Das Angebot trägt die Änderungen beider, und keine ist unbemerkt verloren gegangen.
 

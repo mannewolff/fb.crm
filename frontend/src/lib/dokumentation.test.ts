@@ -327,6 +327,10 @@ describe('Szenarien des Fachplans (E16)', () => {
     // Statuswechsel und Storno sind ebenso geschuetzt wie das Speichern (Kriterium 5, Issue #443).
     expect(text).toMatch(/„Status weiter"/u);
     expect(text).toMatch(/„Storno zurücknehmen"/u);
+    // Kommentare tragen ihren eigenen Stand; ein geloeschter fuehrt zur Uebersicht (Issue #444).
+    expect(text).toMatch(/Löschen eines Kommentars/u);
+    expect(text).toMatch(/„Zur Übersicht"/u);
+    expect(text).toMatch(/Einen neuen\s+Kommentar schreibt man immer ohne Rückfrage/u);
     expect(text).toMatch(/\*\*Ergebnis:\*\*/u);
   });
 

@@ -15,6 +15,7 @@ const KOMMENTAR = {
   text: 'Kunde ruft zurueck.',
   createdAt: '2026-09-30T12:05:00Z',
   verfasser: 'Anna Berg',
+  version: 2,
 };
 
 afterEach(() => {
@@ -35,6 +36,8 @@ describe('parseKommentar', () => {
     ['ohne createdAt', { ...KOMMENTAR, createdAt: undefined }],
     ['ohne verfasser', { ...KOMMENTAR, verfasser: undefined }],
     ['verfasser als Zahl', { ...KOMMENTAR, verfasser: 7 }],
+    ['ohne version', { ...KOMMENTAR, version: undefined }],
+    ['version als Text', { ...KOMMENTAR, version: '2' }],
   ])('weist eine Antwort ab: %s', (_fall, rumpf) => {
     expect(() => parseKommentar(rumpf)).toThrow(TypeError);
   });
@@ -82,6 +85,14 @@ describe('kommentarSchreiben', () => {
     await expect(kommentarSchreiben(9, 'Kunde ruft zurueck.')).resolves.toEqual(KOMMENTAR);
     expect(gesendet).toEqual({ text: 'Kunde ruft zurueck.' });
   });
+
+  it('legt keinen Stand vor — ein neuer Kommentar ist nie geschuetzt (#411, Kriterium 7)', async () => {
+    const abruf = fetchNachPfad({ 'POST /api/angebote/9/kommentare': json(201, KOMMENTAR) });
+
+    await kommentarSchreiben(9, 'Kunde ruft zurueck.');
+
+    expect(abruf.mock.calls[0][1]?.headers).not.toHaveProperty('If-Match');
+  });
 });
 
 describe('kommentarAendern', () => {
@@ -94,11 +105,24 @@ describe('kommentarAendern', () => {
       },
     });
 
-    await expect(kommentarAendern(9, 3, 'Neuer Text')).resolves.toEqual({
+    await expect(kommentarAendern(9, 3, 2, 'Neuer Text')).resolves.toEqual({
       ...KOMMENTAR,
       text: 'Neuer Text',
     });
     expect(gesendet).toEqual({ text: 'Neuer Text' });
+  });
+
+  it('legt den Stand des Kommentars als If-Match vor (Plan #415, E2, E8)', async () => {
+    const abruf = fetchNachPfad({ 'PUT /api/angebote/9/kommentare/3': json(200, KOMMENTAR) });
+
+    await kommentarAendern(9, 3, 2, 'Neuer Text');
+
+    expect(abruf).toHaveBeenCalledWith(
+      '/api/angebote/9/kommentare/3',
+      expect.objectContaining({
+        headers: expect.objectContaining({ 'If-Match': '"2"' }) as unknown,
+      }),
+    );
   });
 });
 
@@ -108,7 +132,13 @@ describe('kommentarLoeschen', () => {
       'DELETE /api/angebote/9/kommentare/3': leer(204),
     });
 
-    await expect(kommentarLoeschen(9, 3)).resolves.toBeUndefined();
+    await expect(kommentarLoeschen(9, 3, 2)).resolves.toBeUndefined();
     expect(abruf.mock.calls[0][1]?.body).toBeUndefined();
+    expect(abruf).toHaveBeenCalledWith(
+      '/api/angebote/9/kommentare/3',
+      expect.objectContaining({
+        headers: expect.objectContaining({ 'If-Match': '"2"' }) as unknown,
+      }),
+    );
   });
 });

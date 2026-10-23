@@ -14,12 +14,15 @@ import {
 } from '../api/kommentare';
 import type { Kommentar } from '../api/kommentare';
 import { useRechte } from '../auth/rechte';
-import { feldMeldungen } from '../lib/apifehler';
+import { feldMeldungen, istBearbeitungskonflikt } from '../lib/apifehler';
 import { meldungAm } from '../lib/feldmeldung';
 import { zeitpunktWort } from '../lib/zeitpunkt';
 import { RADIUS_KLEIN, ZAHLEN_KLASSE } from '../theme';
 import AktionsMenue from './AktionsMenue';
+import EigeneEingaben from './EigeneEingaben';
+import type { EigeneEingabe } from './EigeneEingaben';
 import Karte from './Karte';
+import Konfliktmeldung from './Konfliktmeldung';
 import WeicheTaste from './WeicheTaste';
 
 /**
@@ -48,6 +51,15 @@ import WeicheTaste from './WeicheTaste';
  * <b>Jeder Eintrag nennt seinen Verfasser</b> (Kriterium 11 von #409) — den Namen, den der Server
  * mitschickt. <b>Ohne Schreibrecht</b> fehlen Formular und ⋯-Menue ganz (Kriterium 10 von #409,
  * Plan #414, A10): Wer nur liest, sieht die Kommentare und keine Taste, die ins Leere fuehrte.
+ *
+ * <b>Aendern und Loeschen beruhen auf dem gelesenen Stand</b> (#411, Kriterien 1 bis 3 und 6; Plan
+ * #415, E8, E12). Jeder Kommentar traegt seine eigene Version, und der Bereich legt sie beim
+ * Aendern und Loeschen vor; ein neuer Kommentar legt keine vor (Kriterium 7). Weist der Server ab,
+ * steht die {@link Konfliktmeldung} ueber dem Formular, und der eigene Text bleibt im Feld. „Neu
+ * laden" holt die Kommentare samt neuer Versionen, setzt den Stand des Servers ins offene Feld und
+ * stellt den eigenen Text daneben in {@link EigeneEingaben}, bis „Verwerfen" gewaehlt wird. Ist
+ * der Kommentar inzwischen geloescht, gibt es nichts neu zu laden: „Zur Übersicht" fuehrt zur
+ * Liste der Angebote, und der eigene Text bleibt im Feld zum Kopieren.
  */
 
 export interface KommentareProps {
@@ -64,6 +76,12 @@ const AUSFALL_LOESCHEN = 'Der Kommentar wurde nicht gelöscht. Bitte später ern
 const TEXT_FEHLT = 'Bitte einen Text eingeben.';
 const ZU_LANG = 'Ein Kommentar hat höchstens 2.000 Zeichen.';
 const LOESCHEN_FRAGE = 'Der Kommentar wird gelöscht. Das lässt sich nicht zurücknehmen.';
+
+/** Wohin „Zur Übersicht" fuehrt, wenn der Kommentar inzwischen geloescht ist (#411, Kriterium 6). */
+const UEBERSICHT = '/angebote';
+
+/** Die Beschriftung des eigenen Textes in {@link EigeneEingaben}. */
+const EIGENER_TEXT = 'Kommentar';
 
 /** Die Grenze aus Kriterium 7 — dieselbe Zahl traegt `@Size` am `AngebotKommentarRequest`. */
 const GRENZE = 2000;
@@ -122,6 +140,9 @@ export default function Kommentare({ angebotId }: KommentareProps) {
   const [bearbeitung, setzeBearbeitung] = useState<Bearbeitung | null>(null);
   const [meldung, setzeMeldung] = useState<string | null>(null);
   const [laeuft, setzeLaeuft] = useState(false);
+  // Die Abweisung eines Schritts auf altem Stand, ungeprueft — die Konfliktmeldung liest sie selbst.
+  const [abweisung, setzeAbweisung] = useState<unknown>(null);
+  const [eigene, setzeEigene] = useState<readonly EigeneEingabe[] | null>(null);
 
   useEffect(() => {
     let aktuell = true;
@@ -171,6 +192,7 @@ export default function Kommentare({ angebotId }: KommentareProps) {
     }
     setzeEntwurfFehler(undefined);
     setzeMeldung(null);
+    setzeAbweisung(null);
     setzeLaeuft(true);
     try {
       const neu = await kommentarSchreiben(angebotId, geprueft.text);
@@ -183,20 +205,28 @@ export default function Kommentare({ angebotId }: KommentareProps) {
     }
   };
 
-  /** Aendert den Text eines Kommentars; der Zeitpunkt kommt aus der Antwort (Kriterium 9). */
-  const aendern = async (offen: Bearbeitung) => {
+  /**
+   * Aendert den Text eines Kommentars auf seinem gelesenen Stand; der Zeitpunkt kommt aus der
+   * Antwort (Kriterium 9). Bei einer Abweisung bleibt das Feld mit dem eigenen Text offen.
+   */
+  const aendern = async (offen: Bearbeitung, kommentar: Kommentar) => {
     const geprueft = pruefe(offen.text);
     if (geprueft.fehler !== undefined) {
       setzeBearbeitung({ ...offen, fehler: geprueft.fehler });
       return;
     }
     setzeMeldung(null);
+    setzeAbweisung(null);
     setzeLaeuft(true);
     try {
-      const neu = await kommentarAendern(angebotId, offen.id, geprueft.text);
+      const neu = await kommentarAendern(angebotId, offen.id, kommentar.version, geprueft.text);
       setzeKommentare(kommentare.map((alt) => (alt.id === neu.id ? neu : alt)));
       setzeBearbeitung(null);
     } catch (ursache: unknown) {
+      if (istBearbeitungskonflikt(ursache)) {
+        setzeAbweisung(ursache);
+        return;
+      }
       textFehlschlag(ursache, AUSFALL_SPEICHERN, (feld) => {
         setzeBearbeitung({ ...offen, fehler: feld });
       });
@@ -205,18 +235,50 @@ export default function Kommentare({ angebotId }: KommentareProps) {
     }
   };
 
-  /** Loescht den Kommentar (Kriterium 10) — die Rueckfrage stellt das ⋯-Menue. */
+  /** Loescht den Kommentar auf seinem gelesenen Stand (Kriterium 10); nachgefragt hat das ⋯-Menue. */
   const loeschen = async (kommentar: Kommentar) => {
     setzeMeldung(null);
+    setzeAbweisung(null);
     setzeLaeuft(true);
     try {
-      await kommentarLoeschen(angebotId, kommentar.id);
+      await kommentarLoeschen(angebotId, kommentar.id, kommentar.version);
       setzeKommentare(kommentare.filter((alt) => alt.id !== kommentar.id));
-    } catch {
-      setzeMeldung(AUSFALL_LOESCHEN);
+    } catch (ursache: unknown) {
+      if (istBearbeitungskonflikt(ursache)) {
+        setzeAbweisung(ursache);
+      } else {
+        setzeMeldung(AUSFALL_LOESCHEN);
+      }
     } finally {
       setzeLaeuft(false);
     }
+  };
+
+  /**
+   * „Neu laden" nach einer Abweisung: die Kommentare des Servers samt neuer Versionen, der Stand
+   * des Servers ins offene Feld und der eigene Text daneben (#411, Kriterium 3; Plan #415, E12).
+   *
+   * Der eigene Text wird genommen, wie er in diesem Augenblick im Feld steht. Gibt es den
+   * Kommentar nicht mehr, schliesst das Feld; der eigene Text bleibt trotzdem daneben stehen.
+   */
+  const neuLaden = async () => {
+    const offen = bearbeitung;
+    setzeLaeuft(true);
+    const gelesen = await laden(angebotId);
+    setzeLaeuft(false);
+    if (gelesen === null) {
+      setzeMeldung(AUSFALL_LESEN);
+      return;
+    }
+    setzeKommentare(gelesen);
+    setzeAbweisung(null);
+    setzeMeldung(null);
+    if (offen === null) {
+      return;
+    }
+    setzeEigene([{ bezeichnung: EIGENER_TEXT, wert: offen.text }]);
+    const aktuell = gelesen.find((kommentar) => kommentar.id === offen.id);
+    setzeBearbeitung(aktuell === undefined ? null : { id: aktuell.id, text: aktuell.text });
   };
 
   /** Ein Eintrag: Verfasser und Zeitpunkt mit ⋯-Menue, darunter der Text oder das Feld zum Aendern. */
@@ -303,7 +365,7 @@ export default function Kommentare({ angebotId }: KommentareProps) {
             <Box sx={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
               <WeicheTaste
                 onClick={() => {
-                  void aendern(offen);
+                  void aendern(offen, kommentar);
                 }}
                 disabled={laeuft}
               >
@@ -356,6 +418,21 @@ export default function Kommentare({ angebotId }: KommentareProps) {
     <Karte titel="Kommentare" anzahl={stand === 'gelesen' ? kommentare.length : undefined}>
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
         {meldung === null ? null : <Alert severity="error">{meldung}</Alert>}
+        <Konfliktmeldung
+          ursache={abweisung}
+          onNeuLaden={() => {
+            void neuLaden();
+          }}
+          uebersicht={UEBERSICHT}
+        />
+        {eigene === null ? null : (
+          <EigeneEingaben
+            werte={eigene}
+            onVerwerfen={() => {
+              setzeEigene(null);
+            }}
+          />
+        )}
         {darfFachlichSchreiben ? (
           <Box
             sx={{ display: 'flex', flexDirection: 'column', gap: '10px', alignItems: 'flex-start' }}

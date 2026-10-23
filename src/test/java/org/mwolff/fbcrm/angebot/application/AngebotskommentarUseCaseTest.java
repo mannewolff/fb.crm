@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
@@ -18,14 +19,18 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
+import org.mockito.Captor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mwolff.fbcrm.angebot.domain.AngebotRepository;
 import org.mwolff.fbcrm.angebot.domain.Angebotskommentar;
 import org.mwolff.fbcrm.angebot.domain.AngebotskommentarRepository;
 import org.mwolff.fbcrm.auth.domain.AccountRepository;
+import org.mwolff.fbcrm.common.Bearbeitungskonflikt;
 
 /**
  * Die Anwendungsfaelle der Kommentare am Angebot (Issue #140, Kriterien 2 bis 10).
@@ -49,9 +54,16 @@ class AngebotskommentarUseCaseTest {
   private static final long ANNA = 21L;
   private static final long BERT = 22L;
 
+  /** Der Stand, den die Ansicht vorlegt (Plan #415, E2, E8). */
+  private static final long STAND = 3L;
+
+  private static final Instant GELOESCHT = Instant.parse("2026-09-30T09:00:00Z");
+
   @Mock private AngebotRepository angebote;
   @Mock private AngebotskommentarRepository kommentare;
   @Mock private AccountRepository konten;
+
+  @Captor private ArgumentCaptor<Angebotskommentar> gespeichert;
 
   private AngebotskommentarUseCase useCase;
 
@@ -72,7 +84,36 @@ class AngebotskommentarUseCaseTest {
 
   private static Angebotskommentar kommentar(final long angebotId) {
     return new Angebotskommentar(
-        Long.valueOf(KOMMENTAR), angebotId, ANNA, "Erster Stand", ANGELEGT, ANGELEGT);
+        Long.valueOf(KOMMENTAR),
+        angebotId,
+        ANNA,
+        "Erster Stand",
+        ANGELEGT,
+        ANGELEGT,
+        STAND,
+        ANNA,
+        null,
+        null);
+  }
+
+  /** Derselbe Kommentar, inzwischen von Anna auf einen neueren Stand gebracht. */
+  private static Angebotskommentar weiter() {
+    return new Angebotskommentar(
+        Long.valueOf(KOMMENTAR),
+        ANGEBOT,
+        ANNA,
+        "Annas Stand",
+        ANGELEGT,
+        ANGELEGT,
+        STAND + 1,
+        ANNA,
+        null,
+        null);
+  }
+
+  /** Derselbe Kommentar, inzwischen von Anna geloescht (E17). */
+  private static Angebotskommentar geloescht() {
+    return kommentar(ANGEBOT).geloescht(ANNA, GELOESCHT);
   }
 
   private void annaHeisst(final String name) {
@@ -258,7 +299,7 @@ class AngebotskommentarUseCaseTest {
 
     // When
     final Angebotskommentar geaendert =
-        useCase.aendere(ANGEBOT, KOMMENTAR, "  Zweiter Stand  ").kommentar();
+        useCase.aendere(ANGEBOT, KOMMENTAR, STAND, BERT, "  Zweiter Stand  ").kommentar();
 
     // Then
     assertThat(geaendert.text()).isEqualTo("Zweiter Stand");
@@ -276,7 +317,8 @@ class AngebotskommentarUseCaseTest {
     annaHeisst("Anna Adler-Berg");
 
     // When
-    final KommentarMitVerfasser geaendert = useCase.aendere(ANGEBOT, KOMMENTAR, "Zweiter Stand");
+    final KommentarMitVerfasser geaendert =
+        useCase.aendere(ANGEBOT, KOMMENTAR, STAND, BERT, "Zweiter Stand");
 
     // Then
     assertThat(geaendert.kommentar().verfasserId()).isEqualTo(ANNA);
@@ -290,7 +332,7 @@ class AngebotskommentarUseCaseTest {
     kommentarGehoertZu(ANGEBOT);
 
     // When / Then
-    assertThatThrownBy(() -> useCase.aendere(ANGEBOT, KOMMENTAR, "   "))
+    assertThatThrownBy(() -> useCase.aendere(ANGEBOT, KOMMENTAR, STAND, BERT, "   "))
         .isInstanceOf(IllegalArgumentException.class);
     verify(kommentare).findById(KOMMENTAR);
     verifyNoMoreInteractions(kommentare);
@@ -303,7 +345,7 @@ class AngebotskommentarUseCaseTest {
     when(kommentare.findById(KOMMENTAR)).thenReturn(Optional.empty());
 
     // When / Then
-    assertThatThrownBy(() -> useCase.aendere(ANGEBOT, KOMMENTAR, "Zweiter Stand"))
+    assertThatThrownBy(() -> useCase.aendere(ANGEBOT, KOMMENTAR, STAND, BERT, "Zweiter Stand"))
         .isInstanceOf(AngebotskommentarNichtGefunden.class);
   }
 
@@ -314,7 +356,7 @@ class AngebotskommentarUseCaseTest {
     kommentarGehoertZu(FREMDES_ANGEBOT);
 
     // When / Then
-    assertThatThrownBy(() -> useCase.aendere(ANGEBOT, KOMMENTAR, "Zweiter Stand"))
+    assertThatThrownBy(() -> useCase.aendere(ANGEBOT, KOMMENTAR, STAND, BERT, "Zweiter Stand"))
         .isInstanceOf(AngebotskommentarNichtGefunden.class);
   }
 
@@ -324,22 +366,29 @@ class AngebotskommentarUseCaseTest {
     angebotGibtEsNicht();
 
     // When / Then
-    assertThatThrownBy(() -> useCase.aendere(ANGEBOT, KOMMENTAR, "Zweiter Stand"))
+    assertThatThrownBy(() -> useCase.aendere(ANGEBOT, KOMMENTAR, STAND, BERT, "Zweiter Stand"))
         .isInstanceOf(AngebotNichtGefunden.class);
     verifyNoInteractions(kommentare);
   }
 
   @Test
-  void loesche_thenDeletesTheRow() {
-    // Given — Kriterium 10, E6: geloescht wird wirklich.
+  void loesche_thenMarksTheKommentarWithAccountAndInstant() {
+    // Given — E17: geloescht wird mit Kennzeichen, damit ein spaeterer Zugriff Urheber und
+    // Zeitpunkt nennen kann.
     angebotGibtEs();
     kommentarGehoertZu(ANGEBOT);
+    speichernGibtZurueck();
 
     // When
-    useCase.loesche(ANGEBOT, KOMMENTAR);
+    useCase.loesche(ANGEBOT, KOMMENTAR, STAND, BERT);
 
     // Then
-    verify(kommentare).deleteById(KOMMENTAR);
+    verify(kommentare).save(gespeichert.capture());
+    assertThat(gespeichert.getValue())
+        .satisfies(
+            k -> assertThat(k.geloeschtAm()).isEqualTo(JETZT),
+            k -> assertThat(k.geloeschtVon()).isEqualTo(BERT),
+            k -> assertThat(k.text()).isEqualTo("Erster Stand"));
   }
 
   @Test
@@ -349,7 +398,7 @@ class AngebotskommentarUseCaseTest {
     kommentarGehoertZu(FREMDES_ANGEBOT);
 
     // When / Then
-    assertThatThrownBy(() -> useCase.loesche(ANGEBOT, KOMMENTAR))
+    assertThatThrownBy(() -> useCase.loesche(ANGEBOT, KOMMENTAR, STAND, BERT))
         .isInstanceOf(AngebotskommentarNichtGefunden.class);
     verify(kommentare).findById(KOMMENTAR);
     verifyNoMoreInteractions(kommentare);
@@ -362,7 +411,7 @@ class AngebotskommentarUseCaseTest {
     when(kommentare.findById(KOMMENTAR)).thenReturn(Optional.empty());
 
     // When / Then
-    assertThatThrownBy(() -> useCase.loesche(ANGEBOT, KOMMENTAR))
+    assertThatThrownBy(() -> useCase.loesche(ANGEBOT, KOMMENTAR, STAND, BERT))
         .isInstanceOf(AngebotskommentarNichtGefunden.class);
   }
 
@@ -372,8 +421,139 @@ class AngebotskommentarUseCaseTest {
     angebotGibtEsNicht();
 
     // When / Then
-    assertThatThrownBy(() -> useCase.loesche(ANGEBOT, KOMMENTAR))
+    assertThatThrownBy(() -> useCase.loesche(ANGEBOT, KOMMENTAR, STAND, BERT))
         .isInstanceOf(AngebotNichtGefunden.class);
     verifyNoInteractions(kommentare);
+  }
+
+  @Test
+  @DisplayName("Szenario: Kommentar trotz geöffnetem Angebot")
+  void schreibe_whileAnotherHasTheAngebotOpen_thenStoresWithoutStandAndLeavesTheAngebotVersion() {
+    // Given — #411, Kriterium 7; Plan #415, E8: Anna bearbeitet gerade das Angebot auf Stand 3.
+    when(angebote.findById(ANGEBOT)).thenReturn(Optional.of(Angebotsdoppel.angebot(ANGEBOT)));
+    speichernGibtZurueck();
+    when(konten.displayNamesByIds(Set.of(BERT))).thenReturn(Map.of(BERT, "Ben"));
+
+    // When — Ben schreibt einen Kommentar; ein vorgelegter Stand gehoert nicht dazu.
+    final KommentarMitVerfasser geschrieben = useCase.schreibe(ANGEBOT, BERT, "Kunde hat Zeit.");
+
+    // Then — Bens Kommentar ist gespeichert, und das Angebot wurde nur gelesen, nie geschrieben:
+    // Seine Version steht unveraendert, Annas Speichern danach wird dadurch nicht abgewiesen. Den
+    // Zaehler in der Tabelle belegt AngebotKommentarIT.
+    assertThat(geschrieben.kommentar().text()).isEqualTo("Kunde hat Zeit.");
+    verify(kommentare).save(any());
+    verify(angebote).findById(ANGEBOT);
+    verifyNoMoreInteractions(angebote);
+  }
+
+  @Test
+  void schreibe_thenStartsTheKommentarAtVersionZero() {
+    // Given — ein neuer Kommentar ist ein eigener Datensatz mit eigenem Stand (E8).
+    angebotGibtEs();
+    speichernGibtZurueck();
+    annaHeisst("Anna");
+
+    // When
+    final Angebotskommentar geschrieben =
+        useCase.schreibe(ANGEBOT, ANNA, "Bitte melden.").kommentar();
+
+    // Then
+    assertThat(geschrieben.version()).isZero();
+    assertThat(geschrieben.geloeschtAm()).isNull();
+  }
+
+  @Test
+  void aendere_thenWritesTheActingAccountAsUrheber() {
+    // Given — E14: Bert aendert Annas Kommentar; der Verfasser bleibt Anna.
+    angebotGibtEs();
+    kommentarGehoertZu(ANGEBOT);
+    speichernGibtZurueck();
+    annaHeisst("Anna");
+
+    // When
+    final Angebotskommentar geaendert =
+        useCase.aendere(ANGEBOT, KOMMENTAR, STAND, BERT, "Zweiter Stand").kommentar();
+
+    // Then
+    assertThat(geaendert.geaendertVon()).isEqualTo(BERT);
+    assertThat(geaendert.verfasserId()).isEqualTo(ANNA);
+    assertThat(geaendert.version()).isEqualTo(STAND);
+  }
+
+  @Test
+  void aendere_onAnOutdatedStand_thenRejectsWithUrheberAndInstantAndWritesNothing() {
+    // Given — #411, Kriterium 1: Anna hat den Kommentar inzwischen geaendert.
+    angebotGibtEs();
+    when(kommentare.findById(KOMMENTAR)).thenReturn(Optional.of(weiter()));
+
+    // When / Then
+    assertThatThrownBy(() -> useCase.aendere(ANGEBOT, KOMMENTAR, STAND, BERT, "Zweiter Stand"))
+        .isInstanceOfSatisfying(
+            AngebotskommentarGeaendert.class,
+            konflikt -> {
+              assertThat(konflikt.art()).isEqualTo(Bearbeitungskonflikt.Art.VERALTET);
+              assertThat(konflikt.urheberKonto()).hasValue(ANNA);
+              assertThat(konflikt.handelndesKonto()).isEqualTo(BERT);
+              assertThat(konflikt.zeitpunkt()).contains(ANGELEGT);
+            });
+    verify(kommentare, never()).save(any());
+  }
+
+  @Test
+  void aendere_onAnOutdatedStandWithAnEmptyText_thenRejectsTheStandFirst() {
+    // Given — zuerst der Stand (E9): die fremde Aenderung ist die gruendlichere Aussage.
+    angebotGibtEs();
+    when(kommentare.findById(KOMMENTAR)).thenReturn(Optional.of(weiter()));
+
+    // When / Then
+    assertThatThrownBy(() -> useCase.aendere(ANGEBOT, KOMMENTAR, STAND, BERT, "   "))
+        .isInstanceOf(AngebotskommentarGeaendert.class);
+  }
+
+  @Test
+  void aendere_aDeletedKommentar_thenRejectsAsDeletedWithUrheberAndInstantAndWritesNothing() {
+    // Given — #411, Kriterium 6; E16: Anna hat den Kommentar inzwischen geloescht.
+    angebotGibtEs();
+    when(kommentare.findById(KOMMENTAR)).thenReturn(Optional.of(geloescht()));
+
+    // When / Then — auch mit dem Stand, den der Kommentar vor dem Loeschen trug.
+    assertThatThrownBy(() -> useCase.aendere(ANGEBOT, KOMMENTAR, STAND, BERT, "Zweiter Stand"))
+        .isInstanceOfSatisfying(
+            AngebotskommentarGeloescht.class,
+            konflikt -> {
+              assertThat(konflikt.art()).isEqualTo(Bearbeitungskonflikt.Art.GELOESCHT);
+              assertThat(konflikt.urheberKonto()).hasValue(ANNA);
+              assertThat(konflikt.handelndesKonto()).isEqualTo(BERT);
+              assertThat(konflikt.zeitpunkt()).contains(GELOESCHT);
+            });
+    verify(kommentare, never()).save(any());
+  }
+
+  @Test
+  void loesche_onAnOutdatedStand_thenRejectsAndDeletesNothing() {
+    // Given — Kriterium 6: ein inzwischen geaenderter Kommentar wird nicht geloescht.
+    angebotGibtEs();
+    when(kommentare.findById(KOMMENTAR)).thenReturn(Optional.of(weiter()));
+
+    // When / Then
+    assertThatThrownBy(() -> useCase.loesche(ANGEBOT, KOMMENTAR, STAND, BERT))
+        .isInstanceOf(AngebotskommentarGeaendert.class);
+    verify(kommentare, never()).save(any());
+  }
+
+  @Test
+  void loesche_aDeletedKommentar_thenRejectsAsDeletedAndWritesNothing() {
+    // Given — Kriterium 6: auch ein zweites Loeschen, etwa aus einem anderen Fenster, wird
+    // abgewiesen und schreibt kein neues Kennzeichen.
+    angebotGibtEs();
+    when(kommentare.findById(KOMMENTAR)).thenReturn(Optional.of(geloescht()));
+
+    // When / Then
+    assertThatThrownBy(() -> useCase.loesche(ANGEBOT, KOMMENTAR, STAND, ANNA))
+        .isInstanceOfSatisfying(
+            AngebotskommentarGeloescht.class,
+            konflikt -> assertThat(konflikt.urheberKonto()).hasValue(ANNA));
+    verify(kommentare, times(1)).findById(KOMMENTAR);
+    verifyNoMoreInteractions(kommentare);
   }
 }

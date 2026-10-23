@@ -31,6 +31,8 @@ class JpaAngebotskommentarRepositoryTest {
   private static final Instant GEAENDERT = Instant.parse("2026-09-30T14:05:00Z");
   private static final String TEXT = "Kunde ruft zurueck.";
   private static final long VERFASSER = 3L;
+  private static final long URHEBER = 5L;
+  private static final Instant GELOESCHT = Instant.parse("2026-10-01T10:00:00Z");
 
   @Mock private SpringDataAngebotKommentarRepository zeilen;
 
@@ -43,19 +45,26 @@ class JpaAngebotskommentarRepositoryTest {
   }
 
   private static AngebotKommentarEntity zeile(final long id, final String text) {
-    return new AngebotKommentarEntity(Long.valueOf(id), 11L, VERFASSER, text, ANGELEGT, GEAENDERT);
+    return new AngebotKommentarEntity(
+        new Angebotskommentar(Long.valueOf(id), 11L, VERFASSER, text, ANGELEGT, GEAENDERT));
+  }
+
+  /** Ein Kommentar mit Stand, Urheber und Loeschkennzeichen (Plan #415, E1, E17). */
+  private static Angebotskommentar gekennzeichnet() {
+    return new Angebotskommentar(
+        7L, 11L, VERFASSER, TEXT, ANGELEGT, GEAENDERT, 4L, URHEBER, GELOESCHT, URHEBER);
   }
 
   @Test
   void save_thenWritesEveryFieldIntoTheRow() {
     // Given
-    when(zeilen.save(any(AngebotKommentarEntity.class))).thenReturn(zeile(7L, TEXT));
+    when(zeilen.saveAndFlush(any(AngebotKommentarEntity.class))).thenReturn(zeile(7L, TEXT));
 
     // When
     repository.save(kommentar());
 
     // Then
-    verify(zeilen).save(gespeicherte.capture());
+    verify(zeilen).saveAndFlush(gespeicherte.capture());
     assertThat(gespeicherte.getValue())
         .satisfies(
             zeile -> assertThat(zeile.getId()).isEqualTo(7L),
@@ -69,14 +78,14 @@ class JpaAngebotskommentarRepositoryTest {
   @Test
   void save_givenAnUnsavedComment_thenWritesTheRowWithoutAnIdAndReturnsTheGeneratedOne() {
     // Given
-    when(zeilen.save(any(AngebotKommentarEntity.class))).thenReturn(zeile(7L, TEXT));
+    when(zeilen.saveAndFlush(any(AngebotKommentarEntity.class))).thenReturn(zeile(7L, TEXT));
 
     // When
     final Angebotskommentar gesichert =
         repository.save(new Angebotskommentar(null, 11L, VERFASSER, TEXT, ANGELEGT, ANGELEGT));
 
     // Then
-    verify(zeilen).save(gespeicherte.capture());
+    verify(zeilen).saveAndFlush(gespeicherte.capture());
     assertThat(gespeicherte.getValue().getId()).isNull();
     assertThat(gesichert.id()).isEqualTo(7L);
   }
@@ -133,11 +142,34 @@ class JpaAngebotskommentarRepositoryTest {
   }
 
   @Test
-  void deleteById_thenRemovesTheRow() {
+  void save_thenWritesStandUrheberAndKennzeichenIntoTheRow() {
+    // Given — E1, E17: der vorgelegte Stand geht mit, damit Hibernate einen alten Stand bemerkt.
+    when(zeilen.saveAndFlush(any(AngebotKommentarEntity.class)))
+        .thenAnswer(aufruf -> aufruf.getArgument(0));
+
     // When
-    repository.deleteById(7L);
+    final Angebotskommentar gesichert = repository.save(gekennzeichnet());
+
+    // Then — und zurueck uebersetzt traegt der Kommentar dieselben Angaben.
+    verify(zeilen).saveAndFlush(gespeicherte.capture());
+    assertThat(gespeicherte.getValue())
+        .satisfies(
+            zeile -> assertThat(zeile.getVersion()).isEqualTo(4L),
+            zeile -> assertThat(zeile.getGeaendertVon()).isEqualTo(URHEBER),
+            zeile -> assertThat(zeile.getGeloeschtAm()).isEqualTo(GELOESCHT),
+            zeile -> assertThat(zeile.getGeloeschtVon()).isEqualTo(URHEBER));
+    assertThat(gesichert).isEqualTo(gekennzeichnet());
+  }
+
+  @Test
+  void findById_givenADeletedComment_thenTranslatesItWithItsKennzeichen() {
+    // Given — E16: der Anwendungsfall braucht Urheber und Zeitpunkt der Loeschung.
+    when(zeilen.findById(7L)).thenReturn(Optional.of(new AngebotKommentarEntity(gekennzeichnet())));
+
+    // When
+    final Optional<Angebotskommentar> gefunden = repository.findById(7L);
 
     // Then
-    verify(zeilen).deleteById(7L);
+    assertThat(gefunden).contains(gekennzeichnet());
   }
 }

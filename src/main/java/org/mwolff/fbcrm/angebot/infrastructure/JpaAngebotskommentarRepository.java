@@ -10,8 +10,8 @@ import org.springframework.stereotype.Repository;
  * Setzt den Port {@link AngebotskommentarRepository} auf JPA um und uebersetzt in beide Richtungen.
  *
  * <p>Jeder Kommentar ist eine Zeile fuer sich: Anlegen, Fortschreiben und Loeschen gehen einzeln,
- * anders als beim Angebot mit seinen Positionen (Plan #141, E2). Geloescht wird wirklich — kein
- * Stilllegen-Merkmal (E6).
+ * anders als beim Angebot mit seinen Positionen (Plan #141, E2). Geloescht wird seit Plan #415
+ * (E17) mit Kennzeichen an der Zeile; die Liste laesst gekennzeichnete Zeilen aus.
  */
 @Repository
 class JpaAngebotskommentarRepository implements AngebotskommentarRepository {
@@ -34,14 +34,14 @@ class JpaAngebotskommentarRepository implements AngebotskommentarRepository {
     return zeilen.findById(id).map(JpaAngebotskommentarRepository::toDomain);
   }
 
+  /*
+   * saveAndFlush statt save, aus demselben Grund wie in JpaAngebotRepository (Plan #415, E1): Den
+   * Zaehler version erhoeht Hibernate erst beim Schreiben der Zeile, und die Antwort soll den neuen
+   * Stand tragen, den die Ansicht beim naechsten Aendern vorlegt.
+   */
   @Override
   public Angebotskommentar save(final Angebotskommentar kommentar) {
-    return toDomain(zeilen.save(toEntity(kommentar)));
-  }
-
-  @Override
-  public void deleteById(final long id) {
-    zeilen.deleteById(id);
+    return toDomain(zeilen.saveAndFlush(new AngebotKommentarEntity(kommentar)));
   }
 
   private static Angebotskommentar toDomain(final AngebotKommentarEntity zeile) {
@@ -51,16 +51,10 @@ class JpaAngebotskommentarRepository implements AngebotskommentarRepository {
         zeile.getVerfasserId(),
         zeile.getText(),
         zeile.getCreatedAt(),
-        zeile.getUpdatedAt());
-  }
-
-  private static AngebotKommentarEntity toEntity(final Angebotskommentar kommentar) {
-    return new AngebotKommentarEntity(
-        kommentar.id(),
-        kommentar.angebotId(),
-        kommentar.verfasserId(),
-        kommentar.text(),
-        kommentar.createdAt(),
-        kommentar.updatedAt());
+        zeile.getUpdatedAt(),
+        zeile.getVersion(),
+        zeile.getGeaendertVon(),
+        zeile.getGeloeschtAm(),
+        zeile.getGeloeschtVon());
   }
 }
