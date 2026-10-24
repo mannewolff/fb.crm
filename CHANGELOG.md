@@ -11,6 +11,48 @@ bleibt stehen, auch wenn nichts darunter steht.
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-10-24
+
+- chore: v1.4.1
+- Architekturregel fuer den Bedingungskopf, Projektregeln nachziehen (Issue #456)
+- Konten mit eigenem Zaehler (Issue #455)
+- Eigene Angaben mit Version (Issue #454)
+- Zeiteintrag loeschen mit Kennzeichen, Filterstellen der Arbeitszeit (Issue #453)
+- Zeiteintrag aendern mit Version (Issue #452)
+- Firma und Ansprechpartner mit Version (Issue #451)
+- Einstellungen zur Rechnung und Briefbogen mit Version (Issue #450)
+- Nachgetragene Rechnung loeschen mit Kennzeichen (Issue #449)
+- Nachgetragene Rechnung mit Version (Issue #448)
+- Rechnungsentwurf loeschen mit Kennzeichen, Filterstellen der Rechnung (Issue #447)
+- Rechnung aendern, Zustand setzen und stellen mit Version (Issue #446)
+- Anlagen: Kennzeichen-Loeschung mit Konfliktmeldung (Issue #445)
+- Kommentare mit Version und Kennzeichen-Loeschung (Issue #444)
+- Angebot: Status und Storno mit Version (Issue #443)
+- Angebot speichern mit Version, Abschnitt Gleichzeitig arbeiten (Issue #442)
+- Fundament Oberflaeche: If-Match, Konfliktmeldung und eigene Eingaben (Issue #441)
+- Fundament Backend: Konflikt, Bedingungskopf und Urheber (Issue #440)
+- Spalten fuer Version, Urheber und Loeschkennzeichen (Issue #439)
+- Bedienung: Arbeitszeit je Person dokumentieren und nachweisen (Issue #438)
+- Erfassungsdialog: Personenauswahl fuer ein C-Level mit Vorbelegung (Issue #437)
+- Ansicht Arbeitszeit: Personenumschalter, Spalte Person und Schaltflaechen je Rolle (Issue #436)
+- Frontend-Anbindung: Person, Auswahl und Personenliste in api/arbeitszeit.ts (Issue #435)
+- Nachweis: Vorschlag, Kontingent und Auswertungen ueber alle Personen (Issue #433)
+- Zeiteintraege schreiben: Person, Rechte je Eintrag und Ueberschneidung je Person (Issue #432)
+- Monatsliste je Person: Vorauswahl aus der Rolle (Issue #431)
+- Waehlbare Personen: GET /api/arbeitszeit/personen (Issue #430)
+- Person am Zeiteintrag: Spalte, Migration und Abfrage je Konto (Issue #429)
+- Schaltflächen je Rolle: Rechnungen und Einstellungen (Issue #425)
+- Schaltflächen je Rolle: Firmen, Angebote, Kommentare, Anlagen, Arbeitszeit (Issue #424)
+- Ansicht Mitarbeitende (Issue #423)
+- Rolle und Rechte in der Oberfläche (Issue #422)
+- Verwaltung der Konten in der API (Issue #421)
+- Verfasser am Kommentar (Issue #420)
+- Zugangsregel je Rolle in der API (Issue #419)
+- Stillgelegte Konten aussperren, Rolle in der Sitzung (Issue #418)
+- Drei Rollen und stillgelegte Konten im Kern (Issue #417)
+- Projektregeln auf eine Firma mit mehreren Personen umstellen (Issue #416)
+- Conivience Scripte ins ignore gepackt
+
 ## [1.4.0] - 2026-10-20
 
 - chore: v1.3.2
