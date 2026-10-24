@@ -127,7 +127,9 @@ final class Rechnungsdoppel {
         "Neugestaltung der Website",
         positionen,
         ANGELEGT,
-        ANGELEGT);
+        ANGELEGT,
+        0L,
+        null);
   }
 
   /** Der Grund des Stornos aus dem Szenario „Rest eines Auftrags wird nicht abgerufen" (#330). */
@@ -165,7 +167,77 @@ final class Rechnungsdoppel {
         null,
         null,
         ANGELEGT,
-        ANGELEGT);
+        ANGELEGT,
+        0L,
+        null);
+  }
+
+  /**
+   * Dieselbe Rechnung auf einem anderen Stand, zuletzt geaendert von einem Konto (Plan #415, E1,
+   * E14).
+   *
+   * @param rechnung die Rechnung, deren Angaben bleiben
+   * @param version der Stand, den die Zeile traegt
+   * @param urheber das Konto, das zuletzt geaendert hat
+   * @param zeitpunkt wann es geaendert hat
+   */
+  static Rechnung aufStand(
+      final Rechnung rechnung, final long version, final long urheber, final Instant zeitpunkt) {
+    return new Rechnung(
+        rechnung.id(),
+        rechnung.angebotId(),
+        rechnung.zustand(),
+        rechnung.rechnungDatum(),
+        rechnung.leistungszeitraum(),
+        rechnung.positionen(),
+        rechnung.nummer(),
+        rechnung.steuersatz(),
+        rechnung.zahlungszielTage(),
+        rechnung.gestelltAm(),
+        rechnung.pdfSchluessel(),
+        rechnung.empfaenger(),
+        rechnung.absender(),
+        rechnung.createdAt(),
+        zeitpunkt,
+        version,
+        Long.valueOf(urheber));
+  }
+
+  /**
+   * Ein Rechnungsentwurf auf {@link #ANGEBOT}, inzwischen geloescht (Plan #415, E17).
+   *
+   * @param id Kennung der Rechnung
+   * @param urheber das Konto, das geloescht hat
+   * @param zeitpunkt wann es geloescht hat
+   */
+  static Rechnung geloescht(final long id, final long urheber, final Instant zeitpunkt) {
+    return entwurf(id, List.of(beratung("80.00"))).geloescht(urheber, zeitpunkt);
+  }
+
+  /**
+   * Dasselbe Angebot auf einem anderen Stand, zuletzt geaendert von einem Konto.
+   *
+   * @param angebot das Angebot, dessen Angaben bleiben
+   * @param version der Stand, den die Zeile traegt
+   * @param urheber das Konto, das zuletzt geaendert hat
+   */
+  static Angebot aufStand(final Angebot angebot, final long version, final long urheber) {
+    return new Angebot(
+        angebot.id(),
+        angebot.firmaId(),
+        angebot.ansprechpartnerId(),
+        angebot.intern(),
+        angebot.status(),
+        angebot.storniert(),
+        angebot.stornoGrund(),
+        angebot.angebotDatum(),
+        angebot.titel(),
+        angebot.beschreibung(),
+        angebot.positionen(),
+        angebot.createdAt(),
+        angebot.updatedAt(),
+        version,
+        Long.valueOf(urheber));
   }
 
   /** Die Kopie des Empfaengers an einer gestellten Rechnung — die Firma hiess damals anders. */
@@ -216,7 +288,9 @@ final class Rechnungsdoppel {
         null,
         null,
         ANGELEGT,
-        ANGELEGT);
+        ANGELEGT,
+        0L,
+        null);
   }
 
   /** Dieselbe gestellte Rechnung, festgeschrieben mit den Kopien von Empfaenger und Absender. */
@@ -288,7 +362,9 @@ final class Rechnungsdoppel {
         Rechnungszustand.GESTELLT,
         pdfSchluessel,
         ANGELEGT,
-        ANGELEGT);
+        ANGELEGT,
+        0L,
+        null);
   }
 
   /** Die Firma, an die das Angebot geht — mit vollstaendiger Anschrift. */
@@ -306,7 +382,9 @@ final class Rechnungsdoppel {
         null,
         true,
         ANGELEGT,
-        ANGELEGT);
+        ANGELEGT,
+        0L,
+        null);
   }
 
   /** Vollstaendige eigene Angaben: alles, was das Stellen verlangt, und die freiwilligen dazu. */

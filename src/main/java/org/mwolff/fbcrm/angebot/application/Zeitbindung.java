@@ -16,14 +16,15 @@ import java.util.Set;
  * eine <em>Einreichung</em>, und darin stehen moeglicherweise andere Positionen als am
  * gespeicherten Angebot.
  *
- * <p>Ohne eigene Transaktionsgrenze: Gelesen wird in der Transaktion des Anwendungsfalls.
+ * <p>Ohne eigene Transaktionsgrenze: Gelesen und geschrieben wird in der Transaktion des
+ * Anwendungsfalls.
+ *
+ * <p><b>Eine geloeschte Zeit bindet nichts</b> (Plan #415, E17). Ein geloeschter Zeiteintrag bleibt
+ * gekennzeichnet an seiner Zeile stehen und zeigt weiter ohne {@code ON DELETE} auf seine Position.
+ * {@link #mitZeit(Set)} zaehlt ihn nicht mit, und bevor das Angebot eine Position entfernt, raeumt
+ * {@link #entferneGeloeschte(Set)} solche Eintraege hart ab — sonst scheiterte das Speichern am
+ * Fremdschluessel.
  */
-/*
- * Genau eine Methode, aber bewusst kein @FunctionalInterface: Der Port beschreibt eine Auskunft,
- * die ein Modul gibt, und wird nie als Lambda geschrieben — dieselbe Ueberlegung wie bei
- * Positionsverwendung.
- */
-@SuppressWarnings("PMD.ImplicitFunctionalInterface")
 public interface Zeitbindung {
 
   /**
@@ -33,4 +34,14 @@ public interface Zeitbindung {
    * @return die Teilmenge mit erfasster Zeit; leer, wenn keine davon Zeit traegt
    */
   Set<Long> mitZeit(Set<Long> angebotPositionIds);
+
+  /**
+   * Entfernt die geloeschten Zeiteintraege auf den genannten Positionen hart (Plan #415, E17).
+   *
+   * <p>Ein nicht geloeschter Eintrag bleibt stehen und haelt seine Position weiter fest: Deren
+   * Entfernen scheitert dann wie bisher am Fremdschluessel.
+   *
+   * @param angebotPositionIds die Kennungen der Positionen, die das Angebot entfernt
+   */
+  void entferneGeloeschte(Set<Long> angebotPositionIds);
 }

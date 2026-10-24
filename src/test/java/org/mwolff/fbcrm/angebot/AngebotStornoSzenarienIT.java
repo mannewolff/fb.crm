@@ -12,6 +12,7 @@ import java.util.Objects;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mwolff.fbcrm.AbstractIntegrationTest;
+import org.mwolff.fbcrm.Stand;
 import org.mwolff.fbcrm.angebot.domain.Angebotsstatus;
 import org.mwolff.fbcrm.angebot.web.AngebotResponse;
 import org.mwolff.fbcrm.angebot.web.AngeboteUebersichtResponse;
@@ -84,7 +85,7 @@ class AngebotStornoSzenarienIT extends AbstractIntegrationTest {
         Objects.requireNonNull(
                 jdbc.queryForObject("SELECT id FROM firma WHERE name = ?", Long.class, "Adler AG"))
             .longValue();
-    jdbc.execute("TRUNCATE outbox_message, account RESTART IDENTITY CASCADE");
+    leereKonten(jdbc);
     accounts.save(Konten.neu(MAIL, ANGELEGT));
     sitzung = Anmeldung.perCode(rest, jdbc, hasher, MAIL);
   }
@@ -124,19 +125,28 @@ class AngebotStornoSzenarienIT extends AbstractIntegrationTest {
     rumpf.put("ansprechpartnerId", null);
     rumpf.put("beschreibung", "Neugestaltung der Website");
     rumpf.put("positionen", List.of(position));
-    ruf("/api/angebote/" + angebotId, HttpMethod.PUT, rumpf, AngebotResponse.class);
+    rest.exchange(
+        "/api/angebote/" + angebotId,
+        HttpMethod.PUT,
+        new HttpEntity<>(rumpf, Stand.aktuell(sitzung, jdbc, "angebot", angebotId)),
+        AngebotResponse.class);
     for (int schritt = 0; schritt < schritte; schritt++) {
-      ruf("/api/angebote/" + angebotId + "/status/weiter", HttpMethod.POST, null, String.class);
+      rest.exchange(
+          "/api/angebote/" + angebotId + "/status/weiter",
+          HttpMethod.POST,
+          new HttpEntity<>(null, Stand.aktuell(sitzung, jdbc, "angebot", angebotId)),
+          String.class);
     }
     return lies("/api/angebote/" + angebotId, AngebotResponse.class);
   }
 
   /** Storniert mit Grund, wie nach der bestaetigten Rueckfrage der Oberflaeche. */
   private ResponseEntity<AngebotResponse> storniere(final long angebotId, final String grund) {
-    return ruf(
+    return rest.exchange(
         "/api/angebote/" + angebotId + "/storno",
         HttpMethod.POST,
-        Map.of("grund", grund),
+        new HttpEntity<>(
+            Map.of("grund", grund), Stand.aktuell(sitzung, jdbc, "angebot", angebotId)),
         AngebotResponse.class);
   }
 
@@ -239,10 +249,10 @@ class AngebotStornoSzenarienIT extends AbstractIntegrationTest {
 
     // When
     final ResponseEntity<AngebotResponse> antwort =
-        ruf(
+        rest.exchange(
             "/api/angebote/" + angebot.id() + "/storno",
             HttpMethod.DELETE,
-            null,
+            new HttpEntity<>(null, Stand.aktuell(sitzung, jdbc, "angebot", angebot.id())),
             AngebotResponse.class);
 
     // Then — wieder bestellt, in Arbeit und zugesagt; der Grund ist fort (Kriterium 9).

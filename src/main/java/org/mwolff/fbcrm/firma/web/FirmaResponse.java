@@ -24,6 +24,8 @@ import org.mwolff.fbcrm.firma.domain.Firma;
  * @param umsatzsteuerId Umsatzsteuer-Identifikationsnummer, oder {@code null}
  * @param aktiv {@code false}, solange die Firma stillgelegt ist
  * @param ansprechpartner aktive und stillgelegte Ansprechpartner gemeinsam, nach Nachnamen sortiert
+ * @param version der Stand der Firma, den die Oberflaeche beim naechsten schreibenden Schritt mit
+ *     {@code If-Match} vorlegt (Plan #415, E2)
  */
 public record FirmaResponse(
     long id,
@@ -35,7 +37,8 @@ public record FirmaResponse(
     @Nullable String steuernummer,
     @Nullable String umsatzsteuerId,
     boolean aktiv,
-    List<AnsprechpartnerResponse> ansprechpartner) {
+    List<AnsprechpartnerResponse> ansprechpartner,
+    long version) {
 
   /** Die Sicht der Oberflaeche auf eine Firma samt ihrer Ansprechpartner. */
   static FirmaResponse of(final FirmaMitAnsprechpartnern gelesen) {
@@ -66,6 +69,7 @@ public record FirmaResponse(
         firma.steuernummer(),
         firma.umsatzsteuerId(),
         firma.aktiv(),
-        ansprechpartner);
+        ansprechpartner,
+        firma.version());
   }
 }

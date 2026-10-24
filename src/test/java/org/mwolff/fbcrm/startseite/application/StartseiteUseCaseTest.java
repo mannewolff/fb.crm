@@ -301,7 +301,9 @@ class StartseiteUseCaseTest {
             "Neugestaltung der Website",
             positionen,
             ANGELEGT,
-            ANGELEGT),
+            ANGELEGT,
+            0L,
+            null),
         firmaName);
   }
 

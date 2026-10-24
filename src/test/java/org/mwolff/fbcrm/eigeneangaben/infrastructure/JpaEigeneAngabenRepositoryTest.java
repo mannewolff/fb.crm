@@ -1,6 +1,7 @@
 package org.mwolff.fbcrm.eigeneangaben.infrastructure;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -15,6 +16,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mwolff.fbcrm.common.Anschrift;
 import org.mwolff.fbcrm.eigeneangaben.domain.EigeneAngaben;
+import org.mwolff.fbcrm.eigeneangaben.domain.EigeneAngabenStand;
 
 /**
  * Die Uebersetzung zwischen Selbstauskunft und Zeile — in beide Richtungen.
@@ -35,7 +37,7 @@ class JpaEigeneAngabenRepositoryTest {
   @InjectMocks private JpaEigeneAngabenRepository repository;
 
   private static EigeneAngabenEntity zeile() {
-    return EigeneAngabenEntity.aus(angaben(), GEAENDERT);
+    return EigeneAngabenEntity.aus(angaben(), GEAENDERT, 0L, null);
   }
 
   private static EigeneAngaben angaben() {
@@ -72,7 +74,7 @@ class JpaEigeneAngabenRepositoryTest {
   void lies_givenTheFreshRow_thenEveryValueIsAbsent() {
     // Given — nach der Migration steht die eine Zeile mit lauter NULL da. Dass Hibernate die
     // eingebetteten Anschriftenspalten dann gar nicht erst anlegt, steht in AnschriftSpaltenTest.
-    final EigeneAngabenEntity frisch = EigeneAngabenEntity.aus(leer(), GEAENDERT);
+    final EigeneAngabenEntity frisch = EigeneAngabenEntity.aus(leer(), GEAENDERT, 0L, null);
     when(jpa.findById(EigeneAngabenEntity.ZEILE)).thenReturn(Optional.of(frisch));
 
     // When
@@ -83,12 +85,27 @@ class JpaEigeneAngabenRepositoryTest {
   }
 
   @Test
-  void speichere_thenWritesEveryFieldIntoTheRow() {
-    // When
-    repository.speichere(angaben(), GEAENDERT);
+  void stand_thenTranslatesVersionUrheberAndTime() {
+    // Given
+    when(jpa.findById(EigeneAngabenEntity.ZEILE))
+        .thenReturn(Optional.of(EigeneAngabenEntity.aus(angaben(), GEAENDERT, 4L, 30L)));
 
-    // Then
-    verify(jpa).save(gespeicherte.capture());
+    // When / Then
+    assertThat(repository.stand()).isEqualTo(new EigeneAngabenStand(4L, 30L, GEAENDERT));
+  }
+
+  @Test
+  void speichere_thenWritesEveryFieldIntoTheRow() {
+    // Given — saveAndFlush gibt die geschriebene Zeile zurueck.
+    when(jpa.saveAndFlush(any(EigeneAngabenEntity.class)))
+        .thenAnswer(aufruf -> aufruf.getArgument(0));
+
+    // When
+    final EigeneAngabenStand neu = repository.speichere(angaben(), GEAENDERT, 3L, 31L);
+
+    // Then — der neue Stand kommt aus der geschriebenen Zeile (Plan #415, E1, E14).
+    verify(jpa).saveAndFlush(gespeicherte.capture());
+    assertThat(neu).isEqualTo(new EigeneAngabenStand(3L, 31L, GEAENDERT));
     assertThat(gespeicherte.getValue())
         .satisfies(
             zeile -> assertThat(zeile.getId()).isEqualTo(EigeneAngabenEntity.ZEILE),
@@ -105,16 +122,22 @@ class JpaEigeneAngabenRepositoryTest {
             zeile -> assertThat(zeile.getSteuernummer()).isEqualTo("75/123/45678"),
             zeile -> assertThat(zeile.getUmsatzsteuerId()).isEqualTo("DE123456789"),
             zeile -> assertThat(zeile.getBankverbindung()).isEqualTo("DE02120300000000202051"),
-            zeile -> assertThat(zeile.getUpdatedAt()).isEqualTo(GEAENDERT));
+            zeile -> assertThat(zeile.getUpdatedAt()).isEqualTo(GEAENDERT),
+            zeile -> assertThat(zeile.getVersion()).isEqualTo(3L),
+            zeile -> assertThat(zeile.getGeaendertVon()).isEqualTo(31L));
   }
 
   @Test
   void speichere_givenAbsentValues_thenWritesThemAsAbsent() {
+    // Given
+    when(jpa.saveAndFlush(any(EigeneAngabenEntity.class)))
+        .thenAnswer(aufruf -> aufruf.getArgument(0));
+
     // When — E9: „nicht angegeben" geht als NULL in die Zeile, nicht als Leerstring.
-    repository.speichere(leer(), GEAENDERT);
+    repository.speichere(leer(), GEAENDERT, 0L, 31L);
 
     // Then
-    verify(jpa).save(gespeicherte.capture());
+    verify(jpa).saveAndFlush(gespeicherte.capture());
     assertThat(gespeicherte.getValue())
         .satisfies(
             zeile -> assertThat(zeile.getName()).isNull(),

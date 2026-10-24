@@ -129,7 +129,9 @@ final class Webdoppel {
         "Neugestaltung der Website",
         List.of(BERATUNG),
         ANGELEGT,
-        ANGELEGT);
+        ANGELEGT,
+        0L,
+        null);
   }
 
   /** Ein Rechnungsentwurf ueber die angegebene Menge Beratung. */
@@ -149,7 +151,9 @@ final class Webdoppel {
         null,
         null,
         ANGELEGT,
-        ANGELEGT);
+        ANGELEGT,
+        0L,
+        null);
   }
 
   /** Eine gestellte Rechnung mit ihrer Nummer und ihrem festgeschriebenen Satz. */
@@ -169,7 +173,9 @@ final class Webdoppel {
         null,
         null,
         ANGELEGT,
-        ANGELEGT);
+        ANGELEGT,
+        0L,
+        null);
   }
 
   /** Dieselbe Rechnung, bezahlt — weiterhin gestellt, nur mit anderem Ausgang (Issue #253). */
@@ -181,6 +187,34 @@ final class Webdoppel {
   static Rechnung gestelltMitKopien(final String nummer, final String menge) {
     return entwurf(menge)
         .gestellt(nummer, new BigDecimal("7.00"), 14, EMPFAENGER_KOPIE, ABSENDER_KOPIE, ANGELEGT);
+  }
+
+  /**
+   * Dieselbe Rechnung auf einem anderen Stand (Plan #415, E2) — so, wie der Bestand sie nach dem
+   * Schreiben liefert.
+   *
+   * @param rechnung die Rechnung, deren Angaben bleiben
+   * @param version der Stand, den die Zeile traegt
+   */
+  static Rechnung aufStand(final Rechnung rechnung, final long version) {
+    return new Rechnung(
+        rechnung.id(),
+        rechnung.angebotId(),
+        rechnung.zustand(),
+        rechnung.rechnungDatum(),
+        rechnung.leistungszeitraum(),
+        rechnung.positionen(),
+        rechnung.nummer(),
+        rechnung.steuersatz(),
+        rechnung.zahlungszielTage(),
+        rechnung.gestelltAm(),
+        rechnung.pdfSchluessel(),
+        rechnung.empfaenger(),
+        rechnung.absender(),
+        rechnung.createdAt(),
+        rechnung.updatedAt(),
+        version,
+        rechnung.geaendertVon());
   }
 
   /** Eine Rechnungsposition zur Beratung ueber die angegebene Menge. */

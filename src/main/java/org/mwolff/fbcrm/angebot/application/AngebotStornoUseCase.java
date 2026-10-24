@@ -4,6 +4,7 @@ import java.time.Clock;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.fbcrm.angebot.domain.Angebot;
 import org.mwolff.fbcrm.angebot.domain.AngebotRepository;
+import org.mwolff.fbcrm.common.Bearbeitungskonflikt;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -20,6 +21,12 @@ import org.springframework.transaction.annotation.Transactional;
  * {@link Angebot#laesstSichStornieren()}. Der Konstruktor des Angebots haelt dieselbe Regel, wiese
  * aber mit einer {@link IllegalArgumentException} ab — die Schnittstelle antwortete dann mit 500
  * statt mit dem Satz aus E16.
+ *
+ * <p><b>Zuerst der Stand</b> (#411, Kriterium 5; Plan #415, E9, E14). Stornieren und Zuruecknehmen
+ * sind Zustandswechsel am Angebot als Ganzem: Wer auf einem alten Stand handelt, bekommt {@link
+ * AngebotGeaendert} — vor {@link StornoNichtMoeglich} und {@link KeinStornoVorhanden}, denn beide
+ * Lagen kann der andere eben erst herbeigefuehrt haben. Das handelnde Konto steht danach als
+ * Urheber am Angebot.
  */
 @Service
 @Transactional
@@ -41,17 +48,22 @@ public class AngebotStornoUseCase {
    *
    * @param angebotId Kennung des Angebots
    * @param grund warum storniert wird, oder {@code null} fuer ein Storno ohne Grund
+   * @param version der vorgelegte Stand aus {@code If-Match}
+   * @param konto Kennung des handelnden Kontos
    * @throws AngebotNichtGefunden wenn es das Angebot nicht gibt
+   * @throws AngebotGeaendert wenn das Angebot inzwischen einen anderen Stand hat als den
+   *     vorgelegten
    * @throws StornoNichtMoeglich wenn das Angebot schon storniert ist oder aus seinem Status nicht
    *     storniert wird
    */
-  public Angebot storniere(final long angebotId, final @Nullable String grund) {
-    final Angebot angebot = lies(angebotId);
+  public Angebot storniere(
+      final long angebotId, final @Nullable String grund, final long version, final long konto) {
+    final Angebot angebot = lies(angebotId, version, konto);
     if (!angebot.laesstSichStornieren()) {
       throw new StornoNichtMoeglich();
     }
     final @Nullable String mitInhalt = grund == null || grund.isBlank() ? null : grund;
-    return angebote.save(angebot.storniert(mitInhalt, clock.instant()));
+    return angebote.save(angebot.storniert(mitInhalt, clock.instant()).durch(konto));
   }
 
   /**
@@ -59,18 +71,28 @@ public class AngebotStornoUseCase {
    * Grund (#330, Kriterium 9).
    *
    * @param angebotId Kennung des Angebots
+   * @param version der vorgelegte Stand aus {@code If-Match}
+   * @param konto Kennung des handelnden Kontos
    * @throws AngebotNichtGefunden wenn es das Angebot nicht gibt
+   * @throws AngebotGeaendert wenn das Angebot inzwischen einen anderen Stand hat als den
+   *     vorgelegten
    * @throws KeinStornoVorhanden wenn das Angebot nicht storniert ist
    */
-  public Angebot nimmStornoZurueck(final long angebotId) {
-    final Angebot angebot = lies(angebotId);
+  public Angebot nimmStornoZurueck(final long angebotId, final long version, final long konto) {
+    final Angebot angebot = lies(angebotId, version, konto);
     if (!angebot.storniert()) {
       throw new KeinStornoVorhanden();
     }
-    return angebote.save(angebot.stornoZurueckgenommen(clock.instant()));
+    return angebote.save(angebot.stornoZurueckgenommen(clock.instant()).durch(konto));
   }
 
-  private Angebot lies(final long angebotId) {
-    return angebote.findById(angebotId).orElseThrow(AngebotNichtGefunden::new);
+  /* Liest das Angebot und weist ab, wenn der vorgelegte Stand nicht der aktuelle ist. */
+  private Angebot lies(final long angebotId, final long version, final long konto) {
+    final Angebot angebot = angebote.findById(angebotId).orElseThrow(AngebotNichtGefunden::new);
+    Bearbeitungskonflikt.pruefe(
+        version,
+        angebot.version(),
+        () -> new AngebotGeaendert(angebot.geaendertVon(), konto, angebot.updatedAt()));
+    return angebot;
   }
 }

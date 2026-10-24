@@ -3,6 +3,7 @@ package org.mwolff.fbcrm.angebot.web;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -19,7 +20,9 @@ import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import org.jspecify.annotations.Nullable;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -28,6 +31,7 @@ import org.mockito.Captor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mwolff.fbcrm.angebot.application.AngebotNichtGefunden;
+import org.mwolff.fbcrm.angebot.application.AngebotsanlageGeloescht;
 import org.mwolff.fbcrm.angebot.application.AngebotsanlageNichtGefunden;
 import org.mwolff.fbcrm.angebot.application.AngebotsanlageUseCase;
 import org.mwolff.fbcrm.angebot.application.AnlageOhneInhalt;
@@ -37,10 +41,14 @@ import org.mwolff.fbcrm.angebot.application.Anlageninhalt;
 import org.mwolff.fbcrm.angebot.domain.Angebotsanlage;
 import org.mwolff.fbcrm.angebot.domain.Vorschauart;
 import org.mwolff.fbcrm.common.Uploadgrenze;
+import org.mwolff.fbcrm.common.Urheber;
 import org.mwolff.fbcrm.common.web.Anlagekopf;
 import org.mwolff.fbcrm.common.web.GlobalExceptionHandler;
 import org.springframework.http.HttpHeaders;
 import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.web.method.annotation.AuthenticationPrincipalArgumentResolver;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
@@ -57,6 +65,10 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
  * steht hier zweimal: Der Anwendungsfall bekommt sie nicht zu sehen, und eine Anlage ohne
  * Vorschauart geht als {@code application/octet-stream} hinaus — auch wenn sie als {@code
  * text/html} hereinkam.
+ *
+ * <p><b>Loeschen nimmt das angemeldete Konto und keinen Bedingungskopf</b> (#411, Kriterium 6; Plan
+ * #415, E7, E16): Eine Anlage aendert sich nie und traegt keine Version. Ein zweites Loeschen
+ * derselben Anlage antwortet 409 mit {@code art = "gelöscht"}, Urheber und Zeitpunkt.
  */
 @ExtendWith(MockitoExtension.class)
 class AngebotAnlagenControllerTest {
@@ -70,6 +82,14 @@ class AngebotAnlagenControllerTest {
   private static final String NAME = "Bericht.pdf";
   private static final byte[] BYTES = "%PDF-1.7 Inhalt".getBytes(StandardCharsets.UTF_8);
 
+  /** Das angemeldete Konto. */
+  private static final long ANGEMELDET = 20L;
+
+  /** Das Konto, das die Anlage vorher geloescht hat. */
+  private static final long ANNA = 30L;
+
+  private static final Instant VORHIN = Instant.parse("2026-09-30T09:12:00Z");
+
   @Mock private AngebotsanlageUseCase useCase;
 
   @Captor private ArgumentCaptor<String> dateiName;
@@ -80,10 +100,23 @@ class AngebotAnlagenControllerTest {
 
   @BeforeEach
   void baueDenController() {
+    SecurityContextHolder.getContext()
+        .setAuthentication(
+            UsernamePasswordAuthenticationToken.authenticated(
+                Long.valueOf(ANGEMELDET), null, List.of()));
     mockMvc =
         MockMvcBuilders.standaloneSetup(new AngebotAnlagenController(useCase))
-            .setControllerAdvice(new GlobalExceptionHandler())
+            .setControllerAdvice(
+                new GlobalExceptionHandler(
+                    konto ->
+                        konto == ANNA ? Optional.of(new Urheber(ANNA, "Anna")) : Optional.empty()))
+            .setCustomArgumentResolvers(new AuthenticationPrincipalArgumentResolver())
             .build();
+  }
+
+  @AfterEach
+  void raeumeDieSitzungAb() {
+    SecurityContextHolder.clearContext();
   }
 
   private static Angebotsanlage anlage(final @Nullable Vorschauart art) {
@@ -334,13 +367,56 @@ class AngebotAnlagenControllerTest {
   }
 
   @Test
-  void loeschen_thenAnswers204AndDelegates() throws Exception {
-    // When / Then — Kriterium 10.
+  void loeschen_withoutIfMatch_thenAnswers204AndPassesTheAccount() throws Exception {
+    // When / Then — Kriterium 10; Plan #415, E7: kein Bedingungskopf, das Konto aus der Sitzung.
     mockMvc
         .perform(delete(PFAD_EINZELN, Long.valueOf(ANGEBOT), Long.valueOf(ANLAGE)))
         .andExpect(status().isNoContent())
         .andExpect(content().string(""));
-    verify(useCase).loesche(ANGEBOT, ANLAGE);
+    verify(useCase).loesche(ANGEBOT, ANLAGE, ANGEMELDET);
+  }
+
+  @Test
+  void loeschen_aSecondTime_thenAnswers409AsDeletedWithUrheberAndInstant() throws Exception {
+    // Given — #411, Kriterium 6; Plan #415, E7, E16: Anna hat die Anlage inzwischen geloescht.
+    doThrow(new AngebotsanlageGeloescht(ANNA, ANGEMELDET, VORHIN))
+        .when(useCase)
+        .loesche(ANGEBOT, ANLAGE, ANGEMELDET);
+
+    // When / Then
+    mockMvc
+        .perform(delete(PFAD_EINZELN, Long.valueOf(ANGEBOT), Long.valueOf(ANLAGE)))
+        .andExpect(status().isConflict())
+        .andExpect(jsonPath("$.konflikt.art").value("gelöscht"))
+        .andExpect(jsonPath("$.konflikt.geaendertVon").value("Anna"))
+        .andExpect(jsonPath("$.konflikt.geaendertAm").value("2026-09-30T09:12:00Z"))
+        .andExpect(jsonPath("$.konflikt.eigenesFenster").value(false));
+  }
+
+  @Test
+  void loeschen_anAnlageDeletedInAnotherWindow_thenAnswers409AsOwnWindow() throws Exception {
+    // Given — Kriterium 6: auch die eigene Loeschung aus einem anderen Fenster wird gemeldet.
+    doThrow(new AngebotsanlageGeloescht(ANGEMELDET, ANGEMELDET, VORHIN))
+        .when(useCase)
+        .loesche(ANGEBOT, ANLAGE, ANGEMELDET);
+
+    // When / Then
+    mockMvc
+        .perform(delete(PFAD_EINZELN, Long.valueOf(ANGEBOT), Long.valueOf(ANLAGE)))
+        .andExpect(status().isConflict())
+        .andExpect(jsonPath("$.konflikt.art").value("gelöscht"))
+        .andExpect(jsonPath("$.konflikt.eigenesFenster").value(true));
+  }
+
+  @Test
+  void loeschen_whenTheAnlageIsUnknown_thenAnswers404() throws Exception {
+    // Given — eine nie vorhandene Anlage bleibt 404; 409 gilt nur der gekennzeichneten.
+    doThrow(new AngebotsanlageNichtGefunden()).when(useCase).loesche(ANGEBOT, ANLAGE, ANGEMELDET);
+
+    // When / Then
+    mockMvc
+        .perform(delete(PFAD_EINZELN, Long.valueOf(ANGEBOT), Long.valueOf(ANLAGE)))
+        .andExpect(status().isNotFound());
   }
 
   @Test

@@ -30,6 +30,9 @@ import org.mwolff.fbcrm.angebot.domain.Angebotsstatus;
  * @param beschreibung der Text des Angebots, oder {@code null}
  * @param positionen die Positionen in ihrer Reihenfolge
  * @param summe die Netto-Summe, gerechnet
+ * @param version der Stand des Angebots; die Maske legt ihn beim Speichern als {@code If-Match}
+ *     wieder vor (Plan #415, E2)
+ * @param geaendertVon Kennung des Kontos, das das Angebot zuletzt geaendert hat, oder {@code null}
  */
 public record AngebotResponse(
     long id,
@@ -45,7 +48,9 @@ public record AngebotResponse(
     @Nullable String titel,
     @Nullable String beschreibung,
     List<AngebotPositionResponse> positionen,
-    BigDecimal summe) {
+    BigDecimal summe,
+    long version,
+    @Nullable Long geaendertVon) {
 
   /** Die Sicht der Oberflaeche auf ein Angebot, beschriftet mit den Namen seines Kunden. */
   static AngebotResponse of(final Angebot angebot, final Kundenangaben kunde) {
@@ -63,6 +68,8 @@ public record AngebotResponse(
         angebot.titel(),
         angebot.beschreibung(),
         angebot.positionen().stream().map(AngebotPositionResponse::of).toList(),
-        angebot.summe());
+        angebot.summe(),
+        angebot.version(),
+        angebot.geaendertVon());
   }
 }

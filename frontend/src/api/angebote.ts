@@ -109,6 +109,13 @@ export interface Angebot {
   readonly positionen: readonly AngebotPosition[];
   /** Netto-Summe in ganzen Cent, vom Server gerechnet (E5). */
   readonly summeInCent: number;
+  /**
+   * Der Stand des Angebots — die Maske legt ihn beim Speichern als `If-Match` wieder vor (Plan
+   * #415, E2).
+   */
+  readonly version: number;
+  /** Kennung des Kontos, das das Angebot zuletzt geaendert hat — `null`, wo der Server es nicht weiss. */
+  readonly geaendertVon: number | null;
 }
 
 /** Eine Zeile der Angebotsliste an der Firma (Kriterium 7). */
@@ -253,6 +260,8 @@ export function parseAngebot(wert: unknown): Angebot {
     stornoGrund: textOderNull(angebot.stornoGrund),
     positionen: liste(angebot.positionen).map(parsePosition),
     summeInCent: inHundertsteln(angebot.summe),
+    version: zahl(angebot.version),
+    geaendertVon: zahlOderNull(angebot.geaendertVon),
   };
 }
 
@@ -350,11 +359,23 @@ export function angebotLesen(id: number): Promise<Angebot> {
 /**
  * Aendert das Angebot als Ganzes, in jedem Status (Kriterium 5, E8).
  *
- * Die Antwort traegt das Angebot mit den neu gerechneten Betraegen — die Maske zeigt sie ohne
- * zweiten Aufruf.
+ * Die Antwort traegt das Angebot mit den neu gerechneten Betraegen und seinem neuen Stand — die
+ * Maske zeigt sie ohne zweiten Aufruf.
+ *
+ * @param version der Stand, auf dem die Aenderung beruht; er geht als `If-Match` hinaus, und hat
+ *   inzwischen jemand anderes gespeichert, weist der Server mit einem Bearbeitungskonflikt ab (Plan
+ *   #415, E2, E4)
  */
-export function angebotAendern(id: number, eingabe: AngebotEingabe): Promise<Angebot> {
-  return apiJson(`/api/angebote/${String(id)}`, { methode: 'PUT', rumpf: rumpf(eingabe) }, parseAngebot);
+export function angebotAendern(
+  id: number,
+  version: number,
+  eingabe: AngebotEingabe,
+): Promise<Angebot> {
+  return apiJson(
+    `/api/angebote/${String(id)}`,
+    { methode: 'PUT', rumpf: rumpf(eingabe), version },
+    parseAngebot,
+  );
 }
 
 /**
@@ -381,30 +402,66 @@ function rumpf(eingabe: AngebotEingabe): unknown {
   };
 }
 
-/** Schaltet den Status eine Stufe weiter; die Antwort traegt das Angebot im neuen Status. */
-export function angebotStatusWeiter(id: number): Promise<Angebot> {
-  return apiJson(`/api/angebote/${String(id)}/status/weiter`, { methode: 'POST' }, parseAngebot);
+/*
+ * Statuswechsel, Storno und Ruecknahme sind Zustandswechsel am Angebot als Ganzem (#411, Kriterien
+ * 4 und 5; Plan #415, E9): Jeder legt den Stand, auf dem er beruht, als `If-Match` vor, wie das
+ * Aendern. Hat inzwischen jemand anderes geaendert, weist der Server mit einem Bearbeitungskonflikt
+ * ab; die Antwort auf einen gelungenen Wechsel traegt den neuen Stand.
+ */
+
+/**
+ * Schaltet den Status eine Stufe weiter; die Antwort traegt das Angebot im neuen Status.
+ *
+ * @param version der Stand, auf dem der Wechsel beruht
+ */
+export function angebotStatusWeiter(id: number, version: number): Promise<Angebot> {
+  return apiJson(
+    `/api/angebote/${String(id)}/status/weiter`,
+    { methode: 'POST', version },
+    parseAngebot,
+  );
 }
 
-/** Schaltet den Status eine Stufe zurueck; die Antwort traegt das Angebot im neuen Status. */
-export function angebotStatusZurueck(id: number): Promise<Angebot> {
-  return apiJson(`/api/angebote/${String(id)}/status/zurueck`, { methode: 'POST' }, parseAngebot);
+/**
+ * Schaltet den Status eine Stufe zurueck; die Antwort traegt das Angebot im neuen Status.
+ *
+ * @param version der Stand, auf dem der Wechsel beruht
+ */
+export function angebotStatusZurueck(id: number, version: number): Promise<Angebot> {
+  return apiJson(
+    `/api/angebote/${String(id)}/status/zurueck`,
+    { methode: 'POST', version },
+    parseAngebot,
+  );
 }
 
 /**
  * Storniert das Angebot (Plan #332); die Antwort traegt das stornierte Angebot.
  *
+ * @param version der Stand, auf dem das Storno beruht
  * @param grund warum storniert wird, oder `null` ohne Grund
  */
-export function angebotStornieren(id: number, grund: string | null): Promise<Angebot> {
+export function angebotStornieren(
+  id: number,
+  version: number,
+  grund: string | null,
+): Promise<Angebot> {
   return apiJson(
     `/api/angebote/${String(id)}/storno`,
-    { methode: 'POST', rumpf: { grund } },
+    { methode: 'POST', rumpf: { grund }, version },
     parseAngebot,
   );
 }
 
-/** Nimmt das Storno zurueck; die Antwort traegt das Angebot im Status von vor dem Storno. */
-export function angebotStornoZuruecknehmen(id: number): Promise<Angebot> {
-  return apiJson(`/api/angebote/${String(id)}/storno`, { methode: 'DELETE' }, parseAngebot);
+/**
+ * Nimmt das Storno zurueck; die Antwort traegt das Angebot im Status von vor dem Storno.
+ *
+ * @param version der Stand, auf dem die Ruecknahme beruht
+ */
+export function angebotStornoZuruecknehmen(id: number, version: number): Promise<Angebot> {
+  return apiJson(
+    `/api/angebote/${String(id)}/storno`,
+    { methode: 'DELETE', version },
+    parseAngebot,
+  );
 }

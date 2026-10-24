@@ -105,7 +105,16 @@ class FirmaAnlegenUseCaseTest {
     // Given
     final Firma mitId =
         new Firma(
-            42L, "Adler AG", new Anschrift(null, null, null, null), null, null, true, JETZT, JETZT);
+            42L,
+            "Adler AG",
+            new Anschrift(null, null, null, null),
+            null,
+            null,
+            true,
+            JETZT,
+            JETZT,
+            0L,
+            null);
     when(firmen.save(any(Firma.class))).thenReturn(mitId);
 
     // When — Kriterium 7: die Oberflaeche braucht die Kennung fuer den Weg zur Detailansicht.

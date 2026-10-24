@@ -8,7 +8,7 @@ import { fetchNachPfad, json } from '../test/fetchNachPfad';
 import { renderMitTheme } from '../test/render';
 import AppShell from './AppShell';
 
-const KONTO = { id: 1, displayName: 'Manfred Wolff', email: 'info@mwolff.org' };
+const KONTO = { id: 1, displayName: 'Manfred Wolff', email: 'info@mwolff.org', role: 'C_LEVEL' };
 
 /**
  * Stellt die Fensterbreite ein, gegen die `matchMedia` auswertet.

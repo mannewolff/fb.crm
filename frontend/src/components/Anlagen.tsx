@@ -7,7 +7,8 @@ import type { ChangeEvent, ReactNode } from 'react';
 
 import { anlageHochladen, anlageInhaltPfad, anlageLoeschen, anlagenLesen } from '../api/anlagen';
 import type { Anlage } from '../api/anlagen';
-import { feldMeldungen } from '../lib/apifehler';
+import { useRechte } from '../auth/rechte';
+import { feldMeldungen, istBearbeitungskonflikt } from '../lib/apifehler';
 import { dateigroesse, MAX_UPLOAD_BYTE } from '../lib/dateigroesse';
 import { ersteDatei } from '../lib/dateiwahl';
 import { meldungAm } from '../lib/feldmeldung';
@@ -17,6 +18,7 @@ import AktionsMenue from './AktionsMenue';
 import AnlageVorschau from './AnlageVorschau';
 import type { AnlageMitVorschau } from './AnlageVorschau';
 import Karte from './Karte';
+import Konfliktmeldung from './Konfliktmeldung';
 import WeicheTaste from './WeicheTaste';
 
 /**
@@ -55,6 +57,11 @@ import WeicheTaste from './WeicheTaste';
  *
  * <b>Das Fenster wird beim Schliessen abgebaut</b> und nicht bloss zugeklappt: Daran haengt die
  * Freigabe der Objekt-URL ({@link AnlageVorschau}).
+ *
+ * <b>Ein abgewiesenes Loeschen nennt Urheber und Zeitpunkt</b> (#411, Kriterium 6; Plan #415, E7,
+ * E16). Eine Anlage traegt keine Version, das Loeschen legt darum keinen Stand vor. Hat sie jemand
+ * inzwischen geloescht — ein anderer oder man selbst in einem anderen Fenster —, steht die
+ * {@link Konfliktmeldung} im Bereich, und „Zur Übersicht" fuehrt zur Liste der Angebote.
  */
 
 export interface AnlagenProps {
@@ -69,6 +76,9 @@ const AUSFALL_HOCHLADEN = 'Die Datei wurde nicht hochgeladen. Bitte später erne
 const AUSFALL_LOESCHEN = 'Die Anlage wurde nicht gelöscht. Bitte später erneut versuchen.';
 const OHNE_INHALT = 'Die Datei ist leer.';
 const LOESCHEN_FRAGE = 'Die Anlage wird gelöscht. Das lässt sich nicht zurücknehmen.';
+
+/** Wohin „Zur Übersicht" fuehrt, wenn die Anlage inzwischen geloescht ist (#411, Kriterium 6). */
+const UEBERSICHT = '/angebote';
 
 /** Die Meldung nennt die Grenze in derselben Schreibweise, in der die Liste Groessen zeigt (E12). */
 const ZU_GROSS = `Die Datei darf höchstens ${dateigroesse(MAX_UPLOAD_BYTE)} groß sein.`;
@@ -140,6 +150,7 @@ function vorpruefung(datei: File): string | null {
 }
 
 export default function Anlagen({ angebotId }: AnlagenProps) {
+  const { darfFachlichSchreiben } = useRechte();
   const [stand, setzeStand] = useState<Stand>('laedt');
   const [anlagen, setzeAnlagen] = useState<readonly Anlage[]>([]);
   const [meldung, setzeMeldung] = useState<string | null>(null);
@@ -148,6 +159,8 @@ export default function Anlagen({ angebotId }: AnlagenProps) {
   // auf das sie klickt — dasselbe Muster wie der Anker in {@link AktionsMenue}.
   const [feld, setzeFeld] = useState<HTMLInputElement | null>(null);
   const [vorschau, setzeVorschau] = useState<AnlageMitVorschau | null>(null);
+  // Die Abweisung eines Loeschens, ungeprueft — die Konfliktmeldung liest sie selbst.
+  const [abweisung, setzeAbweisung] = useState<unknown>(null);
 
   useEffect(() => {
     let aktuell = true;
@@ -190,6 +203,7 @@ export default function Anlagen({ angebotId }: AnlagenProps) {
     // das Feld keinen Wechsel, und der zweite Versuch geschaehe still gar nicht.
     ereignis.target.value = '';
     setzeMeldung(null);
+    setzeAbweisung(null);
     if (datei === null) {
       return;
     }
@@ -201,18 +215,42 @@ export default function Anlagen({ angebotId }: AnlagenProps) {
     void hochladen(datei);
   };
 
-  /** Loescht die Anlage (Kriterium 10) — die Rueckfrage stellt das ⋯-Menue. */
+  /**
+   * Loescht die Anlage (Kriterium 10) — die Rueckfrage stellt das ⋯-Menue. Ist sie inzwischen
+   * geloescht, steht statt des Ausfalls die Konfliktmeldung im Bereich (#411, Kriterium 6).
+   */
   const loeschen = async (anlage: Anlage) => {
     setzeMeldung(null);
+    setzeAbweisung(null);
     setzeLaeuft(true);
     try {
       await anlageLoeschen(angebotId, anlage.id);
       setzeAnlagen(anlagen.filter((alte) => alte.id !== anlage.id));
-    } catch {
-      setzeMeldung(AUSFALL_LOESCHEN);
+    } catch (ursache: unknown) {
+      if (istBearbeitungskonflikt(ursache)) {
+        setzeAbweisung(ursache);
+      } else {
+        setzeMeldung(AUSFALL_LOESCHEN);
+      }
     } finally {
       setzeLaeuft(false);
     }
+  };
+
+  /**
+   * „Neu laden" aus der Konfliktmeldung: der Bestand des Servers. Fuer eine Anlage meldet der
+   * Server nur „gelöscht"; der Weg steht dennoch, damit die Taste nie ins Leere fuehrt.
+   */
+  const neuLaden = async () => {
+    setzeLaeuft(true);
+    const gelesen = await laden(angebotId);
+    setzeLaeuft(false);
+    if (gelesen === null) {
+      setzeMeldung(AUSFALL_LESEN);
+      return;
+    }
+    setzeAnlagen(gelesen);
+    setzeAbweisung(null);
   };
 
   /**
@@ -315,20 +353,22 @@ export default function Anlagen({ angebotId }: AnlagenProps) {
         >
           <IconDownload size={18} stroke={1.8} aria-hidden />
         </Box>
-        <AktionsMenue
-          name={`Aktionen für ${anlage.dateiName}`}
-          objekt={anlage.dateiName}
-          eintraege={[
-            {
-              titel: 'Löschen',
-              symbol: <IconTrash size={SYMBOL} stroke={1.8} />,
-              rueckfrage: LOESCHEN_FRAGE,
-              onAuswahl: () => {
-                void loeschen(anlage);
+        {darfFachlichSchreiben ? (
+          <AktionsMenue
+            name={`Aktionen für ${anlage.dateiName}`}
+            objekt={anlage.dateiName}
+            eintraege={[
+              {
+                titel: 'Löschen',
+                symbol: <IconTrash size={SYMBOL} stroke={1.8} />,
+                rueckfrage: LOESCHEN_FRAGE,
+                onAuswahl: () => {
+                  void loeschen(anlage);
+                },
               },
-            },
-          ]}
-        />
+            ]}
+          />
+        ) : null}
       </Box>
     );
   }
@@ -361,7 +401,9 @@ export default function Anlagen({ angebotId }: AnlagenProps) {
     );
   }
 
-  const werkzeug = (
+  // Ohne Schreibrecht fehlen Dateifeld und Taste ganz; Anzeigen und Herunterladen bleiben, denn
+  // sie aendern nichts (Kriterium 10 von #409, Plan #414, E4).
+  const werkzeug = darfFachlichSchreiben ? (
     <>
       <Box
         component="input"
@@ -386,7 +428,7 @@ export default function Anlagen({ angebotId }: AnlagenProps) {
         </WeicheTaste>
       )}
     </>
-  );
+  ) : undefined;
 
   return (
     <Karte
@@ -396,6 +438,13 @@ export default function Anlagen({ angebotId }: AnlagenProps) {
     >
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
         {meldung === null ? null : <Alert severity="error">{meldung}</Alert>}
+        <Konfliktmeldung
+          ursache={abweisung}
+          onNeuLaden={() => {
+            void neuLaden();
+          }}
+          uebersicht={UEBERSICHT}
+        />
         {bestand}
       </Box>
       {vorschau === null ? null : (

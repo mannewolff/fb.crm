@@ -33,6 +33,9 @@ class FirmaStilllegenUseCaseTest {
 
   private static final Instant ANGELEGT = Instant.parse("2026-09-01T08:00:00Z");
   private static final Instant JETZT = Instant.parse("2026-09-25T09:30:00Z");
+  private static final long STAND = 3L;
+  private static final long URHEBER = 2L;
+  private static final long KONTO = 9L;
 
   @Mock private FirmaRepository firmen;
   @Captor private ArgumentCaptor<Firma> gespeicherte;
@@ -53,7 +56,9 @@ class FirmaStilllegenUseCaseTest {
         "DE123456789",
         aktiv,
         ANGELEGT,
-        ANGELEGT);
+        ANGELEGT,
+        STAND,
+        URHEBER);
   }
 
   private Firma gefangeneFirma() {
@@ -72,7 +77,7 @@ class FirmaStilllegenUseCaseTest {
     gibDenBestandAus(bestand(true));
 
     // When
-    useCase.stilllegen(7L);
+    useCase.stilllegen(7L, STAND, KONTO);
 
     // Then
     assertThat(gefangeneFirma().aktiv()).isFalse();
@@ -84,7 +89,7 @@ class FirmaStilllegenUseCaseTest {
     gibDenBestandAus(bestand(true));
 
     // When
-    useCase.stilllegen(7L);
+    useCase.stilllegen(7L, STAND, KONTO);
 
     // Then
     assertThat(gefangeneFirma().updatedAt()).isEqualTo(JETZT);
@@ -96,7 +101,7 @@ class FirmaStilllegenUseCaseTest {
     gibDenBestandAus(bestand(true));
 
     // When
-    useCase.stilllegen(7L);
+    useCase.stilllegen(7L, STAND, KONTO);
 
     // Then
     assertThat(gefangeneFirma())
@@ -110,7 +115,7 @@ class FirmaStilllegenUseCaseTest {
     gibDenBestandAus(bestand(false));
 
     // When
-    useCase.aktivieren(7L);
+    useCase.aktivieren(7L, STAND, KONTO);
 
     // Then
     assertThat(gefangeneFirma().aktiv()).isTrue();
@@ -122,7 +127,7 @@ class FirmaStilllegenUseCaseTest {
     gibDenBestandAus(bestand(false));
 
     // When
-    useCase.aktivieren(7L);
+    useCase.aktivieren(7L, STAND, KONTO);
 
     // Then
     assertThat(gefangeneFirma().updatedAt()).isEqualTo(JETZT);
@@ -134,7 +139,8 @@ class FirmaStilllegenUseCaseTest {
     when(firmen.findById(4711L)).thenReturn(Optional.empty());
 
     // When / Then
-    assertThatThrownBy(() -> useCase.stilllegen(4711L)).isInstanceOf(FirmaNichtGefunden.class);
+    assertThatThrownBy(() -> useCase.stilllegen(4711L, STAND, KONTO))
+        .isInstanceOf(FirmaNichtGefunden.class);
   }
 
   @Test
@@ -143,7 +149,8 @@ class FirmaStilllegenUseCaseTest {
     when(firmen.findById(4711L)).thenReturn(Optional.empty());
 
     // When
-    assertThatThrownBy(() -> useCase.stilllegen(4711L)).isInstanceOf(FirmaNichtGefunden.class);
+    assertThatThrownBy(() -> useCase.stilllegen(4711L, STAND, KONTO))
+        .isInstanceOf(FirmaNichtGefunden.class);
 
     // Then
     verify(firmen, never()).save(any(Firma.class));
@@ -155,7 +162,8 @@ class FirmaStilllegenUseCaseTest {
     when(firmen.findById(4711L)).thenReturn(Optional.empty());
 
     // When / Then
-    assertThatThrownBy(() -> useCase.aktivieren(4711L)).isInstanceOf(FirmaNichtGefunden.class);
+    assertThatThrownBy(() -> useCase.aktivieren(4711L, STAND, KONTO))
+        .isInstanceOf(FirmaNichtGefunden.class);
   }
 
   @Test
@@ -164,7 +172,63 @@ class FirmaStilllegenUseCaseTest {
     when(firmen.findById(4711L)).thenReturn(Optional.empty());
 
     // When
-    assertThatThrownBy(() -> useCase.aktivieren(4711L)).isInstanceOf(FirmaNichtGefunden.class);
+    assertThatThrownBy(() -> useCase.aktivieren(4711L, STAND, KONTO))
+        .isInstanceOf(FirmaNichtGefunden.class);
+
+    // Then
+    verify(firmen, never()).save(any(Firma.class));
+  }
+
+  @Test
+  void stilllegen_thenRecordsTheActingAccountAsAuthor() {
+    // Given — Plan #415, E14.
+    gibDenBestandAus(bestand(true));
+
+    // When
+    useCase.stilllegen(7L, STAND, KONTO);
+
+    // Then
+    assertThat(gefangeneFirma().geaendertVon()).isEqualTo(KONTO);
+  }
+
+  @Test
+  void aktivieren_thenRecordsTheActingAccountAsAuthor() {
+    // Given
+    gibDenBestandAus(bestand(false));
+
+    // When
+    useCase.aktivieren(7L, STAND, KONTO);
+
+    // Then
+    assertThat(gefangeneFirma().geaendertVon()).isEqualTo(KONTO);
+  }
+
+  @Test
+  void stilllegen_givenAnOutdatedVersion_thenThrowsFirmaGeaendertAndStoresNothing() {
+    // Given — Plan #415, E18: auch der Zustandswechsel wird geprueft.
+    when(firmen.findById(7L)).thenReturn(Optional.of(bestand(true)));
+
+    // When
+    assertThatThrownBy(() -> useCase.stilllegen(7L, STAND - 1, KONTO))
+        .isInstanceOfSatisfying(
+            FirmaGeaendert.class,
+            konflikt -> {
+              assertThat(konflikt.urheberKonto()).hasValue(URHEBER);
+              assertThat(konflikt.handelndesKonto()).isEqualTo(KONTO);
+            });
+
+    // Then
+    verify(firmen, never()).save(any(Firma.class));
+  }
+
+  @Test
+  void aktivieren_givenAnOutdatedVersion_thenThrowsFirmaGeaendertAndStoresNothing() {
+    // Given
+    when(firmen.findById(7L)).thenReturn(Optional.of(bestand(false)));
+
+    // When
+    assertThatThrownBy(() -> useCase.aktivieren(7L, STAND + 1, KONTO))
+        .isInstanceOf(FirmaGeaendert.class);
 
     // Then
     verify(firmen, never()).save(any(Firma.class));

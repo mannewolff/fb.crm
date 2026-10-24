@@ -178,13 +178,14 @@ class AngebotStatusMigrationIT extends AbstractIntegrationTest {
             Integer.class,
             PROBE);
 
-    // Then
+    // Then — version und geaendert_von kommen mit V33 hinzu (Issue #439).
     assertThat(spalten)
         .containsExactly(
             "angebot_datum",
             "ansprechpartner_id",
             "created_at",
             "firma_id",
+            "geaendert_von",
             "id",
             "intern",
             "leistungsbeschreibung",
@@ -192,7 +193,8 @@ class AngebotStatusMigrationIT extends AbstractIntegrationTest {
             "storniert",
             "storno_grund",
             "titel",
-            "updated_at");
+            "updated_at",
+            "version");
     assertThat(nummernkreis).isZero();
   }
 

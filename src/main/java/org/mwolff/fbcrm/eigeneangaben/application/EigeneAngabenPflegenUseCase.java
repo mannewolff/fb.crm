@@ -5,6 +5,7 @@ import org.jspecify.annotations.Nullable;
 import org.mwolff.fbcrm.common.Anschrift;
 import org.mwolff.fbcrm.eigeneangaben.domain.EigeneAngaben;
 import org.mwolff.fbcrm.eigeneangaben.domain.EigeneAngabenRepository;
+import org.mwolff.fbcrm.eigeneangaben.domain.EigeneAngabenStand;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -17,6 +18,11 @@ import org.springframework.transaction.annotation.Transactional;
  * <p>Hier liegt die Normalisierung (E9): Leerraum am Rand faellt weg, und was danach leer ist, wird
  * {@code null} statt Leerstring — sonst gaebe es zwei Schreibweisen fuer „nicht angegeben", die
  * Anzeige und spaeter der Beleg beide kennen muessten.
+ *
+ * <p><b>Davor steht der Stand</b> (#411, Kriterium 4; Plan #415, E1, E14): Der Anwendungsfall
+ * vergleicht den vorgelegten Stand mit dem der Zeile. Wer auf einem alten Stand speichert, bekommt
+ * {@link EigeneAngabenGeaendert} mit Urheber und Zeitpunkt der fremden Aenderung, und nichts wird
+ * geschrieben. Das handelnde Konto steht danach als Urheber an der Zeile.
  */
 @Service
 @Transactional
@@ -34,9 +40,18 @@ public class EigeneAngabenPflegenUseCase {
    * Schreibt die neuen Angaben fort.
    *
    * @param angaben die eingereichten Angaben; normalisiert werden sie hier (E9)
+   * @param version der vorgelegte Stand aus {@code If-Match}
+   * @param konto Kennung des handelnden Kontos
+   * @return die gespeicherten Angaben samt erhoehter Version
+   * @throws EigeneAngabenGeaendert wenn die Angaben inzwischen einen anderen Stand haben als den
+   *     vorgelegten
    */
-  public void pflege(final EigeneAngaben angaben) {
-    bestand.speichere(normalisiert(angaben), clock.instant());
+  public GespeicherteEigeneAngaben pflege(
+      final EigeneAngaben angaben, final long version, final long konto) {
+    EigeneAngabenGeaendert.pruefe(bestand.stand(), version, konto);
+    final EigeneAngaben sauber = normalisiert(angaben);
+    final EigeneAngabenStand neu = bestand.speichere(sauber, clock.instant(), version, konto);
+    return new GespeicherteEigeneAngaben(sauber, neu.version());
   }
 
   private static EigeneAngaben normalisiert(final EigeneAngaben angaben) {

@@ -2,11 +2,14 @@ package org.mwolff.fbcrm.rechnung.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.catchThrowableOfType;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -38,6 +41,7 @@ import org.mwolff.fbcrm.rechnung.domain.Briefpapierblatt;
 import org.mwolff.fbcrm.rechnung.domain.Briefpapierspeicher;
 import org.mwolff.fbcrm.rechnung.domain.DokumentSpeicherAusfall;
 import org.mwolff.fbcrm.rechnung.domain.Randmasse;
+import org.mwolff.fbcrm.rechnung.domain.Zeilenstand;
 import org.slf4j.LoggerFactory;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
@@ -51,6 +55,9 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
  * Unberuehrtheit von Schaltern und Raendern. Was der Pruefer am geladenen Dokument abweist, steht
  * in {@code BriefpapierpruefungTest}; hier zeigt sich, dass jede dieser Abweisungen vor jeder
  * Ablage greift.
+ *
+ * <p>Dazu der Vergleich des vorgelegten Stands (#411, Kriterium 4; Plan #415, E1, E11, E14): Auf
+ * einem alten Stand wird abgewiesen, vor den Riegeln und bevor etwas im Speicher landet.
  */
 @ExtendWith(MockitoExtension.class)
 class BriefpapierUseCaseTest {
@@ -71,6 +78,17 @@ class BriefpapierUseCaseTest {
   private static final Briefpapierblatt BISHERIGES =
       new Briefpapierblatt(ALT, "alt.pdf", 12_345L, 2);
 
+  /** Der Stand, den die Maske vorlegt und den die Zeile traegt. */
+  private static final long STAND = 3L;
+
+  /** Das handelnde Konto. */
+  private static final long KONTO = 31L;
+
+  /** Das Konto, das zuletzt geaendert hat. */
+  private static final long ANNA = 30L;
+
+  private static final Instant ANNAS_AENDERUNG = Instant.parse("2026-10-19T08:42:00Z");
+
   @Mock private BriefbogenRepository bestand;
   @Mock private Briefpapierspeicher speicher;
   @Mock private Briefpapierpruefer pruefer;
@@ -87,6 +105,11 @@ class BriefpapierUseCaseTest {
   void richteDenTestEin() {
     useCase =
         new BriefpapierUseCase(bestand, speicher, pruefer, Clock.fixed(JETZT, ZoneOffset.UTC));
+    // Nachsichtig: Nicht jeder Fall kommt bis zum Vergleich oder zum Schreiben.
+    lenient().when(bestand.stand()).thenReturn(new Zeilenstand(STAND, ANNA, ANNAS_AENDERUNG));
+    lenient()
+        .when(bestand.speichere(any(), any(), anyLong(), anyLong()))
+        .thenReturn(new Zeilenstand(STAND + 1, KONTO, JETZT));
     protokoll =
         ((LoggerContext) LoggerFactory.getILoggerFactory())
             .getLogger(BriefpapierUseCase.class.getName());
@@ -121,13 +144,13 @@ class BriefpapierUseCaseTest {
 
   private Briefbogen gespeichert() {
     final ArgumentCaptor<Briefbogen> bogen = ArgumentCaptor.forClass(Briefbogen.class);
-    verify(bestand).speichere(bogen.capture(), any());
+    verify(bestand).speichere(bogen.capture(), any(), anyLong(), anyLong());
     return bogen.getValue();
   }
 
   /** Die Abweisung nennt ihren eigenen Satz am Feld {@code datei}; Zeile und Speicher bleiben. */
   private void assertAbgewiesenMit(final byte[] inhalt, final String meldung) {
-    assertThatThrownBy(() -> useCase.ladeHoch("briefpapier.pdf", inhalt))
+    assertThatThrownBy(() -> useCase.ladeHoch("briefpapier.pdf", inhalt, STAND, KONTO))
         .isInstanceOfSatisfying(
             BriefpapierNichtAnnehmbar.class,
             fehler -> {
@@ -136,7 +159,7 @@ class BriefpapierUseCaseTest {
               assertThat(fehler.felder().get("datei")).isEqualTo(List.of(meldung));
             });
     verifyNoInteractions(speicher);
-    verify(bestand, never()).speichere(any(), any());
+    verify(bestand, never()).speichere(any(), any(), anyLong(), anyLong());
   }
 
   // --- ladeHoch: die sechs Abweisungen ------------------------------------------------------
@@ -184,7 +207,7 @@ class BriefpapierUseCaseTest {
     when(speicher.lege(any())).thenReturn(NEU);
 
     // When
-    final Briefbogenstand stand = useCase.ladeHoch("briefpapier.pdf", genau);
+    final Briefbogenstand stand = useCase.ladeHoch("briefpapier.pdf", genau, STAND, KONTO);
 
     // Then
     assertThat(stand.briefpapier()).isTrue();
@@ -254,7 +277,7 @@ class BriefpapierUseCaseTest {
     when(speicher.lege(any())).thenReturn(NEU);
 
     // When
-    useCase.ladeHoch("briefpapier.pdf", HOCHGELADEN);
+    useCase.ladeHoch("briefpapier.pdf", HOCHGELADEN, STAND, KONTO);
 
     // Then — E4: in den Speicher geht, was der Pruefer zurueckgibt, nicht das Hochgeladene.
     final ArgumentCaptor<byte[]> abgelegt = ArgumentCaptor.forClass(byte[].class);
@@ -270,7 +293,7 @@ class BriefpapierUseCaseTest {
     when(speicher.lege(any())).thenReturn(NEU);
 
     // When
-    final Briefbogenstand stand = useCase.ladeHoch("kopf.pdf", HOCHGELADEN);
+    final Briefbogenstand stand = useCase.ladeHoch("kopf.pdf", HOCHGELADEN, STAND, KONTO);
 
     // Then — die Groesse ist die des abgelegten Objekts; Schalter und Raender bleiben (E15).
     final Briefbogen bogen = gespeichert();
@@ -281,8 +304,8 @@ class BriefpapierUseCaseTest {
     assertThat(stand)
         .isEqualTo(
             new Briefbogenstand(
-                true, "kopf.pdf", (long) GEREINIGT.length, 2, false, true, EINGESTELLT));
-    verify(bestand).speichere(any(), eq(JETZT));
+                true, "kopf.pdf", (long) GEREINIGT.length, 2, false, true, EINGESTELLT, STAND + 1));
+    verify(bestand).speichere(any(), eq(JETZT), eq(STAND), eq(KONTO));
   }
 
   @Test
@@ -293,7 +316,8 @@ class BriefpapierUseCaseTest {
     when(speicher.lege(any())).thenReturn(NEU);
 
     // When
-    final Briefbogenstand stand = useCase.ladeHoch("C:\\Briefe\\kopf\u0007.pdf", HOCHGELADEN);
+    final Briefbogenstand stand =
+        useCase.ladeHoch("C:\\Briefe\\kopf\u0007.pdf", HOCHGELADEN, STAND, KONTO);
 
     // Then
     assertThat(stand.dateiname()).isEqualTo("kopf.pdf");
@@ -307,7 +331,7 @@ class BriefpapierUseCaseTest {
     when(speicher.lege(any())).thenReturn(NEU);
 
     // When
-    final Briefbogenstand stand = useCase.ladeHoch("  ", HOCHGELADEN);
+    final Briefbogenstand stand = useCase.ladeHoch("  ", HOCHGELADEN, STAND, KONTO);
 
     // Then
     assertThat(stand.dateiname()).isEqualTo(BriefpapierUseCase.ERSATZNAME);
@@ -322,7 +346,7 @@ class BriefpapierUseCaseTest {
     when(speicher.lege(any())).thenReturn(NEU);
 
     // When
-    useCase.ladeHoch("kopf.pdf", HOCHGELADEN);
+    useCase.ladeHoch("kopf.pdf", HOCHGELADEN, STAND, KONTO);
 
     // Then — any() statt anyString(): anyString() passt nicht auf null.
     verify(speicher, never()).loesche(any());
@@ -337,7 +361,7 @@ class BriefpapierUseCaseTest {
     when(speicher.lege(any())).thenReturn(NEU);
 
     // When
-    useCase.ladeHoch("neu.pdf", HOCHGELADEN);
+    useCase.ladeHoch("neu.pdf", HOCHGELADEN, STAND, KONTO);
 
     // Then — vor dem Commit ist das alte Objekt noch da.
     assertThat(gespeichert().blatt()).extracting(Briefpapierblatt::schluessel).isEqualTo(NEU);
@@ -358,13 +382,13 @@ class BriefpapierUseCaseTest {
     when(speicher.lege(any())).thenReturn(NEU);
 
     // When
-    useCase.ladeHoch("neu.pdf", HOCHGELADEN);
+    useCase.ladeHoch("neu.pdf", HOCHGELADEN, STAND, KONTO);
 
     // Then
     final InOrder reihenfolge = inOrder(pruefer, speicher, bestand);
     reihenfolge.verify(pruefer).pruefe(HOCHGELADEN);
     reihenfolge.verify(speicher).lege(any());
-    reihenfolge.verify(bestand).speichere(any(), any());
+    reihenfolge.verify(bestand).speichere(any(), any(), anyLong(), anyLong());
     reihenfolge.verify(speicher).loesche(ALT);
   }
 
@@ -377,8 +401,9 @@ class BriefpapierUseCaseTest {
     when(speicher.lege(any())).thenThrow(ausfall);
 
     // When / Then
-    assertThatThrownBy(() -> useCase.ladeHoch("neu.pdf", HOCHGELADEN)).isSameAs(ausfall);
-    verify(bestand, never()).speichere(any(), any());
+    assertThatThrownBy(() -> useCase.ladeHoch("neu.pdf", HOCHGELADEN, STAND, KONTO))
+        .isSameAs(ausfall);
+    verify(bestand, never()).speichere(any(), any(), anyLong(), anyLong());
     verify(speicher, never()).loesche(anyString());
   }
 
@@ -393,13 +418,41 @@ class BriefpapierUseCaseTest {
         .loesche(ALT);
 
     // When
-    final Briefbogenstand stand = useCase.ladeHoch("neu.pdf", HOCHGELADEN);
+    final Briefbogenstand stand = useCase.ladeHoch("neu.pdf", HOCHGELADEN, STAND, KONTO);
 
     // Then
     assertThat(stand.dateiname()).isEqualTo("neu.pdf");
     assertThat(mitgeschrieben.list).hasSize(1);
     assertThat(mitgeschrieben.list.getFirst().getLevel()).isEqualTo(Level.WARN);
     assertThat(mitgeschrieben.list.getFirst().getFormattedMessage()).contains(ALT);
+  }
+
+  @Test
+  void ladeHoch_givenEinenVeraltetenStand_thenAbgewiesenVorJedemRiegelUndJederAblage() {
+    // When — #411, Kriterium 4: Anna hat den Briefbogen inzwischen geaendert (E11: gleich welche
+    // Spalte).
+    final BriefbogenGeaendert konflikt =
+        catchThrowableOfType(
+            BriefbogenGeaendert.class,
+            () -> useCase.ladeHoch("neu.pdf", HOCHGELADEN, STAND - 1, KONTO));
+
+    // Then — Urheber, Handelnder und Zeitpunkt fuer die Meldung.
+    assertThat(konflikt).isNotNull();
+    assertThat(konflikt.urheberKonto()).hasValue(ANNA);
+    assertThat(konflikt.handelndesKonto()).isEqualTo(KONTO);
+    assertThat(konflikt.zeitpunkt()).hasValue(ANNAS_AENDERUNG);
+
+    // Then — weder geprueft noch abgelegt noch geschrieben.
+    verifyNoInteractions(pruefer, speicher);
+    verify(bestand, never()).speichere(any(), any(), anyLong(), anyLong());
+  }
+
+  @Test
+  void ladeHoch_givenEinenVeraltetenStandUndEineLeereDatei_thenZuerstDerStand() {
+    // When / Then — der Stand steht vor den Riegeln: Wer auf altem Stand arbeitet, soll davon
+    // erfahren und nicht von einem Fehler an der Datei.
+    assertThatThrownBy(() -> useCase.ladeHoch("leer.pdf", new byte[0], STAND - 1, KONTO))
+        .isInstanceOf(BriefbogenGeaendert.class);
   }
 
   // --- lies ---------------------------------------------------------------------------------
@@ -432,14 +485,15 @@ class BriefpapierUseCaseTest {
     bogenTraegt(BISHERIGES);
 
     // When
-    final Briefbogenstand stand = useCase.entferne();
+    final Briefbogenstand stand = useCase.entferne(STAND, KONTO);
 
     // Then — E15, Kriterium 16: allein das Blatt faellt weg.
     final Briefbogen bogen = gespeichert();
     assertThat(bogen).isEqualTo(new Briefbogen(null, false, true, EINGESTELLT));
     assertThat(stand)
-        .isEqualTo(new Briefbogenstand(false, null, null, null, false, true, EINGESTELLT));
-    verify(bestand).speichere(any(), eq(JETZT));
+        .isEqualTo(
+            new Briefbogenstand(false, null, null, null, false, true, EINGESTELLT, STAND + 1));
+    verify(bestand).speichere(any(), eq(JETZT), eq(STAND), eq(KONTO));
   }
 
   @Test
@@ -449,10 +503,10 @@ class BriefpapierUseCaseTest {
     bogenTraegt(BISHERIGES);
 
     // When
-    useCase.entferne();
+    useCase.entferne(STAND, KONTO);
 
     // Then
-    verify(bestand).speichere(any(), any());
+    verify(bestand).speichere(any(), any(), anyLong(), anyLong());
     verify(speicher, never()).loesche(anyString());
 
     // And
@@ -467,9 +521,30 @@ class BriefpapierUseCaseTest {
     bogenTraegt(null);
 
     // When / Then
-    assertThatThrownBy(() -> useCase.entferne()).isInstanceOf(BriefpapierNichtGefunden.class);
-    verify(bestand, never()).speichere(any(), any());
+    assertThatThrownBy(() -> useCase.entferne(STAND, KONTO))
+        .isInstanceOf(BriefpapierNichtGefunden.class);
+    verify(bestand, never()).speichere(any(), any(), anyLong(), anyLong());
     verifyNoInteractions(speicher);
+  }
+
+  @Test
+  void entferne_givenEinenVeraltetenStand_thenAbgewiesenUndNichtsGeschrieben() {
+    // When / Then — #411, Kriterium 4.
+    assertThatThrownBy(() -> useCase.entferne(STAND + 1, KONTO))
+        .isInstanceOf(BriefbogenGeaendert.class);
+    verify(bestand, never()).speichere(any(), any(), anyLong(), anyLong());
+    verifyNoInteractions(speicher);
+  }
+
+  @Test
+  void entferne_givenEinenVeraltetenStandOhneBriefpapier_thenZuerstDerStand() {
+    // Given — ein anderer hat das Briefpapier inzwischen entfernt; davon soll die Meldung sagen,
+    // wer und wann, und nicht nur, dass keines da ist.
+    lenient().when(bestand.lies()).thenReturn(new Briefbogen(null, false, true, EINGESTELLT));
+
+    // When / Then
+    assertThatThrownBy(() -> useCase.entferne(STAND - 1, KONTO))
+        .isInstanceOf(BriefbogenGeaendert.class);
   }
 
   @Test
@@ -481,7 +556,7 @@ class BriefpapierUseCaseTest {
         .loesche(ALT);
 
     // When
-    final Briefbogenstand stand = useCase.entferne();
+    final Briefbogenstand stand = useCase.entferne(STAND, KONTO);
 
     // Then
     assertThat(stand.briefpapier()).isFalse();

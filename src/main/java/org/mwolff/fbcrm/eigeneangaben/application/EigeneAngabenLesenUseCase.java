@@ -1,6 +1,5 @@
 package org.mwolff.fbcrm.eigeneangaben.application;
 
-import org.mwolff.fbcrm.eigeneangaben.domain.EigeneAngaben;
 import org.mwolff.fbcrm.eigeneangaben.domain.EigeneAngabenRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -21,8 +20,8 @@ public class EigeneAngabenLesenUseCase {
     this.bestand = bestand;
   }
 
-  /** Die eigenen Angaben. */
-  public EigeneAngaben lese() {
-    return bestand.lies();
+  /** Die eigenen Angaben samt dem Stand der Zeile, den das Speichern vorlegt (Plan #415, E2). */
+  public GespeicherteEigeneAngaben lese() {
+    return new GespeicherteEigeneAngaben(bestand.lies(), bestand.stand().version());
   }
 }

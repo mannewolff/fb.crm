@@ -10,14 +10,22 @@ import java.util.Optional;
  * <p>Die beiden Nummernfragen uebergehen die Schreibweise: „RE-9" und „re-9" sind dieselbe Nummer
  * (#254, Kriterium 4; E3). Sie beantworten nur diesen Bestand — ob eine Nummer ueber beide Arten
  * von Rechnungen vergeben ist, fragt die Anwendung an einer Stelle.
+ *
+ * <p><b>Loeschen heisst kennzeichnen</b> (Plan #415, E17): Geschrieben wird die Rechnung aus {@link
+ * NachgetrageneRechnung#geloescht(long, java.time.Instant)} ueber {@link
+ * #save(NachgetrageneRechnung)}. Die Liste und beide Nummernfragen lassen sie aus, nur der Zugriff
+ * ueber die Kennung liefert sie mit — damit der Anwendungsfall nennen kann, wer wann geloescht hat.
  */
 public interface NachgetrageneRechnungRepository {
 
-  /** Die nachgetragene Rechnung zu einer technischen Kennung, oder leer. */
+  /**
+   * Die nachgetragene Rechnung zu einer technischen Kennung, oder leer — auch eine geloeschte, mit
+   * ihrem Kennzeichen.
+   */
   Optional<NachgetrageneRechnung> findById(long id);
 
   /**
-   * Alle nachgetragenen Rechnungen.
+   * Alle nachgetragenen Rechnungen ohne die geloeschten.
    *
    * <p>Ohne zugesagte Reihenfolge: Welche Ordnung die Ansicht zeigt, entscheidet die
    * Anwendungsschicht.
@@ -28,18 +36,11 @@ public interface NachgetrageneRechnungRepository {
   NachgetrageneRechnung save(NachgetrageneRechnung rechnung);
 
   /**
-   * Loescht die Rechnung.
-   *
-   * @param id Kennung der Rechnung
-   */
-  void delete(long id);
-
-  /**
    * Ob eine nachgetragene Rechnung diese Nummer schon traegt, ohne Ansehen der Schreibweise.
    *
    * <p>Die Zusage haelt trotzdem der eindeutige Index {@code
    * rechnung_nachgetragen_nummer_lower_key} — zwischen Frage und Antwort kann eine zweite Sitzung
-   * dieselbe Nummer schreiben.
+   * dieselbe Nummer schreiben. Eine geloeschte Rechnung zaehlt nicht — wie im Index seit V35.
    *
    * @param nummer die zu pruefende Rechnungsnummer
    */

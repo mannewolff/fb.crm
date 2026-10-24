@@ -1,12 +1,14 @@
 package org.mwolff.fbcrm.firma.web;
 
 import jakarta.validation.Valid;
+import org.mwolff.fbcrm.common.web.Bedingungskopf;
 import org.mwolff.fbcrm.firma.application.FirmaAendernUseCase;
 import org.mwolff.fbcrm.firma.application.FirmaAnlegenUseCase;
 import org.mwolff.fbcrm.firma.application.FirmaLesenUseCase;
 import org.mwolff.fbcrm.firma.application.FirmaStilllegenUseCase;
 import org.mwolff.fbcrm.firma.application.FirmenUebersichtUseCase;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -24,12 +26,17 @@ import org.springframework.web.bind.annotation.RestController;
  * Anwendungsschicht weiter und uebersetzt das Ergebnis in Statuscode und Antwortrumpf
  * (CLAUDE-java.md §6.3).
  *
- * <p><b>Warum die drei Schreibwege ohne Rumpf antworten.</b> Die Detailansicht einer Firma enthaelt
- * ihre Ansprechpartner; die drei Anwendungsfaelle laden die aber nicht, weil sie sie nicht
- * brauchen. Eine Antwort mit leerer Liste waere an dieser Stelle gelogen — deshalb 204, und die
- * Oberflaeche liest den neuen Stand ueber {@code GET /api/firmen/{id}}. Nur das Anlegen antwortet
- * mit einem Rumpf: Die Oberflaeche braucht die Kennung fuer den Weg zur Detailansicht (Kriterium
- * 7), und eine frisch angelegte Firma hat wirklich keine Ansprechpartner.
+ * <p><b>Aendern, Stilllegen und Wiederaktivieren legen den Stand vor</b> (#411, Kriterium 4; Plan
+ * #415, E2, E3, E14, E18): Sie lesen {@link Bedingungskopf} aus {@code If-Match} und das handelnde
+ * Konto aus der Sitzung. Fehlt der Kopf, antwortet der Weg mit 428, ohne den Anwendungsfall zu
+ * fragen. Das Anlegen bleibt frei (#411, Kriterium 7).
+ *
+ * <p><b>Warum die drei Schreibwege die ganze Detailansicht liefern.</b> Die Detailansicht einer
+ * Firma enthaelt ihre Ansprechpartner; die drei Anwendungsfaelle laden die aber nicht, weil sie sie
+ * nicht brauchen. Darum liest der Weg nach dem Schreiben die Firma neu, wie {@code GET
+ * /api/firmen/{id}} — so traegt die Antwort die erhoehte Version, die die Oberflaeche beim
+ * naechsten Schritt vorlegt, und keine leere Liste, die an dieser Stelle gelogen waere. Das Anlegen
+ * antwortet ohne Ansprechpartner: Eine frisch angelegte Firma hat wirklich keine.
  *
  * <p>Einen eigenen Weg zu den Ansprechpartnern gibt es hier nicht — sie kommen eingebettet (E7).
  */
@@ -82,24 +89,39 @@ public class FirmaController {
     return FirmaResponse.of(lesenUseCase.lese(id));
   }
 
-  /** Schreibt die Angaben fort (Kriterium 8). */
+  /**
+   * Schreibt die Angaben fort (Kriterium 8) und liefert den neuen Stand.
+   *
+   * <p>Der Kopf steht vor dem Rumpf: Fehlt er, weist der Weg mit 428 ab, bevor der Rumpf gelesen
+   * und geprueft wird (Plan #415, E3).
+   */
   @PutMapping("/{id}")
-  @ResponseStatus(HttpStatus.NO_CONTENT)
-  public void aendern(@PathVariable final long id, @Valid @RequestBody final FirmaRequest anfrage) {
-    aendernUseCase.aendern(id, anfrage.daten());
+  public FirmaResponse aendern(
+      @PathVariable final long id,
+      final Bedingungskopf stand,
+      @AuthenticationPrincipal final Long accountId,
+      @Valid @RequestBody final FirmaRequest anfrage) {
+    aendernUseCase.aendern(id, anfrage.daten(), stand.version(), accountId);
+    return lesen(id);
   }
 
-  /** Legt die Firma still (Kriterium 13). */
+  /** Legt die Firma still (Kriterium 13) und liefert den neuen Stand. */
   @PostMapping("/{id}/stilllegen")
-  @ResponseStatus(HttpStatus.NO_CONTENT)
-  public void stilllegen(@PathVariable final long id) {
-    stilllegenUseCase.stilllegen(id);
+  public FirmaResponse stilllegen(
+      @PathVariable final long id,
+      final Bedingungskopf stand,
+      @AuthenticationPrincipal final Long accountId) {
+    stilllegenUseCase.stilllegen(id, stand.version(), accountId);
+    return lesen(id);
   }
 
-  /** Nimmt die Firma wieder in Betrieb (Kriterium 13). */
+  /** Nimmt die Firma wieder in Betrieb (Kriterium 13) und liefert den neuen Stand. */
   @PostMapping("/{id}/aktivieren")
-  @ResponseStatus(HttpStatus.NO_CONTENT)
-  public void aktivieren(@PathVariable final long id) {
-    stilllegenUseCase.aktivieren(id);
+  public FirmaResponse aktivieren(
+      @PathVariable final long id,
+      final Bedingungskopf stand,
+      @AuthenticationPrincipal final Long accountId) {
+    stilllegenUseCase.aktivieren(id, stand.version(), accountId);
+    return lesen(id);
   }
 }

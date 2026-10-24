@@ -1,6 +1,8 @@
 package org.mwolff.fbcrm;
 
+import java.util.List;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.MinIOContainer;
@@ -41,6 +43,23 @@ public abstract class AbstractIntegrationTest {
 
   /** Der Eimer der Suite. Die Anwendung legt ihn beim Start selbst an (S3Config). */
   private static final String TEST_BUCKET = "fbcrm-test";
+
+  /** Die Tabellen mit {@code geaendert_von} ohne Pflicht zum Konto (V33). */
+  private static final List<String> MIT_URHEBER =
+      List.of(
+          "angebot",
+          "rechnung",
+          "rechnung_nachgetragen",
+          "firma",
+          "ansprechpartner",
+          "eigene_angaben",
+          "rechnung_einstellungen",
+          "briefbogen",
+          "account");
+
+  /** Die Tabellen mit {@code geloescht_von}, die {@link #leereKonten} nicht ohnehin leert (V34). */
+  private static final List<String> MIT_KENNZEICHEN =
+      List.of("angebot_anlage", "rechnung", "rechnung_nachgetragen");
 
   static final PostgreSQLContainer<?> POSTGRES =
       new PostgreSQLContainer<>(DockerImageName.parse("postgres:16-alpine"));
@@ -92,6 +111,32 @@ public abstract class AbstractIntegrationTest {
       "fbcrm.minio.secret-key=" + MINIO.getPassword(),
       "fbcrm.minio.bucket=" + TEST_BUCKET
     };
+  }
+
+  /**
+   * Leert Konten und Postausgang, ohne die Fachtabellen mitzunehmen (Issue #439).
+   *
+   * <p>Seit {@code V33} und {@code V34} verweisen die Urheberspalten {@code geaendert_von} und
+   * {@code geloescht_von} fast aller Fachtabellen auf {@code account}. Ein {@code TRUNCATE account
+   * … CASCADE} leerte damit Firmen, Angebote, Rechnungen und die einzeiligen Tabellen der
+   * Einstellungen gleich mit, die die Anwendung als vorhanden voraussetzt. Darum leert dieser Weg
+   * wie bisher die Tabellen, die ein Konto als Pflicht tragen — Kommentare und Zeiteintraege —,
+   * nimmt jeden Urheberverweis zurueck und loescht erst danach die Konten zeilenweise. Die Zaehlung
+   * der Kontonummern beginnt wie nach {@code RESTART IDENTITY} wieder bei 1.
+   */
+  protected static void leereKonten(final JdbcTemplate jdbc) {
+    jdbc.execute(
+        "TRUNCATE outbox_message, angebot_kommentar, arbeitszeit RESTART IDENTITY CASCADE");
+    for (final String tabelle : MIT_URHEBER) {
+      jdbc.execute(
+          "UPDATE " + tabelle + " SET geaendert_von = NULL WHERE geaendert_von IS NOT NULL");
+    }
+    for (final String tabelle : MIT_KENNZEICHEN) {
+      jdbc.execute(
+          "UPDATE " + tabelle + " SET geloescht_von = NULL WHERE geloescht_von IS NOT NULL");
+    }
+    jdbc.execute("DELETE FROM account");
+    jdbc.execute("ALTER TABLE account ALTER COLUMN id RESTART");
   }
 
   @DynamicPropertySource

@@ -90,6 +90,8 @@ public class AngebotAnlegenUseCase {
             null,
             List.of(),
             jetzt,
-            jetzt));
+            jetzt,
+            0L,
+            null));
   }
 }

@@ -8,6 +8,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -19,7 +20,8 @@ import org.mwolff.fbcrm.rechnung.domain.Rechnung;
 import org.mwolff.fbcrm.rechnung.domain.Rechnungszustand;
 
 /**
- * Die Zeile der Tabelle {@code rechnung} nach {@code V18__rechnung.sql}.
+ * Die Zeile der Tabelle {@code rechnung} nach {@code V18__rechnung.sql}, {@code V33__version.sql}
+ * und {@code V34__geloescht.sql}.
  *
  * <p>Das Angebot steht als blosse Kennung und nicht als Beziehung, aus demselben Grund wie bei
  * {@code AngebotEntity}: Angebot und Rechnung sind eigene Wurzeln mit eigenem Lebenszyklus, und
@@ -43,7 +45,7 @@ import org.mwolff.fbcrm.rechnung.domain.Rechnungszustand;
  * Spaltenliste in V18); beim Lesen steht dort {@code null}.
  */
 /*
- * Neunundzwanzig Spalten ergeben neunundzwanzig Felder. Sechzehn davon tragen die beiden Kopien
+ * Dreiunddreissig Spalten ergeben dreiunddreissig Felder. Sechzehn davon tragen die beiden Kopien
  * von Empfaenger und Absender (R8) — sie stehen einzeln, weil eine Kopie aus Spalten besteht und
  * nicht aus einem Textblock. Die Zeile ist die Zeile der Tabelle; sie in Teilzeilen zu zerlegen,
  * nur um die Zahl zu druecken, braeuchte eine Kette von @AttributeOverride und klaerte nichts.
@@ -143,6 +145,27 @@ class RechnungEntity {
   private Instant updatedAt;
 
   /*
+   * Der Stand der Zeile, gefuehrt von Hibernate (Plan #415, E1): Jedes Schreiben erhoeht ihn, und
+   * ein UPDATE mit einem anderen Stand als dem gelesenen trifft keine Zeile und scheitert. Er kommt
+   * aus dem Fachobjekt mit, damit eine Zeile, die auf einem alten Stand beruht, nicht still
+   * geschrieben wird. Ein long und kein Long: Ob die Zeile neu ist, entscheidet so weiter die
+   * Kennung, und eine neue Rechnung beginnt bei 0 wie die Vorbelegung der Spalte (V33).
+   */
+  @Version
+  @Column(name = "version", nullable = false)
+  private long version;
+
+  @Column(name = "geaendert_von")
+  private @Nullable Long geaendertVon;
+
+  /* Das Kennzeichen der Loeschung (Plan #415, E17): NULL heisst „nicht geloescht" (V34). */
+  @Column(name = "geloescht_am")
+  private @Nullable Instant geloeschtAm;
+
+  @Column(name = "geloescht_von")
+  private @Nullable Long geloeschtVon;
+
+  /*
    * JPA verlangt einen parameterlosen Konstruktor und fuellt die Felder danach selbst; NullAway
    * sieht diesen Weg nicht und meldete sonst nicht initialisierte Felder.
    */
@@ -181,6 +204,10 @@ class RechnungEntity {
     uebernehmeAbsender(rechnung.absender());
     this.createdAt = rechnung.createdAt();
     this.updatedAt = rechnung.updatedAt();
+    this.version = rechnung.version();
+    this.geaendertVon = rechnung.geaendertVon();
+    this.geloeschtAm = rechnung.geloeschtAm();
+    this.geloeschtVon = rechnung.geloeschtVon();
   }
 
   private void uebernehmeEmpfaenger(final @Nullable Belegempfaenger empfaenger) {
@@ -288,5 +315,21 @@ class RechnungEntity {
 
   Instant getUpdatedAt() {
     return updatedAt;
+  }
+
+  long getVersion() {
+    return version;
+  }
+
+  @Nullable Long getGeaendertVon() {
+    return geaendertVon;
+  }
+
+  @Nullable Instant getGeloeschtAm() {
+    return geloeschtAm;
+  }
+
+  @Nullable Long getGeloeschtVon() {
+    return geloeschtVon;
   }
 }

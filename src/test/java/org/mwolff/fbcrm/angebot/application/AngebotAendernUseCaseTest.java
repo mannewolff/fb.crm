@@ -43,6 +43,7 @@ import org.mwolff.fbcrm.angebot.domain.AngebotRepository;
 import org.mwolff.fbcrm.angebot.domain.Angebotsposition;
 import org.mwolff.fbcrm.angebot.domain.Angebotsstatus;
 import org.mwolff.fbcrm.common.Abrechnungsmodus;
+import org.mwolff.fbcrm.common.Bearbeitungskonflikt;
 import org.mwolff.fbcrm.common.Einheit;
 import org.mwolff.fbcrm.firma.domain.Ansprechpartner;
 import org.mwolff.fbcrm.firma.domain.AnsprechpartnerRepository;
@@ -94,6 +95,18 @@ class AngebotAendernUseCaseTest {
   private static final LocalDate NEUES_DATUM = LocalDate.of(2026, 9, 25);
   private static final String NEUER_TEXT = "Ueberarbeitete Beschreibung";
   private static final String NEUER_TITEL = "Wartungsvertrag";
+
+  /** Der Stand, auf dem eine Aenderung beruht — das Angebot so, wie es geladen wurde (E1). */
+  private static final long GELESEN = 0L;
+
+  /** Das Konto, das gerade speichert (Plan #415, E14). */
+  private static final long BEN = 31L;
+
+  /** Das Konto, das vorher gespeichert hat. */
+  private static final Long ANNA = Long.valueOf(30L);
+
+  /** Wann Anna gespeichert hat — 10:42 Uhr in Berlin (#411, Szenario). */
+  private static final Instant ANNAS_SPEICHERN = Instant.parse("2026-09-28T08:42:00Z");
 
   /** Die Bezeichnung, mit der eine neue Position eingereicht wird. */
   private static final String NEUE_ARBEIT = "Umbau der Ablage";
@@ -156,12 +169,19 @@ class AngebotAendernUseCaseTest {
    * Dasselbe fuer die Zeitbindung (Issue #228), und wieder ein Doppel: Gefragt wird nur beim
    * Wechsel von der internen Arbeit zum Angebot an einen Kunden. Das Doppel merkt sich jede Frage
    * samt der Kennungen — nur so laesst sich zeigen, dass die uebrigen Wechsel den Port gar nicht
-   * bemuehen, und dass nach den eingereichten Kennungen gefragt wird.
+   * bemuehen, und dass nach den eingereichten Kennungen gefragt wird. Ebenso merkt es sich, fuer
+   * welche entfallenden Positionen geloeschte Zeit abgeraeumt werden soll (Plan #415, E17).
    */
   private static final class Zeitbindungsdoppel implements Zeitbindung {
 
     private final Set<Long> bebucht = new HashSet<>();
     private final List<Set<Long>> gefragt = new ArrayList<>();
+    private final List<Set<Long>> freigegeben = new ArrayList<>();
+
+    @Override
+    public void entferneGeloeschte(final Set<Long> angebotPositionIds) {
+      freigegeben.add(Set.copyOf(angebotPositionIds));
+    }
 
     @Override
     public Set<Long> mitZeit(final Set<Long> angebotPositionIds) {
@@ -237,7 +257,44 @@ class AngebotAendernUseCaseTest {
       final boolean intern,
       final List<Positionsangabe> positionen) {
     return new AngebotDaten(
-        NEUES_DATUM, ansprechpartnerId, NEUER_TITEL, NEUER_TEXT, intern, positionen);
+        NEUES_DATUM, ansprechpartnerId, NEUER_TITEL, NEUER_TEXT, intern, positionen, GELESEN, BEN);
+  }
+
+  /** Dieselben Angaben auf einem frei gewaehlten Stand und von einem frei gewaehlten Konto. */
+  private static AngebotDaten daten(final long version, final long konto) {
+    final AngebotDaten vorlage = daten(null, angaben(Angebotsdoppel.KONZEPTION));
+    return new AngebotDaten(
+        vorlage.angebotDatum(),
+        vorlage.ansprechpartnerId(),
+        vorlage.titel(),
+        vorlage.beschreibung(),
+        vorlage.intern(),
+        vorlage.positionen(),
+        version,
+        konto);
+  }
+
+  /**
+   * Dasselbe Angebot auf einem anderen Stand, zuletzt geaendert von {@code urheber} um {@code am}.
+   */
+  private static Angebot aufStand(
+      final Angebot angebot, final long version, final @Nullable Long urheber, final Instant am) {
+    return new Angebot(
+        angebot.id(),
+        angebot.firmaId(),
+        angebot.ansprechpartnerId(),
+        angebot.intern(),
+        angebot.status(),
+        angebot.storniert(),
+        angebot.stornoGrund(),
+        angebot.angebotDatum(),
+        angebot.titel(),
+        angebot.beschreibung(),
+        angebot.positionen(),
+        angebot.createdAt(),
+        am,
+        version,
+        urheber);
   }
 
   private static Ansprechpartner person(final long id, final long firmaId, final boolean aktiv) {
@@ -252,7 +309,9 @@ class AngebotAendernUseCaseTest {
         null,
         aktiv,
         Angebotsdoppel.ANGELEGT,
-        Angebotsdoppel.ANGELEGT);
+        Angebotsdoppel.ANGELEGT,
+        0L,
+        null);
   }
 
   /** Dieselbe Position mit einem anderen Leistungsjahr. */
@@ -283,7 +342,9 @@ class AngebotAendernUseCaseTest {
         angebot.beschreibung(),
         List.of(positionen),
         angebot.createdAt(),
-        angebot.updatedAt());
+        angebot.updatedAt(),
+        angebot.version(),
+        angebot.geaendertVon());
   }
 
   private void angebotIst(final Angebot angebot) {
@@ -293,6 +354,84 @@ class AngebotAendernUseCaseTest {
   private Angebot aendere(final AngebotDaten daten) {
     when(angebote.save(any())).thenAnswer(aufruf -> aufruf.getArgument(0));
     return useCase.aendere(ANGEBOT, daten);
+  }
+
+  @Test
+  void aendere_givenZweitesSpeichernWirdAbgewiesen_thenKonfliktMitUrheberUndZeitpunkt() {
+    // Given — #411, Szenario „Zweites Speichern wird abgewiesen": Ben hat das Angebot auf Stand 0
+    // geoeffnet, Anna hat es um 10:42 Uhr gespeichert und damit auf Stand 1 gehoben.
+    angebotIst(aufStand(Angebotsdoppel.angebot(ANGEBOT), 1L, ANNA, ANNAS_SPEICHERN));
+
+    // When / Then — abgewiesen, mit Urheber, Abgewiesenem und Zeitpunkt; geschrieben wird nichts.
+    assertThatThrownBy(() -> useCase.aendere(ANGEBOT, daten(GELESEN, BEN)))
+        .asInstanceOf(InstanceOfAssertFactories.type(AngebotGeaendert.class))
+        .satisfies(
+            konflikt -> assertThat(konflikt.art()).isEqualTo(Bearbeitungskonflikt.Art.VERALTET),
+            konflikt -> assertThat(konflikt.urheberKonto()).hasValue(ANNA.longValue()),
+            konflikt -> assertThat(konflikt.handelndesKonto()).isEqualTo(BEN),
+            konflikt -> assertThat(konflikt.zeitpunkt()).hasValue(ANNAS_SPEICHERN));
+    verify(angebote).findById(ANGEBOT);
+    verifyNoMoreInteractions(angebote);
+    verifyNoInteractions(personen);
+  }
+
+  @Test
+  void aendere_givenAStandThatNeverExisted_thenRejectsItAsWell() {
+    // Given — E12: Abgewiesen wird jede Abweichung, auch ein Stand, der juenger ist als der
+    // gespeicherte; den hat der Handelnde ebenso wenig gesehen.
+    angebotIst(aufStand(Angebotsdoppel.angebot(ANGEBOT), 1L, ANNA, ANNAS_SPEICHERN));
+
+    // When / Then
+    assertThatThrownBy(() -> useCase.aendere(ANGEBOT, daten(2L, BEN)))
+        .isInstanceOf(AngebotGeaendert.class);
+  }
+
+  @Test
+  void aendere_givenAnOutdatedStandOfACancelledAngebot_thenTheStandComesFirst() {
+    // Given — der Stand vor jeder fachlichen Pruefung: Wer auf einem alten Stand speichert,
+    // erfaehrt
+    // zuerst, dass ein anderer geaendert hat, und nicht das Storno, das der andere gesetzt hat.
+    angebotIst(
+        aufStand(
+            Angebotsdoppel.angebot(ANGEBOT).storniert(null, ANNAS_SPEICHERN),
+            1L,
+            ANNA,
+            ANNAS_SPEICHERN));
+
+    // When / Then
+    assertThatThrownBy(() -> useCase.aendere(ANGEBOT, daten(GELESEN, BEN)))
+        .isInstanceOf(AngebotGeaendert.class);
+  }
+
+  @Test
+  void aendere_givenAnAngebotWithoutKnownUrheber_thenTheConflictNamesNone() {
+    // Given — ein Angebot von vor V33 weiss nicht, wer es zuletzt geaendert hat.
+    angebotIst(aufStand(Angebotsdoppel.angebot(ANGEBOT), 1L, null, ANNAS_SPEICHERN));
+
+    // When / Then
+    assertThatThrownBy(() -> useCase.aendere(ANGEBOT, daten(GELESEN, BEN)))
+        .asInstanceOf(InstanceOfAssertFactories.type(AngebotGeaendert.class))
+        .satisfies(konflikt -> assertThat(konflikt.urheberKonto()).isEmpty());
+  }
+
+  @Test
+  void aendere_givenTheCurrentStand_thenWritesWithTheStandAndTheActingAccount() {
+    // Given — Kriterium 8: Solange der geladene Stand aktuell ist, merkt man vom Schutz nichts.
+    angebotIst(
+        Angebotsdoppel.ohneAnsprechpartner(
+            aufStand(Angebotsdoppel.angebot(ANGEBOT), 1L, ANNA, ANNAS_SPEICHERN)));
+
+    // When
+    final Angebot geaendert = aendere(daten(1L, BEN));
+
+    // Then — der Stand reist unveraendert zum Bestand, der ihn beim Schreiben erhoeht; Ben steht
+    // als Urheber daran.
+    assertThat(geaendert)
+        .satisfies(
+            a -> assertThat(a.version()).isEqualTo(1L),
+            a -> assertThat(a.geaendertVon()).isEqualTo(BEN),
+            a -> assertThat(a.updatedAt()).isEqualTo(JETZT),
+            a -> assertThat(a.titel()).isEqualTo(NEUER_TITEL));
   }
 
   @ParameterizedTest
@@ -610,6 +749,47 @@ class AngebotAendernUseCaseTest {
 
     // Then
     assertThat(geaendert.positionen()).containsExactly(Angebotsdoppel.KONZEPTION);
+  }
+
+  @Test
+  void aendere_droppingAPosition_thenFreesExactlyThatPositionFromDeletedTime() {
+    // Given — Plan #415, E17: Ein geloeschter Zeiteintrag zeigt weiter auf die Schulung; ohne
+    // Freigabe scheiterte das Entfernen am Fremdschluessel.
+    angebotIst(Angebotsdoppel.ohneAnsprechpartner(Angebotsdoppel.angebot(ANGEBOT)));
+
+    // When
+    aendere(daten(null, angaben(Angebotsdoppel.KONZEPTION)));
+
+    // Then
+    assertThat(zeitbindung.freigegeben).containsExactly(Set.of(Angebotsdoppel.SCHULUNG_ID));
+  }
+
+  @Test
+  void aendere_keepingEveryPositionAndAddingANewOne_thenFreesNothing() {
+    // Given — wer keine Position entfernt, bemueht die Zeiterfassung nicht.
+    angebotIst(Angebotsdoppel.ohneAnsprechpartner(Angebotsdoppel.angebot(ANGEBOT)));
+    final List<Positionsangabe> alleUndEineNeue =
+        new ArrayList<>(angaben(Angebotsdoppel.SCHULUNG, Angebotsdoppel.KONZEPTION));
+    alleUndEineNeue.add(ohneKennung(Angebotsdoppel.KONZEPTION_ANGABE));
+
+    // When
+    aendere(daten(null, alleUndEineNeue));
+
+    // Then
+    assertThat(zeitbindung.freigegeben).isEmpty();
+  }
+
+  @Test
+  void aendere_droppingAPositionButRejected_thenFreesNothing() {
+    // Given — eine abgewiesene Aenderung hinterlaesst nichts, auch keine abgeraeumte Zeit.
+    angebotIst(Angebotsdoppel.ohneAnsprechpartner(Angebotsdoppel.angebot(ANGEBOT)));
+    inEinerRechnung(Angebotsdoppel.KONZEPTION_ID);
+    final AngebotDaten aenderung = daten(null, angaben(Angebotsdoppel.SCHULUNG));
+
+    // When / Then
+    assertThatThrownBy(() -> useCase.aendere(ANGEBOT, aenderung))
+        .isInstanceOf(PositionInRechnungVerwendet.class);
+    assertThat(zeitbindung.freigegeben).isEmpty();
   }
 
   @Test
@@ -1140,7 +1320,9 @@ class AngebotAendernUseCaseTest {
             NEUER_TITEL,
             NEUER_TEXT,
             false,
-            List.of(ohneKennung(Angebotsdoppel.KONZEPTION_ANGABE)));
+            List.of(ohneKennung(Angebotsdoppel.KONZEPTION_ANGABE)),
+            GELESEN,
+            BEN);
 
     // When
     final Angebot geaendert = aendere(aenderung);

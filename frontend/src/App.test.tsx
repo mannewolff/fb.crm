@@ -7,7 +7,7 @@ import App from './App';
 import { fetchNachPfad, json, problem } from './test/fetchNachPfad';
 import { renderMitTheme } from './test/render';
 
-const KONTO = { id: 1, displayName: 'Manfred Wolff', email: 'info@mwolff.org' };
+const KONTO = { id: 1, displayName: 'Manfred Wolff', email: 'info@mwolff.org', role: 'C_LEVEL' };
 
 /** Ein Angebot, wie das Backend es schreibt. */
 const ANGEBOT = {
@@ -25,6 +25,8 @@ const ANGEBOT = {
   stornoGrund: null,
   positionen: [],
   summe: 0,
+  version: 0,
+  geaendertVon: null,
 };
 
 /** Eine gestellte Rechnung, wie das Backend sie schreibt (Issue #184). */
@@ -46,6 +48,7 @@ const RECHNUNG = {
   empfaenger: null,
   absender: null,
   zeilen: [],
+  version: 2,
 };
 
 /** Eine nachgetragene Rechnung, wie das Backend sie schreibt (Issue #270). */
@@ -59,6 +62,7 @@ const NACHTRAG = {
   brutto: 1190,
   zustand: 'GESTELLT',
   dokument: false,
+  version: 0,
 };
 
 /** Die Firmenwahl der Nachtrags-Maske: alle Firmen, auch stillgelegte. */
@@ -88,6 +92,7 @@ const FIRMA = {
   umsatzsteuerId: null,
   aktiv: true,
   ansprechpartner: [],
+  version: 0,
 };
 
 /** Die Fensterbreite, gegen die `matchMedia` auswertet — nur der Rahmen fragt danach. */
@@ -165,6 +170,12 @@ describe('App', () => {
     ],
     ['fuehrt „/eigene-angaben" ohne Sitzung auf die Anmeldeseite', '/eigene-angaben'],
     ['fuehrt „/administration“ ohne Sitzung auf die Anmeldeseite', '/administration'],
+    ['fuehrt „/mitarbeitende" ohne Sitzung auf die Anmeldeseite', '/mitarbeitende'],
+    ['fuehrt „/mitarbeitende/neu" ohne Sitzung auf die Anmeldeseite', '/mitarbeitende/neu'],
+    [
+      'fuehrt „/mitarbeitende/2/bearbeiten" ohne Sitzung auf die Anmeldeseite',
+      '/mitarbeitende/2/bearbeiten',
+    ],
     ['fuehrt „/dokumentation" ohne Sitzung auf die Anmeldeseite', '/dokumentation'],
     ['fuehrt „/dokumentation/betrieb" ohne Sitzung auf die Anmeldeseite', '/dokumentation/betrieb'],
   ])('%s', async (_name, pfad) => {
@@ -417,6 +428,7 @@ describe('App', () => {
         naechsteNummer: 1,
         steuersatz: 19,
         zahlungszielTage: 10,
+        version: 0,
       }),
     });
 
@@ -429,6 +441,87 @@ describe('App', () => {
     ).toBeInTheDocument();
     expect(screen.getByRole('navigation', { name: 'Hauptnavigation' })).toBeInTheDocument();
   });
+
+  it('zeigt „/mitarbeitende" einem C-Level im Rahmen — nachgeladen, nicht im ersten Rutsch', async () => {
+    fensterbreite(1440);
+    fetchNachPfad({
+      'GET /api/auth/me': json(200, KONTO),
+      'GET /api/instance': json(200, { version: '0.1.3' }),
+      'GET /api/mitarbeitende': json(200, {
+        mitarbeitende: [{ ...KONTO, aktiv: true, version: 0 }],
+      }),
+    });
+
+    renderApp(['/mitarbeitende'], 0);
+
+    expect(screen.getByRole('status')).toHaveTextContent('Sitzung wird geprüft');
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Mitarbeitende' }),
+    ).toBeInTheDocument();
+    expect(await screen.findByRole('table', { name: 'Mitarbeitende' })).toBeInTheDocument();
+  });
+
+  it.each([
+    ['/mitarbeitende/neu', 'Neues Konto'],
+    ['/mitarbeitende/1/bearbeiten', 'Konto bearbeiten'],
+  ])('zeigt „%s" einem C-Level als Maske', async (adresse, titel) => {
+    fensterbreite(1440);
+    fetchNachPfad({
+      'GET /api/auth/me': json(200, KONTO),
+      'GET /api/instance': json(200, { version: '0.1.3' }),
+      'GET /api/mitarbeitende': json(200, {
+        mitarbeitende: [{ ...KONTO, aktiv: true, version: 0 }],
+      }),
+    });
+
+    renderApp([adresse], 0);
+
+    expect(await screen.findByRole('heading', { level: 1, name: titel })).toBeInTheDocument();
+    expect(await screen.findByRole('radio', { name: 'C-Level' })).toBeInTheDocument();
+  });
+
+  it.each([
+    ['EMPLOYEE', '/mitarbeitende'],
+    ['EMPLOYEE', '/mitarbeitende/neu'],
+    ['READ_ONLY', '/mitarbeitende'],
+    ['READ_ONLY', '/mitarbeitende/2/bearbeiten'],
+  ])('zeigt %s auf „%s" den Satz statt der Konten (Kriterien 9, 10 von #409)', async (rolle, adresse) => {
+    fensterbreite(1440);
+    const fetchMock = fetchNachPfad({
+      'GET /api/auth/me': json(200, { ...KONTO, role: rolle }),
+      'GET /api/instance': json(200, { version: '0.1.3' }),
+    });
+
+    renderApp([adresse], 0);
+
+    expect(
+      await screen.findByText(/Diese Ansicht steht deiner Rolle nicht offen/),
+    ).toBeInTheDocument();
+    expect(fetchMock).not.toHaveBeenCalledWith('/api/mitarbeitende', expect.anything());
+  });
+
+  it.each(['/administration', '/eigene-angaben'])(
+    'zeigt einem Employee auf „%s" den Satz statt der Einstellungen (Plan #414, A11)',
+    async (adresse) => {
+      fensterbreite(1440);
+      const fetchMock = fetchNachPfad({
+        'GET /api/auth/me': json(200, { ...KONTO, role: 'EMPLOYEE' }),
+        'GET /api/instance': json(200, { version: '0.1.3' }),
+      });
+
+      renderApp([adresse], 0);
+
+      expect(
+        await screen.findByText(/Diese Ansicht steht deiner Rolle nicht offen/),
+      ).toBeInTheDocument();
+      expect(screen.getByRole('link', { name: 'Zur Startseite' })).toHaveAttribute('href', '/');
+      expect(screen.getByRole('navigation', { name: 'Hauptnavigation' })).toBeInTheDocument();
+      // Die Ansicht selbst entsteht nicht — keine ihrer Anfragen geht hinaus.
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(fetchMock).toHaveBeenCalledWith('/api/auth/me', expect.anything());
+      expect(fetchMock).toHaveBeenCalledWith('/api/instance', expect.anything());
+    },
+  );
 
   it('zeigt „/" als Startseite im Rahmen', async () => {
     fensterbreite(1440);

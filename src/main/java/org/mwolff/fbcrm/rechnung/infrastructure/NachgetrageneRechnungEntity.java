@@ -8,6 +8,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -16,7 +17,8 @@ import org.mwolff.fbcrm.rechnung.domain.NachgetrageneRechnung;
 import org.mwolff.fbcrm.rechnung.domain.Rechnungszustand;
 
 /**
- * Die Zeile der Tabelle {@code rechnung_nachgetragen} nach {@code V22__rechnung_nachgetragen.sql}.
+ * Die Zeile der Tabelle {@code rechnung_nachgetragen} nach {@code V22__rechnung_nachgetragen.sql},
+ * {@code V33__version.sql} und {@code V34__geloescht.sql}.
  *
  * <p>Die Firma steht als blosse Kennung und nicht als Beziehung, aus demselben Grund wie das
  * Angebot an {@link RechnungEntity}: Firma und Rechnung sind eigene Wurzeln, und eine Beziehung
@@ -62,6 +64,27 @@ class NachgetrageneRechnungEntity {
   private Instant updatedAt;
 
   /*
+   * Der Stand der Zeile, gefuehrt von Hibernate (Plan #415, E1): Jedes Schreiben erhoeht ihn, und
+   * ein UPDATE mit einem anderen Stand als dem gelesenen trifft keine Zeile und scheitert. Er kommt
+   * aus dem Fachobjekt mit, damit eine Zeile, die auf einem alten Stand beruht, nicht still
+   * geschrieben wird. Ein long und kein Long: Ob die Zeile neu ist, entscheidet so weiter die
+   * Kennung, und eine neue Rechnung beginnt bei 0 wie die Vorbelegung der Spalte (V33).
+   */
+  @Version
+  @Column(name = "version", nullable = false)
+  private long version;
+
+  @Column(name = "geaendert_von")
+  private @Nullable Long geaendertVon;
+
+  /* Das Kennzeichen der Loeschung (Plan #415, E17): NULL heisst „nicht geloescht" (V34). */
+  @Column(name = "geloescht_am")
+  private @Nullable Instant geloeschtAm;
+
+  @Column(name = "geloescht_von")
+  private @Nullable Long geloeschtVon;
+
+  /*
    * JPA verlangt einen parameterlosen Konstruktor und fuellt die Felder danach selbst; NullAway
    * sieht diesen Weg nicht und meldete sonst nicht initialisierte Felder.
    */
@@ -92,6 +115,10 @@ class NachgetrageneRechnungEntity {
     this.pdfSchluessel = rechnung.pdfSchluessel();
     this.createdAt = rechnung.createdAt();
     this.updatedAt = rechnung.updatedAt();
+    this.version = rechnung.version();
+    this.geaendertVon = rechnung.geaendertVon();
+    this.geloeschtAm = rechnung.geloeschtAm();
+    this.geloeschtVon = rechnung.geloeschtVon();
   }
 
   @Nullable Long getId() {
@@ -132,5 +159,21 @@ class NachgetrageneRechnungEntity {
 
   Instant getUpdatedAt() {
     return updatedAt;
+  }
+
+  long getVersion() {
+    return version;
+  }
+
+  @Nullable Long getGeaendertVon() {
+    return geaendertVon;
+  }
+
+  @Nullable Instant getGeloeschtAm() {
+    return geloeschtAm;
+  }
+
+  @Nullable Long getGeloeschtVon() {
+    return geloeschtVon;
   }
 }

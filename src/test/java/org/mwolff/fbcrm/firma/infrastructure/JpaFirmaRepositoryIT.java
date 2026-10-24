@@ -1,6 +1,7 @@
 package org.mwolff.fbcrm.firma.infrastructure;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.Instant;
 import java.util.List;
@@ -12,8 +13,18 @@ import org.mwolff.fbcrm.common.Anschrift;
 import org.mwolff.fbcrm.firma.domain.Firma;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.support.TransactionTemplate;
 
-/** Der Firma-Adapter gegen eine echte PostgreSQL-Instanz. */
+/**
+ * Der Firma-Adapter gegen eine echte PostgreSQL-Instanz.
+ *
+ * <p>Hier steht auch der Nachweis, dass der Zaehler an der Zeile das Rennen zwischen Lesen und
+ * Schreiben faengt (Plan #415, E1): Von zwei Transaktionen auf demselben Stand scheitert die
+ * zweite, und die erste bleibt.
+ */
 class JpaFirmaRepositoryIT extends AbstractIntegrationTest {
 
   private static final Instant ANGELEGT = Instant.parse("2026-09-01T08:00:00Z");
@@ -21,11 +32,16 @@ class JpaFirmaRepositoryIT extends AbstractIntegrationTest {
 
   private final JpaFirmaRepository repository;
   private final JdbcTemplate jdbc;
+  private final PlatformTransactionManager transaktionen;
 
   @Autowired
-  JpaFirmaRepositoryIT(final JpaFirmaRepository repository, final JdbcTemplate jdbc) {
+  JpaFirmaRepositoryIT(
+      final JpaFirmaRepository repository,
+      final JdbcTemplate jdbc,
+      final PlatformTransactionManager transaktionen) {
     this.repository = repository;
     this.jdbc = jdbc;
+    this.transaktionen = transaktionen;
   }
 
   @BeforeEach
@@ -42,12 +58,23 @@ class JpaFirmaRepositoryIT extends AbstractIntegrationTest {
         "DE123456789",
         true,
         ANGELEGT,
-        ANGELEGT);
+        ANGELEGT,
+        0L,
+        null);
   }
 
   private static Firma neueStillgelegteFirma(final String name) {
     return new Firma(
-        null, name, new Anschrift(null, null, null, null), null, null, false, ANGELEGT, ANGELEGT);
+        null,
+        name,
+        new Anschrift(null, null, null, null),
+        null,
+        null,
+        false,
+        ANGELEGT,
+        ANGELEGT,
+        0L,
+        null);
   }
 
   private List<String> namenDerUebersicht(final String suche, final boolean auchStillgelegte) {
@@ -125,6 +152,55 @@ class JpaFirmaRepositoryIT extends AbstractIntegrationTest {
               assertThat(firma.anschrift().ort()).isEqualTo("Hamburg");
               assertThat(firma.updatedAt()).isEqualTo(GEAENDERT);
             });
+  }
+
+  @Test
+  void save_givenAChangedFirma_thenRaisesTheVersion() {
+    // Given — Plan #415, E1: jedes Schreiben zaehlt den Stand weiter.
+    final Firma gesichert = repository.save(neueFirma("Adler AG"));
+
+    // When
+    repository.save(gesichert.stillgelegt(GEAENDERT));
+
+    // Then
+    assertThat(repository.findById(gesichert.requireId()))
+        .hasValueSatisfying(firma -> assertThat(firma.version()).isEqualTo(1L));
+  }
+
+  @Test
+  void save_givenTwoTransactionsOnTheSameRow_thenTheSecondFailsAndTheFirstStays() {
+    // Given — E1: Der Vergleich im Anwendungsfall faengt den Regelfall; der Zaehler an der Zeile
+    // faengt das Rennen dazwischen. Beide Transaktionen lesen Stand 0, die erste schreibt und
+    // schliesst ab, die zweite schreibt danach auf dem alten Stand.
+    final long id = repository.save(neueFirma("Adler AG")).requireId();
+    final TransactionTemplate zweite = new TransactionTemplate(transaktionen);
+    final TransactionTemplate erste = new TransactionTemplate(transaktionen);
+    erste.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+
+    // When / Then
+    assertThatThrownBy(
+            () ->
+                zweite.executeWithoutResult(
+                    aussen -> {
+                      final Firma gelesen = repository.findById(id).orElseThrow();
+                      erste.executeWithoutResult(
+                          innen ->
+                              repository.save(
+                                  umbenannt(repository.findById(id).orElseThrow(), "Erste")));
+                      repository.save(umbenannt(gelesen, "Zweite"));
+                    }))
+        .isInstanceOf(ObjectOptimisticLockingFailureException.class);
+    assertThat(repository.findById(id))
+        .hasValueSatisfying(
+            firma -> {
+              assertThat(firma.name()).isEqualTo("Erste");
+              assertThat(firma.version()).isEqualTo(1L);
+            });
+  }
+
+  private static Firma umbenannt(final Firma firma, final String name) {
+    return firma.geaendert(
+        name, firma.anschrift(), firma.steuernummer(), firma.umsatzsteuerId(), GEAENDERT);
   }
 
   @Test

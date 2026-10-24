@@ -62,7 +62,7 @@ class FirmaControllerIT extends AbstractIntegrationTest {
   @BeforeEach
   void leereDenBestandUndMeldeAn() {
     jdbc.execute("TRUNCATE ansprechpartner, firma RESTART IDENTITY CASCADE");
-    jdbc.execute("TRUNCATE outbox_message, account RESTART IDENTITY CASCADE");
+    leereKonten(jdbc);
     accounts.save(Konten.neu(MAIL, ANGELEGT));
     sitzung = Anmeldung.perCode(rest, jdbc, hasher, MAIL);
   }
@@ -70,6 +70,19 @@ class FirmaControllerIT extends AbstractIntegrationTest {
   private <T> ResponseEntity<T> ruf(
       final String pfad, final HttpMethod methode, final Object rumpf, final Class<T> typ) {
     return rest.exchange(pfad, methode, new HttpEntity<>(rumpf, sitzung), typ);
+  }
+
+  /** Ein schreibender Schritt auf dem Stand, den die Detailantwort gerade nennt (Plan #415, E2). */
+  private <T> ResponseEntity<T> schreibe(
+      final long id,
+      final String pfad,
+      final HttpMethod methode,
+      final Object rumpf,
+      final Class<T> typ) {
+    final HttpHeaders mitStand = new HttpHeaders();
+    mitStand.addAll(sitzung);
+    mitStand.setIfMatch("\"" + detail(id).version() + "\"");
+    return rest.exchange(pfad, methode, new HttpEntity<>(rumpf, mitStand), typ);
   }
 
   private <T> ResponseEntity<T> hole(final String pfad, final Class<T> typ) {
@@ -94,7 +107,7 @@ class FirmaControllerIT extends AbstractIntegrationTest {
   }
 
   private void schalte(final long id, final String weg) {
-    ruf("/api/firmen/" + id + "/" + weg, HttpMethod.POST, null, Void.class);
+    schreibe(id, "/api/firmen/" + id + "/" + weg, HttpMethod.POST, null, FirmaResponse.class);
   }
 
   private FirmaResponse detail(final long id) {
@@ -112,7 +125,8 @@ class FirmaControllerIT extends AbstractIntegrationTest {
   private static Ansprechpartner partner(
       final long firmaId, final String nachname, final boolean aktiv) {
     return new Ansprechpartner(
-        null, firmaId, "Max", nachname, null, null, null, null, aktiv, ANGELEGT, ANGELEGT);
+        null, firmaId, "Max", nachname, null, null, null, null, aktiv, ANGELEGT, ANGELEGT, 0L,
+        null);
   }
 
   @Test
@@ -146,20 +160,49 @@ class FirmaControllerIT extends AbstractIntegrationTest {
                 "75/123/45678",
                 "DE123456789",
                 true,
-                List.of()));
+                List.of(),
+                0L));
   }
 
   @Test
-  void aendern_thenAnswersWithoutContent() {
+  void aendern_thenAnswersWithTheRaisedVersion() {
     // Given
     final long id = legeAn("Adler AG", "Bremen");
 
-    // When — Kriterium 8.
-    final ResponseEntity<Void> antwort =
-        ruf("/api/firmen/" + id, HttpMethod.PUT, rumpf("Adler GmbH", "Hamburg"), Void.class);
+    // When — Kriterium 8; Plan #415, E2: die Antwort traegt den Stand fuer den naechsten Schritt.
+    final ResponseEntity<FirmaResponse> antwort =
+        schreibe(
+            id,
+            "/api/firmen/" + id,
+            HttpMethod.PUT,
+            rumpf("Adler GmbH", "Hamburg"),
+            FirmaResponse.class);
 
     // Then
-    assertThat(antwort.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
+    assertThat(antwort.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(Objects.requireNonNull(antwort.getBody()).version()).isEqualTo(1L);
+  }
+
+  @Test
+  void aendern_givenAnOutdatedStand_thenAnswersConflictAndKeepsTheFirstChange() {
+    // Given — #411, Kriterium 1: zwei Fenster auf Stand 0, das erste speichert.
+    final long id = legeAn("Adler AG", "Bremen");
+    schreibe(id, "/api/firmen/" + id, HttpMethod.PUT, rumpf("Adler GmbH", "Hamburg"), Void.class);
+    final HttpHeaders alterStand = new HttpHeaders();
+    alterStand.addAll(sitzung);
+    alterStand.setIfMatch("\"0\"");
+
+    // When — das zweite Fenster speichert auf dem alten Stand.
+    final ResponseEntity<String> antwort =
+        rest.exchange(
+            "/api/firmen/" + id,
+            HttpMethod.PUT,
+            new HttpEntity<>(rumpf("Adler KG", "Kiel"), alterStand),
+            String.class);
+
+    // Then
+    assertThat(antwort.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+    assertThat(detail(id).name()).isEqualTo("Adler GmbH");
   }
 
   @Test
@@ -168,7 +211,7 @@ class FirmaControllerIT extends AbstractIntegrationTest {
     final long id = legeAn("Adler AG", "Bremen");
 
     // When
-    ruf("/api/firmen/" + id, HttpMethod.PUT, rumpf("Adler GmbH", "Hamburg"), Void.class);
+    schreibe(id, "/api/firmen/" + id, HttpMethod.PUT, rumpf("Adler GmbH", "Hamburg"), Void.class);
 
     // Then
     assertThat(detail(id))

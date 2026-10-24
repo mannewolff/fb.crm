@@ -8,7 +8,12 @@ import org.springframework.web.bind.annotation.ResponseStatus;
  *
  * <p>404, weil die Kennung im Pfad steht: Angefragt ist dieser eine Eintrag, und den gibt es nicht
  * — weil er nie existierte oder weil er geloescht wurde (Plan #194, A5). Ein Unterschied zwischen
- * beidem waere hier ohne Wert, und Rechte je Eintrag gibt es nicht (CLAUDE.md, „Betriebsform").
+ * beidem waere hier ohne Wert.
+ *
+ * <p><b>404 auch fuer einen Eintrag, den das Konto nicht schreiben darf</b> (Plan #426, E7, E19):
+ * fuer den fremden Eintrag eines Employee und fuer jeden Eintrag eines ReadOnly-Kontos. Eine 403
+ * bestaetigte die Kennung — und fremde Eintraege sieht ein Employee nicht (#410, Kriterium 2).
+ * Derselbe Fehlerpfad fuer alle Faelle, und keiner verraet, welche Kennungen es gibt.
  */
 @ResponseStatus(code = HttpStatus.NOT_FOUND, reason = "Diesen Zeiteintrag gibt es nicht.")
 public final class ZeiteintragNichtGefunden extends RuntimeException {}

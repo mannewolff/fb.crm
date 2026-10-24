@@ -10,6 +10,7 @@ import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mwolff.fbcrm.AbstractIntegrationTest;
+import org.mwolff.fbcrm.Schutzspalten;
 import org.mwolff.fbcrm.rechnung.domain.NachgetrageneRechnung;
 import org.mwolff.fbcrm.rechnung.domain.NachgetrageneRechnungRepository;
 import org.mwolff.fbcrm.rechnung.domain.Rechnungszustand;
@@ -23,7 +24,8 @@ import org.springframework.transaction.support.TransactionTemplate;
  * <p>Gegenstand sind vor allem die beiden Nummernfragen: Sie stehen als {@code @Query} mit {@code
  * lower(…)}, und eine Abfrage ist gegen ein Mock immer gruen. Erst hier zeigt sich, dass „RE-9" und
  * „re-9" dieselbe Nummer sind (#254, Kriterium 4) und dass die eigene Zeile beim Aendern nicht als
- * fremde zaehlt. Dazu Anlegen, Lesen, Fortschreiben und Loeschen.
+ * fremde zaehlt. Dazu Anlegen, Lesen, Fortschreiben und Loeschen — mit Kennzeichen (Plan #415,
+ * E17): Die Zeile bleibt, keine Liste und keine Nummernfrage sieht sie.
  *
  * <p>Jeder Zug setzt seine Transaktionsgrenze selbst ueber {@link TransactionTemplate}, wie in
  * {@code RechnungPersistenceIT}: Die Grenze gehoert dem Anwendungsfall, nicht dem Adapter.
@@ -68,7 +70,9 @@ class NachgetrageneRechnungPersistenceIT extends AbstractIntegrationTest {
         Rechnungszustand.GESTELLT,
         null,
         ANGELEGT,
-        ANGELEGT);
+        ANGELEGT,
+        0L,
+        null);
   }
 
   private NachgetrageneRechnung geschrieben(final NachgetrageneRechnung rechnung) {
@@ -169,15 +173,29 @@ class NachgetrageneRechnungPersistenceIT extends AbstractIntegrationTest {
   }
 
   @Test
-  void delete_thenTheRechnungIsGone() {
-    // Given
+  void save_givenADeletedRechnung_thenTheRowStaysMarkedAndNoListOrNummerSeesIt() {
+    // Given — geloescht wird mit Kennzeichen (Plan #415, E17; Index seit V35).
+    leereKonten(jdbc);
+    final long konto = Schutzspalten.konto(jdbc);
+    final Instant geloeschtAm = Instant.parse("2026-10-08T08:42:00Z");
     final NachgetrageneRechnung gespeichert = geschrieben(neu("RE-9"));
+    final NachgetrageneRechnung andere = geschrieben(neu("RE-10"));
 
     // When
-    transaktion.executeWithoutResult(status -> repository.delete(gespeichert.requireId()));
+    geschrieben(gelesen(gespeichert.requireId()).orElseThrow().geloescht(konto, geloeschtAm));
 
-    // Then
-    assertThat(gelesen(gespeichert.requireId())).isEmpty();
-    assertThat(alle()).isEmpty();
+    // Then — ueber die Kennung mit Urheber und Zeitpunkt, sonst fuer jeden Weg fort.
+    assertThat(gelesen(gespeichert.requireId()))
+        .hasValueSatisfying(
+            rechnung -> {
+              assertThat(rechnung.geloeschtAm()).isEqualTo(geloeschtAm);
+              assertThat(rechnung.geloeschtVon()).isEqualTo(konto);
+            });
+    assertThat(alle()).extracting(NachgetrageneRechnung::nummer).containsExactly("RE-10");
+    assertThat(vergeben("re-9")).isFalse();
+    assertThat(vergebenAusser("re-9", andere.requireId())).isFalse();
+
+    // And — die Nummer laesst sich neu vergeben, der Index sieht die geloeschte nicht mehr.
+    assertThat(geschrieben(neu("re-9")).nummer()).isEqualTo("re-9");
   }
 }

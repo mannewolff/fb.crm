@@ -61,6 +61,8 @@ public class AnsprechpartnerAnlegenUseCase {
             sauber.telefonMobil(),
             true,
             jetzt,
-            jetzt));
+            jetzt,
+            0L,
+            null));
   }
 }

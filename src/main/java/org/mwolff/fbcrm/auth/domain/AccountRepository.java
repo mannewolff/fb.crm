@@ -1,5 +1,8 @@
 package org.mwolff.fbcrm.auth.domain;
 
+import java.util.Collection;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /** Port auf den Bestand der Konten; die Umsetzung liegt in {@code auth.infrastructure}. */
@@ -11,9 +14,55 @@ public interface AccountRepository {
   /** Das Konto zu einer Anmeldeadresse ohne Ruecksicht auf Gross- und Kleinschreibung. */
   Optional<Account> findByEmail(String email);
 
-  /** Ob es bereits ein Konto mit der Rolle {@link Role#ADMIN} gibt. */
-  boolean existsAnyAdmin();
+  /**
+   * Ob es bereits irgendein Konto gibt — gleich welcher Rolle und welchen Zustands.
+   *
+   * <p>Der Riegel der Einrichtung: Mit dem ersten Konto ist die Instanz eingerichtet (Plan #414,
+   * A5).
+   */
+  boolean existsAnyAccount();
 
-  /** Legt das Konto an oder schreibt es fort und liefert es mit gesetzter Id zurueck. */
+  /** Jedes Konto, aktiv oder stillgelegt, nach Anzeigenamen sortiert. */
+  List<Account> findAllOrderedByDisplayName();
+
+  /**
+   * Die Anzeigenamen zu den genannten Konten.
+   *
+   * <p>Eine Id ohne Konto fehlt in der Antwort, statt einen Platzhalter zu tragen.
+   *
+   * @param ids die Kennungen der Konten
+   */
+  Map<Long, String> displayNamesByIds(Collection<Long> ids);
+
+  /**
+   * Die aktiven C-Level-Konten, deren Zeilen bis zum Ende der Transaktion des Aufrufers gesperrt
+   * sind (Plan #414, A6).
+   *
+   * <p>Gezaehlt wird im Anwendungsfall, nicht hier: Postgres weist eine Zaehlung mit Sperrklausel
+   * ab. Zwei gleichzeitige Herabstufungen oder Stilllegungen warten so aufeinander, und die zweite
+   * sieht, was die erste hinterliess — sonst kaemen beide durch eine ungesperrte Zaehlung, und es
+   * bliebe kein aktiver C-Level. Ohne Transaktion des Aufrufers wird der Aufruf abgewiesen.
+   */
+  List<Account> aktiveCLevelMitSperre();
+
+  /**
+   * Das Konto zu einer technischen Id, dessen Zeile bis zum Ende der Transaktion des Aufrufers
+   * gesperrt ist, oder leer (Plan #415, E19).
+   *
+   * <p>Die Kontenverwaltung liest so, bevor sie die vorgelegte Version vergleicht: Zwei
+   * gleichzeitige Schritte auf demselben Stand warten aufeinander, und der zweite sieht die
+   * Version, die der erste hinterliess. Ohne Transaktion des Aufrufers wird der Aufruf abgewiesen.
+   *
+   * @param id technische Id des Kontos
+   */
+  Optional<Account> findByIdMitSperre(long id);
+
+  /**
+   * Legt das Konto an oder schreibt es fort und liefert es mit gesetzter Id zurueck.
+   *
+   * <p>Geschrieben wird im Aufruf selbst, nicht erst beim Commit: Traegt ein anderes Konto die
+   * Adresse schon, scheitert der Aufruf — innerhalb der Transaktion des Aufrufers, der den Fehler
+   * so noch in seine eigene Abweisung uebersetzen kann.
+   */
   Account save(Account account);
 }

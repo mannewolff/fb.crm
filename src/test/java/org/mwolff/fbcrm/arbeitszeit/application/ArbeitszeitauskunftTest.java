@@ -5,12 +5,17 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.YearMonth;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -167,5 +172,66 @@ class ArbeitszeitauskunftTest {
     // Then
     assertThat(auskunft).isEqualTo(gemeldet);
     verifyNoInteractions(angebote);
+  }
+
+  /** Die zweite Person neben {@link Zeitdoppel#KONTO} (Plan #426, E15). */
+  private static final long BEN = 22L;
+
+  /** Anna (das Konto der Doppel) 10 Stunden, Ben 6 Stunden, beide auf die Konzeption. */
+  private static Zeitbestand zweiPersonen() {
+    final Zeitbestand bestand = new Zeitbestand();
+    bestand.save(
+        Zeitdoppel.zeiteintrag(1L, Zeitdoppel.KONTO, Zeitdoppel.KONZEPTION_ID, "08:00", "18:00"));
+    bestand.save(Zeitdoppel.zeiteintrag(2L, BEN, Zeitdoppel.KONZEPTION_ID, "09:00", "15:00"));
+    return bestand;
+  }
+
+  @Test
+  void angefallen_withEntriesOfTwoPersonen_thenThePositionCarriesTheSumOfBoth() {
+    // Given — Kriterium 6 aus #410: „angefallen" zaehlt die Stunden aller Personen.
+    when(angebote.findById(Zeitdoppel.ANGEBOT)).thenReturn(Optional.of(Zeitdoppel.angebot()));
+
+    // When
+    final Map<Long, BigDecimal> auskunft =
+        new Arbeitszeitauskunft(zweiPersonen(), angebote).angefallen(Zeitdoppel.ANGEBOT);
+
+    // Then
+    assertThat(auskunft.get(Long.valueOf(Zeitdoppel.KONZEPTION_ID))).isEqualByComparingTo("16");
+  }
+
+  @Test
+  void imMonat_withEntriesOfTwoPersonen_thenThePositionCarriesTheSumOfBoth() {
+    // Given — Kriterium 7 aus #410: der Vorschlag eines Monats ist die Summe aller Personen.
+    when(angebote.findById(Zeitdoppel.ANGEBOT)).thenReturn(Optional.of(Zeitdoppel.angebot()));
+
+    // When
+    final Map<Long, BigDecimal> auskunft =
+        new Arbeitszeitauskunft(zweiPersonen(), angebote).imMonat(Zeitdoppel.ANGEBOT, NOVEMBER);
+
+    // Then
+    assertThat(auskunft.get(Long.valueOf(Zeitdoppel.KONZEPTION_ID))).isEqualByComparingTo("16");
+  }
+
+  @Test
+  void auskunft_thenNoMethodTakesAPerson() {
+    // Given — E15: Wer ueber alle Personen rechnet, bekommt keinen Parameter fuer eine. Jede
+    // oeffentliche Frage nimmt genau die Parameter, die sie vor Plan #426 nahm.
+    final Map<String, List<Class<?>>> erwartet =
+        Map.of(
+            "imMonat", List.of(long.class, YearMonth.class),
+            "angefallen", List.of(long.class),
+            "alleAngefallen", List.of(),
+            "alleImZeitraum", List.of(LocalDate.class, LocalDate.class),
+            "monateMitEintragImZeitraum", List.of(LocalDate.class, LocalDate.class));
+
+    // When
+    final Map<String, List<Class<?>>> tatsaechlich =
+        Stream.of(Arbeitszeitauskunft.class.getDeclaredMethods())
+            .filter(methode -> Modifier.isPublic(methode.getModifiers()))
+            .collect(
+                Collectors.toMap(Method::getName, methode -> List.of(methode.getParameterTypes())));
+
+    // Then
+    assertThat(tatsaechlich).isEqualTo(erwartet);
   }
 }

@@ -44,6 +44,8 @@ import org.mwolff.fbcrm.arbeitszeit.domain.Zeiteintrag;
 class JpaZeiteintragRepositoryTest {
 
   private static final long EINTRAG_ID = 42L;
+  private static final long ANNA = 21L;
+  private static final long BEN = 22L;
   private static final long KONZEPTION = 7L;
   private static final long BERATUNG = 8L;
   private static final LocalDate TAG = LocalDate.of(2026, 11, 12);
@@ -69,34 +71,54 @@ class JpaZeiteintragRepositoryTest {
 
   private static Zeiteintrag zeiteintrag(final String von, final String bis) {
     return new Zeiteintrag(
-        null, KONZEPTION, TAG, LocalTime.parse(von), LocalTime.parse(bis), ANGELEGT, GEAENDERT);
-  }
-
-  private static ZeiteintragEntity zeile(
-      final long positionId, final String tag, final String von, final String bis) {
-    return new ZeiteintragEntity(
-        EINTRAG_ID,
-        positionId,
-        LocalDate.parse(tag),
+        null,
+        ANNA,
+        KONZEPTION,
+        TAG,
         LocalTime.parse(von),
         LocalTime.parse(bis),
         ANGELEGT,
         GEAENDERT);
   }
 
+  private static ZeiteintragEntity zeile(
+      final long positionId, final String tag, final String von, final String bis) {
+    return zeile(ANNA, positionId, tag, von, bis);
+  }
+
+  private static ZeiteintragEntity zeile(
+      final long accountId,
+      final long positionId,
+      final String tag,
+      final String von,
+      final String bis) {
+    return ZeiteintragEntity.aus(
+        new Zeiteintrag(
+            EINTRAG_ID,
+            accountId,
+            positionId,
+            LocalDate.parse(tag),
+            LocalTime.parse(von),
+            LocalTime.parse(bis),
+            ANGELEGT,
+            GEAENDERT));
+  }
+
   @Test
   void save_thenHandsEveryFieldToTheRow() {
     // Given
-    when(zeilen.save(any(ZeiteintragEntity.class)))
+    when(zeilen.saveAndFlush(any(ZeiteintragEntity.class)))
         .thenReturn(zeile(KONZEPTION, "2026-11-12", "09:00", "10:45"));
 
     // When
     repository.save(zeiteintrag("09:00", "10:45"));
 
     // Then
-    verify(zeilen).save(gespeicherte.capture());
+    verify(zeilen).saveAndFlush(gespeicherte.capture());
     assertThat(gespeicherte.getValue())
         .extracting(
+            ZeiteintragEntity::getId,
+            ZeiteintragEntity::getAccountId,
             ZeiteintragEntity::getAngebotPositionId,
             ZeiteintragEntity::getTag,
             ZeiteintragEntity::getVon,
@@ -104,13 +126,20 @@ class JpaZeiteintragRepositoryTest {
             ZeiteintragEntity::getCreatedAt,
             ZeiteintragEntity::getUpdatedAt)
         .containsExactly(
-            KONZEPTION, TAG, LocalTime.of(9, 0), LocalTime.of(10, 45), ANGELEGT, GEAENDERT);
+            null,
+            ANNA,
+            KONZEPTION,
+            TAG,
+            LocalTime.of(9, 0),
+            LocalTime.of(10, 45),
+            ANGELEGT,
+            GEAENDERT);
   }
 
   @Test
   void save_thenReturnsTheStoredEntryWithItsId() {
     // Given
-    when(zeilen.save(any(ZeiteintragEntity.class)))
+    when(zeilen.saveAndFlush(any(ZeiteintragEntity.class)))
         .thenReturn(zeile(KONZEPTION, "2026-11-12", "09:00", "10:45"));
 
     // When
@@ -118,6 +147,39 @@ class JpaZeiteintragRepositoryTest {
 
     // Then
     assertThat(gesichert.id()).isEqualTo(EINTRAG_ID);
+  }
+
+  @Test
+  void save_thenHandsVersionAndUrheberToTheRowAndBack() {
+    // Given — Plan #415, E1, E14: Stand und Urheber gehen in beide Richtungen durch.
+    final Zeiteintrag geaendert =
+        new Zeiteintrag(
+            EINTRAG_ID,
+            ANNA,
+            KONZEPTION,
+            TAG,
+            LocalTime.of(9, 0),
+            LocalTime.of(10, 45),
+            ANGELEGT,
+            GEAENDERT,
+            3L,
+            Long.valueOf(BEN),
+            null,
+            null);
+    when(zeilen.saveAndFlush(any(ZeiteintragEntity.class)))
+        .thenReturn(ZeiteintragEntity.aus(geaendert));
+
+    // When
+    final Zeiteintrag gesichert = repository.save(geaendert);
+
+    // Then
+    verify(zeilen).saveAndFlush(gespeicherte.capture());
+    assertThat(gespeicherte.getValue())
+        .extracting(ZeiteintragEntity::getVersion, ZeiteintragEntity::getGeaendertVon)
+        .containsExactly(3L, Long.valueOf(BEN));
+    assertThat(gesichert)
+        .extracting(Zeiteintrag::version, Zeiteintrag::geaendertVon)
+        .containsExactly(3L, Long.valueOf(BEN));
   }
 
   @Test
@@ -134,6 +196,7 @@ class JpaZeiteintragRepositoryTest {
         .contains(
             new Zeiteintrag(
                 EINTRAG_ID,
+                ANNA,
                 KONZEPTION,
                 TAG,
                 LocalTime.of(9, 0),
@@ -190,12 +253,66 @@ class JpaZeiteintragRepositoryTest {
   }
 
   @Test
-  void delete_thenRemovesTheRow() {
+  void findImZeitraumFuerKonto_thenPassesBothBoundsAndTheAccountAndTranslatesEveryRow() {
+    // Given — Plan #426, E8: die Abfrage filtert nach dem Konto; der Adapter reicht es durch.
+    when(zeilen.findImZeitraumFuerKonto(LocalDate.of(2026, 11, 1), LocalDate.of(2026, 11, 30), BEN))
+        .thenReturn(List.of(zeile(BEN, BERATUNG, "2026-11-13", "13:00", "15:00")));
+
     // When
-    repository.delete(EINTRAG_ID);
+    final List<Zeiteintrag> gefunden =
+        repository.findImZeitraumFuerKonto(
+            LocalDate.of(2026, 11, 1), LocalDate.of(2026, 11, 30), BEN);
 
     // Then
-    verify(zeilen).deleteById(EINTRAG_ID);
+    assertThat(gefunden)
+        .extracting(Zeiteintrag::accountId, Zeiteintrag::angebotPositionId, Zeiteintrag::tag)
+        .containsExactly(tuple(BEN, BERATUNG, LocalDate.of(2026, 11, 13)));
+  }
+
+  @Test
+  void angefallenJePosition_givenRowsOfTwoAccounts_thenSumsThemTogether() {
+    // Given — Plan #426, E15: keine der Summen trennt nach Personen; 3:00 und 1:00 ergeben 4.
+    when(zeilen.findByPositionen(List.of(KONZEPTION)))
+        .thenReturn(
+            List.of(
+                zeile(ANNA, KONZEPTION, "2026-11-03", "09:00", "12:00"),
+                zeile(BEN, KONZEPTION, "2026-11-03", "10:00", "11:00")));
+
+    // When
+    final Map<Long, BigDecimal> angefallen = repository.angefallenJePosition(Set.of(KONZEPTION));
+
+    // Then
+    assertThat(angefallen.get(KONZEPTION)).isEqualByComparingTo("4.00");
+  }
+
+  @Test
+  void loescheGekennzeichnete_thenHandsThePositionsToTheQuery() {
+    // When — Plan #415, E17: geloeschte Eintraege entfallen mit ihrer Position.
+    repository.loescheGekennzeichnete(Set.of(KONZEPTION));
+
+    // Then
+    verify(zeilen).loescheGekennzeichnete(List.of(KONZEPTION));
+  }
+
+  @Test
+  void save_thenHandsTheDeletionMarkToTheRowAndBack() {
+    // Given — Plan #415, E17: Zeitpunkt und Konto der Loeschung gehen in beide Richtungen durch.
+    final Instant geloescht = Instant.parse("2026-11-14T10:00:00Z");
+    final Zeiteintrag gekennzeichnet = zeiteintrag("09:00", "10:45").geloescht(BEN, geloescht);
+    when(zeilen.saveAndFlush(any(ZeiteintragEntity.class)))
+        .thenReturn(ZeiteintragEntity.aus(gekennzeichnet));
+
+    // When
+    final Zeiteintrag gesichert = repository.save(gekennzeichnet);
+
+    // Then
+    verify(zeilen).saveAndFlush(gespeicherte.capture());
+    assertThat(gespeicherte.getValue())
+        .extracting(ZeiteintragEntity::getGeloeschtAm, ZeiteintragEntity::getGeloeschtVon)
+        .containsExactly(geloescht, Long.valueOf(BEN));
+    assertThat(gesichert)
+        .extracting(Zeiteintrag::geloeschtAm, Zeiteintrag::geloeschtVon)
+        .containsExactly(geloescht, Long.valueOf(BEN));
   }
 
   @Test
@@ -263,7 +380,7 @@ class JpaZeiteintragRepositoryTest {
   @Test
   void alleAngefallenJePosition_thenSumsTheMinutesOfEveryRowInTheBestand() {
     // Given — 1:45 und 2:00 an derselben Position ergeben 3,75 Stunden, ohne Positionsmenge.
-    when(zeilen.findAll())
+    when(zeilen.findAlleOffenen())
         .thenReturn(
             List.of(
                 zeile(KONZEPTION, "2026-10-05", "09:00", "10:45"),
@@ -280,7 +397,8 @@ class JpaZeiteintragRepositoryTest {
   @Test
   void alleAngefallenJePosition_givenAPositionWithoutEntries_thenItIsMissing() {
     // Given — anders als bei den Summen mit Positionsmenge wird hier nach nichts gefragt.
-    when(zeilen.findAll()).thenReturn(List.of(zeile(KONZEPTION, "2026-11-12", "09:00", "10:45")));
+    when(zeilen.findAlleOffenen())
+        .thenReturn(List.of(zeile(KONZEPTION, "2026-11-12", "09:00", "10:45")));
 
     // When
     final Map<Long, BigDecimal> alle = repository.alleAngefallenJePosition();
@@ -292,7 +410,7 @@ class JpaZeiteintragRepositoryTest {
   @Test
   void alleAngefallenJePosition_givenAnEmptyBestand_thenAnEmptyResult() {
     // Given
-    when(zeilen.findAll()).thenReturn(List.of());
+    when(zeilen.findAlleOffenen()).thenReturn(List.of());
 
     // When
     final Map<Long, BigDecimal> alle = repository.alleAngefallenJePosition();

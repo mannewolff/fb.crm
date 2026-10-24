@@ -52,7 +52,9 @@ class JpaAnsprechpartnerRepositoryIT extends AbstractIntegrationTest {
                 null,
                 true,
                 ANGELEGT,
-                ANGELEGT))
+                ANGELEGT,
+                0L,
+                null))
         .requireId();
   }
 
@@ -69,7 +71,9 @@ class JpaAnsprechpartnerRepositoryIT extends AbstractIntegrationTest {
         "0170 123456",
         aktiv,
         ANGELEGT,
-        ANGELEGT);
+        ANGELEGT,
+        0L,
+        null);
   }
 
   @Test
@@ -116,7 +120,9 @@ class JpaAnsprechpartnerRepositoryIT extends AbstractIntegrationTest {
                 null,
                 false,
                 ANGELEGT,
-                ANGELEGT));
+                ANGELEGT,
+                0L,
+                null));
 
     // When
     final Optional<Ansprechpartner> gefunden = repository.findById(gesichert.requireId());

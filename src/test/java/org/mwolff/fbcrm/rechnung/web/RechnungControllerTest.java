@@ -17,18 +17,29 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.time.Instant;
+import java.util.List;
+import java.util.Optional;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.mwolff.fbcrm.common.Bearbeitungskonflikt;
+import org.mwolff.fbcrm.common.Urheber;
+import org.mwolff.fbcrm.common.web.Bedingungskopf;
 import org.mwolff.fbcrm.common.web.GlobalExceptionHandler;
 import org.mwolff.fbcrm.rechnung.application.Abrechnungsangabe;
 import org.mwolff.fbcrm.rechnung.application.RechnungAendernUseCase;
 import org.mwolff.fbcrm.rechnung.application.RechnungDaten;
 import org.mwolff.fbcrm.rechnung.application.RechnungDokumentLesenUseCase;
+import org.mwolff.fbcrm.rechnung.application.RechnungGeaendert;
+import org.mwolff.fbcrm.rechnung.application.RechnungGeloescht;
 import org.mwolff.fbcrm.rechnung.application.RechnungLesenUseCase;
 import org.mwolff.fbcrm.rechnung.application.RechnungLoeschenUseCase;
 import org.mwolff.fbcrm.rechnung.application.RechnungNichtGefunden;
@@ -39,7 +50,11 @@ import org.mwolff.fbcrm.rechnung.application.RechnungszustandPasstNicht;
 import org.mwolff.fbcrm.rechnung.domain.Rechnungszustand;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.web.method.annotation.AuthenticationPrincipalArgumentResolver;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 /**
@@ -53,6 +68,13 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
  *
  * <p>Die Feldfehler stehen hier und nicht im Integrationstest: Sie sind eine Aussage der
  * Schnittstelle und haengen an keiner Datenbank.
+ *
+ * <p><b>Aendern, Stellen und Zustand legen den Stand vor</b> (#411, Kriterien 4 und 5; Plan #415,
+ * E3, E10): Fuer jeden der drei Wege gilt dasselbe Dreigespann — ohne {@code If-Match} 428, auf
+ * einem alten Stand 409 mit {@code konflikt}, auf dem aktuellen 200 mit dem erhoehten Stand; die
+ * drei Wege laufen je durch dieselben drei parametrisierten Tests. Das Loeschen legt den Stand
+ * ebenso vor und antwortet auf dem aktuellen 204; an einem inzwischen geloeschten Entwurf antworten
+ * alle vier Wege 409 mit {@code art = "gelöscht"} (Kriterium 6; E16).
  */
 @ExtendWith(MockitoExtension.class)
 class RechnungControllerTest {
@@ -64,6 +86,20 @@ class RechnungControllerTest {
       {"rechnungDatum":"2026-09-30","leistungszeitraum":"September 2026",
        "positionen":[{"angebotPositionId":101,"bezeichnung":"Beratung","menge":"80.00"}]}
       """;
+
+  /** Der Stand, den die Maske vorlegt (Plan #415, E2). */
+  private static final long STAND = 3L;
+
+  /** Derselbe Stand als starkes Etikett im Kopf {@code If-Match}. */
+  private static final String VORGELEGT = "\"" + STAND + "\"";
+
+  /** Das angemeldete Konto. */
+  private static final long ANGEMELDET = 31L;
+
+  /** Das Konto, das inzwischen geaendert hat. */
+  private static final long ANNA = 30L;
+
+  private static final Instant ANNAS_AENDERUNG = Instant.parse("2026-09-30T08:42:00Z");
 
   @Mock private RechnungLesenUseCase lesen;
   @Mock private RechnungAendernUseCase aendern;
@@ -78,11 +114,26 @@ class RechnungControllerTest {
 
   @BeforeEach
   void baueDenController() {
+    // Die Sitzung wie im Betrieb: die Kennung des Kontos als Principal (Plan #415, E14).
+    SecurityContextHolder.getContext()
+        .setAuthentication(
+            UsernamePasswordAuthenticationToken.authenticated(
+                Long.valueOf(ANGEMELDET), null, List.of()));
     mockMvc =
         MockMvcBuilders.standaloneSetup(
                 new RechnungController(lesen, aendern, loeschen, stellen, zustand, dokument))
-            .setControllerAdvice(new GlobalExceptionHandler())
+            .setControllerAdvice(
+                new GlobalExceptionHandler(
+                    konto ->
+                        konto == ANNA ? Optional.of(new Urheber(ANNA, "Anna")) : Optional.empty()))
+            .setCustomArgumentResolvers(
+                new Bedingungskopf.Leser(), new AuthenticationPrincipalArgumentResolver())
             .build();
+  }
+
+  @AfterEach
+  void raeumeDieSitzungAb() {
+    SecurityContextHolder.clearContext();
   }
 
   private String rumpfMit(final String bezeichnung, final String menge, final String zeitraum) {
@@ -209,21 +260,22 @@ class RechnungControllerTest {
 
     // When / Then
     mockMvc
-        .perform(post(PFAD + "/stellen"))
+        .perform(post(PFAD + "/stellen").header(HttpHeaders.IF_MATCH, VORGELEGT))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.zustand").value("GESTELLT"))
         .andExpect(jsonPath("$.nummer").value("0001-2026"));
-    verify(stellen).stelle(Webdoppel.RECHNUNG);
+    verify(stellen).stelle(Webdoppel.RECHNUNG, STAND, ANGEMELDET);
   }
 
   @Test
   void stellen_withoutAPosition_thenUnprocessable() throws Exception {
     // Given
-    when(stellen.stelle(Webdoppel.RECHNUNG)).thenThrow(new RechnungOhnePosition());
+    when(stellen.stelle(Webdoppel.RECHNUNG, STAND, ANGEMELDET))
+        .thenThrow(new RechnungOhnePosition());
 
     // When / Then
     mockMvc
-        .perform(post(PFAD + "/stellen"))
+        .perform(post(PFAD + "/stellen").header(HttpHeaders.IF_MATCH, VORGELEGT))
         .andExpect(status().isUnprocessableEntity())
         .andExpect(jsonPath("$.detail").value(RechnungOhnePosition.MELDUNG));
     verifyNoInteractions(lesen);
@@ -232,20 +284,26 @@ class RechnungControllerTest {
   @Test
   void stellen_atAGestellteRechnung_thenConflict() throws Exception {
     // Given
-    when(stellen.stelle(Webdoppel.RECHNUNG)).thenThrow(new RechnungszustandPasstNicht());
+    when(stellen.stelle(Webdoppel.RECHNUNG, STAND, ANGEMELDET))
+        .thenThrow(new RechnungszustandPasstNicht());
 
     // When / Then
-    mockMvc.perform(post(PFAD + "/stellen")).andExpect(status().isConflict());
+    mockMvc
+        .perform(post(PFAD + "/stellen").header(HttpHeaders.IF_MATCH, VORGELEGT))
+        .andExpect(status().isConflict());
     verifyNoInteractions(lesen);
   }
 
   @Test
   void stellen_withAnUnknownRechnung_thenNotFound() throws Exception {
     // Given
-    when(stellen.stelle(Webdoppel.RECHNUNG)).thenThrow(new RechnungNichtGefunden());
+    when(stellen.stelle(Webdoppel.RECHNUNG, STAND, ANGEMELDET))
+        .thenThrow(new RechnungNichtGefunden());
 
     // When / Then
-    mockMvc.perform(post(PFAD + "/stellen")).andExpect(status().isNotFound());
+    mockMvc
+        .perform(post(PFAD + "/stellen").header(HttpHeaders.IF_MATCH, VORGELEGT))
+        .andExpect(status().isNotFound());
     verifyNoInteractions(lesen);
   }
 
@@ -266,7 +324,11 @@ class RechnungControllerTest {
 
     // When
     mockMvc
-        .perform(put(PFAD).contentType(MediaType.APPLICATION_JSON).content(RUMPF))
+        .perform(
+            put(PFAD)
+                .header(HttpHeaders.IF_MATCH, VORGELEGT)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(RUMPF))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.netto").value(8000.00));
 
@@ -291,6 +353,7 @@ class RechnungControllerTest {
     mockMvc
         .perform(
             put(PFAD)
+                .header(HttpHeaders.IF_MATCH, VORGELEGT)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(rumpfMit("Beratung", "0", Webdoppel.ZEITRAUM)))
         .andExpect(status().isOk());
@@ -311,7 +374,11 @@ class RechnungControllerTest {
 
     // When / Then
     mockMvc
-        .perform(put(PFAD).contentType(MediaType.APPLICATION_JSON).content(RUMPF))
+        .perform(
+            put(PFAD)
+                .header(HttpHeaders.IF_MATCH, VORGELEGT)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(RUMPF))
         .andExpect(status().isConflict());
     verifyNoInteractions(lesen);
   }
@@ -322,6 +389,7 @@ class RechnungControllerTest {
     mockMvc
         .perform(
             put(PFAD)
+                .header(HttpHeaders.IF_MATCH, VORGELEGT)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(rumpfMit("Beratung", "-1.00", Webdoppel.ZEITRAUM)))
         .andExpect(status().isBadRequest())
@@ -335,6 +403,7 @@ class RechnungControllerTest {
     mockMvc
         .perform(
             put(PFAD)
+                .header(HttpHeaders.IF_MATCH, VORGELEGT)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(rumpfMit("Beratung", "1.005", Webdoppel.ZEITRAUM)))
         .andExpect(status().isBadRequest())
@@ -348,6 +417,7 @@ class RechnungControllerTest {
     mockMvc
         .perform(
             put(PFAD)
+                .header(HttpHeaders.IF_MATCH, VORGELEGT)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(rumpfMit("   ", "80.00", Webdoppel.ZEITRAUM)))
         .andExpect(status().isBadRequest())
@@ -363,6 +433,7 @@ class RechnungControllerTest {
     mockMvc
         .perform(
             put(PFAD)
+                .header(HttpHeaders.IF_MATCH, VORGELEGT)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(rumpfMit("B".repeat(301), "80.00", Webdoppel.ZEITRAUM)))
         .andExpect(status().isBadRequest())
@@ -376,6 +447,7 @@ class RechnungControllerTest {
     mockMvc
         .perform(
             put(PFAD)
+                .header(HttpHeaders.IF_MATCH, VORGELEGT)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(rumpfMit("Beratung", "80.00", "  ")))
         .andExpect(status().isBadRequest())
@@ -390,6 +462,7 @@ class RechnungControllerTest {
     mockMvc
         .perform(
             put(PFAD)
+                .header(HttpHeaders.IF_MATCH, VORGELEGT)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(rumpfMit("Beratung", "80.00", "S".repeat(101))))
         .andExpect(status().isBadRequest())
@@ -398,28 +471,38 @@ class RechnungControllerTest {
   }
 
   @Test
-  void loeschen_thenNoContent() throws Exception {
+  void loeschen_withTheCurrentStand_thenNoContentAndTheUseCaseSeesStandAndKonto() throws Exception {
     // When / Then
-    mockMvc.perform(delete(PFAD)).andExpect(status().isNoContent());
-    verify(loeschen).loesche(Webdoppel.RECHNUNG);
+    mockMvc
+        .perform(delete(PFAD).header(HttpHeaders.IF_MATCH, VORGELEGT))
+        .andExpect(status().isNoContent());
+    verify(loeschen).loesche(Webdoppel.RECHNUNG, STAND, ANGEMELDET);
   }
 
   @Test
   void loeschen_atAGestellteRechnung_thenConflict() throws Exception {
     // Given
-    doThrow(new RechnungszustandPasstNicht()).when(loeschen).loesche(Webdoppel.RECHNUNG);
+    doThrow(new RechnungszustandPasstNicht())
+        .when(loeschen)
+        .loesche(Webdoppel.RECHNUNG, STAND, ANGEMELDET);
 
     // When / Then
-    mockMvc.perform(delete(PFAD)).andExpect(status().isConflict());
+    mockMvc
+        .perform(delete(PFAD).header(HttpHeaders.IF_MATCH, VORGELEGT))
+        .andExpect(status().isConflict());
   }
 
   @Test
   void loeschen_withAnUnknownRechnung_thenNotFound() throws Exception {
     // Given
-    doThrow(new RechnungNichtGefunden()).when(loeschen).loesche(Webdoppel.RECHNUNG);
+    doThrow(new RechnungNichtGefunden())
+        .when(loeschen)
+        .loesche(Webdoppel.RECHNUNG, STAND, ANGEMELDET);
 
     // When / Then
-    mockMvc.perform(delete(PFAD)).andExpect(status().isNotFound());
+    mockMvc
+        .perform(delete(PFAD).header(HttpHeaders.IF_MATCH, VORGELEGT))
+        .andExpect(status().isNotFound());
   }
 
   @Test
@@ -428,6 +511,7 @@ class RechnungControllerTest {
     mockMvc
         .perform(
             put(PFAD)
+                .header(HttpHeaders.IF_MATCH, VORGELEGT)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"rechnungDatum\":\"2026-09-30\",\"leistungszeitraum\":\"Sept\"}"))
         .andExpect(status().isBadRequest())
@@ -445,6 +529,7 @@ class RechnungControllerTest {
     mockMvc
         .perform(
             put(PFAD)
+                .header(HttpHeaders.IF_MATCH, VORGELEGT)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(
                     "{\"rechnungDatum\":\"2026-09-30\",\"leistungszeitraum\":\"Sept\","
@@ -462,6 +547,7 @@ class RechnungControllerTest {
     mockMvc
         .perform(
             put(PFAD)
+                .header(HttpHeaders.IF_MATCH, VORGELEGT)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(
                     "{\"leistungszeitraum\":\"Sept\",\"positionen\":"
@@ -477,6 +563,7 @@ class RechnungControllerTest {
     mockMvc
         .perform(
             put(PFAD)
+                .header(HttpHeaders.IF_MATCH, VORGELEGT)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(
                     "{\"rechnungDatum\":\"2026-09-30\",\"leistungszeitraum\":\"Sept\","
@@ -492,6 +579,7 @@ class RechnungControllerTest {
     mockMvc
         .perform(
             put(PFAD)
+                .header(HttpHeaders.IF_MATCH, VORGELEGT)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(
                     "{\"rechnungDatum\":\"2026-09-30\",\"leistungszeitraum\":\"Sept\","
@@ -570,12 +658,13 @@ class RechnungControllerTest {
     mockMvc
         .perform(
             put(PFAD + "/zustand")
+                .header(HttpHeaders.IF_MATCH, VORGELEGT)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"zustand\":\"BEZAHLT\"}"))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.zustand").value("BEZAHLT"))
         .andExpect(jsonPath("$.nummer").value("0001-2026"));
-    verify(zustand).setze(Webdoppel.RECHNUNG, Rechnungszustand.BEZAHLT);
+    verify(zustand).setze(Webdoppel.RECHNUNG, Rechnungszustand.BEZAHLT, STAND, ANGEMELDET);
   }
 
   @Test
@@ -584,6 +673,7 @@ class RechnungControllerTest {
     mockMvc
         .perform(
             put(PFAD + "/zustand")
+                .header(HttpHeaders.IF_MATCH, VORGELEGT)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"zustand\":\"MAHNUNG\"}"))
         .andExpect(status().isBadRequest());
@@ -596,7 +686,11 @@ class RechnungControllerTest {
   void zustand_withoutAZustand_thenTheFieldIsNamed() throws Exception {
     // Given — ohne Ziel gibt es keinen Uebergang.
     mockMvc
-        .perform(put(PFAD + "/zustand").contentType(MediaType.APPLICATION_JSON).content("{}"))
+        .perform(
+            put(PFAD + "/zustand")
+                .header(HttpHeaders.IF_MATCH, VORGELEGT)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{}"))
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.fieldErrors.zustand").isArray());
 
@@ -607,13 +701,14 @@ class RechnungControllerTest {
   @Test
   void zustand_atAnEntwurf_thenConflict() throws Exception {
     // Given — von ENTWURF aus fuehrt kein Weg; das entscheidet die Domaene.
-    when(zustand.setze(Webdoppel.RECHNUNG, Rechnungszustand.BEZAHLT))
+    when(zustand.setze(Webdoppel.RECHNUNG, Rechnungszustand.BEZAHLT, STAND, ANGEMELDET))
         .thenThrow(new RechnungszustandPasstNicht());
 
     // When / Then
     mockMvc
         .perform(
             put(PFAD + "/zustand")
+                .header(HttpHeaders.IF_MATCH, VORGELEGT)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"zustand\":\"BEZAHLT\"}"))
         .andExpect(status().isConflict())
@@ -624,13 +719,14 @@ class RechnungControllerTest {
   @Test
   void zustand_towardsEntwurf_thenConflict() throws Exception {
     // Given — die Festschreibung wird nicht zurueckgenommen; kein Formfehler, ein Zustandsfehler.
-    when(zustand.setze(Webdoppel.RECHNUNG, Rechnungszustand.ENTWURF))
+    when(zustand.setze(Webdoppel.RECHNUNG, Rechnungszustand.ENTWURF, STAND, ANGEMELDET))
         .thenThrow(new RechnungszustandPasstNicht());
 
     // When / Then
     mockMvc
         .perform(
             put(PFAD + "/zustand")
+                .header(HttpHeaders.IF_MATCH, VORGELEGT)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"zustand\":\"ENTWURF\"}"))
         .andExpect(status().isConflict());
@@ -640,16 +736,138 @@ class RechnungControllerTest {
   @Test
   void zustand_withAnUnknownRechnung_thenNotFound() throws Exception {
     // Given
-    when(zustand.setze(Webdoppel.RECHNUNG, Rechnungszustand.ABGESCHRIEBEN))
+    when(zustand.setze(Webdoppel.RECHNUNG, Rechnungszustand.ABGESCHRIEBEN, STAND, ANGEMELDET))
         .thenThrow(new RechnungNichtGefunden());
 
     // When / Then
     mockMvc
         .perform(
             put(PFAD + "/zustand")
+                .header(HttpHeaders.IF_MATCH, VORGELEGT)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"zustand\":\"ABGESCHRIEBEN\"}"))
         .andExpect(status().isNotFound());
+    verifyNoInteractions(lesen);
+  }
+
+  /** Die Anfrage des Wegs, noch ohne {@code If-Match}. */
+  private static MockHttpServletRequestBuilder anfrageZu(final String weg) {
+    return switch (weg) {
+      case "aendern" -> put(PFAD).contentType(MediaType.APPLICATION_JSON).content(RUMPF);
+      case "stellen" -> post(PFAD + "/stellen");
+      case "zustand" ->
+          put(PFAD + "/zustand")
+              .contentType(MediaType.APPLICATION_JSON)
+              .content("{\"zustand\":\"BEZAHLT\"}");
+      case "loeschen" -> delete(PFAD);
+      default -> throw new IllegalArgumentException(weg);
+    };
+  }
+
+  /** Der Anwendungsfall des Wegs wirft den Konflikt — mit Stand und Konto aus der Anfrage. */
+  private void wirftKonflikt(final String weg) {
+    wirft(weg, new RechnungGeaendert(ANNA, ANGEMELDET, ANNAS_AENDERUNG));
+  }
+
+  /** Der Anwendungsfall des Wegs wirft den genannten Konflikt. */
+  private void wirft(final String weg, final Bearbeitungskonflikt konflikt) {
+    switch (weg) {
+      case "aendern" -> when(aendern.aendere(eq(Webdoppel.RECHNUNG), any())).thenThrow(konflikt);
+      case "stellen" ->
+          when(stellen.stelle(Webdoppel.RECHNUNG, STAND, ANGEMELDET)).thenThrow(konflikt);
+      case "zustand" ->
+          when(zustand.setze(Webdoppel.RECHNUNG, Rechnungszustand.BEZAHLT, STAND, ANGEMELDET))
+              .thenThrow(konflikt);
+      case "loeschen" ->
+          doThrow(konflikt).when(loeschen).loesche(Webdoppel.RECHNUNG, STAND, ANGEMELDET);
+      default -> throw new IllegalArgumentException(weg);
+    }
+  }
+
+  /** Prueft, dass der Anwendungsfall des Wegs Stand und Konto bekommen hat. */
+  private void bekamStandUndKonto(final String weg) {
+    switch (weg) {
+      case "aendern" -> {
+        verify(aendern).aendere(eq(Webdoppel.RECHNUNG), daten.capture());
+        assertThat(daten.getValue().version()).isEqualTo(STAND);
+        assertThat(daten.getValue().geaendertVon()).isEqualTo(ANGEMELDET);
+      }
+      case "stellen" -> verify(stellen).stelle(Webdoppel.RECHNUNG, STAND, ANGEMELDET);
+      case "zustand" ->
+          verify(zustand).setze(Webdoppel.RECHNUNG, Rechnungszustand.BEZAHLT, STAND, ANGEMELDET);
+      default -> throw new IllegalArgumentException(weg);
+    }
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"aendern", "stellen", "zustand", "loeschen"})
+  void schreibenderWeg_withoutIfMatch_thenAnswers428AndChangesNothing(final String weg)
+      throws Exception {
+    // Given — E3: Ohne vorgelegten Stand wird nicht geschrieben; ein freiwilliger Kopf waere ein
+    // stilles Loch im Schutz.
+
+    // When / Then
+    mockMvc
+        .perform(anfrageZu(weg))
+        .andExpect(status().isPreconditionRequired())
+        .andExpect(jsonPath("$.detail").value(Bedingungskopf.MELDUNG));
+    verifyNoInteractions(aendern, stellen, zustand, loeschen, lesen);
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"aendern", "stellen", "zustand", "loeschen"})
+  void schreibenderWeg_withAnOutdatedStand_thenAnswers409WithTheConflict(final String weg)
+      throws Exception {
+    // Given — #411, Szenario „Rechnung auf veraltetem Stand stellen": Anna hat inzwischen
+    // geaendert.
+    wirftKonflikt(weg);
+
+    // When / Then
+    mockMvc
+        .perform(anfrageZu(weg).header(HttpHeaders.IF_MATCH, VORGELEGT))
+        .andExpect(status().isConflict())
+        .andExpect(jsonPath("$.konflikt.art").value("veraltet"))
+        .andExpect(jsonPath("$.konflikt.geaendertVon").value("Anna"))
+        .andExpect(jsonPath("$.konflikt.geaendertAm").value("2026-09-30T08:42:00Z"))
+        .andExpect(jsonPath("$.konflikt.eigenesFenster").value(false));
+    verifyNoInteractions(lesen);
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"aendern", "stellen", "zustand"})
+  void schreibenderWeg_withTheCurrentStand_thenAnswers200WithTheRaisedVersion(final String weg)
+      throws Exception {
+    // Given — #411, Kriterium 8: Auf dem aktuellen Stand geht der Schritt unveraendert durch; die
+    // Antwort traegt den erhoehten Stand, den die Maske beim naechsten Schritt vorlegt.
+    when(lesen.lese(Webdoppel.RECHNUNG))
+        .thenReturn(
+            Webdoppel.ansicht(Webdoppel.aufStand(Webdoppel.entwurf("80.00"), STAND + 1), "0"));
+
+    // When
+    mockMvc
+        .perform(anfrageZu(weg).header(HttpHeaders.IF_MATCH, VORGELEGT))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.version").value(STAND + 1));
+
+    // Then
+    bekamStandUndKonto(weg);
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"aendern", "stellen", "zustand", "loeschen"})
+  void schreibenderWeg_atADeletedRechnung_thenAnswers409AsGeloescht(final String weg)
+      throws Exception {
+    // Given — #411, Kriterium 6; Plan #415, E16: Anna hat den Entwurf inzwischen geloescht.
+    wirft(weg, new RechnungGeloescht(ANNA, ANGEMELDET, ANNAS_AENDERUNG));
+
+    // When / Then
+    mockMvc
+        .perform(anfrageZu(weg).header(HttpHeaders.IF_MATCH, VORGELEGT))
+        .andExpect(status().isConflict())
+        .andExpect(jsonPath("$.konflikt.art").value("gelöscht"))
+        .andExpect(jsonPath("$.konflikt.geaendertVon").value("Anna"))
+        .andExpect(jsonPath("$.konflikt.geaendertAm").value("2026-09-30T08:42:00Z"))
+        .andExpect(jsonPath("$.konflikt.eigenesFenster").value(false));
     verifyNoInteractions(lesen);
   }
 }

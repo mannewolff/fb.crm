@@ -50,7 +50,9 @@ class JpaFirmaRepositoryTest {
         "DE123456789",
         true,
         ANGELEGT,
-        GEAENDERT);
+        GEAENDERT,
+        4L,
+        2L);
   }
 
   @Test
@@ -74,7 +76,9 @@ class JpaFirmaRepositoryTest {
             zeile -> assertThat(zeile.getUmsatzsteuerId()).isEqualTo("DE123456789"),
             zeile -> assertThat(zeile.isAktiv()).isTrue(),
             zeile -> assertThat(zeile.getCreatedAt()).isEqualTo(ANGELEGT),
-            zeile -> assertThat(zeile.getUpdatedAt()).isEqualTo(GEAENDERT));
+            zeile -> assertThat(zeile.getUpdatedAt()).isEqualTo(GEAENDERT),
+            zeile -> assertThat(zeile.getVersion()).isEqualTo(4L),
+            zeile -> assertThat(zeile.getGeaendertVon()).isEqualTo(2L));
   }
 
   @Test
@@ -89,7 +93,9 @@ class JpaFirmaRepositoryTest {
             null,
             false,
             ANGELEGT,
-            GEAENDERT);
+            GEAENDERT,
+            0L,
+            null);
     when(jpa.save(any(FirmaEntity.class))).thenReturn(zeile(11L));
 
     // When

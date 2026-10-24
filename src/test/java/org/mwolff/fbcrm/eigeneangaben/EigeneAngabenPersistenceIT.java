@@ -10,6 +10,7 @@ import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mwolff.fbcrm.AbstractIntegrationTest;
+import org.mwolff.fbcrm.Stand;
 import org.mwolff.fbcrm.auth.Anmeldung;
 import org.mwolff.fbcrm.auth.Konten;
 import org.mwolff.fbcrm.auth.domain.AccountRepository;
@@ -33,6 +34,9 @@ import org.springframework.jdbc.core.JdbcTemplate;
  * Ein per {@code PUT} gesendeter Leerstring landet als {@code NULL} in der Spalte und nicht als
  * Leerstring (E9) — der Nachweis liest die Spalte direkt, weil beides an der Schnittstelle gleich
  * aussaehe. Drittens: Beide Wege liegen unter {@code /api} und sind ohne Sitzung verschlossen.
+ *
+ * <p>Dazu der Schutz gegen stilles Ueberschreiben (#411, Kriterium 4; Plan #415, E1, E3): ohne
+ * {@code If-Match} 428, auf altem Stand 409, und der Stand des Ersten bleibt.
  *
  * <p>Der Ausgangszustand wird vor jeder Methode wiederhergestellt, wie ihn die Migration
  * hinterlaesst; die Datenbank der Suite ist geteilt.
@@ -68,7 +72,7 @@ class EigeneAngabenPersistenceIT extends AbstractIntegrationTest {
   void stelleDenStandDerMigrationHerUndMeldeAn() {
     jdbc.execute("DELETE FROM eigene_angaben");
     jdbc.execute("INSERT INTO eigene_angaben DEFAULT VALUES");
-    jdbc.execute("TRUNCATE outbox_message, account RESTART IDENTITY CASCADE");
+    leereKonten(jdbc);
     accounts.save(Konten.neu(MAIL, ANGELEGT));
     sitzung = Anmeldung.perCode(rest, jdbc, hasher, MAIL);
   }
@@ -100,8 +104,21 @@ class EigeneAngabenPersistenceIT extends AbstractIntegrationTest {
     return Objects.requireNonNull(ruf(HttpMethod.GET, null, EigeneAngabenResponse.class).getBody());
   }
 
-  private ResponseEntity<Void> gepflegt(final Map<String, Object> felder) {
-    return ruf(HttpMethod.PUT, felder, Void.class);
+  /** Speichert auf dem aktuellen Stand, wie die Maske (Plan #415, E2). */
+  private ResponseEntity<EigeneAngabenResponse> gepflegt(final Map<String, Object> felder) {
+    return rest.exchange(
+        PFAD,
+        HttpMethod.PUT,
+        new HttpEntity<>(felder, Stand.aktuell(sitzung, jdbc, "eigene_angaben", 1L)),
+        EigeneAngabenResponse.class);
+  }
+
+  /** Speichert auf dem genannten Stand. */
+  private ResponseEntity<String> gepflegtAuf(final Map<String, Object> felder, final long stand) {
+    final HttpHeaders kopf = new HttpHeaders();
+    kopf.putAll(sitzung);
+    kopf.setIfMatch("\"" + stand + "\"");
+    return rest.exchange(PFAD, HttpMethod.PUT, new HttpEntity<>(felder, kopf), String.class);
   }
 
   private Integer gesetzteSpalten() {
@@ -123,16 +140,44 @@ class EigeneAngabenPersistenceIT extends AbstractIntegrationTest {
     assertThat(antwort)
         .isEqualTo(
             new EigeneAngabenResponse(
-                null, null, null, null, null, null, null, null, null, null, null, null));
+                null, null, null, null, null, null, null, null, null, null, null, null, 0L));
   }
 
   @Test
-  void pflegen_thenAnswersNoContent() {
+  void pflegen_thenAnswersWithTheRaisedVersion() {
     // When
-    final ResponseEntity<Void> antwort = gepflegt(rumpf("Wert"));
+    final ResponseEntity<EigeneAngabenResponse> antwort = gepflegt(rumpf("Wert"));
+
+    // Then — Plan #415, E1: das Speichern erhoeht den Stand, und der Urheber steht an der Zeile.
+    assertThat(antwort.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(Objects.requireNonNull(antwort.getBody()).version()).isEqualTo(1L);
+    assertThat(gelesen().version()).isEqualTo(1L);
+    assertThat(jdbc.queryForObject("SELECT geaendert_von FROM eigene_angaben", Long.class))
+        .isEqualTo(accounts.findByEmail(MAIL).orElseThrow().id());
+  }
+
+  @Test
+  void pflegen_withoutIfMatch_thenPreconditionRequiredAndNothingChanges() {
+    // When — E3.
+    final ResponseEntity<String> antwort = ruf(HttpMethod.PUT, rumpf("Wert"), String.class);
 
     // Then
-    assertThat(antwort.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
+    assertThat(antwort.getStatusCode()).isEqualTo(HttpStatus.PRECONDITION_REQUIRED);
+    assertThat(gesetzteSpalten()).isZero();
+  }
+
+  @Test
+  void pflegen_onAnOutdatedStand_thenConflictAndTheFirstStandStays() {
+    // Given — #411, Kriterium 1: der Erste hat auf Stand 0 gespeichert.
+    gepflegt(rumpf("Erster"));
+
+    // When — der Zweite speichert auf dem Stand, den er beim Oeffnen sah.
+    final ResponseEntity<String> antwort = gepflegtAuf(rumpf("Zweiter"), 0L);
+
+    // Then
+    assertThat(antwort.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+    assertThat(antwort.getBody()).contains("\"konflikt\"");
+    assertThat(gelesen().name()).isEqualTo("Erster");
   }
 
   @Test
@@ -182,7 +227,7 @@ class EigeneAngabenPersistenceIT extends AbstractIntegrationTest {
     assertThat(gelesen())
         .isEqualTo(
             new EigeneAngabenResponse(
-                null, null, null, null, null, null, null, null, null, null, null, null));
+                null, null, null, null, null, null, null, null, null, null, null, null, 2L));
   }
 
   @Test

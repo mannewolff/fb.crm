@@ -33,7 +33,7 @@ public final class SetupRefused extends RuntimeException {
    * super(cause)} stuende der Text der Datenbank — Tabelle, Index, mitunter Werte — im
    * Antwortrumpf.
    *
-   * @param cause die Verletzung von {@code account_single_admin}
+   * @param cause die Verletzung von {@code account_email_key}
    */
   public SetupRefused(final Throwable cause) {
     super(null, cause);

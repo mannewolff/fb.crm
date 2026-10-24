@@ -2,6 +2,7 @@ package org.mwolff.fbcrm.rechnung;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -11,16 +12,19 @@ import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mwolff.fbcrm.AbstractIntegrationTest;
+import org.mwolff.fbcrm.Stand;
 import org.mwolff.fbcrm.angebot.domain.Angebotsstatus;
 import org.mwolff.fbcrm.angebot.web.AngebotResponse;
 import org.mwolff.fbcrm.auth.Anmeldung;
 import org.mwolff.fbcrm.auth.Konten;
 import org.mwolff.fbcrm.auth.domain.AccountRepository;
 import org.mwolff.fbcrm.auth.domain.SecretHasher;
+import org.mwolff.fbcrm.jahresabschluss.web.JahresabschlussResponse;
 import org.mwolff.fbcrm.rechnung.domain.Rechnungszustand;
 import org.mwolff.fbcrm.rechnung.web.AngebotAbrechnungResponse;
 import org.mwolff.fbcrm.rechnung.web.RechnungResponse;
 import org.mwolff.fbcrm.rechnung.web.RechnungenUebersichtResponse;
+import org.mwolff.fbcrm.startseite.web.StartseiteResponse;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.http.HttpEntity;
@@ -43,6 +47,12 @@ import org.springframework.jdbc.core.JdbcTemplate;
  * <p>Dazu die Grenzen, die am echten Stand haengen: Ein Angebot vor „bestellt" und ein Angebot ohne
  * Offenes antworten 409 — <b>der Server entscheidet</b>, nicht die Auswahlliste. Eine
  * Preisaenderung am Angebot erreicht einen bestehenden Entwurf nicht (Kriterium 9, Frage 15).
+ *
+ * <p><b>Geloescht wird mit Kennzeichen</b> (#411, Kriterium 6; Plan #415, E16, E17): Je
+ * Filterstelle steht hier ein Test, dass ein geloeschter Entwurf nicht mitzaehlt —
+ * Abrechnungsstand, Liste, abrechenbare Angebote, Einzelabruf, Startseite und Jahresabschluss;
+ * Positionsverwendung und Rechnungsbindung stehen in {@code AngebotPositionsbindungIT}, die Nummer
+ * in {@code RechnungNummerIT}. Jeder schreibende Weg an einem geloeschten Entwurf antwortet 409.
  *
  * <p>Der Nachweis der Zugangsregel steht hier und nicht nur in {@code AccessRuleIT}: Jeder neue
  * Pfad unter {@code /api} ist ohne Sitzung verschlossen, und das gehoert zu jedem neuen Weg dazu.
@@ -80,12 +90,19 @@ class RechnungEntwurfIT extends AbstractIntegrationTest {
             + " RESTART IDENTITY CASCADE");
     jdbc.execute("DELETE FROM rechnung_einstellungen");
     jdbc.execute("INSERT INTO rechnung_einstellungen DEFAULT VALUES");
-    jdbc.update("INSERT INTO firma (name) VALUES (?)", "Adler AG");
+    // Mit Anschrift: Das Stellen verlangt sie als Pflichtangabe des Belegs.
+    jdbc.update(
+        "INSERT INTO firma (name, strasse, plz, ort, land) VALUES (?, ?, ?, ?, ?)",
+        "Adler AG",
+        "Hauptstrasse 1",
+        "28195",
+        "Bremen",
+        "Deutschland");
     firmaId =
         Objects.requireNonNull(
                 jdbc.queryForObject("SELECT id FROM firma WHERE name = ?", Long.class, "Adler AG"))
             .longValue();
-    jdbc.execute("TRUNCATE outbox_message, account RESTART IDENTITY CASCADE");
+    leereKonten(jdbc);
     accounts.save(Konten.neu(MAIL, ANGELEGT));
     sitzung = Anmeldung.perCode(rest, jdbc, hasher, MAIL);
   }
@@ -93,6 +110,23 @@ class RechnungEntwurfIT extends AbstractIntegrationTest {
   private <T> ResponseEntity<T> ruf(
       final String pfad, final HttpMethod methode, final Object rumpf, final Class<T> typ) {
     return rest.exchange(pfad, methode, new HttpEntity<>(rumpf, sitzung), typ);
+  }
+
+  /**
+   * Ein schreibender Weg an der Rechnung, auf ihrem aktuellen Stand (Plan #415, E2, E3): so, wie
+   * die Maske ihn vorlegt.
+   */
+  private <T> ResponseEntity<T> rufAufStand(
+      final String pfad,
+      final HttpMethod methode,
+      final @Nullable Object rumpf,
+      final Class<T> typ,
+      final long rechnungId) {
+    return rest.exchange(
+        pfad,
+        methode,
+        new HttpEntity<>(rumpf, Stand.aktuell(sitzung, jdbc, "rechnung", rechnungId)),
+        typ);
   }
 
   /** Ein Angebot mit einer Position ueber die angegebene Menge Beratung, im Status ANGELEGT. */
@@ -133,14 +167,26 @@ class RechnungEntwurfIT extends AbstractIntegrationTest {
     rumpf.put("ansprechpartnerId", null);
     rumpf.put("beschreibung", "Neugestaltung der Website");
     rumpf.put("positionen", List.of(position));
-    ruf("/api/angebote/" + angebotId, HttpMethod.PUT, rumpf, AngebotResponse.class);
+    rest.exchange(
+        "/api/angebote/" + angebotId,
+        HttpMethod.PUT,
+        new HttpEntity<>(rumpf, Stand.aktuell(sitzung, jdbc, "angebot", angebotId)),
+        AngebotResponse.class);
   }
 
   /** Dasselbe Angebot, zweimal weitergeschaltet: von ANGELEGT ueber ABGEGEBEN auf BESTELLT. */
   private long bestelltesAngebot(final String menge) {
     final long angebotId = angebotMit(menge, STUNDENSATZ);
-    ruf("/api/angebote/" + angebotId + "/status/weiter", HttpMethod.POST, null, String.class);
-    ruf("/api/angebote/" + angebotId + "/status/weiter", HttpMethod.POST, null, String.class);
+    rest.exchange(
+        "/api/angebote/" + angebotId + "/status/weiter",
+        HttpMethod.POST,
+        new HttpEntity<>(null, Stand.aktuell(sitzung, jdbc, "angebot", angebotId)),
+        String.class);
+    rest.exchange(
+        "/api/angebote/" + angebotId + "/status/weiter",
+        HttpMethod.POST,
+        new HttpEntity<>(null, Stand.aktuell(sitzung, jdbc, "angebot", angebotId)),
+        String.class);
     return angebotId;
   }
 
@@ -175,7 +221,11 @@ class RechnungEntwurfIT extends AbstractIntegrationTest {
     rumpf.put("positionen", List.of(position));
     final AngebotResponse umgestellt =
         Objects.requireNonNull(
-            ruf("/api/angebote/" + angebotId, HttpMethod.PUT, rumpf, AngebotResponse.class)
+            rest.exchange(
+                    "/api/angebote/" + angebotId,
+                    HttpMethod.PUT,
+                    new HttpEntity<>(rumpf, Stand.aktuell(sitzung, jdbc, "angebot", angebotId)),
+                    AngebotResponse.class)
                 .getBody());
     assertThat(umgestellt.intern()).isTrue();
     assertThat(umgestellt.status()).isEqualTo(Angebotsstatus.LAEUFT);
@@ -204,7 +254,89 @@ class RechnungEntwurfIT extends AbstractIntegrationTest {
     rumpf.put("rechnungDatum", "2026-09-30");
     rumpf.put("leistungszeitraum", "September 2026");
     rumpf.put("positionen", List.of(position));
-    return ruf("/api/rechnungen/" + entwurf.id(), HttpMethod.PUT, rumpf, RechnungResponse.class);
+    return rufAufStand(
+        "/api/rechnungen/" + entwurf.id(),
+        HttpMethod.PUT,
+        rumpf,
+        RechnungResponse.class,
+        entwurf.id());
+  }
+
+  /** Loescht den Entwurf auf seinem aktuellen Stand, so wie die Maske es tut. */
+  private ResponseEntity<Void> loesche(final long rechnungId) {
+    return rufAufStand(
+        "/api/rechnungen/" + rechnungId, HttpMethod.DELETE, null, Void.class, rechnungId);
+  }
+
+  private ResponseEntity<String> lies(final long rechnungId) {
+    return ruf("/api/rechnungen/" + rechnungId, HttpMethod.GET, null, String.class);
+  }
+
+  /** Die Sitzung mit einem frei gewaehlten Stand in {@code If-Match}. */
+  private HttpHeaders mitStand(final long version) {
+    final HttpHeaders kopf = new HttpHeaders();
+    kopf.putAll(sitzung);
+    kopf.setIfMatch("\"" + version + "\"");
+    return kopf;
+  }
+
+  private long positionszeilen(final long rechnungId) {
+    return Objects.requireNonNull(
+            jdbc.queryForObject(
+                "SELECT count(*) FROM rechnung_position WHERE rechnung_id = ?",
+                Long.class,
+                Long.valueOf(rechnungId)))
+        .longValue();
+  }
+
+  private long geloeschteZeilen() {
+    return Objects.requireNonNull(
+            jdbc.queryForObject(
+                "SELECT count(*) FROM rechnung WHERE geloescht_am IS NOT NULL", Long.class))
+        .longValue();
+  }
+
+  /** Die eigenen Angaben, vollstaendig — das Stellen verlangt sie als Pflichtangaben. */
+  private void eigeneAngabenSetzen() {
+    final Map<String, Object> rumpf = new LinkedHashMap<>();
+    rumpf.put("name", "Manfred Wolff");
+    rumpf.put("berufsbezeichnung", "Softwarearchitekt");
+    rumpf.put("strasse", "Am Deich 2");
+    rumpf.put("plz", "28199");
+    rumpf.put("ort", "Bremen");
+    rumpf.put("land", "Deutschland");
+    rumpf.put("email", "post@example.org");
+    rumpf.put("telefon", "0421 123456");
+    rumpf.put("webadresse", "https://example.org");
+    rumpf.put("steuernummer", "75/123/45678");
+    rumpf.put("umsatzsteuerId", null);
+    rumpf.put("bankverbindung", "DE02 1203 0000 0000 2020 51");
+    // Auf dem aktuellen Stand der eigenen Angaben, wie die Maske (Plan #415, E2).
+    assertThat(
+            rest.exchange(
+                    "/api/eigene-angaben",
+                    HttpMethod.PUT,
+                    new HttpEntity<>(rumpf, Stand.aktuell(sitzung, jdbc, "eigene_angaben", 1L)),
+                    String.class)
+                .getStatusCode())
+        .isEqualTo(HttpStatus.OK);
+  }
+
+  /** Die Zahl der offenen Rechnungen auf der Startseite. */
+  private int offeneRechnungen() {
+    return Objects.requireNonNull(
+            ruf("/api/startseite", HttpMethod.GET, null, StartseiteResponse.class).getBody())
+        .offeneRechnungen()
+        .anzahl();
+  }
+
+  /** Die Netto-Einnahmen des Jahres 2026 im Jahresabschluss. */
+  private BigDecimal einnahmen2026() {
+    return Objects.requireNonNull(
+            ruf("/api/jahresabschluesse/2026", HttpMethod.GET, null, JahresabschlussResponse.class)
+                .getBody())
+        .einnahmen()
+        .netto();
   }
 
   private AngebotAbrechnungResponse abrechnung(final long angebotId) {
@@ -272,21 +404,156 @@ class RechnungEntwurfIT extends AbstractIntegrationTest {
   }
 
   @Test
-  void loeschen_thenTheMengenAreOffenAgain() {
+  void loeschen_thenTheMengenAreOffenAgainAndTheRowStaysMarked() {
     // Given — ein Entwurf ueber die vollen 160 Stunden.
     final long angebotId = bestelltesAngebot("160.00");
     final RechnungResponse entwurf = entwurfZu(angebotId);
     assertThat(abrechnung(angebotId).positionen().getFirst().offen()).isEqualByComparingTo("0");
 
     // When
-    final ResponseEntity<Void> antwort =
-        ruf("/api/rechnungen/" + entwurf.id(), HttpMethod.DELETE, null, Void.class);
+    final ResponseEntity<Void> antwort = loesche(entwurf.id());
 
-    // Then
+    // Then — Abrechnungsstand (findByAngebot): der geloeschte Entwurf zaehlt nicht mehr.
     assertThat(antwort.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
     assertThat(abrechnung(angebotId).positionen().getFirst().offen())
         .isEqualByComparingTo("160.00");
     assertThat(abrechnung(angebotId).rechnungen()).isEmpty();
+
+    // Then — Plan #415, E17: die Kopfzeile bleibt mit Urheber und Zeitpunkt, die Positionen gehen.
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT count(*) FROM rechnung"
+                    + " WHERE id = ? AND geloescht_am IS NOT NULL AND geloescht_von IS NOT NULL",
+                Long.class,
+                Long.valueOf(entwurf.id())))
+        .isOne();
+    assertThat(positionszeilen(entwurf.id())).isZero();
+  }
+
+  @Test
+  void loeschen_withAnOutdatedStand_thenConflictAndNothingIsRemoved() {
+    // Given — #411, Kriterium 6: Manfred hat den Entwurf auf Stand 0 geoeffnet, inzwischen wurde
+    // er auf 80 Stunden geaendert.
+    final long angebotId = bestelltesAngebot("160.00");
+    final RechnungResponse entwurf = entwurfZu(angebotId);
+    setzeMenge(entwurf, "80.00");
+
+    // When
+    final ResponseEntity<String> antwort =
+        rest.exchange(
+            "/api/rechnungen/" + entwurf.id(),
+            HttpMethod.DELETE,
+            new HttpEntity<>(null, mitStand(entwurf.version())),
+            String.class);
+
+    // Then — abgewiesen, der Entwurf steht unveraendert und ungekennzeichnet.
+    assertThat(antwort.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+    assertThat(antwort.getBody()).contains("\"art\":\"veraltet\"");
+    assertThat(geloeschteZeilen()).isZero();
+    assertThat(positionszeilen(entwurf.id())).isOne();
+    assertThat(lies(entwurf.id()).getStatusCode()).isEqualTo(HttpStatus.OK);
+  }
+
+  @Test
+  void jederWeg_atADeletedEntwurf_thenConflictAsGeloeschtAndNothingArises() {
+    // Given — #411, Kriterium 6: der Entwurf ist inzwischen geloescht.
+    final long angebotId = bestelltesAngebot("160.00");
+    final RechnungResponse entwurf = entwurfZu(angebotId);
+    loesche(entwurf.id());
+    final Long nummernkreiseVorher =
+        jdbc.queryForObject("SELECT count(*) FROM rechnung_nummernkreis", Long.class);
+    final Map<String, Object> zustand = Map.of("zustand", "BEZAHLT");
+    final Map<String, Object> aenderung = new LinkedHashMap<>();
+    aenderung.put("rechnungDatum", "2026-09-30");
+    aenderung.put("leistungszeitraum", "September 2026");
+    aenderung.put("positionen", List.of());
+
+    // When / Then — Aendern, Loeschen, Zustand und Stellen: 409 mit „gelöscht", Urheber genannt.
+    final String pfad = "/api/rechnungen/" + entwurf.id();
+    assertThat(
+            List.of(
+                rufAufStand(pfad, HttpMethod.PUT, aenderung, String.class, entwurf.id()),
+                rufAufStand(pfad, HttpMethod.DELETE, null, String.class, entwurf.id()),
+                rufAufStand(pfad + "/zustand", HttpMethod.PUT, zustand, String.class, entwurf.id()),
+                rufAufStand(pfad + "/stellen", HttpMethod.POST, null, String.class, entwurf.id())))
+        .allSatisfy(
+            antwort -> {
+              assertThat(antwort.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+              assertThat(antwort.getBody())
+                  .contains("\"art\":\"gelöscht\"")
+                  .contains("\"eigenesFenster\":true");
+            });
+
+    // Then — Einzelabruf: fuer jeden Leseweg fort; nichts ist neu entstanden.
+    assertThat(lies(entwurf.id()).getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+    assertThat(jdbc.queryForObject("SELECT count(*) FROM rechnung", Long.class)).isOne();
+    assertThat(positionszeilen(entwurf.id())).isZero();
+    assertThat(jdbc.queryForObject("SELECT count(*) FROM rechnung_nummernkreis", Long.class))
+        .isEqualTo(nummernkreiseVorher);
+  }
+
+  @Test
+  void liste_withADeletedEntwurf_thenItIsNotListed() {
+    // Given — Listen (findAlle): ein lebender und ein geloeschter Entwurf.
+    final long angebotId = bestelltesAngebot("160.00");
+    final RechnungResponse bleibt = entwurfZu(angebotId);
+    setzeMenge(bleibt, "80.00");
+    loesche(entwurfZu(angebotId).id());
+
+    // When
+    final RechnungenUebersichtResponse liste =
+        Objects.requireNonNull(
+            ruf("/api/rechnungen", HttpMethod.GET, null, RechnungenUebersichtResponse.class)
+                .getBody());
+
+    // Then
+    assertThat(liste.rechnungen())
+        .singleElement()
+        .satisfies(zeile -> assertThat(zeile.id()).isEqualTo(bleibt.id()));
+  }
+
+  @Test
+  void abrechenbareAngebote_afterTheEntwurfWasDeleted_thenTheAngebotIsBillableAgain() {
+    // Given — Listen (findAlle): der Entwurf trug den ganzen Rest und ist geloescht.
+    final long angebotId = bestelltesAngebot("10.00");
+    loesche(entwurfZu(angebotId).id());
+
+    // When
+    final String antwort =
+        ruf("/api/rechnungen/abrechenbare-angebote", HttpMethod.GET, null, String.class).getBody();
+
+    // Then
+    assertThat(antwort).contains("\"angebotId\":" + angebotId);
+  }
+
+  @Test
+  void startseiteUndJahresabschluss_withADeletedRechnung_thenItDoesNotCount() {
+    // Given — eine gestellte Rechnung ueber 80 Stunden zu 100,00 €, noch offen.
+    eigeneAngabenSetzen();
+    final long angebotId = bestelltesAngebot("160.00");
+    final RechnungResponse entwurf = entwurfZu(angebotId);
+    setzeMenge(entwurf, "80.00");
+    assertThat(
+            rufAufStand(
+                    "/api/rechnungen/" + entwurf.id() + "/stellen",
+                    HttpMethod.POST,
+                    null,
+                    String.class,
+                    entwurf.id())
+                .getStatusCode())
+        .isEqualTo(HttpStatus.OK);
+    assertThat(offeneRechnungen()).isOne();
+    assertThat(einnahmen2026()).isEqualByComparingTo("8000.00");
+
+    // When — gekennzeichnet. Ueber die Schnittstelle laesst sich nur ein Entwurf loeschen, und der
+    // zaehlt auf beiden Seiten ohnehin nicht; die Zusage der Filterstelle gilt aber fuer jede
+    // gekennzeichnete Zeile (Plan #415, E17), darum setzt der Test das Kennzeichen direkt.
+    jdbc.update(
+        "UPDATE rechnung SET geloescht_am = now() WHERE id = ?", Long.valueOf(entwurf.id()));
+
+    // Then — Startseite (Rechnungsauskunft, OffenePosten) und Jahresabschluss lassen sie aus.
+    assertThat(offeneRechnungen()).isZero();
+    assertThat(einnahmen2026()).isEqualByComparingTo("0");
   }
 
   @Test

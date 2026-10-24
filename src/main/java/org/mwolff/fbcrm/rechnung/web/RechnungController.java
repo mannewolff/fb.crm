@@ -2,6 +2,7 @@ package org.mwolff.fbcrm.rechnung.web;
 
 import jakarta.validation.Valid;
 import org.mwolff.fbcrm.common.web.Anlagekopf;
+import org.mwolff.fbcrm.common.web.Bedingungskopf;
 import org.mwolff.fbcrm.rechnung.application.RechnungAendernUseCase;
 import org.mwolff.fbcrm.rechnung.application.RechnungDokumentLesenUseCase;
 import org.mwolff.fbcrm.rechnung.application.RechnungLesenUseCase;
@@ -15,6 +16,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -38,6 +40,12 @@ import org.springframework.web.bind.annotation.RestController;
  * gerechneten Werte geaendert — Netto, Steuer, Brutto und je Zeile offen und Ueberschreitung —, und
  * die Maske soll sie ohne zweiten Aufruf zeigen. Gelesen wird dafuer derselbe Weg wie beim {@code
  * GET}: Zwei Abbildungen auf dieselbe Ansicht liefen auseinander.
+ *
+ * <p><b>Aendern, Stellen und Zustand legen den Stand vor</b> (#411, Kriterien 4 und 5; Plan #415,
+ * E2, E3, E10, E14): Sie lesen {@link Bedingungskopf} aus {@code If-Match} und das handelnde Konto
+ * aus der Sitzung. Fehlt der Kopf, antwortet der Weg mit 428, ohne den Anwendungsfall zu fragen.
+ * Das Loeschen ebenso; ist der Entwurf inzwischen geloescht, antwortet jeder dieser Wege mit 409
+ * und {@code konflikt.art = "gelöscht"} (E16), das Lesen dagegen mit 404.
  */
 @RestController
 @RequestMapping("/api/rechnungen/{id}")
@@ -71,11 +79,19 @@ public class RechnungController {
     return RechnungResponse.of(lesenUseCase.lese(id));
   }
 
-  /** Aendert den Entwurf als Ganzes und liefert seinen neuen Stand (Kriterien 4, 5, 10). */
+  /**
+   * Aendert den Entwurf als Ganzes und liefert seinen neuen Stand (Kriterien 4, 5, 10).
+   *
+   * <p>Der Kopf steht vor dem Rumpf: Fehlt er, weist der Weg mit 428 ab, bevor der Rumpf gelesen
+   * und geprueft wird (Plan #415, E3).
+   */
   @PutMapping
   public RechnungResponse aendern(
-      @PathVariable final long id, @Valid @RequestBody final RechnungRequest anfrage) {
-    aendernUseCase.aendere(id, anfrage.daten());
+      @PathVariable final long id,
+      final Bedingungskopf stand,
+      @AuthenticationPrincipal final Long accountId,
+      @Valid @RequestBody final RechnungRequest anfrage) {
+    aendernUseCase.aendere(id, anfrage.daten(stand.version(), accountId));
     return RechnungResponse.of(lesenUseCase.lese(id));
   }
 
@@ -85,10 +101,15 @@ public class RechnungController {
    * <p>Gelesen wird dafuer derselbe Weg wie beim {@code GET}, damit die gestellte Rechnung nach dem
    * Stellen genauso aussieht wie nach dem Neuladen. 200 und nicht 201: Es entsteht keine neue
    * Ressource, die vorhandene wechselt ihren Zustand.
+   *
+   * <p>Vorgelegt wird allein der Stand des Entwurfs (Plan #415, E10).
    */
   @PostMapping("/stellen")
-  public RechnungResponse stellen(@PathVariable final long id) {
-    stellenUseCase.stelle(id);
+  public RechnungResponse stellen(
+      @PathVariable final long id,
+      final Bedingungskopf stand,
+      @AuthenticationPrincipal final Long accountId) {
+    stellenUseCase.stelle(id, stand.version(), accountId);
     return RechnungResponse.of(lesenUseCase.lese(id));
   }
 
@@ -109,8 +130,11 @@ public class RechnungController {
    */
   @PutMapping("/zustand")
   public RechnungResponse zustand(
-      @PathVariable final long id, @Valid @RequestBody final RechnungZustandRequest anfrage) {
-    zustandUseCase.setze(id, anfrage.zustand());
+      @PathVariable final long id,
+      final Bedingungskopf stand,
+      @AuthenticationPrincipal final Long accountId,
+      @Valid @RequestBody final RechnungZustandRequest anfrage) {
+    zustandUseCase.setze(id, anfrage.zustand(), stand.version(), accountId);
     return RechnungResponse.of(lesenUseCase.lese(id));
   }
 
@@ -142,10 +166,16 @@ public class RechnungController {
         .body(new InputStreamResource(dokument.inhalt()));
   }
 
-  /** Loescht den Entwurf (Kriterium 12). */
+  /**
+   * Loescht den Entwurf (Kriterium 12) — mit Kennzeichen, auf dem vorgelegten Stand (Plan #415,
+   * E16, E17).
+   */
   @DeleteMapping
   @ResponseStatus(HttpStatus.NO_CONTENT)
-  public void loeschen(@PathVariable final long id) {
-    loeschenUseCase.loesche(id);
+  public void loeschen(
+      @PathVariable final long id,
+      final Bedingungskopf stand,
+      @AuthenticationPrincipal final Long accountId) {
+    loeschenUseCase.loesche(id, stand.version(), accountId);
   }
 }

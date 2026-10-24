@@ -10,6 +10,7 @@ import static org.mockito.Mockito.when;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
@@ -106,6 +107,19 @@ class RechnungDokumentLesenUseCaseTest {
   }
 
   @Test
+  void lese_aDeletedRechnung_thenNotFound() {
+    // Given — Plan #415, E17: eine gekennzeichnete Rechnung ist fuer jeden Leseweg fort.
+    when(rechnungen.findById(RECHNUNG))
+        .thenReturn(
+            Optional.of(
+                Rechnungsdoppel.geloescht(RECHNUNG, 30L, Instant.parse("2026-10-05T08:42:00Z"))));
+
+    // When / Then
+    assertThatThrownBy(() -> useCase.lese(RECHNUNG)).isInstanceOf(RechnungNichtGefunden.class);
+    verify(dokumente, never()).lies(anyString());
+  }
+
+  @Test
   void lese_anEntwurf_thenItIsRejected() {
     // Given — ein Entwurf hat noch kein Dokument; es entsteht erst mit dem Stellen.
     when(rechnungen.findById(RECHNUNG))
@@ -171,7 +185,9 @@ class RechnungDokumentLesenUseCaseTest {
         rechnung.empfaenger(),
         rechnung.absender(),
         rechnung.createdAt(),
-        rechnung.updatedAt());
+        rechnung.updatedAt(),
+        rechnung.version(),
+        rechnung.geaendertVon());
   }
 
   private static Rechnung ohneNummer(final Rechnung rechnung) {
@@ -190,6 +206,8 @@ class RechnungDokumentLesenUseCaseTest {
         rechnung.empfaenger(),
         rechnung.absender(),
         rechnung.createdAt(),
-        rechnung.updatedAt());
+        rechnung.updatedAt(),
+        rechnung.version(),
+        rechnung.geaendertVon());
   }
 }

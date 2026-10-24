@@ -3,6 +3,7 @@ package org.mwolff.fbcrm.arbeitszeit.web;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.nullValue;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -20,6 +21,7 @@ import java.time.LocalTime;
 import java.time.YearMonth;
 import java.util.List;
 import java.util.Optional;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -32,14 +34,27 @@ import org.mwolff.fbcrm.arbeitszeit.application.Arbeitstag;
 import org.mwolff.fbcrm.arbeitszeit.application.ArbeitszeitMonatUseCase;
 import org.mwolff.fbcrm.arbeitszeit.application.BuchbarePositionenUseCase;
 import org.mwolff.fbcrm.arbeitszeit.application.Buchungsposition;
+import org.mwolff.fbcrm.arbeitszeit.application.PersonNichtWaehlbar;
+import org.mwolff.fbcrm.arbeitszeit.application.Personenauskunft;
+import org.mwolff.fbcrm.arbeitszeit.application.Personenauswahl;
+import org.mwolff.fbcrm.arbeitszeit.application.PersonenauswahlUngueltig;
 import org.mwolff.fbcrm.arbeitszeit.application.PositionNichtBuchbar;
 import org.mwolff.fbcrm.arbeitszeit.application.UhrzeitNichtImRaster;
+import org.mwolff.fbcrm.arbeitszeit.application.WaehlbarePerson;
 import org.mwolff.fbcrm.arbeitszeit.application.Zeitbuchung;
+import org.mwolff.fbcrm.arbeitszeit.application.ZeiteintragGeaendert;
+import org.mwolff.fbcrm.arbeitszeit.application.ZeiteintragGeloescht;
 import org.mwolff.fbcrm.arbeitszeit.application.ZeiteintragNichtGefunden;
 import org.mwolff.fbcrm.arbeitszeit.application.ZeiteintragUseCase;
 import org.mwolff.fbcrm.arbeitszeit.domain.Zeiteintrag;
+import org.mwolff.fbcrm.common.Urheber;
+import org.mwolff.fbcrm.common.web.Bedingungskopf;
 import org.mwolff.fbcrm.common.web.GlobalExceptionHandler;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.web.method.annotation.AuthenticationPrincipalArgumentResolver;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
@@ -54,9 +69,14 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
  * <p>Gegenstand sind die Statuscodes — 201 beim Anlegen, 200 beim Aendern, 204 beim Loeschen, 404
  * bei unbekannter Kennung —, die Felder der Antwort samt der gerechneten Dauer und die
  * Feldmeldungen der fachlichen Abweisungen (422). Dazu die beiden Lesewege: die Monatsliste mit
- * ihren Summen (Plan #194, A20) und die buchbaren Positionen (A15). Der Monat ist ein optionaler
- * Parameter — fehlt er, fragt der Controller ohne Monat und der Anwendungsfall nimmt den laufenden;
- * ein unbrauchbarer Monat ist eine fehlerhafte Anfrage (400).
+ * ihren Summen (Plan #194, A20), die buchbaren Positionen (A15) und die waehlbaren Personen (Plan
+ * #426, E11). Der Monat ist ein optionaler Parameter — fehlt er, fragt der Controller ohne Monat
+ * und der Anwendungsfall nimmt den laufenden; ein unbrauchbarer Monat ist eine fehlerhafte Anfrage
+ * (400).
+ *
+ * <p>Die Sitzung steht als {@link SecurityContextHolder} mit der Kennung des Kontos als Principal,
+ * wie in {@code AngebotKommentareControllerTest}: Ein neuer Eintrag gehoert dem angemeldeten Konto
+ * (Plan #426, E1), und die Kennung kommt aus der Sitzung, nicht aus dem Rumpf.
  *
  * <p><b>Welche Felder</b> die Antwort traegt, entscheidet dieser Layer; <b>wie</b> Tag und Uhrzeit
  * geschrieben werden, entscheidet der von Spring Boot gebaute ObjectMapper, den {@code
@@ -70,18 +90,39 @@ class ArbeitszeitControllerTest {
   private static final String PFAD_EINZELN = PFAD + "/{id}";
 
   private static final long EINTRAG = 4L;
+  private static final long ANGEMELDET = 21L;
   private static final long POSITION = 101L;
   private static final LocalDate TAG = LocalDate.of(2026, 11, 12);
   private static final Instant ANGELEGT = Instant.parse("2026-11-12T08:00:00Z");
+
+  private static final long BEN = 22L;
+  private static final Optional<Long> OHNE_PERSON = Optional.empty();
+
+  /** Der Stand, den die Ansicht vorlegt (Plan #415, E2). */
+  private static final long STAND = 3L;
+
+  /** Derselbe Stand als starkes Etikett im Kopf {@code If-Match}. */
+  private static final String VORGELEGT = "\"" + STAND + "\"";
+
+  /** Das Konto, das den Eintrag vorher geaendert hat. */
+  private static final long ANNA = 30L;
+
+  private static final Instant VORHIN = Instant.parse("2026-11-12T09:12:00Z");
 
   private static final String RUMPF =
       """
       {"angebotPositionId":101,"tag":"2026-11-12","von":"09:00","bis":"10:45"}
       """;
 
+  private static final String RUMPF_FUER_BEN =
+      """
+      {"angebotPositionId":101,"tag":"2026-11-12","von":"09:00","bis":"10:45","accountId":22}
+      """;
+
   @Mock private ZeiteintragUseCase useCase;
   @Mock private ArbeitszeitMonatUseCase monate;
   @Mock private BuchbarePositionenUseCase buchbare;
+  @Mock private Personenauskunft personen;
 
   @Captor private ArgumentCaptor<LocalTime> von;
 
@@ -89,15 +130,51 @@ class ArbeitszeitControllerTest {
 
   @BeforeEach
   void baueDenController() {
+    SecurityContextHolder.getContext()
+        .setAuthentication(
+            UsernamePasswordAuthenticationToken.authenticated(
+                Long.valueOf(ANGEMELDET), null, List.of()));
     mockMvc =
-        MockMvcBuilders.standaloneSetup(new ArbeitszeitController(useCase, monate, buchbare))
-            .setControllerAdvice(new GlobalExceptionHandler())
+        MockMvcBuilders.standaloneSetup(
+                new ArbeitszeitController(useCase, monate, buchbare, personen))
+            .setControllerAdvice(
+                new GlobalExceptionHandler(
+                    konto ->
+                        konto == ANNA ? Optional.of(new Urheber(ANNA, "Anna")) : Optional.empty()))
+            .setCustomArgumentResolvers(
+                new Bedingungskopf.Leser(), new AuthenticationPrincipalArgumentResolver())
             .build();
   }
 
+  @AfterEach
+  void raeumeDieSitzungAb() {
+    SecurityContextHolder.clearContext();
+  }
+
   private static Zeiteintrag eintrag() {
+    return eintragVon(ANGEMELDET);
+  }
+
+  private static Zeiteintrag eintragMitStand(final long version) {
     return new Zeiteintrag(
         Long.valueOf(EINTRAG),
+        ANGEMELDET,
+        POSITION,
+        TAG,
+        LocalTime.of(9, 0),
+        LocalTime.of(10, 45),
+        ANGELEGT,
+        ANGELEGT,
+        version,
+        Long.valueOf(ANGEMELDET),
+        null,
+        null);
+  }
+
+  private static Zeiteintrag eintragVon(final long accountId) {
+    return new Zeiteintrag(
+        Long.valueOf(EINTRAG),
+        accountId,
         POSITION,
         TAG,
         LocalTime.of(9, 0),
@@ -109,7 +186,8 @@ class ArbeitszeitControllerTest {
   @Test
   void anlegen_thenAnswers201WithTheEntryAndItsCalculatedHours() throws Exception {
     // Given — die Dauer steht nicht in der Anfrage; sie wird gerechnet (Plan #194, A3).
-    when(useCase.anlegen(POSITION, TAG, LocalTime.of(9, 0), LocalTime.of(10, 45)))
+    when(useCase.anlegen(
+            ANGEMELDET, OHNE_PERSON, POSITION, TAG, LocalTime.of(9, 0), LocalTime.of(10, 45)))
         .thenReturn(eintrag());
 
     // When / Then
@@ -127,7 +205,13 @@ class ArbeitszeitControllerTest {
   @Test
   void anlegen_thenPassesTheSubmittedTimesToTheUseCase() throws Exception {
     // Given
-    when(useCase.anlegen(eq(POSITION), eq(TAG), von.capture(), eq(LocalTime.of(10, 45))))
+    when(useCase.anlegen(
+            eq(ANGEMELDET),
+            eq(OHNE_PERSON),
+            eq(POSITION),
+            eq(TAG),
+            von.capture(),
+            eq(LocalTime.of(10, 45))))
         .thenReturn(eintrag());
 
     // When
@@ -170,7 +254,8 @@ class ArbeitszeitControllerTest {
   @Test
   void anlegen_whenTheTimeIsOutsideTheGrid_thenAnswers422WithAFieldErrorAtVon() throws Exception {
     // Given — A19: die Meldung kommt am Feld an und nicht als Serverfehler.
-    when(useCase.anlegen(POSITION, TAG, LocalTime.of(9, 0), LocalTime.of(10, 45)))
+    when(useCase.anlegen(
+            ANGEMELDET, OHNE_PERSON, POSITION, TAG, LocalTime.of(9, 0), LocalTime.of(10, 45)))
         .thenThrow(UhrzeitNichtImRaster.anVon());
 
     // When / Then
@@ -184,7 +269,8 @@ class ArbeitszeitControllerTest {
   void anlegen_whenThePositionIsNotBookable_thenAnswers422WithAFieldErrorAtThePosition()
       throws Exception {
     // Given — Antworten 2, 3 und 5.
-    when(useCase.anlegen(POSITION, TAG, LocalTime.of(9, 0), LocalTime.of(10, 45)))
+    when(useCase.anlegen(
+            ANGEMELDET, OHNE_PERSON, POSITION, TAG, LocalTime.of(9, 0), LocalTime.of(10, 45)))
         .thenThrow(PositionNichtBuchbar.amKundenangebot());
 
     // When / Then
@@ -197,13 +283,22 @@ class ArbeitszeitControllerTest {
   @Test
   void aendern_thenAnswers200WithTheChangedEntry() throws Exception {
     // Given — Kriterium 6.
-    when(useCase.aendern(EINTRAG, POSITION, TAG, LocalTime.of(9, 0), LocalTime.of(10, 45)))
+    when(useCase.aendern(
+            ANGEMELDET,
+            EINTRAG,
+            STAND,
+            OHNE_PERSON,
+            POSITION,
+            TAG,
+            LocalTime.of(9, 0),
+            LocalTime.of(10, 45)))
         .thenReturn(eintrag());
 
     // When / Then
     mockMvc
         .perform(
             put(PFAD_EINZELN, Long.valueOf(EINTRAG))
+                .header(HttpHeaders.IF_MATCH, VORGELEGT)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(RUMPF))
         .andExpect(status().isOk())
@@ -214,23 +309,264 @@ class ArbeitszeitControllerTest {
   @Test
   void aendern_whenTheEntryIsUnknown_thenAnswers404() throws Exception {
     // Given
-    when(useCase.aendern(EINTRAG, POSITION, TAG, LocalTime.of(9, 0), LocalTime.of(10, 45)))
+    when(useCase.aendern(
+            ANGEMELDET,
+            EINTRAG,
+            STAND,
+            OHNE_PERSON,
+            POSITION,
+            TAG,
+            LocalTime.of(9, 0),
+            LocalTime.of(10, 45)))
         .thenThrow(new ZeiteintragNichtGefunden());
 
     // When / Then
     mockMvc
         .perform(
             put(PFAD_EINZELN, Long.valueOf(EINTRAG))
+                .header(HttpHeaders.IF_MATCH, VORGELEGT)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(RUMPF))
         .andExpect(status().isNotFound());
   }
 
   @Test
-  void loeschen_thenAnswers204AndDelegates() throws Exception {
+  void aendern_thenTheAnswerCarriesTheRaisedVersion() throws Exception {
+    // Given — Plan #415, E2: der Bestand hat den Stand beim Schreiben erhoeht.
+    when(useCase.aendern(
+            ANGEMELDET,
+            EINTRAG,
+            STAND,
+            OHNE_PERSON,
+            POSITION,
+            TAG,
+            LocalTime.of(9, 0),
+            LocalTime.of(10, 45)))
+        .thenReturn(eintragMitStand(STAND + 1));
+
     // When / Then
-    mockMvc.perform(delete(PFAD_EINZELN, Long.valueOf(EINTRAG))).andExpect(status().isNoContent());
-    verify(useCase).loeschen(EINTRAG);
+    mockMvc
+        .perform(
+            put(PFAD_EINZELN, Long.valueOf(EINTRAG))
+                .header(HttpHeaders.IF_MATCH, VORGELEGT)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(RUMPF))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.version").value(STAND + 1));
+  }
+
+  @Test
+  void aendern_withoutIfMatch_thenAnswers428AndChangesNothing() throws Exception {
+    // When / Then — E3: ohne vorgelegten Stand wird nicht geschrieben.
+    mockMvc
+        .perform(
+            put(PFAD_EINZELN, Long.valueOf(EINTRAG))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(RUMPF))
+        .andExpect(status().isPreconditionRequired())
+        .andExpect(jsonPath("$.detail").value(Bedingungskopf.MELDUNG));
+    verifyNoInteractions(useCase);
+  }
+
+  @Test
+  void aendern_withAnOutdatedStand_thenAnswers409WithTheConflict() throws Exception {
+    // Given — #411, Kriterium 1: Anna hat den Eintrag inzwischen geaendert.
+    when(useCase.aendern(
+            ANGEMELDET,
+            EINTRAG,
+            STAND,
+            OHNE_PERSON,
+            POSITION,
+            TAG,
+            LocalTime.of(9, 0),
+            LocalTime.of(10, 45)))
+        .thenThrow(new ZeiteintragGeaendert(ANNA, ANGEMELDET, VORHIN));
+
+    // When / Then
+    mockMvc
+        .perform(
+            put(PFAD_EINZELN, Long.valueOf(EINTRAG))
+                .header(HttpHeaders.IF_MATCH, VORGELEGT)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(RUMPF))
+        .andExpect(status().isConflict())
+        .andExpect(jsonPath("$.konflikt.art").value("veraltet"))
+        .andExpect(jsonPath("$.konflikt.geaendertVon").value("Anna"))
+        .andExpect(jsonPath("$.konflikt.geaendertAm").value("2026-11-12T09:12:00Z"))
+        .andExpect(jsonPath("$.konflikt.eigenesFenster").value(false));
+  }
+
+  @Test
+  void anlegen_withoutIfMatch_thenCreatesTheEntry() throws Exception {
+    // Given — #411, Kriterium 7: ein neuer Zeiteintrag entsteht ohne Rueckfrage nach dem Stand.
+    when(useCase.anlegen(
+            ANGEMELDET, OHNE_PERSON, POSITION, TAG, LocalTime.of(9, 0), LocalTime.of(10, 45)))
+        .thenReturn(eintragMitStand(0L));
+
+    // When / Then
+    mockMvc
+        .perform(post(PFAD).contentType(MediaType.APPLICATION_JSON).content(RUMPF))
+        .andExpect(status().isCreated())
+        .andExpect(jsonPath("$.version").value(0L));
+  }
+
+  @Test
+  void loeschen_thenAnswers204AndDelegatesWithTheStand() throws Exception {
+    // When / Then — Plan #415, E2, E17: der vorgelegte Stand geht mit dem Konto weiter.
+    mockMvc
+        .perform(
+            delete(PFAD_EINZELN, Long.valueOf(EINTRAG)).header(HttpHeaders.IF_MATCH, VORGELEGT))
+        .andExpect(status().isNoContent());
+    verify(useCase).loeschen(ANGEMELDET, EINTRAG, STAND);
+  }
+
+  @Test
+  void loeschen_withoutIfMatch_thenAnswers428AndDeletesNothing() throws Exception {
+    // When / Then — E3: ohne vorgelegten Stand wird nicht geloescht.
+    mockMvc
+        .perform(delete(PFAD_EINZELN, Long.valueOf(EINTRAG)))
+        .andExpect(status().isPreconditionRequired())
+        .andExpect(jsonPath("$.detail").value(Bedingungskopf.MELDUNG));
+    verifyNoInteractions(useCase);
+  }
+
+  @Test
+  void loeschen_withAnOutdatedStand_thenAnswers409WithTheConflict() throws Exception {
+    // Given — #411, Kriterium 6: Anna hat den Eintrag inzwischen geaendert.
+    doThrow(new ZeiteintragGeaendert(ANNA, ANGEMELDET, VORHIN))
+        .when(useCase)
+        .loeschen(ANGEMELDET, EINTRAG, STAND);
+
+    // When / Then
+    mockMvc
+        .perform(
+            delete(PFAD_EINZELN, Long.valueOf(EINTRAG)).header(HttpHeaders.IF_MATCH, VORGELEGT))
+        .andExpect(status().isConflict())
+        .andExpect(jsonPath("$.konflikt.art").value("veraltet"))
+        .andExpect(jsonPath("$.konflikt.geaendertVon").value("Anna"))
+        .andExpect(jsonPath("$.konflikt.geaendertAm").value("2026-11-12T09:12:00Z"));
+  }
+
+  @Test
+  void loeschen_onADeletedEntry_thenAnswers409WithArtGeloescht() throws Exception {
+    // Given — E16: Anna hat den Eintrag schon geloescht.
+    doThrow(new ZeiteintragGeloescht(ANNA, ANGEMELDET, VORHIN))
+        .when(useCase)
+        .loeschen(ANGEMELDET, EINTRAG, STAND);
+
+    // When / Then
+    mockMvc
+        .perform(
+            delete(PFAD_EINZELN, Long.valueOf(EINTRAG)).header(HttpHeaders.IF_MATCH, VORGELEGT))
+        .andExpect(status().isConflict())
+        .andExpect(jsonPath("$.konflikt.art").value("gelöscht"))
+        .andExpect(jsonPath("$.konflikt.geaendertVon").value("Anna"))
+        .andExpect(jsonPath("$.konflikt.geaendertAm").value("2026-11-12T09:12:00Z"));
+  }
+
+  @Test
+  void aendern_onADeletedEntry_thenAnswers409WithArtGeloescht() throws Exception {
+    // Given — E16: Speichern auf einen geloeschten Eintrag legt nichts neu an.
+    when(useCase.aendern(
+            ANGEMELDET,
+            EINTRAG,
+            STAND,
+            OHNE_PERSON,
+            POSITION,
+            TAG,
+            LocalTime.of(9, 0),
+            LocalTime.of(10, 45)))
+        .thenThrow(new ZeiteintragGeloescht(ANNA, ANGEMELDET, VORHIN));
+
+    // When / Then
+    mockMvc
+        .perform(
+            put(PFAD_EINZELN, Long.valueOf(EINTRAG))
+                .header(HttpHeaders.IF_MATCH, VORGELEGT)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(RUMPF))
+        .andExpect(status().isConflict())
+        .andExpect(jsonPath("$.konflikt.art").value("gelöscht"));
+  }
+
+  @Test
+  void anlegen_withAPerson_thenPassesItAndTheSignedInAccountUnchanged() throws Exception {
+    // Given — Plan #426, E12: die Person ist freiwillig; ob sie waehlbar ist, entscheidet der
+    // Anwendungsfall und nicht der Controller (E6).
+    when(useCase.anlegen(
+            ANGEMELDET,
+            Optional.of(Long.valueOf(BEN)),
+            POSITION,
+            TAG,
+            LocalTime.of(9, 0),
+            LocalTime.of(10, 45)))
+        .thenReturn(eintragVon(BEN));
+
+    // When / Then — die Antwort nennt die Person des gespeicherten Eintrags.
+    mockMvc
+        .perform(post(PFAD).contentType(MediaType.APPLICATION_JSON).content(RUMPF_FUER_BEN))
+        .andExpect(status().isCreated())
+        .andExpect(jsonPath("$.accountId").value(Long.valueOf(BEN)));
+  }
+
+  @Test
+  void anlegen_thenTheAnswerNamesThePersonOfTheEntry() throws Exception {
+    // Given — ohne Feld gehoert der Eintrag dem angemeldeten Konto (E12).
+    when(useCase.anlegen(
+            ANGEMELDET, OHNE_PERSON, POSITION, TAG, LocalTime.of(9, 0), LocalTime.of(10, 45)))
+        .thenReturn(eintrag());
+
+    // When / Then
+    mockMvc
+        .perform(post(PFAD).contentType(MediaType.APPLICATION_JSON).content(RUMPF))
+        .andExpect(status().isCreated())
+        .andExpect(jsonPath("$.accountId").value(Long.valueOf(ANGEMELDET)));
+  }
+
+  @Test
+  void anlegen_whenThePersonIsNotSelectable_thenAnswers422WithAFieldErrorAtThePerson()
+      throws Exception {
+    // Given — E12: die Meldung gehoert an das Feld, an dem ein C-Level die Person waehlt.
+    when(useCase.anlegen(
+            ANGEMELDET,
+            Optional.of(Long.valueOf(BEN)),
+            POSITION,
+            TAG,
+            LocalTime.of(9, 0),
+            LocalTime.of(10, 45)))
+        .thenThrow(new PersonNichtWaehlbar());
+
+    // When / Then
+    mockMvc
+        .perform(post(PFAD).contentType(MediaType.APPLICATION_JSON).content(RUMPF_FUER_BEN))
+        .andExpect(status().isUnprocessableEntity())
+        .andExpect(jsonPath("$.detail").value(PersonNichtWaehlbar.MELDUNG))
+        .andExpect(jsonPath("$.fieldErrors.accountId[0]").value(PersonNichtWaehlbar.MELDUNG));
+  }
+
+  @Test
+  void aendern_withAPerson_thenPassesItAndTheSignedInAccountUnchanged() throws Exception {
+    // Given — E13: Umhaengen ist dasselbe PUT mit genannter Person.
+    when(useCase.aendern(
+            ANGEMELDET,
+            EINTRAG,
+            STAND,
+            Optional.of(Long.valueOf(BEN)),
+            POSITION,
+            TAG,
+            LocalTime.of(9, 0),
+            LocalTime.of(10, 45)))
+        .thenReturn(eintragVon(BEN));
+
+    // When / Then
+    mockMvc
+        .perform(
+            put(PFAD_EINZELN, Long.valueOf(EINTRAG))
+                .header(HttpHeaders.IF_MATCH, VORGELEGT)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(RUMPF_FUER_BEN))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.accountId").value(Long.valueOf(BEN)));
   }
 
   private static Buchungsposition position() {
@@ -250,11 +586,22 @@ class ArbeitszeitControllerTest {
   }
 
   private static Arbeitsmonat november() {
+    return november(new Personenauswahl.Einzeln(ANGEMELDET));
+  }
+
+  private static Arbeitsmonat november(final Personenauswahl auswahl) {
     return new Arbeitsmonat(
         YearMonth.of(2026, 11),
+        auswahl,
         List.of(
             new Arbeitstag(
-                TAG, List.of(new Zeitbuchung(eintrag(), position())), new BigDecimal("1.75"))),
+                TAG,
+                List.of(
+                    new Zeitbuchung(
+                        eintragMitStand(STAND),
+                        position(),
+                        new WaehlbarePerson(ANGEMELDET, "Manne", true))),
+                new BigDecimal("1.75"))),
         new BigDecimal("1.75"),
         new BigDecimal("1.00"),
         new BigDecimal("0.75"));
@@ -263,7 +610,8 @@ class ArbeitszeitControllerTest {
   @Test
   void monat_thenAnswers200WithTheDaysTheirSumsAndThePositionOfEachEntry() throws Exception {
     // Given — A20: die Zeile zeigt Position, Angebot und Firma, der Tag seine Summe.
-    when(monate.monat(Optional.of(YearMonth.of(2026, 11)))).thenReturn(november());
+    when(monate.monat(ANGEMELDET, Optional.of(YearMonth.of(2026, 11)), Optional.empty()))
+        .thenReturn(november());
 
     // When / Then
     mockMvc
@@ -280,17 +628,52 @@ class ArbeitszeitControllerTest {
         .andExpect(jsonPath("$.tage[0].eintraege[0].position.angebotId").value(11))
         .andExpect(jsonPath("$.tage[0].eintraege[0].position.angebotDatum").exists())
         .andExpect(jsonPath("$.tage[0].eintraege[0].position.intern").value(true))
-        .andExpect(jsonPath("$.tage[0].eintraege[0].position.firmaName").value("IT Bildungshaus"));
+        .andExpect(jsonPath("$.tage[0].eintraege[0].position.firmaName").value("IT Bildungshaus"))
+        // Plan #426, E14 und E10: jede Zeile traegt ihre Person, der Monat die geltende Auswahl.
+        .andExpect(jsonPath("$.tage[0].eintraege[0].person.id").value(Long.valueOf(ANGEMELDET)))
+        .andExpect(jsonPath("$.tage[0].eintraege[0].person.name").value("Manne"))
+        .andExpect(jsonPath("$.tage[0].eintraege[0].person.aktiv").value(true))
+        // Plan #415, E2: der Dialog zum Aendern legt den Stand der Zeile vor.
+        .andExpect(jsonPath("$.tage[0].eintraege[0].version").value(STAND))
+        .andExpect(jsonPath("$.auswahl").value(String.valueOf(ANGEMELDET)));
   }
 
   @Test
   void monat_withoutTheParameter_thenAsksWithoutAMonth() throws Exception {
     // Given — welcher Monat der laufende ist, entscheidet der Anwendungsfall an seiner Uhr (E4).
-    when(monate.monat(Optional.empty())).thenReturn(november());
+    when(monate.monat(ANGEMELDET, Optional.empty(), Optional.empty())).thenReturn(november());
 
     // When / Then
     mockMvc.perform(get(PFAD)).andExpect(status().isOk());
-    verify(monate).monat(Optional.empty());
+    verify(monate).monat(ANGEMELDET, Optional.empty(), Optional.empty());
+  }
+
+  @Test
+  void monat_withAPerson_thenPassesItAndTheSignedInAccountUnchanged() throws Exception {
+    // Given — Plan #426, E10: der Controller entscheidet nichts; auch „alle" geht so weiter, und
+    // ob es fuer dieses Konto gilt, sagt der Anwendungsfall.
+    when(monate.monat(ANGEMELDET, Optional.empty(), Optional.of("alle")))
+        .thenReturn(november(new Personenauswahl.Alle()));
+
+    // When / Then — die Antwort nennt die geltende Auswahl.
+    mockMvc
+        .perform(get(PFAD).param("person", "alle"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.auswahl").value("alle"));
+    verify(monate).monat(ANGEMELDET, Optional.empty(), Optional.of("alle"));
+  }
+
+  @Test
+  void monat_withAPersonThatIsNotSelectable_thenAnswers400() throws Exception {
+    // Given — der Parameter nennt kein Konto und nicht „alle".
+    when(monate.monat(ANGEMELDET, Optional.empty(), Optional.of("niemand")))
+        .thenThrow(new PersonenauswahlUngueltig());
+
+    // When / Then
+    mockMvc
+        .perform(get(PFAD).param("person", "niemand"))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.detail").value("Diese Person steht nicht zur Wahl."));
   }
 
   @Test
@@ -329,5 +712,25 @@ class ArbeitszeitControllerTest {
         .perform(get(PFAD + "/buchbare-positionen"))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$[0].angebotTitel").value(nullValue()));
+  }
+
+  @Test
+  void personen_thenPassesTheSignedInAccountAndMapsTheAnswer() throws Exception {
+    // Given — E6: welche Personen waehlbar sind, entscheidet der Anwendungsfall.
+    when(personen.personen(ANGEMELDET))
+        .thenReturn(
+            List.of(new WaehlbarePerson(2L, "Ben", true), new WaehlbarePerson(3L, "Clara", false)));
+
+    // When / Then
+    mockMvc
+        .perform(get(PFAD + "/personen"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$[0].id").value(2))
+        .andExpect(jsonPath("$[0].name").value("Ben"))
+        .andExpect(jsonPath("$[0].aktiv").value(true))
+        .andExpect(jsonPath("$[1].id").value(3))
+        .andExpect(jsonPath("$[1].name").value("Clara"))
+        .andExpect(jsonPath("$[1].aktiv").value(false));
+    verify(personen).personen(ANGEMELDET);
   }
 }

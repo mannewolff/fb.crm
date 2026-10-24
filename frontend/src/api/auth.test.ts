@@ -12,7 +12,7 @@ import {
   setupStatus,
 } from './auth';
 
-const KONTO = { id: 1, displayName: 'Manfred Wolff', email: 'info@mwolff.org' };
+const KONTO = { id: 1, displayName: 'Manfred Wolff', email: 'info@mwolff.org', role: 'C_LEVEL' };
 
 function fetchLiefert(bauen: () => Response) {
   return vi.spyOn(globalThis, 'fetch').mockImplementation(() => Promise.resolve(bauen()));
@@ -34,6 +34,10 @@ describe('parseMe', () => {
     expect(parseMe(KONTO)).toEqual(KONTO);
   });
 
+  it.each(['C_LEVEL', 'EMPLOYEE', 'READ_ONLY'])('nimmt die Rolle %s an', (rolle) => {
+    expect(parseMe({ ...KONTO, role: rolle }).role).toBe(rolle);
+  });
+
   it.each([
     ['ohne Objekt', 'kein Konto'],
     ['bei null', null],
@@ -43,6 +47,9 @@ describe('parseMe', () => {
     ['mit falsch typisiertem Anzeigenamen', { ...KONTO, displayName: 42 }],
     ['ohne Adresse', { id: 1, displayName: 'Manfred Wolff' }],
     ['mit falsch typisierter Adresse', { ...KONTO, email: null }],
+    ['ohne Rolle', { id: 1, displayName: 'Manfred Wolff', email: 'info@mwolff.org' }],
+    ['mit unbekannter Rolle', { ...KONTO, role: 'ADMIN' }],
+    ['mit falsch typisierter Rolle', { ...KONTO, role: 1 }],
   ])('weist eine Antwort %s zurueck', (_fall, antwort) => {
     expect(() => parseMe(antwort)).toThrow(TypeError);
   });

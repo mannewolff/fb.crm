@@ -4,6 +4,7 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 import java.time.Instant;
 import java.util.Objects;
 import org.jspecify.annotations.Nullable;
@@ -12,7 +13,8 @@ import org.mwolff.fbcrm.rechnung.domain.Briefpapierblatt;
 import org.mwolff.fbcrm.rechnung.domain.Randmasse;
 
 /**
- * Die eine Zeile der Tabelle {@code briefbogen} aus {@code V26__briefbogen.sql}.
+ * Die eine Zeile der Tabelle {@code briefbogen} aus {@code V26__briefbogen.sql} und {@code
+ * V33__version.sql}.
  *
  * <p>Die Kennung wird nicht erzeugt, sondern gesetzt: Es gibt genau die Zeile {@link #ZEILE}, und
  * die Datenbank laesst ueber ihren CHECK keine zweite zu. Dass die Kennung von Anfang an steht,
@@ -21,6 +23,12 @@ import org.mwolff.fbcrm.rechnung.domain.Randmasse;
  * <p>Die vier Spalten des Blattes sind gemeinsam NULL oder gemeinsam belegt; das haelt ein CHECK
  * der Tabelle fest. Am Schluessel allein entscheidet sich darum, ob ein Briefpapier hinterlegt ist.
  */
+/*
+ * Sechzehn Spalten ergeben sechzehn Felder: Blatt, Schalter, sechs Raender, Zeitpunkt, Stand und
+ * Urheber. Die Zeile ist die Zeile der Tabelle; sie in Teilzeilen zu zerlegen, nur um die Zahl zu
+ * druecken, braeuchte eine Kette von @AttributeOverride und klaerte nichts — wie bei RechnungEntity.
+ */
+@SuppressWarnings("PMD.TooManyFields")
 @Entity
 @Table(name = "briefbogen")
 class BriefbogenEntity {
@@ -72,6 +80,18 @@ class BriefbogenEntity {
   private Instant updatedAt;
 
   /*
+   * Der Stand der ganzen Zeile, gefuehrt von Hibernate (Plan #415, E1, E11): Schalter, Raender und
+   * Briefpapier zaehlen ihn gemeinsam weiter. Ein UPDATE mit einem anderen Stand als dem
+   * vorgelegten trifft keine Zeile und scheitert.
+   */
+  @Version
+  @Column(name = "version", nullable = false)
+  private long version;
+
+  @Column(name = "geaendert_von")
+  private @Nullable Long geaendertVon;
+
+  /*
    * JPA verlangt einen parameterlosen Konstruktor und fuellt die Felder danach selbst; NullAway
    * sieht diesen Weg nicht und meldete sonst nicht initialisierte Felder.
    */
@@ -83,19 +103,31 @@ class BriefbogenEntity {
   /**
    * Die eine Zeile zum Briefbogen — jedes Feld kommt aus dem Fachobjekt.
    *
-   * <p>Die Kennung steht nicht in der Liste; sie ist fest ({@link #ZEILE}). Der Zeitpunkt der
-   * Aenderung steht nicht am Briefbogen selbst und kommt darum als zweiter Parameter dazu.
+   * <p>Die Kennung steht nicht in der Liste; sie ist fest ({@link #ZEILE}). Zeitpunkt, Stand und
+   * Urheber der Aenderung stehen nicht am Briefbogen selbst und kommen darum als Parameter dazu.
    *
    * @param briefbogen der Briefbogen, dessen Stand die Zeile tragen soll
    * @param geaendertAm Zeitpunkt der Aenderung
+   * @param version der Stand, auf dem die Aenderung beruht
+   * @param geaendertVon Kennung des handelnden Kontos
    * @return die eine Zeile
    */
-  static BriefbogenEntity aus(final Briefbogen briefbogen, final Instant geaendertAm) {
-    return new BriefbogenEntity(briefbogen, geaendertAm);
+  static BriefbogenEntity aus(
+      final Briefbogen briefbogen,
+      final Instant geaendertAm,
+      final long version,
+      final long geaendertVon) {
+    return new BriefbogenEntity(briefbogen, geaendertAm, version, geaendertVon);
   }
 
-  private BriefbogenEntity(final Briefbogen briefbogen, final Instant geaendertAm) {
+  private BriefbogenEntity(
+      final Briefbogen briefbogen,
+      final Instant geaendertAm,
+      final long version,
+      final long geaendertVon) {
     this.id = ZEILE;
+    this.version = version;
+    this.geaendertVon = geaendertVon;
     final Briefpapierblatt blatt = briefbogen.blatt();
     if (blatt != null) {
       this.pdfSchluessel = blatt.schluessel();
@@ -145,5 +177,13 @@ class BriefbogenEntity {
 
   Instant getUpdatedAt() {
     return updatedAt;
+  }
+
+  long getVersion() {
+    return version;
+  }
+
+  @Nullable Long getGeaendertVon() {
+    return geaendertVon;
   }
 }

@@ -5,8 +5,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import KopfPfad, { KopfPfadProvider } from '../components/KopfPfad';
 import { fetchNachPfad, json, leer } from '../test/fetchNachPfad';
+import { alsRolle } from '../test/rechteDoppel';
 import { renderMitTheme } from '../test/render';
 import FirmenPage from './FirmenPage';
+
+vi.mock('../auth/rechte', () => import('../test/rechteDoppel'));
 
 /**
  * Die Tests laufen mit echter Uhr.
@@ -161,6 +164,40 @@ describe('FirmenPage — die Hauptaktion im Kartenkopf', () => {
     // Filter und Schalter stehen links daneben, in derselben Leiste (Plan E5).
     expect(kopf.getByRole('searchbox', { name: 'Suche' })).toBeInTheDocument();
     expect(kopf.getByRole('button', { name: 'auch stillgelegte' })).toBeInTheDocument();
+  });
+});
+
+describe('FirmenPage — je Rolle (Kriterium 10 von #409, Plan #414, A10)', () => {
+  it('zeigt ReadOnly die Firmen ohne „Neue Firma"', async () => {
+    alsRolle('READ_ONLY');
+    fetchNachPfad({ [weg('', false)]: json(200, { firmen: [BEISPIEL], gesamt: 1 }) });
+
+    renderSeite();
+
+    expect(await screen.findByRole('link', { name: 'Beispiel GmbH' })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Neue Firma' })).not.toBeInTheDocument();
+    // Suche und Schalter lesen nur — sie bleiben.
+    expect(screen.getByRole('searchbox', { name: 'Suche' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'auch stillgelegte' })).toBeInTheDocument();
+  });
+
+  it('bietet ReadOnly bei noch keiner Firma keinen Weg zur ersten an', async () => {
+    alsRolle('READ_ONLY');
+    fetchNachPfad({ [weg('', false)]: json(200, { firmen: [], gesamt: 0 }) });
+
+    renderSeite();
+
+    expect(await screen.findByRole('status')).toHaveTextContent('Es ist noch keine Firma angelegt.');
+    expect(screen.queryByRole('link', { name: 'Erste Firma anlegen' })).not.toBeInTheDocument();
+  });
+
+  it('zeigt einem Employee „Neue Firma", denn er darf fachlich schreiben', () => {
+    alsRolle('EMPLOYEE');
+    fetchNachPfad({ [weg('', false)]: json(200, { firmen: [BEISPIEL], gesamt: 1 }) });
+
+    renderSeite();
+
+    expect(screen.getByRole('link', { name: 'Neue Firma' })).toHaveAttribute('href', '/firmen/neu');
   });
 });
 

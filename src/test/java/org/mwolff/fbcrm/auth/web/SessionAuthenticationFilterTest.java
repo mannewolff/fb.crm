@@ -28,6 +28,7 @@ import org.mwolff.fbcrm.auth.Konten;
 import org.mwolff.fbcrm.auth.application.SessionCookie;
 import org.mwolff.fbcrm.auth.domain.Account;
 import org.mwolff.fbcrm.auth.domain.AccountRepository;
+import org.mwolff.fbcrm.auth.domain.Role;
 import org.mwolff.fbcrm.auth.domain.SessionTokenDecoding;
 import org.mwolff.fbcrm.auth.domain.SessionTokens;
 import org.mwolff.fbcrm.auth.infrastructure.SessionTokenCodec;
@@ -150,6 +151,14 @@ class SessionAuthenticationFilterTest {
     when(accounts.findById(KONTO_ID)).thenReturn(Optional.of(konto(GENERATION)));
   }
 
+  private void stillgelegtMitAktuellerGeneration() {
+    when(accounts.findById(KONTO_ID))
+        .thenReturn(
+            Optional.of(
+                Konten.mit(
+                    KONTO_ID, "manne@example.org", Role.C_LEVEL, false, GENERATION, AUSGESTELLT)));
+  }
+
   @AfterEach
   void raeumeDenSicherheitskontextAuf() {
     SecurityContextHolder.clearContext();
@@ -182,7 +191,7 @@ class SessionAuthenticationFilterTest {
             a ->
                 assertThat(a.getAuthorities())
                     .extracting(GrantedAuthority::getAuthority)
-                    .containsExactly("ROLE_ADMIN"));
+                    .containsExactly("ROLE_C_LEVEL"));
   }
 
   @Test
@@ -227,6 +236,31 @@ class SessionAuthenticationFilterTest {
 
     // Then
     assertThat(angemeldet()).isEmpty();
+  }
+
+  @Test
+  void doFilter_givenACookieOfADeactivatedAccount_thenAuthenticatesNobody() throws Exception {
+    // Given — #409, Kriterium 7: stillgelegt ist draussen, auch mit passender Generation.
+    stillgelegtMitAktuellerGeneration();
+
+    // When
+    laufe(filter(AUSGESTELLT), mitCookie(COOKIE_NAME, token(GEHEIMNIS, GENERATION)));
+
+    // Then
+    assertThat(angemeldet()).isEmpty();
+  }
+
+  @Test
+  void doFilter_givenACookieOfADeactivatedAccount_thenSetsNoCookie() throws Exception {
+    // Given — eine Sitzung, die nicht gilt, wird auch nicht verlaengert.
+    stillgelegtMitAktuellerGeneration();
+
+    // When
+    final MockHttpServletResponse antwort =
+        laufe(filter(SPAETER), anfrage("GET", "/api/firmen", token(GEHEIMNIS, GENERATION)));
+
+    // Then
+    assertThat(antwort.getHeaders(HttpHeaders.SET_COOKIE)).isEmpty();
   }
 
   @Test

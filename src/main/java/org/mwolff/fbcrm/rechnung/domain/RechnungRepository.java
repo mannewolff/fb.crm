@@ -13,16 +13,22 @@ import java.util.Optional;
  *
  * <p>Anders als das Angebot laesst sich eine Rechnung loeschen: Ein Entwurf, aus dem nichts wird,
  * verschwindet, und weil er nie eine Nummer getragen hat, reisst er keine Luecke (#160, Kriterium
- * 12). Dass nur ein Entwurf geloescht werden darf, haelt der Anwendungsfall fest — der Bestand
- * fuehrt aus.
+ * 12). <b>Verschwinden heisst gekennzeichnet</b> (Plan #415, E17): Geschrieben wird die Rechnung
+ * aus {@link Rechnung#geloescht(long, java.time.Instant)} ueber {@link #save(Rechnung)}; die Zeile
+ * bleibt ohne Positionen stehen. Jede Liste und {@link #existiertNummer(String)} lassen sie aus,
+ * nur der Zugriff ueber die Kennung liefert sie mit — damit der Anwendungsfall nennen kann, wer
+ * wann geloescht hat.
  */
 public interface RechnungRepository {
 
-  /** Die Rechnung zu einer technischen Kennung samt ihren Positionen, oder leer. */
+  /**
+   * Die Rechnung zu einer technischen Kennung samt ihren Positionen, oder leer — auch eine
+   * geloeschte, mit ihrem Kennzeichen.
+   */
   Optional<Rechnung> findById(long id);
 
   /**
-   * Alle Rechnungen, jede mit ihren Positionen.
+   * Alle Rechnungen ohne die geloeschten, jede mit ihren Positionen.
    *
    * <p>Ohne zugesagte Reihenfolge: Welche Ordnung die Ansicht zeigt, entscheidet die
    * Anwendungsschicht — der Bestand liefert den Inhalt, nicht die Darstellung.
@@ -30,7 +36,7 @@ public interface RechnungRepository {
   List<Rechnung> findAlle();
 
   /**
-   * Alle Rechnungen eines Angebots, jede mit ihren Positionen.
+   * Alle Rechnungen eines Angebots ohne die geloeschten, jede mit ihren Positionen.
    *
    * <p>Ohne zugesagte Reihenfolge, aus demselben Grund wie {@link #findAlle()}.
    *
@@ -70,20 +76,13 @@ public interface RechnungRepository {
   Rechnung saveAndFlush(Rechnung rechnung);
 
   /**
-   * Loescht die Rechnung samt ihren Positionen.
-   *
-   * @param id Kennung der Rechnung; eine unbekannte Kennung ist kein Fehler
-   */
-  void delete(long id);
-
-  /**
    * Ob eine Rechnung diese Nummer schon traegt, ohne Ansehen der Schreibweise (#160, Kriterium 18;
    * #254, Kriterium 4): „RE-1" und „re-1" sind dieselbe Nummer.
    *
    * <p>Die Vorabpruefung des Stellens: Sie erspart dem Anwender einen Datenbankfehler und laesst
    * den Anwendungsfall mit 409 antworten. Die Zusage haelt trotzdem der eindeutige Index ueber
    * {@code lower(nummer)} in der Datenbank — zwischen Frage und Antwort kann eine zweite Sitzung
-   * dieselbe Nummer schreiben.
+   * dieselbe Nummer schreiben. Eine geloeschte Rechnung zaehlt nicht — wie im Index seit V35.
    *
    * @param nummer die zu pruefende Rechnungsnummer
    */

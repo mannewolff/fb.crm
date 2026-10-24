@@ -9,11 +9,15 @@ import { apiJson, apiOhneInhalt } from './client';
  * ist.
  */
 
+/** Die drei Rollen eines Kontos, so wie `Role` im Backend sie benennt (Plan #414, A8). */
+export type Rolle = 'C_LEVEL' | 'EMPLOYEE' | 'READ_ONLY';
+
 /** Das angemeldete Konto, so wie `AccountResponse` es liefert. */
 export interface Konto {
   readonly id: number;
   readonly displayName: string;
   readonly email: string;
+  readonly role: Rolle;
 }
 
 /** Ob die Instanz schon eingerichtet ist (E11). */
@@ -27,16 +31,29 @@ function istObjekt(wert: unknown): wert is Record<string, unknown> {
   return typeof wert === 'object' && wert !== null;
 }
 
+/**
+ * Verengt auf eine der drei Rollen. Eine unbekannte Rolle ist kein Konto mit weniger Rechten,
+ * sondern eine Antwort in falscher Form — die Oberflaeche raet nicht, was sie bedeuten koennte.
+ */
+export function istRolle(wert: unknown): wert is Rolle {
+  return wert === 'C_LEVEL' || wert === 'EMPLOYEE' || wert === 'READ_ONLY';
+}
+
 /** Verengt die Antwort auf ein Konto oder scheitert — nie ein `as` (CLAUDE-react.md). */
 export function parseMe(wert: unknown): Konto {
   if (!istObjekt(wert)) {
     throw new TypeError(FORMFEHLER);
   }
-  const { id, displayName, email } = wert;
-  if (typeof id !== 'number' || typeof displayName !== 'string' || typeof email !== 'string') {
+  const { id, displayName, email, role } = wert;
+  if (
+    typeof id !== 'number' ||
+    typeof displayName !== 'string' ||
+    typeof email !== 'string' ||
+    !istRolle(role)
+  ) {
     throw new TypeError(FORMFEHLER);
   }
-  return { id, displayName, email };
+  return { id, displayName, email, role };
 }
 
 /** Verengt die Antwort des Einrichtungsstands oder scheitert. */

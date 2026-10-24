@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { eigeneAngabenLesen, eigeneAngabenPflegen, parseEigeneAngaben } from './eigeneAngaben';
-import { fetchNachPfad, json, leer } from '../test/fetchNachPfad';
+import { fetchNachPfad, json } from '../test/fetchNachPfad';
 
-const ANGABEN = {
+const EINGABE = {
   name: 'Manfred Wolff',
   berufsbezeichnung: 'Freiberuflicher Softwareentwickler',
   strasse: 'Hauptstraße 1',
@@ -17,6 +17,8 @@ const ANGABEN = {
   umsatzsteuerId: 'DE123456789',
   bankverbindung: 'DE02120300000000202051',
 };
+
+const ANGABEN = { ...EINGABE, version: 3 };
 
 /** Die frische Instanz: die Zeile steht, aber kein Feld ist gepflegt. */
 const LEERE_ANGABEN = {
@@ -32,6 +34,7 @@ const LEERE_ANGABEN = {
   steuernummer: null,
   umsatzsteuerId: null,
   bankverbindung: null,
+  version: 0,
 };
 
 afterEach(() => {
@@ -60,6 +63,8 @@ describe('parseEigeneAngaben', () => {
     ['plz als Zahl', { ...ANGABEN, plz: 28195 }],
     ['email als Objekt', { ...ANGABEN, email: {} }],
     ['bankverbindung als Wahrheitswert', { ...ANGABEN, bankverbindung: false }],
+    ['ohne version', { ...ANGABEN, version: undefined }],
+    ['version als Text', { ...ANGABEN, version: '3' }],
   ])('weist %s ab', (_fall, wert) => {
     expect(() => parseEigeneAngaben(wert)).toThrow(TypeError);
   });
@@ -79,14 +84,21 @@ describe('eigeneAngabenLesen', () => {
 });
 
 describe('eigeneAngabenPflegen', () => {
-  it('schreibt die Angaben mit PUT fort und erwartet keinen Rumpf', async () => {
-    const fetchMock = fetchNachPfad({ 'PUT /api/eigene-angaben': leer(204) });
+  it('schreibt die Angaben mit PUT auf dem vorgelegten Stand fort und liest den neuen', async () => {
+    const fetchMock = fetchNachPfad({
+      'PUT /api/eigene-angaben': json(200, { ...ANGABEN, version: 4 }),
+    });
 
-    await expect(eigeneAngabenPflegen(ANGABEN)).resolves.toBeUndefined();
+    await expect(eigeneAngabenPflegen(3, EINGABE)).resolves.toEqual({ ...ANGABEN, version: 4 });
 
+    // Plan #415, E2: der Stand geht als If-Match hinaus, nicht im Rumpf.
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/eigene-angaben',
-      expect.objectContaining({ method: 'PUT', body: JSON.stringify(ANGABEN) }),
+      expect.objectContaining({
+        method: 'PUT',
+        body: JSON.stringify(EINGABE),
+        headers: expect.objectContaining({ 'If-Match': '"3"' }) as unknown,
+      }),
     );
   });
 });

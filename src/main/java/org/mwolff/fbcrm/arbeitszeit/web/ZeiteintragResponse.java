@@ -14,28 +14,35 @@ import org.mwolff.fbcrm.arbeitszeit.domain.Zeiteintrag;
  * <p>Ohne die Zeitstempel: Die Ansicht zeigt den Tag der Arbeit, nicht den der Erfassung.
  *
  * @param id technische Kennung des Eintrags
+ * @param accountId Kennung der Person, der der gespeicherte Eintrag gehoert (Plan #426, E12)
  * @param angebotPositionId Kennung der Position, auf die gebucht wurde
  * @param tag der Tag, an dem gearbeitet wurde
  * @param von Beginn
  * @param bis Ende
  * @param stunden die gerechnete Dauer in Stunden mit zwei Nachkommastellen
+ * @param version der Stand des Eintrags; die Ansicht legt ihn beim naechsten Aendern als {@code
+ *     If-Match} wieder vor (Plan #415, E2)
  */
 public record ZeiteintragResponse(
     long id,
+    long accountId,
     long angebotPositionId,
     LocalDate tag,
     LocalTime von,
     LocalTime bis,
-    BigDecimal stunden) {
+    BigDecimal stunden,
+    long version) {
 
   /** Derselbe Eintrag in der Sprache der Schnittstelle. */
   static ZeiteintragResponse of(final Zeiteintrag eintrag) {
     return new ZeiteintragResponse(
         eintrag.requireId(),
+        eintrag.accountId(),
         eintrag.angebotPositionId(),
         eintrag.tag(),
         eintrag.von(),
         eintrag.bis(),
-        eintrag.stunden());
+        eintrag.stunden(),
+        eintrag.version());
   }
 }

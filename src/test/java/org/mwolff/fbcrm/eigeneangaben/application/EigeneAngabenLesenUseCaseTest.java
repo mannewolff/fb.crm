@@ -3,6 +3,7 @@ package org.mwolff.fbcrm.eigeneangaben.application;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.when;
 
+import java.time.Instant;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -11,6 +12,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.mwolff.fbcrm.common.Anschrift;
 import org.mwolff.fbcrm.eigeneangaben.domain.EigeneAngaben;
 import org.mwolff.fbcrm.eigeneangaben.domain.EigeneAngabenRepository;
+import org.mwolff.fbcrm.eigeneangaben.domain.EigeneAngabenStand;
 
 /**
  * Das Lesen der Selbstauskunft (Kriterium 1).
@@ -40,12 +42,13 @@ class EigeneAngabenLesenUseCaseTest {
             "DE123456789",
             "DE02120300000000202051");
     when(bestand.lies()).thenReturn(gespeichert);
+    when(bestand.stand()).thenReturn(new EigeneAngabenStand(4L, 30L, Instant.EPOCH));
 
     // When
-    final EigeneAngaben gelesen = useCase.lese();
+    final GespeicherteEigeneAngaben gelesen = useCase.lese();
 
-    // Then
-    assertThat(gelesen).isEqualTo(gespeichert);
+    // Then — samt dem Stand, den das Speichern vorlegt (Plan #415, E2).
+    assertThat(gelesen).isEqualTo(new GespeicherteEigeneAngaben(gespeichert, 4L));
   }
 
   @Test
@@ -55,11 +58,12 @@ class EigeneAngabenLesenUseCaseTest {
         new EigeneAngaben(
             null, null, new Anschrift(null, null, null, null), null, null, null, null, null, null);
     when(bestand.lies()).thenReturn(leer);
+    when(bestand.stand()).thenReturn(new EigeneAngabenStand(0L, null, Instant.EPOCH));
 
     // When
-    final EigeneAngaben gelesen = useCase.lese();
+    final GespeicherteEigeneAngaben gelesen = useCase.lese();
 
     // Then
-    assertThat(gelesen).isEqualTo(leer);
+    assertThat(gelesen).isEqualTo(new GespeicherteEigeneAngaben(leer, 0L));
   }
 }

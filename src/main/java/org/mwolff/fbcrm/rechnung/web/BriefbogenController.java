@@ -4,6 +4,7 @@ import jakarta.validation.Valid;
 import java.io.IOException;
 import java.util.Objects;
 import org.mwolff.fbcrm.common.web.Anlagekopf;
+import org.mwolff.fbcrm.common.web.Bedingungskopf;
 import org.mwolff.fbcrm.rechnung.application.BriefbogenLesenUseCase;
 import org.mwolff.fbcrm.rechnung.application.BriefbogenPflegenUseCase;
 import org.mwolff.fbcrm.rechnung.application.BriefpapierUseCase;
@@ -11,6 +12,7 @@ import org.mwolff.fbcrm.rechnung.application.ProbedruckUseCase;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -31,6 +33,12 @@ import org.springframework.web.multipart.MultipartFile;
  * <p>Der Controller entscheidet nichts (CLAUDE-java.md §6.3). {@code PUT} und beide Wege auf {@code
  * /datei} antworten mit dem neuen Stand. Keine eigene Regel in {@code SecurityConfig}: Der Pfad
  * faellt unter {@code /api/**} fuer angemeldete Benutzer.
+ *
+ * <p><b>Die drei schreibenden Wege legen den Stand vor</b> (#411, Kriterium 4; Plan #415, E2, E3,
+ * E11, E14): {@code PUT} und beide Wege auf {@code /datei} lesen {@link Bedingungskopf} aus {@code
+ * If-Match} und das handelnde Konto aus der Sitzung. Fehlt der Kopf, antwortet der Weg mit 428,
+ * ohne den Anwendungsfall zu fragen. Der Stand gilt fuer den ganzen Briefbogen (E11). Lesen und
+ * Probedruck bleiben frei.
  */
 @RestController
 @RequestMapping("/api/briefpapier")
@@ -61,12 +69,24 @@ public class BriefbogenController {
     return BriefbogenResponse.of(lesenUseCase.lese());
   }
 
-  /** Schreibt Schalter und Raender fort und antwortet mit dem neuen Stand. */
+  /**
+   * Schreibt Schalter und Raender fort und antwortet mit dem neuen Stand.
+   *
+   * <p>Der Kopf steht vor dem Rumpf: Fehlt er, weist der Weg mit 428 ab, bevor der Rumpf gelesen
+   * und geprueft wird (Plan #415, E3).
+   */
   @PutMapping
-  public BriefbogenResponse pflegen(@Valid @RequestBody final BriefbogenRequest anfrage) {
+  public BriefbogenResponse pflegen(
+      final Bedingungskopf stand,
+      @AuthenticationPrincipal final Long accountId,
+      @Valid @RequestBody final BriefbogenRequest anfrage) {
     return BriefbogenResponse.of(
         pflegenUseCase.pflege(
-            anfrage.absenderzeile(), anfrage.steuerBankZeile(), anfrage.raender()));
+            anfrage.absenderzeile(),
+            anfrage.steuerBankZeile(),
+            anfrage.raender(),
+            stand.version(),
+            accountId));
   }
 
   /**
@@ -82,17 +102,24 @@ public class BriefbogenController {
    * @throws IOException wenn sich der Inhalt der hochgeladenen Datei nicht lesen laesst
    */
   @PostMapping("/datei")
-  public BriefbogenResponse hochladen(@RequestPart("datei") final MultipartFile datei)
+  public BriefbogenResponse hochladen(
+      final Bedingungskopf stand,
+      @AuthenticationPrincipal final Long accountId,
+      @RequestPart("datei") final MultipartFile datei)
       throws IOException {
     return BriefbogenResponse.of(
         briefpapierUseCase.ladeHoch(
-            Objects.requireNonNullElse(datei.getOriginalFilename(), ""), datei.getBytes()));
+            Objects.requireNonNullElse(datei.getOriginalFilename(), ""),
+            datei.getBytes(),
+            stand.version(),
+            accountId));
   }
 
   /** Entfernt das Briefpapier; Schalter und Raender bleiben (Kriterium 16). */
   @DeleteMapping("/datei")
-  public BriefbogenResponse entfernen() {
-    return BriefbogenResponse.of(briefpapierUseCase.entferne());
+  public BriefbogenResponse entfernen(
+      final Bedingungskopf stand, @AuthenticationPrincipal final Long accountId) {
+    return BriefbogenResponse.of(briefpapierUseCase.entferne(stand.version(), accountId));
   }
 
   /**

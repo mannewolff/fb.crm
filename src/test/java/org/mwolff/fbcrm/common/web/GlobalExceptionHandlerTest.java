@@ -3,12 +3,18 @@ package org.mwolff.fbcrm.common.web;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
+import org.mwolff.fbcrm.common.Bearbeitungskonflikt;
 import org.mwolff.fbcrm.common.Feldfehler;
 import org.mwolff.fbcrm.common.Uploadgrenze;
+import org.mwolff.fbcrm.common.Urheber;
+import org.mwolff.fbcrm.common.Urheberauskunft;
 import org.mwolff.fbcrm.common.ZuVieleVersuche;
 import org.springframework.beans.TypeMismatchException;
 import org.springframework.core.MethodParameter;
@@ -18,6 +24,8 @@ import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.mock.http.MockHttpInputMessage;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.validation.BeanPropertyBindingResult;
 import org.springframework.validation.BindingResult;
 import org.springframework.validation.FieldError;
@@ -28,7 +36,133 @@ import org.springframework.web.server.ResponseStatusException;
 
 class GlobalExceptionHandlerTest {
 
-  private final GlobalExceptionHandler handler = new GlobalExceptionHandler();
+  private static final long ANNA = 7L;
+  private static final long BERND = 9L;
+  private static final long UNBEKANNT = 404L;
+  private static final Instant GEAENDERT = Instant.parse("2026-10-23T12:05:00Z");
+
+  /** E6: der Name kommt allein ueber den Port; ein unbekanntes Konto hat keinen. */
+  private static final Urheberauskunft AUSKUNFT =
+      konto -> konto == ANNA ? Optional.of(new Urheber(ANNA, "Anna Beispiel")) : Optional.empty();
+
+  private final GlobalExceptionHandler handler = new GlobalExceptionHandler(AUSKUNFT);
+
+  @Test
+  void handleBearbeitungskonflikt_thenAnswersConflict() {
+    // Given — E4: ein Bearbeitungskonflikt ist ein fachlicher Konflikt wie die acht anderen.
+
+    // When
+    final ProblemDetail problem =
+        handler.handleBearbeitungskonflikt(new Veraltet(ANNA, BERND, GEAENDERT));
+
+    // Then
+    assertThat(problem.getStatus()).isEqualTo(HttpStatus.CONFLICT.value());
+    assertThat(problem.getDetail()).isEqualTo(GlobalExceptionHandler.VERALTET_DETAIL);
+  }
+
+  @Test
+  void handleBearbeitungskonflikt_thenCarriesNameAndTimeOfTheOtherChange() {
+    // Given — Kriterium 2 von #411: wer wann geaendert hat.
+
+    // When
+    final ProblemDetail problem =
+        handler.handleBearbeitungskonflikt(new Veraltet(ANNA, BERND, GEAENDERT));
+
+    // Then
+    assertThat(problem.getProperties())
+        .containsEntry(
+            "konflikt",
+            Map.of(
+                "art", "veraltet",
+                "geaendertAm", "2026-10-23T12:05:00Z",
+                "geaendertVon", "Anna Beispiel",
+                "eigenesFenster", false));
+  }
+
+  @Test
+  void handleBearbeitungskonflikt_givenTheOwnAccount_thenMarksTheOwnWindow() {
+    // Given — E15: der Server vergleicht die Kennungen, nicht die Oberflaeche die Namen.
+
+    // When
+    final ProblemDetail problem =
+        handler.handleBearbeitungskonflikt(new Veraltet(ANNA, ANNA, GEAENDERT));
+
+    // Then
+    assertThat(konfliktOf(problem))
+        .containsEntry("eigenesFenster", true)
+        .containsEntry("geaendertVon", "Anna Beispiel");
+  }
+
+  @Test
+  void handleBearbeitungskonflikt_givenAnUnknownAccount_thenNamesNobody() {
+    // Given — ein Konto, zu dem die Auskunft keinen Namen kennt.
+
+    // When
+    final ProblemDetail problem =
+        handler.handleBearbeitungskonflikt(new Veraltet(UNBEKANNT, BERND, GEAENDERT));
+
+    // Then
+    assertThat(konfliktOf(problem))
+        .doesNotContainKey("geaendertVon")
+        .containsEntry("geaendertAm", "2026-10-23T12:05:00Z")
+        .containsEntry("eigenesFenster", false);
+  }
+
+  @Test
+  void handleBearbeitungskonflikt_givenNeitherAuthorNorTime_thenCarriesOnlyTheKind() {
+    // Given — eine Zeile aus der Zeit vor V33 traegt weder Urheber noch Zeitpunkt.
+
+    // When
+    final ProblemDetail problem =
+        handler.handleBearbeitungskonflikt(new Veraltet(null, BERND, null));
+
+    // Then
+    assertThat(konfliktOf(problem)).isEqualTo(Map.of("art", "veraltet", "eigenesFenster", false));
+  }
+
+  @Test
+  void handleBearbeitungskonflikt_givenADeletedEntry_thenSaysSo() {
+    // Given — E16: 409 statt 404, mit Urheber und Zeitpunkt des Loeschens.
+
+    // When
+    final ProblemDetail problem =
+        handler.handleBearbeitungskonflikt(new Geloescht(ANNA, BERND, GEAENDERT));
+
+    // Then
+    assertThat(problem.getStatus()).isEqualTo(HttpStatus.CONFLICT.value());
+    assertThat(problem.getDetail()).isEqualTo(GlobalExceptionHandler.GELOESCHT_DETAIL);
+    assertThat(konfliktOf(problem))
+        .containsEntry("art", "gelöscht")
+        .containsEntry("geaendertVon", "Anna Beispiel");
+  }
+
+  @Test
+  void handleOptimisticLocking_thenAnswersConflictAndNot500() {
+    // Given — zwei Transaktionen schreiben dieselbe Zeile zugleich; Hibernate merkt es erst am
+    // Zaehler. Ohne diesen Zweig kaeme die Lage aus handleUnexpected als 500 zurueck.
+    final ObjectOptimisticLockingFailureException exception =
+        new ObjectOptimisticLockingFailureException(Object.class, 3L);
+
+    // When
+    final ProblemDetail problem = handler.handleOptimisticLocking(exception);
+
+    // Then
+    assertThat(problem.getStatus()).isEqualTo(HttpStatus.CONFLICT.value());
+    assertThat(problem.getDetail()).isEqualTo(GlobalExceptionHandler.VERALTET_DETAIL);
+  }
+
+  @Test
+  void handleOptimisticLocking_thenNamesNeitherAuthorNorTime() {
+    // Given — wer zugleich geschrieben hat, weiss an dieser Stelle niemand.
+    final ObjectOptimisticLockingFailureException exception =
+        new ObjectOptimisticLockingFailureException(Object.class, 3L);
+
+    // When
+    final ProblemDetail problem = handler.handleOptimisticLocking(exception);
+
+    // Then
+    assertThat(konfliktOf(problem)).isEqualTo(Map.of("art", "veraltet", "eigenesFenster", false));
+  }
 
   @Test
   void handleBeanValidation_givenFieldErrors_thenReturns400WithFieldErrors()
@@ -290,6 +424,48 @@ class GlobalExceptionHandlerTest {
   }
 
   @Test
+  void handleAccessDenied_thenAnswersForbidden() {
+    // Given — Plan #414, A9: kommt die Ausnahme aus einem Anwendungsfall hoch, machte
+    // handleUnexpected ohne diesen Zweig einen 500 daraus.
+
+    // When
+    final ProblemDetail problem =
+        handler.handleAccessDenied(new AccessDeniedException("Zugriff verweigert"));
+
+    // Then
+    assertThat(problem.getStatus()).isEqualTo(HttpStatus.FORBIDDEN.value());
+  }
+
+  @Test
+  void handleAccessDenied_thenDetailIsTheOneSentenceForAForbiddenStep() {
+    // Given — derselbe Satz wie in VerbotenAntwort; die Meldung der Ausnahme bleibt drinnen.
+
+    // When
+    final ProblemDetail problem =
+        handler.handleAccessDenied(new AccessDeniedException("interne Begruendung"));
+
+    // Then
+    assertThat(problem.getDetail()).isEqualTo(GlobalExceptionHandler.VERBOTEN_DETAIL);
+  }
+
+  @Test
+  void verbotenDetail_thenDoesNotNameARole() {
+    // Given — A9: der Satz nennt die Rolle nicht beim Namen.
+
+    // When
+    final String satz = GlobalExceptionHandler.VERBOTEN_DETAIL;
+
+    // Then
+    assertThat(satz)
+        .isNotBlank()
+        .doesNotContainIgnoringCase("C-Level")
+        .doesNotContainIgnoringCase("C_LEVEL")
+        .doesNotContainIgnoringCase("Employee")
+        .doesNotContainIgnoringCase("ReadOnly")
+        .doesNotContainIgnoringCase("READ_ONLY");
+  }
+
+  @Test
   void handleZuVieleVersuche_thenAnswersTooManyRequests() {
     // Given — E14: Status und Text kommen nicht mehr aus einem festen @ResponseStatus.
 
@@ -371,6 +547,17 @@ class GlobalExceptionHandlerTest {
     assertThat(antwort.getBody().getProperties()).isNull();
   }
 
+  /*
+   * unchecked: ProblemDetail fuehrt seine Erweiterungen als Map<String, Object>; die Erweiterung
+   * konflikt legt der Handler selbst als Map<String, Object> hinein, und containsKey davor
+   * sichert, dass sie da ist.
+   */
+  @SuppressWarnings("unchecked")
+  private static Map<String, Object> konfliktOf(final ProblemDetail problem) {
+    assertThat(problem.getProperties()).containsKey("konflikt");
+    return (Map<String, Object>) problem.getProperties().get("konflikt");
+  }
+
   private static MethodArgumentNotValidException validationException(final FieldError... errors)
       throws NoSuchMethodException {
     final BindingResult bindingResult = new BeanPropertyBindingResult(new Object(), "antrag");
@@ -406,6 +593,25 @@ class GlobalExceptionHandlerTest {
   private static class Gebremst extends ZuVieleVersuche {
     Gebremst(final Duration restwartezeit) {
       super(restwartezeit);
+    }
+  }
+
+  /*
+   * Bearbeitungskonflikte aus einem beliebigen Fachmodul — nachgebildet aus demselben Grund wie
+   * AngabenFehlen: common darf kein Fachmodul kennen.
+   */
+  private static final class Veraltet extends Bearbeitungskonflikt {
+    Veraltet(
+        final @Nullable Long urheberKonto,
+        final long handelndesKonto,
+        final @Nullable Instant zeitpunkt) {
+      super(Art.VERALTET, urheberKonto, handelndesKonto, zeitpunkt);
+    }
+  }
+
+  private static final class Geloescht extends Bearbeitungskonflikt {
+    Geloescht(final long urheberKonto, final long handelndesKonto, final Instant zeitpunkt) {
+      super(Art.GELOESCHT, urheberKonto, handelndesKonto, zeitpunkt);
     }
   }
 

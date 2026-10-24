@@ -43,9 +43,15 @@ import org.springframework.transaction.annotation.Transactional;
  *       gleichzeitige Aufrufe fuer denselben Entwurf beide {@code ENTWURF}, warteten nacheinander
  *       am Zaehler und schrieben beide — der zweite mit der naechsten Nummer ueber die Zeile des
  *       ersten. Eine Nummer waere verbraucht und verschwunden, ihr Dokument eine Waise.
- *   <li><b>Abgewiesen wird vor dem Zug aus dem Nummernkreis.</b> Eine unbekannte Rechnung, eine
- *       schon gestellte, ein Entwurf ohne Position und fehlende Pflichtangaben — all das kostet
- *       keine Nummer, auch wenn ein Ruecklauf sie ohnehin wieder freigaebe.
+ *   <li><b>Zuerst der Stand des Entwurfs</b> (#411, Kriterium 5; Plan #415, E10). Unmittelbar nach
+ *       dem Lesen und vor jeder fachlichen Pruefung: Wer auf einem alten Stand stellt, bekommt
+ *       {@link RechnungGeaendert} — es wird nie ein Entwurf festgeschrieben, den der Handelnde
+ *       nicht gesehen hat. Es zaehlt allein der Entwurf: Einstellungen, Eigene Angaben, Briefbogen
+ *       und das Angebot gelten, wie sie im Augenblick des Stellens sind, und weisen nicht ab.
+ *   <li><b>Abgewiesen wird vor dem Zug aus dem Nummernkreis.</b> Ein veralteter Stand, eine
+ *       unbekannte Rechnung, eine schon gestellte, ein Entwurf ohne Position und fehlende
+ *       Pflichtangaben — all das kostet keine Nummer, auch wenn ein Ruecklauf sie ohnehin wieder
+ *       freigaebe.
  *   <li><b>Erst die gestellte Rechnung, dann ihr Dokument.</b> Entstuende das Dokument vorher,
  *       muesste die Nummer danach geschrieben werden, und ein fehlgeschlagener Druck risse eine
  *       Luecke in den Nummernkreis. So liegt im schlechten Fall ein Objekt ohne Rechnung im
@@ -58,6 +64,9 @@ import org.springframework.transaction.annotation.Transactional;
  *       Rechnungen: „Abgerechnet" heisst, dass die Rechnungen gestellt sind; ein Entwurf kann noch
  *       geloescht werden (Manne, 2026-09-30; Kriterium 27). Gestellt heisst dabei jeder Zustand
  *       ausser Entwurf — eine bezahlte Rechnung gibt ihre Mengen nicht wieder frei (Issue #253).
+ *       Das Angebot wird dafuer <b>sperrend</b> gelesen: Zwischen Lesen und Fortschreiben schreibt
+ *       es kein anderer, und sein Zaehler weist das Stellen nicht ab (Plan #415, E10).
+ *       Fortgeschrieben traegt es das handelnde Konto als Urheber (E14).
  * </ol>
  *
  * <p>Scheitert ein Schritt, rollt die Transaktion zurueck — der Zaehler gibt seine Nummer wieder
@@ -131,7 +140,12 @@ public class RechnungStellenUseCase {
    * Stellt den Entwurf und liefert die gestellte Rechnung samt dem Schluessel ihres Dokuments.
    *
    * @param rechnungId Kennung der Rechnung
+   * @param version der vorgelegte Stand des Entwurfs aus {@code If-Match}
+   * @param konto Kennung des handelnden Kontos
    * @throws RechnungNichtGefunden wenn es die Rechnung nicht gibt
+   * @throws RechnungGeloescht wenn der Entwurf inzwischen geloescht ist (Plan #415, E16)
+   * @throws RechnungGeaendert wenn der Entwurf inzwischen einen anderen Stand hat als den
+   *     vorgelegten
    * @throws RechnungszustandPasstNicht wenn die Rechnung schon gestellt ist
    * @throws RechnungOhnePosition wenn der Entwurf keine Position traegt
    * @throws AngebotNichtGefunden wenn es das Angebot der Rechnung nicht gibt
@@ -140,9 +154,10 @@ public class RechnungStellenUseCase {
    * @throws RechnungsnummerSchonVergeben wenn die gezogene Nummer schon eine Rechnung traegt, auch
    *     eine nachgetragene
    */
-  public Rechnung stelle(final long rechnungId) {
+  public Rechnung stelle(final long rechnungId, final long version, final long konto) {
     final Rechnung entwurf =
         rechnungen.findByIdMitSperre(rechnungId).orElseThrow(RechnungNichtGefunden::new);
+    Rechnungsvergleich.pruefe(entwurf, version, konto);
     if (entwurf.zustand() != Rechnungszustand.ENTWURF) {
       throw new RechnungszustandPasstNicht();
     }
@@ -150,14 +165,14 @@ public class RechnungStellenUseCase {
       throw new RechnungOhnePosition();
     }
     final Angebot angebot =
-        angebote.findById(entwurf.angebotId()).orElseThrow(AngebotNichtGefunden::new);
+        angebote.findByIdMitSperre(entwurf.angebotId()).orElseThrow(AngebotNichtGefunden::new);
     final Firma firma = firmen.findById(angebot.firmaId()).orElseThrow(FirmaNichtGefunden::new);
     final EigeneAngaben eigene = eigeneAngaben.lies();
     Belegpflichtangaben.pruefe(eigene, firma);
 
-    final Rechnung festgeschrieben = schreibeFest(entwurf, eigene, firma);
+    final Rechnung festgeschrieben = schreibeFest(entwurf, eigene, firma, konto);
     final Rechnung gestellt = mitDokument(festgeschrieben);
-    schliesseAngebotAbWennNichtsOffenIst(angebot);
+    schliesseAngebotAbWennNichtsOffenIst(angebot, konto);
     return gestellt;
   }
 
@@ -168,7 +183,7 @@ public class RechnungStellenUseCase {
    * Serverfehler und kein 409.
    */
   private Rechnung schreibeFest(
-      final Rechnung entwurf, final EigeneAngaben eigene, final Firma firma) {
+      final Rechnung entwurf, final EigeneAngaben eigene, final Firma firma, final long konto) {
     final Rechnungseinstellungen satz = einstellungen.lies();
     final Nummernmuster muster = satz.nummerMuster();
     final int jahr = entwurf.rechnungDatum().getYear();
@@ -180,13 +195,15 @@ public class RechnungStellenUseCase {
     final Instant jetzt = clock.instant();
     try {
       return rechnungen.saveAndFlush(
-          entwurf.gestellt(
-              nummer,
-              satz.steuersatz(),
-              satz.zahlungszielTage(),
-              empfaengerAus(firma),
-              absenderAus(eigene),
-              jetzt));
+          entwurf
+              .gestellt(
+                  nummer,
+                  satz.steuersatz(),
+                  satz.zahlungszielTage(),
+                  empfaengerAus(firma),
+                  absenderAus(eigene),
+                  jetzt)
+              .durch(konto));
     } catch (final DataIntegrityViolationException vergeben) {
       throw new RechnungsnummerSchonVergeben(nummer, vergeben);
     }
@@ -220,7 +237,7 @@ public class RechnungStellenUseCase {
    * wurde (#330, Kriterium 9). Eine Mengenpruefung gegen das Angebot gibt es beim Stellen weiterhin
    * nicht (E8) — ein vor dem Storno angelegter Entwurf wird gestellt, wie er ist.
    */
-  private void schliesseAngebotAbWennNichtsOffenIst(final Angebot angebot) {
+  private void schliesseAngebotAbWennNichtsOffenIst(final Angebot angebot, final long konto) {
     if (angebot.storniert()) {
       return;
     }
@@ -229,7 +246,7 @@ public class RechnungStellenUseCase {
             .filter(rechnung -> rechnung.zustand().istGestellt())
             .toList();
     if (!Abrechnungsstand.fuer(angebot.positionen(), gestellte).etwasOffen()) {
-      angebote.save(angebot.abgerechnet(clock.instant()));
+      angebote.save(angebot.abgerechnet(clock.instant()).durch(konto));
     }
   }
 

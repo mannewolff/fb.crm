@@ -9,7 +9,7 @@ import type { Routen } from '../test/fetchNachPfad';
 import { renderMitTheme } from '../test/render';
 import UserMenu from './UserMenu';
 
-const KONTO = { id: 1, displayName: 'Manfred Wolff', email: 'info@mwolff.org' };
+const KONTO = { id: 1, displayName: 'Manfred Wolff', email: 'info@mwolff.org', role: 'C_LEVEL' };
 
 /** Ein Speicher, der mitzaehlt, ob ueberhaupt etwas abgelegt wurde. */
 function speicherDoppel(name: 'localStorage' | 'sessionStorage') {
@@ -21,8 +21,8 @@ function speicherDoppel(name: 'localStorage' | 'sessionStorage') {
   return setItem;
 }
 
-function angemeldet(weitere: Routen = {}) {
-  return fetchNachPfad({ 'GET /api/auth/me': json(200, KONTO), ...weitere });
+function angemeldet(weitere: Routen = {}, konto: unknown = KONTO) {
+  return fetchNachPfad({ 'GET /api/auth/me': json(200, konto), ...weitere });
 }
 
 function renderMenue(kompakt = false) {
@@ -55,6 +55,25 @@ describe('UserMenu', () => {
     expect(karte).toHaveAttribute('aria-haspopup', 'menu');
     // Das Kuerzel steht neben dem Namen und sagt darum nichts Eigenes mehr.
     expect(screen.getByTestId('nutzer-mal')).toHaveAttribute('aria-hidden', 'true');
+  });
+
+  it.each([
+    ['C_LEVEL', 'C-Level'],
+    ['EMPLOYEE', 'Employee'],
+    ['READ_ONLY', 'ReadOnly'],
+  ])('zeigt unter Namen und Adresse die Rolle %s als „%s" (Plan #414, E9)', async (rolle, name) => {
+    angemeldet({}, { ...KONTO, role: rolle });
+
+    renderMenue();
+
+    const karte = await screen.findByRole('button', { name: 'Nutzermenü: Manfred Wolff' });
+    expect(within(karte).getByTestId('nutzer-rolle')).toHaveTextContent(name);
+    // Die Rolle steht unter der Adresse.
+    expect(
+      within(karte).getByText('info@mwolff.org').compareDocumentPosition(
+        within(karte).getByTestId('nutzer-rolle'),
+      ),
+    ).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
   });
 
   it('zeigt eingeklappt nur das Kuerzel, behaelt aber seinen Namen (E7)', async () => {

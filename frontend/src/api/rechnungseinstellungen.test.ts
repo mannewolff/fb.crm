@@ -5,7 +5,7 @@ import {
   rechnungseinstellungenLesen,
   rechnungseinstellungenPflegen,
 } from './rechnungseinstellungen';
-import { fetchNachPfad, json, leer } from '../test/fetchNachPfad';
+import { fetchNachPfad, json } from '../test/fetchNachPfad';
 
 /** Die Antwort des Backends: der Steuersatz als Dezimalzahl. */
 const ANTWORT = {
@@ -13,6 +13,7 @@ const ANTWORT = {
   naechsteNummer: 3,
   steuersatz: 19.5,
   zahlungszielTage: 14,
+  version: 3,
 };
 
 /** Dieselben Einstellungen, wie die Oberflaeche sie sieht: der Steuersatz in Hundertstel-Prozent. */
@@ -21,6 +22,7 @@ const EINSTELLUNGEN = {
   naechsteNummer: 3,
   steuersatzInHundertsteln: 1950,
   zahlungszielTage: 14,
+  version: 3,
 };
 
 afterEach(() => {
@@ -44,6 +46,7 @@ describe('parseRechnungseinstellungen', () => {
     ['naechsteNummer als Zeichenkette', { ...ANTWORT, naechsteNummer: '3' }],
     ['ohne zahlungszielTage', { ...ANTWORT, zahlungszielTage: undefined }],
     ['zahlungszielTage als Wahrheitswert', { ...ANTWORT, zahlungszielTage: false }],
+    ['ohne version', { ...ANTWORT, version: undefined }],
   ])('weist eine Antwort mit %s ab', (_fall, wert) => {
     expect(() => parseRechnungseinstellungen(wert)).toThrow(TypeError);
   });
@@ -65,15 +68,22 @@ describe('rechnungseinstellungenLesen', () => {
 });
 
 describe('rechnungseinstellungenPflegen', () => {
-  it('schickt den Steuersatz mit PUT als Dezimaltext mit Punkt', async () => {
-    const fetchMock = fetchNachPfad({ 'PUT /api/rechnung/einstellungen': leer(204) });
+  it('schickt den Steuersatz mit PUT als Dezimaltext mit Punkt und legt den Stand vor', async () => {
+    const fetchMock = fetchNachPfad({
+      'PUT /api/rechnung/einstellungen': json(200, { ...ANTWORT, version: 4 }),
+    });
 
-    await expect(rechnungseinstellungenPflegen(EINSTELLUNGEN)).resolves.toBeUndefined();
+    // Die Antwort traegt den neuen Stand samt erhoehter Version (Plan #415, E2).
+    await expect(rechnungseinstellungenPflegen(3, EINSTELLUNGEN)).resolves.toEqual({
+      ...EINSTELLUNGEN,
+      version: 4,
+    });
 
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/rechnung/einstellungen',
       expect.objectContaining({
         method: 'PUT',
+        headers: expect.objectContaining({ 'If-Match': '"3"' }) as unknown,
         body: JSON.stringify({
           nummerMuster: '{NNNN}-{JJJJ}',
           naechsteNummer: 3,

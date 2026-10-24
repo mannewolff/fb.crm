@@ -19,7 +19,7 @@ class KommentarreihenfolgeTest {
   private static final Instant SPAET = Instant.parse("2026-09-30T09:00:00Z");
 
   private static Angebotskommentar kommentar(final long id, final Instant createdAt) {
-    return new Angebotskommentar(Long.valueOf(id), 11L, "Text " + id, createdAt, createdAt);
+    return new Angebotskommentar(Long.valueOf(id), 11L, 3L, "Text " + id, createdAt, createdAt);
   }
 
   @Test

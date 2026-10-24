@@ -32,6 +32,13 @@ import org.springframework.transaction.annotation.Transactional;
  * <p>Ohne hinterlegtes Original antworten Lesen und Entfernen mit {@link NachtragNichtGefunden}
  * (404, E17) — anders als beim Entwurf einer fb.crm-Rechnung ist nicht der Zustand das Hindernis,
  * sondern die Sache fehlt.
+ *
+ * <p><b>Ersetzen und Entfernen legen den Stand vor</b> (#411, Kriterium 4; Plan #415, E1, E14): Das
+ * Original ist eine Angabe der Rechnung, und wer es auf einem alten Stand ersetzt, bekommt {@link
+ * NachtragGeaendert} — vor den Riegeln und bevor etwas im Speicher landet. Das handelnde Konto
+ * steht danach als Urheber an der Rechnung. Das Lesen bleibt frei. Ist die Rechnung inzwischen
+ * geloescht, weisen Ablegen und Entfernen mit {@link NachtragGeloescht} ab, das Lesen mit {@link
+ * NachtragNichtGefunden} (Plan #415, E16, E17).
  */
 @Service
 @Transactional
@@ -57,18 +64,25 @@ public class NachtragDokumentUseCase {
    *
    * @param id Kennung der nachgetragenen Rechnung
    * @param inhalt das hochgeladene Dokument
+   * @param version der vorgelegte Stand aus {@code If-Match}
+   * @param konto Kennung des handelnden Kontos
    * @return die Rechnung mit dem Schluessel des neuen Originals
    * @throws NachtragNichtGefunden wenn es die Rechnung nicht gibt
+   * @throws NachtragGeloescht wenn die Rechnung inzwischen geloescht ist
+   * @throws NachtragGeaendert wenn die Rechnung inzwischen einen anderen Stand hat als den
+   *     vorgelegten
    * @throws DokumentNichtAnnehmbar wenn die Datei leer, zu gross oder kein PDF ist
    * @throws DokumentSpeicherAusfall wenn der Speicher die Ablage nicht annimmt — dann ist nichts
    *     gespeichert
    */
-  public NachgetrageneRechnung lege(final long id, final byte[] inhalt) {
+  public NachgetrageneRechnung lege(
+      final long id, final byte[] inhalt, final long version, final long konto) {
     final NachgetrageneRechnung rechnung = gesucht(id);
+    Nachtragsvergleich.pruefe(rechnung, version, konto);
     pruefe(inhalt);
     final String neu = speicher.legeHochgeladenes(id, inhalt);
     final NachgetrageneRechnung gesichert =
-        nachgetragene.save(rechnung.mitDokument(neu, clock.instant()));
+        nachgetragene.save(rechnung.mitDokument(neu, clock.instant()).durch(konto));
     final String alt = rechnung.pdfSchluessel();
     if (alt != null) {
       NachDemCommit.fuehreAus(() -> entferneObjekt(alt));
@@ -80,25 +94,37 @@ public class NachtragDokumentUseCase {
    * Das hinterlegte Original, Byte fuer Byte.
    *
    * @param id Kennung der nachgetragenen Rechnung
-   * @throws NachtragNichtGefunden wenn es die Rechnung nicht gibt oder sie kein Original traegt
+   * @throws NachtragNichtGefunden wenn es die Rechnung nicht gibt, sie geloescht ist (Plan #415,
+   *     E17) oder sie kein Original traegt
    */
   @Transactional(readOnly = true)
   public byte[] lies(final long id) {
-    return speicher.lies(schluesselVon(gesucht(id)));
+    final NachgetrageneRechnung rechnung =
+        nachgetragene
+            .findById(id)
+            .filter(gefunden -> gefunden.geloeschtAm() == null)
+            .orElseThrow(NachtragNichtGefunden::new);
+    return speicher.lies(schluesselVon(rechnung));
   }
 
   /**
    * Entfernt das Original; das Objekt geht nach dem Commit.
    *
    * @param id Kennung der nachgetragenen Rechnung
+   * @param version der vorgelegte Stand aus {@code If-Match}
+   * @param konto Kennung des handelnden Kontos
    * @return die Rechnung ohne Original
    * @throws NachtragNichtGefunden wenn es die Rechnung nicht gibt oder sie kein Original traegt
+   * @throws NachtragGeloescht wenn die Rechnung inzwischen geloescht ist
+   * @throws NachtragGeaendert wenn die Rechnung inzwischen einen anderen Stand hat als den
+   *     vorgelegten
    */
-  public NachgetrageneRechnung entferne(final long id) {
+  public NachgetrageneRechnung entferne(final long id, final long version, final long konto) {
     final NachgetrageneRechnung rechnung = gesucht(id);
+    Nachtragsvergleich.pruefe(rechnung, version, konto);
     final String alt = schluesselVon(rechnung);
     final NachgetrageneRechnung gesichert =
-        nachgetragene.save(rechnung.ohneDokument(clock.instant()));
+        nachgetragene.save(rechnung.ohneDokument(clock.instant()).durch(konto));
     NachDemCommit.fuehreAus(() -> entferneObjekt(alt));
     return gesichert;
   }

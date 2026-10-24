@@ -5,6 +5,7 @@ import jakarta.persistence.Embedded;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 import java.time.Instant;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.fbcrm.common.Anschrift;
@@ -12,7 +13,8 @@ import org.mwolff.fbcrm.common.infrastructure.AnschriftSpalten;
 import org.mwolff.fbcrm.eigeneangaben.domain.EigeneAngaben;
 
 /**
- * Die eine Zeile der Tabelle {@code eigene_angaben} aus {@code V5__eigene_angaben.sql}.
+ * Die eine Zeile der Tabelle {@code eigene_angaben} aus {@code V5__eigene_angaben.sql} und {@code
+ * V33__version.sql}.
  *
  * <p>Die Kennung wird nicht erzeugt, sondern gesetzt: Es gibt genau die Zeile {@link #ZEILE}, und
  * die Datenbank laesst ueber ihren CHECK keine zweite zu. Dass die Kennung von Anfang an steht,
@@ -64,6 +66,18 @@ class EigeneAngabenEntity {
   private Instant updatedAt;
 
   /*
+   * Der Stand der Zeile, gefuehrt von Hibernate (Plan #415, E1): Jedes Schreiben erhoeht ihn, und
+   * ein UPDATE mit einem anderen Stand als dem vorgelegten trifft keine Zeile und scheitert. Ein
+   * long und kein Long: Ob die Zeile neu ist, entscheidet so weiter die Kennung.
+   */
+  @Version
+  @Column(name = "version", nullable = false)
+  private long version;
+
+  @Column(name = "geaendert_von")
+  private @Nullable Long geaendertVon;
+
+  /*
    * JPA verlangt einen parameterlosen Konstruktor und fuellt die Felder danach selbst; NullAway
    * sieht diesen Weg nicht und meldete sonst nicht initialisierte Felder.
    */
@@ -81,13 +95,23 @@ class EigeneAngabenEntity {
    *
    * @param angaben die eigenen Angaben, deren Stand die Zeile tragen soll
    * @param geaendertAm Zeitpunkt der Aenderung
+   * @param version der Stand, auf dem die Aenderung beruht (Plan #415, E1)
+   * @param geaendertVon Kennung des handelnden Kontos
    * @return die eine Zeile
    */
-  static EigeneAngabenEntity aus(final EigeneAngaben angaben, final Instant geaendertAm) {
-    return new EigeneAngabenEntity(angaben, geaendertAm);
+  static EigeneAngabenEntity aus(
+      final EigeneAngaben angaben,
+      final Instant geaendertAm,
+      final long version,
+      final @Nullable Long geaendertVon) {
+    return new EigeneAngabenEntity(angaben, geaendertAm, version, geaendertVon);
   }
 
-  private EigeneAngabenEntity(final EigeneAngaben angaben, final Instant geaendertAm) {
+  private EigeneAngabenEntity(
+      final EigeneAngaben angaben,
+      final Instant geaendertAm,
+      final long version,
+      final @Nullable Long geaendertVon) {
     this.id = ZEILE;
     this.name = angaben.name();
     this.berufsbezeichnung = angaben.berufsbezeichnung();
@@ -99,6 +123,8 @@ class EigeneAngabenEntity {
     this.umsatzsteuerId = angaben.umsatzsteuerId();
     this.bankverbindung = angaben.bankverbindung();
     this.updatedAt = geaendertAm;
+    this.version = version;
+    this.geaendertVon = geaendertVon;
   }
 
   Short getId() {
@@ -143,5 +169,13 @@ class EigeneAngabenEntity {
 
   Instant getUpdatedAt() {
     return updatedAt;
+  }
+
+  long getVersion() {
+    return version;
+  }
+
+  @Nullable Long getGeaendertVon() {
+    return geaendertVon;
   }
 }

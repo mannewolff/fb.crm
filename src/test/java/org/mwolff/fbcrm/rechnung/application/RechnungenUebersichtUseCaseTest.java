@@ -143,7 +143,9 @@ class RechnungenUebersichtUseCaseTest {
                     null,
                     List.of(Rechnungsdoppel.BERATUNG),
                     Rechnungsdoppel.ANGELEGT,
-                    Rechnungsdoppel.ANGELEGT)));
+                    Rechnungsdoppel.ANGELEGT,
+                    0L,
+                    null)));
     when(firmen.findAllById(any()))
         .thenReturn(
             List.of(
@@ -234,7 +236,9 @@ class RechnungenUebersichtUseCaseTest {
             Rechnungszustand.BEZAHLT,
             null,
             Rechnungsdoppel.ANGELEGT,
-            Rechnungsdoppel.ANGELEGT);
+            Rechnungsdoppel.ANGELEGT,
+            0L,
+            null);
     when(nachtraege.findAlle())
         .thenReturn(
             List.of(

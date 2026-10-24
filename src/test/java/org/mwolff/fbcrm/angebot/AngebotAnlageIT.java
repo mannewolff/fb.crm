@@ -10,6 +10,7 @@ import java.util.Objects;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mwolff.fbcrm.AbstractIntegrationTest;
+import org.mwolff.fbcrm.angebot.domain.AnlageSpeicher;
 import org.mwolff.fbcrm.angebot.web.AngebotAnlageResponse;
 import org.mwolff.fbcrm.angebot.web.AngebotAnlagenResponse;
 import org.mwolff.fbcrm.angebot.web.AngebotResponse;
@@ -46,6 +47,10 @@ import org.springframework.util.MultiValueMap;
  * leere Datei nicht; 401 ohne Sitzung auf allen vier Wegen; 404 bei unbekanntem Angebot und bei
  * einer Anlage eines anderen Angebots (E10); und 201 auch an einem Angebot im letzten Status
  * (Kriterium 3 der Quelle: der Status schraenkt Anlagen nicht ein).
+ *
+ * <p>Seit Plan #415 (E7, E16, E17) loescht der Weg mit Kennzeichen: Die Zeile bleibt mit Konto und
+ * Zeitpunkt der Loeschung, faellt aus jeder Liste, ihr Objekt ist nach dem Commit aus MinIO fort,
+ * und ein zweites Loeschen antwortet 409 mit {@code art = "gelöscht"} statt 404.
  */
 class AngebotAnlageIT extends AbstractIntegrationTest {
 
@@ -65,20 +70,24 @@ class AngebotAnlageIT extends AbstractIntegrationTest {
   private final AccountRepository accounts;
   private final SecretHasher hasher;
   private final JdbcTemplate jdbc;
+  private final AnlageSpeicher speicher;
 
   private HttpHeaders sitzung = new HttpHeaders();
   private long firmaId;
+  private long kontoId;
 
   @Autowired
   AngebotAnlageIT(
       final TestRestTemplate rest,
       final AccountRepository accounts,
       final SecretHasher hasher,
-      final JdbcTemplate jdbc) {
+      final JdbcTemplate jdbc,
+      final AnlageSpeicher speicher) {
     this.rest = rest;
     this.accounts = accounts;
     this.hasher = hasher;
     this.jdbc = jdbc;
+    this.speicher = speicher;
   }
 
   @BeforeEach
@@ -91,8 +100,8 @@ class AngebotAnlageIT extends AbstractIntegrationTest {
         Objects.requireNonNull(
                 jdbc.queryForObject("SELECT id FROM firma WHERE name = ?", Long.class, FIRMA))
             .longValue();
-    jdbc.execute("TRUNCATE outbox_message, account RESTART IDENTITY CASCADE");
-    accounts.save(Konten.neu(MAIL, ANGELEGT));
+    leereKonten(jdbc);
+    kontoId = accounts.save(Konten.neu(MAIL, ANGELEGT)).requireId();
     sitzung = Anmeldung.perCode(rest, jdbc, hasher, MAIL);
   }
 
@@ -160,6 +169,14 @@ class AngebotAnlageIT extends AbstractIntegrationTest {
     return Objects.requireNonNull(
             ruf(pfad(angebotId), HttpMethod.GET, null, AngebotAnlagenResponse.class).getBody())
         .anlagen();
+  }
+
+  private String objektSchluessel(final long anlageId) {
+    return Objects.requireNonNull(
+        jdbc.queryForObject(
+            "SELECT objekt_schluessel FROM angebot_anlage WHERE id = ?",
+            String.class,
+            Long.valueOf(anlageId)));
   }
 
   private ResponseEntity<byte[]> inhalt(final long angebotId, final long anlageId) {
@@ -346,19 +363,55 @@ class AngebotAnlageIT extends AbstractIntegrationTest {
   }
 
   @Test
-  void loeschen_thenTheContentRouteAnswers404AndTheListDoesNotNameItAnymore() {
-    // Given — Kriterium 10.
+  void loeschen_thenMarksTheRowRemovesTheObjectAndNoListNamesItAnymore() {
+    // Given — Kriterium 10; Plan #415, E7: zwei Anlagen, eine davon wird geloescht.
     final long angebotId = angebot();
+    final long bleibt = hochgeladen(angebotId, "Bleibt.pdf", MediaType.APPLICATION_PDF, PDF).id();
     final long anlageId = hochgeladen(angebotId, PDF_NAME, MediaType.APPLICATION_PDF, PDF).id();
+    final String schluessel = objektSchluessel(anlageId);
+    assertThat(speicher.lesen(schluessel)).isPresent();
 
     // When
     final ResponseEntity<Void> antwort =
         ruf(pfad(angebotId) + "/" + anlageId, HttpMethod.DELETE, null, Void.class);
 
-    // Then
+    // Then — keine Liste nennt sie mehr, der Abruf kennt sie nicht, die Zeile traegt das
+    // Kennzeichen, und ihr Objekt ist nach dem Commit fort.
     assertThat(antwort.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
-    assertThat(liste(angebotId)).isEmpty();
+    assertThat(liste(angebotId))
+        .extracting(anlage -> Long.valueOf(anlage.id()))
+        .containsExactly(Long.valueOf(bleibt));
     assertThat(inhalt(angebotId, anlageId).getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+    assertThat(
+            jdbc.queryForMap(
+                "SELECT geloescht_von, geloescht_am IS NOT NULL AS gekennzeichnet"
+                    + " FROM angebot_anlage WHERE id = ?",
+                Long.valueOf(anlageId)))
+        .containsEntry("geloescht_von", Long.valueOf(kontoId))
+        .containsEntry("gekennzeichnet", true);
+    assertThat(speicher.lesen(schluessel)).isEmpty();
+  }
+
+  @Test
+  void loeschen_aSecondTime_thenAnswers409AsDeletedWithUrheberAndInstant() {
+    // Given — #411, Kriterium 6; Plan #415, E7, E16: die Anlage ist in einem anderen Fenster schon
+    // geloescht.
+    final long angebotId = angebot();
+    final long anlageId = hochgeladen(angebotId, PDF_NAME, MediaType.APPLICATION_PDF, PDF).id();
+    final String einzeln = pfad(angebotId) + "/" + anlageId;
+    ruf(einzeln, HttpMethod.DELETE, null, Void.class);
+
+    // When
+    final ResponseEntity<String> antwort = ruf(einzeln, HttpMethod.DELETE, null, String.class);
+
+    // Then — kein 404, sondern die Loeschung mit Urheber und Zeitpunkt; die Zeile bleibt.
+    assertThat(antwort.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+    assertThat(antwort.getBody())
+        .contains("\"art\":\"gelöscht\"")
+        .contains("\"geaendertAm\":")
+        .contains("\"eigenesFenster\":true");
+    assertThat(jdbc.queryForObject("SELECT count(*) FROM angebot_anlage", Long.class))
+        .isEqualTo(Long.valueOf(1L));
   }
 
   @Test

@@ -5,10 +5,12 @@ import java.security.MessageDigest;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Objects;
 import org.mwolff.fbcrm.auth.AuthProperties;
 import org.mwolff.fbcrm.auth.SetupProperties;
 import org.mwolff.fbcrm.auth.domain.Account;
 import org.mwolff.fbcrm.auth.domain.AccountRepository;
+import org.mwolff.fbcrm.auth.domain.ErstesKontoFolge;
 import org.mwolff.fbcrm.auth.domain.Role;
 import org.mwolff.fbcrm.auth.domain.SessionTokens;
 import org.mwolff.fbcrm.auth.infrastructure.FailedLoginDelay;
@@ -16,6 +18,7 @@ import org.mwolff.fbcrm.auth.infrastructure.LoginAttemptLimiter;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionOperations;
 
 /**
  * Die Einrichtung der frischen Instanz per Einmal-Schluessel und Code (K3, E5, E9).
@@ -23,7 +26,8 @@ import org.springframework.transaction.annotation.Transactional;
  * <p>Eine frische Instanz hat kein Konto — und ohne Konto keinen Weg hinein. Der Einmal-Schluessel
  * aus {@code FBCRM_BOOTSTRAP_ADMIN_TOKEN} oeffnet diesen einen Weg, und zwar genau einmal. Er geht
  * in zwei Schritten: Mit {@link #requestCode} kommt ein Code an die eingegebene Adresse, mit {@link
- * #initialize} entstehen Konto und Sitzung, der Betreiber ist danach unmittelbar angemeldet.
+ * #initialize} entstehen Konto und Sitzung, der Betreiber ist danach unmittelbar angemeldet. Das
+ * erste Konto ist ein aktives C-Level-Konto; nach einer Rolle fragt die Einrichtung nicht.
  *
  * <p><b>Kein Zwischenzustand</b> (E9). Die Bestaetigung bringt Schluessel, Anzeigename und Adresse
  * erneut mit, und der Schluessel wird im Augenblick der Kontoanlage ein zweites Mal geprueft. In
@@ -39,17 +43,25 @@ import org.springframework.transaction.annotation.Transactional;
  * wird bei leerem konfiguriertem Wert <b>gar nicht erst verglichen</b>, sondern jeder Aufruf
  * abgewiesen.
  *
- * <p><b>Das Wettrennen.</b> Zwei gleichzeitige Aufrufe mit <b>verschiedenen</b> Adressen kaemen
- * beide durch {@link AccountRepository#existsAnyAdmin()} und beide durch den eindeutigen Index auf
- * {@code lower(email)} — der sieht zwei verschiedene Schluessel. Was sie trennt, ist der partielle
- * eindeutige Index {@code account_single_admin} aus {@code V1__baseline.sql}: Er steht auf dem
- * konstanten Ausdruck {@code (true)} und traegt damit fuer jede ADMIN-Zeile denselben Schluessel.
- * Seine Verletzung wird hier in dieselbe Abweisung uebersetzt wie „Konto existiert bereits".
+ * <p><b>Das Wettrennen</b> (Plan #414, A5). Der Riegel ist „es existiert irgendein Konto" ({@link
+ * AccountRepository#existsAnyAccount()}). Zwei gleichzeitige Aufrufe mit <b>derselben</b> Adresse
+ * trennt der eindeutige Index {@code account_email_key} auf {@code lower(email)}; seine Verletzung
+ * wird hier in dieselbe Abweisung uebersetzt wie „Konto existiert bereits". Zwei gleichzeitige
+ * Aufrufe mit <b>verschiedenen</b> Adressen und richtigem Einmal-Schluessel kommen beide durch und
+ * enden in zwei C-Level-Konten desselben Betreibers — fachlich erlaubt, seit mehrere Konten
+ * dazugehoeren; der fruehere Index {@code account_single_admin}, der das schloss, trug die Zusage
+ * „genau ein Konto" und ist mit V30 entfallen. Danach wirkt der Schluessel nicht mehr, und wer ihn
+ * erraet, konnte schon vorher ein Konto anlegen.
  *
  * <p><b>Zuerst wird gezaehlt</b>, in beiden Schritten, und erst danach der Schluessel geprueft: Ein
  * vor dem Zaehlen gepruefter Schluessel liesse die Einrichtungsseite ungebremst (Kriterium 6,
  * letzter Satz zu Kriterium 5). Den Code prueft {@link CodeEinloesung} nach derselben Regel wie bei
  * der Anmeldung — fuenf Fehleingaben, und er verfaellt.
+ *
+ * <p><b>Was dem ersten Konto folgt</b> (Plan #414, E13). In derselben Transaktion, in der das Konto
+ * entsteht, ruft die Einrichtung {@link ErstesKontoFolge} mit seiner Kennung: Ein Bestand, der
+ * Kommentare ohne Konto mitbringt, gibt sie so dem neuen Konto. Scheitert die Folge, entsteht auch
+ * das Konto nicht — und umgekehrt.
  */
 @Service
 public class SetupAccountUseCase {
@@ -62,8 +74,17 @@ public class SetupAccountUseCase {
   private final CodeEinloesung einloesung;
   private final AuthProperties authProperties;
   private final SetupProperties setupProperties;
+  private final ErstesKontoFolge folge;
+  private final TransactionOperations transaktion;
   private final Clock clock;
 
+  /*
+   * PMD.ExcessiveParameterList: Elf Mitspieler. Die zwei juengsten — die Folge des ersten Kontos
+   * und die Transaktion um Anlage und Folge — gehoeren an genau die Stelle, an der das Konto
+   * entsteht (E13); eine eigene Klasse nur fuer diese zwei Zeilen truege die Zusage „in derselben
+   * Transaktion" aus dem Anwendungsfall heraus, der sie gibt.
+   */
+  @SuppressWarnings("PMD.ExcessiveParameterList")
   public SetupAccountUseCase(
       final AccountRepository accounts,
       final SessionTokens tokens,
@@ -73,6 +94,8 @@ public class SetupAccountUseCase {
       final CodeEinloesung einloesung,
       final AuthProperties authProperties,
       final SetupProperties setupProperties,
+      final ErstesKontoFolge folge,
+      final TransactionOperations transaktion,
       final Clock clock) {
     this.accounts = accounts;
     this.tokens = tokens;
@@ -82,13 +105,15 @@ public class SetupAccountUseCase {
     this.einloesung = einloesung;
     this.authProperties = authProperties;
     this.setupProperties = setupProperties;
+    this.folge = folge;
+    this.transaktion = transaktion;
     this.clock = clock;
   }
 
   /** Ob die Instanz bereits eingerichtet ist (E11). */
   @Transactional(readOnly = true)
   public boolean isInitialized() {
-    return accounts.existsAnyAdmin();
+    return accounts.existsAnyAccount();
   }
 
   /**
@@ -101,8 +126,9 @@ public class SetupAccountUseCase {
    *
    * <p><b>Bewusst ohne {@code @Transactional}</b>, aus demselben Grund wie bei {@link
    * LoginUseCase}: Eine Transaktion, die mit {@link LoginFailed} zurueckrollt, naehme die gezaehlte
-   * Fehleingabe wieder weg. Das Konto entsteht in der Transaktion seines Speicherns; das verlorene
-   * Wettrennen an {@code account_single_admin} faengt {@link #speichere} wie bisher.
+   * Fehleingabe wieder weg. Das Konto entsteht in einer eigenen Transaktion, die auch {@link
+   * ErstesKontoFolge} umschliesst (E13); das verlorene Wettrennen an {@code account_email_key}
+   * faengt {@link #speichere} wie bisher.
    *
    * @param email die Anmeldeadresse des ersten Kontos — dieselbe, an die der Code ging
    * @param displayName der Anzeigename
@@ -121,7 +147,7 @@ public class SetupAccountUseCase {
       final String presentedKey,
       final String clientIp) {
     einloesung.bremse(clientIp);
-    if (!schluesselStimmt(presentedKey) || accounts.existsAnyAdmin()) {
+    if (!schluesselStimmt(presentedKey) || accounts.existsAnyAccount()) {
       throw new SetupRefused();
     }
     if (!einloesung.loese(email, code, clientIp)) {
@@ -130,7 +156,8 @@ public class SetupAccountUseCase {
     }
 
     final Instant jetzt = clock.instant();
-    final Account neu = new Account(null, email, displayName, Role.ADMIN, 0, jetzt, jetzt);
+    final Account neu =
+        new Account(null, email, displayName, Role.C_LEVEL, true, 0, jetzt, jetzt, 0L, null);
 
     final Account angelegt = speichere(neu);
     return new LoginResult(angelegt, cookie(angelegt, jetzt));
@@ -158,7 +185,7 @@ public class SetupAccountUseCase {
     if (!warten.isZero()) {
       throw new TooManyLoginAttempts(warten);
     }
-    if (!schluesselStimmt(presentedKey) || accounts.existsAnyAdmin()) {
+    if (!schluesselStimmt(presentedKey) || accounts.existsAnyAccount()) {
       throw new SetupRefused();
     }
     ausstellung.ausstellen(email, displayName);
@@ -180,9 +207,19 @@ public class SetupAccountUseCase {
             presentedKey.getBytes(StandardCharsets.UTF_8));
   }
 
+  /*
+   * TransactionOperations#execute sagt keinen Wert zu, weil ein Rueckruf null liefern darf; dieser
+   * liefert immer das gespeicherte Konto.
+   */
   private Account speichere(final Account neu) {
     try {
-      return accounts.save(neu);
+      return Objects.requireNonNull(
+          transaktion.execute(
+              status -> {
+                final Account angelegt = accounts.save(neu);
+                folge.erstesKontoAngelegt(angelegt.requireId());
+                return angelegt;
+              }));
     } catch (final DataIntegrityViolationException wettrennenVerloren) {
       throw new SetupRefused(wettrennenVerloren);
     }

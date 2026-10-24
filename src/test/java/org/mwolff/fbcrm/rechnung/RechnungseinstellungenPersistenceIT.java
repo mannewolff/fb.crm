@@ -1,6 +1,7 @@
 package org.mwolff.fbcrm.rechnung;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -8,11 +9,14 @@ import java.time.OffsetDateTime;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mwolff.fbcrm.AbstractIntegrationTest;
+import org.mwolff.fbcrm.Schutzspalten;
 import org.mwolff.fbcrm.rechnung.domain.Nummernmuster;
 import org.mwolff.fbcrm.rechnung.domain.Rechnungseinstellungen;
 import org.mwolff.fbcrm.rechnung.domain.RechnungseinstellungenRepository;
+import org.mwolff.fbcrm.rechnung.domain.Zeilenstand;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 
 /**
  * Der Port auf den Bestand gegen eine echte PostgreSQL-Instanz.
@@ -34,6 +38,8 @@ class RechnungseinstellungenPersistenceIT extends AbstractIntegrationTest {
   private final RechnungseinstellungenRepository repository;
   private final JdbcTemplate jdbc;
 
+  private long konto;
+
   @Autowired
   RechnungseinstellungenPersistenceIT(
       final RechnungseinstellungenRepository repository, final JdbcTemplate jdbc) {
@@ -46,6 +52,8 @@ class RechnungseinstellungenPersistenceIT extends AbstractIntegrationTest {
     jdbc.execute("DELETE FROM rechnung_einstellungen");
     jdbc.execute("INSERT INTO rechnung_einstellungen DEFAULT VALUES");
     jdbc.execute("DELETE FROM rechnung_nummernkreis");
+    leereKonten(jdbc);
+    konto = Schutzspalten.konto(jdbc);
   }
 
   @Test
@@ -67,7 +75,7 @@ class RechnungseinstellungenPersistenceIT extends AbstractIntegrationTest {
         new Rechnungseinstellungen(new Nummernmuster("R{JJ}-{NNNN}"), new BigDecimal("19.50"), 14);
 
     // When
-    repository.speichere(neu, GEAENDERT);
+    repository.speichere(neu, GEAENDERT, 0L, konto);
 
     // Then
     assertThat(repository.lies()).isEqualTo(neu);
@@ -77,7 +85,10 @@ class RechnungseinstellungenPersistenceIT extends AbstractIntegrationTest {
   void speichere_thenUpdatesTheOneRowAndAddsNoSecond() {
     // When — die Kennung steht von Anfang an, das save ist ein UPDATE.
     repository.speichere(
-        new Rechnungseinstellungen(new Nummernmuster("{N}"), new BigDecimal("7.00"), 0), GEAENDERT);
+        new Rechnungseinstellungen(new Nummernmuster("{N}"), new BigDecimal("7.00"), 0),
+        GEAENDERT,
+        0L,
+        konto);
 
     // Then
     final Integer zeilen =
@@ -87,5 +98,40 @@ class RechnungseinstellungenPersistenceIT extends AbstractIntegrationTest {
     assertThat(zeilen).isEqualTo(1);
     assertThat(zuletzt).isNotNull();
     assertThat(zuletzt.toInstant()).isEqualTo(GEAENDERT);
+  }
+
+  @Test
+  void speichere_thenRaisesTheVersionAndSetsTheUrheber() {
+    // When — Plan #415, E1, E14.
+    final Zeilenstand neu =
+        repository.speichere(
+            new Rechnungseinstellungen(new Nummernmuster("{N}"), new BigDecimal("7.00"), 0),
+            GEAENDERT,
+            0L,
+            konto);
+
+    // Then — die Antwort und die Zeile tragen denselben, erhoehten Stand.
+    assertThat(neu).isEqualTo(new Zeilenstand(1L, konto, GEAENDERT));
+    assertThat(repository.stand()).isEqualTo(neu);
+  }
+
+  @Test
+  void speichere_givenAnOutdatedStand_thenTheLockRefusesAndTheRowStays() {
+    // Given — ein anderer hat inzwischen gespeichert.
+    final Rechnungseinstellungen erste =
+        new Rechnungseinstellungen(new Nummernmuster("A-{NNNN}"), new BigDecimal("19.00"), 10);
+    repository.speichere(erste, GEAENDERT, 0L, konto);
+
+    // When / Then — die Sperre greift auch ohne den Vergleich im Anwendungsfall (E1).
+    assertThatThrownBy(
+            () ->
+                repository.speichere(
+                    new Rechnungseinstellungen(
+                        new Nummernmuster("B-{NNNN}"), new BigDecimal("7.00"), 0),
+                    GEAENDERT,
+                    0L,
+                    konto))
+        .isInstanceOf(ObjectOptimisticLockingFailureException.class);
+    assertThat(repository.lies()).isEqualTo(erste);
   }
 }

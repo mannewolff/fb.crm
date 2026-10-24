@@ -9,11 +9,16 @@ import java.util.Optional;
  *
  * <p>Anders als die Positionen sind Kommentare <b>keine</b> Einheit mit dem Angebot (Plan #141,
  * E2): Jeder traegt seine eigene Kennung und wird einzeln angelegt, geaendert und geloescht.
+ *
+ * <p>Geloescht wird mit Kennzeichen (Plan #415, E17): {@link #save(Angebotskommentar)} schreibt es
+ * wie jede andere Aenderung. Die Liste laesst gekennzeichnete Kommentare aus; {@link #findById}
+ * liefert sie dagegen mit, damit der Anwendungsfall Urheber und Zeitpunkt der Loeschung nennen kann
+ * (E16).
  */
 public interface AngebotskommentarRepository {
 
   /**
-   * Alle Kommentare eines Angebots.
+   * Alle nicht geloeschten Kommentare eines Angebots (E17).
    *
    * <p>Ohne zugesagte Reihenfolge, wie {@link AngebotRepository#findByFirma(long)}: Welche Ordnung
    * die Ansicht zeigt, entscheidet die Anwendungsschicht — der Bestand liefert den Inhalt, nicht
@@ -24,22 +29,19 @@ public interface AngebotskommentarRepository {
   List<Angebotskommentar> findByAngebot(long angebotId);
 
   /**
-   * Der Kommentar zu einer technischen Id, oder leer.
+   * Der Kommentar zu einer technischen Id, oder leer — auch ein geloeschter, samt Kennzeichen.
    *
    * <p>Ob er zu dem Angebot gehoert, nach dem gefragt wurde, prueft der Anwendungsfall — der Port
    * kennt nur die Kennung (E5).
    */
   Optional<Angebotskommentar> findById(long id);
 
-  /** Legt den Kommentar an oder schreibt ihn fort und liefert ihn mit gesetzter Id zurueck. */
-  Angebotskommentar save(Angebotskommentar kommentar);
-
   /**
-   * Loescht den Kommentar — die Zeile ist danach fort (E6).
+   * Legt den Kommentar an oder schreibt ihn fort und liefert ihn mit gesetzter Id und dem neuen
+   * Stand zurueck (Plan #415, E1).
    *
-   * <p>Ein Stilllegen gibt es nicht: Ein stillgelegter Kommentar haette keine Ansicht.
-   *
-   * @param id Kennung des Kommentars
+   * <p>Beruht der Kommentar auf einem Stand, den die Zeile nicht mehr traegt, scheitert das
+   * Schreiben, statt still zu ueberschreiben.
    */
-  void deleteById(long id);
+  Angebotskommentar save(Angebotskommentar kommentar);
 }

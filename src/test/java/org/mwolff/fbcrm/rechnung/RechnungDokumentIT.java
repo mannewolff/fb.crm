@@ -12,6 +12,7 @@ import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mwolff.fbcrm.AbstractIntegrationTest;
+import org.mwolff.fbcrm.Stand;
 import org.mwolff.fbcrm.angebot.web.AngebotResponse;
 import org.mwolff.fbcrm.auth.Anmeldung;
 import org.mwolff.fbcrm.auth.Konten;
@@ -86,7 +87,7 @@ class RechnungDokumentIT extends AbstractIntegrationTest {
     // Ohne Briefpapier, wie es diese Klasse erwartet: Andere Klassen hinterlassen den Briefbogen.
     jdbc.execute("DELETE FROM briefbogen");
     jdbc.execute("INSERT INTO briefbogen DEFAULT VALUES");
-    jdbc.execute("TRUNCATE outbox_message, account RESTART IDENTITY CASCADE");
+    leereKonten(jdbc);
     accounts.save(Konten.neu(MAIL, ANGELEGT));
     sitzung = Anmeldung.perCode(rest, jdbc, hasher, MAIL);
     eigeneAngabenSetzen("75/123/45678", "DE02 1203 0000 0000 2020 51");
@@ -99,6 +100,23 @@ class RechnungDokumentIT extends AbstractIntegrationTest {
       final @Nullable Object rumpf,
       final Class<T> typ) {
     return rest.exchange(pfad, methode, new HttpEntity<>(rumpf, sitzung), typ);
+  }
+
+  /**
+   * Ein schreibender Weg an der Rechnung, auf ihrem aktuellen Stand (Plan #415, E2, E3): so, wie
+   * die Maske ihn vorlegt.
+   */
+  private <T> ResponseEntity<T> rufAufStand(
+      final String pfad,
+      final HttpMethod methode,
+      final @Nullable Object rumpf,
+      final Class<T> typ,
+      final long rechnungId) {
+    return rest.exchange(
+        pfad,
+        methode,
+        new HttpEntity<>(rumpf, Stand.aktuell(sitzung, jdbc, "rechnung", rechnungId)),
+        typ);
   }
 
   private void eigeneAngabenSetzen(final String steuernummer, final String bankverbindung) {
@@ -115,7 +133,15 @@ class RechnungDokumentIT extends AbstractIntegrationTest {
     rumpf.put("steuernummer", steuernummer);
     rumpf.put("umsatzsteuerId", "DE123456789");
     rumpf.put("bankverbindung", bankverbindung);
-    ruf("/api/eigene-angaben", HttpMethod.PUT, rumpf, Void.class);
+    // Auf dem aktuellen Stand der eigenen Angaben, wie die Maske (Plan #415, E2).
+    assertThat(
+            rest.exchange(
+                    "/api/eigene-angaben",
+                    HttpMethod.PUT,
+                    new HttpEntity<>(rumpf, Stand.aktuell(sitzung, jdbc, "eigene_angaben", 1L)),
+                    String.class)
+                .getStatusCode())
+        .isEqualTo(HttpStatus.OK);
   }
 
   private long firmaAnlegen(
@@ -150,7 +176,12 @@ class RechnungDokumentIT extends AbstractIntegrationTest {
     rumpf.put("naechsteNummer", Integer.valueOf(naechsteNummer));
     rumpf.put("steuersatz", steuersatz);
     rumpf.put("zahlungszielTage", Integer.valueOf(30));
-    ruf("/api/rechnung/einstellungen", HttpMethod.PUT, rumpf, Void.class);
+    // Auf dem aktuellen Stand der Einstellungen, wie die Maske (Plan #415, E2).
+    rest.exchange(
+        "/api/rechnung/einstellungen",
+        HttpMethod.PUT,
+        new HttpEntity<>(rumpf, Stand.aktuell(sitzung, jdbc, "rechnung_einstellungen", 1L)),
+        Void.class);
   }
 
   /** Die Nummer, die das Standardmuster zur laufenden Nummer bildet. */
@@ -170,8 +201,16 @@ class RechnungDokumentIT extends AbstractIntegrationTest {
                     .getBody())
             .id();
     positionSetzen(angebotId, null, "Beratung", menge, STUNDENSATZ);
-    ruf("/api/angebote/" + angebotId + "/status/weiter", HttpMethod.POST, null, String.class);
-    ruf("/api/angebote/" + angebotId + "/status/weiter", HttpMethod.POST, null, String.class);
+    rest.exchange(
+        "/api/angebote/" + angebotId + "/status/weiter",
+        HttpMethod.POST,
+        new HttpEntity<>(null, Stand.aktuell(sitzung, jdbc, "angebot", angebotId)),
+        String.class);
+    rest.exchange(
+        "/api/angebote/" + angebotId + "/status/weiter",
+        HttpMethod.POST,
+        new HttpEntity<>(null, Stand.aktuell(sitzung, jdbc, "angebot", angebotId)),
+        String.class);
     return angebotId;
   }
 
@@ -194,7 +233,11 @@ class RechnungDokumentIT extends AbstractIntegrationTest {
     rumpf.put("ansprechpartnerId", null);
     rumpf.put("beschreibung", "Neugestaltung der Website");
     rumpf.put("positionen", List.of(position));
-    ruf("/api/angebote/" + angebotId, HttpMethod.PUT, rumpf, AngebotResponse.class);
+    rest.exchange(
+        "/api/angebote/" + angebotId,
+        HttpMethod.PUT,
+        new HttpEntity<>(rumpf, Stand.aktuell(sitzung, jdbc, "angebot", angebotId)),
+        AngebotResponse.class);
   }
 
   /** Ein Entwurf zum Angebot, auf die angegebene Menge gesetzt. */
@@ -217,17 +260,23 @@ class RechnungDokumentIT extends AbstractIntegrationTest {
     rumpf.put("leistungszeitraum", ZEITRAUM);
     rumpf.put("positionen", List.of(position));
     return Objects.requireNonNull(
-        ruf("/api/rechnungen/" + entwurf.id(), HttpMethod.PUT, rumpf, RechnungResponse.class)
+        rufAufStand(
+                "/api/rechnungen/" + entwurf.id(),
+                HttpMethod.PUT,
+                rumpf,
+                RechnungResponse.class,
+                entwurf.id())
             .getBody());
   }
 
   private RechnungResponse gestellt(final long rechnungId) {
     final ResponseEntity<RechnungResponse> antwort =
-        ruf(
+        rufAufStand(
             "/api/rechnungen/" + rechnungId + "/stellen",
             HttpMethod.POST,
             null,
-            RechnungResponse.class);
+            RechnungResponse.class,
+            rechnungId);
     assertThat(antwort.getStatusCode()).isEqualTo(HttpStatus.OK);
     return Objects.requireNonNull(antwort.getBody());
   }

@@ -65,7 +65,8 @@ class AuthControllerIT extends AbstractIntegrationTest {
 
   @BeforeEach
   void legeDasAdminKontoAn() {
-    jdbc.execute("TRUNCATE outbox_message, login_code, account RESTART IDENTITY CASCADE");
+    jdbc.execute("TRUNCATE login_code RESTART IDENTITY");
+    leereKonten(jdbc);
     final Instant jetzt = Instant.parse("2026-09-18T10:00:00Z");
     accounts.save(Konten.neu(MAIL, jetzt));
   }

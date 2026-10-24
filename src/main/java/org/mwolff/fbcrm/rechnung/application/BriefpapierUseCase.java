@@ -10,6 +10,7 @@ import org.mwolff.fbcrm.rechnung.domain.BriefbogenRepository;
 import org.mwolff.fbcrm.rechnung.domain.Briefpapierblatt;
 import org.mwolff.fbcrm.rechnung.domain.Briefpapierspeicher;
 import org.mwolff.fbcrm.rechnung.domain.DokumentSpeicherAusfall;
+import org.mwolff.fbcrm.rechnung.domain.Zeilenstand;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -39,6 +40,12 @@ import org.springframework.transaction.annotation.Transactional;
  * ({@link Dateiname}). Bleibt davon nichts, traegt die Zeile den {@link #ERSATZNAME}: Ein fehlender
  * Name ist kein Grund, ein sonst gutes Briefpapier abzuweisen. Die Groesse ist die des abgelegten,
  * gereinigten Objekts.
+ *
+ * <p><b>Hochladen und Entfernen legen den Stand vor</b> (#411, Kriterium 4; Plan #415, E1, E11,
+ * E14): Das Briefpapier ist ein Teil des Briefbogens, und der traegt einen Stand fuer die ganze
+ * Zeile. Wer auf einem alten Stand hochlaedt oder entfernt, bekommt {@link BriefbogenGeaendert} —
+ * vor den Riegeln und bevor etwas im Speicher landet. Das handelnde Konto steht danach als Urheber
+ * an der Zeile. Das Lesen fuer den Druck bleibt frei (E10).
  */
 @Service
 @Transactional
@@ -70,13 +77,19 @@ public class BriefpapierUseCase {
    *
    * @param rohDateiname der Name, wie er mit der Anfrage kam
    * @param inhalt die hochgeladenen Bytes
-   * @return der neue Stand
+   * @param version der vorgelegte Stand aus {@code If-Match}
+   * @param konto Kennung des handelnden Kontos
+   * @return der neue Stand mit erhoehter Version
+   * @throws BriefbogenGeaendert wenn der Briefbogen inzwischen einen anderen Stand hat als den
+   *     vorgelegten
    * @throws BriefpapierNichtAnnehmbar wenn die Datei leer, zu gross oder kein PDF ist, sich nicht
    *     laden laesst oder verschluesselt ist, mehr als zwei Seiten hat oder nicht A4 hochkant ist
    * @throws DokumentSpeicherAusfall wenn der Speicher die Ablage nicht annimmt — dann ist nichts
    *     geschrieben
    */
-  public Briefbogenstand ladeHoch(final String rohDateiname, final byte[] inhalt) {
+  public Briefbogenstand ladeHoch(
+      final String rohDateiname, final byte[] inhalt, final long version, final long konto) {
+    BriefbogenGeaendert.pruefe(bestand.stand(), version, konto);
     pruefe(inhalt);
     final Briefpapierpruefer.Gereinigt gereinigt = pruefer.pruefe(inhalt);
     final byte[] abzulegen = gereinigt.inhalt();
@@ -90,12 +103,12 @@ public class BriefpapierUseCase {
             gereinigt.seiten());
     final Briefbogen neu =
         new Briefbogen(blatt, bisher.absenderzeile(), bisher.steuerBankZeile(), bisher.raender());
-    bestand.speichere(neu, clock.instant());
+    final Zeilenstand gespeichert = bestand.speichere(neu, clock.instant(), version, konto);
     final Briefpapierblatt alt = bisher.blatt();
     if (alt != null) {
       NachDemCommit.fuehreAus(() -> entferneObjekt(alt.schluessel()));
     }
-    return Briefbogenstand.von(neu);
+    return Briefbogenstand.von(neu, gespeichert.version());
   }
 
   /**
@@ -114,10 +127,15 @@ public class BriefpapierUseCase {
   /**
    * Entfernt das Briefpapier; Schalter und Raender bleiben, das Objekt geht nach dem Commit.
    *
-   * @return der Stand ohne Briefpapier
+   * @param version der vorgelegte Stand aus {@code If-Match}
+   * @param konto Kennung des handelnden Kontos
+   * @return der Stand ohne Briefpapier, mit erhoehter Version
+   * @throws BriefbogenGeaendert wenn der Briefbogen inzwischen einen anderen Stand hat als den
+   *     vorgelegten
    * @throws BriefpapierNichtGefunden wenn keines hinterlegt ist
    */
-  public Briefbogenstand entferne() {
+  public Briefbogenstand entferne(final long version, final long konto) {
+    BriefbogenGeaendert.pruefe(bestand.stand(), version, konto);
     final Briefbogen bisher = bestand.lies();
     final Briefpapierblatt alt = bisher.blatt();
     if (alt == null) {
@@ -125,9 +143,9 @@ public class BriefpapierUseCase {
     }
     final Briefbogen neu =
         new Briefbogen(null, bisher.absenderzeile(), bisher.steuerBankZeile(), bisher.raender());
-    bestand.speichere(neu, clock.instant());
+    final Zeilenstand gespeichert = bestand.speichere(neu, clock.instant(), version, konto);
     NachDemCommit.fuehreAus(() -> entferneObjekt(alt.schluessel()));
-    return Briefbogenstand.von(neu);
+    return Briefbogenstand.von(neu, gespeichert.version());
   }
 
   /*

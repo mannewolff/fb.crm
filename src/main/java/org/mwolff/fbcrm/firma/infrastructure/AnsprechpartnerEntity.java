@@ -6,12 +6,14 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 import java.time.Instant;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.fbcrm.firma.domain.Ansprechpartner;
 
 /**
- * Die Zeile der Tabelle {@code ansprechpartner} aus {@code V2__firma_und_ansprechpartner.sql}.
+ * Die Zeile der Tabelle {@code ansprechpartner} aus {@code V2__firma_und_ansprechpartner.sql} und
+ * {@code V33__version.sql}.
  *
  * <p>Die Firma steht als blosse Kennung und nicht als Beziehung: Ansprechpartner und Firma sind
  * zwei Wurzeln mit je eigenem Lebenszyklus (E2), und eine Beziehung laedt das eine mit dem anderen,
@@ -56,6 +58,20 @@ class AnsprechpartnerEntity {
   private Instant updatedAt;
 
   /*
+   * Der Stand der Zeile, gefuehrt von Hibernate (Plan #415, E1): Jedes Schreiben erhoeht ihn, und
+   * ein UPDATE mit einem anderen Stand als dem gelesenen trifft keine Zeile und scheitert. Er kommt
+   * aus dem Fachobjekt mit, damit eine Zeile, die auf einem alten Stand beruht, nicht still
+   * geschrieben wird. Ein long und kein Long: Ob die Zeile neu ist, entscheidet so weiter die
+   * Kennung, und eine neue Zeile beginnt bei 0 wie die Vorbelegung der Spalte (V33).
+   */
+  @Version
+  @Column(name = "version", nullable = false)
+  private long version;
+
+  @Column(name = "geaendert_von")
+  private @Nullable Long geaendertVon;
+
+  /*
    * JPA verlangt einen parameterlosen Konstruktor und fuellt die Felder danach selbst; NullAway
    * sieht diesen Weg nicht und meldete sonst nicht initialisierte Felder.
    */
@@ -91,6 +107,8 @@ class AnsprechpartnerEntity {
     this.aktiv = ansprechpartner.aktiv();
     this.createdAt = ansprechpartner.createdAt();
     this.updatedAt = ansprechpartner.updatedAt();
+    this.version = ansprechpartner.version();
+    this.geaendertVon = ansprechpartner.geaendertVon();
   }
 
   @Nullable Long getId() {
@@ -135,5 +153,13 @@ class AnsprechpartnerEntity {
 
   Instant getUpdatedAt() {
     return updatedAt;
+  }
+
+  long getVersion() {
+    return version;
+  }
+
+  @Nullable Long getGeaendertVon() {
+    return geaendertVon;
   }
 }

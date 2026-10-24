@@ -14,9 +14,18 @@ import org.mwolff.fbcrm.arbeitszeit.domain.Zeiteintrag;
  * Die Monatsliste, wie die Ansicht „Arbeitszeit" sie zeigt (Issue #193, Kriterium 5; Plan #194,
  * A20).
  *
- * <p>Die Felder sind die aus A20 und vollstaendig: Je Zeile Kennung, Tag, Uhrzeit, gerechnete Dauer
- * und die Position mit Angebot und Firmenname; je Tag die Summe, dazu die des Monats. Die
- * Oberflaeche rechnet und fragt damit nichts nach.
+ * <p>Die Felder sind die aus A20 und vollstaendig: Je Zeile Kennung, Tag, Uhrzeit, gerechnete
+ * Dauer, die Position mit Angebot und Firmenname, die Person mit ihrem aktuellen Namen und der
+ * Stand des Eintrags (Plan #415, E2); je Tag die Summe, dazu die des Monats. Die Oberflaeche
+ * rechnet und fragt damit nichts nach.
+ *
+ * <p><b>Die Person steht an jeder Zeile</b>, gleich welche Auswahl gilt (Plan #426, E14): Eine
+ * Antwort, deren Felder von der Auswahl abhaengen, zwaenge den Parser zu einer Fallunterscheidung.
+ * Wer eine Zeile ueberhaupt bekommt, darf ihren Namen sehen — ein Employee bekommt nur seine.
+ *
+ * <p><b>Die geltende Auswahl steht am Monat</b> (E10), in der Form des Parameters {@code person}:
+ * die Kennung eines Kontos als Text oder {@code alle}. Wer ohne Person fragt, bekommt die
+ * Vorauswahl seiner Rolle, und ohne diese Angabe wuesste die Ansicht nicht, welche das ist.
  *
  * <p><b>Der Monat steht in der Antwort</b>, weil der Aufrufer ihn weglassen darf und dann den
  * laufenden bekommt (E4) — ohne diese Angabe muesste die Ansicht die Geschaeftszone selbst
@@ -31,13 +40,16 @@ import org.mwolff.fbcrm.arbeitszeit.domain.Zeiteintrag;
  * Vorbelegung.
  *
  * @param monat der Monat, den diese Liste zeigt
+ * @param auswahl wessen Zeiten diese Liste zeigt: die Kennung eines Kontos als Text oder {@code
+ *     alle}
  * @param tage die Tage mit Eintraegen, aufsteigend; ein Tag ohne Eintrag fehlt
- * @param stunden die Summe des Monats
+ * @param stunden die Summe des Monats fuer die Eintraege der Auswahl
  * @param stundenFuerKunden der Teil davon, der auf Angebote an Kunden gebucht ist
  * @param stundenIntern der Teil davon, der auf interne Angebote gebucht ist
  */
 public record ArbeitszeitMonatResponse(
     YearMonth monat,
+    String auswahl,
     List<Tageszeile> tage,
     BigDecimal stunden,
     BigDecimal stundenFuerKunden,
@@ -47,6 +59,7 @@ public record ArbeitszeitMonatResponse(
   static ArbeitszeitMonatResponse of(final Arbeitsmonat gelesen) {
     return new ArbeitszeitMonatResponse(
         gelesen.monat(),
+        gelesen.auswahl().alsParameter(),
         gelesen.tage().stream().map(Tageszeile::of).toList(),
         gelesen.stunden(),
         gelesen.stundenFuerKunden(),
@@ -79,6 +92,9 @@ public record ArbeitszeitMonatResponse(
    * @param bis Ende
    * @param stunden die gerechnete Dauer
    * @param position die Position, auf die gebucht wurde
+   * @param person die Person, der der Eintrag gehoert, mit ihrem aktuellen Namen
+   * @param version der Stand des Eintrags; der Dialog zum Aendern legt ihn als {@code If-Match} vor
+   *     (Plan #415, E2)
    */
   public record Zeitzeile(
       long id,
@@ -86,7 +102,9 @@ public record ArbeitszeitMonatResponse(
       LocalTime von,
       LocalTime bis,
       BigDecimal stunden,
-      BuchungspositionResponse position) {
+      BuchungspositionResponse position,
+      PersonResponse person,
+      long version) {
 
     static Zeitzeile of(final Zeitbuchung buchung) {
       final Zeiteintrag eintrag = buchung.eintrag();
@@ -96,7 +114,9 @@ public record ArbeitszeitMonatResponse(
           eintrag.von(),
           eintrag.bis(),
           eintrag.stunden(),
-          BuchungspositionResponse.of(buchung.position()));
+          BuchungspositionResponse.of(buchung.position()),
+          PersonResponse.of(buchung.person()),
+          eintrag.version());
     }
   }
 }

@@ -18,6 +18,7 @@ import org.mwolff.fbcrm.auth.application.LoginResult;
 import org.mwolff.fbcrm.auth.application.SessionCookie;
 import org.mwolff.fbcrm.auth.application.SetupAccountUseCase;
 import org.mwolff.fbcrm.auth.domain.Account;
+import org.mwolff.fbcrm.auth.domain.Role;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -80,8 +81,9 @@ class SetupControllerTest {
     // When
     final ResponseEntity<AccountResponse> antwort = richteEin();
 
-    // Then — Id, Anzeigename und Adresse, sonst nichts.
-    assertThat(antwort.getBody()).isEqualTo(new AccountResponse(KONTO_ID, "Manne", MAIL));
+    // Then — Id, Anzeigename, Adresse und Rolle, sonst nichts (A8).
+    assertThat(antwort.getBody())
+        .isEqualTo(new AccountResponse(KONTO_ID, "Manne", MAIL, Role.C_LEVEL));
   }
 
   @Test

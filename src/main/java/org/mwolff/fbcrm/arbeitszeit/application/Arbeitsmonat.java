@@ -19,7 +19,13 @@ import java.util.List;
  *
  * <p>Die Tage teilen nicht auf: {@link Arbeitstag} traegt weiter nur seine eine Summe.
  *
+ * <p><b>Die Auswahl steht mit darin</b> aus demselben Grund wie der Monat (Plan #426, E10): Wer
+ * ohne Person fragt, bekommt die Vorauswahl seiner Rolle, und ein Employee bekommt immer seine
+ * eigenen Zeiten — die Ansicht erfaehrt hier, welche Auswahl gilt, statt die Regel nachzurechnen.
+ * Alle Summen gelten fuer die Eintraege dieser Auswahl.
+ *
  * @param monat der Monat, den diese Liste zeigt
+ * @param auswahl wessen Zeiten diese Liste zeigt
  * @param tage die Tage mit Eintraegen, aufsteigend; ein Tag ohne Eintrag fehlt
  * @param stunden die Summe des Monats in Stunden mit zwei Nachkommastellen
  * @param stundenFuerKunden der Teil davon, der auf Angebote an Kunden gebucht ist
@@ -27,6 +33,7 @@ import java.util.List;
  */
 public record Arbeitsmonat(
     YearMonth monat,
+    Personenauswahl auswahl,
     List<Arbeitstag> tage,
     BigDecimal stunden,
     BigDecimal stundenFuerKunden,

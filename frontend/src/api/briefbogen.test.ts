@@ -28,6 +28,7 @@ const MIT_PAPIER = {
   unten: 200,
   folgeOben: 200,
   folgeUnten: 200,
+  version: 3,
 };
 
 /** Der Stand einer frischen Instanz: die Vorgaben der Migration, kein Briefpapier. */
@@ -69,9 +70,13 @@ const EINSTELLUNGEN = {
 const MIT_PAPIER_VERENGT = {
   papier: { dateiname: 'Briefbogen.pdf', groesse: 48213, seiten: 2 },
   ...EINSTELLUNGEN,
+  version: 3,
 };
 
-const OHNE_PAPIER_VERENGT = { papier: null, ...EINSTELLUNGEN };
+const OHNE_PAPIER_VERENGT = { papier: null, ...EINSTELLUNGEN, version: 3 };
+
+/** Der Bedingungskopf, mit dem ein geschuetzter Weg den Stand 3 vorlegt (Plan #415, E2). */
+const VORGELEGT = { 'If-Match': '"3"' };
 
 describe('parseBriefbogen', () => {
   it('verengt den Stand mit Briefpapier; Name, Groesse und Seiten stehen beisammen', () => {
@@ -90,6 +95,7 @@ describe('parseBriefbogen', () => {
     ['ein fehlender Rand', { ...MIT_PAPIER, folgeUnten: undefined }],
     ['ein Briefpapier ohne Namen', { ...MIT_PAPIER, dateiname: null }],
     ['ein Briefpapier ohne Seitenzahl', { ...MIT_PAPIER, seiten: null }],
+    ['ohne version', { ...MIT_PAPIER, version: undefined }],
   ])('scheitert an einer unerwarteten Antwort: %s', (_fall, wert) => {
     expect(() => parseBriefbogen(wert)).toThrow(FORMFEHLER);
   });
@@ -113,17 +119,22 @@ describe('briefbogenLesen', () => {
 describe('briefbogenPflegen', () => {
   it('schickt Schalter und Raender als JSON per PUT und liest den neuen Stand', async () => {
     let gesendet: unknown = null;
-    fetchNachPfad({
+    const fetchMock = fetchNachPfad({
       'PUT /api/briefpapier': (rumpf) => {
         gesendet = alsJson(rumpf);
-        return json(200, { ...MIT_PAPIER, absenderzeile: false })();
+        return json(200, { ...MIT_PAPIER, absenderzeile: false, version: 4 })();
       },
     });
 
-    const neu = await briefbogenPflegen(EINGABE);
+    const neu = await briefbogenPflegen(3, EINGABE);
 
     expect(gesendet).toEqual(EINGABE);
     expect(neu.absenderzeile).toBe(false);
+    expect(neu.version).toBe(4);
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/briefpapier',
+      expect.objectContaining({ headers: expect.objectContaining(VORGELEGT) as unknown }),
+    );
   });
 
   it('reicht die Feldfehler einer 422-Antwort als ApiError weiter', async () => {
@@ -133,7 +144,7 @@ describe('briefbogenPflegen', () => {
       }),
     });
 
-    const fehler: unknown = await briefbogenPflegen(EINGABE).catch((ursache: unknown) => ursache);
+    const fehler: unknown = await briefbogenPflegen(3, EINGABE).catch((ursache: unknown) => ursache);
 
     expect(fehler).toBeInstanceOf(ApiError);
     expect(fehler).toMatchObject({
@@ -150,7 +161,7 @@ describe('briefbogenPflegen', () => {
 describe('briefpapierHochladen', () => {
   it('schickt die Datei im Teil „datei" per POST und liest den neuen Stand', async () => {
     const formulare: FormData[] = [];
-    fetchNachPfad({
+    const fetchMock = fetchNachPfad({
       'POST /api/briefpapier/datei': formularWeg(
         (gesendet) => {
           formulare.push(gesendet);
@@ -160,8 +171,12 @@ describe('briefpapierHochladen', () => {
     });
     const datei = new File(['%PDF'], 'Briefbogen.pdf', { type: 'application/pdf' });
 
-    await expect(briefpapierHochladen(datei)).resolves.toEqual(MIT_PAPIER_VERENGT);
+    await expect(briefpapierHochladen(3, datei)).resolves.toEqual(MIT_PAPIER_VERENGT);
     expect(formulare).toHaveLength(1);
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/briefpapier/datei',
+      expect.objectContaining({ headers: expect.objectContaining(VORGELEGT) as unknown }),
+    );
     const teil = formulare[0].get('datei');
     expect(teil).toBeInstanceOf(File);
     expect(teil).toHaveProperty('name', 'Briefbogen.pdf');
@@ -174,7 +189,7 @@ describe('briefpapierHochladen', () => {
       }),
     });
 
-    await expect(briefpapierHochladen(new File(['x'], 'a.pdf'))).rejects.toMatchObject({
+    await expect(briefpapierHochladen(3, new File(['x'], 'a.pdf'))).rejects.toMatchObject({
       status: 422,
       fieldErrors: { datei: ['Das Briefpapier muss A4 hochkant sein.'] },
     });
@@ -185,8 +200,15 @@ describe('briefpapierEntfernen', () => {
   it('entfernt das Briefpapier per DELETE und liest den Stand ohne Papier', async () => {
     const fetchMock = fetchNachPfad({ 'DELETE /api/briefpapier/datei': json(200, OHNE_PAPIER) });
 
-    await expect(briefpapierEntfernen()).resolves.toEqual(OHNE_PAPIER_VERENGT);
+    await expect(briefpapierEntfernen(3)).resolves.toEqual(OHNE_PAPIER_VERENGT);
     expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/briefpapier/datei',
+      expect.objectContaining({
+        method: 'DELETE',
+        headers: expect.objectContaining(VORGELEGT) as unknown,
+      }),
+    );
   });
 });
 

@@ -4,15 +4,23 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.tuple;
 
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.stream.Collectors;
+import javax.sql.DataSource;
+import org.flywaydb.core.Flyway;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.mwolff.fbcrm.AbstractIntegrationTest;
+import org.mwolff.fbcrm.Schutzspalten;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -55,6 +63,9 @@ class AngebotSchemaIT extends AbstractIntegrationTest {
       "INSERT INTO angebot (firma_id, status, titel, angebot_datum)"
           + " VALUES (?, 'ANGELEGT', ?, DATE '2026-09-20')";
 
+  /** Das Schema, in dem der Bestand aus V32 entsteht. */
+  private static final String PROBE = "migration_v33";
+
   private static final String FIRMA = "Adler AG";
 
   private static final String TAUSCHE_PLATZ =
@@ -62,13 +73,16 @@ class AngebotSchemaIT extends AbstractIntegrationTest {
 
   private final JdbcTemplate jdbc;
   private final TransactionTemplate transaktion;
+  private final DataSource dataSource;
 
   private long firmaId;
 
   @Autowired
-  AngebotSchemaIT(final JdbcTemplate jdbc, final TransactionTemplate transaktion) {
+  AngebotSchemaIT(
+      final JdbcTemplate jdbc, final TransactionTemplate transaktion, final DataSource dataSource) {
     this.jdbc = jdbc;
     this.transaktion = transaktion;
+    this.dataSource = dataSource;
   }
 
   @BeforeEach
@@ -473,5 +487,109 @@ class AngebotSchemaIT extends AbstractIntegrationTest {
                         + " VALUES (?, 'ANGELEGT', NULL, DATE '2026-09-20')",
                     firmaId))
         .isInstanceOf(DataIntegrityViolationException.class);
+  }
+
+  @Test
+  void migration_thenTheVersionStartsAtZeroAndTheAuthorReferencesTheAccount() {
+    // When — V33 (Plan #415, E1): ein eigener Zaehler und der letzte Urheber.
+    final String version = Schutzspalten.spalte(jdbc, "angebot", "version");
+    final String urheber = Schutzspalten.spalte(jdbc, "angebot", "geaendert_von");
+    final String verweis = Schutzspalten.verweis(jdbc, "angebot", "geaendert_von");
+
+    // Then — ohne ON DELETE wie jeder Fremdschluessel dieses Schemas.
+    assertThat(version).isEqualTo("bigint NO 0");
+    assertThat(urheber).isEqualTo("bigint YES -");
+    assertThat(verweis).isEqualTo("account.id NO ACTION");
+  }
+
+  @Test
+  void migration_givenAStockFromV32_thenEveryRowHasVersionZeroAndNoAuthorOrDeletionMark() {
+    // Given — ein eigenes Schema bis V32 mit Konto, Firma, Angebot und Kommentar, wie
+    // AngebotStornoMigrationIT; im Schema der Suite gibt es den Stand vor V33 nicht mehr.
+    final Flyway bisZweiunddreissig = flywayBis("32");
+    bisZweiunddreissig.clean();
+    bisZweiunddreissig.migrate();
+    try {
+      jdbc.update(
+          "INSERT INTO "
+              + PROBE
+              + ".account (email, display_name, role) VALUES ('manne@example.org', 'Manne',"
+              + " 'C_LEVEL')");
+      jdbc.update("INSERT INTO " + PROBE + ".firma (name) VALUES ('Adler AG')");
+      jdbc.update(
+          "INSERT INTO "
+              + PROBE
+              + ".angebot (firma_id, status, angebot_datum)"
+              + " SELECT id, 'ANGELEGT', DATE '2026-09-20' FROM "
+              + PROBE
+              + ".firma");
+      jdbc.update(
+          "INSERT INTO "
+              + PROBE
+              + ".angebot_kommentar (angebot_id, verfasser_id, text) SELECT a.id, k.id, 'Hallo'"
+              + " FROM "
+              + PROBE
+              + ".angebot a, "
+              + PROBE
+              + ".account k");
+
+      // When
+      flywayBis("latest").migrate();
+      final List<Map<String, Object>> zeilen =
+          jdbc.queryForList(
+              "SELECT 'account' AS tabelle, version, geaendert_von, NULL::timestamptz AS"
+                  + " geloescht_am, NULL::bigint AS geloescht_von FROM "
+                  + PROBE
+                  + ".account UNION ALL SELECT 'firma', version, geaendert_von, NULL, NULL FROM "
+                  + PROBE
+                  + ".firma UNION ALL SELECT 'angebot', version, geaendert_von, NULL, NULL FROM "
+                  + PROBE
+                  + ".angebot UNION ALL SELECT 'angebot_kommentar', version, geaendert_von,"
+                  + " geloescht_am, geloescht_von FROM "
+                  + PROBE
+                  + ".angebot_kommentar ORDER BY tabelle");
+
+      // Then — jede bestehende Zeile behaelt sich und traegt nur die Vorbelegungen.
+      assertThat(zeilen)
+          .extracting(
+              z -> z.get("tabelle"),
+              z -> z.get("version"),
+              z -> z.get("geaendert_von"),
+              z -> z.get("geloescht_am"),
+              z -> z.get("geloescht_von"))
+          .containsExactly(
+              tuple("account", 0L, null, null, null),
+              tuple("angebot", 0L, null, null, null),
+              tuple("angebot_kommentar", 0L, null, null, null),
+              tuple("firma", 0L, null, null, null));
+    } finally {
+      flywayBis("latest").clean();
+    }
+  }
+
+  @ParameterizedTest
+  @CsvSource({"V33__version.sql", "V34__geloescht.sql", "V35__nummer_ohne_geloeschte.sql"})
+  void migration_thenNoneOfTheThreeStepsRewritesARow(final String datei) throws IOException {
+    // Given — die Anweisungen ohne die Kommentarzeilen des Kopfes.
+    final String anweisungen =
+        new ClassPathResource("db/migration/" + datei)
+            .getContentAsString(StandardCharsets.UTF_8)
+            .lines()
+            .filter(zeile -> !zeile.startsWith("--"))
+            .collect(Collectors.joining("\n"))
+            .toUpperCase(Locale.ROOT);
+
+    // Then — die Vorbelegungen tragen den Bestand, kein UPDATE beruehrt eine Zeile.
+    assertThat(anweisungen).doesNotContain("UPDATE").doesNotContain("DELETE");
+  }
+
+  private Flyway flywayBis(final String ziel) {
+    return Flyway.configure()
+        .dataSource(dataSource)
+        .schemas(PROBE)
+        .locations("classpath:db/migration")
+        .target(ziel)
+        .cleanDisabled(false)
+        .load();
   }
 }

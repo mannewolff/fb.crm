@@ -22,10 +22,12 @@ import {
   setzeNachtragszustand,
 } from '../api/nachtraege';
 import type { Nachtrag } from '../api/nachtraege';
+import { useRechte } from '../auth/rechte';
 import AktionsMenue from '../components/AktionsMenue';
 import type { AktionsEintrag } from '../components/AktionsMenue';
 import Karte from '../components/Karte';
 import Kopfkarte from '../components/Kopfkarte';
+import Konfliktmeldung from '../components/Konfliktmeldung';
 import { useKopfPfad } from '../components/KopfPfad';
 import type { PfadVerweis } from '../components/KopfPfad';
 import { kupferSx } from '../components/KupferTaste';
@@ -33,7 +35,7 @@ import NachgetragenChip from '../components/NachgetragenChip';
 import RechnungszustandChip from '../components/RechnungszustandChip';
 import TastenSymbol from '../components/TastenSymbol';
 import WeicheTaste from '../components/WeicheTaste';
-import { nichtGefunden, serverMeldung } from '../lib/apifehler';
+import { istBearbeitungskonflikt, nichtGefunden, serverMeldung } from '../lib/apifehler';
 import { euro } from '../lib/geld';
 import { kennungAus } from '../lib/kennung';
 import type { Rechnungszustand } from '../lib/rechnungszustand';
@@ -65,12 +67,26 @@ import { ABSTAND_BUEHNE, ZAHLEN_KLASSE } from '../theme';
  *
  * Laden, „gibt es nicht" (404) und Ausfall wie in {@link RechnungPage}: Eine Kennung, die keine ist,
  * geht gar nicht erst ans Netz (`lib/kennung.ts`).
+ *
+ * Ohne Schreibrecht fehlen „Bearbeiten", die Zustandstaste und das ⋯-Menue (Kriterium 10 von #409,
+ * Plan #414, A10); „Herunterladen" bleibt (E4).
+ *
+ * <b>Der Zustandswechsel legt den gelesenen Stand vor</b> (#411, Kriterium 4; Plan #415, E2): Hat
+ * inzwischen jemand anderes geaendert, weist der Server ab, und statt der Ausfallmeldung steht die
+ * {@link Konfliktmeldung} ueber der Ansicht. „Neu laden" holt den Stand des Servers samt neuer
+ * Version; den Schritt loest man danach auf dem neuen Stand erneut aus. Eigene Eingaben gibt es
+ * hier keine — die Ansicht hat kein Formular.
+ *
+ * <b>Das Loeschen legt den Stand ebenso vor</b> (#411, Kriterium 6; Plan #415, E16, E17). Ist die
+ * Rechnung inzwischen geloescht, wird jeder Schritt darauf abgewiesen; statt „Neu laden" fuehrt
+ * „Zur Übersicht" zurueck.
  */
 
 const NICHT_GEFUNDEN = 'Diese nachgetragene Rechnung gibt es nicht.';
 const AUSFALL = 'Die Rechnung ist gerade nicht zu erreichen. Bitte später erneut versuchen.';
 const AUSFALL_ZUSTAND = 'Der Zustand wurde nicht geändert. Bitte später erneut versuchen.';
 const AUSFALL_LOESCHEN = 'Die Rechnung wurde nicht gelöscht. Bitte später erneut versuchen.';
+const AUSFALL_NEU_LADEN = 'Der aktuelle Stand ist gerade nicht zu erreichen. Bitte erneut versuchen.';
 const LAEDT = 'Die Rechnung wird geladen …';
 const KEIN_DOKUMENT = 'Kein Dokument hinterlegt';
 const BEZAHLT = 'Als bezahlt markieren';
@@ -80,6 +96,9 @@ const ABSCHREIBEN_FRAGE =
   'Die Forderung gilt damit als uneinbringlich. Die Rechnung bleibt mit Nummer und Dokument bestehen, und der Schritt lässt sich zurücknehmen.';
 const LOESCHEN_FRAGE =
   'Die nachgetragene Rechnung wird samt ihrem hinterlegten Dokument gelöscht. Das lässt sich nicht zurücknehmen.';
+
+/** Wohin die Konfliktmeldung fuehrt, wenn die Rechnung inzwischen geloescht ist. */
+const UEBERSICHT = '/rechnungen';
 
 /** Die Symbolgroesse in den Tasten (wie in {@link RechnungPage}). */
 const SYMBOL_TASTE = 16;
@@ -137,12 +156,15 @@ function Angaben({ nachtrag }: { readonly nachtrag: Nachtrag }) {
 }
 
 export default function NachgetrageneRechnungPage() {
+  const { darfFachlichSchreiben } = useRechte();
   const { id } = useParams();
   const kennung = kennungAus(id);
   const navigate = useNavigate();
   const [stand, setzeStand] = useState<Stand>({ art: 'laedt' });
   const [fehler, setzeFehler] = useState<string | null>(null);
   const [laeuft, setzeLaeuft] = useState(false);
+  // Die Abweisung eines Schritts auf altem Stand, ungeprueft — die Konfliktmeldung liest sie selbst.
+  const [abweisung, setzeAbweisung] = useState<unknown>(null);
   useKopfPfad(
     [ZU_RECHNUNGEN],
     stand.art === 'daten' ? ueberschriftZu(stand.nachtrag) : 'Rechnung',
@@ -163,27 +185,63 @@ export default function NachgetrageneRechnungPage() {
       });
   }, [kennung]);
 
-  /** Stellt den Zustand ueber den eigenen Weg um (E24); die Antwort ist der neue Stand. */
+  /**
+   * Stellt den Zustand ueber den eigenen Weg um (E24), auf dem gezeigten Stand (Plan #415, E2); die
+   * Antwort ist der neue Stand.
+   */
   const umstellen = async (nachtrag: Nachtrag, ziel: Rechnungszustand) => {
     setzeFehler(null);
+    setzeAbweisung(null);
     setzeLaeuft(true);
     try {
-      setzeStand({ art: 'daten', nachtrag: await setzeNachtragszustand(nachtrag.id, ziel) });
+      setzeStand({
+        art: 'daten',
+        nachtrag: await setzeNachtragszustand(nachtrag.id, nachtrag.version, ziel),
+      });
     } catch (ursache) {
-      setzeFehler(serverMeldung(ursache, AUSFALL_ZUSTAND));
+      if (istBearbeitungskonflikt(ursache)) {
+        setzeAbweisung(ursache);
+      } else {
+        setzeFehler(serverMeldung(ursache, AUSFALL_ZUSTAND));
+      }
     } finally {
       setzeLaeuft(false);
     }
   };
 
-  const loeschen = async (nachtrag: Nachtrag) => {
+  /** „Neu laden" nach einer Abweisung: der Stand des Servers samt neuer Version (#411, Kr. 3). */
+  const neuLaden = async (nachtrag: Nachtrag) => {
     setzeFehler(null);
     setzeLaeuft(true);
     try {
-      await nachtragLoeschen(nachtrag.id);
-      navigate('/rechnungen');
+      setzeStand({ art: 'daten', nachtrag: await nachtragLesen(nachtrag.id) });
+      setzeAbweisung(null);
     } catch {
-      setzeFehler(AUSFALL_LOESCHEN);
+      setzeFehler(AUSFALL_NEU_LADEN);
+    } finally {
+      setzeLaeuft(false);
+    }
+  };
+
+  /**
+   * Loescht die Rechnung auf dem Stand der Ansicht (#411, Kriterium 6; Plan #415, E17).
+   *
+   * Hat inzwischen jemand anderes geaendert oder geloescht, bleibt die Seite stehen, und die
+   * {@link Konfliktmeldung} sagt, was geschehen ist.
+   */
+  const loeschen = async (nachtrag: Nachtrag) => {
+    setzeFehler(null);
+    setzeAbweisung(null);
+    setzeLaeuft(true);
+    try {
+      await nachtragLoeschen(nachtrag.id, nachtrag.version);
+      navigate(UEBERSICHT);
+    } catch (ursache) {
+      if (istBearbeitungskonflikt(ursache)) {
+        setzeAbweisung(ursache);
+      } else {
+        setzeFehler(AUSFALL_LOESCHEN);
+      }
       setzeLaeuft(false);
     }
   };
@@ -219,27 +277,31 @@ export default function NachgetrageneRechnungPage() {
     const gestellt = nachtrag.zustand === 'GESTELLT';
     return (
       <>
-        <WeicheTaste
-          to={`/rechnungen/nachgetragen/${String(nachtrag.id)}/bearbeiten`}
-          symbol={<IconPencil size={SYMBOL_TASTE} stroke={1.8} />}
-        >
-          Bearbeiten
-        </WeicheTaste>
-        <WeicheTaste
-          onClick={() => {
-            void umstellen(nachtrag, gestellt ? 'BEZAHLT' : 'GESTELLT');
-          }}
-          disabled={laeuft}
-          symbol={
-            gestellt ? (
-              <IconCircleCheck size={SYMBOL_TASTE} stroke={1.8} />
-            ) : (
-              <IconRotate2 size={SYMBOL_TASTE} stroke={1.8} />
-            )
-          }
-        >
-          {gestellt ? BEZAHLT : ZURUECK}
-        </WeicheTaste>
+        {darfFachlichSchreiben ? (
+          <>
+            <WeicheTaste
+              to={`/rechnungen/nachgetragen/${String(nachtrag.id)}/bearbeiten`}
+              symbol={<IconPencil size={SYMBOL_TASTE} stroke={1.8} />}
+            >
+              Bearbeiten
+            </WeicheTaste>
+            <WeicheTaste
+              onClick={() => {
+                void umstellen(nachtrag, gestellt ? 'BEZAHLT' : 'GESTELLT');
+              }}
+              disabled={laeuft}
+              symbol={
+                gestellt ? (
+                  <IconCircleCheck size={SYMBOL_TASTE} stroke={1.8} />
+                ) : (
+                  <IconRotate2 size={SYMBOL_TASTE} stroke={1.8} />
+                )
+              }
+            >
+              {gestellt ? BEZAHLT : ZURUECK}
+            </WeicheTaste>
+          </>
+        ) : null}
         {nachtrag.dokument ? (
           <Button
             component="a"
@@ -259,11 +321,13 @@ export default function NachgetrageneRechnungPage() {
             {KEIN_DOKUMENT}
           </Typography>
         )}
-        <AktionsMenue
-          name="Aktionen für diese Rechnung"
-          objekt={ueberschriftZu(nachtrag)}
-          eintraege={menueZu(nachtrag)}
-        />
+        {darfFachlichSchreiben ? (
+          <AktionsMenue
+            name="Aktionen für diese Rechnung"
+            objekt={ueberschriftZu(nachtrag)}
+            eintraege={menueZu(nachtrag)}
+          />
+        ) : null}
       </>
     );
   }
@@ -299,6 +363,13 @@ export default function NachgetrageneRechnungPage() {
   return (
     <Box sx={spalten}>
       {fehler === null ? null : <Alert severity="error">{fehler}</Alert>}
+      <Konfliktmeldung
+        ursache={abweisung}
+        onNeuLaden={() => {
+          void neuLaden(nachtrag);
+        }}
+        uebersicht={UEBERSICHT}
+      />
       <Kopfkarte
         malName={nachtrag.firmaName}
         titel={ueberschriftZu(nachtrag)}

@@ -37,6 +37,9 @@ class AnsprechpartnerAendernUseCaseTest {
   private static final long ID = 3L;
   private static final Instant ANGELEGT = Instant.parse("2026-09-01T08:00:00Z");
   private static final Instant JETZT = Instant.parse("2026-09-25T09:30:00Z");
+  private static final long STAND = 3L;
+  private static final long URHEBER = 2L;
+  private static final long KONTO = 9L;
 
   @Mock private AnsprechpartnerRepository ansprechpartner;
   @Captor private ArgumentCaptor<Ansprechpartner> gespeicherte;
@@ -61,7 +64,9 @@ class AnsprechpartnerAendernUseCaseTest {
         "0170 1234",
         aktiv,
         ANGELEGT,
-        ANGELEGT);
+        ANGELEGT,
+        STAND,
+        URHEBER);
   }
 
   private static AnsprechpartnerDaten neueDaten(final String nachname) {
@@ -74,7 +79,7 @@ class AnsprechpartnerAendernUseCaseTest {
     when(ansprechpartner.findById(ID)).thenReturn(Optional.of(vorher));
     when(ansprechpartner.save(any(Ansprechpartner.class)))
         .thenAnswer(aufruf -> aufruf.getArgument(0));
-    useCase.aendern(FIRMA, ID, daten);
+    useCase.aendern(FIRMA, ID, daten, STAND, KONTO);
     verify(ansprechpartner).save(gespeicherte.capture());
     return gespeicherte.getValue();
   }
@@ -161,7 +166,7 @@ class AnsprechpartnerAendernUseCaseTest {
     final AnsprechpartnerDaten daten = neueDaten("Maier");
 
     // When / Then
-    assertThatThrownBy(() -> useCase.aendern(FIRMA, ID, daten))
+    assertThatThrownBy(() -> useCase.aendern(FIRMA, ID, daten, STAND, KONTO))
         .isInstanceOf(AnsprechpartnerNichtGefunden.class);
   }
 
@@ -173,7 +178,7 @@ class AnsprechpartnerAendernUseCaseTest {
     final AnsprechpartnerDaten daten = neueDaten("Maier");
 
     // When
-    assertThatThrownBy(() -> useCase.aendern(FIRMA, ID, daten))
+    assertThatThrownBy(() -> useCase.aendern(FIRMA, ID, daten, STAND, KONTO))
         .isInstanceOf(AnsprechpartnerNichtGefunden.class);
 
     // Then
@@ -188,7 +193,7 @@ class AnsprechpartnerAendernUseCaseTest {
     final AnsprechpartnerDaten daten = neueDaten("Maier");
 
     // When / Then
-    assertThatThrownBy(() -> useCase.aendern(FIRMA, ID, daten))
+    assertThatThrownBy(() -> useCase.aendern(FIRMA, ID, daten, STAND, KONTO))
         .isInstanceOf(AnsprechpartnerNichtGefunden.class);
   }
 
@@ -200,7 +205,7 @@ class AnsprechpartnerAendernUseCaseTest {
     final AnsprechpartnerDaten daten = neueDaten("Maier");
 
     // When — E7: es gibt keinen Weg, einen Ansprechpartner umzuhaengen.
-    assertThatThrownBy(() -> useCase.aendern(FIRMA, ID, daten))
+    assertThatThrownBy(() -> useCase.aendern(FIRMA, ID, daten, STAND, KONTO))
         .isInstanceOf(AnsprechpartnerNichtGefunden.class);
 
     // Then
@@ -212,10 +217,53 @@ class AnsprechpartnerAendernUseCaseTest {
     final AnsprechpartnerDaten daten = neueDaten("   ");
 
     // When / Then — E9: die Normalisierung steht vor dem Zugriff auf den Bestand.
-    assertThatThrownBy(() -> useCase.aendern(FIRMA, ID, daten))
+    assertThatThrownBy(() -> useCase.aendern(FIRMA, ID, daten, STAND, KONTO))
         .isInstanceOf(IllegalArgumentException.class);
 
     // Then
     verifyNoInteractions(ansprechpartner);
+  }
+
+  @Test
+  void aendern_thenRecordsTheActingAccountAsAuthor() {
+    // When — Plan #415, E14.
+    final Ansprechpartner gespeichert = aendereUndFange(bestand(FIRMA, true), neueDaten("Maier"));
+
+    // Then
+    assertThat(gespeichert.geaendertVon()).isEqualTo(KONTO);
+  }
+
+  @Test
+  void aendern_thenReturnsWhatTheRepositoryStored() {
+    // Given — die Antwort traegt den Stand, den das Schreiben ergeben hat.
+    final Ansprechpartner geschrieben = bestand(FIRMA, true);
+    when(ansprechpartner.findById(ID)).thenReturn(Optional.of(bestand(FIRMA, true)));
+    when(ansprechpartner.save(any(Ansprechpartner.class))).thenReturn(geschrieben);
+
+    // When
+    final Ansprechpartner ergebnis = useCase.aendern(FIRMA, ID, neueDaten("Maier"), STAND, KONTO);
+
+    // Then
+    assertThat(ergebnis).isSameAs(geschrieben);
+  }
+
+  @Test
+  void aendern_givenAnOutdatedVersion_thenThrowsAnsprechpartnerGeaendertAndStoresNothing() {
+    // Given — #411, Kriterium 1.
+    when(ansprechpartner.findById(ID)).thenReturn(Optional.of(bestand(FIRMA, true)));
+    final AnsprechpartnerDaten daten = neueDaten("Maier");
+
+    // When
+    assertThatThrownBy(() -> useCase.aendern(FIRMA, ID, daten, STAND - 1, KONTO))
+        .isInstanceOfSatisfying(
+            AnsprechpartnerGeaendert.class,
+            konflikt -> {
+              assertThat(konflikt.urheberKonto()).hasValue(URHEBER);
+              assertThat(konflikt.handelndesKonto()).isEqualTo(KONTO);
+              assertThat(konflikt.zeitpunkt()).contains(ANGELEGT);
+            });
+
+    // Then
+    verify(ansprechpartner, never()).save(any(Ansprechpartner.class));
   }
 }

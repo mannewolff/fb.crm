@@ -18,6 +18,7 @@ import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mwolff.fbcrm.AbstractIntegrationTest;
+import org.mwolff.fbcrm.Stand;
 import org.mwolff.fbcrm.angebot.web.AngebotResponse;
 import org.mwolff.fbcrm.auth.Anmeldung;
 import org.mwolff.fbcrm.auth.Konten;
@@ -49,6 +50,9 @@ import org.springframework.jdbc.core.JdbcTemplate;
  * Jahreswechsel laesst sich so nicht herbeifuehren, ohne zu warten — darum traegt der Entwurf ein
  * Datum im Folgejahr, und das ist fachlich dasselbe: Das Zaehlerjahr kommt aus dem Rechnungsdatum
  * und nicht aus dem heutigen Tag (Kriterium 17).
+ *
+ * <p>Eine geloeschte Rechnung haelt ihre Nummer nicht fest (Plan #415, E17): Die Vorabpruefung und
+ * der eindeutige Index lassen gekennzeichnete Zeilen aus.
  *
  * <p>Kein Beleg zum Inhalt des Dokuments und keiner zu den Abweisungen — beides steht in {@code
  * RechnungStellenIT}, und es zweimal zu fahren kostete Zeit ohne eine zweite Aussage.
@@ -106,7 +110,7 @@ class RechnungNummerIT extends AbstractIntegrationTest {
     // Ohne Briefpapier, wie es diese Klasse erwartet: Andere Klassen hinterlassen den Briefbogen.
     jdbc.execute("DELETE FROM briefbogen");
     jdbc.execute("INSERT INTO briefbogen DEFAULT VALUES");
-    jdbc.execute("TRUNCATE outbox_message, account RESTART IDENTITY CASCADE");
+    leereKonten(jdbc);
     accounts.save(Konten.neu(MAIL, ANGELEGT));
     sitzung = Anmeldung.perCode(rest, jdbc, hasher, MAIL);
     eigeneAngabenSetzen("75/123/45678");
@@ -119,6 +123,23 @@ class RechnungNummerIT extends AbstractIntegrationTest {
       final @Nullable Object rumpf,
       final Class<T> typ) {
     return rest.exchange(pfad, methode, new HttpEntity<>(rumpf, sitzung), typ);
+  }
+
+  /**
+   * Ein schreibender Weg an der Rechnung, auf ihrem aktuellen Stand (Plan #415, E2, E3): so, wie
+   * die Maske ihn vorlegt.
+   */
+  private <T> ResponseEntity<T> rufAufStand(
+      final String pfad,
+      final HttpMethod methode,
+      final @Nullable Object rumpf,
+      final Class<T> typ,
+      final long rechnungId) {
+    return rest.exchange(
+        pfad,
+        methode,
+        new HttpEntity<>(rumpf, Stand.aktuell(sitzung, jdbc, "rechnung", rechnungId)),
+        typ);
   }
 
   /** Die eigenen Angaben, vollstaendig bis auf die Steuernummer, die der Test waehlt. */
@@ -136,7 +157,15 @@ class RechnungNummerIT extends AbstractIntegrationTest {
     rumpf.put("steuernummer", steuernummer);
     rumpf.put("umsatzsteuerId", null);
     rumpf.put("bankverbindung", "DE02 1203 0000 0000 2020 51");
-    ruf("/api/eigene-angaben", HttpMethod.PUT, rumpf, Void.class);
+    // Auf dem aktuellen Stand der eigenen Angaben, wie die Maske (Plan #415, E2).
+    assertThat(
+            rest.exchange(
+                    "/api/eigene-angaben",
+                    HttpMethod.PUT,
+                    new HttpEntity<>(rumpf, Stand.aktuell(sitzung, jdbc, "eigene_angaben", 1L)),
+                    String.class)
+                .getStatusCode())
+        .isEqualTo(HttpStatus.OK);
   }
 
   private long firmaAnlegen() {
@@ -160,9 +189,16 @@ class RechnungNummerIT extends AbstractIntegrationTest {
     rumpf.put("naechsteNummer", Integer.valueOf(naechsteNummer));
     rumpf.put("steuersatz", "19.00");
     rumpf.put("zahlungszielTage", Integer.valueOf(10));
+    // Auf dem aktuellen Stand der Einstellungen, wie die Maske (Plan #415, E2).
     assertThat(
-            ruf("/api/rechnung/einstellungen", HttpMethod.PUT, rumpf, String.class).getStatusCode())
-        .isEqualTo(HttpStatus.NO_CONTENT);
+            rest.exchange(
+                    "/api/rechnung/einstellungen",
+                    HttpMethod.PUT,
+                    new HttpEntity<>(
+                        rumpf, Stand.aktuell(sitzung, jdbc, "rechnung_einstellungen", 1L)),
+                    String.class)
+                .getStatusCode())
+        .isEqualTo(HttpStatus.OK);
   }
 
   /** Die naechste laufende Nummer des laufenden Jahres, wie die Maske sie zeigt. */
@@ -206,9 +242,21 @@ class RechnungNummerIT extends AbstractIntegrationTest {
     rumpf.put("ansprechpartnerId", null);
     rumpf.put("beschreibung", "Neugestaltung der Website");
     rumpf.put("positionen", List.of(position));
-    ruf("/api/angebote/" + angebotId, HttpMethod.PUT, rumpf, AngebotResponse.class);
-    ruf("/api/angebote/" + angebotId + "/status/weiter", HttpMethod.POST, null, String.class);
-    ruf("/api/angebote/" + angebotId + "/status/weiter", HttpMethod.POST, null, String.class);
+    rest.exchange(
+        "/api/angebote/" + angebotId,
+        HttpMethod.PUT,
+        new HttpEntity<>(rumpf, Stand.aktuell(sitzung, jdbc, "angebot", angebotId)),
+        AngebotResponse.class);
+    rest.exchange(
+        "/api/angebote/" + angebotId + "/status/weiter",
+        HttpMethod.POST,
+        new HttpEntity<>(null, Stand.aktuell(sitzung, jdbc, "angebot", angebotId)),
+        String.class);
+    rest.exchange(
+        "/api/angebote/" + angebotId + "/status/weiter",
+        HttpMethod.POST,
+        new HttpEntity<>(null, Stand.aktuell(sitzung, jdbc, "angebot", angebotId)),
+        String.class);
     return angebotId;
   }
 
@@ -232,24 +280,35 @@ class RechnungNummerIT extends AbstractIntegrationTest {
     rumpf.put("leistungszeitraum", ZEITRAUM);
     rumpf.put("positionen", List.of(position));
     assertThat(
-            ruf("/api/rechnungen/" + angelegt.id(), HttpMethod.PUT, rumpf, RechnungResponse.class)
+            rufAufStand(
+                    "/api/rechnungen/" + angelegt.id(),
+                    HttpMethod.PUT,
+                    rumpf,
+                    RechnungResponse.class,
+                    angelegt.id())
                 .getStatusCode())
         .isEqualTo(HttpStatus.OK);
     return angelegt.id();
   }
 
   private ResponseEntity<String> stelle(final long rechnungId) {
-    return ruf("/api/rechnungen/" + rechnungId + "/stellen", HttpMethod.POST, null, String.class);
+    return rufAufStand(
+        "/api/rechnungen/" + rechnungId + "/stellen",
+        HttpMethod.POST,
+        null,
+        String.class,
+        rechnungId);
   }
 
   /** Stellt und liefert die Nummer; ein anderer Ausgang als 200 ist hier ein Fehlschlag. */
   private String stelleUndNimmDieNummer(final long rechnungId) {
     final ResponseEntity<RechnungResponse> antwort =
-        ruf(
+        rufAufStand(
             "/api/rechnungen/" + rechnungId + "/stellen",
             HttpMethod.POST,
             null,
-            RechnungResponse.class);
+            RechnungResponse.class,
+            rechnungId);
     assertThat(antwort.getStatusCode()).isEqualTo(HttpStatus.OK);
     return Objects.requireNonNull(Objects.requireNonNull(antwort.getBody()).nummer());
   }
@@ -365,5 +424,24 @@ class RechnungNummerIT extends AbstractIntegrationTest {
     eigeneAngabenSetzen("75/123/45678");
     assertThat(stelleUndNimmDieNummer(gescheitert)).isEqualTo(nummer(1, heute.getYear()));
     assertThat(naechsteNummer()).isEqualTo(2);
+  }
+
+  @Test
+  void stellen_afterTheRechnungWithThatNummerWasDeleted_thenTheNummerIsFreeAgain() {
+    // Given — eine gestellte Rechnung mit 0001, danach gekennzeichnet (Plan #415, E17). Ueber die
+    // Schnittstelle laesst sich nur ein Entwurf loeschen, und der traegt keine Nummer; die Zusage
+    // von existiertNummer und des Index aus V35 gilt aber fuer jede gekennzeichnete Zeile, darum
+    // setzt der Test das Kennzeichen direkt.
+    final long angebotId = bestelltesAngebot("160.00");
+    final long geloescht = entwurf(angebotId, "40.00", heute);
+    assertThat(stelleUndNimmDieNummer(geloescht)).isEqualTo(nummer(1, heute.getYear()));
+    jdbc.update("UPDATE rechnung SET geloescht_am = now() WHERE id = ?", Long.valueOf(geloescht));
+
+    // When — der Zaehler geht zurueck auf 1; die Einstellungen pruefen die Nummer dabei schon.
+    einstellungenSetzen(MIT_JAHR, 1);
+    final String gezogen = stelleUndNimmDieNummer(entwurf(angebotId, "40.00", heute));
+
+    // Then — die Nummer der geloeschten Rechnung ist wieder vergeben, ohne Abweisung.
+    assertThat(gezogen).isEqualTo(nummer(1, heute.getYear()));
   }
 }

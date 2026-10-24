@@ -43,6 +43,7 @@ import org.mwolff.fbcrm.angebot.domain.AngebotsanlageRepository;
 import org.mwolff.fbcrm.angebot.domain.AnlageSpeicher;
 import org.mwolff.fbcrm.angebot.domain.AnlageSpeicherAusfall;
 import org.mwolff.fbcrm.angebot.domain.Vorschauart;
+import org.mwolff.fbcrm.common.Bearbeitungskonflikt;
 import org.mwolff.fbcrm.common.Feldfehler;
 import org.mwolff.fbcrm.common.Uploadgrenze;
 import org.slf4j.LoggerFactory;
@@ -58,6 +59,10 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
  * Erkennung der Vorschauart <b>am Inhalt</b> und die Unversehrtheit des Inhalts trotz dieser
  * Erkennung (E4), die drei Riegel gegen eine unbrauchbare Datei (E8), die Ordnung der Liste (E10)
  * und die Abgrenzung gegen die Anlage eines anderen Angebots.
+ *
+ * <p>Seit Plan #415 (E7, E16, E17) loescht der Anwendungsfall mit Kennzeichen: Die Zeile bleibt mit
+ * Zeitpunkt und Konto der Loeschung, das Objekt geht weiter erst nach dem Commit, und ein zweites
+ * Loeschen wird mit {@link AngebotsanlageGeloescht} abgewiesen statt mit 404.
  */
 @ExtendWith(MockitoExtension.class)
 class AngebotsanlageUseCaseTest {
@@ -68,6 +73,13 @@ class AngebotsanlageUseCaseTest {
   private static final String SCHLUESSEL = "angebot/11/anlage/1a2b3c";
   private static final Instant ANGELEGT = Instant.parse("2026-09-30T08:00:00Z");
   private static final Instant JETZT = Instant.parse("2026-09-30T09:30:00Z");
+  private static final Instant VORHIN = Instant.parse("2026-09-30T09:12:00Z");
+
+  /** Das handelnde Konto. */
+  private static final long KONTO = 20L;
+
+  /** Das Konto, das die Anlage vorher geloescht hat. */
+  private static final long ANNA = 30L;
 
   /** Ein PDF — laenger als die Signatur, damit das Zuruecklegen der ersten Bytes messbar ist. */
   private static final byte[] PDF_INHALT = "%PDF-1.7\nInhalt der Datei".getBytes(UTF_8);
@@ -135,6 +147,10 @@ class AngebotsanlageUseCaseTest {
 
   private void anlageGehoertZu(final long angebotId) {
     when(anlagen.findById(ANLAGE)).thenReturn(Optional.of(anlage(angebotId)));
+  }
+
+  private void anlageIstGeloescht() {
+    when(anlagen.findById(ANLAGE)).thenReturn(Optional.of(anlage(ANGEBOT).geloescht(ANNA, VORHIN)));
   }
 
   private void speichernGibtZurueck() {
@@ -442,6 +458,18 @@ class AngebotsanlageUseCaseTest {
   }
 
   @Test
+  void liesInhalt_whenTheAnlageIsDeleted_thenRejectsAsUnknown() {
+    // Given — Plan #415, E7: der Abruf laesst gekennzeichnete Anlagen aus.
+    angebotGibtEs();
+    anlageIstGeloescht();
+
+    // When / Then
+    assertThatThrownBy(() -> useCase.liesInhalt(ANGEBOT, ANLAGE))
+        .isInstanceOf(AngebotsanlageNichtGefunden.class);
+    verifyNoInteractions(speicher);
+  }
+
+  @Test
   void liesInhalt_whenTheAnlageIsUnknown_thenRejects() {
     // Given
     angebotGibtEs();
@@ -477,17 +505,17 @@ class AngebotsanlageUseCaseTest {
   }
 
   @Test
-  void loesche_withinATransaction_thenRemovesTheObjectOnlyAfterTheCommit() {
+  void loesche_withinATransaction_thenMarksTheRowAndRemovesTheObjectOnlyAfterTheCommit() {
     // Given — E9: vor dem Commit geloescht, liesse ein gescheiterter Commit eine Zeile ohne Objekt.
     TransactionSynchronizationManager.initSynchronization();
     angebotGibtEs();
     anlageGehoertZu(ANGEBOT);
 
     // When
-    useCase.loesche(ANGEBOT, ANLAGE);
+    useCase.loesche(ANGEBOT, ANLAGE, KONTO);
 
-    // Then
-    verify(anlagen).deleteById(ANLAGE);
+    // Then — Plan #415, E7: die Zeile bleibt, gekennzeichnet mit Konto und Zeitpunkt.
+    verify(anlagen).save(anlage(ANGEBOT).geloescht(KONTO, JETZT));
     verifyNoInteractions(speicher);
 
     // And — nach dem Commit ist das Objekt fort.
@@ -503,22 +531,23 @@ class AngebotsanlageUseCaseTest {
     anlageGehoertZu(ANGEBOT);
 
     // When
-    useCase.loesche(ANGEBOT, ANLAGE);
+    useCase.loesche(ANGEBOT, ANLAGE, KONTO);
 
     // Then
-    verify(anlagen).deleteById(ANLAGE);
-    verify(speicher).loeschen(SCHLUESSEL);
+    final InOrder reihenfolge = inOrder(anlagen, speicher);
+    reihenfolge.verify(anlagen).save(anlage(ANGEBOT).geloescht(KONTO, JETZT));
+    reihenfolge.verify(speicher).loeschen(SCHLUESSEL);
   }
 
   @Test
-  void loesche_whenDeletingTheRowFails_thenNeverTouchesTheStorage() {
+  void loesche_whenMarkingTheRowFails_thenNeverTouchesTheStorage() {
     // Given — der Fund aus dem Plan-Review: das Objekt haengt am Erfolg der Zeile, nie umgekehrt.
     angebotGibtEs();
     anlageGehoertZu(ANGEBOT);
-    doThrow(new IllegalStateException("Die Zeile ist gesperrt.")).when(anlagen).deleteById(ANLAGE);
+    doThrow(new IllegalStateException("Die Zeile ist gesperrt.")).when(anlagen).save(any());
 
     // When / Then
-    assertThatThrownBy(() -> useCase.loesche(ANGEBOT, ANLAGE))
+    assertThatThrownBy(() -> useCase.loesche(ANGEBOT, ANLAGE, KONTO))
         .isInstanceOf(IllegalStateException.class);
     verifyNoInteractions(speicher);
   }
@@ -533,15 +562,38 @@ class AngebotsanlageUseCaseTest {
         .loeschen(anyString());
 
     // When
-    useCase.loesche(ANGEBOT, ANLAGE);
+    useCase.loesche(ANGEBOT, ANLAGE, KONTO);
 
-    // Then — die Zeile ist fort, und der Fehlschlag steht im Protokoll statt in der Antwort.
-    verify(anlagen).deleteById(ANLAGE);
+    // Then — die Zeile ist gekennzeichnet, und der Fehlschlag steht im Protokoll statt in der
+    // Antwort.
+    verify(anlagen).save(anlage(ANGEBOT).geloescht(KONTO, JETZT));
     assertThat(mitgeschrieben.list).hasSize(1);
     assertThat(mitgeschrieben.list.getFirst().getLevel()).isEqualTo(Level.WARN);
     assertThat(mitgeschrieben.list.getFirst().getFormattedMessage())
         .contains(SCHLUESSEL)
         .doesNotContain("bericht.pdf");
+  }
+
+  @Test
+  void loesche_anAlreadyDeletedAnlage_thenRejectsWithUrheberAndInstantAndChangesNothing() {
+    // Given — #411, Kriterium 6; Plan #415, E7, E16: ein zweites Loeschen nennt, wer wann geloescht
+    // hat, statt 404.
+    angebotGibtEs();
+    anlageIstGeloescht();
+
+    // When / Then
+    assertThatThrownBy(() -> useCase.loesche(ANGEBOT, ANLAGE, KONTO))
+        .isInstanceOfSatisfying(
+            AngebotsanlageGeloescht.class,
+            konflikt -> {
+              assertThat(konflikt.art()).isEqualTo(Bearbeitungskonflikt.Art.GELOESCHT);
+              assertThat(konflikt.urheberKonto()).hasValue(ANNA);
+              assertThat(konflikt.handelndesKonto()).isEqualTo(KONTO);
+              assertThat(konflikt.zeitpunkt()).contains(VORHIN);
+            });
+    verify(anlagen).findById(ANLAGE);
+    verifyNoMoreInteractions(anlagen);
+    verifyNoInteractions(speicher);
   }
 
   @Test
@@ -551,7 +603,7 @@ class AngebotsanlageUseCaseTest {
     anlageGehoertZu(FREMDES_ANGEBOT);
 
     // When / Then
-    assertThatThrownBy(() -> useCase.loesche(ANGEBOT, ANLAGE))
+    assertThatThrownBy(() -> useCase.loesche(ANGEBOT, ANLAGE, KONTO))
         .isInstanceOf(AngebotsanlageNichtGefunden.class);
     verify(anlagen).findById(ANLAGE);
     verifyNoMoreInteractions(anlagen);
@@ -565,7 +617,7 @@ class AngebotsanlageUseCaseTest {
     when(anlagen.findById(ANLAGE)).thenReturn(Optional.empty());
 
     // When / Then
-    assertThatThrownBy(() -> useCase.loesche(ANGEBOT, ANLAGE))
+    assertThatThrownBy(() -> useCase.loesche(ANGEBOT, ANLAGE, KONTO))
         .isInstanceOf(AngebotsanlageNichtGefunden.class);
     verifyNoInteractions(speicher);
   }
@@ -576,7 +628,7 @@ class AngebotsanlageUseCaseTest {
     angebotGibtEsNicht();
 
     // When / Then
-    assertThatThrownBy(() -> useCase.loesche(ANGEBOT, ANLAGE))
+    assertThatThrownBy(() -> useCase.loesche(ANGEBOT, ANLAGE, KONTO))
         .isInstanceOf(AngebotNichtGefunden.class);
     verifyNoInteractions(anlagen, speicher);
   }

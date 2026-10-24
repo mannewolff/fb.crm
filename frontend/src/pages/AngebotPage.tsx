@@ -30,6 +30,7 @@ import {
   angebotStornoZuruecknehmen,
 } from '../api/angebote';
 import type { Angebot, AngebotPosition } from '../api/angebote';
+import { useRechte } from '../auth/rechte';
 import { angebotAbrechnung, rechnungAnlegen } from '../api/rechnungen';
 import type {
   Abrechnungsposition,
@@ -44,6 +45,7 @@ import Karte from '../components/Karte';
 import Kommentare from '../components/Kommentare';
 import { useKopfPfad } from '../components/KopfPfad';
 import type { PfadVerweis } from '../components/KopfPfad';
+import Konfliktmeldung from '../components/Konfliktmeldung';
 import KupferTaste from '../components/KupferTaste';
 import Monatswahl, { monatOderKeiner, monatswahlWert } from '../components/Monatswahl';
 import { EINHEIT_WORT, MODUS_WORT } from '../components/Positionsmaske';
@@ -52,7 +54,7 @@ import StorniertChip from '../components/StorniertChip';
 import Tafel, { type TafelSpalte } from '../components/Tafel';
 import Ueberschreitungshinweis from '../components/Ueberschreitungshinweis';
 import WeicheTaste from '../components/WeicheTaste';
-import { nichtGefunden, serverMeldung } from '../lib/apifehler';
+import { istBearbeitungskonflikt, nichtGefunden, serverMeldung } from '../lib/apifehler';
 import { stundenWort } from '../lib/arbeitszeit';
 import { dezimal, euro } from '../lib/geld';
 import { kennungAus } from '../lib/kennung';
@@ -128,6 +130,16 @@ import { ABSTAND_BUEHNE, RADIUS_RUND, TASTE_INNENABSTAND, ZAHLEN_KLASSE } from '
  * Ganzes: intern die zwei Tasten der internen Kette, extern die des Kundenangebots — und nur dort
  * steht „Rechnung schreiben". Storniert wird intern ebenso wenig: Storniert wird ein Angebot an
  * einen Kunden (#330, Kriterium 1).
+ *
+ * <b>Jeder Wechsel legt den gelesenen Stand vor</b> (#411, Kriterien 4 und 5; Plan #415, E9):
+ * Statuswechsel, Storno und Ruecknahme schicken die Version des gezeigten Angebots mit. Hat
+ * inzwischen jemand anderes geaendert, weist der Server ab, und statt der Ausfallmeldung steht die
+ * {@link Konfliktmeldung} ueber der Karte — mit Namen und Zeitpunkt der fremden Aenderung. „Neu
+ * laden" holt den Stand des Servers; den Wechsel loest man danach auf dem neuen Stand erneut aus.
+ *
+ * <b>Ohne Schreibrecht fehlt die Aktionsreihe ganz</b> (Kriterium 10 von #409, Plan #414, A10):
+ * Wer nur liest, sieht Angaben, Positionen, Rechnungen, Anlagen und Kommentare, aber keine Taste,
+ * die etwas aendert. Ob sie steht, fragt die Ansicht das Recht und nie die Rolle.
  */
 
 const NICHT_GEFUNDEN = 'Dieses Angebot gibt es nicht.';
@@ -135,6 +147,10 @@ const AUSFALL = 'Das Angebot ist gerade nicht zu erreichen. Bitte später erneut
 const AUSFALL_AKTION = 'Der Status wurde nicht geändert. Bitte später erneut versuchen.';
 /** Wo Storno oder Ruecknahme ohne Meldung des Servers scheitern. */
 const AUSFALL_STORNO = 'Das Angebot wurde nicht geändert. Bitte später erneut versuchen.';
+/** Wo „Neu laden" nach einer Abweisung scheitert. */
+const AUSFALL_NEU_LADEN = 'Der aktuelle Stand ist gerade nicht zu erreichen. Bitte erneut versuchen.';
+/** Wohin die Konfliktmeldung fuehrt, wenn das Angebot inzwischen geloescht ist. */
+const UEBERSICHT = '/angebote';
 const LAEDT = 'Das Angebot wird geladen …';
 const OHNE_POSITION = 'Noch keine Position.';
 const NETTO = 'Alle Beträge netto, zzgl. gesetzlicher Umsatzsteuer';
@@ -650,6 +666,7 @@ function Stornodialog({
 const ZU_FIRMEN: PfadVerweis = { titel: 'Firmen', ziel: '/firmen' };
 
 export default function AngebotPage() {
+  const { darfFachlichSchreiben } = useRechte();
   const { angebotId } = useParams();
   const kennung = kennungAus(angebotId);
   const navigate = useNavigate();
@@ -660,6 +677,8 @@ export default function AngebotPage() {
   const [abrechnungslauf, setzeAbrechnungslauf] = useState(0);
   const [stornofrage, setzeStornofrage] = useState(false);
   const [meldung, setzeMeldung] = useState<string | null>(null);
+  // Die Abweisung eines Wechsels auf altem Stand, ungeprueft — die Konfliktmeldung liest sie selbst.
+  const [abweisung, setzeAbweisung] = useState<unknown>(null);
   const [laeuft, setzeLaeuft] = useState(false);
   const [wahlOffen, setzeWahlOffen] = useState(false);
   const [wahlmeldung, setzeWahlmeldung] = useState<string | null>(null);
@@ -721,20 +740,46 @@ export default function AngebotPage() {
    * der Oberflaeche. Danach wird der Abrechnungsstand neu gelesen, denn `schreibbar` haengt an
    * beidem (Plan #332, E9).
    *
-   * `meldungZu` sagt, was nach einem Fehlschlag ueber der Karte steht.
+   * Jeder Wechsel legt die Version des gezeigten Angebots vor (Plan #415, E9). Weist der Server
+   * ab, weil inzwischen jemand anderes geaendert hat, steht die Konfliktmeldung ueber der Karte;
+   * sonst sagt `meldungZu`, was nach einem Fehlschlag dort steht.
    */
   const schalten = async (
-    weg: (id: number) => Promise<Angebot>,
+    weg: (id: number, version: number) => Promise<Angebot>,
     angebot: Angebot,
     meldungZu: (ursache: unknown) => string = () => AUSFALL_AKTION,
   ) => {
     setzeMeldung(null);
+    setzeAbweisung(null);
     setzeLaeuft(true);
     try {
-      setzeStand({ art: 'daten', angebot: await weg(angebot.id) });
+      setzeStand({ art: 'daten', angebot: await weg(angebot.id, angebot.version) });
       setzeAbrechnungslauf((lauf) => lauf + 1);
     } catch (ursache: unknown) {
-      setzeMeldung(meldungZu(ursache));
+      if (istBearbeitungskonflikt(ursache)) {
+        setzeAbweisung(ursache);
+      } else {
+        setzeMeldung(meldungZu(ursache));
+      }
+    } finally {
+      setzeLaeuft(false);
+    }
+  };
+
+  /**
+   * „Neu laden" nach einer Abweisung (#411, Kriterium 3): der Stand des Servers samt neuer Version
+   * in die Ansicht. Auch der Abrechnungsstand wird neu gelesen — der andere kann Status oder Storno
+   * gewechselt haben, und daran haengt `schreibbar`.
+   */
+  const neuLaden = async (id: number) => {
+    setzeMeldung(null);
+    setzeLaeuft(true);
+    try {
+      setzeStand({ art: 'daten', angebot: await angebotLesen(id) });
+      setzeAbweisung(null);
+      setzeAbrechnungslauf((lauf) => lauf + 1);
+    } catch {
+      setzeMeldung(AUSFALL_NEU_LADEN);
     } finally {
       setzeLaeuft(false);
     }
@@ -974,14 +1019,22 @@ export default function AngebotPage() {
     };
     return (
       <>
-        <Karte titel={ueberschriftZu(angebot)} titelEbene={1} werkzeug={aktionenZu(angebot)}>
+        <Karte
+          titel={ueberschriftZu(angebot)}
+          titelEbene={1}
+          werkzeug={darfFachlichSchreiben ? aktionenZu(angebot) : undefined}
+        >
           <Angaben angebot={angebot} />
         </Karte>
         {wahlOffen ? wahlZu(angebot) : null}
         {stornofrage ? (
           <Stornodialog
             onJa={(grund) => {
-              void schalten((id) => angebotStornieren(id, grund), angebot, stornomeldung);
+              void schalten(
+                (id, version) => angebotStornieren(id, version, grund),
+                angebot,
+                stornomeldung,
+              );
             }}
             onEnde={() => {
               setzeStornofrage(false);
@@ -1105,6 +1158,15 @@ export default function AngebotPage() {
       }}
     >
       {meldung === null ? null : <Alert severity="error">{meldung}</Alert>}
+      {stand.art === 'daten' ? (
+        <Konfliktmeldung
+          ursache={abweisung}
+          onNeuLaden={() => {
+            void neuLaden(stand.angebot.id);
+          }}
+          uebersicht={UEBERSICHT}
+        />
+      ) : null}
       {inhalt}
     </Box>
   );

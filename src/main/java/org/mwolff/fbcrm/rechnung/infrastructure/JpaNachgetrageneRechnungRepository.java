@@ -12,6 +12,10 @@ import org.springframework.stereotype.Repository;
  *
  * <p>Anders als bei {@link JpaRechnungRepository} gibt es keine Positionen: Die nachgetragene
  * Rechnung ist eine Zeile, und jede Methode reicht an Spring Data durch.
+ *
+ * <p><b>Geloescht wird mit Kennzeichen</b> (Plan #415, E17): Die Rechnung kommt mit gesetztem
+ * {@code geloescht_am} ueber {@link #save} herein. Die Liste und die Nummernfragen lassen
+ * gekennzeichnete Zeilen aus, {@link #findById(long)} liefert sie mit.
  */
 @Repository
 class JpaNachgetrageneRechnungRepository implements NachgetrageneRechnungRepository {
@@ -29,17 +33,12 @@ class JpaNachgetrageneRechnungRepository implements NachgetrageneRechnungReposit
 
   @Override
   public List<NachgetrageneRechnung> findAlle() {
-    return zeilen.findAll().stream().map(JpaNachgetrageneRechnungRepository::toDomain).toList();
+    return zeilen.findLebende().stream().map(JpaNachgetrageneRechnungRepository::toDomain).toList();
   }
 
   @Override
   public NachgetrageneRechnung save(final NachgetrageneRechnung rechnung) {
     return toDomain(zeilen.save(NachgetrageneRechnungEntity.aus(rechnung)));
-  }
-
-  @Override
-  public void delete(final long id) {
-    zeilen.deleteById(id);
   }
 
   @Override
@@ -63,6 +62,10 @@ class JpaNachgetrageneRechnungRepository implements NachgetrageneRechnungReposit
         zeile.getZustand(),
         zeile.getPdfSchluessel(),
         zeile.getCreatedAt(),
-        zeile.getUpdatedAt());
+        zeile.getUpdatedAt(),
+        zeile.getVersion(),
+        zeile.getGeaendertVon(),
+        zeile.getGeloeschtAm(),
+        zeile.getGeloeschtVon());
   }
 }

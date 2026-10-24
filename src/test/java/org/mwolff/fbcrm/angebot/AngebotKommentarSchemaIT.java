@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mwolff.fbcrm.AbstractIntegrationTest;
+import org.mwolff.fbcrm.Schutzspalten;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -17,20 +18,23 @@ import org.springframework.jdbc.core.JdbcTemplate;
  * PostgreSQL-Instanz.
  *
  * <p>Gegenstand sind die Zusagen, die allein die Datenbank haelt: der Text ist nie leer und nie
- * laenger als 2.000 Zeichen, und ein Kommentar haengt an einem vorhandenen Angebot. Gearbeitet wird
- * mit {@link JdbcTemplate} und direkten Anweisungen — der Weg ueber die Entities kaeme an einigen
- * dieser Faelle gar nicht vorbei.
+ * laenger als 2.000 Zeichen, und ein Kommentar haengt an einem vorhandenen Angebot. Seit {@code
+ * V31} traegt jeder Kommentar einen Verfasser; die Faelle dazu stehen in {@code SchemaBaselineIT}
+ * und {@code MehrereKontenMigrationIT}, hier haengt jeder Kommentar am Konto aus dem Vorlauf.
+ * Gearbeitet wird mit {@link JdbcTemplate} und direkten Anweisungen — der Weg ueber die Entities
+ * kaeme an einigen dieser Faelle gar nicht vorbei.
  */
 class AngebotKommentarSchemaIT extends AbstractIntegrationTest {
 
   private static final String INSERT_KOMMENTAR =
-      "INSERT INTO angebot_kommentar (angebot_id, text) VALUES (?, ?)";
+      "INSERT INTO angebot_kommentar (angebot_id, verfasser_id, text) VALUES (?, ?, ?)";
 
   private static final String FIRMA = "Adler AG";
 
   private final JdbcTemplate jdbc;
 
   private long angebotId;
+  private long verfasserId;
 
   @Autowired
   AngebotKommentarSchemaIT(final JdbcTemplate jdbc) {
@@ -50,10 +54,17 @@ class AngebotKommentarSchemaIT extends AbstractIntegrationTest {
             + " VALUES (?, 'ANGELEGT', DATE '2026-09-20')",
         firmaId);
     angebotId = jdbc.queryForObject("SELECT id FROM angebot LIMIT 1", Long.class).longValue();
+    leereKonten(jdbc);
+    verfasserId =
+        jdbc.queryForObject(
+                "INSERT INTO account (email, display_name, role)"
+                    + " VALUES ('manne@example.org', 'Manne', 'C_LEVEL') RETURNING id",
+                Long.class)
+            .longValue();
   }
 
   private int kommentar(final String text) {
-    return jdbc.update(INSERT_KOMMENTAR, angebotId, text);
+    return jdbc.update(INSERT_KOMMENTAR, angebotId, verfasserId, text);
   }
 
   private static String zeichen(final int laenge) {
@@ -119,27 +130,30 @@ class AngebotKommentarSchemaIT extends AbstractIntegrationTest {
   @Test
   void kommentarAngebotId_givenAnUnknownOffer_thenRejectedByTheDatabase() {
     // When / Then
-    assertThatThrownBy(() -> jdbc.update(INSERT_KOMMENTAR, 4711L, "Kunde ruft zurueck."))
+    assertThatThrownBy(
+            () -> jdbc.update(INSERT_KOMMENTAR, 4711L, verfasserId, "Kunde ruft zurueck."))
         .isInstanceOf(DataIntegrityViolationException.class);
   }
 
   @Test
-  void migration_thenTheOfferIndexExistsAndNoAuthorColumn() {
+  void migration_thenBothIndexesExistAndTheVerfasserIsAnIdNotAName() {
     // When
     final Integer indizes =
         jdbc.queryForObject(
             "SELECT count(*) FROM pg_indexes WHERE schemaname = 'public'"
-                + " AND indexname = 'angebot_kommentar_angebot_idx'",
+                + " AND indexname IN ('angebot_kommentar_angebot_idx',"
+                + " 'angebot_kommentar_verfasser_idx')",
             Integer.class);
     final Integer verfasser =
         jdbc.queryForObject(
             "SELECT count(*) FROM information_schema.columns WHERE table_schema = 'public'"
                 + " AND table_name = 'angebot_kommentar'"
-                + " AND column_name IN ('verfasser', 'verfasser_id', 'benutzer_id')",
+                + " AND column_name IN ('verfasser', 'verfasser_name', 'benutzer_id')",
             Integer.class);
 
-    // Then — E3: keine Verfasser-Spalte, weder angezeigt noch fuer Rechte.
-    assertThat(indizes).isEqualTo(1);
+    // Then — Plan #414, A7: verfasser_id und kein kopierter Name, der nach einer Umbenennung
+    // veraltete.
+    assertThat(indizes).isEqualTo(2);
     assertThat(verfasser).isZero();
   }
 
@@ -156,5 +170,58 @@ class AngebotKommentarSchemaIT extends AbstractIntegrationTest {
     final Integer verbleibend =
         jdbc.queryForObject("SELECT count(*) FROM angebot_kommentar", Integer.class);
     assertThat(verbleibend).isZero();
+  }
+
+  @Test
+  void migration_thenTheVersionStartsAtZeroAndTheAuthorReferencesTheAccount() {
+    // When — V33 (Plan #415, E1): ein eigener Zaehler und der letzte Urheber.
+    final String version = Schutzspalten.spalte(jdbc, "angebot_kommentar", "version");
+    final String urheber = Schutzspalten.spalte(jdbc, "angebot_kommentar", "geaendert_von");
+    final String verweis = Schutzspalten.verweis(jdbc, "angebot_kommentar", "geaendert_von");
+
+    // Then — ohne ON DELETE wie jeder Fremdschluessel dieses Schemas.
+    assertThat(version).isEqualTo("bigint NO 0");
+    assertThat(urheber).isEqualTo("bigint YES -");
+    assertThat(verweis).isEqualTo("account.id NO ACTION");
+  }
+
+  @Test
+  void migration_thenTheDeletionMarkIsOptionalAndNamesTheAccount() {
+    // When — V34 (Plan #415, E17): Zeitpunkt und Urheber der Loeschung.
+    final String zeitpunkt = Schutzspalten.spalte(jdbc, "angebot_kommentar", "geloescht_am");
+    final String urheber = Schutzspalten.spalte(jdbc, "angebot_kommentar", "geloescht_von");
+    final String verweis = Schutzspalten.verweis(jdbc, "angebot_kommentar", "geloescht_von");
+
+    // Then
+    assertThat(zeitpunkt).isEqualTo("timestamp with time zone YES -");
+    assertThat(urheber).isEqualTo("bigint YES -");
+    assertThat(verweis).isEqualTo("account.id NO ACTION");
+  }
+
+  @Test
+  void geloeschtVon_givenNoDeletionTime_thenRejectedByTheDatabase() {
+    // Given
+    kommentar("Kunde ruft zurueck.");
+    final Long konto = Long.valueOf(verfasserId);
+
+    // When / Then — ein Urheber der Loeschung steht nur an einer geloeschten Zeile.
+    assertThatThrownBy(() -> jdbc.update("UPDATE angebot_kommentar SET geloescht_von = ?", konto))
+        .isInstanceOf(DataIntegrityViolationException.class)
+        .hasMessageContaining("angebot_kommentar_geloescht_bindung");
+  }
+
+  @Test
+  void geloeschtVon_givenADeletionTime_thenAccepted() {
+    // Given
+    kommentar("Kunde ruft zurueck.");
+
+    // When
+    final int betroffen =
+        jdbc.update(
+            "UPDATE angebot_kommentar SET geloescht_am = now(), geloescht_von = ?",
+            Long.valueOf(verfasserId));
+
+    // Then
+    assertThat(betroffen).isEqualTo(1);
   }
 }

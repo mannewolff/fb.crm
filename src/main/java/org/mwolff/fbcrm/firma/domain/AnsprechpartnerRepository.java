@@ -14,7 +14,8 @@ public interface AnsprechpartnerRepository {
   Optional<Ansprechpartner> findById(long id);
 
   /**
-   * Legt den Ansprechpartner an oder schreibt ihn fort und liefert ihn mit gesetzter Id zurueck.
+   * Legt den Ansprechpartner an oder schreibt ihn fort und liefert ihn mit gesetzter Id und dem
+   * Stand zurueck, den das Schreiben ergeben hat.
    */
   Ansprechpartner save(Ansprechpartner ansprechpartner);
 

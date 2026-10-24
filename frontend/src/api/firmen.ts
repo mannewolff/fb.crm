@@ -1,4 +1,4 @@
-import { apiJson, apiOhneInhalt } from './client';
+import { apiJson } from './client';
 import { jaNein, liste, objekt, text, textOderNull, zahl } from './verengen';
 
 /**
@@ -14,6 +14,10 @@ import { jaNein, liste, objekt, text, textOderNull, zahl } from './verengen';
  * Feld fuer die Firma — die steht im Pfad, und Umhaengen gibt es nicht (Kriterium 12).
  *
  * Die Bausteine der Pruefung stehen in `verengen.ts` und werden mit den Angeboten geteilt.
+ *
+ * Aendern, Stilllegen und Wiederaktivieren legen den Stand, auf dem sie beruhen, als `If-Match` vor
+ * (#411, Kriterium 4; Plan #415, E2, E18) und antworten mit dem neuen Stand. Das Anlegen bleibt frei
+ * (Kriterium 7).
  */
 
 /** Eine Zeile der Uebersicht. */
@@ -46,6 +50,8 @@ export interface Ansprechpartner {
   readonly telefonFestnetz: string | null;
   readonly telefonMobil: string | null;
   readonly aktiv: boolean;
+  /** Der Stand des Ansprechpartners (Plan #415, E2): Aendern und Umschalten legen ihn vor. */
+  readonly version: number;
 }
 
 /** Eine Firma mit allen Angaben und ihren Ansprechpartnern. */
@@ -60,6 +66,8 @@ export interface Firma {
   readonly umsatzsteuerId: string | null;
   readonly aktiv: boolean;
   readonly ansprechpartner: readonly Ansprechpartner[];
+  /** Der Stand der Firma (Plan #415, E2): Aendern und Umschalten legen ihn vor. */
+  readonly version: number;
 }
 
 /** Die Eingaben der Firma-Maske — die Felder von `FirmaRequest` im Backend. */
@@ -116,6 +124,7 @@ export function parseAnsprechpartner(wert: unknown): Ansprechpartner {
     telefonFestnetz: textOderNull(partner.telefonFestnetz),
     telefonMobil: textOderNull(partner.telefonMobil),
     aktiv: jaNein(partner.aktiv),
+    version: zahl(partner.version),
   };
 }
 
@@ -133,6 +142,7 @@ export function parseFirma(wert: unknown): Firma {
     umsatzsteuerId: textOderNull(firma.umsatzsteuerId),
     aktiv: jaNein(firma.aktiv),
     ansprechpartner: liste(firma.ansprechpartner).map(parseAnsprechpartner),
+    version: zahl(firma.version),
   };
 }
 
@@ -171,19 +181,31 @@ export function firmaLesen(id: number): Promise<Firma> {
   return apiJson(`/api/firmen/${id}`, { methode: 'GET' }, parseFirma);
 }
 
-/** Schreibt die Angaben fort (Kriterium 8); die Antwort traegt keinen Rumpf. */
-export function firmaAendern(id: number, eingabe: FirmaEingabe): Promise<void> {
-  return apiOhneInhalt(`/api/firmen/${id}`, { methode: 'PUT', rumpf: eingabe });
+/**
+ * Schreibt die Angaben fort (Kriterium 8); die Antwort traegt den neuen Stand.
+ *
+ * @param version der Stand, auf dem die Aenderung beruht
+ */
+export function firmaAendern(id: number, version: number, eingabe: FirmaEingabe): Promise<Firma> {
+  return apiJson(`/api/firmen/${id}`, { methode: 'PUT', rumpf: eingabe, version }, parseFirma);
 }
 
-/** Legt die Firma still (Kriterium 13). */
-export function firmaStilllegen(id: number): Promise<void> {
-  return apiOhneInhalt(`/api/firmen/${id}/stilllegen`, { methode: 'POST' });
+/**
+ * Legt die Firma still (Kriterium 13); die Antwort traegt den neuen Stand.
+ *
+ * @param version der Stand, auf dem das Stilllegen beruht
+ */
+export function firmaStilllegen(id: number, version: number): Promise<Firma> {
+  return apiJson(`/api/firmen/${id}/stilllegen`, { methode: 'POST', version }, parseFirma);
 }
 
-/** Nimmt die Firma wieder in Betrieb (Kriterium 13). */
-export function firmaAktivieren(id: number): Promise<void> {
-  return apiOhneInhalt(`/api/firmen/${id}/aktivieren`, { methode: 'POST' });
+/**
+ * Nimmt die Firma wieder in Betrieb (Kriterium 13); die Antwort traegt den neuen Stand.
+ *
+ * @param version der Stand, auf dem das Wiederaktivieren beruht
+ */
+export function firmaAktivieren(id: number, version: number): Promise<Firma> {
+  return apiJson(`/api/firmen/${id}/aktivieren`, { methode: 'POST', version }, parseFirma);
 }
 
 /** Legt einen Ansprechpartner unter der Firma an (Kriterium 9). */
@@ -198,28 +220,54 @@ export function ansprechpartnerAnlegen(
   );
 }
 
-/** Schreibt die Angaben des Ansprechpartners fort (Kriterium 11). */
+/**
+ * Schreibt die Angaben des Ansprechpartners fort (Kriterium 11); die Antwort traegt den neuen Stand.
+ *
+ * @param version der Stand des Ansprechpartners, auf dem die Aenderung beruht
+ */
 export function ansprechpartnerAendern(
   firmaId: number,
   id: number,
+  version: number,
   eingabe: AnsprechpartnerEingabe,
-): Promise<void> {
-  return apiOhneInhalt(`/api/firmen/${firmaId}/ansprechpartner/${id}`, {
-    methode: 'PUT',
-    rumpf: eingabe,
-  });
+): Promise<Ansprechpartner> {
+  return apiJson(
+    `/api/firmen/${firmaId}/ansprechpartner/${id}`,
+    { methode: 'PUT', rumpf: eingabe, version },
+    parseAnsprechpartner,
+  );
 }
 
-/** Legt den Ansprechpartner still (Kriterium 15). */
-export function ansprechpartnerStilllegen(firmaId: number, id: number): Promise<void> {
-  return apiOhneInhalt(`/api/firmen/${firmaId}/ansprechpartner/${id}/stilllegen`, {
-    methode: 'POST',
-  });
+/**
+ * Legt den Ansprechpartner still (Kriterium 15).
+ *
+ * @param version der Stand des Ansprechpartners, auf dem das Stilllegen beruht
+ */
+export function ansprechpartnerStilllegen(
+  firmaId: number,
+  id: number,
+  version: number,
+): Promise<Ansprechpartner> {
+  return apiJson(
+    `/api/firmen/${firmaId}/ansprechpartner/${id}/stilllegen`,
+    { methode: 'POST', version },
+    parseAnsprechpartner,
+  );
 }
 
-/** Nimmt den Ansprechpartner wieder in Betrieb (Kriterium 15). */
-export function ansprechpartnerAktivieren(firmaId: number, id: number): Promise<void> {
-  return apiOhneInhalt(`/api/firmen/${firmaId}/ansprechpartner/${id}/aktivieren`, {
-    methode: 'POST',
-  });
+/**
+ * Nimmt den Ansprechpartner wieder in Betrieb (Kriterium 15).
+ *
+ * @param version der Stand des Ansprechpartners, auf dem das Wiederaktivieren beruht
+ */
+export function ansprechpartnerAktivieren(
+  firmaId: number,
+  id: number,
+  version: number,
+): Promise<Ansprechpartner> {
+  return apiJson(
+    `/api/firmen/${firmaId}/ansprechpartner/${id}/aktivieren`,
+    { methode: 'POST', version },
+    parseAnsprechpartner,
+  );
 }

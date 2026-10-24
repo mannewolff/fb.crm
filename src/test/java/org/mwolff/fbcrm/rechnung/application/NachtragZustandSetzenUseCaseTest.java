@@ -24,6 +24,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.mwolff.fbcrm.common.Bearbeitungskonflikt;
 import org.mwolff.fbcrm.rechnung.domain.NachgetrageneRechnung;
 import org.mwolff.fbcrm.rechnung.domain.NachgetrageneRechnungRepository;
 import org.mwolff.fbcrm.rechnung.domain.Rechnungszustand;
@@ -42,6 +43,15 @@ class NachtragZustandSetzenUseCaseTest {
   private static final long ID = 21L;
   private static final Instant ANGELEGT = Instant.parse("2026-03-02T08:00:00Z");
   private static final Instant JETZT = Instant.parse("2026-10-20T07:30:00Z");
+
+  /** Der Stand der gespeicherten Rechnung, den ein aktueller Aufruf vorlegt. */
+  private static final long STAND = 3L;
+
+  /** Wer die gespeicherte Rechnung zuletzt geaendert hat. */
+  private static final long URHEBER = 7L;
+
+  /** Wer gerade umstellt. */
+  private static final long KONTO = 9L;
 
   @Mock private NachgetrageneRechnungRepository nachgetragene;
 
@@ -69,7 +79,9 @@ class NachtragZustandSetzenUseCaseTest {
                     zustand,
                     null,
                     ANGELEGT,
-                    ANGELEGT)));
+                    ANGELEGT,
+                    STAND,
+                    URHEBER)));
   }
 
   @ParameterizedTest
@@ -85,7 +97,7 @@ class NachtragZustandSetzenUseCaseTest {
     rechnungSteht(von);
 
     // When
-    final NachgetrageneRechnung umgestellt = useCase.setze(ID, nach);
+    final NachgetrageneRechnung umgestellt = useCase.setze(ID, nach, STAND, KONTO);
 
     // Then
     verify(nachgetragene).save(gespeicherte.capture());
@@ -95,8 +107,28 @@ class NachtragZustandSetzenUseCaseTest {
             r -> assertThat(r.zustand()).isEqualTo(nach),
             r -> assertThat(r.nummer()).isEqualTo("RE-1"),
             r -> assertThat(r.createdAt()).isEqualTo(ANGELEGT),
-            r -> assertThat(r.updatedAt()).isEqualTo(JETZT));
+            r -> assertThat(r.updatedAt()).isEqualTo(JETZT),
+            r -> assertThat(r.version()).isEqualTo(STAND),
+            r -> assertThat(r.geaendertVon()).isEqualTo(KONTO));
     assertThat(umgestellt).isEqualTo(gespeicherte.getValue());
+  }
+
+  @Test
+  void setze_onAnOutdatedStand_thenNachtragGeaendertBeforeTheEdgeRule() {
+    // Given — „bezahlt" auf „bezahlt" verletzte auch die Kantenregel; der Stand wird zuerst
+    // gemeldet
+    rechnungSteht(Rechnungszustand.BEZAHLT);
+
+    // When / Then
+    assertThatThrownBy(() -> useCase.setze(ID, Rechnungszustand.BEZAHLT, STAND - 1, KONTO))
+        .isInstanceOfSatisfying(
+            NachtragGeaendert.class,
+            konflikt -> {
+              assertThat(konflikt.urheberKonto()).hasValue(URHEBER);
+              assertThat(konflikt.handelndesKonto()).isEqualTo(KONTO);
+              assertThat(konflikt.zeitpunkt()).contains(ANGELEGT);
+            });
+    verify(nachgetragene, never()).save(any());
   }
 
   @ParameterizedTest
@@ -107,7 +139,7 @@ class NachtragZustandSetzenUseCaseTest {
     rechnungSteht(von);
 
     // When / Then
-    assertThatThrownBy(() -> useCase.setze(ID, nach))
+    assertThatThrownBy(() -> useCase.setze(ID, nach, STAND, KONTO))
         .isInstanceOf(RechnungszustandPasstNicht.class);
     verify(nachgetragene, never()).save(any());
   }
@@ -121,7 +153,7 @@ class NachtragZustandSetzenUseCaseTest {
     rechnungSteht(zustand);
 
     // When / Then
-    assertThatThrownBy(() -> useCase.setze(ID, zustand))
+    assertThatThrownBy(() -> useCase.setze(ID, zustand, STAND, KONTO))
         .isInstanceOf(RechnungszustandPasstNicht.class);
     verify(nachgetragene, never()).save(any());
   }
@@ -132,7 +164,7 @@ class NachtragZustandSetzenUseCaseTest {
     rechnungSteht(Rechnungszustand.GESTELLT);
 
     // When / Then
-    assertThatThrownBy(() -> useCase.setze(ID, Rechnungszustand.ENTWURF))
+    assertThatThrownBy(() -> useCase.setze(ID, Rechnungszustand.ENTWURF, STAND, KONTO))
         .isInstanceOf(RechnungszustandPasstNicht.class);
     verify(nachgetragene, never()).save(any());
   }
@@ -143,8 +175,43 @@ class NachtragZustandSetzenUseCaseTest {
     when(nachgetragene.findById(ID)).thenReturn(Optional.empty());
 
     // When / Then
-    assertThatThrownBy(() -> useCase.setze(ID, Rechnungszustand.BEZAHLT))
+    assertThatThrownBy(() -> useCase.setze(ID, Rechnungszustand.BEZAHLT, STAND, KONTO))
         .isInstanceOf(NachtragNichtGefunden.class);
+    verify(nachgetragene, never()).save(any());
+  }
+
+  @Test
+  void setze_givenADeletedRechnung_thenNachtragGeloeschtAndWritesNothing() {
+    // Given — #411, Kriterium 6: Anna (Konto 7) hat die Rechnung inzwischen geloescht.
+    final Instant geloescht = Instant.parse("2026-10-05T08:42:00Z");
+    when(nachgetragene.findById(ID))
+        .thenReturn(
+            Optional.of(
+                new NachgetrageneRechnung(
+                        ID,
+                        4L,
+                        "RE-1",
+                        LocalDate.of(2026, 3, 1),
+                        new BigDecimal("1000.00"),
+                        new BigDecimal("1190.00"),
+                        Rechnungszustand.GESTELLT,
+                        null,
+                        ANGELEGT,
+                        ANGELEGT,
+                        STAND,
+                        URHEBER)
+                    .geloescht(URHEBER, geloescht)));
+
+    // When / Then
+    assertThatThrownBy(() -> useCase.setze(ID, Rechnungszustand.BEZAHLT, STAND, KONTO))
+        .isInstanceOfSatisfying(
+            NachtragGeloescht.class,
+            konflikt -> {
+              assertThat(konflikt.art()).isEqualTo(Bearbeitungskonflikt.Art.GELOESCHT);
+              assertThat(konflikt.urheberKonto()).hasValue(URHEBER);
+              assertThat(konflikt.handelndesKonto()).isEqualTo(KONTO);
+              assertThat(konflikt.zeitpunkt()).contains(geloescht);
+            });
     verify(nachgetragene, never()).save(any());
   }
 }

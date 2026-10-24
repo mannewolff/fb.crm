@@ -7,6 +7,7 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.Year;
 import java.util.ArrayList;
 import java.util.List;
@@ -61,6 +62,18 @@ class RechnungLesenUseCaseTest {
   void lese_withAnUnknownRechnung_thenNotFound() {
     // Given
     when(rechnungen.findById(ENTWURF)).thenReturn(Optional.empty());
+
+    // When / Then
+    assertThatThrownBy(() -> useCase.lese(ENTWURF)).isInstanceOf(RechnungNichtGefunden.class);
+  }
+
+  @Test
+  void lese_aDeletedEntwurf_thenNotFound() {
+    // Given — Plan #415, E17: ein gekennzeichneter Entwurf ist fuer jeden Leseweg fort.
+    when(rechnungen.findById(ENTWURF))
+        .thenReturn(
+            Optional.of(
+                Rechnungsdoppel.geloescht(ENTWURF, 30L, Instant.parse("2026-10-05T08:42:00Z"))));
 
     // When / Then
     assertThatThrownBy(() -> useCase.lese(ENTWURF)).isInstanceOf(RechnungNichtGefunden.class);

@@ -5,7 +5,9 @@ import {
   buchbarePositionen,
   parseArbeitsmonat,
   parseBuchungspositionen,
+  parsePersonen,
   parseZeiteintrag,
+  personen,
   zeiteintragAendern,
   zeiteintragAnlegen,
   zeiteintragLoeschen,
@@ -24,9 +26,13 @@ const POSITION = {
   firmaName: 'IT Bildungshaus',
 };
 
+/** Eine Person, wie `PersonResponse` sie schreibt. */
+const PERSON = { id: 1, name: 'Manfred Wolff', aktiv: true };
+
 /** Ein Monat mit einem Tag und zwei Eintraegen, wie `ArbeitszeitMonatResponse` ihn schreibt. */
 const MONAT = {
   monat: '2026-11',
+  auswahl: '1',
   tage: [
     {
       tag: '2026-11-12',
@@ -38,6 +44,8 @@ const MONAT = {
           bis: '10:45:00',
           stunden: 1.75,
           position: POSITION,
+          person: PERSON,
+          version: 3,
         },
         {
           id: 8,
@@ -46,6 +54,8 @@ const MONAT = {
           bis: '15:00:00',
           stunden: 2,
           position: POSITION,
+          person: PERSON,
+          version: 0,
         },
       ],
       stunden: 3.75,
@@ -59,11 +69,13 @@ const MONAT = {
 /** Ein Eintrag, wie `ZeiteintragResponse` ihn schreibt. */
 const EINTRAG = {
   id: 7,
+  accountId: 1,
   angebotPositionId: 101,
   tag: '2026-11-12',
   von: '09:00:00',
   bis: '10:45:00',
   stunden: 1.75,
+  version: 4,
 };
 
 const EINGABE = {
@@ -97,7 +109,51 @@ describe('parseArbeitsmonat (A20)', () => {
       bis: '10:45:00',
       stundenInHundertsteln: 175,
       position: POSITION,
+      person: PERSON,
+      version: 3,
     });
+  });
+
+  it('scheitert, wo eine Zeile keinen Stand traegt (Plan #415, E2)', () => {
+    const ohneStand = { ...MONAT.tage[0].eintraege[0], version: undefined };
+    expect(() =>
+      parseArbeitsmonat({ ...MONAT, tage: [{ ...MONAT.tage[0], eintraege: [ohneStand] }] }),
+    ).toThrow(TypeError);
+  });
+
+  it('liest die Auswahl einer Person als Kennung und das Wort alle als „Alle" (E10)', () => {
+    expect(parseArbeitsmonat(MONAT).auswahl).toBe(1);
+    expect(parseArbeitsmonat({ ...MONAT, auswahl: 'alle' }).auswahl).toBe('alle');
+  });
+
+  it.each([[undefined], [1], ['jemand'], ['']])(
+    'scheitert, wo die Auswahl %j weder eine Kennung noch alle ist',
+    (auswahl) => {
+      expect(() => parseArbeitsmonat({ ...MONAT, auswahl })).toThrow(TypeError);
+    },
+  );
+
+  it('liest die Person einer Zeile samt stillgelegtem Zustand (E14, Kriterium 9)', () => {
+    const stillgelegt = { id: 2, name: 'Ben Berger', aktiv: false };
+    const monat = {
+      ...MONAT,
+      tage: [{ ...MONAT.tage[0], eintraege: [{ ...MONAT.tage[0].eintraege[0], person: stillgelegt }] }],
+    };
+
+    expect(parseArbeitsmonat(monat).tage[0].eintraege[0].person).toEqual(stillgelegt);
+  });
+
+  it.each([
+    ['fehlt', undefined],
+    ['traegt keinen Namen', { id: 1, aktiv: true }],
+    ['nennt ihren Zustand als Text', { id: 1, name: 'Manfred Wolff', aktiv: 'ja' }],
+  ])('scheitert, wo die Person einer Zeile %s', (_fall, person) => {
+    const kaputt = {
+      ...MONAT,
+      tage: [{ ...MONAT.tage[0], eintraege: [{ ...MONAT.tage[0].eintraege[0], person }] }],
+    };
+
+    expect(() => parseArbeitsmonat(kaputt)).toThrow(TypeError);
   });
 
   it('scheitert, wo ein Feld fehlt — eine halb gelesene Antwort geht nicht weiter', () => {
@@ -156,16 +212,42 @@ describe('parseZeiteintrag', () => {
   it('verengt den Eintrag samt gerechneter Dauer', () => {
     expect(parseZeiteintrag(EINTRAG)).toEqual({
       id: 7,
+      accountId: 1,
       angebotPositionId: 101,
       tag: '2026-11-12',
       von: '09:00:00',
       bis: '10:45:00',
       stundenInHundertsteln: 175,
+      version: 4,
     });
+  });
+
+  it('scheitert, wo der Stand fehlt (Plan #415, E2)', () => {
+    expect(() => parseZeiteintrag({ ...EINTRAG, version: undefined })).toThrow(TypeError);
   });
 
   it('scheitert, wo die Kennung keine Zahl ist', () => {
     expect(() => parseZeiteintrag({ ...EINTRAG, id: '7' })).toThrow(TypeError);
+  });
+
+  it('scheitert, wo das Konto des Eintrags fehlt (E12)', () => {
+    expect(() => parseZeiteintrag({ ...EINTRAG, accountId: undefined })).toThrow(TypeError);
+  });
+});
+
+describe('parsePersonen (E11)', () => {
+  it('verengt die Liste mit Kennung, Name und Zustand', () => {
+    const stillgelegt = { id: 2, name: 'Ben Berger', aktiv: false };
+
+    expect(parsePersonen([PERSON, stillgelegt])).toEqual([PERSON, stillgelegt]);
+  });
+
+  it('scheitert, wo die Kennung einer Person keine Zahl ist', () => {
+    expect(() => parsePersonen([{ ...PERSON, id: '1' }])).toThrow(TypeError);
+  });
+
+  it('scheitert, wo die Antwort keine Liste ist', () => {
+    expect(() => parsePersonen({ personen: [PERSON] })).toThrow(TypeError);
   });
 });
 
@@ -182,6 +264,38 @@ describe('arbeitszeitMonat', () => {
 
     await expect(arbeitszeitMonat()).resolves.toMatchObject({ stundenInHundertsteln: 375 });
   });
+
+  it('haengt die Auswahl einer Person als Parameter person an die Adresse (E10)', async () => {
+    const aufruf = fetchNachPfad({ 'GET /api/arbeitszeit?person=2': json(200, MONAT) });
+
+    await arbeitszeitMonat(undefined, 2);
+    expect(aufruf).toHaveBeenCalledTimes(1);
+  });
+
+  it('haengt die Auswahl „Alle" als person=alle an die Adresse', async () => {
+    const aufruf = fetchNachPfad({
+      'GET /api/arbeitszeit?monat=2026-11&person=alle': json(200, { ...MONAT, auswahl: 'alle' }),
+    });
+
+    await expect(arbeitszeitMonat('2026-11', 'alle')).resolves.toMatchObject({ auswahl: 'alle' });
+    expect(aufruf).toHaveBeenCalledTimes(1);
+  });
+
+  it('laesst den Parameter person ohne Auswahl weg — die Vorauswahl entscheidet der Server', async () => {
+    // Das Doppel kennt nur diese eine Adresse; ein angehaengtes `person` scheiterte laut.
+    const aufruf = fetchNachPfad({ 'GET /api/arbeitszeit?monat=2026-11': json(200, MONAT) });
+
+    await arbeitszeitMonat('2026-11', undefined);
+    expect(aufruf).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('personen', () => {
+  it('liest die waehlbaren Personen (E11)', async () => {
+    fetchNachPfad({ 'GET /api/arbeitszeit/personen': json(200, [PERSON]) });
+
+    await expect(personen()).resolves.toEqual([PERSON]);
+  });
 });
 
 describe('buchbarePositionen', () => {
@@ -195,7 +309,7 @@ describe('buchbarePositionen', () => {
 describe('zeiteintragAnlegen', () => {
   it('schickt die vier Angaben als JSON und liest den angelegten Eintrag', async () => {
     let hinaus: unknown = null;
-    fetchNachPfad({
+    const abruf = fetchNachPfad({
       'POST /api/arbeitszeit': (rumpf) => {
         hinaus = alsJson(rumpf);
         return json(201, EINTRAG)();
@@ -204,6 +318,25 @@ describe('zeiteintragAnlegen', () => {
 
     await expect(zeiteintragAnlegen(EINGABE)).resolves.toMatchObject({ id: 7 });
     expect(hinaus).toEqual(EINGABE);
+    // Anlegen bleibt frei (#411, Kriterium 7): kein Stand im Kopf.
+    expect(abruf.mock.calls[0][1]?.headers).not.toHaveProperty('If-Match');
+    // Ohne Konto geht das Feld nicht hinaus: dann gehoert der Eintrag dem angemeldeten (E12).
+    expect(hinaus).not.toHaveProperty('accountId');
+  });
+
+  it('schickt das genannte Konto als accountId mit (E12)', async () => {
+    let hinaus: unknown = null;
+    fetchNachPfad({
+      'POST /api/arbeitszeit': (rumpf) => {
+        hinaus = alsJson(rumpf);
+        return json(201, { ...EINTRAG, accountId: 2 })();
+      },
+    });
+
+    await expect(zeiteintragAnlegen({ ...EINGABE, accountId: 2 })).resolves.toMatchObject({
+      accountId: 2,
+    });
+    expect(hinaus).toEqual({ ...EINGABE, accountId: 2 });
   });
 
   it('reicht die Feldmeldung des Servers als ApiError heraus (A19)', async () => {
@@ -227,16 +360,36 @@ describe('zeiteintragAendern', () => {
       },
     });
 
-    await expect(zeiteintragAendern(7, EINGABE)).resolves.toMatchObject({ id: 7 });
+    await expect(zeiteintragAendern(7, 3, EINGABE)).resolves.toMatchObject({ id: 7, version: 4 });
     expect(hinaus).toEqual(EINGABE);
+  });
+
+  it('legt den Stand des Eintrags als If-Match vor (Plan #415, E2)', async () => {
+    const abruf = fetchNachPfad({ 'PUT /api/arbeitszeit/7': json(200, EINTRAG) });
+
+    await zeiteintragAendern(7, 3, EINGABE);
+
+    expect(abruf).toHaveBeenCalledWith(
+      '/api/arbeitszeit/7',
+      expect.objectContaining({
+        headers: expect.objectContaining({ 'If-Match': '"3"' }) as unknown,
+      }),
+    );
   });
 });
 
 describe('zeiteintragLoeschen', () => {
-  it('loescht und erwartet keine Antwort mit Inhalt', async () => {
+  it('loescht auf dem vorgelegten Stand und erwartet keine Antwort mit Inhalt', async () => {
     const aufruf = fetchNachPfad({ 'DELETE /api/arbeitszeit/7': leer(204) });
 
-    await expect(zeiteintragLoeschen(7)).resolves.toBeUndefined();
+    await expect(zeiteintragLoeschen(7, 3)).resolves.toBeUndefined();
     expect(aufruf).toHaveBeenCalledTimes(1);
+    // Plan #415, E2, E17: der Stand geht als starkes Etikett im Kopf If-Match mit.
+    expect(aufruf).toHaveBeenCalledWith(
+      '/api/arbeitszeit/7',
+      expect.objectContaining({
+        headers: expect.objectContaining({ 'If-Match': '"3"' }) as unknown,
+      }),
+    );
   });
 });

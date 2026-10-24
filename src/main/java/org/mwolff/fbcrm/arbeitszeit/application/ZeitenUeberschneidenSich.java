@@ -13,9 +13,10 @@ import org.springframework.web.bind.annotation.ResponseStatus;
  * Der eingereichte Zeitraum liegt ueber einem Eintrag, der schon da ist (Issue #193, Kriterium 4;
  * Plan #194, A8).
  *
- * <p><b>Gezaehlt wird ueber alle Positionen</b> und nicht nur ueber dieselbe: Niemand arbeitet zur
- * selben Zeit fuer zwei Kunden. Beruehrende Grenzen sind kein Widerspruch — 9:00 bis 10:00 und
- * 10:00 bis 11:00 sind zwei Eintraege.
+ * <p><b>Gezaehlt wird ueber alle Positionen dieser Person</b> und nicht nur ueber dieselbe
+ * Position: Niemand arbeitet zur selben Zeit fuer zwei Kunden. Zwei Personen duerfen dagegen zur
+ * selben Zeit arbeiten (Plan #426, E8; #410, Kriterium 5). Beruehrende Grenzen sind kein
+ * Widerspruch — 9:00 bis 10:00 und 10:00 bis 11:00 sind zwei Eintraege.
  *
  * <p><b>Die Meldung nennt den anderen Eintrag beim Namen</b> — Uhrzeit, Position und Firma. Ein
  * blosses „Die Zeiten ueberschneiden sich" liesse den Anwender seinen Monat durchsuchen; der andere
@@ -27,9 +28,10 @@ import org.springframework.web.bind.annotation.ResponseStatus;
  * <p>Die Meldung haengt an <b>beiden</b> Zeitfeldern: Erst Beginn und Ende zusammen ergeben die
  * Lage, und der Anwender kann an jedem von beiden ausweichen.
  *
- * <p>422 und nicht 409: Es ist kein gleichzeitiger zweiter Schreiber im Spiel (CLAUDE.md,
- * „Betriebsform"), sondern eine Eingabe, die zum eigenen Bestand nicht passt. Ein {@link
- * Feldfehler} aus demselben Grund wie bei {@code angebot.application.PositionInRechnungVerwendet}.
+ * <p>422 und nicht 409: Gemeldet wird eine Eingabe, die zum Bestand dieser Person nicht passt, und
+ * kein gleichzeitiger zweiter Schreiber — dagegen schuetzt die Anwendung noch nicht, das folgt mit
+ * #411. Ein {@link Feldfehler} aus demselben Grund wie bei {@code
+ * angebot.application.PositionInRechnungVerwendet}.
  */
 @ResponseStatus(code = HttpStatus.UNPROCESSABLE_ENTITY)
 public final class ZeitenUeberschneidenSich extends Feldfehler {

@@ -16,6 +16,7 @@ import org.mwolff.fbcrm.angebot.domain.Angebot;
 import org.mwolff.fbcrm.angebot.domain.AngebotRepository;
 import org.mwolff.fbcrm.angebot.domain.Angebotsposition;
 import org.mwolff.fbcrm.common.Abrechnungsmodus;
+import org.mwolff.fbcrm.common.Bearbeitungskonflikt;
 import org.mwolff.fbcrm.common.Einheit;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -66,6 +67,12 @@ import org.springframework.transaction.annotation.Transactional;
  * Wechsel <b>intern → extern</b> (E19): Der Weg nach innen nimmt keiner Position ihre Stunden, und
  * das Entfernen einer bebuchten Position scheitert weiter am Fremdschluessel.
  *
+ * <p><b>Eine geloeschte Zeit sperrt keine Position</b> (Plan #415, E17). Ein geloeschter
+ * Zeiteintrag steht gekennzeichnet weiter an seiner Zeile und zeigt auf seine Position. Bevor das
+ * Angebot geschrieben wird, entfernt {@link Zeitbindung} solche Eintraege auf den Positionen hart,
+ * die die Einreichung nicht mehr nennt — erst nach allen Pruefungen, damit eine abgewiesene
+ * Aenderung nichts hinterlaesst. Wer keine Position entfernt, bemueht den Port nicht.
+ *
  * <p><b>Das Leistungsjahr einer Position wird hier bestimmt</b> (#302, Kriterium 4; Plan #303, E2).
  * Eine gespeicherte Position behaelt ihr bisheriges Jahr, eine neue ist mit dem Jahr des
  * eingereichten Angebotsdatums vorbelegt. Die Vorbelegung gilt nur beim Anlegen: Wer spaeter das
@@ -77,24 +84,32 @@ import org.springframework.transaction.annotation.Transactional;
  * mit {@link AngebotStorniert} ab. Kommentare und Anlagen sind davon nicht beruehrt — sie laufen
  * ueber eigene Anwendungsfaelle und entstehen weiter.
  *
- * <p><b>Die Reihenfolge der Pruefungen</b> ist Absicht: erst das Angebot, dann das Storno, dann der
- * Ansprechpartner, die Positionskennungen, die Rechnungsbindung beim Artwechsel, die Bindung der
- * berechneten Positionen, die Angaben nach Zielart und zuletzt die erfasste Arbeitszeit. Das Storno
- * steht vor allen uebrigen, weil es die gruendlichste Aussage ist: Am stornierten Angebot geht gar
- * keine Aenderung durch, und wer eine versucht, soll das erfahren und nicht zuerst einen Fehler zu
- * einer Angabe bekommen, deren Korrektur ihm danach nichts nuetzte. Aus demselben Grund steht die
- * Sperre aus Kriterium 8 vor den Feldpruefungen — wer bei bestehender Rechnung umstellen will, soll
- * das erfahren und nicht zuerst vier Feldfehler zu Positionen bekommen, die er gar nicht aendern
- * wollte.
+ * <p><b>Zuerst der Stand</b> (#411, Kriterium 1; Plan #415, E1, E9). Bevor irgendeine fachliche
+ * Regel gefragt wird, vergleicht der Anwendungsfall den vorgelegten Stand mit dem des Angebots: Wer
+ * auf einem alten Stand speichert, bekommt {@link AngebotGeaendert} mit Urheber und Zeitpunkt der
+ * fremden Aenderung — und nicht eine Abweisung zu Angaben, die ein anderer inzwischen geaendert
+ * hat. Das Angebot zaehlt als Ganzes, Kopf und Positionen tragen eine Version (E9). Das handelnde
+ * Konto steht danach als Urheber am Angebot (E14).
+ *
+ * <p><b>Die Reihenfolge der Pruefungen</b> ist Absicht: erst das Angebot und sein Stand, dann das
+ * Storno, dann der Ansprechpartner, die Positionskennungen, die Rechnungsbindung beim Artwechsel,
+ * die Bindung der berechneten Positionen, die Angaben nach Zielart und zuletzt die erfasste
+ * Arbeitszeit. Das Storno steht vor allen uebrigen, weil es die gruendlichste Aussage ist: Am
+ * stornierten Angebot geht gar keine Aenderung durch, und wer eine versucht, soll das erfahren und
+ * nicht zuerst einen Fehler zu einer Angabe bekommen, deren Korrektur ihm danach nichts nuetzte.
+ * Aus demselben Grund steht die Sperre aus Kriterium 8 vor den Feldpruefungen — wer bei bestehender
+ * Rechnung umstellen will, soll das erfahren und nicht zuerst vier Feldfehler zu Positionen
+ * bekommen, die er gar nicht aendern wollte.
  */
 /*
- * PMD.TooManyMethods: Fuenf Pruefungen, vier Uebersetzer einer Positionsangabe und die Regel fuer
- * ihr Leistungsjahr ergeben zusammen mit dem einen oeffentlichen Weg mehr als die zehn Methoden der
- * Schwelle. Jede Pruefung traegt hier ihren Namen und ihre Begruendung — sie zusammenzuziehen
- * hiesse, die Reihenfolge der Abweisungen in einer langen Methode zu verstecken, und sie auf
- * mehrere Klassen zu verteilen hiesse, denselben geladenen Stand und dieselbe Einreichung durch
- * mehrere Haende zu geben. Beides waere schlechter zu lesen als die Folge kleiner, benannter
- * Schritte an einer Stelle — dasselbe Vorgehen wie bei {@code Rechnungslayout}.
+ * PMD.TooManyMethods: Fuenf Pruefungen, die Freigabe entfallender Positionen, vier Uebersetzer
+ * einer Positionsangabe und die Regel fuer ihr Leistungsjahr ergeben zusammen mit dem einen
+ * oeffentlichen Weg mehr als die zehn Methoden der Schwelle. Jede Pruefung traegt hier ihren Namen
+ * und ihre Begruendung — sie zusammenzuziehen hiesse, die Reihenfolge der Abweisungen in einer
+ * langen Methode zu verstecken, und sie auf mehrere Klassen zu verteilen hiesse, denselben
+ * geladenen Stand und dieselbe Einreichung durch mehrere Haende zu geben. Beides waere schlechter
+ * zu lesen als die Folge kleiner, benannter Schritte an einer Stelle — dasselbe Vorgehen wie bei
+ * {@code Rechnungslayout}.
  */
 @SuppressWarnings("PMD.TooManyMethods")
 @Service
@@ -130,8 +145,11 @@ public class AngebotAendernUseCase {
    * Aendert das Angebot und liefert es in seinem neuen Stand.
    *
    * @param angebotId Kennung des Angebots
-   * @param daten die eingereichten Angaben samt vollstaendiger Positionsliste
+   * @param daten die eingereichten Angaben samt vollstaendiger Positionsliste, vorgelegtem Stand
+   *     und handelndem Konto
    * @throws AngebotNichtGefunden wenn es das Angebot nicht gibt
+   * @throws AngebotGeaendert wenn das Angebot inzwischen einen anderen Stand hat als den
+   *     vorgelegten (Plan #415, E1)
    * @throws AngebotStorniert wenn das Angebot storniert ist (Kriterium 10)
    * @throws AnsprechpartnerNichtWaehlbar wenn der gewaehlte Ansprechpartner nicht zur Wahl steht
    * @throws PositionenNichtWaehlbar wenn eine Positionskennung nicht zu diesem Angebot gehoert oder
@@ -145,6 +163,12 @@ public class AngebotAendernUseCase {
    */
   public Angebot aendere(final long angebotId, final AngebotDaten daten) {
     final Angebot angebot = angebote.findById(angebotId).orElseThrow(AngebotNichtGefunden::new);
+    Bearbeitungskonflikt.pruefe(
+        daten.version(),
+        angebot.version(),
+        () ->
+            new AngebotGeaendert(
+                angebot.geaendertVon(), daten.geaendertVon(), angebot.updatedAt()));
     if (angebot.storniert()) {
       throw new AngebotStorniert();
     }
@@ -160,6 +184,7 @@ public class AngebotAendernUseCase {
             daten.intern(),
             Year.from(daten.angebotDatum()));
     pruefeZeit(daten, angebot.intern());
+    gibEntfallendeFrei(daten.positionen(), angebot.positionen());
     final Instant jetzt = clock.instant();
     return angebote.save(
         angebot
@@ -170,7 +195,8 @@ public class AngebotAendernUseCase {
                 daten.titel(),
                 daten.beschreibung(),
                 positionen,
-                jetzt));
+                jetzt)
+            .durch(daten.geaendertVon()));
   }
 
   /*
@@ -187,6 +213,22 @@ public class AngebotAendernUseCase {
       if (kennung != null && !offen.remove(kennung)) {
         throw new PositionenNichtWaehlbar();
       }
+    }
+  }
+
+  /*
+   * Die Positionen, die die Einreichung nicht mehr nennt, von geloeschter Zeit befreien (E17).
+   * Nicht geloeschte Zeit bleibt stehen; an ihr scheitert das Entfernen wie bisher.
+   */
+  private void gibEntfallendeFrei(
+      final List<Positionsangabe> eingereicht, final List<Angebotsposition> vorhanden) {
+    final Set<Long> entfallend =
+        vorhanden.stream()
+            .map(Angebotsposition::requireId)
+            .collect(Collectors.toCollection(HashSet::new));
+    eingereicht.forEach(angabe -> entfallend.remove(angabe.id()));
+    if (!entfallend.isEmpty()) {
+      zeit.entferneGeloeschte(Set.copyOf(entfallend));
     }
   }
 

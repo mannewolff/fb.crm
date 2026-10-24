@@ -3,6 +3,7 @@ package org.mwolff.fbcrm.firma.domain;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.time.Instant;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.mwolff.fbcrm.common.Anschrift;
 
@@ -19,7 +20,7 @@ class FirmaTest {
 
   private static Firma firma(final boolean aktiv) {
     return new Firma(
-        7L, "Adler AG", BREMEN, "75/123/45678", "DE123456789", aktiv, ANGELEGT, ANGELEGT);
+        7L, "Adler AG", BREMEN, "75/123/45678", "DE123456789", aktiv, ANGELEGT, ANGELEGT, 4L, 2L);
   }
 
   @Test
@@ -208,5 +209,47 @@ class FirmaTest {
 
     // Then
     assertThat(aktiviert.aktiv()).isTrue();
+  }
+
+  @Test
+  void durch_thenRecordsTheAccountAndKeepsEverythingElse() {
+    // Given — Plan #415, E14.
+    final Firma bestand = firma(true);
+
+    // When
+    final Firma geaendert = bestand.durch(9L);
+
+    // Then
+    assertThat(geaendert)
+        .isEqualTo(
+            new Firma(
+                7L,
+                "Adler AG",
+                BREMEN,
+                "75/123/45678",
+                "DE123456789",
+                true,
+                ANGELEGT,
+                ANGELEGT,
+                4L,
+                9L));
+  }
+
+  @Test
+  void uebergaenge_thenCarryVersionAndAuthorUnchanged() {
+    // Given — den Stand zaehlt der Bestand, nicht die Domaene (Plan #415, E1).
+    final Firma bestand = firma(true);
+
+    // When / Then
+    assertThat(
+            List.of(
+                bestand.geaendert("Adler GmbH", HAMBURG, null, null, GEAENDERT),
+                bestand.stillgelegt(GEAENDERT),
+                bestand.aktiviert(GEAENDERT)))
+        .allSatisfy(
+            neu -> {
+              assertThat(neu.version()).isEqualTo(4L);
+              assertThat(neu.geaendertVon()).isEqualTo(2L);
+            });
   }
 }

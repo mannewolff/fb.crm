@@ -50,13 +50,15 @@ class FirmaLesenUseCaseTest {
         "DE123456789",
         true,
         ANGELEGT,
-        ANGELEGT);
+        ANGELEGT,
+        0L,
+        null);
   }
 
   private static Ansprechpartner partner(
       final long id, final String nachname, final boolean aktiv) {
     return new Ansprechpartner(
-        id, 7L, "Max", nachname, null, null, null, null, aktiv, ANGELEGT, ANGELEGT);
+        id, 7L, "Max", nachname, null, null, null, null, aktiv, ANGELEGT, ANGELEGT, 0L, null);
   }
 
   @Test

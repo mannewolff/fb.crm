@@ -17,12 +17,16 @@ import {
 } from '../api/briefbogen';
 import type { Briefbogen, BriefbogenEingabe } from '../api/briefbogen';
 import type { FieldErrors } from '../api/client';
-import { feldMeldungen } from '../lib/apifehler';
+import { useRechte } from '../auth/rechte';
+import { feldMeldungen, istBearbeitungskonflikt } from '../lib/apifehler';
 import { dateigroesse } from '../lib/dateigroesse';
 import { ersteDatei } from '../lib/dateiwahl';
 import { meldungAm } from '../lib/feldmeldung';
 import { RADIUS_KLEIN, ZAHLEN_KLASSE } from '../theme';
+import EigeneEingaben from './EigeneEingaben';
+import type { EigeneEingabe } from './EigeneEingaben';
 import Karte from './Karte';
+import Konfliktmeldung from './Konfliktmeldung';
 import WeicheTaste from './WeicheTaste';
 
 /**
@@ -52,6 +56,19 @@ import WeicheTaste from './WeicheTaste';
  *
  * <b>Keine Kupfertaste</b>: Die eine der Ansicht ist „Speichern" der eigenen Angaben
  * (CLAUDE-design.md, „Eine Hauptsache je Ansicht").
+ *
+ * <b>Ohne das Recht, die Einstellungen zu aendern</b>, fehlen Hochladen, Ersetzen, Entfernen und
+ * „Einstellungen speichern" samt Dateifeld (Kriterium 10 von #409, Plan #414, A10, E1); der
+ * Probedruck bleibt, denn er liest nur (E4).
+ *
+ * <b>Jeder schreibende Weg legt den Stand vor</b> (#411, Kriterien 1 bis 3; Plan #415, E2, E11,
+ * E12): Hochladen, Entfernen und „Einstellungen speichern" schicken die Version des zuletzt
+ * gelesenen Stands, und jede Antwort bringt die neue mit. Der Briefbogen traegt <b>eine</b> Version
+ * fuer die ganze Zeile: Hat ein anderer inzwischen hochgeladen, wird auch das Speichern der Raender
+ * abgewiesen. Dann sagt {@link Konfliktmeldung}, wer wann; die Feldwerte bleiben stehen. „Neu
+ * laden" holt den Stand des Servers und stellt die eigenen Werte — samt dem Namen einer gewaehlten,
+ * nicht hochgeladenen Datei — daneben in {@link EigeneEingaben}. Ein Briefbogen wird nie geloescht;
+ * der Weg zur Uebersicht fuehrt darum auf diese Seite zurueck.
  */
 
 /** 5 MB, binaer gerechnet — das Gegenstueck zu `Briefpapiergrenze.MAX_BYTE` (E17). */
@@ -71,6 +88,14 @@ const AUSFALL_SPEICHERN =
 const AUSFALL_PROBEDRUCK =
   'Der Probedruck ist gerade nicht zu erzeugen. Bitte später erneut versuchen.';
 const GESPEICHERT = 'Die Einstellungen sind gespeichert.';
+const AUSFALL_NEU_LADEN =
+  'Der aktuelle Stand ist gerade nicht zu erreichen. Bitte später erneut versuchen.';
+
+/** Wohin die Konfliktmeldung fuehrt, wenn es nichts neu zu laden gibt — auf diese Seite. */
+const UEBERSICHT = '/eigene-angaben';
+
+/** Die Zeile unter „Deine Eingaben" fuer eine gewaehlte, nicht hochgeladene Datei. */
+const GEWAEHLTE_DATEI = 'Gewähltes Briefpapier';
 const KEIN_MASS = 'Bitte einen Wert in Millimetern mit höchstens einer Nachkommastelle angeben.';
 
 const SCHALTER_ABSENDER = 'Absenderzeile eindrucken';
@@ -170,6 +195,20 @@ function alsEingabe(
   return Object.keys(fehler).length > 0 ? { fehler } : { eingabe };
 }
 
+/**
+ * Was gerade in der Karte steht, als eigene Eingaben zum Kopieren (#411, Kriterium 3) — mit den
+ * Beschriftungen der Felder und, wenn das Hochladen abgewiesen wurde, dem Namen der Datei.
+ */
+function eigeneEingabenAus(werte: Werte, datei: string | null): readonly EigeneEingabe[] {
+  const schalter = (an: boolean) => (an ? 'an' : 'aus');
+  const zeilen: EigeneEingabe[] = [
+    { bezeichnung: SCHALTER_ABSENDER, wert: schalter(werte.absenderzeile) },
+    { bezeichnung: SCHALTER_STEUER, wert: schalter(werte.steuerBankZeile) },
+    ...RAENDER.map(({ feld, label }) => ({ bezeichnung: label, wert: werte.raender[feld] })),
+  ];
+  return datei === null ? zeilen : [...zeilen, { bezeichnung: GEWAEHLTE_DATEI, wert: datei }];
+}
+
 function seitenWort(seiten: number): string {
   return seiten === 1 ? '1 Seite' : `${String(seiten)} Seiten`;
 }
@@ -201,6 +240,7 @@ function sichern(inhalt: Blob) {
 }
 
 export default function BriefbogenKarte() {
+  const { darfEinstellungenAendern } = useRechte();
   const [lesestand, setzeLesestand] = useState<Lesestand>('laedt');
   const [stand, setzeStand] = useState<Briefbogen | null>(null);
   const [werte, setzeWerte] = useState<Werte | null>(null);
@@ -211,6 +251,12 @@ export default function BriefbogenKarte() {
   const [laeuft, setzeLaeuft] = useState(false);
   // Das Dateifeld als Zustand und nicht als `useRef` — dasselbe Muster wie in {@link Anlagen}.
   const [feld, setzeFeld] = useState<HTMLInputElement | null>(null);
+  // Die Abweisung eines Schritts auf altem Stand, ungeprueft — die Konfliktmeldung liest sie.
+  const [abweisung, setzeAbweisung] = useState<unknown>(null);
+  // Der Name einer Datei, deren Hochladen abgewiesen wurde — sie gehoert zu den eigenen Eingaben.
+  const [abgewieseneDatei, setzeAbgewieseneDatei] = useState<string | null>(null);
+  // Die eigenen Werte nach „Neu laden", bis „Verwerfen" gewaehlt wird (#411, Kriterium 3).
+  const [eigene, setzeEigene] = useState<readonly EigeneEingabe[] | null>(null);
 
   useEffect(() => {
     let aktuell = true;
@@ -237,22 +283,29 @@ export default function BriefbogenKarte() {
     setzeMeldung(null);
     setzeErfolg(false);
     setzeHinweis(false);
+    setzeAbweisung(null);
+    setzeAbgewieseneDatei(null);
   };
 
-  const hochladen = async (datei: File) => {
+  const hochladen = async (version: number, datei: File) => {
     setzeLaeuft(true);
     try {
-      const neu = await briefpapierHochladen(datei);
+      const neu = await briefpapierHochladen(version, datei);
       setzeStand(neu);
       setzeHinweis(neu.steuerBankZeile);
     } catch (ursache: unknown) {
-      setzeMeldung(meldungAm(feldMeldungen(ursache), FELD_DATEI) ?? AUSFALL_HOCHLADEN);
+      if (istBearbeitungskonflikt(ursache)) {
+        setzeAbweisung(ursache);
+        setzeAbgewieseneDatei(datei.name);
+      } else {
+        setzeMeldung(meldungAm(feldMeldungen(ursache), FELD_DATEI) ?? AUSFALL_HOCHLADEN);
+      }
     } finally {
       setzeLaeuft(false);
     }
   };
 
-  const beiWahl = (ereignis: ChangeEvent<HTMLInputElement>) => {
+  const beiWahl = (version: number) => (ereignis: ChangeEvent<HTMLInputElement>) => {
     const datei = ersteDatei(ereignis.target.files);
     // Geleert, damit dieselbe Datei ein zweites Mal gewaehlt werden kann.
     ereignis.target.value = '';
@@ -264,16 +317,20 @@ export default function BriefbogenKarte() {
       setzeMeldung(ZU_GROSS);
       return;
     }
-    void hochladen(datei);
+    void hochladen(version, datei);
   };
 
-  const entfernen = async () => {
+  const entfernen = (version: number) => async () => {
     neuBeginnen();
     setzeLaeuft(true);
     try {
-      setzeStand(await briefpapierEntfernen());
-    } catch {
-      setzeMeldung(AUSFALL_ENTFERNEN);
+      setzeStand(await briefpapierEntfernen(version));
+    } catch (ursache: unknown) {
+      if (istBearbeitungskonflikt(ursache)) {
+        setzeAbweisung(ursache);
+      } else {
+        setzeMeldung(AUSFALL_ENTFERNEN);
+      }
     } finally {
       setzeLaeuft(false);
     }
@@ -291,7 +348,7 @@ export default function BriefbogenKarte() {
     }
   };
 
-  const speichern = async (aktuell: Werte) => {
+  const speichern = async (version: number, aktuell: Werte) => {
     neuBeginnen();
     const gelesen = alsEingabe(aktuell);
     if ('fehler' in gelesen) {
@@ -301,13 +358,16 @@ export default function BriefbogenKarte() {
     setzeFeldFehler({});
     setzeLaeuft(true);
     try {
-      const neu = await briefbogenPflegen(gelesen.eingabe);
+      const neu = await briefbogenPflegen(version, gelesen.eingabe);
       setzeStand(neu);
       setzeWerte(alsWerte(neu));
       setzeErfolg(true);
     } catch (ursache: unknown) {
       const felder = feldMeldungen(ursache);
-      if (Object.keys(felder).length > 0) {
+      if (istBearbeitungskonflikt(ursache)) {
+        // Die Feldwerte bleiben stehen; den Weg weiter zeigt die Konfliktmeldung (Kriterium 3).
+        setzeAbweisung(ursache);
+      } else if (Object.keys(felder).length > 0) {
         setzeFeldFehler(felder);
       } else {
         setzeMeldung(AUSFALL_SPEICHERN);
@@ -317,9 +377,33 @@ export default function BriefbogenKarte() {
     }
   };
 
+  /**
+   * „Neu laden" nach einer Abweisung: der Stand des Servers in die Karte, die eigenen Werte daneben
+   * (#411, Kriterium 3; Plan #415, E12). Genommen wird, was in diesem Augenblick in den Feldern
+   * steht — auch was nach der Abweisung noch eingestellt wurde.
+   */
+  const neuLaden = async (aktuell: Werte) => {
+    const meine = eigeneEingabenAus(aktuell, abgewieseneDatei);
+    setzeMeldung(null);
+    setzeLaeuft(true);
+    try {
+      const gelesen = await briefbogenLesen();
+      setzeStand(gelesen);
+      setzeWerte(alsWerte(gelesen));
+      setzeEigene(meine);
+      setzeAbweisung(null);
+      setzeAbgewieseneDatei(null);
+      setzeFeldFehler({});
+    } catch {
+      setzeMeldung(AUSFALL_NEU_LADEN);
+    } finally {
+      setzeLaeuft(false);
+    }
+  };
+
   const bereit = lesestand === 'bereit' && stand !== null && werte !== null;
 
-  const werkzeug = bereit ? (
+  const werkzeug = bereit && darfEinstellungenAendern ? (
     <>
       <Box
         component="input"
@@ -328,7 +412,7 @@ export default function BriefbogenKarte() {
         ref={setzeFeld}
         aria-label={FELD_NAME}
         tabIndex={-1}
-        onChange={beiWahl}
+        onChange={beiWahl(stand.version)}
         sx={VERSTECKT}
       />
       {feld === null ? null : (
@@ -362,7 +446,27 @@ export default function BriefbogenKarte() {
         {meldung === null ? null : <Alert severity="error">{meldung}</Alert>}
         {hinweis ? <Alert severity="info">{HINWEIS_STEUER}</Alert> : null}
         {erfolg ? <Alert severity="success">{GESPEICHERT}</Alert> : null}
-        {papierZeile(stand, laeuft, entfernen, probedruck)}
+        <Konfliktmeldung
+          ursache={abweisung}
+          onNeuLaden={() => {
+            void neuLaden(werte);
+          }}
+          uebersicht={UEBERSICHT}
+        />
+        {eigene === null ? null : (
+          <EigeneEingaben
+            werte={eigene}
+            onVerwerfen={() => {
+              setzeEigene(null);
+            }}
+          />
+        )}
+        {papierZeile(
+          stand,
+          laeuft,
+          darfEinstellungenAendern ? entfernen(stand.version) : null,
+          probedruck,
+        )}
         <Box sx={{ display: 'flex', flexWrap: 'wrap', columnGap: 3 }}>
           <FormControlLabel
             control={
@@ -414,16 +518,18 @@ export default function BriefbogenKarte() {
             );
           })}
         </Box>
-        <Box>
-          <WeicheTaste
-            onClick={() => {
-              void speichern(werte);
-            }}
-            disabled={laeuft}
-          >
-            Einstellungen speichern
-          </WeicheTaste>
-        </Box>
+        {darfEinstellungenAendern ? (
+          <Box>
+            <WeicheTaste
+              onClick={() => {
+                void speichern(stand.version, werte);
+              }}
+              disabled={laeuft}
+            >
+              Einstellungen speichern
+            </WeicheTaste>
+          </Box>
+        ) : null}
       </Box>
     );
   }
@@ -435,11 +541,14 @@ export default function BriefbogenKarte() {
   );
 }
 
-/** Der Stand des hinterlegten PDF samt Entfernen und Probedruck — oder der Satz, dass es fehlt. */
+/**
+ * Der Stand des hinterlegten PDF samt Entfernen und Probedruck — oder der Satz, dass es fehlt.
+ * Ohne `entfernen` (kein Recht zum Aendern) steht nur der Probedruck da.
+ */
 function papierZeile(
   stand: Briefbogen,
   laeuft: boolean,
-  entfernen: () => Promise<void>,
+  entfernen: (() => Promise<void>) | null,
   probedruck: () => Promise<void>,
 ): ReactNode {
   const { papier } = stand;
@@ -493,15 +602,17 @@ function papierZeile(
       >
         Probedruck
       </WeicheTaste>
-      <WeicheTaste
-        onClick={() => {
-          void entfernen();
-        }}
-        disabled={laeuft}
-        symbol={<IconTrash size={SYMBOL} stroke={1.8} />}
-      >
-        Briefpapier entfernen
-      </WeicheTaste>
+      {entfernen === null ? null : (
+        <WeicheTaste
+          onClick={() => {
+            void entfernen();
+          }}
+          disabled={laeuft}
+          symbol={<IconTrash size={SYMBOL} stroke={1.8} />}
+        >
+          Briefpapier entfernen
+        </WeicheTaste>
+      )}
     </Box>
   );
 }

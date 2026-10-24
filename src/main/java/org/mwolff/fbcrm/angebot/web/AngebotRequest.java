@@ -44,14 +44,21 @@ public record AngebotRequest(
     @Nullable Boolean intern,
     @NotNull @Valid List<AngebotPositionRequest> positionen) {
 
-  /** Dieselben Angaben in der Sprache der Anwendungsschicht. */
-  AngebotDaten daten() {
+  /**
+   * Dieselben Angaben in der Sprache der Anwendungsschicht.
+   *
+   * @param version der Stand aus {@code If-Match} (Plan #415, E2)
+   * @param konto Kennung des angemeldeten Kontos (E14)
+   */
+  AngebotDaten daten(final long version, final long konto) {
     return new AngebotDaten(
         angebotDatum,
         ansprechpartnerId,
         titel,
         beschreibung,
         Boolean.TRUE.equals(intern),
-        positionen.stream().map(AngebotPositionRequest::angabe).toList());
+        positionen.stream().map(AngebotPositionRequest::angabe).toList(),
+        version,
+        konto);
   }
 }

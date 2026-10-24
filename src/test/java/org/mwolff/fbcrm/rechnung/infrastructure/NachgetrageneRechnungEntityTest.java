@@ -34,7 +34,9 @@ class NachgetrageneRechnungEntityTest {
         Rechnungszustand.BEZAHLT,
         pdfSchluessel,
         ANGELEGT,
-        GEAENDERT);
+        GEAENDERT,
+        5L,
+        7L);
   }
 
   @Test
@@ -56,7 +58,30 @@ class NachgetrageneRechnungEntityTest {
             gelesen ->
                 assertThat(gelesen.getPdfSchluessel()).isEqualTo("nachgetragen/21/original.pdf"),
             gelesen -> assertThat(gelesen.getCreatedAt()).isEqualTo(ANGELEGT),
-            gelesen -> assertThat(gelesen.getUpdatedAt()).isEqualTo(GEAENDERT));
+            gelesen -> assertThat(gelesen.getUpdatedAt()).isEqualTo(GEAENDERT),
+            gelesen -> assertThat(gelesen.getVersion()).isEqualTo(5L),
+            gelesen -> assertThat(gelesen.getGeaendertVon()).isEqualTo(7L));
+  }
+
+  @Test
+  void aus_givenADeletedRechnung_thenCarriesTheKennzeichen() {
+    // When
+    final NachgetrageneRechnungEntity zeile =
+        NachgetrageneRechnungEntity.aus(rechnung(null).geloescht(9L, GEAENDERT));
+
+    // Then — Plan #415, E17
+    assertThat(zeile.getGeloeschtAm()).isEqualTo(GEAENDERT);
+    assertThat(zeile.getGeloeschtVon()).isEqualTo(9L);
+  }
+
+  @Test
+  void aus_givenALivingRechnung_thenTheKennzeichenStaysEmpty() {
+    // When
+    final NachgetrageneRechnungEntity zeile = NachgetrageneRechnungEntity.aus(rechnung(null));
+
+    // Then
+    assertThat(zeile.getGeloeschtAm()).isNull();
+    assertThat(zeile.getGeloeschtVon()).isNull();
   }
 
   @Test

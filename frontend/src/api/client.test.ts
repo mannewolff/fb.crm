@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { ApiError, apiBlob, apiJson, apiOhneInhalt } from './client';
+import { ApiError, apiBlob, apiJson, apiOhneInhalt, beiVerboten } from './client';
 import { blobText } from '../test/blobText';
 
 /** Gibt den Wert unveraendert zurueck — fuer Faelle, in denen nicht der Parser geprueft wird. */
@@ -23,6 +23,7 @@ function fetchLiefert(bauen: () => Response) {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  beiVerboten(null);
 });
 
 describe('apiJson', () => {
@@ -227,5 +228,121 @@ describe('apiBlob', () => {
     await expect(
       apiBlob('/api/angebote/9/anlagen/3/inhalt', { methode: 'GET' }),
     ).rejects.toMatchObject({ status: 404, message: 'Die Anlage wurde nicht gefunden.' });
+  });
+});
+
+describe('beiVerboten (Plan #414, E5)', () => {
+  it('ruft bei 403 den Rueckruf, bevor der Fehler geworfen wird', async () => {
+    fetchLiefert(() => problemAntwort(403, { detail: 'Nicht erlaubt' }));
+    const rueckruf = vi.fn();
+    beiVerboten(rueckruf);
+
+    const fehler = await apiJson('/api/test', { methode: 'GET' }, durchreichen).catch(
+      (ursache: unknown) => {
+        // Der Rueckruf lief schon, als der Fehler beim Aufrufer ankam.
+        expect(rueckruf).toHaveBeenCalledTimes(1);
+        return ursache;
+      },
+    );
+
+    expect(fehler).toBeInstanceOf(ApiError);
+    expect(fehler).toMatchObject({ status: 403, message: 'Nicht erlaubt' });
+  });
+
+  it.each([400, 401, 404, 409, 500])('laesst den Rueckruf bei %i ruhen', async (status) => {
+    fetchLiefert(() => problemAntwort(status, { detail: 'Anders' }));
+    const rueckruf = vi.fn();
+    beiVerboten(rueckruf);
+
+    await expect(apiOhneInhalt('/api/test', { methode: 'POST' })).rejects.toBeInstanceOf(ApiError);
+    expect(rueckruf).not.toHaveBeenCalled();
+  });
+
+  it('laesst den Rueckruf bei einer erfolgreichen Antwort ruhen', async () => {
+    fetchLiefert(() => new Response(null, { status: 204 }));
+    const rueckruf = vi.fn();
+    beiVerboten(rueckruf);
+
+    await apiOhneInhalt('/api/test', { methode: 'POST' });
+
+    expect(rueckruf).not.toHaveBeenCalled();
+  });
+
+  it('wirft bei 403 auch ohne gesetzten Rueckruf den Fehler', async () => {
+    fetchLiefert(() => problemAntwort(403, { detail: 'Nicht erlaubt' }));
+    const rueckruf = vi.fn();
+    beiVerboten(rueckruf);
+    beiVerboten(null);
+
+    await expect(apiBlob('/api/test', { methode: 'GET' })).rejects.toMatchObject({ status: 403 });
+    expect(rueckruf).not.toHaveBeenCalled();
+  });
+});
+
+describe('Version als If-Match (Plan #415, E2)', () => {
+  it('legt die Version als starkes Etikett vor', async () => {
+    const fetchMock = fetchLiefert(() => new Response(null, { status: 204 }));
+
+    await apiOhneInhalt('/api/firmen/7', { methode: 'DELETE', version: 4 });
+
+    expect(fetchMock.mock.calls[0][1]?.headers).toEqual({ 'If-Match': '"4"' });
+  });
+
+  it('legt die Version neben dem Inhaltstyp eines JSON-Rumpfs vor', async () => {
+    const fetchMock = fetchLiefert(() => problemAntwort(200, {}));
+
+    await apiJson('/api/firmen/7', { methode: 'PUT', rumpf: { a: 1 }, version: 0 }, durchreichen);
+
+    expect(fetchMock.mock.calls[0][1]?.headers).toEqual({
+      'Content-Type': 'application/json',
+      'If-Match': '"0"',
+    });
+  });
+
+  it('legt die Version auch zu Formulardaten vor, ohne einen Inhaltstyp zu setzen', async () => {
+    const fetchMock = fetchLiefert(() => problemAntwort(200, {}));
+
+    await apiJson(
+      '/api/rechnungen/3/pdf',
+      { methode: 'PUT', formular: new FormData(), version: 2 },
+      durchreichen,
+    );
+
+    expect(fetchMock.mock.calls[0][1]?.headers).toEqual({ 'If-Match': '"2"' });
+  });
+
+  it('schickt ohne Version keinen Bedingungskopf', async () => {
+    const fetchMock = fetchLiefert(() => problemAntwort(200, {}));
+
+    await apiJson('/api/firmen/7', { methode: 'PUT', rumpf: { a: 1 } }, durchreichen);
+
+    expect(fetchMock.mock.calls[0][1]?.headers).toEqual({ 'Content-Type': 'application/json' });
+  });
+});
+
+describe('Problem-Rumpf am ApiError (Plan #415, E4)', () => {
+  it('traegt den gelesenen Rumpf der Antwort', async () => {
+    const problem = {
+      detail: 'Inzwischen geaendert.',
+      konflikt: { art: 'veraltet', geaendertVon: 'Anna Muster', eigenesFenster: false },
+    };
+    fetchLiefert(() => problemAntwort(409, problem));
+
+    await expect(apiJson('/api/test', { methode: 'PUT' }, durchreichen)).rejects.toMatchObject({
+      status: 409,
+      problem,
+    });
+  });
+
+  it('traegt null, wenn die Antwort keinen JSON-Rumpf hat', async () => {
+    fetchLiefert(() => new Response('kein json', { status: 500 }));
+
+    await expect(apiJson('/api/test', { methode: 'GET' }, durchreichen)).rejects.toMatchObject({
+      problem: null,
+    });
+  });
+
+  it('traegt null, wenn ein Fehler ohne Rumpf gebaut wird', () => {
+    expect(new ApiError(404, 'Weg', {}).problem).toBeNull();
   });
 });

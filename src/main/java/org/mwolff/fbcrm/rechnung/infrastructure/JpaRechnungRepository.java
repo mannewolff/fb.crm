@@ -32,12 +32,13 @@ import org.springframework.stereotype.Repository;
  * <p>Jede Liste holt ihre Positionen in <b>einer</b> zweiten Abfrage und ordnet sie danach den
  * Rechnungen zu; je Zeile einzeln nachzuladen waere die bekannte Abfrage-Lawine.
  *
- * <p>Geloescht wird eine Rechnung mit ihren Positionen: erst die Zeilen, dann die Rechnung — der
- * Fremdschluessel traegt kein {@code ON DELETE}. Dass nur ein Entwurf geloescht werden darf, haelt
- * der Anwendungsfall fest.
+ * <p><b>Geloescht wird mit Kennzeichen</b> (Plan #415, E17): Die Rechnung kommt mit gesetztem
+ * {@code geloescht_am} und ohne Positionen herein, und das Fortschreiben loescht ihre
+ * Positionszeilen hart — sie zeigen ohne {@code ON DELETE} auf die Positionen des Angebots. Die
+ * Listen lassen gekennzeichnete Zeilen aus, {@link #findById(long)} liefert sie mit.
  */
 /*
- * Neun Methoden des Ports und fuenf private Uebersetzer ergeben vierzehn. Sie weiter aufzuteilen
+ * Acht Methoden des Ports und fuenf private Uebersetzer ergeben dreizehn. Sie weiter aufzuteilen
  * verschoebe die Zahl, ohne etwas zu klaeren: Der Adapter ist die eine Stelle, an der Rechnung und
  * Zeile ineinander uebergehen, und genau darum stehen beide Richtungen hier beieinander.
  */
@@ -69,7 +70,7 @@ class JpaRechnungRepository implements RechnungRepository {
 
   @Override
   public List<Rechnung> findAlle() {
-    return mitPositionen(rechnungen.findAll());
+    return mitPositionen(rechnungen.findLebende());
   }
 
   @Override
@@ -121,12 +122,6 @@ class JpaRechnungRepository implements RechnungRepository {
       final RechnungEntity zeile, final List<Rechnungsposition> eingereicht) {
     final long rechnungId = Objects.requireNonNull(zeile.getId());
     return toDomain(zeile, fortgeschrieben(rechnungId, eingereicht));
-  }
-
-  @Override
-  public void delete(final long id) {
-    positionen.deleteAll(positionen.findByRechnung(id));
-    rechnungen.deleteById(id);
   }
 
   @Override
@@ -196,7 +191,11 @@ class JpaRechnungRepository implements RechnungRepository {
         zeile.getEmpfaenger(),
         zeile.getAbsender(),
         zeile.getCreatedAt(),
-        zeile.getUpdatedAt());
+        zeile.getUpdatedAt(),
+        zeile.getVersion(),
+        zeile.getGeaendertVon(),
+        zeile.getGeloeschtAm(),
+        zeile.getGeloeschtVon());
   }
 
   private static Rechnungsposition toDomain(final RechnungPositionEntity zeile) {

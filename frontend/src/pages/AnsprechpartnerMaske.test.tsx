@@ -1,10 +1,12 @@
-import { screen, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { Ansprechpartner, Firma } from '../api/firmen';
 import KopfPfad, { KopfPfadProvider } from '../components/KopfPfad';
+import { NICHT_OFFEN } from '../routes/RollenRoute';
+import { appAlsRolle } from '../test/appAlsRolle';
 import { fetchNachPfad, json, leer, problem } from '../test/fetchNachPfad';
 import { renderMitTheme } from '../test/render';
 import AnsprechpartnerMaske from './AnsprechpartnerMaske';
@@ -18,6 +20,7 @@ const ANNA: Ansprechpartner = {
   telefonFestnetz: '+49 421 123456',
   telefonMobil: null,
   aktiv: true,
+  version: 3,
 };
 
 const FIRMA: Firma = {
@@ -31,6 +34,7 @@ const FIRMA: Firma = {
   umsatzsteuerId: null,
   aktiv: true,
   ansprechpartner: [ANNA],
+  version: 0,
 };
 
 /** Die Adresse, an der sich ablesen laesst, wohin die Maske gefuehrt hat. */
@@ -285,7 +289,7 @@ describe('AnsprechpartnerMaske — Ändern', () => {
     const nutzer = userEvent.setup();
     const fetchMock = fetchNachPfad({
       'GET /api/firmen/7': json(200, FIRMA),
-      'PUT /api/firmen/7/ansprechpartner/11': leer(204),
+      'PUT /api/firmen/7/ansprechpartner/11': json(200, { ...ANNA, version: 4 }),
     });
 
     renderMaske('/firmen/7/ansprechpartner/11/bearbeiten');
@@ -326,7 +330,7 @@ describe('AnsprechpartnerMaske — Ändern', () => {
     const nutzer = userEvent.setup();
     const fetchMock = fetchNachPfad({
       'GET /api/firmen/7': json(200, FIRMA),
-      'PUT /api/firmen/7/ansprechpartner/11': leer(204),
+      'PUT /api/firmen/7/ansprechpartner/11': json(200, { ...ANNA, version: 4 }),
     });
 
     renderMaske('/firmen/7/ansprechpartner/11/bearbeiten');
@@ -396,6 +400,27 @@ describe('AnsprechpartnerMaske — unsinnige Kennung, Unbekanntes, Ausfall', () 
   });
 });
 
+describe('AnsprechpartnerMaske — nur mit Schreibrecht (Kriterium 10 von #409, Plan #414, A11)', () => {
+  it.each([
+    ['/firmen/7/ansprechpartner/neu', 'Neuer Ansprechpartner'],
+    ['/firmen/7/ansprechpartner/11/bearbeiten', 'Ansprechpartner bearbeiten'],
+  ])('zeigt ReadOnly auf „%s" den Satz statt der Maske „%s"', async (adresse, titel) => {
+    const aufruf = appAlsRolle('READ_ONLY', adresse);
+
+    expect(await screen.findByText(new RegExp(NICHT_OFFEN))).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: titel })).not.toBeInTheDocument();
+    // Die Maske entsteht gar nicht — sie liest auch nichts.
+    expect(aufruf).toHaveBeenCalledTimes(2);
+  });
+
+  it('zeigt einem Employee die Maske, denn er darf fachlich schreiben', async () => {
+    appAlsRolle('EMPLOYEE', '/firmen/7/ansprechpartner/neu', { 'GET /api/firmen/7': json(200, FIRMA) });
+
+    expect(await screen.findByRole('heading', { name: 'Neuer Ansprechpartner' })).toBeInTheDocument();
+    expect(screen.queryByText(new RegExp(NICHT_OFFEN))).not.toBeInTheDocument();
+  });
+});
+
 describe('AnsprechpartnerMaske — der Pfad im Kopf (E6)', () => {
   it.each([
     ['/firmen/7/ansprechpartner/neu', 'Neuer Ansprechpartner'],
@@ -433,5 +458,178 @@ describe('AnsprechpartnerMaske — Tastatur und Benennung', () => {
       await nutzer.tab();
       expect(element).toHaveFocus();
     }
+  });
+});
+
+/** Heute um die genannte Uhrzeit in der Ortszeit — die Meldung nennt dann nur die Uhrzeit. */
+function heuteUm(stunde: number, minute: number): string {
+  const zeitpunkt = new Date();
+  zeitpunkt.setHours(stunde, minute, 0, 0);
+  return zeitpunkt.toISOString();
+}
+
+/** Die Abweisung des Servers, wie `GlobalExceptionHandler` sie schreibt (Plan #415, E4, E15). */
+function abweisung(geaendertVon: string): () => Response {
+  return json(409, {
+    title: 'Conflict',
+    status: 409,
+    detail: 'Dieser Eintrag wurde inzwischen geändert.',
+    konflikt: { art: 'veraltet', geaendertAm: heuteUm(10, 42), eigenesFenster: false, geaendertVon },
+  });
+}
+
+/** Antwortet der Reihe nach mit den Antworten — beim ersten Aufruf mit der ersten. */
+function nacheinander(...antworten: readonly (() => Response)[]): () => Response {
+  let aufruf = 0;
+  return () => {
+    const antwort = antworten[Math.min(aufruf, antworten.length - 1)];
+    aufruf += 1;
+    return antwort();
+  };
+}
+
+/** Die Bedingungskoepfe aller Aufrufe des Wegs, in ihrer Reihenfolge. */
+function vorgelegteStaende(
+  fetchMock: ReturnType<typeof fetchNachPfad>,
+  methode: string,
+  pfad: string,
+): (string | undefined)[] {
+  return fetchMock.mock.calls
+    .filter(([ziel, init]) => ziel === pfad && init?.method === methode)
+    .map(([, init]) => (init?.headers as Record<string, string> | undefined)?.['If-Match']);
+}
+
+describe('AnsprechpartnerMaske — gleichzeitig arbeiten (#411, Kriterien 1 bis 4; Plan #415)', () => {
+  const WEG = '/api/firmen/7/ansprechpartner/11';
+  /** Bernds Stand: Er hat Rolle und Nachnamen inzwischen geaendert. */
+  const BERNDS_STAND: Firma = {
+    ...FIRMA,
+    ansprechpartner: [{ ...ANNA, nachname: 'Berg-Weber', rolle: 'Vertrieb', version: 4 }],
+  };
+
+  it('legt beim Speichern den gelesenen Stand des Ansprechpartners vor', async () => {
+    const nutzer = userEvent.setup();
+    const fetchMock = fetchNachPfad({
+      'GET /api/firmen/7': json(200, FIRMA),
+      [`PUT ${WEG}`]: json(200, { ...ANNA, version: 4 }),
+    });
+
+    renderMaske('/firmen/7/ansprechpartner/11/bearbeiten');
+    await screen.findByRole('heading', { name: 'Ansprechpartner bearbeiten' });
+    await nutzer.click(screen.getByRole('button', { name: 'Speichern' }));
+
+    await screen.findByText('Detailansicht');
+    expect(vorgelegteStaende(fetchMock, 'PUT', WEG)).toEqual(['"3"']);
+  });
+
+  it('legt beim Anlegen keinen Stand vor (Kriterium 7)', async () => {
+    const nutzer = userEvent.setup();
+    const fetchMock = fetchNachPfad({
+      'GET /api/firmen/7': json(200, FIRMA),
+      'POST /api/firmen/7/ansprechpartner': json(201, ANNA),
+    });
+
+    renderMaske('/firmen/7/ansprechpartner/neu');
+    await screen.findByRole('heading', { name: 'Neuer Ansprechpartner' });
+    await nutzer.type(feld('Nachname'), 'Berg');
+    await nutzer.click(screen.getByRole('button', { name: 'Anlegen' }));
+
+    await screen.findByText('Detailansicht');
+    expect(vorgelegteStaende(fetchMock, 'POST', '/api/firmen/7/ansprechpartner')).toEqual([
+      undefined,
+    ]);
+  });
+
+  it('Szenario: abgewiesenes Speichern — die Eingaben bleiben, Neu laden stellt sie daneben', async () => {
+    const nutzer = userEvent.setup();
+    const fetchMock = fetchNachPfad({
+      'GET /api/firmen/7': nacheinander(json(200, FIRMA), json(200, BERNDS_STAND)),
+      [`PUT ${WEG}`]: nacheinander(abweisung('Bernd'), json(200, { ...ANNA, version: 5 })),
+    });
+
+    renderMaske('/firmen/7/ansprechpartner/11/bearbeiten');
+    await screen.findByRole('heading', { name: 'Ansprechpartner bearbeiten' });
+    await nutzer.clear(feld('Rolle'));
+    await nutzer.type(feld('Rolle'), 'Geschäftsführung');
+    await nutzer.click(screen.getByRole('button', { name: 'Speichern' }));
+
+    // Abgewiesen: Die Meldung nennt Bernd, und die eigene Rolle steht weiter im Feld.
+    const meldung = await screen.findByRole('alert');
+    expect(meldung).toHaveTextContent('Bernd hat diesen Eintrag inzwischen geändert (10:42).');
+    expect(feld('Rolle')).toHaveValue('Geschäftsführung');
+    expect(adresse()).toBe('/firmen/7/ansprechpartner/11/bearbeiten');
+
+    // Neu laden: Bernds Stand steht in der Maske, die eigenen Werte daneben zum Kopieren.
+    await nutzer.click(screen.getByRole('button', { name: 'Neu laden' }));
+    await waitFor(() => {
+      expect(feld('Rolle')).toHaveValue('Vertrieb');
+    });
+    expect(feld('Nachname')).toHaveValue('Berg-Weber');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    const eigene = screen.getByRole('region', { name: 'Deine Eingaben' });
+    expect(eigene).toHaveTextContent('Geschäftsführung');
+    expect(within(eigene).getByText('Telefon Mobil')).toBeInTheDocument();
+
+    // Auf Bernds Stand geht das Speichern durch; vorgelegt wird der neu geladene Stand.
+    await nutzer.click(screen.getByRole('button', { name: 'Speichern' }));
+    await screen.findByText('Detailansicht');
+    expect(vorgelegteStaende(fetchMock, 'PUT', WEG)).toEqual(['"3"', '"4"']);
+  });
+
+  it('raeumt die eigenen Eingaben mit „Verwerfen" ab', async () => {
+    const nutzer = userEvent.setup();
+    fetchNachPfad({
+      'GET /api/firmen/7': nacheinander(json(200, FIRMA), json(200, BERNDS_STAND)),
+      [`PUT ${WEG}`]: abweisung('Bernd'),
+    });
+
+    renderMaske('/firmen/7/ansprechpartner/11/bearbeiten');
+    await screen.findByRole('heading', { name: 'Ansprechpartner bearbeiten' });
+    await nutzer.click(screen.getByRole('button', { name: 'Speichern' }));
+    await nutzer.click(await screen.findByRole('button', { name: 'Neu laden' }));
+    const eigene = await screen.findByRole('region', { name: 'Deine Eingaben' });
+
+    await nutzer.click(within(eigene).getByRole('button', { name: 'Verwerfen' }));
+
+    expect(screen.queryByRole('region', { name: 'Deine Eingaben' })).not.toBeInTheDocument();
+  });
+
+  it('meldet beim Neu laden, wenn die Firma den Ansprechpartner nicht mehr traegt', async () => {
+    const nutzer = userEvent.setup();
+    fetchNachPfad({
+      'GET /api/firmen/7': nacheinander(
+        json(200, FIRMA),
+        json(200, { ...FIRMA, ansprechpartner: [] }),
+      ),
+      [`PUT ${WEG}`]: abweisung('Bernd'),
+    });
+
+    renderMaske('/firmen/7/ansprechpartner/11/bearbeiten');
+    await screen.findByRole('heading', { name: 'Ansprechpartner bearbeiten' });
+    await nutzer.click(screen.getByRole('button', { name: 'Speichern' }));
+    await nutzer.click(await screen.findByRole('button', { name: 'Neu laden' }));
+
+    expect(await screen.findByText('Diesen Ansprechpartner gibt es nicht.')).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Deine Eingaben' })).not.toBeInTheDocument();
+  });
+
+  it('meldet einen Ausfall beim Neu laden und laesst die Konfliktmeldung stehen', async () => {
+    const nutzer = userEvent.setup();
+    fetchNachPfad({
+      'GET /api/firmen/7': nacheinander(json(200, FIRMA), problem(503, 'kaputt')),
+      [`PUT ${WEG}`]: abweisung('Bernd'),
+    });
+
+    renderMaske('/firmen/7/ansprechpartner/11/bearbeiten');
+    await screen.findByRole('heading', { name: 'Ansprechpartner bearbeiten' });
+    await nutzer.click(screen.getByRole('button', { name: 'Speichern' }));
+    await nutzer.click(await screen.findByRole('button', { name: 'Neu laden' }));
+
+    expect(
+      await screen.findByText(
+        'Der aktuelle Stand ist gerade nicht zu erreichen. Bitte erneut versuchen.',
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Neu laden' })).toBeInTheDocument();
   });
 });

@@ -6,7 +6,10 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.time.Instant;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -30,6 +33,12 @@ class JpaAccountRepositoryTest {
   private static final Instant ANGELEGT = Instant.parse("2026-09-01T08:00:00Z");
   private static final Instant GEAENDERT = Instant.parse("2026-09-18T12:00:00Z");
 
+  /** Das Konto, das zuletzt verwaltet hat (Plan #415, E19). */
+  private static final long VERWALTER = 3L;
+
+  /** Der Stand der Kontenverwaltung, den jede Zeile hier traegt. */
+  private static final long VERSION = 5L;
+
   @Mock private SpringDataAccountRepository jpa;
 
   @Captor private ArgumentCaptor<AccountEntity> gespeicherte;
@@ -41,34 +50,54 @@ class JpaAccountRepositoryTest {
   }
 
   private static Account konto(final Long id) {
-    return Konten.gespeichert(id, "manne@example.org", 2, ANGELEGT, GEAENDERT);
+    return Konten.imStand(
+        Konten.gespeichert(id, "manne@example.org", 2, ANGELEGT, GEAENDERT), VERSION, VERWALTER);
   }
 
   @Test
   void save_thenWritesEveryFieldOfTheAccountIntoTheRow() {
     // Given
-    when(jpa.save(any(AccountEntity.class))).thenReturn(zeile(11L));
+    when(jpa.saveAndFlush(any(AccountEntity.class))).thenReturn(zeile(11L));
 
     // When
     repository.save(konto(null));
 
     // Then
-    verify(jpa).save(gespeicherte.capture());
+    verify(jpa).saveAndFlush(gespeicherte.capture());
     assertThat(gespeicherte.getValue())
         .satisfies(
             zeile -> assertThat(zeile.getId()).isNull(),
             zeile -> assertThat(zeile.getEmail()).isEqualTo("manne@example.org"),
             zeile -> assertThat(zeile.getDisplayName()).isEqualTo("Manne"),
-            zeile -> assertThat(zeile.getRole()).isEqualTo(Role.ADMIN),
+            zeile -> assertThat(zeile.getRole()).isEqualTo(Role.C_LEVEL),
+            zeile -> assertThat(zeile.isAktiv()).isTrue(),
             zeile -> assertThat(zeile.getSessionGeneration()).isEqualTo(2),
             zeile -> assertThat(zeile.getCreatedAt()).isEqualTo(ANGELEGT),
-            zeile -> assertThat(zeile.getUpdatedAt()).isEqualTo(GEAENDERT));
+            zeile -> assertThat(zeile.getUpdatedAt()).isEqualTo(GEAENDERT),
+            zeile -> assertThat(zeile.getVersion()).isEqualTo(VERSION),
+            zeile -> assertThat(zeile.getGeaendertVon()).isEqualTo(VERWALTER));
+  }
+
+  @Test
+  void save_givenAnAccountWithoutUrheber_thenTheRowCarriesNone() {
+    // Given — ein frisches Konto: Version 0, niemand hat es bisher verwaltet.
+    final Account frisch = Konten.neu("anna@firma.de", ANGELEGT);
+    when(jpa.saveAndFlush(any(AccountEntity.class))).thenReturn(AccountEntity.aus(frisch));
+
+    // When
+    final Account gesichert = repository.save(frisch);
+
+    // Then
+    verify(jpa).saveAndFlush(gespeicherte.capture());
+    assertThat(gespeicherte.getValue().getVersion()).isZero();
+    assertThat(gespeicherte.getValue().getGeaendertVon()).isNull();
+    assertThat(gesichert.geaendertVon()).isNull();
   }
 
   @Test
   void save_thenReturnsTheAccountWithTheGeneratedId() {
     // Given
-    when(jpa.save(any(AccountEntity.class))).thenReturn(zeile(11L));
+    when(jpa.saveAndFlush(any(AccountEntity.class))).thenReturn(zeile(11L));
 
     // When
     final Account gesichert = repository.save(konto(null));
@@ -126,26 +155,108 @@ class JpaAccountRepositoryTest {
   }
 
   @Test
-  void existsAnyAdmin_thenAsksForTheAdminRole() {
+  void save_givenADeactivatedAccount_thenTheRowIsNotActive() {
     // Given
-    when(jpa.existsByRole(Role.ADMIN)).thenReturn(true);
+    final Account stillgelegt =
+        Konten.mit(null, "anna@firma.de", Role.EMPLOYEE, false, 0, ANGELEGT);
+    when(jpa.saveAndFlush(any(AccountEntity.class))).thenReturn(AccountEntity.aus(stillgelegt));
 
     // When
-    final boolean vorhanden = repository.existsAnyAdmin();
+    final Account gesichert = repository.save(stillgelegt);
+
+    // Then — in beide Richtungen: die Zeile traegt den Zustand, und das Konto kommt so zurueck.
+    verify(jpa).saveAndFlush(gespeicherte.capture());
+    assertThat(gespeicherte.getValue().isAktiv()).isFalse();
+    assertThat(gesichert.aktiv()).isFalse();
+  }
+
+  @Test
+  void existsAnyAccount_givenARow_thenTrue() {
+    // Given
+    when(jpa.existsBy()).thenReturn(true);
+
+    // When
+    final boolean vorhanden = repository.existsAnyAccount();
 
     // Then
     assertThat(vorhanden).isTrue();
   }
 
   @Test
-  void existsAnyAdmin_givenNoAdminRow_thenFalse() {
+  void existsAnyAccount_givenNoRow_thenFalse() {
     // Given
-    when(jpa.existsByRole(Role.ADMIN)).thenReturn(false);
+    when(jpa.existsBy()).thenReturn(false);
 
     // When
-    final boolean vorhanden = repository.existsAnyAdmin();
+    final boolean vorhanden = repository.existsAnyAccount();
 
     // Then
     assertThat(vorhanden).isFalse();
+  }
+
+  @Test
+  void findAllOrderedByDisplayName_thenTranslatesEveryRowInTheGivenOrder() {
+    // Given
+    when(jpa.findAllByOrderByDisplayNameAscIdAsc()).thenReturn(List.of(zeile(12L), zeile(11L)));
+
+    // When
+    final List<Account> liste = repository.findAllOrderedByDisplayName();
+
+    // Then
+    assertThat(liste).containsExactly(konto(12L), konto(11L));
+  }
+
+  @Test
+  void displayNamesByIds_thenMapsEachFoundIdToItsName() {
+    // Given
+    final AccountEntity anna = AccountEntity.aus(benannt(11L, "anna@firma.de", "Anna"));
+    final AccountEntity bert = AccountEntity.aus(benannt(12L, "bert@firma.de", "Bert"));
+    when(jpa.findAllById(Set.of(11L, 12L, 99L))).thenReturn(List.of(anna, bert));
+
+    // When
+    final Map<Long, String> namen = repository.displayNamesByIds(Set.of(11L, 12L, 99L));
+
+    // Then — eine unbekannte Id fehlt in der Antwort, statt einen Platzhalter zu tragen.
+    assertThat(namen).containsExactlyInAnyOrderEntriesOf(Map.of(11L, "Anna", 12L, "Bert"));
+  }
+
+  @Test
+  void aktiveCLevelMitSperre_thenAsksForTheActiveCLevelRowsAndTranslatesThem() {
+    // Given
+    when(jpa.sperreAktiveMitRolle(Role.C_LEVEL)).thenReturn(List.of(zeile(11L)));
+
+    // When
+    final List<Account> gesperrt = repository.aktiveCLevelMitSperre();
+
+    // Then
+    assertThat(gesperrt).containsExactly(konto(11L));
+  }
+
+  @Test
+  void findByIdMitSperre_givenAKnownAccount_thenLocksAndTranslatesTheRow() {
+    // Given
+    when(jpa.sperreKonto(11L)).thenReturn(Optional.of(zeile(11L)));
+
+    // When
+    final Optional<Account> gesperrt = repository.findByIdMitSperre(11L);
+
+    // Then — Version und Urheber kommen mit, gegen sie prueft die Verwaltung (E19).
+    assertThat(gesperrt).contains(konto(11L));
+  }
+
+  @Test
+  void findByIdMitSperre_givenAnUnknownId_thenEmpty() {
+    // Given
+    when(jpa.sperreKonto(11L)).thenReturn(Optional.empty());
+
+    // When
+    final Optional<Account> gesperrt = repository.findByIdMitSperre(11L);
+
+    // Then
+    assertThat(gesperrt).isEmpty();
+  }
+
+  private static Account benannt(final Long id, final String email, final String name) {
+    return Konten.benannt(konto(id).mitAdresse(email, GEAENDERT, VERWALTER), name);
   }
 }

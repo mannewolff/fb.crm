@@ -25,6 +25,10 @@ import org.mwolff.fbcrm.common.Identifiable;
  * @param aktiv {@code false}, solange der Ansprechpartner stillgelegt ist
  * @param createdAt Zeitpunkt der Anlage
  * @param updatedAt Zeitpunkt der letzten Aenderung
+ * @param version der Stand des Ansprechpartners, wie ihn {@code If-Match} vorlegt (Plan #415, E1);
+ *     0 vor der ersten Aenderung, danach fuehrt ihn der Bestand
+ * @param geaendertVon Kennung des Kontos, das ihn zuletzt geaendert hat, oder {@code null}, solange
+ *     er das nicht weiss (Plan #415, E14)
  */
 public record Ansprechpartner(
     @Nullable Long id,
@@ -37,7 +41,9 @@ public record Ansprechpartner(
     @Nullable String telefonMobil,
     boolean aktiv,
     Instant createdAt,
-    Instant updatedAt)
+    Instant updatedAt,
+    long version,
+    @Nullable Long geaendertVon)
     implements Identifiable {
 
   /**
@@ -71,7 +77,9 @@ public record Ansprechpartner(
         telefonMobil,
         aktiv,
         createdAt,
-        geaendertAm);
+        geaendertAm,
+        version,
+        geaendertVon);
   }
 
   /**
@@ -91,7 +99,9 @@ public record Ansprechpartner(
         telefonMobil,
         false,
         createdAt,
-        zeitpunkt);
+        zeitpunkt,
+        version,
+        geaendertVon);
   }
 
   /**
@@ -111,6 +121,33 @@ public record Ansprechpartner(
         telefonMobil,
         true,
         createdAt,
-        zeitpunkt);
+        zeitpunkt,
+        version,
+        geaendertVon);
+  }
+
+  /**
+   * Der Ansprechpartner mit dem Konto, das ihn gerade geaendert hat (Plan #415, E14).
+   *
+   * <p>Wie an der Firma: Wer aendert, ist eine Angabe des Anwendungsfalls, nicht der fachlichen
+   * Regel. Die Version bleibt, wie sie ist — sie zaehlt der Bestand beim Schreiben weiter.
+   *
+   * @param konto Kennung des handelnden Kontos
+   */
+  public Ansprechpartner durch(final long konto) {
+    return new Ansprechpartner(
+        id,
+        firmaId,
+        vorname,
+        nachname,
+        rolle,
+        email,
+        telefonFestnetz,
+        telefonMobil,
+        aktiv,
+        createdAt,
+        updatedAt,
+        version,
+        konto);
   }
 }

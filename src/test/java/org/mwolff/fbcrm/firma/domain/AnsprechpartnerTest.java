@@ -3,6 +3,7 @@ package org.mwolff.fbcrm.firma.domain;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.time.Instant;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 
 /** Verhalten des Ansprechpartners: Aendern, Stilllegen und Wiederaktivieren. */
@@ -23,7 +24,9 @@ class AnsprechpartnerTest {
         "0170 123456",
         aktiv,
         ANGELEGT,
-        ANGELEGT);
+        ANGELEGT,
+        4L,
+        2L);
   }
 
   private static Ansprechpartner geaendert(final Ansprechpartner bestand) {
@@ -230,5 +233,48 @@ class AnsprechpartnerTest {
 
     // Then
     assertThat(aktiviert.aktiv()).isTrue();
+  }
+
+  @Test
+  void durch_thenRecordsTheAccountAndKeepsEverythingElse() {
+    // Given — Plan #415, E14.
+    final Ansprechpartner bestand = ansprechpartner(true);
+
+    // When
+    final Ansprechpartner geaendert = bestand.durch(9L);
+
+    // Then
+    assertThat(geaendert)
+        .isEqualTo(
+            new Ansprechpartner(
+                3L,
+                7L,
+                "Max",
+                "Mustermann",
+                "Einkauf",
+                "max@firma.de",
+                "0421 123456",
+                "0170 123456",
+                true,
+                ANGELEGT,
+                ANGELEGT,
+                4L,
+                9L));
+  }
+
+  @Test
+  void uebergaenge_thenCarryVersionAndAuthorUnchanged() {
+    // Given — den Stand zaehlt der Bestand, nicht die Domaene (Plan #415, E1).
+    final Ansprechpartner bestand = ansprechpartner(true);
+
+    // When / Then
+    assertThat(
+            List.of(
+                geaendert(bestand), bestand.stillgelegt(GEAENDERT), bestand.aktiviert(GEAENDERT)))
+        .allSatisfy(
+            neu -> {
+              assertThat(neu.version()).isEqualTo(4L);
+              assertThat(neu.geaendertVon()).isEqualTo(2L);
+            });
   }
 }

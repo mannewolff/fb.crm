@@ -17,7 +17,10 @@ import org.springframework.stereotype.Repository;
  * Setzt den Port {@link ZeiteintragRepository} auf JPA um und uebersetzt in beide Richtungen.
  *
  * <p>Jeder Zeiteintrag ist eine Zeile fuer sich: Anlegen, Fortschreiben und Loeschen gehen einzeln,
- * wie beim Kommentar am Angebot und anders als bei den Positionen eines Belegs.
+ * wie beim Kommentar am Angebot und anders als bei den Positionen eines Belegs. Die Zeile entsteht
+ * aus dem Fachobjekt ({@code ZeiteintragEntity.aus}, Plan #426, E2). Geloescht wird seit Plan #415
+ * (E17) mit Kennzeichen an der Zeile; jede Abfrage ausser {@code findById} laesst gekennzeichnete
+ * Zeilen aus.
  *
  * <p><b>Die Summen rechnet der Adapter, nicht die Datenbank.</b> Beide Abfragen holen die Zeilen
  * der angefragten Positionen, und addiert werden die <i>Minuten</i> der Eintraege; erst die Summe
@@ -34,18 +37,19 @@ import org.springframework.stereotype.Repository;
  *
  * <p>Die beiden Summen ueber <b>alle</b> Angebote (Issue #211) gehen durch denselben Summierer, nur
  * mit leerer Vorbelegung: Es gibt keine angefragte Position, also steht am Ende genau die darin, zu
- * der eine Zeile gefunden wurde. Sie brauchen auch keine eigene Abfrage — die Zeilen liefern {@code
- * findAll} beziehungsweise das vorhandene {@code findImZeitraum}, das schon die Monatsliste der
- * Ansicht bedient; dessen Grenzen gehen unveraendert durch.
+ * der eine Zeile gefunden wurde. Die Zeilen liefern {@code findAlleOffenen} — {@code findAll}
+ * truege auch geloeschte — beziehungsweise das vorhandene {@code findImZeitraum}, das schon die
+ * Monatsliste der Ansicht bedient; dessen Grenzen gehen unveraendert durch.
  *
  * <p>Die Monate mit Eintrag (Plan #274, E6) lesen dieselben Zeilen ueber {@code findImZeitraum} und
  * behalten von jeder nur ihren Monat — auch dafuer keine eigene Abfrage.
  */
 /*
- * Neun Methoden des Ports und drei private Helfer ergeben zwoelf. Sie weiter aufzuteilen
- * verschoebe die Zahl, ohne etwas zu klaeren: Die Breite kommt vom Port — vier Summen in zwei
- * Paaren und die Monate mit Eintrag —, und der Adapter ist die eine Stelle, an der Zeiteintrag und
- * Zeile ineinander uebergehen. Dasselbe Vorgehen wie bei {@code JpaRechnungRepository}.
+ * Zehn Methoden des Ports und zwei private Helfer ergeben zwoelf. Sie weiter aufzuteilen
+ * verschoebe die Zahl, ohne etwas zu klaeren: Die Breite kommt vom Port — zwei Lesewege nach
+ * Zeitraum, vier Summen in zwei Paaren und die Monate mit Eintrag —, und der Adapter ist die eine
+ * Stelle, an der Zeiteintrag und Zeile ineinander uebergehen. Dasselbe Vorgehen wie bei {@code
+ * JpaRechnungRepository}.
  */
 @SuppressWarnings("PMD.TooManyMethods")
 @Repository
@@ -70,13 +74,26 @@ class JpaZeiteintragRepository implements ZeiteintragRepository {
   }
 
   @Override
+  public List<Zeiteintrag> findImZeitraumFuerKonto(
+      final LocalDate von, final LocalDate bis, final long accountId) {
+    return zeilen.findImZeitraumFuerKonto(von, bis, accountId).stream()
+        .map(JpaZeiteintragRepository::toDomain)
+        .toList();
+  }
+
+  /*
+   * saveAndFlush statt save, aus demselben Grund wie in JpaAngebotskommentarRepository (Plan #415,
+   * E1): Den Zaehler version erhoeht Hibernate erst beim Schreiben der Zeile, und die Antwort soll
+   * den neuen Stand tragen, den die Ansicht beim naechsten Aendern vorlegt.
+   */
+  @Override
   public Zeiteintrag save(final Zeiteintrag zeiteintrag) {
-    return toDomain(zeilen.save(toEntity(zeiteintrag)));
+    return toDomain(zeilen.saveAndFlush(ZeiteintragEntity.aus(zeiteintrag)));
   }
 
   @Override
-  public void delete(final long id) {
-    zeilen.deleteById(id);
+  public void loescheGekennzeichnete(final Set<Long> angebotPositionIds) {
+    zeilen.loescheGekennzeichnete(List.copyOf(angebotPositionIds));
   }
 
   @Override
@@ -96,7 +113,7 @@ class JpaZeiteintragRepository implements ZeiteintragRepository {
 
   @Override
   public Map<Long, BigDecimal> alleAngefallenJePosition() {
-    return stundenJePosition(Set.of(), zeilen.findAll());
+    return stundenJePosition(Set.of(), zeilen.findAlleOffenen());
   }
 
   @Override
@@ -131,22 +148,16 @@ class JpaZeiteintragRepository implements ZeiteintragRepository {
   private static Zeiteintrag toDomain(final ZeiteintragEntity zeile) {
     return new Zeiteintrag(
         zeile.getId(),
+        zeile.getAccountId(),
         zeile.getAngebotPositionId(),
         zeile.getTag(),
         zeile.getVon(),
         zeile.getBis(),
         zeile.getCreatedAt(),
-        zeile.getUpdatedAt());
-  }
-
-  private static ZeiteintragEntity toEntity(final Zeiteintrag zeiteintrag) {
-    return new ZeiteintragEntity(
-        zeiteintrag.id(),
-        zeiteintrag.angebotPositionId(),
-        zeiteintrag.tag(),
-        zeiteintrag.von(),
-        zeiteintrag.bis(),
-        zeiteintrag.createdAt(),
-        zeiteintrag.updatedAt());
+        zeile.getUpdatedAt(),
+        zeile.getVersion(),
+        zeile.getGeaendertVon(),
+        zeile.getGeloeschtAm(),
+        zeile.getGeloeschtVon());
   }
 }

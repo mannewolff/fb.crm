@@ -8,6 +8,8 @@ import org.mwolff.fbcrm.angebot.application.AngebotStatusUseCase;
 import org.mwolff.fbcrm.angebot.application.AngebotStornoUseCase;
 import org.mwolff.fbcrm.angebot.application.KundenangabenUseCase;
 import org.mwolff.fbcrm.angebot.domain.Angebot;
+import org.mwolff.fbcrm.common.web.Bedingungskopf;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -36,6 +38,11 @@ import org.springframework.web.bind.annotation.RestController;
  * #332, E5): Das Storno traegt einen Grund und braucht darum einen Rumpf, die Ruecknahme braucht
  * keinen und ist als {@code DELETE} auf denselben Pfad ablesbar. Beide antworten mit dem Angebot in
  * seinem neuen Stand, wie die Statuswege.
+ *
+ * <p><b>Jeder schreibende Weg legt den Stand vor</b> (#411, Kriterien 4 und 5; Plan #415, E2, E3,
+ * E14): Aendern, beide Statuswege, Storno und Ruecknahme lesen {@link Bedingungskopf} aus {@code
+ * If-Match} und das handelnde Konto aus der Sitzung. Fehlt der Kopf, antwortet der Weg mit 428,
+ * ohne den Anwendungsfall zu fragen.
  */
 @RestController
 @RequestMapping("/api/angebote/{id}")
@@ -66,23 +73,38 @@ public class AngebotController {
     return antwort(lesenUseCase.lese(id));
   }
 
-  /** Aendert das Angebot als Ganzes und liefert seinen neuen Stand (Kriterium 5, E8). */
+  /**
+   * Aendert das Angebot als Ganzes und liefert seinen neuen Stand (Kriterium 5, E8).
+   *
+   * <p>Der vorgelegte Stand kommt aus {@code If-Match}, das handelnde Konto aus der Sitzung (Plan
+   * #415, E2, E14). Der Kopf steht vor dem Rumpf: Fehlt er, weist der Weg mit 428 ab, bevor der
+   * Rumpf gelesen und geprueft wird (E3).
+   */
   @PutMapping
   public AngebotResponse aendern(
-      @PathVariable final long id, @Valid @RequestBody final AngebotRequest anfrage) {
-    return antwort(aendernUseCase.aendere(id, anfrage.daten()));
+      @PathVariable final long id,
+      final Bedingungskopf stand,
+      @AuthenticationPrincipal final Long accountId,
+      @Valid @RequestBody final AngebotRequest anfrage) {
+    return antwort(aendernUseCase.aendere(id, anfrage.daten(stand.version(), accountId)));
   }
 
-  /** Schaltet den Status eine Stufe weiter (Kriterium 4). */
+  /** Schaltet den Status eine Stufe weiter (Kriterium 4), auf dem vorgelegten Stand. */
   @PostMapping("/status/weiter")
-  public AngebotResponse statusWeiter(@PathVariable final long id) {
-    return antwort(statusUseCase.weiter(id));
+  public AngebotResponse statusWeiter(
+      @PathVariable final long id,
+      final Bedingungskopf stand,
+      @AuthenticationPrincipal final Long accountId) {
+    return antwort(statusUseCase.weiter(id, stand.version(), accountId));
   }
 
-  /** Schaltet den Status eine Stufe zurueck (Kriterium 4). */
+  /** Schaltet den Status eine Stufe zurueck (Kriterium 4), auf dem vorgelegten Stand. */
   @PostMapping("/status/zurueck")
-  public AngebotResponse statusZurueck(@PathVariable final long id) {
-    return antwort(statusUseCase.zurueck(id));
+  public AngebotResponse statusZurueck(
+      @PathVariable final long id,
+      final Bedingungskopf stand,
+      @AuthenticationPrincipal final Long accountId) {
+    return antwort(statusUseCase.zurueck(id, stand.version(), accountId));
   }
 
   /**
@@ -92,14 +114,21 @@ public class AngebotController {
   @PostMapping("/storno")
   public AngebotResponse stornieren(
       @PathVariable final long id,
+      final Bedingungskopf stand,
+      @AuthenticationPrincipal final Long accountId,
       @Valid @RequestBody(required = false) final @Nullable AngebotStornoRequest anfrage) {
-    return antwort(stornoUseCase.storniere(id, anfrage == null ? null : anfrage.grund()));
+    return antwort(
+        stornoUseCase.storniere(
+            id, anfrage == null ? null : anfrage.grund(), stand.version(), accountId));
   }
 
-  /** Nimmt das Storno zurueck (#330, Kriterium 9). */
+  /** Nimmt das Storno zurueck (#330, Kriterium 9), auf dem vorgelegten Stand. */
   @DeleteMapping("/storno")
-  public AngebotResponse stornoZuruecknehmen(@PathVariable final long id) {
-    return antwort(stornoUseCase.nimmStornoZurueck(id));
+  public AngebotResponse stornoZuruecknehmen(
+      @PathVariable final long id,
+      final Bedingungskopf stand,
+      @AuthenticationPrincipal final Long accountId) {
+    return antwort(stornoUseCase.nimmStornoZurueck(id, stand.version(), accountId));
   }
 
   private AngebotResponse antwort(final Angebot angebot) {

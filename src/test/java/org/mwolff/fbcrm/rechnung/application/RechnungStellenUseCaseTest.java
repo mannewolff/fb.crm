@@ -14,6 +14,7 @@ import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
@@ -24,7 +25,9 @@ import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Stream;
+import org.assertj.core.api.InstanceOfAssertFactories;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -39,6 +42,7 @@ import org.mwolff.fbcrm.angebot.domain.Angebot;
 import org.mwolff.fbcrm.angebot.domain.AngebotRepository;
 import org.mwolff.fbcrm.angebot.domain.Angebotsstatus;
 import org.mwolff.fbcrm.common.Anschrift;
+import org.mwolff.fbcrm.common.Bearbeitungskonflikt;
 import org.mwolff.fbcrm.eigeneangaben.domain.EigeneAngaben;
 import org.mwolff.fbcrm.eigeneangaben.domain.EigeneAngabenRepository;
 import org.mwolff.fbcrm.firma.application.FirmaNichtGefunden;
@@ -79,6 +83,10 @@ import org.springframework.dao.DataIntegrityViolationException;
  * hinterlegtem Briefpapier setzt {@link Briefbogenlayout} und das Briefpapier geht als Untergrund
  * an den Drucker, ohne setzt {@link Rechnungslayout} wie bisher und der Untergrund ist {@code
  * null}.
+ *
+ * <p>Zuerst aber der Stand des Entwurfs (#411, Kriterium 5; Plan #415, E10, E14): Wer auf einem
+ * alten Stand stellt, wird abgewiesen, bevor eine Nummer gezogen wird. Es zaehlt allein der Entwurf
+ * — Einstellungen, Eigene Angaben, Briefbogen und das Angebot gelten, wie sie sind.
  */
 @ExtendWith(MockitoExtension.class)
 class RechnungStellenUseCaseTest {
@@ -92,6 +100,20 @@ class RechnungStellenUseCaseTest {
   private static final String NUMMER = "0001-2026";
   private static final byte[] PDF = "%PDF-1.7 Rechnung".getBytes(UTF_8);
   private static final String SCHLUESSEL = "rechnung/2/beleg.pdf";
+
+  /** Der Stand, auf dem Manfred den Entwurf geoeffnet hat — der des frischen Entwurfs. */
+  private static final long GELESEN = 0L;
+
+  /** Das handelnde Konto. */
+  private static final long MANFRED = 31L;
+
+  /** Das Konto, das inzwischen geaendert hat. */
+  private static final long ANNA = 30L;
+
+  private static final Instant ANNAS_AENDERUNG = Instant.parse("2026-09-30T09:42:00Z");
+
+  /** Die Bankverbindung, die Anna inzwischen in den Eigenen Angaben hinterlegt hat. */
+  private static final String NEUE_BANK = "DE89 3704 0044 0532 0130 00";
 
   /** Die Raender aus Kriterium 15 in Zehntel-Millimetern. */
   private static final Randmasse VORGABE = new Randmasse(250, 200, 985, 200, 200, 200);
@@ -197,7 +219,8 @@ class RechnungStellenUseCaseTest {
   }
 
   private void angabenSind(final Firma firma, final EigeneAngaben eigene) {
-    when(angebote.findById(Rechnungsdoppel.ANGEBOT)).thenReturn(Optional.of(angebotMitBeratung()));
+    when(angebote.findByIdMitSperre(Rechnungsdoppel.ANGEBOT))
+        .thenReturn(Optional.of(angebotMitBeratung()));
     when(firmen.findById(Rechnungsdoppel.FIRMA)).thenReturn(Optional.of(firma));
     when(eigeneAngaben.lies()).thenReturn(eigene);
   }
@@ -243,7 +266,7 @@ class RechnungStellenUseCaseTest {
     nummerWirdGezogen(MUSTER_MIT_JAHR, 1);
     schreibenUndDruckenGelingen(bogen);
     when(rechnungen.findByAngebot(Rechnungsdoppel.ANGEBOT)).thenReturn(danach);
-    return useCase.stelle(ENTWURF);
+    return useCase.stelle(ENTWURF, GELESEN, MANFRED);
   }
 
   @Test
@@ -252,7 +275,8 @@ class RechnungStellenUseCaseTest {
     when(rechnungen.findByIdMitSperre(ENTWURF)).thenReturn(Optional.empty());
 
     // When / Then
-    assertThatThrownBy(() -> useCase.stelle(ENTWURF)).isInstanceOf(RechnungNichtGefunden.class);
+    assertThatThrownBy(() -> useCase.stelle(ENTWURF, GELESEN, MANFRED))
+        .isInstanceOf(RechnungNichtGefunden.class);
     verifyNoInteractions(nummernkreis, drucker, dokumente);
   }
 
@@ -262,7 +286,7 @@ class RechnungStellenUseCaseTest {
     entwurfLiegt(gestelltUeber("80.00"));
 
     // When / Then
-    assertThatThrownBy(() -> useCase.stelle(ENTWURF))
+    assertThatThrownBy(() -> useCase.stelle(ENTWURF, GELESEN, MANFRED))
         .isInstanceOf(RechnungszustandPasstNicht.class);
     verifyNoInteractions(nummernkreis, drucker, dokumente);
   }
@@ -273,7 +297,8 @@ class RechnungStellenUseCaseTest {
     entwurfLiegt(Rechnungsdoppel.entwurf(ENTWURF, List.of()));
 
     // When / Then
-    assertThatThrownBy(() -> useCase.stelle(ENTWURF)).isInstanceOf(RechnungOhnePosition.class);
+    assertThatThrownBy(() -> useCase.stelle(ENTWURF, GELESEN, MANFRED))
+        .isInstanceOf(RechnungOhnePosition.class);
     verifyNoInteractions(nummernkreis, drucker, dokumente);
   }
 
@@ -281,21 +306,24 @@ class RechnungStellenUseCaseTest {
   void stelle_whenTheAngebotIsMissing_thenItIsAContradictionInTheBestand() {
     // Given — Angebote werden nie geloescht.
     entwurfLiegt(entwurfUeber("80.00"));
-    when(angebote.findById(Rechnungsdoppel.ANGEBOT)).thenReturn(Optional.empty());
+    when(angebote.findByIdMitSperre(Rechnungsdoppel.ANGEBOT)).thenReturn(Optional.empty());
 
     // When / Then
-    assertThatThrownBy(() -> useCase.stelle(ENTWURF)).isInstanceOf(AngebotNichtGefunden.class);
+    assertThatThrownBy(() -> useCase.stelle(ENTWURF, GELESEN, MANFRED))
+        .isInstanceOf(AngebotNichtGefunden.class);
   }
 
   @Test
   void stelle_whenTheFirmaIsMissing_thenItIsAContradictionInTheBestand() {
     // Given — Firmen werden nie geloescht, nur stillgelegt.
     entwurfLiegt(entwurfUeber("80.00"));
-    when(angebote.findById(Rechnungsdoppel.ANGEBOT)).thenReturn(Optional.of(angebotMitBeratung()));
+    when(angebote.findByIdMitSperre(Rechnungsdoppel.ANGEBOT))
+        .thenReturn(Optional.of(angebotMitBeratung()));
     when(firmen.findById(Rechnungsdoppel.FIRMA)).thenReturn(Optional.empty());
 
     // When / Then
-    assertThatThrownBy(() -> useCase.stelle(ENTWURF)).isInstanceOf(FirmaNichtGefunden.class);
+    assertThatThrownBy(() -> useCase.stelle(ENTWURF, GELESEN, MANFRED))
+        .isInstanceOf(FirmaNichtGefunden.class);
   }
 
   @Test
@@ -306,7 +334,8 @@ class RechnungStellenUseCaseTest {
 
     // When
     final PflichtangabenFehlen fehler =
-        catchThrowableOfType(PflichtangabenFehlen.class, () -> useCase.stelle(ENTWURF));
+        catchThrowableOfType(
+            PflichtangabenFehlen.class, () -> useCase.stelle(ENTWURF, GELESEN, MANFRED));
 
     // Then
     assertThat(fehler.felder()).containsOnlyKeys("bankverbindung");
@@ -321,7 +350,8 @@ class RechnungStellenUseCaseTest {
 
     // When
     final PflichtangabenFehlen fehler =
-        catchThrowableOfType(PflichtangabenFehlen.class, () -> useCase.stelle(ENTWURF));
+        catchThrowableOfType(
+            PflichtangabenFehlen.class, () -> useCase.stelle(ENTWURF, GELESEN, MANFRED));
 
     // Then
     assertThat(fehler.felder()).containsOnlyKeys("steuernummer");
@@ -339,7 +369,7 @@ class RechnungStellenUseCaseTest {
         .thenReturn(List.of(gestelltUeber("80.00")));
 
     // When / Then
-    assertThat(useCase.stelle(ENTWURF).nummer()).isEqualTo(NUMMER);
+    assertThat(useCase.stelle(ENTWURF, GELESEN, MANFRED).nummer()).isEqualTo(NUMMER);
   }
 
   @Test
@@ -355,12 +385,15 @@ class RechnungStellenUseCaseTest {
             null,
             true,
             Rechnungsdoppel.ANGELEGT,
-            Rechnungsdoppel.ANGELEGT),
+            Rechnungsdoppel.ANGELEGT,
+            0L,
+            null),
         OHNE_ANGABEN);
 
     // When
     final PflichtangabenFehlen fehler =
-        catchThrowableOfType(PflichtangabenFehlen.class, () -> useCase.stelle(ENTWURF));
+        catchThrowableOfType(
+            PflichtangabenFehlen.class, () -> useCase.stelle(ENTWURF, GELESEN, MANFRED));
 
     // Then — eine Antwort nennt alle Felder, nicht nur das erste.
     assertThat(fehler.felder())
@@ -397,7 +430,7 @@ class RechnungStellenUseCaseTest {
         .thenReturn(List.of(gestelltUeber("80.00")));
 
     // When
-    final Rechnung gestellt = useCase.stelle(ENTWURF);
+    final Rechnung gestellt = useCase.stelle(ENTWURF, GELESEN, MANFRED);
 
     // Then
     verify(nummernkreis).ziehe(Nummernmuster.OHNE_JAHR);
@@ -413,7 +446,7 @@ class RechnungStellenUseCaseTest {
     when(rechnungsnummern.vergeben(NUMMER)).thenReturn(true);
 
     // When / Then — kein Dokument, keine Waise im Speicher.
-    assertThatThrownBy(() -> useCase.stelle(ENTWURF))
+    assertThatThrownBy(() -> useCase.stelle(ENTWURF, GELESEN, MANFRED))
         .isInstanceOf(RechnungsnummerSchonVergeben.class)
         .hasMessageContaining(NUMMER);
     verifyNoInteractions(drucker, dokumente);
@@ -430,7 +463,7 @@ class RechnungStellenUseCaseTest {
     when(rechnungsnummern.vergeben(NUMMER)).thenReturn(true);
 
     // When / Then — dieselbe Meldung wie heute, und der Zaehler wird kein zweites Mal gezogen.
-    assertThatThrownBy(() -> useCase.stelle(ENTWURF))
+    assertThatThrownBy(() -> useCase.stelle(ENTWURF, GELESEN, MANFRED))
         .isInstanceOf(RechnungsnummerSchonVergeben.class)
         .hasMessageContaining(NUMMER);
     verify(nummernkreis).ziehe(anyInt());
@@ -451,7 +484,7 @@ class RechnungStellenUseCaseTest {
         .thenThrow(new DataIntegrityViolationException("rechnung_nummer_key"));
 
     // When / Then
-    assertThatThrownBy(() -> useCase.stelle(ENTWURF))
+    assertThatThrownBy(() -> useCase.stelle(ENTWURF, GELESEN, MANFRED))
         .isInstanceOf(RechnungsnummerSchonVergeben.class)
         .hasMessageContaining(NUMMER);
     verifyNoInteractions(drucker, dokumente);
@@ -541,7 +574,7 @@ class RechnungStellenUseCaseTest {
     // Given — die gestellten Rechnungen decken die 160 Stunden, aber das Angebot ist storniert:
     // Solange es storniert ist, steht die Statuskette still (Plan #332, E2).
     entwurfLiegt(entwurfUeber("160.00"));
-    when(angebote.findById(Rechnungsdoppel.ANGEBOT))
+    when(angebote.findByIdMitSperre(Rechnungsdoppel.ANGEBOT))
         .thenReturn(Optional.of(Rechnungsdoppel.storniert(List.of(Rechnungsdoppel.BERATUNG))));
     when(firmen.findById(Rechnungsdoppel.FIRMA)).thenReturn(Optional.of(Rechnungsdoppel.firma()));
     when(eigeneAngaben.lies()).thenReturn(Rechnungsdoppel.eigeneAngaben());
@@ -554,7 +587,7 @@ class RechnungStellenUseCaseTest {
         .thenReturn(List.of(gestelltUeber("160.00")));
 
     // When
-    final Rechnung gestellt = useCase.stelle(ENTWURF);
+    final Rechnung gestellt = useCase.stelle(ENTWURF, GELESEN, MANFRED);
 
     // Then — gestellt ist sie, nur der Sprung auf „abgerechnet" unterbleibt.
     assertThat(gestellt.nummer()).isEqualTo(NUMMER);
@@ -609,5 +642,137 @@ class RechnungStellenUseCaseTest {
     assertThat(gesetzt.getValue())
         .isEqualTo(Rechnungslayout.setze(Rechnungsbeleg.druckdaten(festgeschrieben.getValue())));
     verifyNoInteractions(briefpapier);
+  }
+
+  @Test
+  @DisplayName("Szenario: Rechnung auf veraltetem Stand stellen")
+  void stelle_givenAnOutdatedEntwurf_thenNothingIsGestelltAndAnnaIsNamed() {
+    // Given — Manfred hat den Entwurf auf Stand 0 geoeffnet; Anna hat inzwischen eine Menge
+    // geaendert, der Entwurf steht auf Stand 1.
+    entwurfLiegt(Rechnungsdoppel.aufStand(entwurfUeber("60.00"), 1L, ANNA, ANNAS_AENDERUNG));
+
+    // When / Then — abgewiesen mit Annas Namen und dem Zeitpunkt ihrer Aenderung.
+    assertThatThrownBy(() -> useCase.stelle(ENTWURF, GELESEN, MANFRED))
+        .asInstanceOf(InstanceOfAssertFactories.type(RechnungGeaendert.class))
+        .satisfies(
+            konflikt -> assertThat(konflikt.art()).isEqualTo(Bearbeitungskonflikt.Art.VERALTET),
+            konflikt -> assertThat(konflikt.urheberKonto()).hasValue(ANNA),
+            konflikt -> assertThat(konflikt.handelndesKonto()).isEqualTo(MANFRED),
+            konflikt -> assertThat(konflikt.zeitpunkt()).hasValue(ANNAS_AENDERUNG));
+
+    // Then — nichts gestellt, der Nummernkreis bleibt auf seinem Stand, kein Dokument entsteht.
+    verify(rechnungen).findByIdMitSperre(ENTWURF);
+    verifyNoMoreInteractions(rechnungen);
+    verifyNoInteractions(
+        nummernkreis, rechnungsnummern, einstellungen, drucker, dokumente, briefboegen, angebote);
+  }
+
+  @Test
+  void stelle_givenAnOutdatedStandOfAnAlreadyGestellteRechnung_thenTheConflictComesFirst() {
+    // Given — Anna hat den Entwurf in einem anderen Fenster schon gestellt.
+    entwurfLiegt(Rechnungsdoppel.aufStand(gestelltUeber("80.00"), 2L, ANNA, ANNAS_AENDERUNG));
+
+    // When / Then — die Meldung nennt die fremde Aenderung, nicht den Zustand.
+    assertThatThrownBy(() -> useCase.stelle(ENTWURF, GELESEN, MANFRED))
+        .isInstanceOf(RechnungGeaendert.class);
+    verifyNoInteractions(nummernkreis, drucker, dokumente);
+  }
+
+  @Test
+  void stelle_givenADeletedEntwurf_thenNothingIsGestelltAndTheDeletionIsNamed() {
+    // Given — #411, Kriterium 6: Anna hat den Entwurf inzwischen geloescht.
+    entwurfLiegt(Rechnungsdoppel.geloescht(ENTWURF, ANNA, ANNAS_AENDERUNG));
+
+    // When / Then — abgewiesen mit Annas Namen und dem Zeitpunkt der Loeschung.
+    assertThatThrownBy(() -> useCase.stelle(ENTWURF, GELESEN, MANFRED))
+        .asInstanceOf(InstanceOfAssertFactories.type(RechnungGeloescht.class))
+        .satisfies(
+            konflikt -> assertThat(konflikt.art()).isEqualTo(Bearbeitungskonflikt.Art.GELOESCHT),
+            konflikt -> assertThat(konflikt.urheberKonto()).hasValue(ANNA),
+            konflikt -> assertThat(konflikt.handelndesKonto()).isEqualTo(MANFRED),
+            konflikt -> assertThat(konflikt.zeitpunkt()).hasValue(ANNAS_AENDERUNG));
+
+    // Then — keine Nummer gezogen, kein Dokument, nichts geschrieben.
+    verify(rechnungen).findByIdMitSperre(ENTWURF);
+    verifyNoMoreInteractions(rechnungen);
+    verifyNoInteractions(
+        nummernkreis, rechnungsnummern, einstellungen, drucker, dokumente, briefboegen, angebote);
+  }
+
+  @Test
+  void stelle_givenTheCurrentStand_thenTheGestellteRechnungCarriesTheStellenden() {
+    // Given — Anna hat den Entwurf geaendert, Manfred hat danach geoeffnet und legt Stand 1 vor.
+    entwurfLiegt(Rechnungsdoppel.aufStand(entwurfUeber("80.00"), 1L, ANNA, ANNAS_AENDERUNG));
+    angabenSind(Rechnungsdoppel.firma(), Rechnungsdoppel.eigeneAngaben());
+    nummerWirdGezogen(MUSTER_MIT_JAHR, 1);
+    schreibenUndDruckenGelingen();
+    when(rechnungen.findByAngebot(Rechnungsdoppel.ANGEBOT))
+        .thenReturn(List.of(gestelltUeber("80.00")));
+
+    // When
+    useCase.stelle(ENTWURF, 1L, MANFRED);
+
+    // Then — festgeschrieben auf dem vorgelegten Stand; erhoeht wird er erst im Bestand.
+    verify(rechnungen).saveAndFlush(festgeschrieben.capture());
+    assertThat(festgeschrieben.getValue())
+        .satisfies(
+            rechnung -> assertThat(rechnung.version()).isEqualTo(1L),
+            rechnung -> assertThat(rechnung.geaendertVon()).isEqualTo(MANFRED));
+  }
+
+  @Test
+  void stelle_whenAngebotAndAngabenChangedMeanwhile_thenTheyDoNotReject() {
+    // Given — #411, Kriterium 5: Seit Manfred den Entwurf geoeffnet hat, hat Anna das Angebot
+    // geaendert (Stand 5) und Einstellungen, Eigene Angaben und Briefbogen neu gefasst. Sie gelten,
+    // wie sie im Augenblick des Stellens sind; vorgelegt wird allein der Stand des Entwurfs.
+    entwurfLiegt(entwurfUeber("160.00"));
+    when(angebote.findByIdMitSperre(Rechnungsdoppel.ANGEBOT))
+        .thenReturn(Optional.of(Rechnungsdoppel.aufStand(angebotMitBeratung(), 5L, ANNA)));
+    when(firmen.findById(Rechnungsdoppel.FIRMA)).thenReturn(Optional.of(Rechnungsdoppel.firma()));
+    when(eigeneAngaben.lies()).thenReturn(mitNeuerBankverbindung());
+    nummerWirdGezogen(MUSTER_OHNE_JAHR, 7);
+    schreibenUndDruckenGelingen(MIT_BRIEFPAPIER);
+    when(briefpapier.lies("briefpapier/kopf.pdf")).thenReturn(BRIEFPAPIER);
+    when(rechnungen.findByAngebot(Rechnungsdoppel.ANGEBOT))
+        .thenReturn(List.of(gestelltUeber("160.00")));
+
+    // When
+    final Rechnung gestellt = useCase.stelle(ENTWURF, GELESEN, MANFRED);
+
+    // Then — gestellt mit den Angaben von jetzt, und das Angebot traegt den Stellenden.
+    assertThat(gestellt.nummer()).isEqualTo("R-007");
+    assertThat(gestellt.absender())
+        .satisfies(absender -> assertThat(absender.bankverbindung()).isEqualTo(NEUE_BANK));
+    verify(angebote).save(fortgeschrieben.capture());
+    assertThat(fortgeschrieben.getValue())
+        .satisfies(
+            angebot -> assertThat(angebot.status()).isEqualTo(Angebotsstatus.ABGERECHNET),
+            angebot -> assertThat(angebot.version()).isEqualTo(5L),
+            angebot -> assertThat(angebot.geaendertVon()).isEqualTo(MANFRED));
+  }
+
+  @Test
+  void stelle_thenTheAngebotIsReadWithItsRowLocked() {
+    // Given / When
+    derWegGelingt(entwurfUeber("160.00"), List.of(gestelltUeber("160.00")));
+
+    // Then — sperrend gelesen, damit kein Zaehler des Angebots das Stellen abweist (E10).
+    verify(angebote).findByIdMitSperre(Rechnungsdoppel.ANGEBOT);
+    verify(angebote, never()).findById(anyLong());
+  }
+
+  /** Neu gefasste Eigene Angaben: dieselben, nur mit einer neuen Bankverbindung. */
+  private static EigeneAngaben mitNeuerBankverbindung() {
+    final EigeneAngaben voll = Rechnungsdoppel.eigeneAngaben();
+    return new EigeneAngaben(
+        voll.name(),
+        voll.berufsbezeichnung(),
+        voll.anschrift(),
+        voll.email(),
+        voll.telefon(),
+        voll.webadresse(),
+        voll.steuernummer(),
+        voll.umsatzsteuerId(),
+        NEUE_BANK);
   }
 }

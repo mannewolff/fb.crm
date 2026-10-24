@@ -9,6 +9,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mwolff.fbcrm.AbstractIntegrationTest;
+import org.mwolff.fbcrm.Schutzspalten;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -169,5 +170,18 @@ class BriefbogenSchemaIT extends AbstractIntegrationTest {
     // When / Then — das Blatt steht ganz oder gar nicht da.
     assertThatThrownBy(() -> jdbc.execute("UPDATE briefbogen SET " + zuweisung))
         .isInstanceOf(DataIntegrityViolationException.class);
+  }
+
+  @Test
+  void migration_thenTheVersionStartsAtZeroAndTheAuthorReferencesTheAccount() {
+    // When — V33 (Plan #415, E1): ein eigener Zaehler und der letzte Urheber.
+    final String version = Schutzspalten.spalte(jdbc, "briefbogen", "version");
+    final String urheber = Schutzspalten.spalte(jdbc, "briefbogen", "geaendert_von");
+    final String verweis = Schutzspalten.verweis(jdbc, "briefbogen", "geaendert_von");
+
+    // Then — ohne ON DELETE wie jeder Fremdschluessel dieses Schemas.
+    assertThat(version).isEqualTo("bigint NO 0");
+    assertThat(urheber).isEqualTo("bigint YES -");
+    assertThat(verweis).isEqualTo("account.id NO ACTION");
   }
 }

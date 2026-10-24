@@ -11,7 +11,11 @@ import org.mwolff.fbcrm.common.Identifiable;
 
 /**
  * Eine erfasste Arbeitszeit: ein Tag, eine Uhrzeit von und bis, eine Angebotsposition (Issue #193,
- * Kriterium 1).
+ * Kriterium 1) — und die Person, der sie gehoert (Plan #426, E1).
+ *
+ * <p><b>Die Person steht als blosse Kennung des Kontos</b>, nicht als Name: Der Name kommt beim
+ * Lesen aus dem Konto, damit nach einer Umbenennung alle Eintraege den aktuellen zeigen (#410,
+ * Kriterium 9).
  *
  * <p><b>Die Dauer wird gerechnet, nicht gefuehrt</b> (Plan #194, A3). Eine gespeicherte Dauer waere
  * ein zweiter Wahrheitsort neben von und bis, der bei jeder Korrektur nachgezogen werden muesste —
@@ -29,22 +33,45 @@ import org.mwolff.fbcrm.common.Identifiable;
  * Beginn. Die letzte Viertelstunde vor Mitternacht ist damit nicht erfassbar; das wird bewusst
  * hingenommen.
  *
+ * <p><b>Eigene Version, eigener Urheber</b> (Plan #415, E1, E14): Ein Zeiteintrag ist ein Datensatz
+ * fuer sich, und ein Aendern beruht auf seinem Stand — auch wenn ein C-Level einen fremden Eintrag
+ * korrigiert (#410). Den Zaehler fuehrt der Bestand; {@link #durch(long)} haelt fest, wer zuletzt
+ * geaendert hat.
+ *
+ * <p><b>Geloescht wird mit Kennzeichen</b> (Plan #415, E16, E17): {@link #geloescht(long, Instant)}
+ * haelt Zeitpunkt und Konto der Loeschung fest, damit ein spaeterer Zugriff beides nennen kann. Aus
+ * jedem Leseweg und jeder Summe faellt ein gekennzeichneter Eintrag heraus; das filtert der
+ * Bestand.
+ *
  * @param id technische Kennung — {@code null}, solange der Eintrag nicht gespeichert ist
+ * @param accountId Kennung des Kontos, dem der Eintrag gehoert
  * @param angebotPositionId Kennung der Angebotsposition, auf die gebucht wurde
  * @param tag der Tag, an dem gearbeitet wurde
  * @param von Beginn, auf einer Viertelstunde ohne Sekunden
  * @param bis Ende, auf einer Viertelstunde ohne Sekunden; stets nach {@code von}
  * @param createdAt Zeitpunkt der Anlage
  * @param updatedAt Zeitpunkt der letzten Aenderung
+ * @param version der Stand des Eintrags, wie ihn {@code If-Match} vorlegt (Plan #415, E1); 0 vor
+ *     dem ersten Schreiben, danach fuehrt ihn der Bestand
+ * @param geaendertVon Kennung des Kontos, das den Eintrag zuletzt geaendert hat, oder {@code null},
+ *     solange er nie geaendert wurde
+ * @param geloeschtAm Zeitpunkt der Loeschung, oder {@code null} fuer einen bestehenden Eintrag
+ *     (E17)
+ * @param geloeschtVon Kennung des Kontos, das den Eintrag geloescht hat, oder {@code null}
  */
 public record Zeiteintrag(
     @Nullable Long id,
+    long accountId,
     long angebotPositionId,
     LocalDate tag,
     LocalTime von,
     LocalTime bis,
     Instant createdAt,
-    Instant updatedAt)
+    Instant updatedAt,
+    long version,
+    @Nullable Long geaendertVon,
+    @Nullable Instant geloeschtAm,
+    @Nullable Long geloeschtVon)
     implements Identifiable {
 
   /** Die Schrittweite der Erfassung in Minuten (Issue #193, Antwort 6). */
@@ -65,6 +92,92 @@ public record Zeiteintrag(
     if (!bis.isAfter(von)) {
       throw new IllegalArgumentException("Das Ende liegt nach dem Beginn: " + von + " bis " + bis);
     }
+  }
+
+  /**
+   * Ein Eintrag, der nie geaendert und nie geloescht wurde — so entsteht jeder neue.
+   *
+   * @param id technische Kennung, oder {@code null} vor dem Speichern
+   * @param accountId Kennung des Kontos, dem der Eintrag gehoert
+   * @param angebotPositionId Kennung der Angebotsposition
+   * @param tag der Tag, an dem gearbeitet wurde
+   * @param von Beginn
+   * @param bis Ende
+   * @param createdAt Zeitpunkt der Anlage
+   * @param updatedAt Zeitpunkt der letzten Aenderung
+   */
+  public Zeiteintrag(
+      final @Nullable Long id,
+      final long accountId,
+      final long angebotPositionId,
+      final LocalDate tag,
+      final LocalTime von,
+      final LocalTime bis,
+      final Instant createdAt,
+      final Instant updatedAt) {
+    this(
+        id,
+        accountId,
+        angebotPositionId,
+        tag,
+        von,
+        bis,
+        createdAt,
+        updatedAt,
+        0L,
+        null,
+        null,
+        null);
+  }
+
+  /**
+   * Der Eintrag mit dem Konto, das ihn gerade geaendert hat (Plan #415, E14).
+   *
+   * <p>Ein eigener Schritt wie {@code Angebotskommentar.durch(long)}: Wer aendert, ist eine Angabe
+   * des Anwendungsfalls. Die Version bleibt, wie sie ist — sie zaehlt der Bestand beim Schreiben
+   * weiter.
+   *
+   * @param konto Kennung des handelnden Kontos
+   */
+  public Zeiteintrag durch(final long konto) {
+    return new Zeiteintrag(
+        id,
+        accountId,
+        angebotPositionId,
+        tag,
+        von,
+        bis,
+        createdAt,
+        updatedAt,
+        version,
+        konto,
+        geloeschtAm,
+        geloeschtVon);
+  }
+
+  /**
+   * Der Eintrag mit dem Kennzeichen der Loeschung (Plan #415, E17).
+   *
+   * <p>Person, Position, Zeiten und Urheber der letzten Aenderung bleiben an der Zeile; nur
+   * Zeitpunkt und Konto der Loeschung kommen hinzu.
+   *
+   * @param konto Kennung des loeschenden Kontos
+   * @param zeitpunkt Zeitpunkt der Loeschung
+   */
+  public Zeiteintrag geloescht(final long konto, final Instant zeitpunkt) {
+    return new Zeiteintrag(
+        id,
+        accountId,
+        angebotPositionId,
+        tag,
+        von,
+        bis,
+        createdAt,
+        updatedAt,
+        version,
+        geaendertVon,
+        zeitpunkt,
+        konto);
   }
 
   /**
@@ -103,14 +216,22 @@ public record Zeiteintrag(
    * sind zwei Eintraege und kein Widerspruch. An verschiedenen Tagen gibt es keine Ueberschneidung,
    * auch bei gleicher Uhrzeit.
    *
-   * <p>Die Position spielt keine Rolle: Niemand arbeitet zur selben Zeit fuer zwei Kunden (Issue
-   * #193, Kriterium 4). Welche Eintraege verglichen werden, entscheidet der Anwendungsfall — die
-   * Methode vergleicht zwei.
+   * <p><b>Dieselbe Person nicht zweimal, zwei Personen schon</b> (#410, Kriterium 5). Die Position
+   * spielt keine Rolle: Wer zur selben Zeit fuer zwei Kunden bucht, hat sich verschrieben. Zwei
+   * Eintraege verschiedener Konten ueberschneiden sich dagegen nie.
+   *
+   * <p>Welche Eintraege verglichen werden, entscheidet weiter der Anwendungsfall — die Methode
+   * vergleicht zwei. Er liest dafuer nur die Eintraege der Person, der der gepruefte gehoeren soll
+   * (Plan #426, E8); der Vergleich der Konten hier ist die letzte Sicherung hinter dieser Abfrage,
+   * nicht die Regel selbst.
    *
    * @param anderer der Eintrag, gegen den verglichen wird
    */
   public boolean ueberschneidet(final Zeiteintrag anderer) {
-    return tag.equals(anderer.tag) && von.isBefore(anderer.bis) && anderer.von.isBefore(bis);
+    return accountId == anderer.accountId
+        && tag.equals(anderer.tag)
+        && von.isBefore(anderer.bis)
+        && anderer.von.isBefore(bis);
   }
 
   /**

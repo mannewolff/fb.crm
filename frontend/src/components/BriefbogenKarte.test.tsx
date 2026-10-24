@@ -4,13 +4,18 @@ import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vites
 
 import BriefbogenKarte from './BriefbogenKarte';
 import { alsJson, fetchNachPfad, formularWeg, json, leer, problem } from '../test/fetchNachPfad';
+import { alsRolle } from '../test/rechteDoppel';
 import { renderMitTheme } from '../test/render';
+
+vi.mock('../auth/rechte', () => import('../test/rechteDoppel'));
 
 /**
  * Die Karte „Briefpapier" bei den eigenen Angaben (fachliche Quelle #361; Plan #363, E8, E16,
  * E17).
  *
  * Die Karte laedt selbst — jede Probe legt darum den Leseweg mit fest.
+ *
+ * Jeder schreibende Weg legt den Stand vor (#411, Kriterien 1 bis 3; Plan #415, E2, E11, E12).
  */
 
 const WEG = '/api/briefpapier';
@@ -33,6 +38,7 @@ const OHNE_PAPIER = {
   unten: 200,
   folgeOben: 200,
   folgeUnten: 200,
+  version: 3,
 };
 
 const MIT_PAPIER = {
@@ -63,6 +69,40 @@ const SCHALTER_ABSENDER = 'Absenderzeile eindrucken';
 
 /** 5 MB, binaer gerechnet (E17). */
 const GRENZE = 5242880;
+
+/** Heute um die genannte Uhrzeit in der Ortszeit — die Meldung nennt dann nur die Uhrzeit. */
+function heuteUm(stunde: number, minute: number): string {
+  const zeitpunkt = new Date();
+  zeitpunkt.setHours(stunde, minute, 0, 0);
+  return zeitpunkt.toISOString();
+}
+
+/** Die Abweisung des Servers, wie `GlobalExceptionHandler` sie schreibt (Plan #415, E4). */
+function abweisung(geaendertVon: string): () => Response {
+  return json(409, {
+    title: 'Conflict',
+    status: 409,
+    detail: 'Dieser Eintrag wurde inzwischen geändert.',
+    konflikt: { art: 'veraltet', geaendertAm: heuteUm(10, 42), eigenesFenster: false, geaendertVon },
+  });
+}
+
+/** Antwortet der Reihe nach mit den Antworten — beim ersten Aufruf mit der ersten. */
+function nacheinander(...antworten: readonly (() => Response)[]): () => Response {
+  let aufruf = 0;
+  return () => {
+    const antwort = antworten[Math.min(aufruf, antworten.length - 1)];
+    aufruf += 1;
+    return antwort();
+  };
+}
+
+/** Die Staende, die die schreibenden Aufrufe als `If-Match` vorgelegt haben, in ihrer Reihenfolge. */
+function vorgelegteStaende(fetchMock: ReturnType<typeof fetchNachPfad>): readonly unknown[] {
+  return fetchMock.mock.calls
+    .filter(([, init]) => init?.method !== undefined && init.method !== 'GET')
+    .map(([, init]) => (init?.headers as Record<string, string> | undefined)?.['If-Match']);
+}
 
 function renderKarte() {
   return renderMitTheme(<BriefbogenKarte />);
@@ -498,5 +538,177 @@ describe('BriefbogenKarte — Probedruck', () => {
 
     expect(await screen.findByText(AUSFALL_PROBEDRUCK)).toBeInTheDocument();
     expect(objektUrl.erzeuge).not.toHaveBeenCalled();
+  });
+});
+
+describe('BriefbogenKarte — je Rolle (Kriterien 9 und 10 von #409, Plan #414, A10, E1)', () => {
+  it('zeigt ReadOnly das hinterlegte Briefpapier nur mit „Probedruck" (E4)', async () => {
+    alsRolle('READ_ONLY');
+    fetchNachPfad({ [LESEN]: json(200, MIT_PAPIER) });
+
+    renderKarte();
+
+    const papier = within(await screen.findByTestId('briefpapier'));
+    expect(papier.getByText('Briefbogen.pdf')).toBeInTheDocument();
+    expect(papier.getByRole('button', { name: 'Probedruck' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Briefpapier entfernen' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Briefpapier ersetzen' })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Einstellungen speichern' }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Briefpapier-PDF auswählen')).not.toBeInTheDocument();
+  });
+
+  it('bietet ReadOnly ohne Briefpapier kein „Briefpapier hochladen" an', async () => {
+    alsRolle('READ_ONLY');
+    fetchNachPfad({ [LESEN]: json(200, OHNE_PAPIER) });
+
+    renderKarte();
+
+    expect(await screen.findByText(OHNE)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Briefpapier hochladen' })).not.toBeInTheDocument();
+  });
+
+  it('zeigt einem C-Level Ersetzen, Entfernen und „Einstellungen speichern"', async () => {
+    alsRolle('C_LEVEL');
+    fetchNachPfad({ [LESEN]: json(200, MIT_PAPIER) });
+
+    renderKarte();
+
+    expect(await screen.findByRole('button', { name: 'Briefpapier ersetzen' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Briefpapier entfernen' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Einstellungen speichern' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Probedruck' })).toBeInTheDocument();
+  });
+
+  it('zeigt einem C-Level ohne Briefpapier „Briefpapier hochladen"', async () => {
+    alsRolle('C_LEVEL');
+    fetchNachPfad({ [LESEN]: json(200, OHNE_PAPIER) });
+
+    renderKarte();
+
+    expect(await screen.findByRole('button', { name: 'Briefpapier hochladen' })).toBeInTheDocument();
+  });
+});
+
+describe('BriefbogenKarte — Stand vorlegen (#411, Plan #415)', () => {
+  it('legt beim Speichern nach dem eigenen Hochladen den Stand aus dessen Antwort vor', async () => {
+    const fetchMock = fetchNachPfad({
+      [LESEN]: json(200, OHNE_PAPIER),
+      [HOCHLADEN]: formularWeg(() => undefined, json(200, { ...MIT_PAPIER, version: 4 })),
+      [PFLEGEN]: json(200, { ...MIT_PAPIER, links: 300, version: 5 }),
+    });
+    const nutzer = userEvent.setup();
+    renderKarte();
+    await screen.findByText(OHNE);
+
+    await nutzer.upload(dateifeld(), dateiMitGroesse('Briefbogen.pdf', 2048));
+    await screen.findByTestId('briefpapier');
+    await nutzer.clear(rand('Linker Rand (mm)'));
+    await nutzer.type(rand('Linker Rand (mm)'), '30');
+    await nutzer.click(screen.getByRole('button', { name: 'Einstellungen speichern' }));
+
+    // E11: Das eigene Hochladen erhoeht den Stand; das folgende Speichern legt den neuen vor und
+    // wird darum nicht abgewiesen (#411, Kriterium 8).
+    expect(await screen.findByText(GESPEICHERT)).toBeInTheDocument();
+    expect(vorgelegteStaende(fetchMock)).toEqual(['"3"', '"4"']);
+  });
+
+  it('Szenario: abgewiesenes Speichern — die Werte bleiben, Neu laden stellt sie daneben', async () => {
+    const annasStand = { ...MIT_PAPIER, links: 280, version: 4 };
+    const fetchMock = fetchNachPfad({
+      [LESEN]: nacheinander(json(200, OHNE_PAPIER), json(200, annasStand)),
+      [PFLEGEN]: nacheinander(abweisung('Anna'), json(200, { ...annasStand, version: 5 })),
+    });
+    const nutzer = userEvent.setup();
+    renderKarte();
+    await screen.findByText(OHNE);
+    await nutzer.clear(rand('Linker Rand (mm)'));
+    await nutzer.type(rand('Linker Rand (mm)'), '30');
+    await nutzer.click(screen.getByRole('checkbox', { name: SCHALTER_ABSENDER }));
+    await nutzer.click(screen.getByRole('button', { name: 'Einstellungen speichern' }));
+
+    // Abgewiesen: Die Meldung nennt Anna, und die eigenen Werte stehen weiter in den Feldern.
+    const meldung = await screen.findByRole('alert');
+    expect(meldung).toHaveTextContent('Nicht ausgeführt');
+    expect(meldung).toHaveTextContent('Anna hat diesen Eintrag inzwischen geändert (10:42).');
+    expect(screen.queryByText(AUSFALL_SPEICHERN)).not.toBeInTheDocument();
+    expect(rand('Linker Rand (mm)')).toHaveValue('30');
+
+    // Neu laden: Annas Stand steht in der Karte — samt ihrem Briefpapier —, die eigenen Werte daneben.
+    await nutzer.click(screen.getByRole('button', { name: 'Neu laden' }));
+    expect(await screen.findByTestId('briefpapier')).toHaveTextContent('Briefbogen.pdf');
+    expect(rand('Linker Rand (mm)')).toHaveValue('28,0');
+    expect(screen.queryByText('Nicht ausgeführt')).not.toBeInTheDocument();
+    const eigene = screen.getByRole('region', { name: 'Deine Eingaben' });
+    expect(eigene).toHaveTextContent('Linker Rand (mm)');
+    expect(eigene).toHaveTextContent('30');
+    // Der umgelegte Schalter steht als Wort neben seiner Beschriftung.
+    expect(eigene).toHaveTextContent(new RegExp(`${SCHALTER_ABSENDER}\\s*aus`, 'u'));
+
+    // Auf Annas Stand geht das Speichern durch; vorgelegt wird der neu geladene Stand.
+    await nutzer.click(screen.getByRole('button', { name: 'Einstellungen speichern' }));
+    expect(await screen.findByText(GESPEICHERT)).toBeInTheDocument();
+    expect(vorgelegteStaende(fetchMock)).toEqual(['"3"', '"4"']);
+
+    await nutzer.click(screen.getByRole('button', { name: 'Verwerfen' }));
+    expect(screen.queryByRole('region', { name: 'Deine Eingaben' })).not.toBeInTheDocument();
+  });
+
+  it('nennt nach einem abgewiesenen Hochladen die gewaehlte Datei bei den eigenen Eingaben', async () => {
+    fetchNachPfad({
+      [LESEN]: nacheinander(json(200, OHNE_PAPIER), json(200, { ...MIT_PAPIER, version: 4 })),
+      [HOCHLADEN]: formularWeg(() => undefined, abweisung('Anna')),
+    });
+    const nutzer = userEvent.setup();
+    renderKarte();
+    await screen.findByText(OHNE);
+
+    await nutzer.upload(dateifeld(), dateiMitGroesse('neu.pdf', 2048));
+
+    expect(await screen.findByText(/Anna hat diesen Eintrag inzwischen geändert/u)).toBeInTheDocument();
+    expect(screen.queryByText(AUSFALL_HOCHLADEN)).not.toBeInTheDocument();
+
+    await nutzer.click(screen.getByRole('button', { name: 'Neu laden' }));
+    const eigene = await screen.findByRole('region', { name: 'Deine Eingaben' });
+    expect(eigene).toHaveTextContent('Gewähltes Briefpapier');
+    expect(eigene).toHaveTextContent('neu.pdf');
+  });
+
+  it('weist ein Entfernen auf altem Stand mit der Meldung ab und laesst das Briefpapier stehen', async () => {
+    const fetchMock = fetchNachPfad({
+      [LESEN]: json(200, MIT_PAPIER),
+      [ENTFERNEN]: abweisung('Anna'),
+    });
+    const nutzer = userEvent.setup();
+    renderKarte();
+    await screen.findByTestId('briefpapier');
+
+    await nutzer.click(screen.getByRole('button', { name: 'Briefpapier entfernen' }));
+
+    expect(await screen.findByText(/Anna hat diesen Eintrag inzwischen geändert/u)).toBeInTheDocument();
+    expect(screen.queryByText(AUSFALL_ENTFERNEN)).not.toBeInTheDocument();
+    expect(screen.getByTestId('briefpapier')).toBeInTheDocument();
+    expect(vorgelegteStaende(fetchMock)).toEqual(['"3"']);
+  });
+
+  it('meldet einen Ausfall beim Neu laden und laesst die Konfliktmeldung stehen', async () => {
+    fetchNachPfad({
+      [LESEN]: nacheinander(json(200, OHNE_PAPIER), leer(503)),
+      [PFLEGEN]: abweisung('Anna'),
+    });
+    const nutzer = userEvent.setup();
+    renderKarte();
+    await screen.findByText(OHNE);
+    await nutzer.click(screen.getByRole('button', { name: 'Einstellungen speichern' }));
+    await nutzer.click(await screen.findByRole('button', { name: 'Neu laden' }));
+
+    expect(
+      await screen.findByText(
+        'Der aktuelle Stand ist gerade nicht zu erreichen. Bitte später erneut versuchen.',
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Neu laden' })).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Deine Eingaben' })).not.toBeInTheDocument();
   });
 });

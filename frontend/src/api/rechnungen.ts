@@ -166,6 +166,11 @@ export interface Rechnung {
   /** Kopie der eigenen Angaben, oder `null` im Entwurf. */
   readonly absender: Belegabsender | null;
   readonly zeilen: readonly Rechnungsmaskenzeile[];
+  /**
+   * Der Stand der Rechnung (Plan #415, E2): Aendern, Stellen und Zustand legen ihn als `If-Match`
+   * vor, und jede Antwort darauf traegt den neuen.
+   */
+  readonly version: number;
 }
 
 /**
@@ -318,6 +323,7 @@ export function parseRechnung(wert: unknown): Rechnung {
     empfaenger: parseEmpfaenger(rechnung.empfaenger),
     absender: parseAbsender(rechnung.absender),
     zeilen: liste(rechnung.zeilen).map(parseMaskenzeile),
+    version: zahl(rechnung.version),
   };
 }
 
@@ -447,24 +453,48 @@ export function rechnungLesen(id: number): Promise<Rechnung> {
   return apiJson(pfad(id), { methode: 'GET' }, parseRechnung);
 }
 
+/*
+ * Aendern, Loeschen, Stellen und Zustand legen den Stand, auf dem sie beruhen, als `If-Match` vor
+ * (#411, Kriterien 4 bis 6; Plan #415, E2, E10). Hat inzwischen jemand anderes geaendert, weist
+ * der Server mit einem Bearbeitungskonflikt ab; die Antwort auf einen gelungenen Schritt traegt den
+ * neuen Stand.
+ */
+
 /**
  * Aendert den Entwurf als Ganzes (Kriterien 4, 5, 10).
  *
  * Die Antwort traegt die neu gerechneten Werte — Netto, Steuer, Brutto und je Zeile offen und
  * Ueberschreitung. Die Maske zeigt sie ohne zweiten Aufruf.
+ *
+ * @param version der Stand, auf dem die Aenderung beruht
  */
-export function rechnungAendern(id: number, eingabe: RechnungEingabe): Promise<Rechnung> {
-  return apiJson(pfad(id), { methode: 'PUT', rumpf: eingabe }, parseRechnung);
+export function rechnungAendern(
+  id: number,
+  version: number,
+  eingabe: RechnungEingabe,
+): Promise<Rechnung> {
+  return apiJson(pfad(id), { methode: 'PUT', rumpf: eingabe, version }, parseRechnung);
 }
 
-/** Loescht den Entwurf (Kriterium 12) — die Antwort traegt keinen Inhalt. */
-export function rechnungLoeschen(id: number): Promise<void> {
-  return apiOhneInhalt(pfad(id), { methode: 'DELETE' });
+/**
+ * Loescht den Entwurf (Kriterium 12) — die Antwort traegt keinen Inhalt.
+ *
+ * Geloescht wird mit Kennzeichen (Plan #415, E17); ist der Entwurf inzwischen geaendert oder
+ * geloescht, weist der Server mit einem Bearbeitungskonflikt ab.
+ *
+ * @param version der Stand, auf dem das Loeschen beruht
+ */
+export function rechnungLoeschen(id: number, version: number): Promise<void> {
+  return apiOhneInhalt(pfad(id), { methode: 'DELETE', version });
 }
 
-/** Stellt den Entwurf; die Antwort traegt die gestellte Rechnung (Kriterien 13 bis 16). */
-export function rechnungStellen(id: number): Promise<Rechnung> {
-  return apiJson(`${pfad(id)}/stellen`, { methode: 'POST' }, parseRechnung);
+/**
+ * Stellt den Entwurf; die Antwort traegt die gestellte Rechnung (Kriterien 13 bis 16).
+ *
+ * @param version der Stand des Entwurfs, der gestellt werden soll — es zaehlt allein er (E10)
+ */
+export function rechnungStellen(id: number, version: number): Promise<Rechnung> {
+  return apiJson(`${pfad(id)}/stellen`, { methode: 'POST', version }, parseRechnung);
 }
 
 /**
@@ -473,9 +503,19 @@ export function rechnungStellen(id: number): Promise<Rechnung> {
  * Ein Weg fuer alle drei Ziele, wie im Backend: Das Ziel geht im Rumpf hinaus, und die Antwort traegt
  * die Rechnung mit ihrem neuen Zustand — die Seite zeigt ihn ohne zweiten Aufruf. Ein unzulaessiger
  * Uebergang kommt als 409 zurueck; welcher zulaessig ist, entscheidet der Server, nicht diese Datei.
+ *
+ * @param version der Stand, auf dem der Wechsel beruht
  */
-export function setzeRechnungszustand(id: number, zustand: Rechnungszustand): Promise<Rechnung> {
-  return apiJson(`${pfad(id)}/zustand`, { methode: 'PUT', rumpf: { zustand } }, parseRechnung);
+export function setzeRechnungszustand(
+  id: number,
+  version: number,
+  zustand: Rechnungszustand,
+): Promise<Rechnung> {
+  return apiJson(
+    `${pfad(id)}/zustand`,
+    { methode: 'PUT', rumpf: { zustand }, version },
+    parseRechnung,
+  );
 }
 
 /**

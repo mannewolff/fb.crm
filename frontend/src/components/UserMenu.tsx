@@ -7,6 +7,7 @@ import { useId, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import { useAuth } from '../auth/AuthContext';
+import { rollenname } from '../auth/rechte';
 import { initialen } from '../lib/initials';
 import { RADIUS_KACHEL, RADIUS_RUND } from '../theme';
 
@@ -15,8 +16,8 @@ import { RADIUS_KACHEL, RADIUS_RUND } from '../theme';
  *
  * Sie stand bis zur Kupferwolke als rundes Mal im Kopf; die Vorlage zeigt sie als Kachel „Flaeche
  * weich" unten in der Schiene (`.schiene .fuss` Z. 42, HTML Z. 118–122). Sichtbar sind Kuerzel,
- * `displayName` und E-Mail. Eine Rolle steht nicht dabei: `Konto` kennt im Frontend keine, und
- * sie wird dafuer nicht eingefuehrt.
+ * `displayName`, E-Mail und darunter die Rolle (Plan #414, E9): Die Oberflaeche unterscheidet sich
+ * je Rolle, und wer eine Taste nicht findet, liest am eigenen Konto ab, warum.
  *
  * Das Kuerzel liegt auf der Toenung Flieder — der neutralen Kategorie fuer Personen
  * (CLAUDE-design.md, „Toenungen"). Neben dem Namen sagt es nichts Eigenes und ist darum
@@ -52,7 +53,7 @@ export default function UserMenu({ kompakt = false }: { readonly kompakt?: boole
   if (sitzung.status !== 'angemeldet') {
     return null;
   }
-  const { displayName, email } = sitzung.konto;
+  const { displayName, email, role } = sitzung.konto;
 
   const abmeldenUndGehen = async () => {
     setAnker(null);
@@ -134,6 +135,18 @@ export default function UserMenu({ kompakt = false }: { readonly kompakt?: boole
                 })}
               >
                 {email}
+              </Box>
+              <Box
+                component="span"
+                data-testid="nutzer-rolle"
+                sx={(theme) => ({
+                  ...zeileStil,
+                  fontSize: 12,
+                  fontWeight: 500,
+                  color: theme.vars.palette.kupferwolke.textSchwach,
+                })}
+              >
+                {rollenname(role)}
               </Box>
             </Box>
             <Box

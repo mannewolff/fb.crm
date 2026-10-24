@@ -1,6 +1,9 @@
 package org.mwolff.fbcrm.rechnung.web;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -10,6 +13,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.math.BigDecimal;
+import java.time.Instant;
+import java.util.List;
+import java.util.Optional;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -18,13 +25,20 @@ import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.mwolff.fbcrm.common.Urheber;
+import org.mwolff.fbcrm.common.web.Bedingungskopf;
 import org.mwolff.fbcrm.common.web.GlobalExceptionHandler;
+import org.mwolff.fbcrm.rechnung.application.RechnungseinstellungenGeaendert;
 import org.mwolff.fbcrm.rechnung.application.RechnungseinstellungenLesenUseCase;
 import org.mwolff.fbcrm.rechnung.application.RechnungseinstellungenMitNummer;
 import org.mwolff.fbcrm.rechnung.application.RechnungseinstellungenPflegenUseCase;
 import org.mwolff.fbcrm.rechnung.domain.Nummernmuster;
 import org.mwolff.fbcrm.rechnung.domain.Rechnungseinstellungen;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.web.method.annotation.AuthenticationPrincipalArgumentResolver;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
@@ -36,12 +50,33 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
  * direkt an den Methoden, und die Faelle, bei denen die <b>Form</b> der Antwort die Aussage ist —
  * Statuscodes und Feldfehler — ueber eine schlanke MockMvc-Strecke mit dem echten {@link
  * GlobalExceptionHandler}.
+ *
+ * <p>Der {@code PUT} legt den Stand vor (#411, Kriterium 4; Plan #415, E2, E3, E14): ohne {@code
+ * If-Match} 428, auf veraltetem Stand 409 mit der Erweiterung {@code konflikt}, sonst 200 mit dem
+ * neuen Stand samt erhoehter Version.
  */
 @ExtendWith(MockitoExtension.class)
 class RechnungseinstellungenControllerTest {
 
   private static final String PFAD = "/api/rechnung/einstellungen";
   private static final String GUELTIGES_MUSTER = "\"{NNNN}-{JJJJ}\"";
+
+  /** Der Stand, den die Maske vorlegt (Plan #415, E2). */
+  private static final long STAND = 3L;
+
+  /** Derselbe Stand als starkes Etikett im Kopf {@code If-Match}. */
+  private static final String VORGELEGT = "\"" + STAND + "\"";
+
+  /** Das angemeldete Konto. */
+  private static final long ANGEMELDET = 31L;
+
+  /** Das Konto, das inzwischen geaendert hat. */
+  private static final long ANNA = 30L;
+
+  private static final Instant ANNAS_AENDERUNG = Instant.parse("2026-10-06T08:42:00Z");
+
+  private static final Rechnungseinstellungen EINGEREICHT =
+      new Rechnungseinstellungen(new Nummernmuster("R{JJ}-{NNNN}"), new BigDecimal("19.50"), 14);
 
   @Mock private RechnungseinstellungenLesenUseCase lesen;
   @Mock private RechnungseinstellungenPflegenUseCase pflegen;
@@ -51,17 +86,39 @@ class RechnungseinstellungenControllerTest {
 
   @BeforeEach
   void baueDenController() {
+    // Die Sitzung wie im Betrieb: die Kennung des Kontos als Principal (Plan #415, E14).
+    SecurityContextHolder.getContext()
+        .setAuthentication(
+            UsernamePasswordAuthenticationToken.authenticated(
+                Long.valueOf(ANGEMELDET), null, List.of()));
     controller = new RechnungseinstellungenController(lesen, pflegen);
     mockMvc =
         MockMvcBuilders.standaloneSetup(controller)
-            .setControllerAdvice(new GlobalExceptionHandler())
+            .setControllerAdvice(
+                new GlobalExceptionHandler(
+                    konto ->
+                        konto == ANNA ? Optional.of(new Urheber(ANNA, "Anna")) : Optional.empty()))
+            .setCustomArgumentResolvers(
+                new Bedingungskopf.Leser(), new AuthenticationPrincipalArgumentResolver())
             .build();
+  }
+
+  @AfterEach
+  void raeumeDieSitzungAb() {
+    SecurityContextHolder.clearContext();
   }
 
   private static RechnungseinstellungenMitNummer vorbelegt() {
     return new RechnungseinstellungenMitNummer(
         new Rechnungseinstellungen(new Nummernmuster("{NNNN}-{JJJJ}"), new BigDecimal("19.00"), 10),
-        1);
+        1,
+        STAND);
+  }
+
+  /** Der Anwendungsfall nimmt jede gueltige Eingabe an und meldet den erhoehten Stand. */
+  private void nimmtAn() {
+    when(pflegen.pflege(any(), anyInt(), anyLong(), anyLong()))
+        .thenReturn(new RechnungseinstellungenMitNummer(EINGEREICHT, 4, STAND + 1));
   }
 
   /**
@@ -83,7 +140,11 @@ class RechnungseinstellungenControllerTest {
 
   private void weiseAb(final String rumpf, final String feld) throws Exception {
     mockMvc
-        .perform(put(PFAD).contentType(MediaType.APPLICATION_JSON).content(rumpf))
+        .perform(
+            put(PFAD)
+                .header(HttpHeaders.IF_MATCH, VORGELEGT)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(rumpf))
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.fieldErrors." + feld).isArray());
 
@@ -106,7 +167,8 @@ class RechnungseinstellungenControllerTest {
     // Then — das Muster geht als Text hinaus, nicht als geschachteltes Objekt.
     assertThat(antwort)
         .isEqualTo(
-            new RechnungseinstellungenResponse("{NNNN}-{JJJJ}", 1, new BigDecimal("19.00"), 10));
+            new RechnungseinstellungenResponse(
+                "{NNNN}-{JJJJ}", 1, new BigDecimal("19.00"), 10, STAND));
   }
 
   @Test
@@ -124,6 +186,7 @@ class RechnungseinstellungenControllerTest {
             .andExpect(jsonPath("$.nummerMuster").value("{NNNN}-{JJJJ}"))
             .andExpect(jsonPath("$.naechsteNummer").value(1))
             .andExpect(jsonPath("$.zahlungszielTage").value(10))
+            .andExpect(jsonPath("$.version").value(STAND))
             .andReturn()
             .getResponse()
             .getContentAsString();
@@ -133,55 +196,96 @@ class RechnungseinstellungenControllerTest {
   }
 
   @Test
-  void pflegen_thenPassesTheValuesOn() {
+  void pflegen_thenPassesTheValuesStandAndKontoOn() {
+    // Given
+    nimmtAn();
+
     // When
-    controller.pflegen(
-        new RechnungseinstellungenRequest("R{JJ}-{NNNN}", 4, new BigDecimal("19.50"), 14));
+    final RechnungseinstellungenResponse antwort =
+        controller.pflegen(
+            new Bedingungskopf(STAND),
+            ANGEMELDET,
+            new RechnungseinstellungenRequest("R{JJ}-{NNNN}", 4, new BigDecimal("19.50"), 14));
 
     // Then — die Nummer geht getrennt mit; sie gehoert dem Nummernkreis (#175).
-    verify(pflegen)
-        .pflege(
-            new Rechnungseinstellungen(
-                new Nummernmuster("R{JJ}-{NNNN}"), new BigDecimal("19.50"), 14),
-            4);
+    verify(pflegen).pflege(EINGEREICHT, 4, STAND, ANGEMELDET);
+    assertThat(antwort)
+        .isEqualTo(
+            new RechnungseinstellungenResponse(
+                "R{JJ}-{NNNN}", 4, new BigDecimal("19.50"), 14, STAND + 1));
   }
 
   @Test
-  void pflegen_thenAnswersWithNoContentAndAnEmptyBody() throws Exception {
-    // When — der Steuersatz kommt als Dezimaltext aus der Maske.
-    final String inhalt =
-        mockMvc
-            .perform(
-                put(PFAD)
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .content(rumpf("\"R{JJ}-{NNNN}\"", "4", "\"19.50\"", "14")))
-            .andExpect(status().isNoContent())
-            .andReturn()
-            .getResponse()
-            .getContentAsString();
+  void pflegen_withTheCurrentStand_thenAnswers200WithTheRaisedVersion() throws Exception {
+    // Given — #411, Kriterium 8: auf dem aktuellen Stand merkt man vom Schutz nichts.
+    nimmtAn();
 
-    // Then — wie {@code EigeneAngabenController}: kein Rumpf, den neuen Stand liest die
-    // Oberflaeche ueber den GET.
-    assertThat(inhalt).isEmpty();
-    verify(pflegen)
-        .pflege(
-            new Rechnungseinstellungen(
-                new Nummernmuster("R{JJ}-{NNNN}"), new BigDecimal("19.50"), 14),
-            4);
+    // When — der Steuersatz kommt als Dezimaltext aus der Maske.
+    mockMvc
+        .perform(
+            put(PFAD)
+                .header(HttpHeaders.IF_MATCH, VORGELEGT)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(rumpf("\"R{JJ}-{NNNN}\"", "4", "\"19.50\"", "14")))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.nummerMuster").value("R{JJ}-{NNNN}"))
+        .andExpect(jsonPath("$.naechsteNummer").value(4))
+        .andExpect(jsonPath("$.version").value(STAND + 1));
+
+    // Then — Stand und Konto aus Kopf und Sitzung.
+    verify(pflegen).pflege(EINGEREICHT, 4, STAND, ANGEMELDET);
+  }
+
+  @Test
+  void pflegen_withoutIfMatch_thenAnswers428AndChangesNothing() throws Exception {
+    // When / Then — E3: ohne vorgelegten Stand wird nicht geschrieben, auch nicht vorher
+    // geprueft.
+    mockMvc
+        .perform(
+            put(PFAD)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(rumpf("\"R{JJ}-{NNNN}\"", "4", "\"19.50\"", "14")))
+        .andExpect(status().isPreconditionRequired())
+        .andExpect(jsonPath("$.detail").value(Bedingungskopf.MELDUNG));
+    verifyNoInteractions(pflegen, lesen);
+  }
+
+  @Test
+  void pflegen_withAnOutdatedStand_thenAnswers409WithTheConflict() throws Exception {
+    // Given — #411, Kriterium 4: Anna hat die Einstellungen inzwischen gespeichert.
+    when(pflegen.pflege(EINGEREICHT, 4, STAND, ANGEMELDET))
+        .thenThrow(new RechnungseinstellungenGeaendert(ANNA, ANGEMELDET, ANNAS_AENDERUNG));
+
+    // When / Then
+    mockMvc
+        .perform(
+            put(PFAD)
+                .header(HttpHeaders.IF_MATCH, VORGELEGT)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(rumpf("\"R{JJ}-{NNNN}\"", "4", "\"19.50\"", "14")))
+        .andExpect(status().isConflict())
+        .andExpect(jsonPath("$.konflikt.art").value("veraltet"))
+        .andExpect(jsonPath("$.konflikt.geaendertVon").value("Anna"))
+        .andExpect(jsonPath("$.konflikt.geaendertAm").value("2026-10-06T08:42:00Z"))
+        .andExpect(jsonPath("$.konflikt.eigenesFenster").value(false));
   }
 
   @ParameterizedTest
   @CsvSource({"1, 0.00, 0", "1, 100.00, 0", "1, 19.50, 14"})
-  void pflegen_givenAnAcceptedBoundary_thenAnswersWithNoContent(
+  void pflegen_givenAnAcceptedBoundary_thenAnswersWith200(
       final String nummer, final String steuersatz, final String ziel) throws Exception {
+    // Given
+    nimmtAn();
+
     // When / Then — die Grenzen selbst sind gueltig: naechste Nummer 1, Steuersatz 0 und 100,
     // Zahlungsziel 0.
     mockMvc
         .perform(
             put(PFAD)
+                .header(HttpHeaders.IF_MATCH, VORGELEGT)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(rumpf(GUELTIGES_MUSTER, nummer, "\"" + steuersatz + "\"", ziel)))
-        .andExpect(status().isNoContent());
+        .andExpect(status().isOk());
   }
 
   @ParameterizedTest

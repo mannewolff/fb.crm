@@ -42,6 +42,8 @@ import org.mwolff.fbcrm.rechnung.domain.Rechnungszustand;
  * @param empfaenger Kopie des Empfaengers, oder {@code null} im Entwurf
  * @param absender Kopie der eigenen Angaben, oder {@code null} im Entwurf
  * @param zeilen je Position des Angebots eine Zeile, in der Reihenfolge des Angebots
+ * @param version der Stand der Rechnung, den die Oberflaeche beim naechsten schreibenden Schritt
+ *     mit {@code If-Match} vorlegt (Plan #415, E2)
  */
 public record RechnungResponse(
     long id,
@@ -60,7 +62,8 @@ public record RechnungResponse(
     @Nullable Integer zahlungszielTage,
     @Nullable BelegempfaengerResponse empfaenger,
     @Nullable BelegabsenderResponse absender,
-    List<RechnungZeileResponse> zeilen) {
+    List<RechnungZeileResponse> zeilen,
+    long version) {
 
   /** Die Sicht der Oberflaeche auf eine Rechnung. */
   static RechnungResponse of(final Rechnungsansicht ansicht) {
@@ -83,6 +86,7 @@ public record RechnungResponse(
         rechnung.zahlungszielTage(),
         BelegempfaengerResponse.of(rechnung.empfaenger()),
         BelegabsenderResponse.of(rechnung.absender()),
-        ansicht.zeilen().stream().map(RechnungZeileResponse::of).toList());
+        ansicht.zeilen().stream().map(RechnungZeileResponse::of).toList(),
+        rechnung.version());
   }
 }

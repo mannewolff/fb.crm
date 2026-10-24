@@ -108,7 +108,9 @@ class JpaRechnungRepositoryTest {
         null,
         null,
         ANGELEGT,
-        ANGELEGT);
+        ANGELEGT,
+        0L,
+        null);
   }
 
   private static Rechnung gestellt(final List<Rechnungsposition> positionen) {
@@ -152,6 +154,63 @@ class JpaRechnungRepositoryTest {
     when(rechnungen.save(any(RechnungEntity.class))).thenReturn(zeile);
     when(positionen.findByRechnung(RECHNUNG_ID)).thenReturn(vorhandene);
     when(positionen.saveAll(any())).thenAnswer(aufruf -> aufruf.getArgument(0));
+  }
+
+  /* Ein Entwurf auf Stand 4, zuletzt geaendert von Konto 30 (Plan #415, E1, E14). */
+  private static Rechnung aufStand(final List<Rechnungsposition> positionen) {
+    final Rechnung entwurf = entwurf(positionen);
+    return new Rechnung(
+            entwurf.id(),
+            entwurf.angebotId(),
+            entwurf.zustand(),
+            entwurf.rechnungDatum(),
+            entwurf.leistungszeitraum(),
+            entwurf.positionen(),
+            entwurf.nummer(),
+            entwurf.steuersatz(),
+            entwurf.zahlungszielTage(),
+            entwurf.gestelltAm(),
+            entwurf.pdfSchluessel(),
+            entwurf.empfaenger(),
+            entwurf.absender(),
+            entwurf.createdAt(),
+            entwurf.updatedAt(),
+            4L,
+            null)
+        .durch(30L);
+  }
+
+  @Test
+  void save_thenWritesTheStandAndTheUrheberIntoTheRow() {
+    // Given — E1: Der Stand reist mit in die Zeile; nur so erkennt Hibernate eine Zeile, die auf
+    // einem alten Stand beruht.
+    erwarteSchreibenDerZeile(entwurfszeile());
+
+    // When
+    repository.save(aufStand(List.of(BERATUNG)));
+
+    // Then
+    verify(rechnungen).save(gespeicherte.capture());
+    assertThat(gespeicherte.getValue())
+        .satisfies(
+            zeile -> assertThat(zeile.getVersion()).isEqualTo(4L),
+            zeile -> assertThat(zeile.getGeaendertVon()).isEqualTo(30L));
+  }
+
+  @Test
+  void findById_thenTranslatesTheStandAndTheUrheberBack() {
+    // Given — E2: Die Leseantwort gibt den Stand heraus, den die Maske wieder vorlegt.
+    when(rechnungen.findById(RECHNUNG_ID))
+        .thenReturn(Optional.of(RechnungEntity.aus(aufStand(List.of()))));
+    when(positionen.findByRechnung(RECHNUNG_ID)).thenReturn(List.of());
+
+    // When / Then
+    assertThat(repository.findById(RECHNUNG_ID))
+        .hasValueSatisfying(
+            rechnung -> {
+              assertThat(rechnung.version()).isEqualTo(4L);
+              assertThat(rechnung.geaendertVon()).isEqualTo(30L);
+            });
   }
 
   @Test
@@ -453,7 +512,7 @@ class JpaRechnungRepositoryTest {
   @Test
   void findAlle_thenLoadsEveryRechnungWithItsPositions() {
     // Given
-    when(rechnungen.findAll()).thenReturn(List.of(entwurfszeile()));
+    when(rechnungen.findLebende()).thenReturn(List.of(entwurfszeile()));
     when(positionen.findByRechnungen(List.of(RECHNUNG_ID)))
         .thenReturn(List.of(positionszeile(RECHNUNG_ID, (short) 1, BERATUNG)));
 
@@ -466,7 +525,7 @@ class JpaRechnungRepositoryTest {
   @Test
   void findAlle_givenARechnungWithoutPositions_thenItIsReadWithAnEmptyList() {
     // Given
-    when(rechnungen.findAll()).thenReturn(List.of(entwurfszeile()));
+    when(rechnungen.findLebende()).thenReturn(List.of(entwurfszeile()));
     when(positionen.findByRechnungen(List.of(RECHNUNG_ID))).thenReturn(List.of());
 
     // When / Then
@@ -476,18 +535,41 @@ class JpaRechnungRepositoryTest {
   }
 
   @Test
-  void delete_thenRemovesThePositionRowsAndTheRechnung() {
-    // Given
+  void save_givenADeletedEntwurf_thenMarksTheRowAndDeletesItsPositionRows() {
+    // Given — Plan #415, E17: die Zeile bleibt mit Kennzeichen, die Positionszeilen gehen hart.
+    final Instant geloeschtAm = Instant.parse("2026-10-05T08:42:00Z");
     final RechnungPositionEntity beratung = positionszeile((short) 1, BERATUNG);
-    when(positionen.findByRechnung(RECHNUNG_ID)).thenReturn(List.of(beratung));
+    erwarteSchreibenDerZeile(entwurfszeile(), List.of(beratung));
 
     // When
-    repository.delete(RECHNUNG_ID);
+    repository.save(entwurf(List.of(BERATUNG)).geloescht(31L, geloeschtAm));
 
     // Then
+    verify(rechnungen).save(gespeicherte.capture());
+    assertThat(gespeicherte.getValue())
+        .satisfies(
+            zeile -> assertThat(zeile.getGeloeschtAm()).isEqualTo(geloeschtAm),
+            zeile -> assertThat(zeile.getGeloeschtVon()).isEqualTo(31L));
     verify(positionen).deleteAll(geloeschtePositionen.capture());
     assertThat(geloeschtePositionen.getValue()).containsExactly(beratung);
-    verify(rechnungen).deleteById(RECHNUNG_ID);
+  }
+
+  @Test
+  void findById_givenADeletedRow_thenReadsTheMarkBack() {
+    // Given — der Zugriff ueber die Kennung liefert die gekennzeichnete Zeile mit (E16).
+    final Instant geloeschtAm = Instant.parse("2026-10-05T08:42:00Z");
+    when(rechnungen.findById(RECHNUNG_ID))
+        .thenReturn(
+            Optional.of(RechnungEntity.aus(entwurf(List.of()).geloescht(31L, geloeschtAm))));
+    when(positionen.findByRechnung(RECHNUNG_ID)).thenReturn(List.of());
+
+    // When / Then
+    assertThat(repository.findById(RECHNUNG_ID))
+        .hasValueSatisfying(
+            rechnung -> {
+              assertThat(rechnung.geloeschtAm()).isEqualTo(geloeschtAm);
+              assertThat(rechnung.geloeschtVon()).isEqualTo(31L);
+            });
   }
 
   @ParameterizedTest

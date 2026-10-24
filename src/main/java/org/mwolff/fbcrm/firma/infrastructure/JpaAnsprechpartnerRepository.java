@@ -11,6 +11,9 @@ import org.springframework.stereotype.Repository;
 
 /**
  * Setzt den Port {@link AnsprechpartnerRepository} auf JPA um und uebersetzt in beide Richtungen.
+ *
+ * <p>Geschrieben wird mit {@code saveAndFlush}: Erst das Schreiben erhoeht die Version, und der
+ * neue Stand geht mit der Antwort des Weges hinaus (Plan #415, E2).
  */
 @Repository
 class JpaAnsprechpartnerRepository implements AnsprechpartnerRepository {
@@ -28,7 +31,7 @@ class JpaAnsprechpartnerRepository implements AnsprechpartnerRepository {
 
   @Override
   public Ansprechpartner save(final Ansprechpartner ansprechpartner) {
-    return toDomain(jpa.save(AnsprechpartnerEntity.aus(ansprechpartner)));
+    return toDomain(jpa.saveAndFlush(AnsprechpartnerEntity.aus(ansprechpartner)));
   }
 
   @Override
@@ -61,6 +64,8 @@ class JpaAnsprechpartnerRepository implements AnsprechpartnerRepository {
         zeile.getTelefonMobil(),
         zeile.isAktiv(),
         zeile.getCreatedAt(),
-        zeile.getUpdatedAt());
+        zeile.getUpdatedAt(),
+        zeile.getVersion(),
+        zeile.getGeaendertVon());
   }
 }

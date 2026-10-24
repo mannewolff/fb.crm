@@ -1,12 +1,15 @@
 import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, test, vi } from 'vitest';
 
 import AngebotPage from './AngebotPage';
 import KopfPfad, { KopfPfadProvider } from '../components/KopfPfad';
 import { alsJson, fetchNachPfad, json, leer, problem } from '../test/fetchNachPfad';
+import { alsRolle } from '../test/rechteDoppel';
 import { renderMitTheme } from '../test/render';
+
+vi.mock('../auth/rechte', () => import('../test/rechteDoppel'));
 
 const POSITION = {
   id: 3,
@@ -34,6 +37,8 @@ const ANGEBOT = {
   stornoGrund: null,
   positionen: [POSITION],
   summe: 2500.03,
+  version: 0,
+  geaendertVon: null,
 };
 
 const KOMMENTARE = 'GET /api/angebote/9/kommentare';
@@ -422,6 +427,104 @@ describe('AngebotPage — die Aktionen (Issue #127, Kriterien 4, 5)', () => {
     expect(within(screen.getByTestId('angebot-angaben')).getByTestId('chip')).toHaveTextContent(
       'Abgegeben',
     );
+  });
+});
+
+describe('AngebotPage — je Rolle (Kriterium 10 von #409, Plan #414, A10)', () => {
+  const KOMMENTAR = {
+    id: 1,
+    text: 'Kunde wartet auf das Konzept',
+    createdAt: '2026-09-30T12:05:00Z',
+    verfasser: 'Anna Berg',
+    version: 0,
+  };
+  const ANLAGE = {
+    id: 2,
+    dateiName: 'Lastenheft.pdf',
+    groesse: 2048,
+    vorschauArt: 'PDF',
+    createdAt: '2026-09-30T12:05:00Z',
+  };
+  /** Jede Taste, die am Angebot etwas aendert — keine davon steht fuer ReadOnly da. */
+  const SCHREIBENDE_TASTEN = [
+    'Status weiter',
+    'Status zurück',
+    'Stornieren',
+    'Storno zurücknehmen',
+    'Abschließen',
+    'Wieder öffnen',
+    'Rechnung schreiben',
+    'Datei hochladen',
+    'Kommentar speichern',
+  ];
+
+  function bestandDoppel(angebot: object) {
+    fetchNachPfad({
+      [KOMMENTARE]: json(200, { kommentare: [KOMMENTAR] }),
+      [ANLAGEN]: json(200, { anlagen: [ANLAGE] }),
+      [ABRECHNUNG]: json(200, STAND_TEIL),
+      'GET /api/angebote/9': json(200, angebot),
+    });
+  }
+
+  function keineSchreibendeTaste() {
+    for (const name of SCHREIBENDE_TASTEN) {
+      expect(screen.queryByRole('button', { name })).not.toBeInTheDocument();
+    }
+    expect(screen.queryByRole('link', { name: 'Bearbeiten' })).not.toBeInTheDocument();
+    expect(screen.queryByTestId('angebot-aktionen')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Neuer Kommentar')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Aktionen für/ })).not.toBeInTheDocument();
+  }
+
+  test('Szenario: ReadOnly liest, ändert aber nichts', async () => {
+    alsRolle('READ_ONLY');
+    bestandDoppel(BESTELLT);
+
+    renderSeite();
+    await screen.findByRole('heading', { level: 1, name: UEBERSCHRIFT });
+
+    // Dann sieht er Positionen, Status, Kommentare und Anlagen …
+    expect(screen.getByText('Konzeption')).toBeInTheDocument();
+    expect(within(screen.getByTestId('angebot-angaben')).getByTestId('chip')).toHaveTextContent(
+      'Bestellt',
+    );
+    expect(await screen.findByText(KOMMENTAR.text)).toBeInTheDocument();
+    expect(screen.getByText('Anna Berg')).toBeInTheDocument();
+    expect(await screen.findByText(ANLAGE.dateiName)).toBeInTheDocument();
+    expect(
+      screen.getByRole('link', { name: `Herunterladen: ${ANLAGE.dateiName}` }),
+    ).toBeInTheDocument();
+    // … und es gibt keine Schaltflaeche zum Aendern, Kommentieren oder Hochladen.
+    keineSchreibendeTaste();
+  });
+
+  it.each([
+    ['das interne Angebot', { ...ANGEBOT, intern: true, status: 'LAEUFT' }],
+    ['das stornierte Angebot', { ...BESTELLT, storniert: true, stornoGrund: 'Kein Budget' }],
+  ])('zeigt ReadOnly auch an %s keine schreibende Taste', async (_fall, angebot) => {
+    alsRolle('READ_ONLY');
+    bestandDoppel(angebot);
+
+    renderSeite();
+    await screen.findByRole('heading', { level: 1, name: UEBERSCHRIFT });
+    await screen.findByText(KOMMENTAR.text);
+
+    keineSchreibendeTaste();
+  });
+
+  it('zeigt einem Employee die Aktionen, denn er darf fachlich schreiben', async () => {
+    alsRolle('EMPLOYEE');
+    bestandDoppel(BESTELLT);
+
+    renderSeite();
+    await screen.findByRole('heading', { level: 1, name: UEBERSCHRIFT });
+
+    expect(aktionen().getByRole('link', { name: 'Bearbeiten' })).toBeInTheDocument();
+    expect(aktionen().getByRole('button', { name: 'Status weiter' })).toBeInTheDocument();
+    expect(await aktionen().findByRole('button', { name: 'Rechnung schreiben' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Datei hochladen' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Kommentar speichern' })).toBeInTheDocument();
   });
 });
 
@@ -901,6 +1004,7 @@ describe('AngebotPage — „Rechnung schreiben" (Issue #187, Kriterium 3)', () 
     empfaenger: null,
     absender: null,
     zeilen: [],
+    version: 0,
   };
 
   /** Die Wege eines bestellten Angebots mit einer Teilabrechnung. */
@@ -1813,5 +1917,190 @@ describe('AngebotPage — Storno ohne Antwort des Servers', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'Das Angebot wurde nicht geändert. Bitte später erneut versuchen.',
     );
+  });
+});
+
+/** Heute um die genannte Uhrzeit in der Ortszeit — die Meldung nennt dann nur die Uhrzeit. */
+function heuteUm(stunde: number, minute: number): string {
+  const zeitpunkt = new Date();
+  zeitpunkt.setHours(stunde, minute, 0, 0);
+  return zeitpunkt.toISOString();
+}
+
+/** Die Abweisung des Servers, wie `GlobalExceptionHandler` sie schreibt (Plan #415, E4, E15). */
+function abweisung(geaendertVon: string): () => Response {
+  return json(409, {
+    title: 'Conflict',
+    status: 409,
+    detail: 'Dieser Eintrag wurde inzwischen geändert.',
+    konflikt: { art: 'veraltet', geaendertAm: heuteUm(10, 42), eigenesFenster: false, geaendertVon },
+  });
+}
+
+/** Antwortet der Reihe nach mit den Antworten — beim ersten Aufruf mit der ersten. */
+function nacheinander(...antworten: readonly (() => Response)[]): () => Response {
+  let aufruf = 0;
+  return () => {
+    const antwort = antworten[Math.min(aufruf, antworten.length - 1)];
+    aufruf += 1;
+    return antwort();
+  };
+}
+
+/** Die Bedingungskoepfe aller Aufrufe des Wegs, in ihrer Reihenfolge. */
+function vorgelegteStaende(
+  fetchMock: ReturnType<typeof fetchNachPfad>,
+  schluessel: string,
+): (string | undefined)[] {
+  const [methode, pfad] = schluessel.split(' ');
+  return fetchMock.mock.calls
+    .filter(([ziel, init]) => ziel === pfad && init?.method === methode)
+    .map(([, init]) => (init?.headers as Record<string, string> | undefined)?.['If-Match']);
+}
+
+describe('AngebotPage — gleichzeitig arbeiten (#411, Kriterien 4 und 5; Plan #415)', () => {
+  /** Annas Stand: inzwischen bestellt, Stand 1. */
+  const ANNAS_STAND = { ...ANGEBOT, status: 'BESTELLT', version: 1, geaendertVon: 30 };
+
+  it.each([
+    ['Status weiter', 'POST /api/angebote/9/status/weiter'],
+    ['Status zurück', 'POST /api/angebote/9/status/zurueck'],
+  ])('legt bei „%s" den gezeigten Stand als If-Match vor, danach den der Antwort', async (
+    taste,
+    schluessel,
+  ) => {
+    const nutzer = userEvent.setup();
+    const fetchMock = fetchNachPfad({
+      ...LEERE_BEREICHE,
+      'GET /api/angebote/9': json(200, { ...BESTELLT, version: 4 }),
+      [schluessel]: json(200, { ...BESTELLT, version: 5 }),
+    });
+
+    renderSeite();
+    await screen.findByRole('heading', { level: 1, name: UEBERSCHRIFT });
+    await nutzer.click(aktionen().getByRole('button', { name: taste }));
+    await nutzer.click(aktionen().getByRole('button', { name: taste }));
+
+    expect(vorgelegteStaende(fetchMock, schluessel)).toEqual(['"4"', '"5"']);
+  });
+
+  it('legt beim Stornieren und beim Zuruecknehmen den gezeigten Stand vor', async () => {
+    const nutzer = userEvent.setup();
+    const fetchMock = fetchNachPfad({
+      ...LEERE_BEREICHE,
+      'GET /api/angebote/9': json(200, { ...ANGEBOT, version: 2 }),
+      'POST /api/angebote/9/storno': json(200, { ...ANGEBOT, storniert: true, version: 3 }),
+      'DELETE /api/angebote/9/storno': json(200, { ...ANGEBOT, version: 4 }),
+    });
+
+    renderSeite();
+    await screen.findByRole('heading', { level: 1, name: UEBERSCHRIFT });
+    await nutzer.click(aktionen().getByRole('button', { name: 'Stornieren' }));
+    await nutzer.click(
+      within(await screen.findByRole('dialog')).getByRole('button', { name: 'Stornieren' }),
+    );
+    await nutzer.click(await aktionen().findByRole('button', { name: 'Storno zurücknehmen' }));
+    await aktionen().findByRole('button', { name: 'Stornieren' });
+
+    expect(vorgelegteStaende(fetchMock, 'POST /api/angebote/9/storno')).toEqual(['"2"']);
+    expect(vorgelegteStaende(fetchMock, 'DELETE /api/angebote/9/storno')).toEqual(['"3"']);
+  });
+
+  it('Szenario: abgewiesener Statuswechsel — die Meldung nennt, wer wann geaendert hat', async () => {
+    // Anna hat das Angebot um 10:42 Uhr bestellt; Ben schaltet danach auf dem alten Stand weiter.
+    const nutzer = userEvent.setup();
+    const fetchMock = fetchNachPfad({
+      ...LEERE_BEREICHE,
+      'GET /api/angebote/9': json(200, ANGEBOT),
+      'POST /api/angebote/9/status/weiter': abweisung('Anna'),
+    });
+
+    renderSeite();
+    await screen.findByRole('heading', { level: 1, name: UEBERSCHRIFT });
+    await nutzer.click(aktionen().getByRole('button', { name: 'Status weiter' }));
+
+    const meldung = await screen.findByRole('alert');
+    expect(meldung).toHaveTextContent('Nicht ausgeführt');
+    expect(meldung).toHaveTextContent('Anna hat diesen Eintrag inzwischen geändert (10:42).');
+    expect(meldung).not.toHaveTextContent('Bitte später erneut versuchen');
+    expect(screen.getByRole('button', { name: 'Neu laden' })).toBeInTheDocument();
+    // Die Ansicht behauptet keinen Wechsel: Sie zeigt weiter den Stand, den Ben gesehen hat.
+    expect(within(screen.getByTestId('angebot-angaben')).getByTestId('chip')).toHaveTextContent(
+      'Abgegeben',
+    );
+    expect(vorgelegteStaende(fetchMock, 'POST /api/angebote/9/status/weiter')).toHaveLength(1);
+  });
+
+  it('Szenario: abgewiesenes Storno — auch dort steht die Konfliktmeldung', async () => {
+    const nutzer = userEvent.setup();
+    fetchNachPfad({
+      ...LEERE_BEREICHE,
+      'GET /api/angebote/9': json(200, ANGEBOT),
+      'POST /api/angebote/9/storno': abweisung('Anna'),
+    });
+
+    renderSeite();
+    await screen.findByRole('heading', { level: 1, name: UEBERSCHRIFT });
+    await nutzer.click(aktionen().getByRole('button', { name: 'Stornieren' }));
+    await nutzer.click(
+      within(await screen.findByRole('dialog')).getByRole('button', { name: 'Stornieren' }),
+    );
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Anna hat diesen Eintrag inzwischen geändert (10:42).',
+    );
+    expect(aktionen().getByRole('button', { name: 'Stornieren' })).toBeInTheDocument();
+  });
+
+  it('Szenario: Neu laden holt den aktuellen Stand, und der Wechsel geht auf ihm durch', async () => {
+    const nutzer = userEvent.setup();
+    const fetchMock = fetchNachPfad({
+      ...LEERE_BEREICHE,
+      'GET /api/angebote/9': nacheinander(json(200, ANGEBOT), json(200, ANNAS_STAND)),
+      'POST /api/angebote/9/status/weiter': nacheinander(
+        abweisung('Anna'),
+        json(200, { ...ANNAS_STAND, status: 'ERLEDIGT', version: 2, geaendertVon: 31 }),
+      ),
+    });
+
+    renderSeite();
+    await screen.findByRole('heading', { level: 1, name: UEBERSCHRIFT });
+    await nutzer.click(aktionen().getByRole('button', { name: 'Status weiter' }));
+    await nutzer.click(await screen.findByRole('button', { name: 'Neu laden' }));
+
+    // Annas Stand steht da, die Meldung ist fort.
+    expect(
+      await within(screen.getByTestId('angebot-angaben')).findByText('Bestellt'),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+
+    // Ben schaltet erneut — jetzt auf Annas Stand, und der Wechsel geht durch.
+    await nutzer.click(aktionen().getByRole('button', { name: 'Status weiter' }));
+    expect(
+      await within(screen.getByTestId('angebot-angaben')).findByText('Erledigt'),
+    ).toBeInTheDocument();
+    expect(vorgelegteStaende(fetchMock, 'POST /api/angebote/9/status/weiter')).toEqual([
+      '"0"',
+      '"1"',
+    ]);
+  });
+
+  it('meldet, wenn das Neuladen ausfaellt, und laesst die Abweisung stehen', async () => {
+    const nutzer = userEvent.setup();
+    fetchNachPfad({
+      ...LEERE_BEREICHE,
+      'GET /api/angebote/9': nacheinander(json(200, ANGEBOT), leer(503)),
+      'POST /api/angebote/9/status/weiter': abweisung('Anna'),
+    });
+
+    renderSeite();
+    await screen.findByRole('heading', { level: 1, name: UEBERSCHRIFT });
+    await nutzer.click(aktionen().getByRole('button', { name: 'Status weiter' }));
+    await nutzer.click(await screen.findByRole('button', { name: 'Neu laden' }));
+
+    expect(
+      await screen.findByText('Der aktuelle Stand ist gerade nicht zu erreichen. Bitte erneut versuchen.'),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Neu laden' })).toBeInTheDocument();
   });
 });

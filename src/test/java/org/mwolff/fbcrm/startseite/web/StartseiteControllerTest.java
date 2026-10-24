@@ -105,7 +105,7 @@ class StartseiteControllerTest {
     wandlung.addConverter(new ZeitraumConverter());
     mockMvc =
         MockMvcBuilders.standaloneSetup(new StartseiteController(useCase))
-            .setControllerAdvice(new GlobalExceptionHandler())
+            .setControllerAdvice(new GlobalExceptionHandler(konto -> Optional.empty()))
             .setConversionService(wandlung)
             .build();
   }
@@ -142,7 +142,9 @@ class StartseiteControllerTest {
                     new BigDecimal("100.00"),
                     Year.of(2026))),
             ANGELEGT,
-            ANGELEGT),
+            ANGELEGT,
+            0L,
+            null),
         firmaName);
   }
 

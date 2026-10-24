@@ -11,6 +11,7 @@ import { Link as RouterLink, useSearchParams } from 'react-router-dom';
 
 import { firmenUebersicht } from '../api/firmen';
 import type { FirmaZeile, FirmenUebersicht } from '../api/firmen';
+import { useRechte } from '../auth/rechte';
 import Karte from '../components/Karte';
 import { useKopfPfad } from '../components/KopfPfad';
 import type { PfadVerweis } from '../components/KopfPfad';
@@ -40,6 +41,9 @@ import { ABSTAND_BUEHNE, RADIUS_RUND, ZAHLEN_KLASSE } from '../theme';
  *   <li><b>Der Stilllegungsstand steht als Wort da</b> — als Chip in der Zeile, nicht als zweite
  *       Farbe (CLAUDE-design.md, „Zustandsformen").</li>
  * </ul>
+ *
+ * Ohne Schreibrecht fehlen „Neue Firma" und der Weg zur ersten Firma (Kriterium 10 von #409,
+ * Plan #414, A10); Suche und Schalter bleiben, denn sie lesen nur.
  */
 
 /** Wie lange der Suchtext ruhen muss, bevor er in Adresse und Aufruf geht. */
@@ -99,10 +103,14 @@ function mitParameter(alt: URLSearchParams, name: string, wert: string | null): 
  *
  * Drei Lagen, die eine leere Liste sonst nicht auseinanderhaelt (E5). Die dritte steht als
  * Restfall: Ohne Suchtext und mit `gesamt` groesser null kann die Liste nur leer sein, weil alles
- * stillgelegt ist — bei eingeschaltetem Schalter kaeme dieselbe Anfrage mit Zeilen zurueck.
+ * stillgelegt ist — bei eingeschaltetem Schalter kaeme dieselbe Anfrage mit Zeilen zurueck. Den
+ * Weg zur ersten Firma bietet er nur an, wer anlegen darf.
  */
-function hinweisZu(suche: string, gesamt: number): ReactNode {
+function hinweisZu(suche: string, gesamt: number, darfAnlegen: boolean): ReactNode {
   if (gesamt === 0) {
+    if (!darfAnlegen) {
+      return <>Es ist noch keine Firma angelegt.</>;
+    }
     return (
       <>
         Es ist noch keine Firma angelegt.{' '}
@@ -158,7 +166,7 @@ function Zeile({ firma }: { readonly firma: FirmaZeile }) {
 }
 
 /** Was in der Karte steht: Ladehinweis, Meldung, Hinweis zur Leere oder die Tafel. */
-function inhaltZu(stand: Stand, suche: string): ReactNode {
+function inhaltZu(stand: Stand, suche: string, darfAnlegen: boolean): ReactNode {
   if (stand.art === 'laedt') {
     return (
       <Typography
@@ -183,7 +191,7 @@ function inhaltZu(stand: Stand, suche: string): ReactNode {
           color: theme.vars.palette.kupferwolke.textMatt,
         })}
       >
-        {hinweisZu(suche, stand.uebersicht.gesamt)}
+        {hinweisZu(suche, stand.uebersicht.gesamt, darfAnlegen)}
       </Typography>
     );
   }
@@ -197,6 +205,7 @@ function inhaltZu(stand: Stand, suche: string): ReactNode {
 }
 
 export default function FirmenPage() {
+  const { darfFachlichSchreiben } = useRechte();
   useKopfPfad(KEIN_WEG, 'Firmen');
   const [parameter, setzeParameter] = useSearchParams();
   const suche = parameter.get(PARAM_SUCHE) ?? '';
@@ -303,13 +312,15 @@ export default function FirmenPage() {
             >
               auch stillgelegte
             </ToggleButton>
-            <KupferTaste to="/firmen/neu" symbol={<IconPlus size={16} stroke={1.8} />}>
-              Neue Firma
-            </KupferTaste>
+            {darfFachlichSchreiben ? (
+              <KupferTaste to="/firmen/neu" symbol={<IconPlus size={16} stroke={1.8} />}>
+                Neue Firma
+              </KupferTaste>
+            ) : null}
           </>
         }
       >
-        {inhaltZu(stand, suche)}
+        {inhaltZu(stand, suche, darfFachlichSchreiben)}
       </Karte>
     </Box>
   );

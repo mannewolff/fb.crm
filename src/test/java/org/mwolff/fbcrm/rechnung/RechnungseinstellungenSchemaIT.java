@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.mwolff.fbcrm.AbstractIntegrationTest;
+import org.mwolff.fbcrm.Schutzspalten;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -103,5 +104,18 @@ class RechnungseinstellungenSchemaIT extends AbstractIntegrationTest {
     assertThatThrownBy(
             () -> jdbc.execute("UPDATE rechnung_einstellungen SET " + spalte + " = " + wert))
         .isInstanceOf(DataIntegrityViolationException.class);
+  }
+
+  @Test
+  void migration_thenTheVersionStartsAtZeroAndTheAuthorReferencesTheAccount() {
+    // When — V33 (Plan #415, E1): ein eigener Zaehler und der letzte Urheber.
+    final String version = Schutzspalten.spalte(jdbc, "rechnung_einstellungen", "version");
+    final String urheber = Schutzspalten.spalte(jdbc, "rechnung_einstellungen", "geaendert_von");
+    final String verweis = Schutzspalten.verweis(jdbc, "rechnung_einstellungen", "geaendert_von");
+
+    // Then — ohne ON DELETE wie jeder Fremdschluessel dieses Schemas.
+    assertThat(version).isEqualTo("bigint NO 0");
+    assertThat(urheber).isEqualTo("bigint YES -");
+    assertThat(verweis).isEqualTo("account.id NO ACTION");
   }
 }

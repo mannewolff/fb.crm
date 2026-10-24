@@ -1,10 +1,12 @@
 package org.mwolff.fbcrm.firma.web;
 
 import jakarta.validation.Valid;
+import org.mwolff.fbcrm.common.web.Bedingungskopf;
 import org.mwolff.fbcrm.firma.application.AnsprechpartnerAendernUseCase;
 import org.mwolff.fbcrm.firma.application.AnsprechpartnerAnlegenUseCase;
 import org.mwolff.fbcrm.firma.application.AnsprechpartnerStilllegenUseCase;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -22,9 +24,13 @@ import org.springframework.web.bind.annotation.RestController;
  * — damit gibt es keinen Weg, einen Ansprechpartner umzuhaengen (E7, Kriterium 12).
  *
  * <p>Einen Leseweg gibt es hier nicht: Die Ansprechpartner kommen eingebettet in der Detailantwort
- * ihrer Firma (E7). Aus demselben Grund antworten die drei Wege ohne Rumpf mit 204 — nur das
- * Anlegen bringt einen, weil ein frisch angelegter Ansprechpartner eine Kennung hat, die die
- * Oberflaeche noch nicht kennt.
+ * ihrer Firma (E7). Jeder Schreibweg antwortet mit dem Ansprechpartner, wie er nach dem Schreiben
+ * dasteht: das Anlegen mit der neuen Kennung, die drei anderen mit der erhoehten Version.
+ *
+ * <p><b>Aendern, Stilllegen und Wiederaktivieren legen den Stand vor</b> (#411, Kriterium 4; Plan
+ * #415, E2, E3, E14, E18): Sie lesen {@link Bedingungskopf} aus {@code If-Match} und das handelnde
+ * Konto aus der Sitzung. Fehlt der Kopf, antwortet der Weg mit 428, ohne den Anwendungsfall zu
+ * fragen. Das Anlegen bleibt frei (#411, Kriterium 7).
  */
 @RestController
 @RequestMapping("/api/firmen/{firmaId}/ansprechpartner")
@@ -51,27 +57,42 @@ public class AnsprechpartnerController {
     return AnsprechpartnerResponse.of(anlegenUseCase.anlegen(firmaId, anfrage.daten()));
   }
 
-  /** Schreibt die Angaben fort (Kriterium 11). */
+  /**
+   * Schreibt die Angaben fort (Kriterium 11) und liefert den neuen Stand.
+   *
+   * <p>Der Kopf steht vor dem Rumpf: Fehlt er, weist der Weg mit 428 ab, bevor der Rumpf gelesen
+   * und geprueft wird (Plan #415, E3).
+   */
   @PutMapping("/{id}")
-  @ResponseStatus(HttpStatus.NO_CONTENT)
-  public void aendern(
+  public AnsprechpartnerResponse aendern(
       @PathVariable final long firmaId,
       @PathVariable final long id,
+      final Bedingungskopf stand,
+      @AuthenticationPrincipal final Long accountId,
       @Valid @RequestBody final AnsprechpartnerRequest anfrage) {
-    aendernUseCase.aendern(firmaId, id, anfrage.daten());
+    return AnsprechpartnerResponse.of(
+        aendernUseCase.aendern(firmaId, id, anfrage.daten(), stand.version(), accountId));
   }
 
-  /** Legt den Ansprechpartner still (Kriterium 15). */
+  /** Legt den Ansprechpartner still (Kriterium 15) und liefert den neuen Stand. */
   @PostMapping("/{id}/stilllegen")
-  @ResponseStatus(HttpStatus.NO_CONTENT)
-  public void stilllegen(@PathVariable final long firmaId, @PathVariable final long id) {
-    stilllegenUseCase.stilllegen(firmaId, id);
+  public AnsprechpartnerResponse stilllegen(
+      @PathVariable final long firmaId,
+      @PathVariable final long id,
+      final Bedingungskopf stand,
+      @AuthenticationPrincipal final Long accountId) {
+    return AnsprechpartnerResponse.of(
+        stilllegenUseCase.stilllegen(firmaId, id, stand.version(), accountId));
   }
 
-  /** Nimmt den Ansprechpartner wieder in Betrieb (Kriterium 15). */
+  /** Nimmt den Ansprechpartner wieder in Betrieb (Kriterium 15) und liefert den neuen Stand. */
   @PostMapping("/{id}/aktivieren")
-  @ResponseStatus(HttpStatus.NO_CONTENT)
-  public void aktivieren(@PathVariable final long firmaId, @PathVariable final long id) {
-    stilllegenUseCase.aktivieren(firmaId, id);
+  public AnsprechpartnerResponse aktivieren(
+      @PathVariable final long firmaId,
+      @PathVariable final long id,
+      final Bedingungskopf stand,
+      @AuthenticationPrincipal final Long accountId) {
+    return AnsprechpartnerResponse.of(
+        stilllegenUseCase.aktivieren(firmaId, id, stand.version(), accountId));
   }
 }

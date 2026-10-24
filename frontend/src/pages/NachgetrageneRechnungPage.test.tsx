@@ -1,4 +1,4 @@
-import { screen, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -6,7 +6,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import NachgetrageneRechnungPage from './NachgetrageneRechnungPage';
 import { KopfPfadProvider } from '../components/KopfPfad';
 import { fetchNachPfad, json, leer, problem } from '../test/fetchNachPfad';
+import { alsRolle } from '../test/rechteDoppel';
 import { renderMitTheme } from '../test/render';
+
+vi.mock('../auth/rechte', () => import('../test/rechteDoppel'));
 
 /**
  * Die Einzelansicht der nachgetragenen Rechnung (#254, Kriterien 6, 7, 8, 10, 11; Plan #259, E21,
@@ -31,11 +34,12 @@ const GESTELLT = {
   brutto: 1190,
   zustand: 'GESTELLT',
   dokument: true,
+  version: 3,
 };
 
 const OHNE_DOKUMENT = { ...GESTELLT, dokument: false };
-const BEZAHLT = { ...GESTELLT, zustand: 'BEZAHLT' };
-const ABGESCHRIEBEN = { ...GESTELLT, zustand: 'ABGESCHRIEBEN' };
+const BEZAHLT = { ...GESTELLT, zustand: 'BEZAHLT', version: 4 };
+const ABGESCHRIEBEN = { ...GESTELLT, zustand: 'ABGESCHRIEBEN', version: 4 };
 
 /** Die Adresse — daran haengt, ob das Loeschen zur Liste gefuehrt hat. */
 function Adresse() {
@@ -260,7 +264,11 @@ describe('NachgetrageneRechnungPage — Zustand (Kriterium 8, E24)', () => {
     ).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/nachgetragene-rechnungen/7/zustand',
-      expect.objectContaining({ method: 'PUT', body: JSON.stringify({ zustand: 'BEZAHLT' }) }),
+      expect.objectContaining({
+        method: 'PUT',
+        body: JSON.stringify({ zustand: 'BEZAHLT' }),
+        headers: expect.objectContaining({ 'If-Match': '"3"' }) as unknown,
+      }),
     );
   });
 
@@ -388,7 +396,10 @@ describe('NachgetrageneRechnungPage — Löschen (Kriterium 10)', () => {
     expect(screen.getByTestId('adresse')).toHaveTextContent(/^\/rechnungen$/);
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/nachgetragene-rechnungen/7',
-      expect.objectContaining({ method: 'DELETE' }),
+      expect.objectContaining({
+        method: 'DELETE',
+        headers: expect.objectContaining({ 'If-Match': '"3"' }) as unknown,
+      }),
     );
   });
 
@@ -427,5 +438,192 @@ describe('NachgetrageneRechnungPage — Löschen (Kriterium 10)', () => {
       ),
     ).toBeInTheDocument();
     expect(screen.getByTestId('adresse')).toHaveTextContent('/rechnungen/nachgetragen/7');
+  });
+});
+
+describe('NachgetrageneRechnungPage — je Rolle (Kriterium 10 von #409, Plan #414, A10)', () => {
+  it.each([
+    ['GESTELLT', GESTELLT],
+    ['BEZAHLT', BEZAHLT],
+    ['ABGESCHRIEBEN', ABGESCHRIEBEN],
+  ])('zeigt ReadOnly die Rechnung im Zustand %s nur mit „Herunterladen" (E4)', async (_, nachtrag) => {
+    alsRolle('READ_ONLY');
+    fetchNachPfad({ [WEG]: json(200, nachtrag) });
+
+    renderSeite();
+    await geladen();
+
+    expect(screen.queryAllByRole('button')).toHaveLength(0);
+    expect(screen.queryByRole('link', { name: 'Bearbeiten' })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Herunterladen' })).toHaveAttribute(
+      'href',
+      '/api/nachgetragene-rechnungen/7/dokument',
+    );
+  });
+
+  it('zeigt einem Employee „Bearbeiten", die Zustandstaste und das ⋯-Menue', async () => {
+    alsRolle('EMPLOYEE');
+    fetchNachPfad({ [WEG]: json(200, GESTELLT) });
+
+    renderSeite();
+    await geladen();
+
+    expect(screen.getByRole('link', { name: 'Bearbeiten' })).toHaveAttribute(
+      'href',
+      '/rechnungen/nachgetragen/7/bearbeiten',
+    );
+    expect(screen.getByRole('button', { name: 'Als bezahlt markieren' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Aktionen für diese Rechnung' })).toBeInTheDocument();
+  });
+});
+
+/** Heute um die genannte Uhrzeit in der Ortszeit — die Meldung nennt dann nur die Uhrzeit. */
+function heuteUm(stunde: number, minute: number): string {
+  const zeitpunkt = new Date();
+  zeitpunkt.setHours(stunde, minute, 0, 0);
+  return zeitpunkt.toISOString();
+}
+
+/** Die Abweisung des Servers, wie `GlobalExceptionHandler` sie schreibt (Plan #415, E4, E15). */
+function abweisung(geaendertVon: string): () => Response {
+  return json(409, {
+    title: 'Conflict',
+    status: 409,
+    detail: 'Dieser Eintrag wurde inzwischen geändert.',
+    konflikt: { art: 'veraltet', geaendertAm: heuteUm(10, 42), eigenesFenster: false, geaendertVon },
+  });
+}
+
+/** Die Abweisung, weil die Rechnung inzwischen geloescht ist (#411, Kriterium 6; Plan #415, E16). */
+function geloescht(geaendertVon: string): () => Response {
+  return json(409, {
+    title: 'Conflict',
+    status: 409,
+    detail: 'Dieser Eintrag wurde inzwischen gelöscht.',
+    konflikt: { art: 'gelöscht', geaendertAm: heuteUm(10, 42), eigenesFenster: false, geaendertVon },
+  });
+}
+
+/** Antwortet der Reihe nach mit den Antworten — beim ersten Aufruf mit der ersten. */
+function nacheinander(...antworten: readonly (() => Response)[]): () => Response {
+  let aufruf = 0;
+  return () => {
+    const antwort = antworten[Math.min(aufruf, antworten.length - 1)];
+    aufruf += 1;
+    return antwort();
+  };
+}
+
+describe('NachgetrageneRechnungPage — gleichzeitig arbeiten (#411, Kriterium 4; Plan #415)', () => {
+  it('Szenario: abgewiesener Zustandswechsel — Konfliktmeldung, Neu laden holt den neuen Stand', async () => {
+    const fetchMock = fetchNachPfad({
+      [WEG]: nacheinander(json(200, GESTELLT), json(200, BEZAHLT)),
+      [WEG_ZUSTAND]: nacheinander(abweisung('Anna'), json(200, { ...GESTELLT, version: 5 })),
+    });
+    const nutzer = userEvent.setup();
+
+    renderSeite();
+    await geladen();
+    await nutzer.click(screen.getByRole('button', { name: 'Als bezahlt markieren' }));
+
+    // Nichts ist umgestellt, und die Meldung nennt Anna statt eines Ausfalls.
+    const meldung = await screen.findByRole('alert');
+    expect(meldung).toHaveTextContent('Nicht ausgeführt');
+    expect(meldung).toHaveTextContent('Anna hat diesen Eintrag inzwischen geändert (10:42).');
+    expect(meldung).not.toHaveTextContent('Bitte später erneut versuchen');
+    expect(within(screen.getByTestId('kopfkarte-chips')).getByText('Gestellt')).toBeInTheDocument();
+
+    // Neu laden: Annas Stand — bereits bezahlt — samt neuer Version; eigene Eingaben gibt es nicht.
+    await nutzer.click(screen.getByRole('button', { name: 'Neu laden' }));
+    expect(
+      await within(screen.getByTestId('kopfkarte-chips')).findByText('Bezahlt'),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Deine Eingaben' })).not.toBeInTheDocument();
+
+    // Der naechste Schritt legt den neu geladenen Stand vor.
+    await nutzer.click(screen.getByRole('button', { name: 'Zurück auf gestellt' }));
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenLastCalledWith(
+        '/api/nachgetragene-rechnungen/7/zustand',
+        expect.objectContaining({
+          body: JSON.stringify({ zustand: 'GESTELLT' }),
+          headers: expect.objectContaining({ 'If-Match': '"4"' }) as unknown,
+        }),
+      );
+    });
+  });
+
+  it('meldet einen Ausfall beim Neu laden und laesst die Konfliktmeldung stehen', async () => {
+    fetchNachPfad({
+      [WEG]: nacheinander(json(200, GESTELLT), problem(503, 'kaputt')),
+      [WEG_ZUSTAND]: abweisung('Anna'),
+    });
+    const nutzer = userEvent.setup();
+
+    renderSeite();
+    await geladen();
+    await nutzer.click(screen.getByRole('button', { name: 'Als bezahlt markieren' }));
+    await nutzer.click(await screen.findByRole('button', { name: 'Neu laden' }));
+
+    expect(
+      await screen.findByText(
+        'Der aktuelle Stand ist gerade nicht zu erreichen. Bitte erneut versuchen.',
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Neu laden' })).toBeInTheDocument();
+  });
+});
+
+describe('NachgetrageneRechnungPage — gelöscht (#411, Kriterium 6; Plan #415, E16, E17)', () => {
+  it('Szenario: Loeschen auf altem Stand — die Meldung nennt Anna, die Seite bleibt stehen', async () => {
+    fetchNachPfad({ [WEG]: json(200, GESTELLT), [WEG_LOESCHEN]: abweisung('Anna') });
+    const nutzer = userEvent.setup();
+
+    renderSeite();
+    await geladen();
+    await waehle(nutzer, 'Löschen');
+    await nutzer.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Löschen' }));
+
+    const meldung = await screen.findByRole('alert');
+    expect(meldung).toHaveTextContent('Anna hat diesen Eintrag inzwischen geändert (10:42).');
+    expect(meldung).not.toHaveTextContent('Bitte später erneut versuchen');
+    expect(screen.getByRole('button', { name: 'Neu laden' })).toBeInTheDocument();
+    expect(screen.getByTestId('adresse')).toHaveTextContent('/rechnungen/nachgetragen/7');
+  });
+
+  it('Szenario: Loeschen einer schon geloeschten — die Meldung fuehrt zur Uebersicht', async () => {
+    fetchNachPfad({ [WEG]: json(200, GESTELLT), [WEG_LOESCHEN]: geloescht('Anna') });
+    const nutzer = userEvent.setup();
+
+    renderSeite();
+    await geladen();
+    await waehle(nutzer, 'Löschen');
+    await nutzer.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Löschen' }));
+
+    const meldung = await screen.findByRole('alert');
+    expect(meldung).toHaveTextContent('Anna hat diesen Eintrag inzwischen gelöscht (10:42).');
+    expect(screen.queryByRole('button', { name: 'Neu laden' })).not.toBeInTheDocument();
+    expect(screen.queryByText(/nicht gelöscht\. Bitte später/u)).not.toBeInTheDocument();
+
+    await nutzer.click(within(meldung).getByRole('link', { name: 'Zur Übersicht' }));
+    expect(await screen.findByText('Die Liste')).toBeInTheDocument();
+  });
+
+  it('Szenario: Zustandswechsel an einer geloeschten — Zur Uebersicht statt Neu laden', async () => {
+    fetchNachPfad({ [WEG]: json(200, GESTELLT), [WEG_ZUSTAND]: geloescht('Anna') });
+    const nutzer = userEvent.setup();
+
+    renderSeite();
+    await geladen();
+    await nutzer.click(screen.getByRole('button', { name: 'Als bezahlt markieren' }));
+
+    const meldung = await screen.findByRole('alert');
+    expect(meldung).toHaveTextContent('Anna hat diesen Eintrag inzwischen gelöscht (10:42).');
+    expect(within(meldung).getByRole('link', { name: 'Zur Übersicht' })).toHaveAttribute(
+      'href',
+      '/rechnungen',
+    );
+    expect(screen.queryByRole('button', { name: 'Neu laden' })).not.toBeInTheDocument();
   });
 });

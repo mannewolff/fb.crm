@@ -1,6 +1,7 @@
 package org.mwolff.fbcrm.rechnung.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -8,6 +9,7 @@ import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -16,6 +18,7 @@ import org.mwolff.fbcrm.rechnung.domain.Nummernkreis;
 import org.mwolff.fbcrm.rechnung.domain.Nummernmuster;
 import org.mwolff.fbcrm.rechnung.domain.Rechnungseinstellungen;
 import org.mwolff.fbcrm.rechnung.domain.RechnungseinstellungenRepository;
+import org.mwolff.fbcrm.rechnung.domain.Zeilenstand;
 
 /**
  * Das Lesen der Rechnungseinstellungen samt naechster Nummer (fachliche Quelle #159, Kriterium 5).
@@ -26,6 +29,9 @@ import org.mwolff.fbcrm.rechnung.domain.RechnungseinstellungenRepository;
  *
  * <p>Der Anwendungsfall entscheidet nur eines selbst: <b>welches</b> Zaehlerjahr gefragt ist. Das
  * laufende Jahr kommt aus der Geschaeftszone und nicht aus der UTC-Uhr (E12).
+ *
+ * <p>Die Antwort traegt die Version der Zeile, die die Maske beim Speichern vorlegt (Plan #415, E1,
+ * E2).
  */
 @ExtendWith(MockitoExtension.class)
 class RechnungseinstellungenLesenUseCaseTest {
@@ -35,6 +41,13 @@ class RechnungseinstellungenLesenUseCaseTest {
 
   @Mock private RechnungseinstellungenRepository bestand;
   @Mock private Nummernkreis nummernkreis;
+
+  @BeforeEach
+  void richteDenStandEin() {
+    lenient()
+        .when(bestand.stand())
+        .thenReturn(new Zeilenstand(5L, 30L, Instant.parse("2026-09-29T08:00:00Z")));
+  }
 
   private RechnungseinstellungenLesenUseCase useCase(final Instant jetzt) {
     return new RechnungseinstellungenLesenUseCase(
@@ -56,8 +69,9 @@ class RechnungseinstellungenLesenUseCaseTest {
     final RechnungseinstellungenMitNummer gelesen =
         useCase(Instant.parse("2026-09-30T09:30:00Z")).lese();
 
-    // Then — der Anwendungsfall reicht die Einstellungen durch und rechnet nichts um.
-    assertThat(gelesen).isEqualTo(new RechnungseinstellungenMitNummer(gespeichert, 4));
+    // Then — der Anwendungsfall reicht die Einstellungen durch und rechnet nichts um; die Version
+    // ist die der Zeile.
+    assertThat(gelesen).isEqualTo(new RechnungseinstellungenMitNummer(gespeichert, 4, 5L));
   }
 
   @Test

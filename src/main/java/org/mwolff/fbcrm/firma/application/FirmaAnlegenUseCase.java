@@ -43,6 +43,8 @@ public class FirmaAnlegenUseCase {
             sauber.umsatzsteuerId(),
             true,
             jetzt,
-            jetzt));
+            jetzt,
+            0L,
+            null));
   }
 }

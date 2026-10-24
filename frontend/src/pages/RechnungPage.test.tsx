@@ -1,4 +1,4 @@
-import { screen, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -6,7 +6,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import RechnungPage from './RechnungPage';
 import { KopfPfadProvider } from '../components/KopfPfad';
 import { alsJson, fetchNachPfad, json, leer, problem } from '../test/fetchNachPfad';
+import { alsRolle } from '../test/rechteDoppel';
 import { renderMitTheme } from '../test/render';
+
+vi.mock('../auth/rechte', () => import('../test/rechteDoppel'));
 
 /**
  * Die Entwurfsmaske der Rechnung (Issue #185), das Stellen und die gestellte Rechnung (Issue #186).
@@ -70,6 +73,7 @@ const ENTWURF = {
   empfaenger: null,
   absender: null,
   zeilen: [ZEILE_STUNDEN, ZEILE_PAUSCHAL],
+  version: 3,
 };
 
 /** Derselbe Entwurf, nachdem 80 Stunden eingetragen und gespeichert wurden. */
@@ -79,6 +83,7 @@ const GESPEICHERT = {
   steuer: 1824,
   brutto: 11424,
   zeilen: [{ ...ZEILE_STUNDEN, menge: 80 }, ZEILE_PAUSCHAL],
+  version: 4,
 };
 
 const GESTELLT = {
@@ -86,11 +91,12 @@ const GESTELLT = {
   zustand: 'GESTELLT',
   nummer: '0001-2026',
   zahlungszielTage: 14,
+  version: 5,
 };
 
 /** Dieselbe Rechnung, bezahlt beziehungsweise abgeschrieben (Issue #253). */
-const BEZAHLT = { ...GESTELLT, zustand: 'BEZAHLT' };
-const ABGESCHRIEBEN = { ...GESTELLT, zustand: 'ABGESCHRIEBEN' };
+const BEZAHLT = { ...GESTELLT, zustand: 'BEZAHLT', version: 6 };
+const ABGESCHRIEBEN = { ...GESTELLT, zustand: 'ABGESCHRIEBEN', version: 6 };
 
 /** Die Adresse — daran haengt, ob das Loeschen zur Liste gefuehrt hat. */
 function Adresse() {
@@ -564,6 +570,8 @@ describe('RechnungPage — den Entwurf loeschen (Kriterium 12)', () => {
       '/api/rechnungen/4',
       expect.objectContaining({ method: 'DELETE' }),
     );
+    // Geloescht wird auf dem gezeigten Stand (#411, Kriterium 6; Plan #415, E17).
+    expect(vorgelegteStaende(fetchMock, WEG_LOESCHEN)).toEqual(['"3"']);
   });
 
   it('loescht nicht, wenn die Rueckfrage abgebrochen wird', async () => {
@@ -1032,5 +1040,365 @@ describe('RechnungPage — der Ausgang der Forderung (Issue #253)', () => {
     expect(
       await screen.findByText('Der Zustand wurde nicht geändert. Bitte später erneut versuchen.'),
     ).toBeInTheDocument();
+  });
+});
+
+describe('RechnungPage — je Rolle (Kriterium 10 von #409, Plan #414, A10)', () => {
+  it('zeigt ReadOnly den Entwurf ohne „Speichern", „Rechnung stellen" und „Entwurf löschen"', async () => {
+    alsRolle('READ_ONLY');
+    fetchNachPfad({ [WEG]: json(200, ENTWURF) });
+
+    renderSeite();
+
+    expect(await screen.findByRole('table', { name: 'Positionen' })).toBeInTheDocument();
+    expect(screen.queryByTestId('rechnung-aktionen')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Speichern' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Rechnung stellen' })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Aktionen für diese Rechnung' }),
+    ).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ['GESTELLT', GESTELLT],
+    ['BEZAHLT', BEZAHLT],
+    ['ABGESCHRIEBEN', ABGESCHRIEBEN],
+  ])('zeigt ReadOnly die Rechnung im Zustand %s nur mit „Herunterladen" (E4)', async (_, rechnung) => {
+    alsRolle('READ_ONLY');
+    fetchNachPfad({ [WEG]: json(200, rechnung) });
+
+    renderSeite();
+    await screen.findByRole('table', { name: 'Positionen' });
+
+    const aktionen = within(screen.getByTestId('rechnung-aktionen'));
+    expect(aktionen.queryAllByRole('button')).toHaveLength(0);
+    expect(aktionen.getByRole('link', { name: 'Herunterladen' })).toHaveAttribute(
+      'href',
+      '/api/rechnungen/4/dokument',
+    );
+  });
+
+  it('zeigt einem Employee am Entwurf „Speichern" und „Rechnung stellen"', async () => {
+    alsRolle('EMPLOYEE');
+    fetchNachPfad({ [WEG]: json(200, ENTWURF) });
+
+    renderSeite();
+
+    expect(await screen.findByRole('button', { name: 'Speichern' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Rechnung stellen' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Aktionen für diese Rechnung' })).toBeInTheDocument();
+  });
+
+  it('zeigt einem Employee an der gestellten Rechnung den Ausgang der Forderung', async () => {
+    alsRolle('EMPLOYEE');
+    fetchNachPfad({ [WEG]: json(200, GESTELLT) });
+
+    renderSeite();
+
+    expect(await screen.findByRole('button', { name: 'Als bezahlt markieren' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Abschreiben' })).toBeInTheDocument();
+  });
+});
+
+/** Heute um die genannte Uhrzeit in der Ortszeit — die Meldung nennt dann nur die Uhrzeit. */
+function heuteUm(stunde: number, minute: number): string {
+  const zeitpunkt = new Date();
+  zeitpunkt.setHours(stunde, minute, 0, 0);
+  return zeitpunkt.toISOString();
+}
+
+/** Die Abweisung des Servers, wie `GlobalExceptionHandler` sie schreibt (Plan #415, E4, E15). */
+function abweisung(geaendertVon: string): () => Response {
+  return json(409, {
+    title: 'Conflict',
+    status: 409,
+    detail: 'Dieser Eintrag wurde inzwischen geändert.',
+    konflikt: { art: 'veraltet', geaendertAm: heuteUm(10, 42), eigenesFenster: false, geaendertVon },
+  });
+}
+
+/** Die Abweisung an einem inzwischen geloeschten Entwurf (#411, Kriterium 6; Plan #415, E16). */
+function geloescht(geaendertVon: string): () => Response {
+  return json(409, {
+    title: 'Conflict',
+    status: 409,
+    detail: 'Dieser Eintrag wurde inzwischen gelöscht.',
+    konflikt: { art: 'gelöscht', geaendertAm: heuteUm(10, 42), eigenesFenster: false, geaendertVon },
+  });
+}
+
+/** Antwortet der Reihe nach mit den Antworten — beim ersten Aufruf mit der ersten. */
+function nacheinander(...antworten: readonly (() => Response)[]): () => Response {
+  let aufruf = 0;
+  return () => {
+    const antwort = antworten[Math.min(aufruf, antworten.length - 1)];
+    aufruf += 1;
+    return antwort();
+  };
+}
+
+/** Die Bedingungskoepfe aller Aufrufe des Wegs, in ihrer Reihenfolge. */
+function vorgelegteStaende(
+  fetchMock: ReturnType<typeof fetchNachPfad>,
+  schluessel: string,
+): (string | undefined)[] {
+  const [methode, pfad] = schluessel.split(' ');
+  return fetchMock.mock.calls
+    .filter(([ziel, init]) => ziel === pfad && init?.method === methode)
+    .map(([, init]) => (init?.headers as Record<string, string> | undefined)?.['If-Match']);
+}
+
+describe('RechnungPage — gleichzeitig arbeiten (#411, Kriterien 1 bis 5; Plan #415)', () => {
+  /** Annas Stand: Sie hat die Menge der ersten Position inzwischen auf 60 gesetzt. */
+  const ANNAS_STAND = {
+    ...GESPEICHERT,
+    netto: 7200,
+    steuer: 1368,
+    brutto: 8568,
+    zeilen: [{ ...ZEILE_STUNDEN, menge: 60 }, ZEILE_PAUSCHAL],
+    version: 5,
+  };
+
+  it('legt beim Speichern den gezeigten Stand als If-Match vor, danach den der Antwort', async () => {
+    const nutzer = userEvent.setup();
+    const fetchMock = fetchNachPfad({
+      [WEG]: json(200, ENTWURF),
+      [WEG_AENDERN]: nacheinander(json(200, GESPEICHERT), json(200, { ...GESPEICHERT, version: 5 })),
+    });
+
+    renderSeite();
+    await screen.findByRole('table', { name: 'Positionen' });
+    await trageEin(nutzer, 1, '80');
+    await nutzer.click(screen.getByRole('button', { name: 'Speichern' }));
+    await screen.findByText('Gespeichert.');
+    await nutzer.click(screen.getByRole('button', { name: 'Speichern' }));
+
+    await waitFor(() => {
+      expect(vorgelegteStaende(fetchMock, WEG_AENDERN)).toEqual(['"3"', '"4"']);
+    });
+  });
+
+  it('legt beim Stellen den Stand des gezeigten Entwurfs vor', async () => {
+    const nutzer = userEvent.setup();
+    const fetchMock = fetchNachPfad({ [WEG]: json(200, GESPEICHERT), [WEG_STELLEN]: json(200, GESTELLT) });
+
+    renderSeite();
+    await screen.findByRole('table', { name: 'Positionen' });
+    await stelle(nutzer);
+    await screen.findByRole('heading', { level: 1, name: 'Rechnung 0001-2026' });
+
+    expect(vorgelegteStaende(fetchMock, WEG_STELLEN)).toEqual(['"4"']);
+  });
+
+  it('legt beim Stellen nach dem Sichern ungespeicherter Aenderungen den neuen Stand vor', async () => {
+    const nutzer = userEvent.setup();
+    const fetchMock = fetchNachPfad({
+      [WEG]: json(200, ENTWURF),
+      [WEG_AENDERN]: json(200, GESPEICHERT),
+      [WEG_STELLEN]: json(200, GESTELLT),
+    });
+
+    renderSeite();
+    await screen.findByRole('table', { name: 'Positionen' });
+    await trageEin(nutzer, 1, '80');
+    await stelle(nutzer);
+    await screen.findByRole('heading', { level: 1, name: 'Rechnung 0001-2026' });
+
+    expect(vorgelegteStaende(fetchMock, WEG_AENDERN)).toEqual(['"3"']);
+    expect(vorgelegteStaende(fetchMock, WEG_STELLEN)).toEqual(['"4"']);
+  });
+
+  it('legt beim Ausgang der Forderung den Stand der gestellten Rechnung vor', async () => {
+    const nutzer = userEvent.setup();
+    const fetchMock = fetchNachPfad({ [WEG]: json(200, GESTELLT), [WEG_ZUSTAND]: json(200, BEZAHLT) });
+
+    renderSeite();
+    await screen.findByRole('table', { name: 'Positionen' });
+    await nutzer.click(screen.getByRole('button', { name: 'Als bezahlt markieren' }));
+    await screen.findByText('Bezahlt');
+
+    expect(vorgelegteStaende(fetchMock, WEG_ZUSTAND)).toEqual(['"5"']);
+  });
+
+  it('Szenario: Rechnung auf veraltetem Stand stellen', async () => {
+    // Manfred hat den Entwurf geoeffnet; Anna hat inzwischen eine Menge geaendert.
+    const nutzer = userEvent.setup();
+    const fetchMock = fetchNachPfad({ [WEG]: json(200, GESPEICHERT), [WEG_STELLEN]: abweisung('Anna') });
+
+    renderSeite();
+    await screen.findByRole('table', { name: 'Positionen' });
+    await stelle(nutzer);
+
+    // Nichts ist gestellt, und Manfred liest, dass Anna den Entwurf inzwischen geaendert hat.
+    const meldung = await screen.findByRole('alert');
+    expect(meldung).toHaveTextContent('Nicht ausgeführt');
+    expect(meldung).toHaveTextContent('Anna hat diesen Eintrag inzwischen geändert (10:42).');
+    expect(meldung).not.toHaveTextContent('Bitte später erneut versuchen');
+    expect(screen.getByRole('button', { name: 'Neu laden' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1, name: 'Rechnung (Entwurf)' })).toBeInTheDocument();
+    expect(mengenfeld(1)).toHaveValue('80,00');
+    expect(vorgelegteStaende(fetchMock, WEG_STELLEN)).toEqual(['"4"']);
+  });
+
+  it('Szenario: abgewiesenes Speichern — die Eingaben bleiben, Neu laden stellt sie daneben', async () => {
+    const nutzer = userEvent.setup();
+    const fetchMock = fetchNachPfad({
+      [WEG]: nacheinander(json(200, GESPEICHERT), json(200, ANNAS_STAND)),
+      [WEG_AENDERN]: nacheinander(abweisung('Anna'), json(200, { ...ANNAS_STAND, version: 6 })),
+    });
+
+    renderSeite();
+    await screen.findByRole('table', { name: 'Positionen' });
+    await trageEin(nutzer, 1, '90');
+    await nutzer.click(screen.getByRole('button', { name: 'Speichern' }));
+
+    // Abgewiesen: Die Meldung nennt Anna, und die eigene Menge steht weiter im Feld.
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Anna hat diesen Eintrag inzwischen geändert (10:42).',
+    );
+    expect(mengenfeld(1)).toHaveValue('90');
+
+    // Neu laden: Annas Stand steht in der Maske, die eigenen Werte daneben zum Kopieren.
+    await nutzer.click(screen.getByRole('button', { name: 'Neu laden' }));
+    await waitFor(() => {
+      expect(mengenfeld(1)).toHaveValue('60,00');
+    });
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    const eigene = screen.getByRole('region', { name: 'Deine Eingaben' });
+    expect(eigene).toHaveTextContent('Leistungszeitraum');
+    expect(eigene).toHaveTextContent('Oktober 2026');
+    expect(eigene).toHaveTextContent('Entwicklung · 90 Stunde');
+
+    // Auf Annas Stand geht das Speichern durch; Verwerfen raeumt die eigenen Werte ab.
+    await nutzer.click(screen.getByRole('button', { name: 'Speichern' }));
+    await screen.findByText('Gespeichert.');
+    expect(vorgelegteStaende(fetchMock, WEG_AENDERN)).toEqual(['"4"', '"5"']);
+    await nutzer.click(within(eigene).getByRole('button', { name: 'Verwerfen' }));
+    expect(screen.queryByRole('region', { name: 'Deine Eingaben' })).not.toBeInTheDocument();
+  });
+
+  it('Szenario: abgewiesener Ausgang der Forderung — die Konfliktmeldung steht ueber dem Beleg', async () => {
+    const nutzer = userEvent.setup();
+    fetchNachPfad({
+      [WEG]: nacheinander(json(200, GESTELLT), json(200, BEZAHLT)),
+      [WEG_ZUSTAND]: abweisung('Anna'),
+    });
+
+    renderSeite();
+    await screen.findByRole('table', { name: 'Positionen' });
+    await nutzer.click(screen.getByRole('button', { name: 'Als bezahlt markieren' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Anna hat diesen Eintrag inzwischen geändert (10:42).',
+    );
+    await nutzer.click(screen.getByRole('button', { name: 'Neu laden' }));
+
+    // Annas Stand: bereits bezahlt; eigene Eingaben gibt es am Beleg nicht.
+    expect(await screen.findByText('Bezahlt')).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Deine Eingaben' })).not.toBeInTheDocument();
+  });
+
+  it('meldet einen Ausfall beim Neu laden und laesst die Konfliktmeldung stehen', async () => {
+    const nutzer = userEvent.setup();
+    fetchNachPfad({
+      [WEG]: nacheinander(json(200, GESPEICHERT), problem(503, 'kaputt')),
+      [WEG_STELLEN]: abweisung('Anna'),
+    });
+
+    renderSeite();
+    await screen.findByRole('table', { name: 'Positionen' });
+    await stelle(nutzer);
+    await nutzer.click(await screen.findByRole('button', { name: 'Neu laden' }));
+
+    expect(
+      await screen.findByText(
+        'Der aktuelle Stand ist gerade nicht zu erreichen. Bitte erneut versuchen.',
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Neu laden' })).toBeInTheDocument();
+  });
+});
+
+describe('RechnungPage — inzwischen geloescht (#411, Kriterium 6; Plan #415, E16, E17)', () => {
+  /** Waehlt „Entwurf löschen" und bestaetigt die Rueckfrage. */
+  async function loescheDenEntwurf(nutzer: ReturnType<typeof userEvent.setup>) {
+    await waehle(nutzer, 'Entwurf löschen');
+    const frage = await screen.findByRole('dialog');
+    await nutzer.click(within(frage).getByRole('button', { name: 'Entwurf löschen' }));
+  }
+
+  it('Szenario: abgewiesenes Speichern am geloeschten Entwurf — Zur Übersicht, die Eingaben bleiben sichtbar', async () => {
+    const nutzer = userEvent.setup();
+    const fetchMock = fetchNachPfad({ [WEG]: json(200, GESPEICHERT), [WEG_AENDERN]: geloescht('Anna') });
+
+    renderSeite();
+    await screen.findByRole('table', { name: 'Positionen' });
+    await trageEin(nutzer, 1, '90');
+    await nutzer.click(screen.getByRole('button', { name: 'Speichern' }));
+
+    // Abgewiesen: Anna hat geloescht; statt „Neu laden" fuehrt der Weg zur Uebersicht.
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Anna hat diesen Eintrag inzwischen gelöscht (10:42).',
+    );
+    expect(screen.getByRole('link', { name: 'Zur Übersicht' })).toHaveAttribute('href', '/rechnungen');
+    expect(screen.queryByRole('button', { name: 'Neu laden' })).not.toBeInTheDocument();
+
+    // Die eigenen Werte stehen weiter in der Maske und daneben zum Kopieren.
+    expect(mengenfeld(1)).toHaveValue('90');
+    const eigene = screen.getByRole('region', { name: 'Deine Eingaben' });
+    expect(eigene).toHaveTextContent('Leistungszeitraum');
+    expect(eigene).toHaveTextContent('Oktober 2026');
+    expect(eigene).toHaveTextContent('Entwicklung · 90 Stunde');
+    expect(vorgelegteStaende(fetchMock, WEG_AENDERN)).toEqual(['"4"']);
+  });
+
+  it('weist das Loeschen eines inzwischen geloeschten Entwurfs ab und bleibt auf der Rechnung', async () => {
+    const nutzer = userEvent.setup();
+    fetchNachPfad({ [WEG]: json(200, ENTWURF), [WEG_LOESCHEN]: geloescht('Anna') });
+
+    renderSeite();
+    await screen.findByRole('table', { name: 'Positionen' });
+    await loescheDenEntwurf(nutzer);
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Anna hat diesen Eintrag inzwischen gelöscht (10:42).',
+    );
+    expect(screen.getByRole('link', { name: 'Zur Übersicht' })).toHaveAttribute('href', '/rechnungen');
+    expect(screen.getByRole('region', { name: 'Deine Eingaben' })).toBeInTheDocument();
+    expect(screen.queryByText('Der Entwurf wurde nicht gelöscht.')).not.toBeInTheDocument();
+    expect(screen.getByTestId('adresse')).toHaveTextContent('/rechnungen/4');
+  });
+
+  it('weist das Loeschen eines inzwischen geaenderten Entwurfs ab und bietet Neu laden', async () => {
+    const nutzer = userEvent.setup();
+    fetchNachPfad({ [WEG]: json(200, ENTWURF), [WEG_LOESCHEN]: abweisung('Anna') });
+
+    renderSeite();
+    await screen.findByRole('table', { name: 'Positionen' });
+    await loescheDenEntwurf(nutzer);
+
+    // Nichts ist geloescht: die Meldung nennt Annas Aenderung, die Seite bleibt.
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Anna hat diesen Eintrag inzwischen geändert (10:42).',
+    );
+    expect(screen.getByRole('button', { name: 'Neu laden' })).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Deine Eingaben' })).not.toBeInTheDocument();
+    expect(screen.getByTestId('adresse')).toHaveTextContent('/rechnungen/4');
+  });
+
+  it('zeigt am Beleg nach einer Abweisung als geloescht keine eigenen Eingaben', async () => {
+    const nutzer = userEvent.setup();
+    fetchNachPfad({ [WEG]: json(200, GESTELLT), [WEG_ZUSTAND]: geloescht('Anna') });
+
+    renderSeite();
+    await screen.findByRole('table', { name: 'Positionen' });
+    await nutzer.click(screen.getByRole('button', { name: 'Als bezahlt markieren' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Anna hat diesen Eintrag inzwischen gelöscht (10:42).',
+    );
+    expect(screen.getByRole('link', { name: 'Zur Übersicht' })).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Deine Eingaben' })).not.toBeInTheDocument();
   });
 });

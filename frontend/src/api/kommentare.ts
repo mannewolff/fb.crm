@@ -24,6 +24,10 @@ export interface Kommentar {
   readonly text: string;
   /** Zeitpunkt der Anlage als Zeitstempel-Text, wie Jackson einen `Instant` schreibt. */
   readonly createdAt: string;
+  /** Der aktuelle Anzeigename des Kontos, das ihn geschrieben hat (Kriterium 11 von #409). */
+  readonly verfasser: string;
+  /** Der Stand des Kommentars; Aendern und Loeschen legen ihn als `If-Match` vor (Plan #415, E8). */
+  readonly version: number;
 }
 
 /** Die Kommentare eines Angebots, neuester zuerst (Kriterium 4). */
@@ -38,6 +42,8 @@ export function parseKommentar(wert: unknown): Kommentar {
     id: zahl(kommentar.id),
     text: text(kommentar.text),
     createdAt: text(kommentar.createdAt),
+    verfasser: text(kommentar.verfasser),
+    version: zahl(kommentar.version),
   };
 }
 
@@ -60,26 +66,42 @@ export function kommentareLesen(angebotId: number): Promise<Kommentare> {
  * Schreibt einen Kommentar; die Antwort traegt ihn samt Kennung und Zeitpunkt (Kriterium 2).
  *
  * Damit steht der neue Kommentar ohne zweiten Aufruf an seinem Platz — der Bereich muss die Liste
- * nicht neu laden.
+ * nicht neu laden. Ohne Version: Ein neuer Kommentar ist nie geschuetzt (#411, Kriterium 7).
  */
 export function kommentarSchreiben(angebotId: number, text: string): Promise<Kommentar> {
   return apiJson(pfad(angebotId), { methode: 'POST', rumpf: { text } }, parseKommentar);
 }
 
-/** Aendert den Text eines Kommentars; der Zeitpunkt bleibt derselbe (Kriterium 9). */
+/**
+ * Aendert den Text eines Kommentars; der Zeitpunkt bleibt derselbe (Kriterium 9).
+ *
+ * @param version der Stand, auf dem die Aenderung beruht (Plan #415, E2)
+ */
 export function kommentarAendern(
   angebotId: number,
   kommentarId: number,
+  version: number,
   text: string,
 ): Promise<Kommentar> {
   return apiJson(
     `${pfad(angebotId)}/${String(kommentarId)}`,
-    { methode: 'PUT', rumpf: { text } },
+    { methode: 'PUT', rumpf: { text }, version },
     parseKommentar,
   );
 }
 
-/** Loescht den Kommentar (Kriterium 10) — die Antwort traegt keinen Inhalt. */
-export function kommentarLoeschen(angebotId: number, kommentarId: number): Promise<void> {
-  return apiOhneInhalt(`${pfad(angebotId)}/${String(kommentarId)}`, { methode: 'DELETE' });
+/**
+ * Loescht den Kommentar (Kriterium 10) — die Antwort traegt keinen Inhalt.
+ *
+ * @param version der Stand, auf dem das Loeschen beruht (Plan #415, E2)
+ */
+export function kommentarLoeschen(
+  angebotId: number,
+  kommentarId: number,
+  version: number,
+): Promise<void> {
+  return apiOhneInhalt(`${pfad(angebotId)}/${String(kommentarId)}`, {
+    methode: 'DELETE',
+    version,
+  });
 }

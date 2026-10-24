@@ -73,7 +73,9 @@ class AbrechnungsstandTest {
         null,
         null,
         ANGELEGT,
-        ANGELEGT);
+        ANGELEGT,
+        0L,
+        null);
   }
 
   private static Rechnungsposition abrechnung(final long angebotPositionId, final String menge) {
@@ -343,7 +345,9 @@ class AbrechnungsstandTest {
         null,
         positionen,
         ANGELEGT,
-        ANGELEGT);
+        ANGELEGT,
+        0L,
+        null);
   }
 
   /** Dasselbe Angebot, aus „bestellt" storniert (#330, Szenario „Rest eines Auftrags"). */

@@ -56,6 +56,8 @@ class JpaFirmaRepository implements FirmaRepository {
         zeile.getUmsatzsteuerId(),
         zeile.isAktiv(),
         zeile.getCreatedAt(),
-        zeile.getUpdatedAt());
+        zeile.getUpdatedAt(),
+        zeile.getVersion(),
+        zeile.getGeaendertVon());
   }
 }

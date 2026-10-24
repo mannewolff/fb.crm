@@ -3,9 +3,15 @@ package org.mwolff.fbcrm.angebot.application;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.stream.Collectors;
 import org.mwolff.fbcrm.angebot.domain.AngebotRepository;
 import org.mwolff.fbcrm.angebot.domain.Angebotskommentar;
 import org.mwolff.fbcrm.angebot.domain.AngebotskommentarRepository;
+import org.mwolff.fbcrm.auth.domain.AccountRepository;
+import org.mwolff.fbcrm.common.Bearbeitungskonflikt;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -23,9 +29,24 @@ import org.springframework.transaction.annotation.Transactional;
  * 2.000 Zeichen prueft dagegen die Schnittstelle am eingereichten Text ({@code
  * AngebotKommentarRequest}) und die Tabelle am gespeicherten.
  *
+ * <p><b>Der Verfasser</b> (Plan #414, A7). Beim Schreiben ist es das angemeldete Konto — die
+ * Kennung kommt aus der Sitzung, nie aus dem Rumpf. Beim Lesen holt der Anwendungsfall den
+ * <b>aktuellen</b> Namen ueber {@link AccountRepository#displayNamesByIds}, fuer eine ganze Liste
+ * in einem Zug (fachliche Quelle #409, Kriterium 11). Aendern und Loeschen kennen keine Rechte je
+ * Verfasser, und der Verfasser bleibt beim Aendern derselbe.
+ *
  * <p>Der Zeitpunkt kommt aus der injizierten {@link Clock} (CLAUDE-java.md §6.2). Beim Aendern
  * bleibt {@code createdAt} stehen: Die Ansicht zeigt den Zeitpunkt der Anlage, und einen Hinweis
  * „bearbeitet" gibt es nicht (Kriterium 9, E8).
+ *
+ * <p><b>Aendern und Loeschen beruhen auf dem gelesenen Stand</b> (#411, Kriterien 1, 4 und 6; Plan
+ * #415, E8, E14, E16, E17). Der Kommentar traegt seine eigene Version. Bevor der Text geprueft
+ * wird, steht fest, dass es den Kommentar noch gibt — sonst {@link AngebotskommentarGeloescht} mit
+ * Urheber und Zeitpunkt der Loeschung — und dass der vorgelegte Stand der aktuelle ist — sonst
+ * {@link AngebotskommentarGeaendert}. Geloescht wird mit Kennzeichen; die Liste laesst
+ * gekennzeichnete Kommentare aus. <b>Das Schreiben bleibt frei</b> (Kriterium 7): Ein neuer
+ * Kommentar legt keinen Stand vor und liest das Angebot nur — dessen Version bleibt stehen, und wer
+ * das Angebot gerade bearbeitet, wird dadurch nicht abgewiesen (E8).
  */
 @Service
 @Transactional
@@ -33,44 +54,57 @@ public class AngebotskommentarUseCase {
 
   private final AngebotRepository angebote;
   private final AngebotskommentarRepository kommentare;
+  private final AccountRepository konten;
   private final Clock clock;
 
   AngebotskommentarUseCase(
       final AngebotRepository angebote,
       final AngebotskommentarRepository kommentare,
+      final AccountRepository konten,
       final Clock clock) {
     this.angebote = angebote;
     this.kommentare = kommentare;
+    this.konten = konten;
     this.clock = clock;
   }
 
   /**
-   * Die Kommentare des Angebots, neuester zuerst (Kriterium 4).
+   * Die Kommentare des Angebots, neuester zuerst (Kriterium 4), jeder mit dem aktuellen Namen
+   * seines Verfassers.
    *
    * @param angebotId Kennung des Angebots
    * @throws AngebotNichtGefunden wenn es das Angebot nicht gibt
    */
   @Transactional(readOnly = true)
-  public List<Angebotskommentar> liste(final long angebotId) {
+  public List<KommentarMitVerfasser> liste(final long angebotId) {
     pruefeAngebot(angebotId);
-    return kommentare.findByAngebot(angebotId).stream()
-        .sorted(Kommentarreihenfolge.NEUESTE_ZUERST)
-        .toList();
+    final List<Angebotskommentar> sortiert =
+        kommentare.findByAngebot(angebotId).stream()
+            .sorted(Kommentarreihenfolge.NEUESTE_ZUERST)
+            .toList();
+    final Map<Long, String> namen =
+        konten.displayNamesByIds(
+            sortiert.stream().map(Angebotskommentar::verfasserId).collect(Collectors.toSet()));
+    return sortiert.stream().map(kommentar -> mitVerfasser(kommentar, namen)).toList();
   }
 
   /**
    * Schreibt einen Kommentar an das Angebot (Kriterium 2) — in jedem Status (Kriterium 8).
    *
    * @param angebotId Kennung des Angebots
+   * @param verfasserId Kennung des angemeldeten Kontos — aus der Sitzung, nicht aus dem Rumpf
    * @param text der eingereichte Text; Leerraum am Rand faellt weg
    * @throws AngebotNichtGefunden wenn es das Angebot nicht gibt
    * @throws IllegalArgumentException wenn vom Text nur Leerraum uebrig bleibt
    */
-  public Angebotskommentar schreibe(final long angebotId, final String text) {
+  public KommentarMitVerfasser schreibe(
+      final long angebotId, final long verfasserId, final String text) {
     pruefeAngebot(angebotId);
     final String sauberer = bereinigt(text);
     final Instant jetzt = clock.instant();
-    return kommentare.save(new Angebotskommentar(null, angebotId, sauberer, jetzt, jetzt));
+    return mitVerfasser(
+        kommentare.save(
+            new Angebotskommentar(null, angebotId, verfasserId, sauberer, jetzt, jetzt)));
   }
 
   /**
@@ -78,27 +112,43 @@ public class AngebotskommentarUseCase {
    *
    * @param angebotId Kennung des Angebots
    * @param kommentarId Kennung des Kommentars
+   * @param version der vorgelegte Stand aus {@code If-Match} (Plan #415, E2)
+   * @param konto Kennung des handelnden Kontos — aus der Sitzung (E14)
    * @param text der neue Text; Leerraum am Rand faellt weg
    * @throws AngebotNichtGefunden wenn es das Angebot nicht gibt
    * @throws AngebotskommentarNichtGefunden wenn es den Kommentar an diesem Angebot nicht gibt
+   * @throws AngebotskommentarGeloescht wenn der Kommentar inzwischen geloescht ist (E16)
+   * @throws AngebotskommentarGeaendert wenn der Kommentar inzwischen einen anderen Stand hat
    * @throws IllegalArgumentException wenn vom Text nur Leerraum uebrig bleibt
    */
-  public Angebotskommentar aendere(
-      final long angebotId, final long kommentarId, final String text) {
-    final Angebotskommentar vorhandener = lies(angebotId, kommentarId);
-    return kommentare.save(vorhandener.geaendert(bereinigt(text), clock.instant()));
+  public KommentarMitVerfasser aendere(
+      final long angebotId,
+      final long kommentarId,
+      final long version,
+      final long konto,
+      final String text) {
+    final Angebotskommentar vorhandener = offen(angebotId, kommentarId, version, konto);
+    return mitVerfasser(
+        kommentare.save(vorhandener.geaendert(bereinigt(text), clock.instant()).durch(konto)));
   }
 
   /**
-   * Loescht den Kommentar — die Zeile ist danach fort (Kriterium 10, E6).
+   * Loescht den Kommentar mit Kennzeichen (Kriterium 10; Plan #415, E17): Die Zeile bleibt mit
+   * Zeitpunkt und Konto der Loeschung und faellt aus der Liste.
    *
    * @param angebotId Kennung des Angebots
    * @param kommentarId Kennung des Kommentars
+   * @param version der vorgelegte Stand aus {@code If-Match} (Plan #415, E2)
+   * @param konto Kennung des handelnden Kontos — aus der Sitzung (E14)
    * @throws AngebotNichtGefunden wenn es das Angebot nicht gibt
    * @throws AngebotskommentarNichtGefunden wenn es den Kommentar an diesem Angebot nicht gibt
+   * @throws AngebotskommentarGeloescht wenn der Kommentar inzwischen geloescht ist (E16)
+   * @throws AngebotskommentarGeaendert wenn der Kommentar inzwischen einen anderen Stand hat
    */
-  public void loesche(final long angebotId, final long kommentarId) {
-    kommentare.deleteById(lies(angebotId, kommentarId).requireId());
+  public void loesche(
+      final long angebotId, final long kommentarId, final long version, final long konto) {
+    kommentare.save(
+        offen(angebotId, kommentarId, version, konto).geloescht(konto, clock.instant()));
   }
 
   private void pruefeAngebot(final long angebotId) {
@@ -115,6 +165,45 @@ public class AngebotskommentarUseCase {
       throw new AngebotskommentarNichtGefunden();
     }
     return vorhandener;
+  }
+
+  /*
+   * Der Kommentar, auf dem ein Aendern oder Loeschen beruhen darf: vorhanden, nicht geloescht und
+   * auf dem vorgelegten Stand. Das Kennzeichen geht dem Stand vor — wer einen geloeschten Kommentar
+   * bearbeitet, soll von der Loeschung erfahren und nicht von einem Stand, den es nicht mehr gibt.
+   */
+  private Angebotskommentar offen(
+      final long angebotId, final long kommentarId, final long version, final long konto) {
+    final Angebotskommentar vorhandener = lies(angebotId, kommentarId);
+    final Instant geloeschtAm = vorhandener.geloeschtAm();
+    if (geloeschtAm != null) {
+      throw new AngebotskommentarGeloescht(vorhandener.geloeschtVon(), konto, geloeschtAm);
+    }
+    Bearbeitungskonflikt.pruefe(
+        version,
+        vorhandener.version(),
+        () ->
+            new AngebotskommentarGeaendert(
+                vorhandener.geaendertVon(), konto, vorhandener.updatedAt()));
+    return vorhandener;
+  }
+
+  private KommentarMitVerfasser mitVerfasser(final Angebotskommentar kommentar) {
+    return mitVerfasser(kommentar, konten.displayNamesByIds(Set.of(kommentar.verfasserId())));
+  }
+
+  /*
+   * Ein Verfasser ohne Konto kann es nicht geben: Der Fremdschluessel auf account haelt jede
+   * Kennung fest, und Konten werden nicht geloescht (A7). Fehlt der Name doch, ist das ein Bruch
+   * dieser Zusage und kein Fall fuer einen Platzhalter.
+   */
+  private static KommentarMitVerfasser mitVerfasser(
+      final Angebotskommentar kommentar, final Map<Long, String> namen) {
+    return new KommentarMitVerfasser(
+        kommentar,
+        Objects.requireNonNull(
+            namen.get(kommentar.verfasserId()),
+            "Verfasser ohne Konto: " + kommentar.verfasserId()));
   }
 
   private static String bereinigt(final String text) {

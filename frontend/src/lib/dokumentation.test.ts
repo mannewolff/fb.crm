@@ -241,6 +241,7 @@ describe('Szenarien des Fachplans (E16)', () => {
         'Konto einrichten',
         'Betrieb unter eigenem Namen',
         'Mailversand einrichten',
+        'Weitere Konten anlegen',
       ]),
     );
     const readme = readFileSync(join(WURZEL, 'README.md'), 'utf8');
@@ -279,5 +280,104 @@ describe('Szenarien des Fachplans (E16)', () => {
     expect(text).toMatch(/Code/u);
     expect(text).toMatch(/Protokoll/u);
     expect(text).not.toMatch(/Passwort/u);
+  });
+
+  it('Szenario: Erstes Konto auf frischer Installation', () => {
+    const text = abschnitt('betrieb', 'Konto einrichten');
+
+    // Kriterium 12 (#409): Das erste Konto ist C-Level, weitere entstehen in fb.crm.
+    expect(text).toMatch(/C-Level/u);
+    expect(text).toMatch(/Mailversand/u);
+    expect(text).toMatch(/Weitere Konten anlegen/u);
+  });
+
+  it('Szenario: C-Level legt eine Mitarbeiterin an', () => {
+    const weitere = abschnitt('betrieb', 'Weitere Konten anlegen');
+    const rollen = abschnitt('bedienung', 'Mitarbeitende und Rollen');
+
+    // Kriterium 12 (#409): Mailversand im Betrieb mit mehreren Personen, ohne ihn das Protokoll.
+    expect(weitere).toMatch(/Mailversand/u);
+    expect(weitere).toMatch(/Protokoll/u);
+    expect(abschnittsnamen('bedienung')).toContain('Mitarbeitende und Rollen');
+    for (const stichwort of ['Neues Konto', 'Bearbeiten', 'Stilllegen', 'Wieder aktivieren']) {
+      expect(rollen, stichwort).toContain(stichwort);
+    }
+    for (const rolle of ['C-Level', 'Employee', 'ReadOnly']) {
+      expect(rollen, rolle).toMatch(new RegExp(`^${rolle} darf|^${rolle} liest`, 'mu'));
+    }
+    expect(rollen).toMatch(/letzte aktive\s+C-Level-Konto/u);
+    // Die Erste Schritte nennen die eigene Adresse, der Aufbau „Mitarbeitende" im Fuss.
+    const erste = abschnitt('bedienung', 'Erste Schritte');
+    expect(erste).toMatch(/eigenen E-Mail-Adresse/u);
+    expect(erste).toMatch(/Fuß der Schiene stehen „Mitarbeitende"/u);
+  });
+
+  it('Szenario: Gleichzeitig arbeiten (#411, Kriterium 9)', () => {
+    const namen = abschnittsnamen('bedienung');
+    // Gleich nach dem Einstieg, vor den Bereichen, in denen die Abweisung erscheint.
+    expect(namen.indexOf('Gleichzeitig arbeiten')).toBe(namen.indexOf('Erste Schritte') + 1);
+    const text = abschnitt('bedienung', 'Gleichzeitig arbeiten');
+
+    expect(text).toMatch(/^\*\*Zweck:\*\*/u);
+    expect(text).toMatch(/Nicht ausgeführt/u);
+    expect(text).toMatch(/in einem anderen Fenster geändert/u);
+    expect(text).toMatch(/„Neu laden"/u);
+    expect(text).toMatch(/„Deine Eingaben"/u);
+    expect(text).toMatch(/„Verwerfen"/u);
+    // Statuswechsel und Storno sind ebenso geschuetzt wie das Speichern (Kriterium 5, Issue #443).
+    expect(text).toMatch(/„Status weiter"/u);
+    expect(text).toMatch(/„Storno zurücknehmen"/u);
+    // Kommentare tragen ihren eigenen Stand; ein geloeschter fuehrt zur Uebersicht (Issue #444).
+    expect(text).toMatch(/Löschen eines Kommentars/u);
+    expect(text).toMatch(/„Zur Übersicht"/u);
+    expect(text).toMatch(/Einen neuen\s+Kommentar schreibt man immer ohne Rückfrage/u);
+    // Eine geloeschte Anlage nennt beim zweiten Loeschen Urheber und Zeitpunkt (Issue #445).
+    expect(text).toMatch(/Löschen einer Anlage/u);
+    expect(text).toMatch(/Karte „Anlagen"/u);
+    // Der Rechnungsentwurf, das Stellen und der Ausgang der Forderung sind geschuetzt; beim Stellen
+    // zaehlt allein der Entwurf (Kriterium 5, Issue #446).
+    expect(text).toMatch(/„Rechnung stellen"/u);
+    expect(text).toMatch(/„Als bezahlt markieren"/u);
+    expect(text).toMatch(/zählt allein der\s+Entwurf/u);
+    // Ein geloeschter Entwurf weist jede Taste ab und fuehrt zur Uebersicht (Issue #447).
+    expect(text).toMatch(/„Entwurf löschen" löscht nur den Entwurf, den man gesehen hat/u);
+    expect(text).toMatch(/„Zur Übersicht" führt zur Liste der Rechnungen/u);
+    // Die nachgetragene Rechnung ist in jedem Zustand geschuetzt, samt ihrem PDF (Issue #448).
+    expect(text).toMatch(/Maske „Nachgetragene Rechnung bearbeiten"/u);
+    expect(text).toMatch(/Ersetzen oder Entfernen ihres PDFs/u);
+    // Eine geloeschte nachgetragene Rechnung weist jede Taste ab, ihre Nummer ist frei (Issue #449).
+    expect(text).toMatch(/„Löschen" an einer nachgetragenen Rechnung löscht nur die Rechnung/u);
+    expect(text).toMatch(/Nummer ist wieder frei/u);
+    // Einstellungen zur Rechnung und Briefbogen sind geschuetzt; der Briefbogen zaehlt als ein
+    // Eintrag, auch zwischen Briefpapier und Raendern (Issue #450, E11).
+    expect(text).toMatch(/Speichern der\s+Einstellungen zur Rechnung/u);
+    expect(text).toMatch(/Der Briefbogen zählt als ein\s+Eintrag/u);
+    // Die Eigenen Angaben sind geschuetzt und weisen das Stellen nicht ab (Issue #454, E10).
+    expect(text).toMatch(/Bei den Eigenen Angaben gilt es beim\s+Speichern der Angaben/u);
+    expect(text).toMatch(/weist\s+das Stellen nicht ab/u);
+    // Firma und Ansprechpartner sind geschuetzt, auch beim Stilllegen und Wiederaktivieren
+    // (Issue #451, E18).
+    expect(text).toMatch(/Bei Firmen und Ansprechpartnern gilt es/u);
+    expect(text).toMatch(/Firma und\s+Ansprechpartner sind getrennte Einträge/u);
+    // Das Aendern eines Zeiteintrags ist geschuetzt, das Erfassen bleibt frei (Issue #452).
+    expect(text).toMatch(/Dialog „Arbeitszeit ändern"/u);
+    expect(text).toMatch(/Eine neue Arbeitszeit erfasst\s+man mit „Zeit erfassen" immer ohne Rückfrage/u);
+    // Ein geloeschter Zeiteintrag weist jede Aktion ab und zaehlt nirgends mehr (Issue #453).
+    expect(text).toMatch(/„Löschen" im Menü ⋯ einer Zeile der Arbeitszeit löscht nur den Eintrag/u);
+    expect(text).toMatch(/„Zur\s+Übersicht" führt zurück zur Liste der Arbeitszeit/u);
+    expect(text).toMatch(/seine Zeit ist für einen neuen Eintrag wieder frei/u);
+    // Konten sind geschuetzt; An- und Abmelden der Person weisen nichts ab (Issue #455, E19).
+    expect(text).toMatch(/Unter „Mitarbeitende" gilt es beim Speichern in der Maske „Konto bearbeiten"/u);
+    expect(text).toMatch(/Dass sich die Person selbst an- oder abmeldet, weist nichts ab/u);
+    expect(text).toMatch(/\*\*Ergebnis:\*\*/u);
+  });
+
+  it('Szenario: Arbeitszeit je Person (Kriterium 10, #410)', () => {
+    const text = abschnitt('bedienung', 'Arbeitszeit');
+
+    expect(text).toMatch(/Employee sieht und pflegt nur die eigenen Zeiten/u);
+    expect(text).toMatch(/C-Level sieht zunächst die eigenen Zeiten/u);
+    expect(text).toMatch(/ReadOnly sieht beim Öffnen „Alle"/u);
+    expect(text).toMatch(/Überschneidungen prüft fb\.crm je Person/u);
   });
 });

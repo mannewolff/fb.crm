@@ -11,12 +11,16 @@ import {
   rechnungseinstellungenPflegen,
 } from '../api/rechnungseinstellungen';
 import type { Rechnungseinstellungen } from '../api/rechnungseinstellungen';
+import EigeneEingaben from '../components/EigeneEingaben';
+import type { EigeneEingabe } from '../components/EigeneEingaben';
 import Karte from '../components/Karte';
+import Konfliktmeldung from '../components/Konfliktmeldung';
 import { useKopfPfad } from '../components/KopfPfad';
 import type { PfadVerweis } from '../components/KopfPfad';
+import { useRechte } from '../auth/rechte';
 import KupferTaste from '../components/KupferTaste';
 import WeicheTaste from '../components/WeicheTaste';
-import { feldMeldungen } from '../lib/apifehler';
+import { feldMeldungen, istBearbeitungskonflikt } from '../lib/apifehler';
 import { meldungAm } from '../lib/feldmeldung';
 import { dezimal, hundertstel } from '../lib/geld';
 import { istGueltigesMuster, rechnungsnummer } from '../lib/nummernmuster';
@@ -50,6 +54,16 @@ import { ABSTAND_BUEHNE } from '../theme';
  *
  * „Abbrechen" ist hier ein **Schalter, kein Weg**: Ueber „Administration" liegt keine Ebene, auf
  * die es fuehren koennte. Es nimmt die Aenderungen stattdessen auf den gespeicherten Stand zurueck.
+ *
+ * Ohne das Recht, die Einstellungen zu aendern, stehen die Werte ohne „Speichern" und „Abbrechen"
+ * da — ReadOnly liest sie nur (Kriterium 10 von #409, Plan #414, A10).
+ *
+ * **Speichern legt den Stand vor** (#411, Kriterien 1 bis 3; Plan #415, E2, E12): die Version des
+ * zuletzt gelesenen oder gespeicherten Stands. Hat inzwischen jemand anderes gespeichert, sagt
+ * {@link Konfliktmeldung}, wer wann; die eigenen Eingaben bleiben im Formular. „Neu laden" holt den
+ * Stand des Servers und stellt die eigenen Werte daneben in {@link EigeneEingaben}, bis
+ * „Verwerfen" gewaehlt wird. Die Einstellungen werden nie geloescht; der Weg zur Uebersicht fuehrt
+ * darum hierher zurueck.
  */
 
 const AUSFALL_LESEN =
@@ -57,6 +71,19 @@ const AUSFALL_LESEN =
 const AUSFALL_SPEICHERN =
   'Die Einstellungen wurden nicht gespeichert. Bitte später erneut versuchen.';
 const GESPEICHERT = 'Die Einstellungen sind gespeichert.';
+const AUSFALL_NEU_LADEN =
+  'Der aktuelle Stand ist gerade nicht zu erreichen. Bitte später erneut versuchen.';
+
+/** Wohin die Konfliktmeldung fuehrt, wenn es nichts neu zu laden gibt — hierher. */
+const UEBERSICHT = '/administration';
+
+/** Die Beschriftungen der vier Felder — an der Maske und unter „Deine Eingaben" dieselben. */
+const BESCHRIFTUNG = {
+  nummerMuster: 'Muster der Rechnungsnummer',
+  naechsteNummer: 'Nächste laufende Nummer',
+  steuersatz: 'Mehrwertsteuersatz in Prozent',
+  zahlungszielTage: 'Zahlungsziel in Tagen',
+} as const;
 
 const HILFE_MUSTER =
   'Platzhalter: {NNNN} für die laufende Nummer — die Zahl der N ist die Mindestbreite —, ' +
@@ -107,6 +134,16 @@ function alsWerte(einstellungen: Rechnungseinstellungen): Werte {
     steuersatz: dezimal(einstellungen.steuersatzInHundertsteln, ','),
     zahlungszielTage: String(einstellungen.zahlungszielTage),
   };
+}
+
+/** Was gerade in der Maske steht, als eigene Eingaben zum Kopieren (#411, Kriterium 3). */
+function eigeneEingabenAus(werte: Werte): readonly EigeneEingabe[] {
+  return [
+    { bezeichnung: BESCHRIFTUNG.nummerMuster, wert: werte.nummerMuster },
+    { bezeichnung: BESCHRIFTUNG.naechsteNummer, wert: werte.naechsteNummer },
+    { bezeichnung: BESCHRIFTUNG.steuersatz, wert: werte.steuersatz },
+    { bezeichnung: BESCHRIFTUNG.zahlungszielTage, wert: werte.zahlungszielTage },
+  ];
 }
 
 /** Eine ganze Zahl aus einem Feld — `null`, wenn dort keine steht. */
@@ -192,6 +229,7 @@ function nichtBereit(stand: Exclude<Stand, 'bereit'>): ReactNode {
 }
 
 export default function AdministrationPage() {
+  const { darfEinstellungenAendern } = useRechte();
   const [stand, setzeStand] = useState<Stand>('laedt');
   const [werte, setzeWerte] = useState<Werte>(LEERE_WERTE);
   // Der zuletzt gespeicherte Stand — das Ziel der Ruecknahme. Kein `null`: Solange nichts geladen
@@ -202,6 +240,12 @@ export default function AdministrationPage() {
   const [feldFehler, setzeFeldFehler] = useState<FieldErrors>({});
   const [fehler, setzeFehler] = useState<string | null>(null);
   const [laeuft, setzeLaeuft] = useState(false);
+  // Der Stand, den das naechste Speichern vorlegt: gelesen, oder aus der Antwort des letzten.
+  const [version, setzeVersion] = useState(0);
+  // Die Abweisung eines Speicherns auf altem Stand, ungeprueft — die Konfliktmeldung liest sie.
+  const [abweisung, setzeAbweisung] = useState<unknown>(null);
+  // Die eigenen Werte nach „Neu laden", bis „Verwerfen" gewaehlt wird (#411, Kriterium 3).
+  const [eigene, setzeEigene] = useState<readonly EigeneEingabe[] | null>(null);
 
   useKopfPfad(KEIN_WEG, TITEL);
 
@@ -211,6 +255,7 @@ export default function AdministrationPage() {
         const geladen = alsWerte(einstellungen);
         setzeWerte(geladen);
         setzeGespeichert(geladen);
+        setzeVersion(einstellungen.version);
         setzeStand('bereit');
       })
       .catch(() => {
@@ -222,6 +267,7 @@ export default function AdministrationPage() {
     setzeFehler(null);
     setzeFeldFehler({});
     setzeErfolg(false);
+    setzeAbweisung(null);
     const geprueft = pruefe(werte);
     if (geprueft.art === 'fehler') {
       // Was nicht stimmt, steht am Feld; hinaus geht nichts, und die uebrigen Eingaben bleiben
@@ -232,21 +278,51 @@ export default function AdministrationPage() {
     setzeEigeneFehler({});
     setzeLaeuft(true);
     try {
-      await rechnungseinstellungenPflegen(geprueft.einstellungen);
+      const gesichert = await rechnungseinstellungenPflegen(version, geprueft.einstellungen);
       // Was gespeichert wurde, ist der neue Stand — auch fuer die Ruecknahme. Die Felder
       // uebernehmen dabei die gerundete Form: „19,5" wird zu „19,50", so wie der Server sie
-      // zurueckgaebe.
-      const neu = alsWerte(geprueft.einstellungen);
+      // zurueckgibt.
+      const neu = alsWerte(gesichert);
       setzeWerte(neu);
       setzeGespeichert(neu);
+      setzeVersion(gesichert.version);
       setzeErfolg(true);
     } catch (ursache) {
       const felder = feldMeldungen(ursache);
-      if (Object.keys(felder).length > 0) {
+      if (istBearbeitungskonflikt(ursache)) {
+        // Die Eingaben bleiben stehen; den Weg weiter zeigt die Konfliktmeldung (Kriterium 3).
+        setzeAbweisung(ursache);
+      } else if (Object.keys(felder).length > 0) {
         setzeFeldFehler(felder);
       } else {
         setzeFehler(AUSFALL_SPEICHERN);
       }
+    } finally {
+      setzeLaeuft(false);
+    }
+  };
+
+  /**
+   * „Neu laden" nach einer Abweisung: der Stand des Servers ins Formular, die eigenen Werte daneben
+   * (#411, Kriterium 3; Plan #415, E12). Genommen wird, was in diesem Augenblick in der Maske steht
+   * — auch was nach der Abweisung noch getippt wurde.
+   */
+  const neuLaden = async () => {
+    const meine = eigeneEingabenAus(werte);
+    setzeFehler(null);
+    setzeLaeuft(true);
+    try {
+      const einstellungen = await rechnungseinstellungenLesen();
+      const geladen = alsWerte(einstellungen);
+      setzeWerte(geladen);
+      setzeGespeichert(geladen);
+      setzeVersion(einstellungen.version);
+      setzeEigene(meine);
+      setzeAbweisung(null);
+      setzeEigeneFehler({});
+      setzeFeldFehler({});
+    } catch {
+      setzeFehler(AUSFALL_NEU_LADEN);
     } finally {
       setzeLaeuft(false);
     }
@@ -303,9 +379,24 @@ export default function AdministrationPage() {
           >
             {fehler === null ? null : <Alert severity="error">{fehler}</Alert>}
             {erfolg ? <Alert severity="success">{GESPEICHERT}</Alert> : null}
+            <Konfliktmeldung
+              ursache={abweisung}
+              onNeuLaden={() => {
+                void neuLaden();
+              }}
+              uebersicht={UEBERSICHT}
+            />
+            {eigene === null ? null : (
+              <EigeneEingaben
+                werte={eigene}
+                onVerwerfen={() => {
+                  setzeEigene(null);
+                }}
+              />
+            )}
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
               <TextField
-                label="Muster der Rechnungsnummer"
+                label={BESCHRIFTUNG.nummerMuster}
                 value={werte.nummerMuster}
                 onChange={aendere('nummerMuster')}
                 error={musterMeldung !== undefined}
@@ -332,7 +423,7 @@ export default function AdministrationPage() {
               </Typography>
             </Box>
             <TextField
-              label="Nächste laufende Nummer"
+              label={BESCHRIFTUNG.naechsteNummer}
               value={werte.naechsteNummer}
               onChange={aendere('naechsteNummer')}
               error={meldung('naechsteNummer') !== undefined}
@@ -341,7 +432,7 @@ export default function AdministrationPage() {
               slotProps={{ inputLabel: { shrink: true } }}
             />
             <TextField
-              label="Mehrwertsteuersatz in Prozent"
+              label={BESCHRIFTUNG.steuersatz}
               value={werte.steuersatz}
               onChange={aendere('steuersatz')}
               error={meldung('steuersatz') !== undefined}
@@ -350,7 +441,7 @@ export default function AdministrationPage() {
               slotProps={{ inputLabel: { shrink: true } }}
             />
             <TextField
-              label="Zahlungsziel in Tagen"
+              label={BESCHRIFTUNG.zahlungszielTage}
               value={werte.zahlungszielTage}
               onChange={aendere('zahlungszielTage')}
               error={meldung('zahlungszielTage') !== undefined}
@@ -358,10 +449,12 @@ export default function AdministrationPage() {
               fullWidth
               slotProps={{ inputLabel: { shrink: true } }}
             />
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, flexWrap: 'wrap' }}>
-              <KupferTaste disabled={laeuft}>Speichern</KupferTaste>
-              <WeicheTaste onClick={zuruecknehmen}>Abbrechen</WeicheTaste>
-            </Box>
+            {darfEinstellungenAendern ? (
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, flexWrap: 'wrap' }}>
+                <KupferTaste disabled={laeuft}>Speichern</KupferTaste>
+                <WeicheTaste onClick={zuruecknehmen}>Abbrechen</WeicheTaste>
+              </Box>
+            ) : null}
           </Box>
         ) : (
           nichtBereit(stand)

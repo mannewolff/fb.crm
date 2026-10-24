@@ -36,7 +36,9 @@ class AngebotsblickTest {
         "Neugestaltung der Website",
         List.of(),
         ANGELEGT,
-        ANGELEGT);
+        ANGELEGT,
+        0L,
+        null);
   }
 
   @ParameterizedTest

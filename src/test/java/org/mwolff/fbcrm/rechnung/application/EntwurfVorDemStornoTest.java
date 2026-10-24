@@ -95,7 +95,9 @@ class EntwurfVorDemStornoTest {
                     "Oktober 2026",
                     List.of(
                         new Abrechnungsangabe(
-                            Rechnungsdoppel.BERATUNG_ID, "Beratung", new BigDecimal("8.00")))));
+                            Rechnungsdoppel.BERATUNG_ID, "Beratung", new BigDecimal("8.00"))),
+                    0L,
+                    1L));
 
     // Then
     assertThat(geaendert.positionen())
@@ -108,7 +110,8 @@ class EntwurfVorDemStornoTest {
     // Given
     when(rechnungen.findByIdMitSperre(ENTWURF))
         .thenReturn(Optional.of(entwurfUeberAlleAchtStunden()));
-    when(angebote.findById(Rechnungsdoppel.ANGEBOT)).thenReturn(Optional.of(storniertesAngebot()));
+    when(angebote.findByIdMitSperre(Rechnungsdoppel.ANGEBOT))
+        .thenReturn(Optional.of(storniertesAngebot()));
     when(firmen.findById(Rechnungsdoppel.FIRMA)).thenReturn(Optional.of(Rechnungsdoppel.firma()));
     when(eigeneAngaben.lies()).thenReturn(Rechnungsdoppel.eigeneAngaben());
     when(einstellungen.lies())
@@ -138,7 +141,7 @@ class EntwurfVorDemStornoTest {
                 briefboegen,
                 briefpapier,
                 uhr)
-            .stelle(ENTWURF);
+            .stelle(ENTWURF, 0L, 1L);
 
     // Then — gestellt mit allen 8 Stunden; das stornierte Angebot bleibt unberuehrt.
     assertThat(gestellt.zustand()).isEqualTo(Rechnungszustand.GESTELLT);

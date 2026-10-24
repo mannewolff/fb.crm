@@ -1,9 +1,11 @@
 package org.mwolff.fbcrm.arbeitszeit.web;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.tuple;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalTime;
 import java.time.YearMonth;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -12,11 +14,13 @@ import java.util.Objects;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mwolff.fbcrm.AbstractIntegrationTest;
+import org.mwolff.fbcrm.Stand;
 import org.mwolff.fbcrm.angebot.web.AngebotPositionResponse;
 import org.mwolff.fbcrm.angebot.web.AngebotResponse;
 import org.mwolff.fbcrm.auth.Anmeldung;
 import org.mwolff.fbcrm.auth.Konten;
 import org.mwolff.fbcrm.auth.domain.AccountRepository;
+import org.mwolff.fbcrm.auth.domain.Role;
 import org.mwolff.fbcrm.auth.domain.SecretHasher;
 import org.mwolff.fbcrm.common.Geschaeftszone;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -34,16 +38,19 @@ import org.springframework.jdbc.core.JdbcTemplate;
  *
  * <p>Hier stehen die Zusagen, die an der echten Verdrahtung und am echten Schema haengen: Ein
  * erfasster Eintrag kommt mit 201 und seiner gerechneten Dauer zurueck, ein {@code PUT} antwortet
- * 200, ein {@code DELETE} nimmt die Zeile wirklich fort, und eine unbekannte Kennung ist 404. Dazu
- * die beiden Abweisungen, die der Anwendungsfall als Meldung am Feld liefert (Plan #194, A19, A8):
- * 9:10 liegt nicht im Raster, und ein zweiter Eintrag zur selben Zeit nennt den ersten mit Uhrzeit,
- * Position und Firma.
+ * 200, ein {@code DELETE} kennzeichnet die Zeile (Plan #415, E17), und eine unbekannte Kennung ist
+ * 404. Jede weitere Aktion auf den geloeschten Eintrag antwortet 409 mit {@code art = "gelöscht"}
+ * (E16), und er faellt aus Monatsliste und Ueberschneidungspruefung. Dazu die beiden Abweisungen,
+ * die der Anwendungsfall als Meldung am Feld liefert (Plan #194, A19, A8): 9:10 liegt nicht im
+ * Raster, und ein zweiter Eintrag zur selben Zeit nennt den ersten mit Uhrzeit, Position und Firma.
  *
  * <p>Dazu die beiden Lesewege (Plan #194, A20, A15): Die Monatsliste traegt je Eintrag die
  * Bezeichnung seiner Position und den Namen der Firma, je Tag eine Summe und fuer den Monat eine
  * weitere; ohne Parameter antwortet sie fuer den laufenden Monat, und ein Monat, den es nicht gibt,
  * ist eine fehlerhafte Anfrage. Die buchbaren Positionen nennen nur, was nach Aufwand in Stunden
- * abrechnet.
+ * abrechnet. Die waehlbaren Personen (Plan #426, E11) nennt ein eigener Weg. Welche Zeilen die
+ * Monatsliste zeigt, entscheidet die Rolle (E10): Ein Employee bekommt auch mit {@code person=alle}
+ * nur seine eigenen.
  *
  * <p>Der Ausgangspunkt ist ein bestelltes Angebot mit zwei Positionen: „Konzeption" nach Aufwand in
  * Stunden, auf die gebucht werden darf, und daneben eine Pauschale, auf die nicht gebucht werden
@@ -87,7 +94,7 @@ class ArbeitszeitControllerIT extends AbstractIntegrationTest {
     jdbc.execute(
         "TRUNCATE arbeitszeit, rechnung_position, rechnung, angebot_position, angebot,"
             + " ansprechpartner, firma RESTART IDENTITY CASCADE");
-    jdbc.execute("TRUNCATE outbox_message, account RESTART IDENTITY CASCADE");
+    leereKonten(jdbc);
     accounts.save(Konten.neu(MAIL, ANGELEGT));
     sitzung = Anmeldung.perCode(rest, jdbc, hasher, MAIL);
     jdbc.update("INSERT INTO firma (name) VALUES (?)", FIRMA);
@@ -113,13 +120,33 @@ class ArbeitszeitControllerIT extends AbstractIntegrationTest {
                 .getBody());
     konzeptionId = kennung(mitPositionen.positionen().get(0));
     schulungId = kennung(mitPositionen.positionen().get(1));
-    ruf("/api/angebote/" + angebotId + "/status/weiter", HttpMethod.POST, null, String.class);
-    ruf("/api/angebote/" + angebotId + "/status/weiter", HttpMethod.POST, null, String.class);
+    rest.exchange(
+        "/api/angebote/" + angebotId + "/status/weiter",
+        HttpMethod.POST,
+        new HttpEntity<>(null, Stand.aktuell(sitzung, jdbc, "angebot", angebotId)),
+        String.class);
+    rest.exchange(
+        "/api/angebote/" + angebotId + "/status/weiter",
+        HttpMethod.POST,
+        new HttpEntity<>(null, Stand.aktuell(sitzung, jdbc, "angebot", angebotId)),
+        String.class);
   }
 
   private <T> ResponseEntity<T> ruf(
       final String pfad, final HttpMethod methode, final Object rumpf, final Class<T> typ) {
     return rest.exchange(pfad, methode, new HttpEntity<>(rumpf, sitzung), typ);
+  }
+
+  /*
+   * Ein Aendern, wie die Maske es schickt: auf dem aktuellen Stand der Zeile (Plan #415, E2). Den
+   * Schutz selbst pruefen die Tests, die den Kopf weglassen oder einen alten Stand vorlegen.
+   */
+  private <T> ResponseEntity<T> aendere(final long id, final Object rumpf, final Class<T> typ) {
+    return rest.exchange(
+        PFAD + "/" + id,
+        HttpMethod.PUT,
+        new HttpEntity<>(rumpf, Stand.aktuell(sitzung, jdbc, "arbeitszeit", id)),
+        typ);
   }
 
   private static long kennung(final AngebotPositionResponse position) {
@@ -150,7 +177,11 @@ class ArbeitszeitControllerIT extends AbstractIntegrationTest {
     rumpf.put("ansprechpartnerId", null);
     rumpf.put("beschreibung", "Neugestaltung der Website");
     rumpf.put("positionen", positionen);
-    return ruf("/api/angebote/" + angebotId, HttpMethod.PUT, rumpf, AngebotResponse.class);
+    return rest.exchange(
+        "/api/angebote/" + angebotId,
+        HttpMethod.PUT,
+        new HttpEntity<>(rumpf, Stand.aktuell(sitzung, jdbc, "angebot", angebotId)),
+        AngebotResponse.class);
   }
 
   private static Map<String, Object> eintrag(
@@ -260,11 +291,7 @@ class ArbeitszeitControllerIT extends AbstractIntegrationTest {
 
     // When
     final ResponseEntity<ZeiteintragResponse> geaendert =
-        ruf(
-            PFAD + "/" + id,
-            HttpMethod.PUT,
-            eintrag(konzeptionId, "09:00", "12:00"),
-            ZeiteintragResponse.class);
+        aendere(id, eintrag(konzeptionId, "09:00", "12:00"), ZeiteintragResponse.class);
 
     // Then
     assertThat(geaendert.getStatusCode()).isEqualTo(HttpStatus.OK);
@@ -272,30 +299,40 @@ class ArbeitszeitControllerIT extends AbstractIntegrationTest {
   }
 
   @Test
-  void aendern_whenTheEntryIsUnknown_thenAnswers404() {
-    // Given — die Kennung steht im Pfad.
-    // When / Then
-    assertThat(
-            ruf(
-                    PFAD + "/999",
-                    HttpMethod.PUT,
-                    eintrag(konzeptionId, "09:00", "12:00"),
-                    String.class)
-                .getStatusCode())
-        .isEqualTo(HttpStatus.NOT_FOUND);
+  void aendern_onAnOutdatedStand_thenAnswers409AndTheRowKeepsTheFirstChange() {
+    // Given — #411, Kriterium 1: ein erstes Aendern hat den Stand von 0 auf 1 gehoben.
+    final long id = erfassteKennung("09:00", "11:00");
+    final ResponseEntity<String> erstes =
+        aendere(id, eintrag(konzeptionId, "09:00", "12:00"), String.class);
+    assertThat(erstes.getStatusCode()).as(erstes.getBody()).isEqualTo(HttpStatus.OK);
+    final HttpHeaders alterStand = new HttpHeaders();
+    alterStand.putAll(sitzung);
+    alterStand.setIfMatch("\"0\"");
+
+    // When — ein zweites Aendern legt noch den Stand 0 vor.
+    final ResponseEntity<String> abgewiesen =
+        rest.exchange(
+            PFAD + "/" + id,
+            HttpMethod.PUT,
+            new HttpEntity<>(eintrag(konzeptionId, "09:00", "10:00"), alterStand),
+            String.class);
+
+    // Then — 409 mit dem Konflikt, und der Eintrag traegt die erste Aenderung auf Stand 1.
+    assertThat(abgewiesen.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+    assertThat(abgewiesen.getBody()).contains("\"konflikt\"").contains("\"veraltet\"");
+    assertThat(lieseDenMonat(MONAT).tage().get(0).eintraege())
+        .singleElement()
+        .extracting(
+            ArbeitszeitMonatResponse.Zeitzeile::bis, ArbeitszeitMonatResponse.Zeitzeile::version)
+        .containsExactly(LocalTime.of(12, 0), 1L);
   }
 
   @Test
-  void loeschen_thenTheRowIsGone() {
-    // Given — A5, Antwort 4: geloescht wird wirklich.
+  void aendern_withoutIfMatch_thenAnswers428() {
+    // Given
     final long id = erfassteKennung("09:00", "11:00");
 
-    // When
-    final ResponseEntity<String> geloescht =
-        ruf(PFAD + "/" + id, HttpMethod.DELETE, null, String.class);
-
-    // Then — derselbe Eintrag ist danach nicht mehr aenderbar.
-    assertThat(geloescht.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
+    // When / Then — E3: ohne vorgelegten Stand wird nicht geschrieben.
     assertThat(
             ruf(
                     PFAD + "/" + id,
@@ -303,15 +340,127 @@ class ArbeitszeitControllerIT extends AbstractIntegrationTest {
                     eintrag(konzeptionId, "09:00", "12:00"),
                     String.class)
                 .getStatusCode())
+        .isEqualTo(HttpStatus.PRECONDITION_REQUIRED);
+  }
+
+  @Test
+  void aendern_whenTheEntryIsUnknown_thenAnswers404() {
+    // Given — die Kennung steht im Pfad.
+    // When / Then
+    assertThat(aendere(999L, eintrag(konzeptionId, "09:00", "12:00"), String.class).getStatusCode())
         .isEqualTo(HttpStatus.NOT_FOUND);
+  }
+
+  /** Loescht den Eintrag, wie die Ansicht es tut: auf dem aktuellen Stand der Zeile (E2). */
+  private ResponseEntity<String> loesche(final long id) {
+    return rest.exchange(
+        PFAD + "/" + id,
+        HttpMethod.DELETE,
+        new HttpEntity<>(null, Stand.aktuell(sitzung, jdbc, "arbeitszeit", id)),
+        String.class);
+  }
+
+  /** Die Kopfzeilen der Sitzung mit einem frei gewaehlten Stand. */
+  private HttpHeaders aufStand(final long version) {
+    final HttpHeaders kopf = new HttpHeaders();
+    kopf.putAll(sitzung);
+    kopf.setIfMatch("\"" + version + "\"");
+    return kopf;
+  }
+
+  @Test
+  void loeschen_thenTheRowIsMarkedAndLeavesTheMonth() {
+    // Given — A5, Antwort 4; Plan #415, E17: geloescht wird mit Kennzeichen.
+    final long id = erfassteKennung("09:00", "11:00");
+
+    // When
+    final ResponseEntity<String> geloescht = loesche(id);
+
+    // Then — die Zeile steht mit Zeitpunkt und Konto der Loeschung, die Monatsliste ist leer.
+    assertThat(geloescht.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT count(*) FROM arbeitszeit"
+                    + " WHERE id = ? AND geloescht_am IS NOT NULL AND geloescht_von IS NOT NULL",
+                Long.class,
+                Long.valueOf(id)))
+        .isOne();
+    assertThat(lieseDenMonat(MONAT).tage()).isEmpty();
+  }
+
+  @Test
+  void loeschen_thenChangingAndDeletingAgainAnswer409Geloescht() {
+    // Given — #411, Kriterium 6: ein zweites Fenster hatte den Eintrag auf Stand 0 offen.
+    final long id = erfassteKennung("09:00", "11:00");
+    loesche(id);
+
+    // When — aendern und noch einmal loeschen, beides auf dem Stand des zweiten Fensters.
+    final ResponseEntity<String> geaendert =
+        rest.exchange(
+            PFAD + "/" + id,
+            HttpMethod.PUT,
+            new HttpEntity<>(eintrag(konzeptionId, "09:00", "12:00"), aufStand(0L)),
+            String.class);
+    final ResponseEntity<String> nochmals =
+        rest.exchange(
+            PFAD + "/" + id, HttpMethod.DELETE, new HttpEntity<>(null, aufStand(0L)), String.class);
+
+    // Then — beide 409 mit art = "gelöscht", und es entsteht nichts neu.
+    assertThat(geaendert.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+    assertThat(geaendert.getBody()).contains("\"art\":\"gelöscht\"");
+    assertThat(nochmals.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+    assertThat(nochmals.getBody()).contains("\"art\":\"gelöscht\"");
+    assertThat(jdbc.queryForObject("SELECT count(*) FROM arbeitszeit", Long.class)).isOne();
+    assertThat(lieseDenMonat(MONAT).tage()).isEmpty();
+  }
+
+  @Test
+  void loeschen_onAnOutdatedStand_thenAnswers409AndKeepsTheEntry() {
+    // Given — #411, Kriterium 6: ein erstes Aendern hat den Stand von 0 auf 1 gehoben.
+    final long id = erfassteKennung("09:00", "11:00");
+    aendere(id, eintrag(konzeptionId, "09:00", "12:00"), String.class);
+
+    // When — das Loeschen legt noch den Stand 0 vor.
+    final ResponseEntity<String> abgewiesen =
+        rest.exchange(
+            PFAD + "/" + id, HttpMethod.DELETE, new HttpEntity<>(null, aufStand(0L)), String.class);
+
+    // Then
+    assertThat(abgewiesen.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+    assertThat(abgewiesen.getBody()).contains("\"veraltet\"");
+    assertThat(lieseDenMonat(MONAT).tage().get(0).eintraege()).hasSize(1);
+  }
+
+  @Test
+  void loeschen_withoutIfMatch_thenAnswers428AndKeepsTheEntry() {
+    // Given
+    final long id = erfassteKennung("09:00", "11:00");
+
+    // When / Then — E3: ohne vorgelegten Stand wird nicht geloescht.
+    assertThat(ruf(PFAD + "/" + id, HttpMethod.DELETE, null, String.class).getStatusCode())
+        .isEqualTo(HttpStatus.PRECONDITION_REQUIRED);
+    assertThat(lieseDenMonat(MONAT).tage().get(0).eintraege()).hasSize(1);
   }
 
   @Test
   void loeschen_whenTheEntryIsUnknown_thenAnswers404() {
     // Given
     // When / Then
-    assertThat(ruf(PFAD + "/999", HttpMethod.DELETE, null, String.class).getStatusCode())
-        .isEqualTo(HttpStatus.NOT_FOUND);
+    assertThat(loesche(999L).getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+  }
+
+  @Test
+  void anlegen_inTheSlotOfADeletedEntry_thenNoOverlapAndCreated() {
+    // Given — E17: die Ueberschneidungspruefung je Person zaehlt den geloeschten Eintrag nicht.
+    loesche(erfassteKennung("09:00", "11:00"));
+
+    // When
+    final ResponseEntity<String> neu =
+        ruf(PFAD, HttpMethod.POST, eintrag(konzeptionId, "09:00", "11:00"), String.class);
+
+    // Then
+    assertThat(neu.getStatusCode()).as(neu.getBody()).isEqualTo(HttpStatus.CREATED);
+    assertThat(lieseDenMonat(MONAT).tage().get(0).eintraege()).hasSize(1);
   }
 
   private ArbeitszeitMonatResponse lieseDenMonat(final String monat) {
@@ -414,5 +563,205 @@ class ArbeitszeitControllerIT extends AbstractIntegrationTest {
               assertThat(position.angebotId()).isEqualTo(angebotId);
               assertThat(position.angebotTitel()).isEqualTo("Website-Relaunch");
             });
+  }
+
+  @Test
+  void personen_signedInAsCLevel_thenAnswers200WithAllAccountsIncludingTheDeactivatedOne() {
+    // Given — Kriterium 9 von #410: auch eine stillgelegte Person steht zur Auswahl.
+    final long ben =
+        accounts
+            .save(
+                Konten.benannt(
+                    Konten.mit(null, "ben@example.org", Role.EMPLOYEE, false, 0, ANGELEGT), "Ben"))
+            .requireId();
+
+    // When
+    final ResponseEntity<PersonResponse[]> gelesen =
+        ruf(PFAD + "/personen", HttpMethod.GET, null, PersonResponse[].class);
+
+    // Then — nach Anzeigenamen: Ben vor Manne.
+    assertThat(gelesen.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(Objects.requireNonNull(gelesen.getBody()))
+        .extracting(PersonResponse::id, PersonResponse::name, PersonResponse::aktiv)
+        .containsExactly(
+            tuple(ben, "Ben", false),
+            tuple(accounts.findByEmail(MAIL).orElseThrow().requireId(), "Manne", true));
+  }
+
+  @Test
+  void monat_asAnEmployeeAskingForAll_thenOnlyTheOwnEntries() {
+    // Given — Kriterium 2 von #410: Manne (C-Level) und Ben (Employee) haben am selben Tag Zeit
+    // erfasst; Ben meldet sich an und fragt ausdruecklich nach „Alle".
+    erfasse("09:00", "10:45", ZeiteintragResponse.class);
+    final long ben =
+        accounts
+            .save(
+                Konten.benannt(
+                    Konten.mit(null, "ben@example.org", Role.EMPLOYEE, true, 0, ANGELEGT), "Ben"))
+            .requireId();
+    sitzung = Anmeldung.perCode(rest, jdbc, hasher, "ben@example.org");
+    final long bensEintrag = erfassteKennung("11:00", "12:00");
+
+    // When
+    final ArbeitszeitMonatResponse gelesen =
+        Objects.requireNonNull(
+            ruf(
+                    PFAD + "?monat=" + MONAT + "&person=alle",
+                    HttpMethod.GET,
+                    null,
+                    ArbeitszeitMonatResponse.class)
+                .getBody());
+
+    // Then — nur Bens Eintrag mit seinem Namen, seine Summen, und die Auswahl nennt ihn.
+    assertThat(gelesen.tage())
+        .singleElement()
+        .satisfies(tag -> assertThat(tag.stunden()).isEqualByComparingTo("1.00"));
+    assertThat(gelesen.tage().get(0).eintraege())
+        .extracting(
+            zeile -> zeile.id(), zeile -> zeile.person().id(), zeile -> zeile.person().name())
+        .containsExactly(tuple(bensEintrag, ben, "Ben"));
+    assertThat(gelesen.stunden()).isEqualByComparingTo("1.00");
+    assertThat(gelesen.auswahl()).isEqualTo(String.valueOf(ben));
+  }
+
+  @Test
+  void monat_asACLevelAskingForAll_thenTheEntriesOfEveryPersonWithTheirNames() {
+    // Given — Kriterium 3 von #410: bei „Alle" steht an jedem Eintrag der Name der Person.
+    final HttpHeaders manne = sitzung;
+    erfasse("09:00", "10:45", ZeiteintragResponse.class);
+    accounts.save(
+        Konten.benannt(
+            Konten.mit(null, "ben@example.org", Role.EMPLOYEE, true, 0, ANGELEGT), "Ben"));
+    sitzung = Anmeldung.perCode(rest, jdbc, hasher, "ben@example.org");
+    erfasse("11:00", "12:00", ZeiteintragResponse.class);
+    sitzung = manne;
+
+    // When
+    final ArbeitszeitMonatResponse gelesen =
+        Objects.requireNonNull(
+            ruf(
+                    PFAD + "?monat=" + MONAT + "&person=alle",
+                    HttpMethod.GET,
+                    null,
+                    ArbeitszeitMonatResponse.class)
+                .getBody());
+
+    // Then — zwei Personen am selben Tag, und die Summen gelten fuer beide.
+    assertThat(gelesen.auswahl()).isEqualTo("alle");
+    assertThat(gelesen.tage().get(0).eintraege())
+        .extracting(zeile -> zeile.person().name())
+        .containsExactly("Manne", "Ben");
+    assertThat(gelesen.stunden()).isEqualByComparingTo("2.75");
+  }
+
+  private long legeBenAn() {
+    return accounts
+        .save(
+            Konten.benannt(
+                Konten.mit(null, "ben@example.org", Role.EMPLOYEE, true, 0, ANGELEGT), "Ben"))
+        .requireId();
+  }
+
+  private static Map<String, Object> fuer(final long accountId, final Map<String, Object> rumpf) {
+    final Map<String, Object> mitPerson = new LinkedHashMap<>(rumpf);
+    mitPerson.put("accountId", Long.valueOf(accountId));
+    return mitPerson;
+  }
+
+  /*
+   * Die Zeile, wie sie in der Tabelle steht — verglichen wird vorher gegen nachher, nicht gegen
+   * einen erwarteten Text: Wie die Uhrzeit dort steht, ist Sache der Abbildung und nicht dieses
+   * Tests.
+   */
+  private Map<String, Object> zeile(final long id) {
+    return jdbc.queryForMap(
+        "SELECT account_id, angebot_position_id, tag, von, bis, updated_at FROM arbeitszeit"
+            + " WHERE id = ?",
+        id);
+  }
+
+  private long personDerZeile(final long id) {
+    return Objects.requireNonNull(
+            jdbc.queryForObject("SELECT account_id FROM arbeitszeit WHERE id = ?", Long.class, id))
+        .longValue();
+  }
+
+  @Test
+  void anlegen_byACLevelWithAPerson_thenTheEntryBelongsToThatPerson() {
+    // Given — Kriterium 1 von #410: Manne (C-Level) traegt Zeit fuer Ben nach (Plan #426, E12).
+    final long ben = legeBenAn();
+
+    // When
+    final ResponseEntity<ZeiteintragResponse> erfasst =
+        ruf(
+            PFAD,
+            HttpMethod.POST,
+            fuer(ben, eintrag(konzeptionId, "09:00", "12:00")),
+            ZeiteintragResponse.class);
+
+    // Then — die Antwort und die Zeile nennen Ben.
+    assertThat(erfasst.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+    final ZeiteintragResponse angelegt = Objects.requireNonNull(erfasst.getBody());
+    assertThat(angelegt.accountId()).isEqualTo(ben);
+    assertThat(personDerZeile(angelegt.id())).isEqualTo(ben);
+  }
+
+  @Test
+  void aendern_byACLevelWithoutAPerson_thenKeepsTheOwnerUntilAnotherOneIsNamed() {
+    // Given — Ben hat 8:00 bis 18:00 Uhr gebucht; Manne (C-Level) korrigiert (E12, E13).
+    final HttpHeaders manne = sitzung;
+    final long manneId = accounts.findByEmail(MAIL).orElseThrow().requireId();
+    final long ben = legeBenAn();
+    sitzung = Anmeldung.perCode(rest, jdbc, hasher, "ben@example.org");
+    final long bensEintrag = erfassteKennung("08:00", "18:00");
+    sitzung = manne;
+
+    // When — ein PUT ohne Feld accountId
+    final ResponseEntity<ZeiteintragResponse> korrigiert =
+        aendere(bensEintrag, eintrag(konzeptionId, "08:00", "16:00"), ZeiteintragResponse.class);
+
+    // Then — die Zeiten sind geaendert, und der Eintrag gehoert weiter Ben.
+    assertThat(korrigiert.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(Objects.requireNonNull(korrigiert.getBody()).stunden()).isEqualByComparingTo("8.00");
+    assertThat(personDerZeile(bensEintrag)).isEqualTo(ben);
+
+    // When — erst ein PUT mit genanntem anderem Konto haengt ihn um.
+    final ResponseEntity<ZeiteintragResponse> umgehaengt =
+        aendere(
+            bensEintrag,
+            fuer(manneId, eintrag(konzeptionId, "08:00", "16:00")),
+            ZeiteintragResponse.class);
+
+    // Then
+    assertThat(umgehaengt.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(Objects.requireNonNull(umgehaengt.getBody()).accountId()).isEqualTo(manneId);
+    assertThat(personDerZeile(bensEintrag)).isEqualTo(manneId);
+  }
+
+  @Test
+  void aendern_byAnEmployeeOnAForeignEntry_thenAnswers404AndTheRowIsUnchanged() {
+    // Given — E7: Mannes Eintrag ist fuer Ben einer, den es nicht gibt.
+    final long mannesEintrag = erfassteKennung("09:00", "11:00");
+    final Map<String, Object> vorher = zeile(mannesEintrag);
+    legeBenAn();
+    sitzung = Anmeldung.perCode(rest, jdbc, hasher, "ben@example.org");
+
+    // When
+    final ResponseEntity<String> abgewiesen =
+        aendere(mannesEintrag, eintrag(konzeptionId, "09:00", "12:00"), String.class);
+
+    // Then
+    assertThat(abgewiesen.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+    assertThat(zeile(mannesEintrag)).isEqualTo(vorher);
+  }
+
+  @Test
+  void personen_withoutASession_thenAnswers401() {
+    // Given
+    sitzung = new HttpHeaders();
+
+    // When / Then
+    assertThat(ruf(PFAD + "/personen", HttpMethod.GET, null, String.class).getStatusCode())
+        .isEqualTo(HttpStatus.UNAUTHORIZED);
   }
 }

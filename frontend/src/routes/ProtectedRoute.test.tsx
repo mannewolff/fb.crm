@@ -7,7 +7,7 @@ import { AuthProvider } from '../auth/AuthContext';
 import { renderMitTheme } from '../test/render';
 import ProtectedRoute from './ProtectedRoute';
 
-const KONTO = { id: 1, displayName: 'Manfred Wolff', email: 'info@mwolff.org' };
+const KONTO = { id: 1, displayName: 'Manfred Wolff', email: 'info@mwolff.org', role: 'C_LEVEL' };
 
 function fetchLiefert(bauen: () => Response) {
   return vi.spyOn(globalThis, 'fetch').mockImplementation(() => Promise.resolve(bauen()));

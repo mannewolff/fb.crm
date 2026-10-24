@@ -132,7 +132,9 @@ class ForecastUseCaseTest {
             "Schulungen",
             List.of(positionen),
             ANGELEGT,
-            ANGELEGT),
+            ANGELEGT,
+            0L,
+            null),
         firmaName);
   }
 

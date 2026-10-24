@@ -62,6 +62,7 @@ const ENTWURF = {
   empfaenger: null,
   absender: null,
   zeilen: [ZEILE],
+  version: 3,
 };
 
 const ENTWURF_VERENGT = {
@@ -82,6 +83,7 @@ const ENTWURF_VERENGT = {
   empfaenger: null,
   absender: null,
   zeilen: [ZEILE_VERENGT],
+  version: 3,
 };
 
 /** Der Empfaenger, wie das Stellen ihn festschreibt. */
@@ -278,6 +280,8 @@ describe('parseRechnung', () => {
     ['Absender ohne Name', { ...GESTELLT, absender: { ...ABSENDER, name: null } }],
     ['Absender mit Telefon als Zahl', { ...GESTELLT, absender: { ...ABSENDER, telefon: 421 } }],
     ['Zeilen als Objekt', { ...ENTWURF, zeilen: {} }],
+    ['ohne Version', { ...ENTWURF, version: undefined }],
+    ['Version als Text', { ...ENTWURF, version: '3' }],
     ['Zeile ist kein Objekt', { ...ENTWURF, zeilen: ['x'] }],
     ['Zeile ohne Kennung der Angebotsposition', { ...ENTWURF, zeilen: [{ ...ZEILE, angebotPositionId: null }] }],
     ['Zeile ohne Bezeichnung', { ...ENTWURF, zeilen: [{ ...ZEILE, bezeichnung: null }] }],
@@ -498,31 +502,41 @@ describe('die Wege', () => {
   it('aendert den Entwurf als Ganzes; die Menge geht als Dezimaltext hinaus', async () => {
     const fetchMock = fetchNachPfad({ 'PUT /api/rechnungen/4': json(200, ENTWURF) });
 
-    expect(await rechnungAendern(4, EINGABE)).toEqual(ENTWURF_VERENGT);
+    expect(await rechnungAendern(4, 3, EINGABE)).toEqual(ENTWURF_VERENGT);
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/rechnungen/4',
-      expect.objectContaining({ method: 'PUT', body: JSON.stringify(EINGABE) }),
+      expect.objectContaining({
+        method: 'PUT',
+        body: JSON.stringify(EINGABE),
+        headers: expect.objectContaining({ 'If-Match': '"3"' }) as unknown,
+      }),
     );
   });
 
-  it('loescht den Entwurf', async () => {
+  it('loescht den Entwurf und legt dabei seinen Stand vor', async () => {
     const fetchMock = fetchNachPfad({ 'DELETE /api/rechnungen/4': leer(204) });
 
-    await rechnungLoeschen(4);
+    await rechnungLoeschen(4, 3);
 
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/rechnungen/4',
-      expect.objectContaining({ method: 'DELETE' }),
+      expect.objectContaining({
+        method: 'DELETE',
+        headers: expect.objectContaining({ 'If-Match': '"3"' }) as unknown,
+      }),
     );
   });
 
   it('stellt die Rechnung und nimmt die gestellte aus der Antwort', async () => {
     const fetchMock = fetchNachPfad({ 'POST /api/rechnungen/4/stellen': json(200, GESTELLT) });
 
-    expect(await rechnungStellen(4)).toEqual(GESTELLT_VERENGT);
+    expect(await rechnungStellen(4, 3)).toEqual(GESTELLT_VERENGT);
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/rechnungen/4/stellen',
-      expect.objectContaining({ method: 'POST' }),
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({ 'If-Match': '"3"' }) as unknown,
+      }),
     );
   });
 
@@ -531,20 +545,24 @@ describe('die Wege', () => {
       'PUT /api/rechnungen/4/zustand': json(200, { ...GESTELLT, zustand: 'BEZAHLT' }),
     });
 
-    expect(await setzeRechnungszustand(4, 'BEZAHLT')).toEqual({
+    expect(await setzeRechnungszustand(4, 5, 'BEZAHLT')).toEqual({
       ...GESTELLT_VERENGT,
       zustand: 'BEZAHLT',
     });
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/rechnungen/4/zustand',
-      expect.objectContaining({ method: 'PUT', body: JSON.stringify({ zustand: 'BEZAHLT' }) }),
+      expect.objectContaining({
+        method: 'PUT',
+        body: JSON.stringify({ zustand: 'BEZAHLT' }),
+        headers: expect.objectContaining({ 'If-Match': '"5"' }) as unknown,
+      }),
     );
   });
 
   it('stellt die Rechnung zurueck auf gestellt', async () => {
     const fetchMock = fetchNachPfad({ 'PUT /api/rechnungen/4/zustand': json(200, GESTELLT) });
 
-    expect(await setzeRechnungszustand(4, 'GESTELLT')).toEqual(GESTELLT_VERENGT);
+    expect(await setzeRechnungszustand(4, 5, 'GESTELLT')).toEqual(GESTELLT_VERENGT);
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/rechnungen/4/zustand',
       expect.objectContaining({ body: JSON.stringify({ zustand: 'GESTELLT' }) }),

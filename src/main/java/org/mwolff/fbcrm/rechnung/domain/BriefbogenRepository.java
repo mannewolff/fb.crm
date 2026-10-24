@@ -14,10 +14,21 @@ public interface BriefbogenRepository {
   Briefbogen lies();
 
   /**
+   * Der Stand der Zeile: Version, Urheber und Zeitpunkt der letzten Aenderung (Plan #415, E1, E11).
+   */
+  Zeilenstand stand();
+
+  /**
    * Schreibt den Briefbogen fort.
+   *
+   * <p>Die Zeile wird nur geschrieben, wenn sie noch den Stand {@code version} traegt; sonst
+   * scheitert das Schreiben an der Sperre des Bestands (E1).
    *
    * @param briefbogen der neue Stand, bereits geprueft
    * @param geaendertAm Zeitpunkt der Aenderung
+   * @param version der Stand, auf dem die Aenderung beruht
+   * @param konto Kennung des handelnden Kontos
+   * @return der neue Stand der Zeile
    */
-  void speichere(Briefbogen briefbogen, Instant geaendertAm);
+  Zeilenstand speichere(Briefbogen briefbogen, Instant geaendertAm, long version, long konto);
 }

@@ -9,13 +9,17 @@ import { eigeneAngabenLesen, eigeneAngabenPflegen } from '../api/eigeneAngaben';
 import type { EigeneAngaben } from '../api/eigeneAngaben';
 import type { FieldErrors } from '../api/client';
 import AnschriftFelder from '../components/AnschriftFelder';
+import { useRechte } from '../auth/rechte';
 import BriefbogenKarte from '../components/BriefbogenKarte';
+import EigeneEingaben from '../components/EigeneEingaben';
+import type { EigeneEingabe } from '../components/EigeneEingaben';
 import Karte from '../components/Karte';
+import Konfliktmeldung from '../components/Konfliktmeldung';
 import { useKopfPfad } from '../components/KopfPfad';
 import type { PfadVerweis } from '../components/KopfPfad';
 import KupferTaste from '../components/KupferTaste';
 import WeicheTaste from '../components/WeicheTaste';
-import { feldMeldungen } from '../lib/apifehler';
+import { feldMeldungen, istBearbeitungskonflikt } from '../lib/apifehler';
 import { meldungAm } from '../lib/feldmeldung';
 import { ABSTAND_BUEHNE } from '../theme';
 
@@ -41,6 +45,9 @@ import { ABSTAND_BUEHNE } from '../theme';
  * „Abbrechen" ist hier ein **Schalter, kein Weg**: Ueber „Eigene Angaben" liegt keine Ebene, auf
  * die es fuehren koennte — bei der Firma ist das die Detailansicht. Es nimmt die Aenderungen
  * stattdessen auf den gespeicherten Stand zurueck.
+ *
+ * Ohne das Recht, die Einstellungen zu aendern, stehen die Angaben ohne „Speichern" und
+ * „Abbrechen" da — ReadOnly liest sie nur (Kriterium 10 von #409, Plan #414, A10, E1).
  */
 
 const AUSFALL_LESEN =
@@ -48,6 +55,30 @@ const AUSFALL_LESEN =
 const AUSFALL_SPEICHERN =
   'Die Angaben wurden nicht gespeichert. Bitte später erneut versuchen.';
 const GESPEICHERT = 'Die Angaben sind gespeichert.';
+const AUSFALL_NEU_LADEN =
+  'Der aktuelle Stand ist gerade nicht zu erreichen. Bitte später erneut versuchen.';
+
+/** Wohin die Konfliktmeldung fuehrt, wenn es nichts neu zu laden gibt — hierher. */
+const UEBERSICHT = '/eigene-angaben';
+
+/**
+ * Die Beschriftungen der zwoelf Felder — an der Maske und unter „Deine Eingaben" dieselben. Die
+ * vier der Anschrift setzt {@link AnschriftFelder}; hier stehen sie nur fuer „Deine Eingaben".
+ */
+const BESCHRIFTUNG: Readonly<Record<keyof Werte, string>> = {
+  name: 'Name',
+  berufsbezeichnung: 'Berufsbezeichnung',
+  strasse: 'Straße und Hausnummer',
+  plz: 'Postleitzahl',
+  ort: 'Ort',
+  land: 'Land',
+  email: 'E-Mail-Adresse',
+  telefon: 'Telefon',
+  webadresse: 'Webadresse',
+  steuernummer: 'Steuernummer',
+  umsatzsteuerId: 'Umsatzsteuer-Identifikationsnummer',
+  bankverbindung: 'Bankverbindung',
+};
 
 /** Die zwoelf Felder der Maske, jedes als Zeichenkette — leer heisst „keine Angabe". */
 interface Werte {
@@ -137,6 +168,14 @@ function alsEingabe(werte: Werte): EigeneAngaben {
   };
 }
 
+/** Was gerade in der Maske steht, als eigene Eingaben zum Kopieren (#411, Kriterium 3). */
+function eigeneEingabenAus(werte: Werte): readonly EigeneEingabe[] {
+  return (Object.keys(BESCHRIFTUNG) as (keyof Werte)[]).map((feld) => ({
+    bezeichnung: BESCHRIFTUNG[feld],
+    wert: werte[feld],
+  }));
+}
+
 interface EingabeProps {
   readonly label: string;
   readonly feld: keyof Werte;
@@ -181,6 +220,7 @@ function nichtBereit(stand: Exclude<Stand, 'bereit'>): ReactNode {
 }
 
 export default function EigeneAngabenMaske() {
+  const { darfEinstellungenAendern } = useRechte();
   const [stand, setzeStand] = useState<Stand>('laedt');
   const [werte, setzeWerte] = useState<Werte>(LEERE_WERTE);
   // Der zuletzt gespeicherte Stand — das Ziel der Ruecknahme. Kein `null`: Solange nichts geladen
@@ -190,6 +230,12 @@ export default function EigeneAngabenMaske() {
   const [feldFehler, setzeFeldFehler] = useState<FieldErrors>({});
   const [fehler, setzeFehler] = useState<string | null>(null);
   const [laeuft, setzeLaeuft] = useState(false);
+  // Der Stand, den das naechste Speichern vorlegt: gelesen, oder aus der Antwort des letzten.
+  const [version, setzeVersion] = useState(0);
+  // Die Abweisung eines Speicherns auf altem Stand, ungeprueft — die Konfliktmeldung liest sie.
+  const [abweisung, setzeAbweisung] = useState<unknown>(null);
+  // Die eigenen Werte nach „Neu laden", bis „Verwerfen" gewaehlt wird (#411, Kriterium 3).
+  const [eigene, setzeEigene] = useState<readonly EigeneEingabe[] | null>(null);
 
   useKopfPfad(KEIN_WEG, TITEL);
 
@@ -199,6 +245,7 @@ export default function EigeneAngabenMaske() {
         const geladen = alsWerte(angaben);
         setzeWerte(geladen);
         setzeGespeichert(geladen);
+        setzeVersion(angaben.version);
         setzeStand('bereit');
       })
       .catch(() => {
@@ -211,24 +258,53 @@ export default function EigeneAngabenMaske() {
     setzeFehler(null);
     setzeFeldFehler({});
     setzeErfolg(false);
+    setzeAbweisung(null);
     setzeLaeuft(true);
-    const eingabe = alsEingabe(werte);
     try {
-      await eigeneAngabenPflegen(eingabe);
+      const gesichert = await eigeneAngabenPflegen(version, alsEingabe(werte));
       // Was gespeichert wurde, ist der neue Stand — auch fuer die Ruecknahme. Die Felder
       // uebernehmen dabei die abgeschnittene Form; sonst stuende im Feld ein Leerzeichen, das
       // der Server nicht bekommen hat.
-      const neu = alsWerte(eingabe);
+      const neu = alsWerte(gesichert);
       setzeWerte(neu);
       setzeGespeichert(neu);
+      setzeVersion(gesichert.version);
       setzeErfolg(true);
     } catch (ursache) {
       const felder = feldMeldungen(ursache);
-      if (Object.keys(felder).length > 0) {
+      if (istBearbeitungskonflikt(ursache)) {
+        // Die Eingaben bleiben stehen; den Weg weiter zeigt die Konfliktmeldung (Kriterium 3).
+        setzeAbweisung(ursache);
+      } else if (Object.keys(felder).length > 0) {
         setzeFeldFehler(felder);
       } else {
         setzeFehler(AUSFALL_SPEICHERN);
       }
+    } finally {
+      setzeLaeuft(false);
+    }
+  };
+
+  /**
+   * „Neu laden" nach einer Abweisung: der Stand des Servers ins Formular, die eigenen Werte daneben
+   * (#411, Kriterium 3; Plan #415, E12). Genommen wird, was in diesem Augenblick in der Maske steht
+   * — auch was nach der Abweisung noch getippt wurde.
+   */
+  const neuLaden = async () => {
+    const meine = eigeneEingabenAus(werte);
+    setzeFehler(null);
+    setzeLaeuft(true);
+    try {
+      const angaben = await eigeneAngabenLesen();
+      const geladen = alsWerte(angaben);
+      setzeWerte(geladen);
+      setzeGespeichert(geladen);
+      setzeVersion(angaben.version);
+      setzeEigene(meine);
+      setzeAbweisung(null);
+      setzeFeldFehler({});
+    } catch {
+      setzeFehler(AUSFALL_NEU_LADEN);
     } finally {
       setzeLaeuft(false);
     }
@@ -263,15 +339,30 @@ export default function EigeneAngabenMaske() {
           >
             {fehler === null ? null : <Alert severity="error">{fehler}</Alert>}
             {erfolg ? <Alert severity="success">{GESPEICHERT}</Alert> : null}
+            <Konfliktmeldung
+              ursache={abweisung}
+              onNeuLaden={() => {
+                void neuLaden();
+              }}
+              uebersicht={UEBERSICHT}
+            />
+            {eigene === null ? null : (
+              <EigeneEingaben
+                werte={eigene}
+                onVerwerfen={() => {
+                  setzeEigene(null);
+                }}
+              />
+            )}
             <Eingabe
-              label="Name"
+              label={BESCHRIFTUNG.name}
               feld="name"
               werte={werte}
               setzeWerte={setzeWerte}
               meldung={meldungAm(feldFehler, 'name')}
             />
             <Eingabe
-              label="Berufsbezeichnung"
+              label={BESCHRIFTUNG.berufsbezeichnung}
               feld="berufsbezeichnung"
               werte={werte}
               setzeWerte={setzeWerte}
@@ -279,51 +370,53 @@ export default function EigeneAngabenMaske() {
             />
             <AnschriftFelder werte={werte} setzeWerte={setzeWerte} feldFehler={feldFehler} />
             <Eingabe
-              label="E-Mail-Adresse"
+              label={BESCHRIFTUNG.email}
               feld="email"
               werte={werte}
               setzeWerte={setzeWerte}
               meldung={meldungAm(feldFehler, 'email')}
             />
             <Eingabe
-              label="Telefon"
+              label={BESCHRIFTUNG.telefon}
               feld="telefon"
               werte={werte}
               setzeWerte={setzeWerte}
               meldung={meldungAm(feldFehler, 'telefon')}
             />
             <Eingabe
-              label="Webadresse"
+              label={BESCHRIFTUNG.webadresse}
               feld="webadresse"
               werte={werte}
               setzeWerte={setzeWerte}
               meldung={meldungAm(feldFehler, 'webadresse')}
             />
             <Eingabe
-              label="Steuernummer"
+              label={BESCHRIFTUNG.steuernummer}
               feld="steuernummer"
               werte={werte}
               setzeWerte={setzeWerte}
               meldung={meldungAm(feldFehler, 'steuernummer')}
             />
             <Eingabe
-              label="Umsatzsteuer-Identifikationsnummer"
+              label={BESCHRIFTUNG.umsatzsteuerId}
               feld="umsatzsteuerId"
               werte={werte}
               setzeWerte={setzeWerte}
               meldung={meldungAm(feldFehler, 'umsatzsteuerId')}
             />
             <Eingabe
-              label="Bankverbindung"
+              label={BESCHRIFTUNG.bankverbindung}
               feld="bankverbindung"
               werte={werte}
               setzeWerte={setzeWerte}
               meldung={meldungAm(feldFehler, 'bankverbindung')}
             />
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, flexWrap: 'wrap' }}>
-              <KupferTaste disabled={laeuft}>Speichern</KupferTaste>
-              <WeicheTaste onClick={zuruecknehmen}>Abbrechen</WeicheTaste>
-            </Box>
+            {darfEinstellungenAendern ? (
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, flexWrap: 'wrap' }}>
+                <KupferTaste disabled={laeuft}>Speichern</KupferTaste>
+                <WeicheTaste onClick={zuruecknehmen}>Abbrechen</WeicheTaste>
+              </Box>
+            ) : null}
           </Box>
         ) : (
           nichtBereit(stand)

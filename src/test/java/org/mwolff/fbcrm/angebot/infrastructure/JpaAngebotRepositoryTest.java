@@ -127,7 +127,9 @@ class JpaAngebotRepositoryTest {
         BESCHREIBUNG,
         positionen,
         ANGELEGT,
-        GEAENDERT);
+        GEAENDERT,
+        0L,
+        null);
   }
 
   /** Dasselbe Angebot mit einem anderen Titel — {@code null} fuer ein Angebot von vor #316. */
@@ -145,7 +147,9 @@ class JpaAngebotRepositoryTest {
         angebot.beschreibung(),
         angebot.positionen(),
         angebot.createdAt(),
-        angebot.updatedAt());
+        angebot.updatedAt(),
+        0L,
+        null);
   }
 
   private static Angebotsposition mitKennung(
@@ -207,9 +211,94 @@ class JpaAngebotRepositoryTest {
   /** Dasselbe, aber das Angebot traegt die genannten Positionszeilen schon. */
   private void erwarteSchreibenDerZeile(
       final AngebotEntity zeile, final List<AngebotPositionEntity> vorhandene) {
-    when(angebote.save(any(AngebotEntity.class))).thenReturn(zeile);
+    when(angebote.saveAndFlush(any(AngebotEntity.class))).thenReturn(zeile);
     when(positionen.findByAngebot(11L)).thenReturn(vorhandene);
     when(positionen.saveAll(any())).thenAnswer(aufruf -> aufruf.getArgument(0));
+  }
+
+  /** Dasselbe Angebot auf Stand 4, zuletzt geaendert von Konto 30 (Plan #415, E1, E14). */
+  private static Angebot aufStand(final Angebot angebot) {
+    return new Angebot(
+            angebot.id(),
+            angebot.firmaId(),
+            angebot.ansprechpartnerId(),
+            angebot.intern(),
+            angebot.status(),
+            angebot.storniert(),
+            angebot.stornoGrund(),
+            angebot.angebotDatum(),
+            angebot.titel(),
+            angebot.beschreibung(),
+            angebot.positionen(),
+            angebot.createdAt(),
+            angebot.updatedAt(),
+            4L,
+            null)
+        .durch(30L);
+  }
+
+  @Test
+  void save_thenWritesTheStandAndTheUrheberIntoTheRow() {
+    // Given — E1: Der Stand reist mit in die Zeile; nur so erkennt Hibernate eine Zeile, die auf
+    // einem alten Stand beruht.
+    erwarteSchreibenDerZeile(zeile());
+
+    // When
+    repository.save(aufStand(angebot(List.of(KONZEPTION))));
+
+    // Then
+    verify(angebote).saveAndFlush(gespeicherte.capture());
+    assertThat(gespeicherte.getValue())
+        .satisfies(
+            zeile -> assertThat(zeile.getVersion()).isEqualTo(4L),
+            zeile -> assertThat(zeile.getGeaendertVon()).isEqualTo(30L));
+  }
+
+  @Test
+  void findById_thenTranslatesTheStandAndTheUrheberBack() {
+    // Given — E2: Die Leseantwort gibt den Stand heraus, den die Maske wieder vorlegt.
+    when(angebote.findById(11L))
+        .thenReturn(Optional.of(AngebotEntity.aus(aufStand(angebot(List.of())))));
+    when(positionen.findByAngebot(11L)).thenReturn(List.of());
+
+    // When
+    final Optional<Angebot> gefunden = repository.findById(11L);
+
+    // Then
+    assertThat(gefunden)
+        .hasValueSatisfying(
+            angebot -> {
+              assertThat(angebot.version()).isEqualTo(4L);
+              assertThat(angebot.geaendertVon()).isEqualTo(30L);
+            });
+  }
+
+  @Test
+  void findByIdMitSperre_thenReadsTheLockedRowWithItsPositions() {
+    // Given — der Lesepfad des Stellens einer Rechnung (Plan #415, E10): dieselbe Abbildung, nur
+    // mit Sperre auf der Zeile.
+    when(angebote.sperreUndLies(11L))
+        .thenReturn(Optional.of(AngebotEntity.aus(aufStand(angebot(List.of())))));
+    when(positionen.findByAngebot(11L)).thenReturn(List.of());
+
+    // When / Then
+    assertThat(repository.findByIdMitSperre(11L))
+        .hasValueSatisfying(
+            angebot -> {
+              assertThat(angebot.requireId()).isEqualTo(11L);
+              assertThat(angebot.version()).isEqualTo(4L);
+            });
+    verify(angebote, never()).findById(anyLong());
+  }
+
+  @Test
+  void findByIdMitSperre_givenAnUnknownId_thenEmpty() {
+    // Given
+    when(angebote.sperreUndLies(11L)).thenReturn(Optional.empty());
+
+    // When / Then — keine zweite Abfrage nach Positionen eines Angebots, das es nicht gibt.
+    assertThat(repository.findByIdMitSperre(11L)).isEmpty();
+    verify(positionen, never()).findByAngebot(anyLong());
   }
 
   @Test
@@ -221,7 +310,7 @@ class JpaAngebotRepositoryTest {
     repository.save(angebot(List.of(KONZEPTION)));
 
     // Then
-    verify(angebote).save(gespeicherte.capture());
+    verify(angebote).saveAndFlush(gespeicherte.capture());
     assertThat(gespeicherte.getValue())
         .satisfies(
             zeile -> assertThat(zeile.getId()).isEqualTo(11L),
@@ -332,7 +421,7 @@ class JpaAngebotRepositoryTest {
   void save_givenAnIdOutsideTheRowsOfTheAngebot_thenThrowsAndWritesNoPositionRow() {
     // Given — nach der Pruefung im Anwendungsfall ist das ein Programmierfehler, kein
     // Eingabefehler.
-    when(angebote.save(any(AngebotEntity.class))).thenReturn(zeile());
+    when(angebote.saveAndFlush(any(AngebotEntity.class))).thenReturn(zeile());
     when(positionen.findByAngebot(11L))
         .thenReturn(List.of(positionszeile((short) 1, mitKennung(KONZEPTION, 71L))));
 
@@ -419,7 +508,7 @@ class JpaAngebotRepositoryTest {
     repository.save(angebot(List.of(KONZEPTION), Angebotsstatus.LAEUFT));
 
     // Then
-    verify(angebote).save(gespeicherte.capture());
+    verify(angebote).saveAndFlush(gespeicherte.capture());
     assertThat(gespeicherte.getValue())
         .satisfies(
             zeile -> assertThat(zeile.isIntern()).isTrue(),
@@ -636,7 +725,7 @@ class JpaAngebotRepositoryTest {
     repository.save(mitTitel(angebot(List.of()), "Betreuung 2027"));
 
     // Then
-    verify(angebote).save(gespeicherte.capture());
+    verify(angebote).saveAndFlush(gespeicherte.capture());
     assertThat(gespeicherte.getValue().getTitel()).isEqualTo("Betreuung 2027");
   }
 
@@ -649,7 +738,7 @@ class JpaAngebotRepositoryTest {
     final Angebot gesichert = repository.save(mitTitel(angebot(List.of()), null));
 
     // Then
-    verify(angebote).save(gespeicherte.capture());
+    verify(angebote).saveAndFlush(gespeicherte.capture());
     assertThat(gespeicherte.getValue().getTitel()).isNull();
     assertThat(gesichert.titel()).isNull();
   }
@@ -713,7 +802,7 @@ class JpaAngebotRepositoryTest {
     final Angebot gesichert = repository.save(storniert);
 
     // Then — hin in die Zeile und zurueck in das Angebot, das der Adapter liefert.
-    verify(angebote).save(gespeicherte.capture());
+    verify(angebote).saveAndFlush(gespeicherte.capture());
     assertThat(gespeicherte.getValue().isStorniert()).isTrue();
     assertThat(gespeicherte.getValue().getStornoGrund()).isEqualTo("Auftrag zurueckgezogen");
     assertThat(gesichert.storniert()).isTrue();

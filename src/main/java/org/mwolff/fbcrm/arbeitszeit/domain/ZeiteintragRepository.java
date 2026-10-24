@@ -13,8 +13,14 @@ import java.util.Set;
  * arbeitszeit.infrastructure}.
  *
  * <p>Jeder Zeiteintrag ist eine Zeile fuer sich — wie der Kommentar am Angebot und anders als die
- * Positionen eines Belegs: Er traegt seine eigene Kennung und wird einzeln angelegt,
- * fortgeschrieben und geloescht (Plan #194, A3).
+ * Positionen eines Belegs: Er traegt seine eigene Kennung und wird einzeln angelegt und
+ * fortgeschrieben (Plan #194, A3).
+ *
+ * <p><b>Geloescht wird mit Kennzeichen</b> (Plan #415, E17): Der Anwendungsfall schreibt den
+ * gekennzeichneten Eintrag mit {@link #save(Zeiteintrag)}. Jeder Leseweg und jede Summe laesst ihn
+ * danach aus; allein {@link #findById(long)} liefert ihn weiter, damit eine Aktion darauf Urheber
+ * und Zeitpunkt der Loeschung nennen kann (E16). Hart entfernt werden gekennzeichnete Eintraege nur
+ * noch mit ihrer Position ({@link #loescheGekennzeichnete(Set)}).
  *
  * <p><b>Vier Summen in zwei Paaren und ein fuenfter Weg ohne Stunden.</b> Die vier Summen liefern
  * Stunden je Angebotsposition, und keine fragt je Zeile einmal — dasselbe Muster wie {@code
@@ -38,23 +44,28 @@ import java.util.Set;
  * begrenzten — mit Positionsmenge genau ein Monat, ohne sie zwei Datumsgrenzen, die einen Monat
  * ebenso fassen wie ein Jahr (Plan #274, E6).
  *
+ * <p>Keine der vier Summen trennt nach Personen: Kontingent, Rechnungsvorschlag und Auswertungen
+ * zaehlen die Stunden aller (Plan #426, E15; #410, Kriterien 6 bis 8).
+ *
  * <p>Der fuenfte Weg, {@link #monateMitEintragImZeitraum(LocalDate, LocalDate)}, ist der eine, der
  * keine Stunden liefert: Er sagt nur, in welchen Monaten eines Zeitraums ueberhaupt Zeit erfasst
  * ist.
  */
 public interface ZeiteintragRepository {
 
-  /** Der Zeiteintrag zu einer technischen Kennung, oder leer. */
+  /**
+   * Der Zeiteintrag zu einer technischen Kennung, oder leer — auch ein gekennzeichneter (E16).
+   *
+   * @param id Kennung des Zeiteintrags
+   */
   Optional<Zeiteintrag> findById(long id);
 
   /**
    * Alle Zeiteintraege in einem Zeitraum, beide Grenzen eingeschlossen.
    *
-   * <p>Ueber alle Positionen, denn beide Leser brauchen genau das: die Monatsliste der Ansicht
-   * (Issue #193, Kriterium 5) und die Ueberschneidungspruefung eines einzelnen Tages, die niemanden
-   * zur selben Zeit fuer zwei Kunden arbeiten laesst (Kriterium 4, A8). Fuer den einzelnen Tag
-   * stehen in beiden Grenzen derselbe Tag — ein eigenes {@code findAmTag} waere dieselbe Abfrage
-   * unter zweitem Namen.
+   * <p>Ueber alle Positionen und alle Personen: Der Leser ist die Monatsliste der Ansicht in der
+   * Sicht „Alle" (Issue #193, Kriterium 5; Plan #426, E10). Die Ueberschneidungspruefung gilt je
+   * Person und fragt {@link #findImZeitraumFuerKonto(LocalDate, LocalDate, long)} (E8).
    *
    * <p>Ohne zugesagte Reihenfolge, wie die Listen der Belege: Welche Ordnung die Ansicht zeigt,
    * entscheidet die Anwendungsschicht.
@@ -65,20 +76,37 @@ public interface ZeiteintragRepository {
   List<Zeiteintrag> findImZeitraum(LocalDate von, LocalDate bis);
 
   /**
+   * Die Zeiteintraege einer Person in einem Zeitraum, beide Grenzen eingeschlossen (Plan #426, E8).
+   *
+   * <p>Die Leser sind die Monatsliste einer Person und die Ueberschneidungspruefung, die je Person
+   * gilt (#410, Kriterium 5). Gefiltert wird hier, wo ohnehin gelesen wird, und nicht danach in der
+   * Anwendungsschicht: Sonst kaemen fremde Eintraege in den Speicher, auch fuer ein Konto, das sie
+   * nicht sehen darf. {@link #findImZeitraum(LocalDate, LocalDate)} bleibt fuer die Sicht „Alle"
+   * und die Leser ueber alle Angebote.
+   *
+   * <p>Ohne zugesagte Reihenfolge, wie {@link #findImZeitraum(LocalDate, LocalDate)}.
+   *
+   * @param von erster Tag des Zeitraums
+   * @param bis letzter Tag des Zeitraums
+   * @param accountId Kennung des Kontos, dessen Eintraege gelesen werden
+   */
+  List<Zeiteintrag> findImZeitraumFuerKonto(LocalDate von, LocalDate bis, long accountId);
+
+  /**
    * Legt den Zeiteintrag an oder schreibt ihn fort und liefert ihn mit gesetzter Kennung zurueck.
    */
   Zeiteintrag save(Zeiteintrag zeiteintrag);
 
   /**
-   * Loescht den Zeiteintrag — die Zeile ist danach fort.
+   * Entfernt die gekennzeichneten Eintraege auf den genannten Positionen hart (Plan #415, E17).
    *
-   * <p>Loeschen ist immer erlaubt, auch an einem schon abgerechneten Angebot (Plan #194, A7): Wer
-   * sich verschrieben hat, soll den Fehler wegnehmen koennen. Dass der Eintrag existiert, prueft
-   * der Anwendungsfall; eine unbekannte Kennung ist hier kein Fehler.
+   * <p>Der Leser ist das Angebot, wenn es Positionen entfernt: Ein gekennzeichneter Eintrag zeigt
+   * weiter ohne {@code ON DELETE} auf seine Position und sperrte sie sonst fuer immer. Ein nicht
+   * geloeschter Eintrag bleibt stehen und haelt seine Position weiter fest.
    *
-   * @param id Kennung des Zeiteintrags
+   * @param angebotPositionIds die Kennungen der Positionen, die entfallen
    */
-  void delete(long id);
+  void loescheGekennzeichnete(Set<Long> angebotPositionIds);
 
   /**
    * Die insgesamt erfassten Stunden je Angebotsposition (Issue #193, Kriterium 7).

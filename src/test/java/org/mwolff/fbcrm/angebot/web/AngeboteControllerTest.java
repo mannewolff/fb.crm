@@ -13,6 +13,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.Year;
 import java.util.List;
+import java.util.Optional;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -52,7 +53,7 @@ class AngeboteControllerTest {
   void baueDenController() {
     mockMvc =
         MockMvcBuilders.standaloneSetup(new AngeboteController(uebersicht))
-            .setControllerAdvice(new GlobalExceptionHandler())
+            .setControllerAdvice(new GlobalExceptionHandler(konto -> Optional.empty()))
             .build();
   }
 
@@ -84,7 +85,9 @@ class AngeboteControllerTest {
                     new BigDecimal("1000.01"),
                     Year.of(2026))),
             ANGELEGT,
-            ANGELEGT),
+            ANGELEGT,
+            0L,
+            null),
         "Adler AG");
   }
 

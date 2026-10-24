@@ -99,7 +99,74 @@ class AngebotTest {
         "Neugestaltung der Website",
         positionen,
         ANGELEGT,
-        ANGELEGT);
+        ANGELEGT,
+        0L,
+        null);
+  }
+
+  /**
+   * Ein Angebot im Status {@code status} auf Stand 5, zuletzt geaendert von Konto 30 (Plan #415).
+   */
+  private static Angebot aufStand(final Angebotsstatus status) {
+    final Angebot angebot = angebot(status);
+    return new Angebot(
+        angebot.id(),
+        angebot.firmaId(),
+        angebot.ansprechpartnerId(),
+        angebot.intern(),
+        angebot.status(),
+        angebot.storniert(),
+        angebot.stornoGrund(),
+        angebot.angebotDatum(),
+        angebot.titel(),
+        angebot.beschreibung(),
+        angebot.positionen(),
+        angebot.createdAt(),
+        angebot.updatedAt(),
+        5L,
+        30L);
+  }
+
+  @Test
+  void jederUebergang_thenKeepsStandAndUrheber() {
+    // Given — Plan #415, E1: Den Stand zaehlt der Bestand beim Schreiben weiter. Ein Uebergang, der
+    // ihn verloere, legte dem Bestand einen fremden Stand vor, und das Schreiben scheiterte.
+    final Angebot angelegt = aufStand(Angebotsstatus.ANGELEGT);
+
+    // When
+    final List<Angebot> uebergaenge =
+        List.of(
+            angelegt.geaendert(ANGEBOTSDATUM, 8L, "Wartung", null, List.of(), JETZT),
+            angelegt.statusWeiter(JETZT),
+            aufStand(Angebotsstatus.ABGEGEBEN).statusZurueck(JETZT),
+            angelegt.abgerechnet(JETZT),
+            angelegt.umgestellt(true, JETZT),
+            angelegt.storniert("Kunde abgesprungen", JETZT),
+            angelegt.storniert(null, JETZT).stornoZurueckgenommen(JETZT));
+
+    // Then
+    assertThat(uebergaenge)
+        .allSatisfy(
+            angebot -> {
+              assertThat(angebot.version()).isEqualTo(5L);
+              assertThat(angebot.geaendertVon()).isEqualTo(30L);
+            });
+  }
+
+  @Test
+  void durch_thenNamesTheActingAccountAndChangesNothingElse() {
+    // Given — Plan #415, E14: wer aendert, steht am Angebot.
+    final Angebot angebot = aufStand(Angebotsstatus.BESTELLT);
+
+    // When
+    final Angebot geaendert = angebot.durch(31L);
+
+    // Then
+    assertThat(geaendert.geaendertVon()).isEqualTo(31L);
+    assertThat(geaendert)
+        .usingRecursiveComparison()
+        .ignoringFields("geaendertVon")
+        .isEqualTo(angebot);
   }
 
   private static Angebot mitTitel(final @Nullable String titel) {
@@ -116,7 +183,9 @@ class AngebotTest {
         "Neugestaltung der Website",
         List.of(KONZEPTION),
         ANGELEGT,
-        ANGELEGT);
+        ANGELEGT,
+        0L,
+        null);
   }
 
   private static Angebot angebot(final boolean intern, final Angebotsstatus status) {
@@ -133,7 +202,9 @@ class AngebotTest {
         "Neugestaltung der Website",
         List.of(KONZEPTION),
         ANGELEGT,
-        ANGELEGT);
+        ANGELEGT,
+        0L,
+        null);
   }
 
   /**
@@ -155,7 +226,9 @@ class AngebotTest {
         "Neugestaltung der Website",
         List.of(KONZEPTION),
         ANGELEGT,
-        ANGELEGT);
+        ANGELEGT,
+        0L,
+        null);
   }
 
   @Test

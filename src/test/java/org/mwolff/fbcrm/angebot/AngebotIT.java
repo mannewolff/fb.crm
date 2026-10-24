@@ -1,12 +1,16 @@
 package org.mwolff.fbcrm.angebot;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.tuple;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.OffsetDateTime;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -14,6 +18,9 @@ import java.util.Objects;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mwolff.fbcrm.AbstractIntegrationTest;
+import org.mwolff.fbcrm.Stand;
+import org.mwolff.fbcrm.angebot.domain.Angebot;
+import org.mwolff.fbcrm.angebot.domain.AngebotRepository;
 import org.mwolff.fbcrm.angebot.domain.Angebotsstatus;
 import org.mwolff.fbcrm.angebot.web.AngebotPositionResponse;
 import org.mwolff.fbcrm.angebot.web.AngebotResponse;
@@ -31,6 +38,10 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * Der Lebensweg eines Angebots ueber HTTP, mit Sitzung und gegen eine echte PostgreSQL-Instanz:
@@ -62,6 +73,9 @@ class AngebotIT extends AbstractIntegrationTest {
   private final SecretHasher hasher;
   private final JdbcTemplate jdbc;
   private final Clock clock;
+  private final AngebotRepository angebote;
+  private final PlatformTransactionManager transaktionen;
+  private final ObjectMapper json;
 
   private HttpHeaders sitzung = new HttpHeaders();
   private long firmaId;
@@ -74,12 +88,18 @@ class AngebotIT extends AbstractIntegrationTest {
       final AccountRepository accounts,
       final SecretHasher hasher,
       final JdbcTemplate jdbc,
-      final Clock clock) {
+      final Clock clock,
+      final AngebotRepository angebote,
+      final PlatformTransactionManager transaktionen,
+      final ObjectMapper json) {
     this.rest = rest;
     this.accounts = accounts;
     this.hasher = hasher;
     this.jdbc = jdbc;
     this.clock = clock;
+    this.angebote = angebote;
+    this.transaktionen = transaktionen;
+    this.json = json;
   }
 
   @BeforeEach
@@ -89,7 +109,7 @@ class AngebotIT extends AbstractIntegrationTest {
     firmaId = firma("Adler AG");
     ansprechpartnerId = ansprechpartner(firmaId, "Adler");
     fremderAnsprechpartnerId = ansprechpartner(firma("Biber GmbH"), "Biber");
-    jdbc.execute("TRUNCATE outbox_message, account RESTART IDENTITY CASCADE");
+    leereKonten(jdbc);
     accounts.save(Konten.neu(MAIL, ANGELEGT));
     sitzung = Anmeldung.perCode(rest, jdbc, hasher, MAIL);
   }
@@ -284,7 +304,11 @@ class AngebotIT extends AbstractIntegrationTest {
 
     // When
     final ResponseEntity<AngebotResponse> aendern =
-        ruf("/api/angebote/" + angebotId, HttpMethod.PUT, neuerTitel, AngebotResponse.class);
+        rest.exchange(
+            "/api/angebote/" + angebotId,
+            HttpMethod.PUT,
+            new HttpEntity<>(neuerTitel, Stand.aktuell(sitzung, jdbc, "angebot", angebotId)),
+            AngebotResponse.class);
     final AngebotResponse wiederGelesen =
         Objects.requireNonNull(
             ruf("/api/angebote/" + angebotId, HttpMethod.GET, null, AngebotResponse.class)
@@ -304,24 +328,28 @@ class AngebotIT extends AbstractIntegrationTest {
   void aendern_withAReorderedList_thenRenumbersThePositionsFromOne() {
     // Given — E24: die Plaetze entstehen aus der Reihenfolge der gesendeten Liste.
     final long angebotId = angebot().id();
-    ruf(
+    rest.exchange(
         "/api/angebote/" + angebotId,
         HttpMethod.PUT,
-        rumpf(
-            List.of(
-                position("Konzeption", "AUFWAND", "2.50", "PERSONENTAG"),
-                position("Schulungstag", "FESTPREIS", "1.00", "PAUSCHAL"))),
+        new HttpEntity<>(
+            rumpf(
+                List.of(
+                    position("Konzeption", "AUFWAND", "2.50", "PERSONENTAG"),
+                    position("Schulungstag", "FESTPREIS", "1.00", "PAUSCHAL"))),
+            Stand.aktuell(sitzung, jdbc, "angebot", angebotId)),
         AngebotResponse.class);
 
     // When — dieselben Positionen, umgestellt.
     final ResponseEntity<AngebotResponse> antwort =
-        ruf(
+        rest.exchange(
             "/api/angebote/" + angebotId,
             HttpMethod.PUT,
-            rumpf(
-                List.of(
-                    position("Schulungstag", "FESTPREIS", "1.00", "PAUSCHAL"),
-                    position("Konzeption", "AUFWAND", "2.50", "PERSONENTAG"))),
+            new HttpEntity<>(
+                rumpf(
+                    List.of(
+                        position("Schulungstag", "FESTPREIS", "1.00", "PAUSCHAL"),
+                        position("Konzeption", "AUFWAND", "2.50", "PERSONENTAG"))),
+                Stand.aktuell(sitzung, jdbc, "angebot", angebotId)),
             AngebotResponse.class);
 
     // Then
@@ -339,13 +367,15 @@ class AngebotIT extends AbstractIntegrationTest {
   void lesen_thenAnswersWithThePositionsInOrderAndTheCalculatedSumme() {
     // Given — Kriterium 5: 2,5 × 1.000,01 € = 2.500,03 €, plus 1 × 1.000,01 €.
     final long angebotId = angebot().id();
-    ruf(
+    rest.exchange(
         "/api/angebote/" + angebotId,
         HttpMethod.PUT,
-        rumpf(
-            List.of(
-                position("Konzeption", "AUFWAND", "2.50", "PERSONENTAG"),
-                position("Schulungstag", "FESTPREIS", "1.00", "PAUSCHAL"))),
+        new HttpEntity<>(
+            rumpf(
+                List.of(
+                    position("Konzeption", "AUFWAND", "2.50", "PERSONENTAG"),
+                    position("Schulungstag", "FESTPREIS", "1.00", "PAUSCHAL"))),
+            Stand.aktuell(sitzung, jdbc, "angebot", angebotId)),
         AngebotResponse.class);
 
     // When
@@ -363,21 +393,29 @@ class AngebotIT extends AbstractIntegrationTest {
     assertThat(gelesen.beschreibung()).isEqualTo("Neugestaltung der Website");
   }
 
+  /** Schaltet den Status in die Richtung, auf dem aktuellen Stand des Angebots (Plan #415, E3). */
+  private <T> ResponseEntity<T> schalte(
+      final long angebotId, final String richtung, final Class<T> typ) {
+    return rest.exchange(
+        "/api/angebote/" + angebotId + "/status/" + richtung,
+        HttpMethod.POST,
+        new HttpEntity<>(null, Stand.aktuell(sitzung, jdbc, "angebot", angebotId)),
+        typ);
+  }
+
   @Test
   void status_forwardThroughEveryStepAndBack_thenStoredAndBoundedByTheEnds() {
     // Given — Kriterium 4: frei weiter und zurueck, immer genau eine Stufe.
     final long angebotId = angebot().id();
-    final String pfad = "/api/angebote/" + angebotId + "/status/";
 
     // When — viermal weiter bis ABGERECHNET, dann noch einmal.
     for (int schritt = 0; schritt < 4; schritt++) {
-      assertThat(ruf(pfad + "weiter", HttpMethod.POST, null, AngebotResponse.class).getStatusCode())
+      assertThat(schalte(angebotId, "weiter", AngebotResponse.class).getStatusCode())
           .isEqualTo(HttpStatus.OK);
     }
-    final ResponseEntity<String> ueberDasEnde =
-        ruf(pfad + "weiter", HttpMethod.POST, null, String.class);
+    final ResponseEntity<String> ueberDasEnde = schalte(angebotId, "weiter", String.class);
     final ResponseEntity<AngebotResponse> zurueck =
-        ruf(pfad + "zurueck", HttpMethod.POST, null, AngebotResponse.class);
+        schalte(angebotId, "zurueck", AngebotResponse.class);
 
     // Then
     assertThat(ueberDasEnde.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
@@ -396,7 +434,11 @@ class AngebotIT extends AbstractIntegrationTest {
 
     // When
     final ResponseEntity<String> antwort =
-        ruf("/api/angebote/" + angebotId + "/status/zurueck", HttpMethod.POST, null, String.class);
+        rest.exchange(
+            "/api/angebote/" + angebotId + "/status/zurueck",
+            HttpMethod.POST,
+            new HttpEntity<>(null, Stand.aktuell(sitzung, jdbc, "angebot", angebotId)),
+            String.class);
 
     // Then
     assertThat(antwort.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
@@ -410,10 +452,12 @@ class AngebotIT extends AbstractIntegrationTest {
 
     // When
     final ResponseEntity<AngebotResponse> antwort =
-        ruf(
+        rest.exchange(
             "/api/angebote/" + angebotId,
             HttpMethod.PUT,
-            rumpf(List.of(position("Konzeption", "AUFWAND", "2.50", "PERSONENTAG"))),
+            new HttpEntity<>(
+                rumpf(List.of(position("Konzeption", "AUFWAND", "2.50", "PERSONENTAG"))),
+                Stand.aktuell(sitzung, jdbc, "angebot", angebotId)),
             AngebotResponse.class);
 
     // Then
@@ -487,10 +531,12 @@ class AngebotIT extends AbstractIntegrationTest {
             Map.of("titel", TITEL),
             String.class);
     final ResponseEntity<AngebotResponse> aendern =
-        ruf(
+        rest.exchange(
             "/api/angebote/" + angebotId,
             HttpMethod.PUT,
-            rumpf(List.of(position("Konzeption", "AUFWAND", "2.50", "PERSONENTAG"))),
+            new HttpEntity<>(
+                rumpf(List.of(position("Konzeption", "AUFWAND", "2.50", "PERSONENTAG"))),
+                Stand.aktuell(sitzung, jdbc, "angebot", angebotId)),
             AngebotResponse.class);
 
     // Then
@@ -502,20 +548,24 @@ class AngebotIT extends AbstractIntegrationTest {
   void aendern_withAPositionOfAnotherAngebot_thenAnswers422AndLeavesItUntouched() {
     // Given — ein fremdes Angebot mit einer Position, und ein eigenes daneben.
     final long fremdesAngebot = angebot().id();
-    ruf(
+    rest.exchange(
         "/api/angebote/" + fremdesAngebot,
         HttpMethod.PUT,
-        rumpf(List.of(position("Konzeption", "AUFWAND", "2.50", "PERSONENTAG"))),
+        new HttpEntity<>(
+            rumpf(List.of(position("Konzeption", "AUFWAND", "2.50", "PERSONENTAG"))),
+            Stand.aktuell(sitzung, jdbc, "angebot", fremdesAngebot)),
         AngebotResponse.class);
     final long fremdePosition = positionskennungen(fremdesAngebot).get(0).longValue();
     final long eigenesAngebot = angebot().id();
 
     // When — das eigene Angebot beruft sich auf die fremde Position.
     final ResponseEntity<String> antwort =
-        ruf(
+        rest.exchange(
             "/api/angebote/" + eigenesAngebot,
             HttpMethod.PUT,
-            rumpf(List.of(positionMitKennung(fremdePosition, "Geraubt", "AUFWAND", "1.00"))),
+            new HttpEntity<>(
+                rumpf(List.of(positionMitKennung(fremdePosition, "Geraubt", "AUFWAND", "1.00"))),
+                Stand.aktuell(sitzung, jdbc, "angebot", eigenesAngebot)),
             String.class);
 
     // Then
@@ -540,27 +590,31 @@ class AngebotIT extends AbstractIntegrationTest {
   void aendern_resubmittingThePositionsWithTheirIds_thenTheyKeepThem() {
     // Given — die dauerhafte Kennung ueber HTTP: gelesen, zurueckgeschickt, unveraendert.
     final long angebotId = angebot().id();
-    ruf(
+    rest.exchange(
         "/api/angebote/" + angebotId,
         HttpMethod.PUT,
-        rumpf(
-            List.of(
-                position("Konzeption", "AUFWAND", "2.50", "PERSONENTAG"),
-                position("Schulungstag", "FESTPREIS", "1.00", "PAUSCHAL"))),
+        new HttpEntity<>(
+            rumpf(
+                List.of(
+                    position("Konzeption", "AUFWAND", "2.50", "PERSONENTAG"),
+                    position("Schulungstag", "FESTPREIS", "1.00", "PAUSCHAL"))),
+            Stand.aktuell(sitzung, jdbc, "angebot", angebotId)),
         AngebotResponse.class);
     final List<Long> vorher = positionskennungen(angebotId);
 
     // When — umgestellt, aber mit ihren Kennungen.
     final ResponseEntity<AngebotResponse> antwort =
-        ruf(
+        rest.exchange(
             "/api/angebote/" + angebotId,
             HttpMethod.PUT,
-            rumpf(
-                List.of(
-                    positionMitKennung(
-                        vorher.get(1).longValue(), "Schulungstag", "FESTPREIS", "1.00"),
-                    positionMitKennung(
-                        vorher.get(0).longValue(), "Feinkonzept", "AUFWAND", "2.50"))),
+            new HttpEntity<>(
+                rumpf(
+                    List.of(
+                        positionMitKennung(
+                            vorher.get(1).longValue(), "Schulungstag", "FESTPREIS", "1.00"),
+                        positionMitKennung(
+                            vorher.get(0).longValue(), "Feinkonzept", "AUFWAND", "2.50"))),
+                Stand.aktuell(sitzung, jdbc, "angebot", angebotId)),
             AngebotResponse.class);
 
     // Then
@@ -590,19 +644,23 @@ class AngebotIT extends AbstractIntegrationTest {
     // Given — Issue #227, Kriterium 8 von #207: Aus dem Angebot ist keine Rechnung entstanden, also
     // laesst sich das Kennzeichen setzen. Die Position traegt nur noch ihre Bezeichnung.
     final long angebotId = angebot().id();
-    ruf(
+    rest.exchange(
         "/api/angebote/" + angebotId,
         HttpMethod.PUT,
-        rumpf(List.of(position("Konzeption", "AUFWAND", "2.50", "PERSONENTAG"))),
+        new HttpEntity<>(
+            rumpf(List.of(position("Konzeption", "AUFWAND", "2.50", "PERSONENTAG"))),
+            Stand.aktuell(sitzung, jdbc, "angebot", angebotId)),
         AngebotResponse.class);
     final long positionId = positionskennungen(angebotId).get(0).longValue();
 
     // When
     final ResponseEntity<AngebotResponse> antwort =
-        ruf(
+        rest.exchange(
             "/api/angebote/" + angebotId,
             HttpMethod.PUT,
-            rumpf(List.of(positionMitNurBezeichnung(positionId, "Konzeption")), true),
+            new HttpEntity<>(
+                rumpf(List.of(positionMitNurBezeichnung(positionId, "Konzeption")), true),
+                Stand.aktuell(sitzung, jdbc, "angebot", angebotId)),
             AngebotResponse.class);
 
     // Then
@@ -627,18 +685,22 @@ class AngebotIT extends AbstractIntegrationTest {
   void aendern_ofAnInternalAngebotWithoutTheInternField_thenSwitchesItBackToACustomerOffer() {
     // Given — ein fehlendes Feld gilt als extern; das Angebot steht intern.
     final long angebotId = angebot().id();
-    ruf(
+    rest.exchange(
         "/api/angebote/" + angebotId,
         HttpMethod.PUT,
-        rumpf(List.of(nurBezeichnung("Umbau der Ablage")), true),
+        new HttpEntity<>(
+            rumpf(List.of(nurBezeichnung("Umbau der Ablage")), true),
+            Stand.aktuell(sitzung, jdbc, "angebot", angebotId)),
         AngebotResponse.class);
 
     // When — derselbe Weg ohne das Feld, dafuer mit allen vier Angaben.
     final ResponseEntity<AngebotResponse> antwort =
-        ruf(
+        rest.exchange(
             "/api/angebote/" + angebotId,
             HttpMethod.PUT,
-            rumpf(List.of(position("Umbau der Ablage", "AUFWAND", "3.00", "STUNDE"))),
+            new HttpEntity<>(
+                rumpf(List.of(position("Umbau der Ablage", "AUFWAND", "3.00", "STUNDE"))),
+                Stand.aktuell(sitzung, jdbc, "angebot", angebotId)),
             AngebotResponse.class);
 
     // Then
@@ -656,10 +718,12 @@ class AngebotIT extends AbstractIntegrationTest {
 
     // When
     final ResponseEntity<String> antwort =
-        ruf(
+        rest.exchange(
             "/api/angebote/" + angebotId,
             HttpMethod.PUT,
-            rumpf(List.of(nurBezeichnung("Konzeption"))),
+            new HttpEntity<>(
+                rumpf(List.of(nurBezeichnung("Konzeption"))),
+                Stand.aktuell(sitzung, jdbc, "angebot", angebotId)),
             String.class);
 
     // Then
@@ -677,10 +741,12 @@ class AngebotIT extends AbstractIntegrationTest {
 
     // When
     final ResponseEntity<AngebotResponse> antwort =
-        ruf(
+        rest.exchange(
             "/api/angebote/" + angebotId,
             HttpMethod.PUT,
-            rumpf(List.of(nurBezeichnung("Umbau der Ablage")), true),
+            new HttpEntity<>(
+                rumpf(List.of(nurBezeichnung("Umbau der Ablage")), true),
+                Stand.aktuell(sitzung, jdbc, "angebot", angebotId)),
             AngebotResponse.class);
 
     // Then
@@ -712,21 +778,28 @@ class AngebotIT extends AbstractIntegrationTest {
     // Given — Issue #305: Das Angebotsdatum liegt 2026, die Position kommt mit 2027 — wie im
     // Anlass von #302.
     final long angebotId = angebot().id();
-    ruf(
+    rest.exchange(
         "/api/angebote/" + angebotId,
         HttpMethod.PUT,
-        rumpf(List.of(imJahr(position("Aufwaende Mai 2027", "AUFWAND", "135", "STUNDE"), 2027))),
+        new HttpEntity<>(
+            rumpf(
+                List.of(imJahr(position("Aufwaende Mai 2027", "AUFWAND", "135", "STUNDE"), 2027))),
+            Stand.aktuell(sitzung, jdbc, "angebot", angebotId)),
         AngebotResponse.class);
     final AngebotResponse angelegt = lies(angebotId);
 
     // When — dieselbe Position, das Jahr geaendert.
     final long kennung = Objects.requireNonNull(angelegt.positionen().get(0).id()).longValue();
-    ruf(
+    rest.exchange(
         "/api/angebote/" + angebotId,
         HttpMethod.PUT,
-        rumpf(
-            List.of(
-                imJahr(positionMitKennung(kennung, "Aufwaende Mai 2027", "AUFWAND", "135"), 2028))),
+        new HttpEntity<>(
+            rumpf(
+                List.of(
+                    imJahr(
+                        positionMitKennung(kennung, "Aufwaende Mai 2027", "AUFWAND", "135"),
+                        2028))),
+            Stand.aktuell(sitzung, jdbc, "angebot", angebotId)),
         AngebotResponse.class);
     final AngebotResponse geaendert = lies(angebotId);
 
@@ -752,15 +825,182 @@ class AngebotIT extends AbstractIntegrationTest {
 
     // When
     final ResponseEntity<String> antwort =
-        ruf(
+        rest.exchange(
             "/api/angebote/" + angebotId,
             HttpMethod.PUT,
-            rumpf(List.of(imJahr(position("Konzeption", "AUFWAND", "2.50", "PERSONENTAG"), 2100))),
+            new HttpEntity<>(
+                rumpf(
+                    List.of(
+                        imJahr(position("Konzeption", "AUFWAND", "2.50", "PERSONENTAG"), 2100))),
+                Stand.aktuell(sitzung, jdbc, "angebot", angebotId)),
             String.class);
 
     // Then
     assertThat(antwort.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
     assertThat(antwort.getBody()).contains("positionen[0].leistungsjahr");
     assertThat(bezeichnungenNachPlatz(angebotId)).isEmpty();
+  }
+
+  /** Die Kopfzeilen einer Sitzung samt {@code If-Match} auf einen frei gewaehlten Stand (E2). */
+  private static HttpHeaders aufStand(final HttpHeaders kopf, final long version) {
+    final HttpHeaders mitStand = new HttpHeaders();
+    mitStand.putAll(kopf);
+    mitStand.setIfMatch("\"" + version + "\"");
+    return mitStand;
+  }
+
+  private ResponseEntity<String> aendernAufStand(
+      final HttpHeaders kopf, final long angebotId, final long version, final Object rumpf) {
+    return rest.exchange(
+        "/api/angebote/" + angebotId,
+        HttpMethod.PUT,
+        new HttpEntity<>(rumpf, aufStand(kopf, version)),
+        String.class);
+  }
+
+  private long kontoZu(final String mail) {
+    return Objects.requireNonNull(
+            jdbc.queryForObject("SELECT id FROM account WHERE email = ?", Long.class, mail))
+        .longValue();
+  }
+
+  @Test
+  void aendern_givenZweitesSpeichernWirdAbgewiesen_thenBensChangeIsRejectedAndAnnasPriceStays()
+      throws Exception {
+    // Given — #411, Szenario „Zweites Speichern wird abgewiesen": Anna und Ben haben dasselbe
+    // Angebot auf Stand 0 geoeffnet. Das angemeldete Konto des Tests ist Anna.
+    jdbc.update("UPDATE account SET display_name = 'Anna' WHERE email = ?", MAIL);
+    accounts.save(Konten.neu("ben@example.org", ANGELEGT));
+    jdbc.update("UPDATE account SET display_name = 'Ben' WHERE email = 'ben@example.org'");
+    final HttpHeaders ben = Anmeldung.perCode(rest, jdbc, hasher, "ben@example.org");
+    final long angebotId = angebot().id();
+    final Map<String, Object> annasPreis =
+        rumpf(List.of(position("Konzeption", "AUFWAND", "2.50", "PERSONENTAG")));
+    final Map<String, Object> bensTitel = rumpf(List.of());
+    bensTitel.put("titel", "Bens Titel");
+
+    // When — Anna speichert zuerst, Ben danach auf dem alten Stand.
+    final ResponseEntity<String> anna = aendernAufStand(sitzung, angebotId, 0L, annasPreis);
+    final ResponseEntity<String> abgewiesen = aendernAufStand(ben, angebotId, 0L, bensTitel);
+
+    // Then — Bens Aenderung ist abgewiesen, nennt Anna und den Zeitpunkt, und Annas Preis bleibt.
+    assertThat(anna.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(abgewiesen.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+    final JsonNode konflikt = json.readTree(abgewiesen.getBody()).path("konflikt");
+    assertThat(konflikt.path("art").asText()).isEqualTo("veraltet");
+    assertThat(konflikt.path("geaendertVon").asText()).isEqualTo("Anna");
+    assertThat(konflikt.path("eigenesFenster").asBoolean()).isFalse();
+    assertThat(Instant.parse(konflikt.path("geaendertAm").asText()))
+        .isEqualTo(
+            Objects.requireNonNull(
+                    jdbc.queryForObject(
+                        "SELECT updated_at FROM angebot WHERE id = ?",
+                        OffsetDateTime.class,
+                        Long.valueOf(angebotId)))
+                .toInstant());
+    assertThat(bezeichnungenNachPlatz(angebotId)).containsExactly("Konzeption");
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT titel FROM angebot WHERE id = ?", String.class, Long.valueOf(angebotId)))
+        .isEqualTo(TITEL);
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT geaendert_von FROM angebot WHERE id = ?",
+                Long.class,
+                Long.valueOf(angebotId)))
+        .isEqualTo(kontoZu(MAIL));
+  }
+
+  @Test
+  void aendern_givenZweiFensterDerselbenPerson_thenEigenesFenster() throws Exception {
+    // Given — #411, Szenario „Zwei Fenster derselben Person": dieselbe Sitzung, zwei Fenster auf
+    // Stand 0.
+    final long angebotId = angebot().id();
+    final Map<String, Object> ersteFenster =
+        rumpf(List.of(position("Konzeption", "AUFWAND", "3.00", "PERSONENTAG")));
+    final Map<String, Object> zweitesFenster = rumpf(List.of());
+    zweitesFenster.put("titel", "Aus dem zweiten Fenster");
+
+    // When
+    final ResponseEntity<String> erstes = aendernAufStand(sitzung, angebotId, 0L, ersteFenster);
+    final ResponseEntity<String> zweites = aendernAufStand(sitzung, angebotId, 0L, zweitesFenster);
+
+    // Then — der Server entscheidet, dass es das eigene Fenster war (E15).
+    assertThat(erstes.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(json.readTree(erstes.getBody()).path("version").asLong()).isEqualTo(1L);
+    assertThat(zweites.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+    assertThat(json.readTree(zweites.getBody()).path("konflikt").path("eigenesFenster").asBoolean())
+        .isTrue();
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT titel FROM angebot WHERE id = ?", String.class, Long.valueOf(angebotId)))
+        .isEqualTo(TITEL);
+  }
+
+  @Test
+  void aendern_withoutIfMatch_thenAnswers428AndWritesNothing() {
+    // Given — E3: Ohne vorgelegten Stand wird nicht geschrieben.
+    final long angebotId = angebot().id();
+    final Map<String, Object> neuerTitel = rumpf(List.of());
+    neuerTitel.put("titel", "Ohne Stand");
+
+    // When
+    final ResponseEntity<String> antwort =
+        ruf("/api/angebote/" + angebotId, HttpMethod.PUT, neuerTitel, String.class);
+
+    // Then
+    assertThat(antwort.getStatusCode()).isEqualTo(HttpStatus.PRECONDITION_REQUIRED);
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT version FROM angebot WHERE id = ?", Long.class, Long.valueOf(angebotId)))
+        .isZero();
+  }
+
+  @Test
+  void save_givenTwoTransactionsOnTheSameRow_thenTheSecondFailsAndTheFirstStays() {
+    // Given — E1: Der Vergleich im Anwendungsfall faengt den Regelfall; der Zaehler an der Zeile
+    // faengt das Rennen dazwischen. Beide Transaktionen lesen Stand 0, die erste schreibt und
+    // schliesst ab, die zweite schreibt danach auf dem alten Stand.
+    final long angebotId = angebot().id();
+    final long konto = kontoZu(MAIL);
+    final TransactionTemplate zweite = new TransactionTemplate(transaktionen);
+    final TransactionTemplate erste = new TransactionTemplate(transaktionen);
+    erste.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+
+    // When / Then
+    assertThatThrownBy(
+            () ->
+                zweite.executeWithoutResult(
+                    aussen -> {
+                      final Angebot gelesen = angebote.findById(angebotId).orElseThrow();
+                      erste.executeWithoutResult(
+                          innen -> angebote.save(mitTitel(angebotId, "Erste", konto)));
+                      angebote.save(mitTitel(gelesen, "Zweite", konto));
+                    }))
+        .isInstanceOf(ObjectOptimisticLockingFailureException.class);
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT titel FROM angebot WHERE id = ?", String.class, Long.valueOf(angebotId)))
+        .isEqualTo("Erste");
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT version FROM angebot WHERE id = ?", Long.class, Long.valueOf(angebotId)))
+        .isEqualTo(1L);
+  }
+
+  private Angebot mitTitel(final long angebotId, final String titel, final long konto) {
+    return mitTitel(angebote.findById(angebotId).orElseThrow(), titel, konto);
+  }
+
+  private Angebot mitTitel(final Angebot angebot, final String titel, final long konto) {
+    return angebot
+        .geaendert(
+            angebot.angebotDatum(),
+            angebot.ansprechpartnerId(),
+            titel,
+            angebot.beschreibung(),
+            angebot.positionen(),
+            clock.instant())
+        .durch(konto);
   }
 }

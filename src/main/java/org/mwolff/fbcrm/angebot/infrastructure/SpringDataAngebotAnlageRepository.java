@@ -17,7 +17,7 @@ import org.springframework.data.repository.query.Param;
 interface SpringDataAngebotAnlageRepository extends JpaRepository<AngebotAnlageEntity, Long> {
 
   /**
-   * Die Anlagen eines Angebots, in keiner zugesagten Reihenfolge.
+   * Die nicht geloeschten Anlagen eines Angebots, in keiner zugesagten Reihenfolge (Plan #415, E7).
    *
    * @param angebotId Kennung des Angebots
    */
@@ -25,6 +25,7 @@ interface SpringDataAngebotAnlageRepository extends JpaRepository<AngebotAnlageE
       """
       select a from AngebotAnlageEntity a
       where a.angebotId = :angebotId
+        and a.geloeschtAm is null
       """)
   List<AngebotAnlageEntity> findByAngebot(@Param("angebotId") long angebotId);
 }

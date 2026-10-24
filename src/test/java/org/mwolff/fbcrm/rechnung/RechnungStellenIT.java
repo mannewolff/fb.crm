@@ -3,6 +3,7 @@ package org.mwolff.fbcrm.rechnung;
 import static java.nio.charset.StandardCharsets.ISO_8859_1;
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -34,6 +35,7 @@ import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mwolff.fbcrm.AbstractIntegrationTest;
+import org.mwolff.fbcrm.Stand;
 import org.mwolff.fbcrm.angebot.domain.Angebotsstatus;
 import org.mwolff.fbcrm.angebot.web.AngebotResponse;
 import org.mwolff.fbcrm.auth.Anmeldung;
@@ -170,7 +172,7 @@ class RechnungStellenIT extends AbstractIntegrationTest {
     jdbc.execute("INSERT INTO rechnung_einstellungen DEFAULT VALUES");
     jdbc.execute("DELETE FROM briefbogen");
     jdbc.execute("INSERT INTO briefbogen DEFAULT VALUES");
-    jdbc.execute("TRUNCATE outbox_message, account RESTART IDENTITY CASCADE");
+    leereKonten(jdbc);
     accounts.save(Konten.neu(MAIL, ANGELEGT));
     sitzung = Anmeldung.perCode(rest, jdbc, hasher, MAIL);
     eigeneAngabenSetzen(STEUERNUMMER, UMSATZSTEUER_ID, BANKVERBINDUNG);
@@ -183,6 +185,23 @@ class RechnungStellenIT extends AbstractIntegrationTest {
       final @Nullable Object rumpf,
       final Class<T> typ) {
     return rest.exchange(pfad, methode, new HttpEntity<>(rumpf, sitzung), typ);
+  }
+
+  /**
+   * Ein schreibender Weg an der Rechnung, auf ihrem aktuellen Stand (Plan #415, E2, E3): so, wie
+   * die Maske ihn vorlegt.
+   */
+  private <T> ResponseEntity<T> rufAufStand(
+      final String pfad,
+      final HttpMethod methode,
+      final @Nullable Object rumpf,
+      final Class<T> typ,
+      final long rechnungId) {
+    return rest.exchange(
+        pfad,
+        methode,
+        new HttpEntity<>(rumpf, Stand.aktuell(sitzung, jdbc, "rechnung", rechnungId)),
+        typ);
   }
 
   /** Die eigenen Angaben, vollstaendig bis auf die drei Werte, die der Test waehlt. */
@@ -203,7 +222,15 @@ class RechnungStellenIT extends AbstractIntegrationTest {
     rumpf.put("steuernummer", steuernummer);
     rumpf.put("umsatzsteuerId", umsatzsteuerId);
     rumpf.put("bankverbindung", bankverbindung);
-    ruf("/api/eigene-angaben", HttpMethod.PUT, rumpf, Void.class);
+    // Auf dem aktuellen Stand der eigenen Angaben, wie die Maske (Plan #415, E2).
+    assertThat(
+            rest.exchange(
+                    "/api/eigene-angaben",
+                    HttpMethod.PUT,
+                    new HttpEntity<>(rumpf, Stand.aktuell(sitzung, jdbc, "eigene_angaben", 1L)),
+                    String.class)
+                .getStatusCode())
+        .isEqualTo(HttpStatus.OK);
   }
 
   private long firmaAnlegen(
@@ -221,7 +248,16 @@ class RechnungStellenIT extends AbstractIntegrationTest {
       final @Nullable String ort) {
     final Map<String, Object> rumpf = firmenrumpf(strasse, plz, ort);
     rumpf.put("name", name);
-    ruf("/api/firmen/" + firmaId, HttpMethod.PUT, rumpf, Void.class);
+    // Auf dem aktuellen Stand der Firma, wie die Maske (Plan #415, E2).
+    assertThat(
+            rest.exchange(
+                    "/api/firmen/" + firmaId,
+                    HttpMethod.PUT,
+                    new HttpEntity<>(rumpf, Stand.aktuell(sitzung, jdbc, "firma", firmaId)),
+                    String.class)
+                .getStatusCode()
+                .is2xxSuccessful())
+        .isTrue();
   }
 
   private static Map<String, Object> firmenrumpf(
@@ -244,7 +280,12 @@ class RechnungStellenIT extends AbstractIntegrationTest {
     rumpf.put("naechsteNummer", Integer.valueOf(naechsteNummer));
     rumpf.put("steuersatz", steuersatz);
     rumpf.put("zahlungszielTage", Integer.valueOf(zahlungszielTage));
-    ruf("/api/rechnung/einstellungen", HttpMethod.PUT, rumpf, Void.class);
+    // Auf dem aktuellen Stand der Einstellungen, wie die Maske (Plan #415, E2).
+    rest.exchange(
+        "/api/rechnung/einstellungen",
+        HttpMethod.PUT,
+        new HttpEntity<>(rumpf, Stand.aktuell(sitzung, jdbc, "rechnung_einstellungen", 1L)),
+        Void.class);
   }
 
   /** Die naechste laufende Nummer, wie die Maske der Einstellungen sie zeigt. */
@@ -276,8 +317,16 @@ class RechnungStellenIT extends AbstractIntegrationTest {
                     .getBody())
             .id();
     positionSetzen(angebotId, null, "Beratung", menge, STUNDENSATZ);
-    ruf("/api/angebote/" + angebotId + "/status/weiter", HttpMethod.POST, null, String.class);
-    ruf("/api/angebote/" + angebotId + "/status/weiter", HttpMethod.POST, null, String.class);
+    rest.exchange(
+        "/api/angebote/" + angebotId + "/status/weiter",
+        HttpMethod.POST,
+        new HttpEntity<>(null, Stand.aktuell(sitzung, jdbc, "angebot", angebotId)),
+        String.class);
+    rest.exchange(
+        "/api/angebote/" + angebotId + "/status/weiter",
+        HttpMethod.POST,
+        new HttpEntity<>(null, Stand.aktuell(sitzung, jdbc, "angebot", angebotId)),
+        String.class);
     return angebotId;
   }
 
@@ -305,7 +354,11 @@ class RechnungStellenIT extends AbstractIntegrationTest {
     rumpf.put("ansprechpartnerId", null);
     rumpf.put("beschreibung", "Neugestaltung der Website");
     rumpf.put("positionen", List.of(position));
-    ruf("/api/angebote/" + angebotId, HttpMethod.PUT, rumpf, AngebotResponse.class);
+    rest.exchange(
+        "/api/angebote/" + angebotId,
+        HttpMethod.PUT,
+        new HttpEntity<>(rumpf, Stand.aktuell(sitzung, jdbc, "angebot", angebotId)),
+        AngebotResponse.class);
   }
 
   /** Ein Entwurf zum Angebot, auf die angegebene Menge gesetzt. */
@@ -323,6 +376,16 @@ class RechnungStellenIT extends AbstractIntegrationTest {
 
   private ResponseEntity<RechnungResponse> setzeMenge(
       final RechnungResponse entwurf, final String menge) {
+    return rufAufStand(
+        "/api/rechnungen/" + entwurf.id(),
+        HttpMethod.PUT,
+        mengenrumpf(entwurf, menge),
+        RechnungResponse.class,
+        entwurf.id());
+  }
+
+  /** Der Rumpf der Entwurfsmaske mit der Beratung ueber die angegebene Menge. */
+  private Map<String, Object> mengenrumpf(final RechnungResponse entwurf, final String menge) {
     final Map<String, Object> position = new LinkedHashMap<>();
     position.put(
         "angebotPositionId", Long.valueOf(entwurf.zeilen().getFirst().angebotPositionId()));
@@ -332,20 +395,47 @@ class RechnungStellenIT extends AbstractIntegrationTest {
     rumpf.put("rechnungDatum", heute.toString());
     rumpf.put("leistungszeitraum", ZEITRAUM);
     rumpf.put("positionen", List.of(position));
-    return ruf("/api/rechnungen/" + entwurf.id(), HttpMethod.PUT, rumpf, RechnungResponse.class);
+    return rumpf;
+  }
+
+  /** Ein zweites Konto mit eigenem Anzeigenamen, angemeldet in einer eigenen Sitzung. */
+  private HttpHeaders zweitesKonto(final String mail, final String anzeigename) {
+    accounts.save(Konten.neu(mail, ANGELEGT));
+    jdbc.update("UPDATE account SET display_name = ? WHERE email = ?", anzeigename, mail);
+    return Anmeldung.perCode(rest, jdbc, hasher, mail);
+  }
+
+  private long kontoZu(final String mail) {
+    return Objects.requireNonNull(
+            jdbc.queryForObject("SELECT id FROM account WHERE email = ?", Long.class, mail))
+        .longValue();
+  }
+
+  /** Die Kopfzeilen einer Sitzung samt {@code If-Match} auf einen frei gewaehlten Stand. */
+  private static HttpHeaders aufStand(final HttpHeaders kopf, final long version) {
+    final HttpHeaders mitStand = new HttpHeaders();
+    mitStand.putAll(kopf);
+    mitStand.setIfMatch("\"" + version + "\"");
+    return mitStand;
   }
 
   private ResponseEntity<String> stelle(final long rechnungId) {
-    return ruf("/api/rechnungen/" + rechnungId + "/stellen", HttpMethod.POST, null, String.class);
+    return rufAufStand(
+        "/api/rechnungen/" + rechnungId + "/stellen",
+        HttpMethod.POST,
+        null,
+        String.class,
+        rechnungId);
   }
 
   private RechnungResponse gestellt(final long rechnungId) {
     final ResponseEntity<RechnungResponse> antwort =
-        ruf(
+        rufAufStand(
             "/api/rechnungen/" + rechnungId + "/stellen",
             HttpMethod.POST,
             null,
-            RechnungResponse.class);
+            RechnungResponse.class,
+            rechnungId);
     assertThat(antwort.getStatusCode()).isEqualTo(HttpStatus.OK);
     return Objects.requireNonNull(antwort.getBody());
   }
@@ -414,7 +504,11 @@ class RechnungStellenIT extends AbstractIntegrationTest {
     rumpf.put("ansprechpartnerId", null);
     rumpf.put("beschreibung", "Neugestaltung der Website");
     rumpf.put("positionen", positionen);
-    ruf("/api/angebote/" + angebotId, HttpMethod.PUT, rumpf, AngebotResponse.class);
+    rest.exchange(
+        "/api/angebote/" + angebotId,
+        HttpMethod.PUT,
+        new HttpEntity<>(rumpf, Stand.aktuell(sitzung, jdbc, "angebot", angebotId)),
+        AngebotResponse.class);
     return angebotId;
   }
 
@@ -456,7 +550,12 @@ class RechnungStellenIT extends AbstractIntegrationTest {
     rumpf.put("leistungszeitraum", ZEITRAUM);
     rumpf.put("positionen", positionen);
     return Objects.requireNonNull(
-        ruf("/api/rechnungen/" + entwurf.id(), HttpMethod.PUT, rumpf, RechnungResponse.class)
+        rufAufStand(
+                "/api/rechnungen/" + entwurf.id(),
+                HttpMethod.PUT,
+                rumpf,
+                RechnungResponse.class,
+                entwurf.id())
             .getBody());
   }
 
@@ -493,8 +592,8 @@ class RechnungStellenIT extends AbstractIntegrationTest {
               }
             },
             dateikopf));
-    final HttpHeaders kopf = new HttpHeaders();
-    kopf.addAll(sitzung);
+    // Auf dem aktuellen Stand des Briefbogens, wie die Maske (Plan #415, E2, E11).
+    final HttpHeaders kopf = Stand.aktuell(sitzung, jdbc, "briefbogen", 1L);
     kopf.setContentType(MediaType.MULTIPART_FORM_DATA);
     final ResponseEntity<String> antwort =
         rest.exchange(
@@ -843,6 +942,128 @@ class RechnungStellenIT extends AbstractIntegrationTest {
   }
 
   @Test
+  void stellen_givenRechnungAufVeraltetemStand_thenNothingIsGestelltAndAnnaIsNamed() {
+    // Given — #411, Szenario „Rechnung auf veraltetem Stand stellen": Manfred hat den Entwurf
+    // geoeffnet, Anna aendert inzwischen eine Menge darin.
+    final HttpHeaders anna = zweitesKonto("anna@example.org", "Anna");
+    final long angebotId = bestelltesAngebot("160.00");
+    final RechnungResponse geoeffnet = entwurfUeber(angebotId, "80.00");
+    final int vorher = objekteZu(geoeffnet.id());
+    assertThat(
+            rest.exchange(
+                    "/api/rechnungen/" + geoeffnet.id(),
+                    HttpMethod.PUT,
+                    new HttpEntity<>(
+                        mengenrumpf(geoeffnet, "60.00"),
+                        Stand.aktuell(anna, jdbc, "rechnung", geoeffnet.id())),
+                    String.class)
+                .getStatusCode())
+        .isEqualTo(HttpStatus.OK);
+
+    // When — Manfred stellt auf dem Stand, den er geoeffnet hat.
+    final ResponseEntity<JsonNode> antwort =
+        rest.exchange(
+            "/api/rechnungen/" + geoeffnet.id() + "/stellen",
+            HttpMethod.POST,
+            new HttpEntity<>(null, aufStand(sitzung, geoeffnet.version())),
+            JsonNode.class);
+
+    // Then — nichts gestellt; Manfred liest, dass Anna den Entwurf inzwischen geaendert hat.
+    assertThat(antwort.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+    final JsonNode konflikt = Objects.requireNonNull(antwort.getBody()).path("konflikt");
+    assertThat(konflikt.path("art").asText()).isEqualTo("veraltet");
+    assertThat(konflikt.path("geaendertVon").asText()).isEqualTo("Anna");
+    assertThat(konflikt.path("eigenesFenster").asBoolean()).isFalse();
+    final RechnungResponse danach = lese(geoeffnet.id());
+    assertThat(danach.zustand()).isEqualTo(Rechnungszustand.ENTWURF);
+    assertThat(danach.nummer()).isNull();
+    assertThat(danach.zeilen().getFirst().menge()).isEqualByComparingTo("60.00");
+    // Der Nummernkreis bleibt auf seinem Stand, und kein Dokument entsteht.
+    assertThat(naechsteNummer()).isEqualTo(1);
+    assertThat(objekteZu(geoeffnet.id())).isEqualTo(vorher);
+  }
+
+  @Test
+  void stellen_whenAngebotAndAngabenChangedSinceOpening_thenGestelltWithTheirCurrentStand() {
+    // Given — #411, Kriterium 5: Manfred oeffnet den Entwurf ueber alle 160 Stunden. Danach aendert
+    // Anna das Angebot, und Einstellungen, Eigene Angaben und Briefbogen werden neu gefasst.
+    final HttpHeaders anna = zweitesKonto("anna@example.org", "Anna");
+    final long angebotId = bestelltesAngebot("160.00");
+    final RechnungResponse geoeffnet = entwurfUeber(angebotId, "160.00");
+    final Map<String, Object> angebot = new LinkedHashMap<>();
+    angebot.put("angebotDatum", heute.toString());
+    angebot.put("titel", "Website-Relaunch, zweite Fassung");
+    angebot.put("ansprechpartnerId", null);
+    angebot.put("beschreibung", "Neugestaltung der Website");
+    angebot.put(
+        "positionen",
+        List.of(
+            angebotsposition(
+                Long.valueOf(geoeffnet.zeilen().getFirst().angebotPositionId()),
+                "Beratung",
+                "160.00")));
+    assertThat(
+            rest.exchange(
+                    "/api/angebote/" + angebotId,
+                    HttpMethod.PUT,
+                    new HttpEntity<>(angebot, Stand.aktuell(anna, jdbc, "angebot", angebotId)),
+                    String.class)
+                .getStatusCode())
+        .isEqualTo(HttpStatus.OK);
+    einstellungenSetzen(5, "7.00", 21);
+    eigeneAngabenSetzen(STEUERNUMMER, UMSATZSTEUER_ID, "DE89 3704 0044 0532 0130 00");
+    final Map<String, Object> bogen = new LinkedHashMap<>();
+    bogen.put("absenderzeile", false);
+    bogen.put("steuerBankZeile", false);
+    bogen.put("links", Integer.valueOf(250));
+    bogen.put("rechts", Integer.valueOf(200));
+    bogen.put("inhaltOben", Integer.valueOf(985));
+    bogen.put("unten", Integer.valueOf(200));
+    bogen.put("folgeOben", Integer.valueOf(200));
+    bogen.put("folgeUnten", Integer.valueOf(200));
+    assertThat(
+            rest.exchange(
+                    "/api/briefpapier",
+                    HttpMethod.PUT,
+                    new HttpEntity<>(bogen, Stand.aktuell(sitzung, jdbc, "briefbogen", 1L)),
+                    String.class)
+                .getStatusCode())
+        .isEqualTo(HttpStatus.OK);
+
+    // When — Manfred stellt auf dem Stand des Entwurfs, den er geoeffnet hat.
+    final ResponseEntity<RechnungResponse> antwort =
+        rest.exchange(
+            "/api/rechnungen/" + geoeffnet.id() + "/stellen",
+            HttpMethod.POST,
+            new HttpEntity<>(null, aufStand(sitzung, geoeffnet.version())),
+            RechnungResponse.class);
+
+    // Then — gestellt mit allem, wie es jetzt gilt; das Angebot ist abgerechnet und traegt
+    // Manfred als Urheber, nicht Anna.
+    assertThat(antwort.getStatusCode()).isEqualTo(HttpStatus.OK);
+    final RechnungResponse gestellt = Objects.requireNonNull(antwort.getBody());
+    assertThat(gestellt.nummer()).isEqualTo(nummer(5));
+    assertThat(gestellt.steuersatz()).isEqualByComparingTo("7.00");
+    assertThat(gestellt.zahlungszielTage()).isEqualTo(21);
+    assertThat(Objects.requireNonNull(gestellt.absender()).bankverbindung())
+        .isEqualTo("DE89 3704 0044 0532 0130 00");
+    assertThat(gestellt.version()).isGreaterThan(geoeffnet.version());
+    assertThat(angebotsstatus(angebotId)).isEqualTo(Angebotsstatus.ABGERECHNET);
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT geaendert_von FROM angebot WHERE id = ?",
+                Long.class,
+                Long.valueOf(angebotId)))
+        .isEqualTo(kontoZu(MAIL));
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT geaendert_von FROM rechnung WHERE id = ?",
+                Long.class,
+                Long.valueOf(geoeffnet.id())))
+        .isEqualTo(kontoZu(MAIL));
+  }
+
+  @Test
   void lesen_afterEverythingAroundItChanged_thenTheGestellteRechnungIsUnchanged() {
     // Given — gestellt mit 19 Prozent, 10 Tagen und der Firma „Adler AG" in Bremen.
     final long angebotId = bestelltesAngebot("160.00");
@@ -896,7 +1117,12 @@ class RechnungStellenIT extends AbstractIntegrationTest {
     // When / Then — eine gestellte Rechnung ist festgeschrieben (Kriterium 14).
     assertThat(setzeMenge(gestellt, "40.00").getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
     assertThat(
-            ruf("/api/rechnungen/" + gestellt.id(), HttpMethod.DELETE, null, String.class)
+            rufAufStand(
+                    "/api/rechnungen/" + gestellt.id(),
+                    HttpMethod.DELETE,
+                    null,
+                    String.class,
+                    gestellt.id())
                 .getStatusCode())
         .isEqualTo(HttpStatus.CONFLICT);
   }

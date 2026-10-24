@@ -7,14 +7,18 @@ import type { Dispatch, FormEvent, ReactNode, SetStateAction } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 
 import { firmaAendern, firmaAnlegen, firmaLesen } from '../api/firmen';
+import type { Firma } from '../api/firmen';
 import type { FieldErrors } from '../api/client';
+import EigeneEingaben from '../components/EigeneEingaben';
+import type { EigeneEingabe } from '../components/EigeneEingaben';
 import { useKopfPfad } from '../components/KopfPfad';
 import type { PfadVerweis } from '../components/KopfPfad';
 import AnschriftFelder from '../components/AnschriftFelder';
 import Karte from '../components/Karte';
+import Konfliktmeldung from '../components/Konfliktmeldung';
 import KupferTaste from '../components/KupferTaste';
 import WeicheTaste from '../components/WeicheTaste';
-import { feldMeldungen, nichtGefunden } from '../lib/apifehler';
+import { feldMeldungen, istBearbeitungskonflikt, nichtGefunden } from '../lib/apifehler';
 import { meldungAm } from '../lib/feldmeldung';
 import { kennungAus } from '../lib/kennung';
 import { ABSTAND_BUEHNE } from '../theme';
@@ -36,6 +40,13 @@ import { ABSTAND_BUEHNE } from '../theme';
  * Das Formular traegt `noValidate`. Die Pflichtangabe steht als `required` am Feld — fuer den
  * Screenreader und fuer das Sternchen —, die Meldung dazu schreibt aber diese Maske, damit sie
  * in derselben Sprache und an derselben Stelle steht wie die Meldungen des Servers.
+ *
+ * <b>Gespeichert wird auf dem gelesenen Stand</b> (#411, Kriterien 1 bis 4; Plan #415, E2). Die
+ * Maske fuehrt die Version der Firma mit und legt sie beim Speichern vor. Hat inzwischen jemand
+ * anderes gespeichert — oder dieselbe Person in einem anderen Fenster —, weist der Server ab, und
+ * die {@link Konfliktmeldung} sagt, wer wann geaendert hat. Die eigenen Eingaben bleiben dabei im
+ * Formular stehen. „Neu laden" holt den Stand des Servers samt neuer Version ins Formular und
+ * stellt die eigenen Werte daneben in {@link EigeneEingaben}, bis „Verwerfen" gewaehlt wird.
  */
 
 /** Beim Anlegen vorbelegt; beim Aendern gilt der gespeicherte Wert (Kriterium 4). */
@@ -46,6 +57,11 @@ const NICHT_GEFUNDEN = 'Diese Firma gibt es nicht.';
 const AUSFALL_LESEN = 'Die Firma ist gerade nicht zu erreichen. Bitte später erneut versuchen.';
 const AUSFALL_SPEICHERN =
   'Die Firma wurde nicht gespeichert. Bitte später erneut versuchen.';
+/** Wo „Neu laden" nach einer Abweisung scheitert. */
+const AUSFALL_NEU_LADEN = 'Der aktuelle Stand ist gerade nicht zu erreichen. Bitte erneut versuchen.';
+
+/** Wohin die Konfliktmeldung fuehrt, wenn es die Firma nicht mehr gibt. */
+const UEBERSICHT = '/firmen';
 
 /** Die sieben Felder der Maske, jedes als Zeichenkette — leer heisst „keine Angabe". */
 interface Werte {
@@ -74,6 +90,35 @@ type Stand = 'laedt' | 'bereit' | 'unbekannt' | 'ausfall';
 /** Eine fehlende Angabe wird zum leeren Feld — nie zu einem Platzhalter im Eingabefeld. */
 function alsText(wert: string | null): string {
   return wert ?? '';
+}
+
+/** Die Werte der Maske aus dem Stand des Servers. */
+function werteAus(firma: Firma): Werte {
+  return {
+    name: firma.name,
+    strasse: alsText(firma.strasse),
+    plz: alsText(firma.plz),
+    ort: alsText(firma.ort),
+    land: alsText(firma.land),
+    steuernummer: alsText(firma.steuernummer),
+    umsatzsteuerId: alsText(firma.umsatzsteuerId),
+  };
+}
+
+/**
+ * Was gerade in der Maske steht, als eigene Eingaben zum Kopieren (#411, Kriterium 3) — beschriftet
+ * wie die Felder, damit sich jeder Wert seinem Feld zuordnen laesst.
+ */
+function eigeneEingabenAus(werte: Werte): readonly EigeneEingabe[] {
+  return [
+    { bezeichnung: 'Name', wert: werte.name },
+    { bezeichnung: 'Straße und Hausnummer', wert: werte.strasse },
+    { bezeichnung: 'Postleitzahl', wert: werte.plz },
+    { bezeichnung: 'Ort', wert: werte.ort },
+    { bezeichnung: 'Land', wert: werte.land },
+    { bezeichnung: 'Steuernummer', wert: werte.steuernummer },
+    { bezeichnung: 'Umsatzsteuer-Identifikationsnummer', wert: werte.umsatzsteuerId },
+  ];
 }
 
 /**
@@ -141,6 +186,12 @@ export default function FirmaMaske() {
   const [feldFehler, setzeFeldFehler] = useState<FieldErrors>({});
   const [fehler, setzeFehler] = useState<string | null>(null);
   const [laeuft, setzeLaeuft] = useState(false);
+  // Der Stand, den das naechste Speichern vorlegt: gelesen, oder aus „Neu laden".
+  const [version, setzeVersion] = useState(0);
+  // Die Abweisung eines Speicherns auf altem Stand, ungeprueft — die Konfliktmeldung liest sie selbst.
+  const [abweisung, setzeAbweisung] = useState<unknown>(null);
+  // Die eigenen Werte nach „Neu laden", bis „Verwerfen" gewaehlt wird (#411, Kriterium 3).
+  const [eigene, setzeEigene] = useState<readonly EigeneEingabe[] | null>(null);
 
   useEffect(() => {
     if (!aendern) {
@@ -153,15 +204,8 @@ export default function FirmaMaske() {
     }
     firmaLesen(kennung)
       .then((firma) => {
-        setzeWerte({
-          name: firma.name,
-          strasse: alsText(firma.strasse),
-          plz: alsText(firma.plz),
-          ort: alsText(firma.ort),
-          land: alsText(firma.land),
-          steuernummer: alsText(firma.steuernummer),
-          umsatzsteuerId: alsText(firma.umsatzsteuerId),
-        });
+        setzeWerte(werteAus(firma));
+        setzeVersion(firma.version);
         setzeStand('bereit');
       })
       .catch((ursache: unknown) => {
@@ -172,6 +216,7 @@ export default function FirmaMaske() {
   const absenden = async (ereignis: FormEvent<HTMLFormElement>) => {
     ereignis.preventDefault();
     setzeFehler(null);
+    setzeAbweisung(null);
     setzeFeldFehler({});
     const fehltName = werte.name.trim() === '';
     setzeNameFehlt(fehltName);
@@ -193,17 +238,46 @@ export default function FirmaMaske() {
         const angelegt = await firmaAnlegen(eingabe);
         navigate(`/firmen/${String(angelegt.id)}`, { replace: true });
       } else {
-        await firmaAendern(kennung, eingabe);
+        await firmaAendern(kennung, version, eingabe);
         navigate(`/firmen/${String(kennung)}`, { replace: true });
       }
     } catch (ursache) {
       setzeLaeuft(false);
       const felder = feldMeldungen(ursache);
-      if (Object.keys(felder).length > 0) {
+      if (istBearbeitungskonflikt(ursache)) {
+        // Die Eingaben bleiben stehen; den Weg weiter zeigt die Konfliktmeldung (Kriterium 3).
+        setzeAbweisung(ursache);
+      } else if (Object.keys(felder).length > 0) {
         setzeFeldFehler(felder);
       } else {
         setzeFehler(AUSFALL_SPEICHERN);
       }
+    }
+  };
+
+  /**
+   * „Neu laden" nach einer Abweisung: der Stand des Servers ins Formular, die eigenen Werte daneben
+   * (#411, Kriterium 3; Plan #415, E12).
+   *
+   * Die eigenen Werte werden genommen, wie sie in diesem Augenblick in der Maske stehen — auch was
+   * nach der Abweisung noch getippt wurde, soll nicht verloren gehen.
+   */
+  const neuLaden = async (id: number) => {
+    const meine = eigeneEingabenAus(werte);
+    setzeFehler(null);
+    setzeLaeuft(true);
+    try {
+      const firma = await firmaLesen(id);
+      setzeWerte(werteAus(firma));
+      setzeVersion(firma.version);
+      setzeEigene(meine);
+      setzeAbweisung(null);
+      setzeNameFehlt(false);
+      setzeFeldFehler({});
+    } catch {
+      setzeFehler(AUSFALL_NEU_LADEN);
+    } finally {
+      setzeLaeuft(false);
     }
   };
 
@@ -233,6 +307,23 @@ export default function FirmaMaske() {
             sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}
           >
             {fehler === null ? null : <Alert severity="error">{fehler}</Alert>}
+            {kennung === null ? null : (
+              <Konfliktmeldung
+                ursache={abweisung}
+                onNeuLaden={() => {
+                  void neuLaden(kennung);
+                }}
+                uebersicht={UEBERSICHT}
+              />
+            )}
+            {eigene === null ? null : (
+              <EigeneEingaben
+                werte={eigene}
+                onVerwerfen={() => {
+                  setzeEigene(null);
+                }}
+              />
+            )}
             <Eingabe
               label="Name"
               feld="name"

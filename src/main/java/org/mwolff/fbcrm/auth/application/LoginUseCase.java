@@ -17,10 +17,10 @@ import org.springframework.stereotype.Service;
  * Anmelden mit E-Mail-Adresse und Code (Kriterium 2) und einen Code fuer die Anmeldung anfordern
  * (E8).
  *
- * <p>Der Fehlerfall ist der interessante: Eine unbekannte Adresse, ein falscher, ein abgelaufener
- * und ein verbrauchter Code fuehren zur selben {@link LoginFailed} und dauern gleich lang (E13,
- * Kriterium 3). Den gleichen Rechenaufwand stellt {@link CodeEinloesung} her, die Verzoegerung
- * danach {@link FailedLoginDelay}.
+ * <p>Der Fehlerfall ist der interessante: Eine unbekannte Adresse, ein stillgelegtes Konto, ein
+ * falscher, ein abgelaufener und ein verbrauchter Code fuehren zur selben {@link LoginFailed} und
+ * dauern gleich lang (E13, Kriterium 3). Den gleichen Rechenaufwand stellt {@link CodeEinloesung}
+ * her, die Verzoegerung danach {@link FailedLoginDelay}.
  *
  * <p><b>Bewusst ohne {@code @Transactional}:</b> Bei einem Fehlschlag haelt der Anwendungsfall den
  * Thread bis zu 800 ms an, und eine Transaktion um das Ganze hielte waehrenddessen eine
@@ -77,19 +77,21 @@ public class LoginUseCase {
    *
    * <p>Die Bremse je Herkunft greift vor allem anderen und zaehlt jede Eingabe (Kriterium 5). Erst
    * nach einem eingeloesten Code wird nach dem Konto gesehen: Ein Code ohne Konto — etwa der einer
-   * noch laufenden Einrichtung — meldet niemanden an und endet in derselben Abweisung.
+   * noch laufenden Einrichtung — meldet niemanden an und endet in derselben Abweisung. Ebenso ein
+   * Code, der vor dem Stilllegen ausgestellt wurde: Ein stillgelegtes Konto meldet sich nicht mehr
+   * an (Plan #414, E6; fachliche Quelle #409, Kriterium 7).
    *
    * @param email die eingegebene Adresse
    * @param code der eingegebene Code
    * @param clientIp die Absender-Adresse fuer die Zaehlbremse (E9)
    * @throws TooManyLoginAttempts wenn die Herkunft gesperrt ist, mit der Restwartezeit
    * @throws LoginFailed wenn der Code nicht stimmt, abgelaufen oder verbraucht ist oder es zu der
-   *     Adresse kein Konto gibt — fuer jeden Fall dieselbe
+   *     Adresse kein aktives Konto gibt — fuer jeden Fall dieselbe
    */
   public LoginResult login(final String email, final String code, final String clientIp) {
     einloesung.bremse(clientIp);
     final Optional<Account> konto =
-        einloesung.loese(email, code, clientIp) ? accounts.findByEmail(email) : Optional.empty();
+        einloesung.loese(email, code, clientIp) ? aktivesKonto(email) : Optional.empty();
     if (konto.isEmpty()) {
       delay.apply();
       throw new LoginFailed();
@@ -106,10 +108,11 @@ public class LoginUseCase {
    * des Kontos liefe in die Bremse. Eine abgewiesene Anforderung stellt nichts aus, der bisherige
    * Code gilt weiter (E12).
    *
-   * <p><b>Ohne Konto</b> entsteht weder eine Zeile noch eine Mail (Kriterium 3), aber derselbe
-   * Rechenaufwand: Die Ausstellung rechnet einen Argon2-Durchlauf, also rechnet ihn auch die
-   * unbekannte Adresse — gegen einen erzeugten und sofort verworfenen Code. Ohne ihn waere die
-   * Laufzeit der Antwort ein von aussen messbares Orakel auf das Konto.
+   * <p><b>Ohne aktives Konto</b> — die Adresse ist unbekannt oder ihr Konto stillgelegt (E6) —
+   * entsteht weder eine Zeile noch eine Mail (Kriterium 3), aber derselbe Rechenaufwand: Die
+   * Ausstellung rechnet einen Argon2-Durchlauf, also rechnet ihn auch die unbekannte Adresse —
+   * gegen einen erzeugten und sofort verworfenen Code. Ohne ihn waere die Laufzeit der Antwort ein
+   * von aussen messbares Orakel auf das Konto.
    *
    * <p>Der Code geht an die Adresse, die das Konto traegt, nicht an die eingegebene: Gefunden wird
    * ohne Ruecksicht auf die Schreibweise, zugestellt wird an die eine bekannte Adresse.
@@ -124,11 +127,21 @@ public class LoginUseCase {
     if (!warten.isZero()) {
       throw new TooManyLoginAttempts(warten);
     }
-    accounts
-        .findByEmail(email)
+    aktivesKonto(email)
         .ifPresentOrElse(
             konto -> ausstellung.ausstellen(konto.email(), konto.displayName()),
             this::rechneWieEineAusstellung);
+  }
+
+  /**
+   * Das Konto zur Adresse, sofern es sich anmelden darf (E6).
+   *
+   * <p>Das Repository liefert bewusst auch stillgelegte Konten: Ihre Adresse bleibt blockiert, und
+   * die Pruefung auf Eindeutigkeit beim Anlegen braucht sie. Ob ein Konto sich anmelden darf,
+   * entscheidet erst diese Stelle.
+   */
+  private Optional<Account> aktivesKonto(final String email) {
+    return accounts.findByEmail(email).filter(Account::aktiv);
   }
 
   /** Ein Argon2-Durchlauf, dessen Ergebnis niemand braucht — allein die Rechenzeit zaehlt (E13). */

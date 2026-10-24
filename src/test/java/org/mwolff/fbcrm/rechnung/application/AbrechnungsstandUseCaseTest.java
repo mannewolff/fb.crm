@@ -6,7 +6,9 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -21,6 +23,7 @@ import org.mwolff.fbcrm.angebot.application.AngebotNichtGefunden;
 import org.mwolff.fbcrm.angebot.domain.AngebotRepository;
 import org.mwolff.fbcrm.angebot.domain.Angebotsstatus;
 import org.mwolff.fbcrm.arbeitszeit.application.Arbeitszeitauskunft;
+import org.mwolff.fbcrm.arbeitszeit.domain.Zeiteintrag;
 import org.mwolff.fbcrm.rechnung.domain.Nummernmuster;
 import org.mwolff.fbcrm.rechnung.domain.RechnungRepository;
 import org.mwolff.fbcrm.rechnung.domain.Rechnungseinstellungen;
@@ -52,6 +55,11 @@ import org.mwolff.fbcrm.rechnung.domain.RechnungseinstellungenRepository;
  */
 @ExtendWith(MockitoExtension.class)
 class AbrechnungsstandUseCaseTest {
+
+  /** Die beiden Personen aus dem Szenario von Plan #426. */
+  private static final long ANNA = 21L;
+
+  private static final long BEN = 22L;
 
   @Mock private AngebotRepository angebote;
   @Mock private RechnungRepository rechnungen;
@@ -345,5 +353,62 @@ class AbrechnungsstandUseCaseTest {
     // Then
     assertThat(abrechnung.schreibbar()).isTrue();
     assertThat(abrechnung.positionen().getFirst().stand().offen()).isEqualByComparingTo("8.00");
+  }
+
+  /**
+   * Die Stunden zweier Personen auf die Beratung, so wie die Zeiterfassung sie ueber alle Personen
+   * zusammenzaehlt (Plan #426, E15): Anna 10, Ben 6. Dass die Auskunft wirklich summiert, weist
+   * {@code ArbeitszeitauskunftTest} nach; hier zaehlt, was der Anwendungsfall daraus macht.
+   */
+  private static Map<Long, BigDecimal> stundenVonAnnaUndBen() {
+    final LocalDate tag = LocalDate.of(2026, 11, 12);
+    final Instant erfasst = Instant.parse("2026-11-12T18:00:00Z");
+    final List<Zeiteintrag> eintraege =
+        List.of(
+            new Zeiteintrag(
+                1L,
+                ANNA,
+                Rechnungsdoppel.BERATUNG_ID,
+                tag,
+                LocalTime.of(8, 0),
+                LocalTime.of(18, 0),
+                erfasst,
+                erfasst),
+            new Zeiteintrag(
+                2L,
+                BEN,
+                Rechnungsdoppel.BERATUNG_ID,
+                tag,
+                LocalTime.of(9, 0),
+                LocalTime.of(15, 0),
+                erfasst,
+                erfasst));
+    return Map.of(
+        Long.valueOf(Rechnungsdoppel.BERATUNG_ID),
+        Zeiteintrag.stundenAus(eintraege.stream().mapToLong(Zeiteintrag::minuten).sum()));
+  }
+
+  @Test
+  void zu_withHoursOfTwoPersonen_thenTheStandCountsBoth() {
+    // Given — Anna 10 und Ben 6 Stunden auf 20 angebotene, 10 davon bereits gestellt.
+    when(angebote.findById(Rechnungsdoppel.ANGEBOT))
+        .thenReturn(
+            Optional.of(
+                Rechnungsdoppel.angebot(
+                    Angebotsstatus.BESTELLT, List.of(Rechnungsdoppel.beratungUeber("20.00")))));
+    when(rechnungen.findByAngebot(Rechnungsdoppel.ANGEBOT))
+        .thenReturn(
+            List.of(
+                Rechnungsdoppel.gestellt(
+                    1L, "R26-0001", List.of(Rechnungsdoppel.beratung("10.00")))));
+    when(arbeitszeit.angefallen(Rechnungsdoppel.ANGEBOT)).thenReturn(stundenVonAnnaUndBen());
+    gegebeneEinstellungen("19.00");
+
+    // When
+    final Angebotsabrechnung abrechnung = useCase.zu(Rechnungsdoppel.ANGEBOT);
+
+    // Then — angefallen sind 16 Stunden beider Personen, an der Zeile wie in der Gesamtsumme.
+    assertThat(abrechnung.positionen().getFirst().angefallen()).isEqualByComparingTo("16.00");
+    assertThat(abrechnung.angefallen()).isEqualByComparingTo("16.00");
   }
 }

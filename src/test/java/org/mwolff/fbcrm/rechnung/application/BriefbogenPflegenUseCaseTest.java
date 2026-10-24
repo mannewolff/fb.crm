@@ -3,6 +3,8 @@ package org.mwolff.fbcrm.rechnung.application;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowableOfType;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -12,6 +14,7 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -20,6 +23,7 @@ import org.mwolff.fbcrm.rechnung.domain.Briefbogen;
 import org.mwolff.fbcrm.rechnung.domain.BriefbogenRepository;
 import org.mwolff.fbcrm.rechnung.domain.Briefpapierblatt;
 import org.mwolff.fbcrm.rechnung.domain.Randmasse;
+import org.mwolff.fbcrm.rechnung.domain.Zeilenstand;
 
 /**
  * Das Fortschreiben von Schaltern und Raendern (fachliche Quelle #361, Kriterien 13 und 16; Plan
@@ -29,6 +33,9 @@ import org.mwolff.fbcrm.rechnung.domain.Randmasse;
  * mit der gespeicherten Zeile; passt der Satz nicht, faellt der ganze {@code PUT}, und die
  * bisherige Zeile bleibt. Die Grenzwerte stammen aus {@code RandgrenzenTest}, wo sie von Hand
  * gerechnet sind.
+ *
+ * <p>Davor steht der Vergleich des vorgelegten Stands (#411, Kriterium 4; Plan #415, E1, E11, E14):
+ * Auf einem alten Stand wird abgewiesen, bevor die Raender geprueft werden.
  */
 @ExtendWith(MockitoExtension.class)
 class BriefbogenPflegenUseCaseTest {
@@ -41,7 +48,27 @@ class BriefbogenPflegenUseCaseTest {
   private static final Briefpapierblatt BLATT =
       new Briefpapierblatt("briefpapier/3f2a.pdf", "kopf.pdf", 98_765L, 2);
 
+  /** Der Stand, den die Maske vorlegt und den die Zeile traegt. */
+  private static final long STAND = 3L;
+
+  /** Das handelnde Konto. */
+  private static final long KONTO = 31L;
+
+  /** Das Konto, das zuletzt geaendert hat — etwa mit einem Hochladen. */
+  private static final long ANNA = 30L;
+
+  private static final Instant ANNAS_AENDERUNG = Instant.parse("2026-10-19T08:42:00Z");
+
   @Mock private BriefbogenRepository bestand;
+
+  @BeforeEach
+  void richteDenStandEin() {
+    // Nachsichtig: Die abweisenden Faelle kommen nie zum Schreiben.
+    lenient().when(bestand.stand()).thenReturn(new Zeilenstand(STAND, ANNA, ANNAS_AENDERUNG));
+    lenient()
+        .when(bestand.speichere(any(), any(), anyLong(), anyLong()))
+        .thenReturn(new Zeilenstand(STAND + 1, KONTO, JETZT));
+  }
 
   private BriefbogenPflegenUseCase useCase() {
     return new BriefbogenPflegenUseCase(bestand, Clock.fixed(JETZT, ZoneOffset.UTC));
@@ -52,10 +79,10 @@ class BriefbogenPflegenUseCaseTest {
     final RandNichtMoeglich fehler =
         catchThrowableOfType(
             RandNichtMoeglich.class,
-            () -> useCase().pflege(absenderzeile, steuerBankZeile, raender));
+            () -> useCase().pflege(absenderzeile, steuerBankZeile, raender, STAND, KONTO));
     assertThat(fehler).isNotNull();
     // Kriterium 13: die bisherige Einstellung bleibt — der ganze PUT faellt.
-    verify(bestand, never()).speichere(any(), any());
+    verify(bestand, never()).speichere(any(), any(), anyLong(), anyLong());
     return fehler.felder();
   }
 
@@ -66,12 +93,33 @@ class BriefbogenPflegenUseCaseTest {
     final Randmasse neu = new Randmasse(300, 150, 1_000, 250, 180, 220);
 
     // When
-    final Briefbogenstand stand = useCase().pflege(false, true, neu);
+    final Briefbogenstand stand = useCase().pflege(false, true, neu, STAND, KONTO);
+
+    // Then — mit dem vorgelegten Stand und dem handelnden Konto; die Antwort traegt die erhoehte
+    // Version.
+    verify(bestand).speichere(new Briefbogen(BLATT, false, true, neu), JETZT, STAND, KONTO);
+    assertThat(stand)
+        .isEqualTo(new Briefbogenstand(true, "kopf.pdf", 98_765L, 2, false, true, neu, STAND + 1));
+  }
+
+  @Test
+  void pflege_givenTheStandBeforeAnUpload_thenRefusesBeforeTheMarginsAndWritesNothing() {
+    // When — E11: Anna hat inzwischen ein Briefpapier hochgeladen; das schreibt in andere Spalten,
+    // erhoeht aber denselben Stand. Die Raender passen nicht einmal — der Stand steht davor.
+    final BriefbogenGeaendert konflikt =
+        catchThrowableOfType(
+            BriefbogenGeaendert.class,
+            () ->
+                useCase()
+                    .pflege(true, true, new Randmasse(250, 200, 985, 701, 200, 200), 2L, KONTO));
 
     // Then
-    verify(bestand).speichere(new Briefbogen(BLATT, false, true, neu), JETZT);
-    assertThat(stand)
-        .isEqualTo(new Briefbogenstand(true, "kopf.pdf", 98_765L, 2, false, true, neu));
+    assertThat(konflikt).isNotNull();
+    assertThat(konflikt.urheberKonto()).hasValue(ANNA);
+    assertThat(konflikt.handelndesKonto()).isEqualTo(KONTO);
+    assertThat(konflikt.zeitpunkt()).hasValue(ANNAS_AENDERUNG);
+    verify(bestand, never()).lies();
+    verify(bestand, never()).speichere(any(), any(), anyLong(), anyLong());
   }
 
   @Test
