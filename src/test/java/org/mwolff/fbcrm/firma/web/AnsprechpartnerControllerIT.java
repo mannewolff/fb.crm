@@ -73,7 +73,11 @@ class AnsprechpartnerControllerIT extends AbstractIntegrationTest {
 
   private long legeFirmaAn(final String name) {
     final ResponseEntity<FirmaResponse> antwort =
-        ruf("/api/firmen", HttpMethod.POST, Map.of("name", name), FirmaResponse.class);
+        ruf(
+            "/api/firmen",
+            HttpMethod.POST,
+            Map.of("name", name, "land", "DE"),
+            FirmaResponse.class);
     return Objects.requireNonNull(antwort.getBody()).id();
   }
 

@@ -45,7 +45,7 @@ class JpaFirmaRepositoryTest {
     return new Firma(
         id,
         "Adler AG",
-        new Anschrift("Am Wall 1", "28195", "Bremen", "Deutschland"),
+        new Anschrift("Am Wall 1", "28195", "Bremen", "DE"),
         "75/123/45678",
         "DE123456789",
         true,
@@ -71,7 +71,7 @@ class JpaFirmaRepositoryTest {
             zeile -> assertThat(zeile.getName()).isEqualTo("Adler AG"),
             zeile ->
                 assertThat(zeile.getAnschrift())
-                    .isEqualTo(new Anschrift("Am Wall 1", "28195", "Bremen", "Deutschland")),
+                    .isEqualTo(new Anschrift("Am Wall 1", "28195", "Bremen", "DE")),
             zeile -> assertThat(zeile.getSteuernummer()).isEqualTo("75/123/45678"),
             zeile -> assertThat(zeile.getUmsatzsteuerId()).isEqualTo("DE123456789"),
             zeile -> assertThat(zeile.isAktiv()).isTrue(),

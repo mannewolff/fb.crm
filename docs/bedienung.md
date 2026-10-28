@@ -317,9 +317,10 @@ Klick auf den Namen öffnet die Seite der Firma.
 **Firma anlegen:**
 
 1. In der Übersicht „Neue Firma" wählen.
-2. Die Felder ausfüllen: „Name" ist Pflicht, dazu „Straße und Hausnummer", „Postleitzahl", „Ort",
-   „Land" (vorbelegt mit „Deutschland"), „Steuernummer" und
-   „Umsatzsteuer-Identifikationsnummer".
+2. Die Felder ausfüllen: „Name" und „Land" sind Pflicht, dazu „Straße und Hausnummer",
+   „Postleitzahl", „Ort", „Steuernummer" und „Umsatzsteuer-Identifikationsnummer". Das Land ist
+   ein Länderkürzel nach ISO 3166-1, vorbelegt mit `DE` für Deutschland, etwa `AT` für
+   Österreich. Ein unbekanntes Kürzel weist fb.crm am Feld „Land" ab.
 3. „Anlegen" wählen. fb.crm öffnet die Seite der neuen Firma.
 
 Eine Rechnung an die Firma lässt sich erst stellen, wenn Name, Straße und Hausnummer, Postleitzahl

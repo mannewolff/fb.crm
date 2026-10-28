@@ -49,8 +49,11 @@ import { ABSTAND_BUEHNE } from '../theme';
  * stellt die eigenen Werte daneben in {@link EigeneEingaben}, bis „Verwerfen" gewaehlt wird.
  */
 
-/** Beim Anlegen vorbelegt; beim Aendern gilt der gespeicherte Wert (Kriterium 4). */
-const LAND_VORGABE = 'Deutschland';
+/**
+ * Beim Anlegen vorbelegt; beim Aendern gilt der gespeicherte Wert (Kriterium 4). Das Land ist ein
+ * Kuerzel der Laenderliste (Plan #461, E11); die Auswahl folgt mit Issue #463.
+ */
+const LAND_VORGABE = 'DE';
 
 const NAME_FEHLT = 'Bitte einen Namen angeben.';
 const NICHT_GEFUNDEN = 'Diese Firma gibt es nicht.';

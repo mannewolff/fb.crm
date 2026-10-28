@@ -15,8 +15,7 @@ import org.mwolff.fbcrm.common.Anschrift;
  */
 class AnschriftSpaltenTest {
 
-  private static final Anschrift AM_WALL =
-      new Anschrift("Am Wall 1", "28195", "Bremen", "Deutschland");
+  private static final Anschrift AM_WALL = new Anschrift("Am Wall 1", "28195", "Bremen", "DE");
 
   @Test
   void aus_thenEveryFieldOfTheAnschriftArrivesAtItsColumn() {
@@ -29,7 +28,7 @@ class AnschriftSpaltenTest {
             gelesen -> assertThat(gelesen.strasse()).isEqualTo("Am Wall 1"),
             gelesen -> assertThat(gelesen.plz()).isEqualTo("28195"),
             gelesen -> assertThat(gelesen.ort()).isEqualTo("Bremen"),
-            gelesen -> assertThat(gelesen.land()).isEqualTo("Deutschland"));
+            gelesen -> assertThat(gelesen.land()).isEqualTo("DE"));
   }
 
   @Test

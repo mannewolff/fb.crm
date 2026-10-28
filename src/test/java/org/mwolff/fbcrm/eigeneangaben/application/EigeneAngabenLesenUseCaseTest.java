@@ -34,7 +34,7 @@ class EigeneAngabenLesenUseCaseTest {
         new EigeneAngaben(
             "Manfred Wolff",
             "Freiberuflicher Softwareentwickler",
-            new Anschrift("Am Wall 1", "28195", "Bremen", "Deutschland"),
+            new Anschrift("Am Wall 1", "28195", "Bremen", "DE"),
             "manne@example.org",
             "0421 1234",
             "https://mwolff.org",

@@ -53,7 +53,7 @@ class FirmaAendernUseCaseTest {
     return new Firma(
         7L,
         "Adler AG",
-        new Anschrift("Am Wall 1", "28195", "Bremen", "Deutschland"),
+        new Anschrift("Am Wall 1", "28195", "Bremen", "DE"),
         "75/123/45678",
         "DE123456789",
         aktiv,
@@ -66,7 +66,7 @@ class FirmaAendernUseCaseTest {
   private static FirmaDaten neueDaten(final String name) {
     return new FirmaDaten(
         name,
-        new Anschrift("Moenckebergstrasse 2", "20095", "Hamburg", "Deutschland"),
+        new Anschrift("Moenckebergstrasse 2", "20095", "Hamburg", "DE"),
         "75/999/00000",
         "DE999999999");
   }
@@ -89,7 +89,7 @@ class FirmaAendernUseCaseTest {
         .extracting(Firma::name, Firma::anschrift, Firma::steuernummer, Firma::umsatzsteuerId)
         .containsExactly(
             "Adler GmbH",
-            new Anschrift("Moenckebergstrasse 2", "20095", "Hamburg", "Deutschland"),
+            new Anschrift("Moenckebergstrasse 2", "20095", "Hamburg", "DE"),
             "75/999/00000",
             "DE999999999");
   }
@@ -136,12 +136,12 @@ class FirmaAendernUseCaseTest {
     final Firma gespeichert =
         aendereUndFange(
             bestand(true),
-            new FirmaDaten("Adler GmbH", new Anschrift(" ", " ", " ", " "), " ", " "));
+            new FirmaDaten("Adler GmbH", new Anschrift(" ", " ", " ", "DE"), " ", " "));
 
     // Then
     assertThat(gespeichert)
         .extracting(Firma::anschrift, Firma::steuernummer, Firma::umsatzsteuerId)
-        .containsExactly(new Anschrift(null, null, null, null), null, null);
+        .containsExactly(new Anschrift(null, null, null, "DE"), null, null);
   }
 
   @Test

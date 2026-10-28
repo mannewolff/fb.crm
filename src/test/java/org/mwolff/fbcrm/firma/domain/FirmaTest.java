@@ -13,10 +13,9 @@ class FirmaTest {
   private static final Instant ANGELEGT = Instant.parse("2026-09-01T08:00:00Z");
   private static final Instant GEAENDERT = Instant.parse("2026-09-18T12:00:00Z");
 
-  private static final Anschrift BREMEN =
-      new Anschrift("Am Wall 1", "28195", "Bremen", "Deutschland");
+  private static final Anschrift BREMEN = new Anschrift("Am Wall 1", "28195", "Bremen", "DE");
   private static final Anschrift HAMBURG =
-      new Anschrift("Moenckebergstrasse 2", "20095", "Hamburg", "Deutschland");
+      new Anschrift("Moenckebergstrasse 2", "20095", "Hamburg", "DE");
 
   private static Firma firma(final boolean aktiv) {
     return new Firma(

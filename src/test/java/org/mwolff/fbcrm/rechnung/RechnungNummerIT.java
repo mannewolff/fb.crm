@@ -150,7 +150,7 @@ class RechnungNummerIT extends AbstractIntegrationTest {
     rumpf.put("strasse", "Am Deich 2");
     rumpf.put("plz", "28199");
     rumpf.put("ort", "Bremen");
-    rumpf.put("land", "Deutschland");
+    rumpf.put("land", "DE");
     rumpf.put("email", "post@example.org");
     rumpf.put("telefon", "0421 123456");
     rumpf.put("webadresse", "https://example.org");
@@ -174,7 +174,7 @@ class RechnungNummerIT extends AbstractIntegrationTest {
     rumpf.put("strasse", "Hauptstrasse 1");
     rumpf.put("plz", "28195");
     rumpf.put("ort", "Bremen");
-    rumpf.put("land", "Deutschland");
+    rumpf.put("land", "DE");
     rumpf.put("steuernummer", null);
     rumpf.put("umsatzsteuerId", null);
     ruf("/api/firmen", HttpMethod.POST, rumpf, String.class);

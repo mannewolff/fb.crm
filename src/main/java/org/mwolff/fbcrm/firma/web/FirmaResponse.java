@@ -2,6 +2,7 @@ package org.mwolff.fbcrm.firma.web;
 
 import java.util.List;
 import org.jspecify.annotations.Nullable;
+import org.mwolff.fbcrm.common.Laenderliste;
 import org.mwolff.fbcrm.firma.application.FirmaMitAnsprechpartnern;
 import org.mwolff.fbcrm.firma.domain.Firma;
 
@@ -19,7 +20,8 @@ import org.mwolff.fbcrm.firma.domain.Firma;
  * @param strasse Strasse und Hausnummer, oder {@code null}
  * @param plz Postleitzahl, oder {@code null}
  * @param ort Ort, oder {@code null}
- * @param land Land, oder {@code null}
+ * @param land Land als Kuerzel nach ISO 3166-1
+ * @param landName deutscher Name des Landes aus der {@link Laenderliste} (Plan #461, E11)
  * @param steuernummer Steuernummer, oder {@code null}
  * @param umsatzsteuerId Umsatzsteuer-Identifikationsnummer, oder {@code null}
  * @param aktiv {@code false}, solange die Firma stillgelegt ist
@@ -34,6 +36,7 @@ public record FirmaResponse(
     @Nullable String plz,
     @Nullable String ort,
     @Nullable String land,
+    @Nullable String landName,
     @Nullable String steuernummer,
     @Nullable String umsatzsteuerId,
     boolean aktiv,
@@ -66,6 +69,7 @@ public record FirmaResponse(
         firma.anschrift().plz(),
         firma.anschrift().ort(),
         firma.anschrift().land(),
+        Laenderliste.name(firma.anschrift().land()),
         firma.steuernummer(),
         firma.umsatzsteuerId(),
         firma.aktiv(),

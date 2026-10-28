@@ -23,8 +23,7 @@ final class Kundendoppel {
   /** Vor- und Nachname des Ansprechpartners, wie die Ansicht sie zeigt. */
   static final String ANSPRECHPARTNER_TEXT = "Eva Adler";
 
-  static final Anschrift FIRMENANSCHRIFT =
-      new Anschrift("Hauptstrasse 1", "28195", "Bremen", "Deutschland");
+  static final Anschrift FIRMENANSCHRIFT = new Anschrift("Hauptstrasse 1", "28195", "Bremen", "DE");
 
   private static final Instant ANGELEGT = Instant.parse("2026-09-01T08:00:00Z");
 

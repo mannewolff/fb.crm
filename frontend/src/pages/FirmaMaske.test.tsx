@@ -75,14 +75,14 @@ afterEach(() => {
 });
 
 describe('FirmaMaske — Anlegen', () => {
-  it('legt Land mit „Deutschland" vor und schickt nur die ausgefuellten Angaben', async () => {
+  it('legt das Land mit „DE" vor und schickt nur die ausgefuellten Angaben', async () => {
     const nutzer = userEvent.setup();
     const fetchMock = fetchNachPfad({ 'POST /api/firmen': json(200, FIRMA) });
 
     renderMaske('/firmen/neu');
 
     expect(screen.getByRole('heading', { name: 'Neue Firma' })).toBeInTheDocument();
-    expect(feld('Land')).toHaveValue('Deutschland');
+    expect(feld('Land')).toHaveValue('DE');
 
     await nutzer.type(feld('Name'), 'Neue GmbH');
     await nutzer.click(screen.getByRole('button', { name: 'Anlegen' }));
@@ -96,7 +96,7 @@ describe('FirmaMaske — Anlegen', () => {
           strasse: null,
           plz: null,
           ort: null,
-          land: 'Deutschland',
+          land: 'DE',
           steuernummer: null,
           umsatzsteuerId: null,
         }),

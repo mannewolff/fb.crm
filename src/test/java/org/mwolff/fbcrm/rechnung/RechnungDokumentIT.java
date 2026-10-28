@@ -126,7 +126,7 @@ class RechnungDokumentIT extends AbstractIntegrationTest {
     rumpf.put("strasse", "Am Deich 2");
     rumpf.put("plz", "28199");
     rumpf.put("ort", "Bremen");
-    rumpf.put("land", "Deutschland");
+    rumpf.put("land", "DE");
     rumpf.put("email", "post@example.org");
     rumpf.put("telefon", "0421 123456");
     rumpf.put("webadresse", "https://example.org");
@@ -164,7 +164,7 @@ class RechnungDokumentIT extends AbstractIntegrationTest {
     rumpf.put("strasse", strasse);
     rumpf.put("plz", plz);
     rumpf.put("ort", ort);
-    rumpf.put("land", "Deutschland");
+    rumpf.put("land", "DE");
     rumpf.put("steuernummer", null);
     rumpf.put("umsatzsteuerId", null);
     return rumpf;

@@ -372,6 +372,7 @@ class RollenZugangIT extends AbstractIntegrationTest {
     rumpf.put("strasse", "Hauptstrasse 1");
     rumpf.put("plz", "28195");
     rumpf.put("ort", "Bremen");
+    rumpf.put("land", "DE");
     return rumpf;
   }
 }

@@ -3,6 +3,7 @@ package org.mwolff.fbcrm.firma.web;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.tuple;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -90,12 +91,16 @@ class FirmaControllerIT extends AbstractIntegrationTest {
   }
 
   private static Map<String, String> rumpf(final String name, final String ort) {
+    return rumpf(name, ort, "DE");
+  }
+
+  private static Map<String, String> rumpf(final String name, final String ort, final String land) {
     return Map.of(
         "name", name,
         "strasse", "Am Wall 1",
         "plz", "28195",
         "ort", ort,
-        "land", "Deutschland",
+        "land", land,
         "steuernummer", "75/123/45678",
         "umsatzsteuerId", "DE123456789");
   }
@@ -156,6 +161,7 @@ class FirmaControllerIT extends AbstractIntegrationTest {
                 "Am Wall 1",
                 "28195",
                 "Bremen",
+                "DE",
                 "Deutschland",
                 "75/123/45678",
                 "DE123456789",
@@ -366,6 +372,35 @@ class FirmaControllerIT extends AbstractIntegrationTest {
 
     // Then
     assertThat(antwort.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+  }
+
+  @Test
+  void anlegen_givenAnUnknownCountryCode_thenAnswersBadRequestAtTheFieldLand() throws Exception {
+    // When — Plan #461, E11.
+    final ResponseEntity<String> antwort =
+        ruf("/api/firmen", HttpMethod.POST, rumpf("Adler AG", "Bremen", "XX"), String.class);
+
+    // Then
+    assertThat(antwort.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    assertThat(
+            new ObjectMapper()
+                .readTree(antwort.getBody())
+                .path("fieldErrors")
+                .path("land")
+                .isArray())
+        .isTrue();
+  }
+
+  @Test
+  void anlegen_givenAustria_thenAnswersWithTheCodeAndTheGermanName() {
+    // When
+    final ResponseEntity<FirmaResponse> antwort =
+        ruf("/api/firmen", HttpMethod.POST, rumpf("Adler AG", "Wien", "AT"), FirmaResponse.class);
+
+    // Then
+    assertThat(Objects.requireNonNull(antwort.getBody()))
+        .extracting(FirmaResponse::land, FirmaResponse::landName)
+        .containsExactly("AT", "Österreich");
   }
 
   @Test

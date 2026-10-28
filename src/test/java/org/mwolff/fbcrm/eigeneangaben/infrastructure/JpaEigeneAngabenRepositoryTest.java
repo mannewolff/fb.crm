@@ -44,7 +44,7 @@ class JpaEigeneAngabenRepositoryTest {
     return new EigeneAngaben(
         "Manfred Wolff",
         "Freiberuflicher Softwareentwickler",
-        new Anschrift("Am Wall 1", "28195", "Bremen", "Deutschland"),
+        new Anschrift("Am Wall 1", "28195", "Bremen", "DE"),
         "manne@example.org",
         "0421 1234",
         "https://mwolff.org",
@@ -115,7 +115,7 @@ class JpaEigeneAngabenRepositoryTest {
                     .isEqualTo("Freiberuflicher Softwareentwickler"),
             zeile ->
                 assertThat(zeile.getAnschrift())
-                    .isEqualTo(new Anschrift("Am Wall 1", "28195", "Bremen", "Deutschland")),
+                    .isEqualTo(new Anschrift("Am Wall 1", "28195", "Bremen", "DE")),
             zeile -> assertThat(zeile.getEmail()).isEqualTo("manne@example.org"),
             zeile -> assertThat(zeile.getTelefon()).isEqualTo("0421 1234"),
             zeile -> assertThat(zeile.getWebadresse()).isEqualTo("https://mwolff.org"),

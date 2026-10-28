@@ -465,6 +465,7 @@ class BriefpapierIT extends AbstractIntegrationTest {
     firma.put("strasse", "Hauptstrasse 1");
     firma.put("plz", "28195");
     firma.put("ort", "Bremen");
+    firma.put("land", "DE");
     ruf("/api/firmen", HttpMethod.POST, firma, String.class);
   }
 

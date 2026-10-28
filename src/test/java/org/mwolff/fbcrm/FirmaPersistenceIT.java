@@ -57,7 +57,7 @@ class FirmaPersistenceIT extends AbstractIntegrationTest {
                 new Firma(
                     null,
                     "Adler AG",
-                    new Anschrift("Am Wall 1", "28195", "Bremen", "Deutschland"),
+                    new Anschrift("Am Wall 1", "28195", "Bremen", "DE"),
                     "75/123/45678",
                     "DE123456789",
                     false,
@@ -123,7 +123,7 @@ class FirmaPersistenceIT extends AbstractIntegrationTest {
           .extracting(Firma::name, Firma::anschrift, Firma::steuernummer, Firma::umsatzsteuerId)
           .containsExactly(
               "Adler AG",
-              new Anschrift("Am Wall 1", "28195", "Bremen", "Deutschland"),
+              new Anschrift("Am Wall 1", "28195", "Bremen", "DE"),
               "75/123/45678",
               "DE123456789");
     }

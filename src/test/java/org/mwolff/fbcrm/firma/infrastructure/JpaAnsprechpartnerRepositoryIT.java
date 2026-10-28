@@ -47,7 +47,7 @@ class JpaAnsprechpartnerRepositoryIT extends AbstractIntegrationTest {
             new Firma(
                 null,
                 name,
-                new Anschrift(null, null, null, null),
+                new Anschrift(null, null, null, "DE"),
                 null,
                 null,
                 true,
