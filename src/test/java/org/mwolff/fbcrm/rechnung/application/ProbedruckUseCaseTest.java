@@ -83,10 +83,10 @@ class ProbedruckUseCaseTest {
         "mmuster.org",
         "12/345/67890",
         "DE 01010101010",
-        null,
-        null,
-        null,
-        "MLP Bank Heidelberg");
+        "DE89370400440532013000",
+        "COBADEFFXXX",
+        "Max Mustermann",
+        null);
   }
 
   private static EigeneAngaben leer() {
@@ -240,7 +240,9 @@ class ProbedruckUseCaseTest {
     final byte[] pdf = useCase.drucke();
 
     // Then — die echten eigenen Angaben; die USt-IdNr. steht vor der Steuernummer.
-    final String zeile = "USt-IdNr. DE 01010101010 · Bankverbindung: MLP Bank Heidelberg";
+    final String zeile =
+        "USt-IdNr. DE 01010101010 · Bankverbindung: Max Mustermann"
+            + " · IBAN DE89 3704 0044 0532 0130 00 · BIC COBADEFFXXX";
     assertThat(ausgelesen(pdf, 1))
         .contains("Max Mustermann · Muster Str. 34a · 28197 Bremen")
         .contains(zeile);

@@ -102,6 +102,9 @@ class RechnungEntity {
   @Column(name = "empfaenger_land", length = 100)
   private @Nullable String empfaengerLand;
 
+  @Column(name = "empfaenger_land_kuerzel", length = 2)
+  private @Nullable String empfaengerLandKuerzel;
+
   @Column(name = "absender_name", length = 200)
   private @Nullable String absenderName;
 
@@ -137,6 +140,15 @@ class RechnungEntity {
 
   @Column(name = "absender_webadresse", length = 200)
   private @Nullable String absenderWebadresse;
+
+  @Column(name = "absender_iban", length = 34)
+  private @Nullable String absenderIban;
+
+  @Column(name = "absender_bic", length = 11)
+  private @Nullable String absenderBic;
+
+  @Column(name = "absender_kontoinhaber", length = 200)
+  private @Nullable String absenderKontoinhaber;
 
   @Column(name = "created_at", nullable = false)
   private Instant createdAt;
@@ -220,6 +232,7 @@ class RechnungEntity {
     this.empfaengerPlz = anschrift.plz();
     this.empfaengerOrt = anschrift.ort();
     this.empfaengerLand = anschrift.land();
+    this.empfaengerLandKuerzel = empfaenger.landKuerzel();
   }
 
   private void uebernehmeAbsender(final @Nullable Belegabsender absender) {
@@ -239,6 +252,9 @@ class RechnungEntity {
     this.absenderUmsatzsteuerId = absender.umsatzsteuerId();
     this.absenderBankverbindung = absender.bankverbindung();
     this.absenderWebadresse = absender.webadresse();
+    this.absenderIban = absender.iban();
+    this.absenderBic = absender.bic();
+    this.absenderKontoinhaber = absender.kontoinhaber();
   }
 
   @Nullable Long getId() {
@@ -289,7 +305,8 @@ class RechnungEntity {
     return new Belegempfaenger(
         empfaengerFirma,
         new Anschrift(empfaengerStrasse, empfaengerPlz, empfaengerOrt, empfaengerLand),
-        null);
+        null,
+        empfaengerLandKuerzel);
   }
 
   /** Die Kopie der eigenen Angaben, oder {@code null} — dann ist die Rechnung noch Entwurf. */
@@ -306,7 +323,10 @@ class RechnungEntity {
         absenderSteuernummer,
         absenderUmsatzsteuerId,
         absenderBankverbindung,
-        absenderWebadresse);
+        absenderWebadresse,
+        absenderIban,
+        absenderBic,
+        absenderKontoinhaber);
   }
 
   Instant getCreatedAt() {

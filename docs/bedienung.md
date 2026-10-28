@@ -218,8 +218,9 @@ gegangen.
 
 **Zweck:** Die eigenen Angaben sind der Absender von fb.crm: Name, Anschrift, Kontakt, Steuer- und
 Bankangaben. Sie erscheinen auf jeder Rechnung. Ohne sie lässt sich keine Rechnung stellen —
-fb.crm verlangt dafür den Namen, Straße und Hausnummer, Postleitzahl, Ort, die Bankverbindung und
-die Steuernummer oder die Umsatzsteuer-Identifikationsnummer.
+fb.crm verlangt dafür den Namen, Straße und Hausnummer, Postleitzahl, Ort, IBAN und Kontoinhaber
+und die Steuernummer oder die Umsatzsteuer-Identifikationsnummer. Die bisherige Bankverbindung als
+Text genügt dafür nicht mehr; die BIC darf fehlen.
 
 **Einstieg:** In der Schiene im Block „Stammdaten" den Eintrag „Eigene Angaben" wählen. Die
 Ansicht zeigt oben das Formular „Eigene Angaben" und darunter die Karte „Briefpapier". Speichern,
@@ -249,6 +250,7 @@ gültige IBAN und BIC übernommen, wo es eine fand, und als Kontoinhaber den eig
 eingetragen. Solange IBAN oder Kontoinhaber nicht gespeichert sind, steht unter den Feldern der
 Hinweis „Bisherige Bankverbindung: … Bitte in die Felder oben übernehmen." mit dem früheren Text.
 Die Angaben daraus in die Felder übertragen und speichern; danach verschwindet der Hinweis.
+Rechnungen, die vor der Umstellung gestellt wurden, behalten ihre damalige Bankzeile.
 
 **Briefpapier:** Die Karte „Briefpapier" legt fest, worauf eine Rechnung gedruckt wird. Ohne
 Briefpapier steht dort „Noch kein Briefpapier hinterlegt. Rechnungen tragen die Gestaltung von
@@ -475,6 +477,13 @@ hinterlegten Briefpapier, sonst in der Gestaltung von fb.crm. In der Übersicht 
 das Symbol in der Spalte „Dokument" dasselbe PDF herunter. Neben „Herunterladen" stehen „Als bezahlt
 markieren" und „Abschreiben" für den Ausgang der Forderung; „Zurück auf gestellt" nimmt beides
 zurück.
+
+**Die Bankzeile:** Im Fuß des Rechnungsdokuments, auf eigenem Briefpapier in der Zeile über dem
+unteren Rand, steht die Bankverbindung aus den eigenen Angaben im Wortlaut
+„Bankverbindung: <Kontoinhaber> · IBAN <IBAN> · BIC <BIC>", etwa „Bankverbindung: Manfred Wolff ·
+IBAN DE89 3704 0044 0532 0130 00 · BIC COBADEFFXXX". Die IBAN steht in Vierergruppen; ohne BIC
+endet die Zeile nach der IBAN. Ein Bankname steht dort nicht. Die Zeile gilt, wie sie beim Stellen
+war: Eine spätere Änderung der eigenen Angaben ändert eine gestellte Rechnung nicht.
 
 **Eine gestellte Rechnung ändert sich nicht mehr:** Sie lässt sich weder bearbeiten noch löschen.
 Der Weg zurück ist ein Storno; eine Taste dafür bietet fb.crm bisher nicht.

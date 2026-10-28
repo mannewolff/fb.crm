@@ -237,7 +237,7 @@ class RechnungControllerTest {
         .andExpect(jsonPath("$.empfaenger.strasse").value("Hauptstrasse 1"))
         .andExpect(jsonPath("$.empfaenger.plz").value("28195"))
         .andExpect(jsonPath("$.empfaenger.ort").value("Bremen"))
-        .andExpect(jsonPath("$.empfaenger.land").value("DE"))
+        .andExpect(jsonPath("$.empfaenger.land").value("Deutschland"))
         .andExpect(jsonPath("$.absender.name").value("Manfred Wolff"))
         .andExpect(jsonPath("$.absender.berufsbezeichnung").value("Softwarearchitekt"))
         .andExpect(jsonPath("$.absender.strasse").value("Am Deich 2"))
@@ -248,7 +248,12 @@ class RechnungControllerTest {
         .andExpect(jsonPath("$.absender.telefon").value("0421 123456"))
         .andExpect(jsonPath("$.absender.steuernummer").value("75/123/45678"))
         .andExpect(jsonPath("$.absender.umsatzsteuerId").value("DE123456789"))
-        .andExpect(jsonPath("$.absender.bankverbindung").value("DE02 1203 0000 0000 2020 51"))
+        .andExpect(
+            jsonPath("$.absender.bankzeile")
+                .value(
+                    "Bankverbindung: Manfred Wolff · IBAN DE02 1203 0000 0000 2020 51"
+                        + " · BIC BYLADEM1001"))
+        .andExpect(jsonPath("$.absender.bankverbindung").doesNotExist())
         .andExpect(jsonPath("$.absender.webadresse").value("https://example.org"));
   }
 

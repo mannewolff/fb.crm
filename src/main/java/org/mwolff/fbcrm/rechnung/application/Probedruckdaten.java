@@ -41,7 +41,7 @@ record Probedruckdaten(@Nullable String name, RechnungDruckdaten druckdaten) {
   /** Der erfundene Empfaenger. */
   private static final Belegempfaenger EMPFAENGER =
       new Belegempfaenger(
-          "Beispiel GmbH", new Anschrift("Musterweg 1", "12345", "Musterstadt", null), null);
+          "Beispiel GmbH", new Anschrift("Musterweg 1", "12345", "Musterstadt", null), null, null);
 
   /** Die erfundene Rechnungsnummer; sie stammt aus keinem Nummernkreis. */
   private static final String NUMMER = "Muster-001";
@@ -83,10 +83,12 @@ record Probedruckdaten(@Nullable String name, RechnungDruckdaten druckdaten) {
             eigene.telefon(),
             eigene.steuernummer(),
             eigene.umsatzsteuerId(),
-            // Bis zur Belegkopie mit Bankfeldern (#467) der bisherige Freitext.
-            // Bis zur Belegkopie mit Bankfeldern (#467) der bisherige Freitext.
+            // Ohne IBAN zeigt die Probe den bisherigen Freitext, wie die Maske ihn noch zeigt.
             eigene.bisherigeBankverbindung(),
-            eigene.webadresse());
+            eigene.webadresse(),
+            eigene.iban(),
+            eigene.bic(),
+            eigene.kontoinhaber());
     return new Probedruckdaten(eigene.name(), beleg(absender, ANZAHL_POSITIONEN));
   }
 

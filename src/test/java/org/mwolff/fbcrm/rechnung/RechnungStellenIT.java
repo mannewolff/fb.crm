@@ -101,7 +101,13 @@ class RechnungStellenIT extends AbstractIntegrationTest {
   private static final String EIGENER_NAME = "Manfred Wolff";
   private static final String STEUERNUMMER = "75/123/45678";
   private static final String UMSATZSTEUER_ID = "DE123456789";
-  private static final String BANKVERBINDUNG = "DE02 1203 0000 0000 2020 51";
+  private static final String IBAN = "DE02120300000000202051";
+  private static final String BIC = "BYLADEM1001";
+
+  /** Die Bankzeile zu IBAN, BIC und Kontoinhaber im Wortlaut von Kriterium 8 (#460). */
+  private static final String BANKZEILE =
+      "Bankverbindung: " + EIGENER_NAME + " · IBAN DE02 1203 0000 0000 2020 51 · BIC " + BIC;
+
   private static final String MUSTER = "{NNNN}-{JJJJ}";
   private static final Duration GEDULD = Duration.ofSeconds(30);
 
@@ -175,7 +181,7 @@ class RechnungStellenIT extends AbstractIntegrationTest {
     leereKonten(jdbc);
     accounts.save(Konten.neu(MAIL, ANGELEGT));
     sitzung = Anmeldung.perCode(rest, jdbc, hasher, MAIL);
-    eigeneAngabenSetzen(STEUERNUMMER, UMSATZSTEUER_ID, BANKVERBINDUNG);
+    eigeneAngabenSetzen(STEUERNUMMER, UMSATZSTEUER_ID, IBAN);
     firmaId = firmaAnlegen("Hauptstrasse 1", "28195", "Bremen");
   }
 
@@ -204,11 +210,14 @@ class RechnungStellenIT extends AbstractIntegrationTest {
         typ);
   }
 
-  /** Die eigenen Angaben, vollstaendig bis auf die drei Werte, die der Test waehlt. */
+  /**
+   * Die eigenen Angaben, vollstaendig bis auf die drei Werte, die der Test waehlt; mit IBAN stehen
+   * auch BIC und der eigene Name als Kontoinhaber, ohne sie fehlen beide.
+   */
   private void eigeneAngabenSetzen(
       final @Nullable String steuernummer,
       final @Nullable String umsatzsteuerId,
-      final @Nullable String bankverbindung) {
+      final @Nullable String iban) {
     final Map<String, Object> rumpf = new LinkedHashMap<>();
     rumpf.put("name", EIGENER_NAME);
     rumpf.put("berufsbezeichnung", "Softwarearchitekt");
@@ -221,6 +230,9 @@ class RechnungStellenIT extends AbstractIntegrationTest {
     rumpf.put("webadresse", "https://example.org");
     rumpf.put("steuernummer", steuernummer);
     rumpf.put("umsatzsteuerId", umsatzsteuerId);
+    rumpf.put("iban", iban);
+    rumpf.put("bic", iban == null ? null : BIC);
+    rumpf.put("kontoinhaber", iban == null ? null : EIGENER_NAME);
     // Auf dem aktuellen Stand der eigenen Angaben, wie die Maske (Plan #415, E2).
     assertThat(
             rest.exchange(
@@ -230,9 +242,6 @@ class RechnungStellenIT extends AbstractIntegrationTest {
                     String.class)
                 .getStatusCode())
         .isEqualTo(HttpStatus.OK);
-    // Den bisherigen Freitext fuehrt die Anfrage nicht mehr (Plan #461, E13); bis zur
-    // Belegkopie mit Bankfeldern (#467) verlangt das Stellen aber genau ihn.
-    jdbc.update("UPDATE eigene_angaben SET bankverbindung = ?", bankverbindung);
   }
 
   private long firmaAnlegen(
@@ -737,12 +746,39 @@ class RechnungStellenIT extends AbstractIntegrationTest {
   }
 
   @Test
+  void stellen_thenTheKopieTraegtBankfelderUndLandkuerzelUndDerBelegDieBankzeile()
+      throws IOException {
+    // Given — die Firma fuehrt das Land als Kuerzel DE.
+    final RechnungResponse entwurf = entwurfUeber(bestelltesAngebot("160.00"), "80.00");
+
+    // When
+    final long rechnungId = gestellt(entwurf.id()).id();
+
+    // Then — die Kopie traegt die Bankfelder und beide Formen des Landes (Plan #461, E10, E16).
+    final Map<String, Object> kopie =
+        jdbc.queryForMap(
+            "SELECT absender_iban, absender_bic, absender_kontoinhaber, absender_bankverbindung,"
+                + " empfaenger_land, empfaenger_land_kuerzel FROM rechnung WHERE id = ?",
+            Long.valueOf(rechnungId));
+    assertThat(kopie)
+        .containsEntry("absender_iban", IBAN)
+        .containsEntry("absender_bic", BIC)
+        .containsEntry("absender_kontoinhaber", EIGENER_NAME)
+        .containsEntry("empfaenger_land", "Deutschland")
+        .containsEntry("empfaenger_land_kuerzel", "DE");
+    assertThat(kopie.get("absender_bankverbindung")).isNull();
+
+    // Then — der Fuss des Belegs traegt die Bankzeile im Wortlaut (Kriterium 8).
+    assertThat(belegtext(rechnungId)).contains(BANKZEILE);
+  }
+
+  @Test
   void stelle_givenBriefpapierUndSteuerBankZeile_thenRechnungAufEigenemBriefpapier()
       throws IOException {
     // Given — Szenario „Rechnung auf eigenem Briefpapier": einseitig, A4 hochkant; die Steuer- und
     // Bankzeile ist nach der Migration eingeschaltet. Allein die Steuernummer, damit sie in der
     // Zeile steht und nicht die USt-IdNr. (Kriterium 6).
-    eigeneAngabenSetzen(STEUERNUMMER, null, BANKVERBINDUNG);
+    eigeneAngabenSetzen(STEUERNUMMER, null, IBAN);
     ladeBriefpapierHoch(briefpapier(BRIEFKOPF));
     final RechnungResponse entwurf =
         entwurfUeberAlleZeilen(bestelltesAngebotMitDreiPositionen(), "10.00");
@@ -776,8 +812,7 @@ class RechnungStellenIT extends AbstractIntegrationTest {
 
     // Then — die Steuer- und Bankzeile steht ueber dem unteren Rand, unter allem anderen.
     final Map<String, Float> zeilen = grundlinien(pdf);
-    final String steuerBank =
-        "Steuernummer " + STEUERNUMMER + " · Bankverbindung: " + BANKVERBINDUNG;
+    final String steuerBank = "Steuernummer " + STEUERNUMMER + " · " + BANKZEILE;
     assertThat(zeilen).containsKey(steuerBank);
     final float ueberDemBlattrand = zeilen.get(steuerBank).floatValue();
     assertThat((double) ueberDemBlattrand).isGreaterThan(UNTERER_RAND);
@@ -809,8 +844,8 @@ class RechnungStellenIT extends AbstractIntegrationTest {
   }
 
   @Test
-  void stellen_withoutTheBankverbindung_thenUnprocessableAndTheZaehlerIsUnchanged() {
-    // Given — ohne Bankverbindung kann der Kunde nicht zahlen (Kriterium 13).
+  void stellen_withoutIban_thenUnprocessableWithIbanAndKontoinhaberAndTheZaehlerIsUnchanged() {
+    // Given — ohne IBAN und Kontoinhaber kann der Kunde nicht zahlen (#460, Kriterium 12).
     final long angebotId = bestelltesAngebot("160.00");
     final RechnungResponse entwurf = entwurfUeber(angebotId, "80.00");
     eigeneAngabenSetzen(STEUERNUMMER, UMSATZSTEUER_ID, null);
@@ -820,7 +855,11 @@ class RechnungStellenIT extends AbstractIntegrationTest {
 
     // Then
     assertThat(antwort.getStatusCode()).isEqualTo(HttpStatus.UNPROCESSABLE_ENTITY);
-    assertThat(antwort.getBody()).contains("\"fieldErrors\"").contains("\"bankverbindung\"");
+    assertThat(antwort.getBody())
+        .contains("\"fieldErrors\"")
+        .contains("\"iban\"")
+        .contains("\"kontoinhaber\"")
+        .doesNotContain("\"bankverbindung\"");
     assertThat(naechsteNummer()).isEqualTo(1);
   }
 
@@ -829,7 +868,7 @@ class RechnungStellenIT extends AbstractIntegrationTest {
     // Given — eine von beiden muss auf dem Beleg stehen.
     final long angebotId = bestelltesAngebot("160.00");
     final RechnungResponse entwurf = entwurfUeber(angebotId, "80.00");
-    eigeneAngabenSetzen(null, null, BANKVERBINDUNG);
+    eigeneAngabenSetzen(null, null, IBAN);
 
     // When
     final ResponseEntity<String> antwort = stelle(entwurf.id());
@@ -845,7 +884,7 @@ class RechnungStellenIT extends AbstractIntegrationTest {
     // Given — welche der beiden Angaben ein Freiberufler fuehrt, bleibt ihm ueberlassen.
     final long angebotId = bestelltesAngebot("160.00");
     final RechnungResponse entwurf = entwurfUeber(angebotId, "80.00");
-    eigeneAngabenSetzen(null, UMSATZSTEUER_ID, BANKVERBINDUNG);
+    eigeneAngabenSetzen(null, UMSATZSTEUER_ID, IBAN);
 
     // When / Then
     assertThat(gestellt(entwurf.id()).nummer()).isEqualTo(nummer(1));
@@ -856,7 +895,7 @@ class RechnungStellenIT extends AbstractIntegrationTest {
     // Given
     final long angebotId = bestelltesAngebot("160.00");
     final RechnungResponse entwurf = entwurfUeber(angebotId, "80.00");
-    eigeneAngabenSetzen(STEUERNUMMER, null, BANKVERBINDUNG);
+    eigeneAngabenSetzen(STEUERNUMMER, null, IBAN);
 
     // When / Then
     assertThat(gestellt(entwurf.id()).nummer()).isEqualTo(nummer(1));
@@ -1047,8 +1086,9 @@ class RechnungStellenIT extends AbstractIntegrationTest {
     assertThat(gestellt.nummer()).isEqualTo(nummer(5));
     assertThat(gestellt.steuersatz()).isEqualByComparingTo("7.00");
     assertThat(gestellt.zahlungszielTage()).isEqualTo(21);
-    assertThat(Objects.requireNonNull(gestellt.absender()).bankverbindung())
-        .isEqualTo("DE89 3704 0044 0532 0130 00");
+    assertThat(Objects.requireNonNull(gestellt.absender()).bankzeile())
+        .isEqualTo(
+            "Bankverbindung: " + EIGENER_NAME + " · IBAN DE89 3704 0044 0532 0130 00 · BIC " + BIC);
     assertThat(gestellt.version()).isGreaterThan(geoeffnet.version());
     assertThat(angebotsstatus(angebotId)).isEqualTo(Angebotsstatus.ABGERECHNET);
     assertThat(
@@ -1077,7 +1117,7 @@ class RechnungStellenIT extends AbstractIntegrationTest {
     firmaSetzen("Adler Holding SE", "Neue Strasse 9", "20095", "Hamburg");
     positionSetzen(
         angebotId, Long.valueOf(positionId), "Beratung, neu benannt", "160.00", "120.00");
-    eigeneAngabenSetzen("99/999/99999", "DE999999999", "DE99 9999 9999 9999 9999 99");
+    eigeneAngabenSetzen("99/999/99999", "DE999999999", "DE89370400440532013000");
     einstellungenSetzen(2, "7.00", 30);
 
     // Then — die gestellte Rechnung zeigt weiter, was der Kunde gelesen hat.
@@ -1101,7 +1141,7 @@ class RechnungStellenIT extends AbstractIntegrationTest {
             kopie -> assertThat(kopie.name()).isEqualTo(EIGENER_NAME),
             kopie -> assertThat(kopie.steuernummer()).isEqualTo(STEUERNUMMER),
             kopie -> assertThat(kopie.umsatzsteuerId()).isEqualTo(UMSATZSTEUER_ID),
-            kopie -> assertThat(kopie.bankverbindung()).isEqualTo(BANKVERBINDUNG));
+            kopie -> assertThat(kopie.bankzeile()).isEqualTo(BANKZEILE));
     assertThat(danach.zeilen().getFirst())
         .satisfies(
             zeile -> assertThat(zeile.bezeichnung()).isEqualTo("Beratung"),

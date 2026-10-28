@@ -19,6 +19,10 @@ import org.mwolff.fbcrm.firma.domain.Firma;
  * ein Freiberufler fuehrt, haengt an seiner Lage. Fehlen beide, steht die Meldung unter {@code
  * steuernummer} — die Maske fuehrt sie dort als erstes der zwei Felder.
  *
+ * <p><b>IBAN und Kontoinhaber</b> statt der bisherigen Bankverbindung als Freitext (Plan #461,
+ * E17): Die E-Rechnung braucht die Bankverbindung in fester Form, und die Bankzeile entsteht aus
+ * diesen Feldern. Die BIC darf fehlen.
+ *
  * <p>Leer zaehlt wie fehlend. Die eigenen Angaben halten eine fehlende Angabe als {@code null}
  * (E9), die Firma einen Namen als Pflichtspalte; ein Name aus Leerzeichen ist dort trotzdem
  * moeglich und auf einem Beleg kein Name.
@@ -48,8 +52,8 @@ final class Belegpflichtangaben {
     sammle(fehlend, "strasse", meine.strasse());
     sammle(fehlend, "plz", meine.plz());
     sammle(fehlend, "ort", meine.ort());
-    // Bis zur Belegkopie mit Bankfeldern (#467) zaehlt hier der bisherige Freitext.
-    sammle(fehlend, "bankverbindung", eigene.bisherigeBankverbindung());
+    sammle(fehlend, "iban", eigene.iban());
+    sammle(fehlend, "kontoinhaber", eigene.kontoinhaber());
     if (fehlt(eigene.steuernummer()) && fehlt(eigene.umsatzsteuerId())) {
       fehlend.put("steuernummer", List.of(STEUERANGABE_FEHLT));
     }

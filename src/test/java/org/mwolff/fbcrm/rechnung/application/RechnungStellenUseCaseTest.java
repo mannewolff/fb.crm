@@ -112,8 +112,8 @@ class RechnungStellenUseCaseTest {
 
   private static final Instant ANNAS_AENDERUNG = Instant.parse("2026-09-30T09:42:00Z");
 
-  /** Die Bankverbindung, die Anna inzwischen in den Eigenen Angaben hinterlegt hat. */
-  private static final String NEUE_BANK = "DE89 3704 0044 0532 0130 00";
+  /** Die IBAN, die Anna inzwischen in den Eigenen Angaben hinterlegt hat. */
+  private static final String NEUE_IBAN = "DE89370400440532013000";
 
   /** Die Raender aus Kriterium 15 in Zehntel-Millimetern. */
   private static final Randmasse VORGABE = new Randmasse(250, 200, 985, 200, 200, 200);
@@ -184,12 +184,13 @@ class RechnungStellenUseCaseTest {
         voll.webadresse(),
         steuernummer,
         umsatzsteuerId,
-        null,
-        null,
-        null,
+        voll.iban(),
+        voll.bic(),
+        voll.kontoinhaber(),
         voll.bisherigeBankverbindung());
   }
 
+  /** Ohne IBAN und Kontoinhaber; der bisherige Freitext steht noch, zaehlt aber nicht (E17). */
   private static EigeneAngaben ohneBankverbindung() {
     final EigeneAngaben voll = Rechnungsdoppel.eigeneAngaben();
     return new EigeneAngaben(
@@ -202,9 +203,9 @@ class RechnungStellenUseCaseTest {
         voll.steuernummer(),
         voll.umsatzsteuerId(),
         null,
+        voll.bic(),
         null,
-        null,
-        null);
+        "MLP Bank Heidelberg");
   }
 
   /** Das bestellte Angebot mit nur der Beratung: 160 Stunden zu 100,00 €. */
@@ -333,8 +334,8 @@ class RechnungStellenUseCaseTest {
   }
 
   @Test
-  void stelle_withoutTheBankverbindung_thenTheFieldIsNamed() {
-    // Given — ohne Bankverbindung kann der Kunde nicht zahlen (Kriterium 13).
+  void stelle_withoutIbanAndKontoinhaber_thenBothFieldsAreNamed() {
+    // Given — ohne Bankverbindung kann der Kunde nicht zahlen (#460, Kriterium 12).
     entwurfLiegt(entwurfUeber("80.00"));
     angabenSind(Rechnungsdoppel.firma(), ohneBankverbindung());
 
@@ -344,7 +345,7 @@ class RechnungStellenUseCaseTest {
             PflichtangabenFehlen.class, () -> useCase.stelle(ENTWURF, GELESEN, MANFRED));
 
     // Then
-    assertThat(fehler.felder()).containsOnlyKeys("bankverbindung");
+    assertThat(fehler.felder()).containsOnlyKeys("iban", "kontoinhaber");
     verifyNoInteractions(nummernkreis, drucker, dokumente);
   }
 
@@ -408,7 +409,8 @@ class RechnungStellenUseCaseTest {
             "strasse",
             "plz",
             "ort",
-            "bankverbindung",
+            "iban",
+            "kontoinhaber",
             "steuernummer",
             "firma.name",
             "firma.strasse",
@@ -527,7 +529,10 @@ class RechnungStellenUseCaseTest {
                 assertThat(rechnung.empfaenger())
                     .isEqualTo(
                         new Belegempfaenger(
-                            Rechnungsdoppel.FIRMENNAME, Rechnungsdoppel.firma().anschrift(), null)),
+                            Rechnungsdoppel.FIRMENNAME,
+                            new Anschrift("Hauptstrasse 1", "28195", "Bremen", "Deutschland"),
+                            null,
+                            "DE")),
             rechnung ->
                 assertThat(rechnung.absender())
                     .isEqualTo(
@@ -539,8 +544,11 @@ class RechnungStellenUseCaseTest {
                             "0421 123456",
                             "75/123/45678",
                             "DE123456789",
-                            "DE02 1203 0000 0000 2020 51",
-                            "https://example.org")));
+                            null,
+                            "https://example.org",
+                            "DE02120300000000202051",
+                            "BYLADEM1001",
+                            "Manfred Wolff")));
   }
 
   @Test
@@ -748,7 +756,7 @@ class RechnungStellenUseCaseTest {
     // Then — gestellt mit den Angaben von jetzt, und das Angebot traegt den Stellenden.
     assertThat(gestellt.nummer()).isEqualTo("R-007");
     assertThat(gestellt.absender())
-        .satisfies(absender -> assertThat(absender.bankverbindung()).isEqualTo(NEUE_BANK));
+        .satisfies(absender -> assertThat(absender.iban()).isEqualTo(NEUE_IBAN));
     verify(angebote).save(fortgeschrieben.capture());
     assertThat(fortgeschrieben.getValue())
         .satisfies(
@@ -779,9 +787,9 @@ class RechnungStellenUseCaseTest {
         voll.webadresse(),
         voll.steuernummer(),
         voll.umsatzsteuerId(),
-        null,
-        null,
-        null,
-        NEUE_BANK);
+        NEUE_IBAN,
+        voll.bic(),
+        voll.kontoinhaber(),
+        null);
   }
 }

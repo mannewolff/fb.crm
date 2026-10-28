@@ -9,6 +9,7 @@ import java.util.Locale;
 import java.util.Objects;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.fbcrm.common.Anschrift;
+import org.mwolff.fbcrm.common.Iban;
 import org.mwolff.fbcrm.rechnung.domain.Belegabsender;
 
 /**
@@ -21,8 +22,18 @@ import org.mwolff.fbcrm.rechnung.domain.Belegabsender;
  * <p>Auch die festen Saetze des Belegs stehen hier — Anrede, Einleitung, Zahlungsziel und Gruss —,
  * dazu Ort und Datum: Auf dem Briefbogen bleiben sie, wie sie auf der Kupferwolke sind (fachliche
  * Quelle #361, Geklaerter Stand 10), und ein zweiter Wortlaut wuerde an einer Stelle altern.
+ *
+ * <p>Oeffentlich ist allein die {@link #bankzeile(Belegabsender) Bankzeile}: Die Rechnungsansicht
+ * zeigt sie im selben Wortlaut wie das Dokument (Plan #461, E16).
  */
-final class Belegschreibweisen {
+/*
+ * PMD.TooManyMethods: Jede Methode ist eine Schreibweise, die beide Layouts gleich brauchen, und
+ * genau dafuer steht die Klasse (Plan #363, E7). Sie nach Art der Zeile aufzuteilen, braechte
+ * die Saetze und Zeilen des Belegs an zwei Stellen, von denen eine den Wortlaut der anderen
+ * nachbauen muesste — die Bankzeile aus Kriterium 8 (#460) gehoert zu den anderen Zeilen.
+ */
+@SuppressWarnings("PMD.TooManyMethods")
+public final class Belegschreibweisen {
 
   /** Die Anrede; sie nennt keine Person, weil der Beleg an die Firma geht. */
   static final String ANREDE = "Sehr geehrte Damen und Herren,";
@@ -115,6 +126,30 @@ final class Belegschreibweisen {
       return mit("USt-IdNr. ", absender.umsatzsteuerId());
     }
     return mit("Steuernummer ", absender.steuernummer());
+  }
+
+  /**
+   * Die Bankzeile (fachliche Quelle #460, Kriterium 8; Plan #461, E16).
+   *
+   * <p>Mit IBAN: „Bankverbindung: Manfred Wolff · IBAN DE89 3704 0044 0532 0130 00 · BIC
+   * COBADEFFXXX"; ohne BIC entfaellt der letzte Teil, und die IBAN steht in Vierergruppen. Ohne
+   * IBAN ist es eine Rechnung von vor den Bankfeldern, und die Zeile traegt ihren damaligen
+   * Freitext.
+   *
+   * @param absender die Kopie der eigenen Angaben
+   * @return die Zeile, oder {@code null}, wenn weder IBAN noch Freitext steht
+   */
+  public static @Nullable String bankzeile(final Belegabsender absender) {
+    final String iban = absender.iban();
+    if (iban == null) {
+      return mit("Bankverbindung: ", absender.bankverbindung());
+    }
+    return "Bankverbindung: "
+        + verbunden(
+            " · ",
+            absender.kontoinhaber(),
+            "IBAN " + new Iban(iban).gedruckt(),
+            mit("BIC ", absender.bic()));
   }
 
   /**

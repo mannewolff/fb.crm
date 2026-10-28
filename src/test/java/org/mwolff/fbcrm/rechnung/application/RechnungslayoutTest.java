@@ -40,11 +40,17 @@ class RechnungslayoutTest {
           "12/345/67890",
           "DE 01010101010",
           "MLP Bank Heidelberg · IBAN DE00 xxxx xxxx xxxx xxxx xx",
-          "mmuster.org");
+          "mmuster.org",
+          null,
+          null,
+          null);
 
   private static final Belegempfaenger EMPFAENGER =
       new Belegempfaenger(
-          "Franz Mustermann GmbH", new Anschrift("Muster-Str. 24", "28217", "Bremen", null), null);
+          "Franz Mustermann GmbH",
+          new Anschrift("Muster-Str. 24", "28217", "Bremen", null),
+          null,
+          null);
 
   /** Drei Positionen: eine in Stunden, eine in Personentagen, eine Pauschale. */
   private static final List<Druckposition> POSITIONEN =
@@ -103,9 +109,13 @@ class RechnungslayoutTest {
             null,
             null,
             null,
+            null,
+            null,
+            null,
             null);
     final Belegempfaenger knappeFirma =
-        new Belegempfaenger("Franz Mustermann GmbH", new Anschrift(null, null, null, null), null);
+        new Belegempfaenger(
+            "Franz Mustermann GmbH", new Anschrift(null, null, null, null), null, null);
     return daten(knapp, knappeFirma, POSITIONEN, "19", 10);
   }
 
@@ -319,7 +329,10 @@ class RechnungslayoutTest {
             "12/345/67890",
             null,
             ABSENDER.bankverbindung(),
-            ABSENDER.webadresse());
+            ABSENDER.webadresse(),
+            null,
+            null,
+            null);
 
     // When
     final List<Druckelement> mitId = Rechnungslayout.setze(vorlageDaten());
@@ -330,6 +343,35 @@ class RechnungslayoutTest {
     assertThat(inhalte(mitId)).contains("USt-IdNr. DE 01010101010");
     assertThat(inhalte(ohne)).contains("Steuernummer 12/345/67890");
     assertThat(inhalte(ohne)).noneMatch(zeile -> zeile.startsWith("USt-IdNr."));
+  }
+
+  @Test
+  void setze_givenIbanUndKontoinhaber_thenTheFussTraegtDieBankzeileAusDenFeldern() {
+    // Given — eine Rechnung nach den Bankfeldern: kein Freitext mehr (Plan #461, E16).
+    final Belegabsender mitFeldern =
+        new Belegabsender(
+            ABSENDER.name(),
+            ABSENDER.berufsbezeichnung(),
+            ABSENDER.anschrift(),
+            ABSENDER.email(),
+            ABSENDER.telefon(),
+            ABSENDER.steuernummer(),
+            ABSENDER.umsatzsteuerId(),
+            null,
+            ABSENDER.webadresse(),
+            "DE89370400440532013000",
+            "COBADEFFXXX",
+            "Max Mustermann");
+
+    // When
+    final List<Druckelement> elemente =
+        Rechnungslayout.setze(daten(mitFeldern, EMPFAENGER, POSITIONEN, "19", 10));
+
+    // Then
+    assertThat(inhalte(elemente))
+        .contains(
+            "Bankverbindung: Max Mustermann · IBAN DE89 3704 0044 0532 0130 00 · BIC COBADEFFXXX")
+        .noneMatch(zeile -> zeile.contains("MLP Bank"));
   }
 
   @Test
@@ -384,6 +426,7 @@ class RechnungslayoutTest {
         new Belegempfaenger(
             "Franz Mustermann GmbH",
             new Anschrift("Muster-Str. 24", null, "Wien", "Österreich"),
+            null,
             null);
 
     // When
@@ -399,7 +442,7 @@ class RechnungslayoutTest {
     // Given
     final Belegempfaenger ohneOrt =
         new Belegempfaenger(
-            "Franz Mustermann GmbH", new Anschrift(null, "28217", null, null), null);
+            "Franz Mustermann GmbH", new Anschrift(null, "28217", null, null), null, null);
 
     // When
     final List<Druckelement> elemente =

@@ -32,7 +32,7 @@ class RechnungsbelegTest {
 
   private static final Belegempfaenger EMPFAENGER =
       new Belegempfaenger(
-          "Adler AG", new Anschrift("Hauptstrasse 1", "28195", "Bremen", "DE"), null);
+          "Adler AG", new Anschrift("Hauptstrasse 1", "28195", "Bremen", "DE"), null, null);
 
   private static final Belegabsender ABSENDER =
       new Belegabsender(
@@ -44,7 +44,10 @@ class RechnungsbelegTest {
           "75/123/45678",
           "DE123456789",
           "DE02 1203 0000 0000 2020 51",
-          "https://example.org");
+          "https://example.org",
+          null,
+          null,
+          null);
 
   private static Rechnung gestellt() {
     return Rechnungsdoppel.entwurf(

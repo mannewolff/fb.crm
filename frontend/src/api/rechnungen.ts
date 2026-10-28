@@ -134,7 +134,8 @@ export interface Belegabsender {
   readonly telefon: string | null;
   readonly steuernummer: string | null;
   readonly umsatzsteuerId: string | null;
-  readonly bankverbindung: string | null;
+  /** Die Bankzeile im Wortlaut des Dokuments (Plan #461, E16), oder `null` ohne jede Bankangabe. */
+  readonly bankzeile: string | null;
   readonly webadresse: string | null;
 }
 
@@ -282,7 +283,7 @@ function parseAbsender(wert: unknown): Belegabsender | null {
     telefon: textOderNull(absender.telefon),
     steuernummer: textOderNull(absender.steuernummer),
     umsatzsteuerId: textOderNull(absender.umsatzsteuerId),
-    bankverbindung: textOderNull(absender.bankverbindung),
+    bankzeile: textOderNull(absender.bankzeile),
     webadresse: textOderNull(absender.webadresse),
   };
 }

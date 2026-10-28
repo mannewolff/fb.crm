@@ -47,7 +47,10 @@ class RechnungPersistenceIT extends AbstractIntegrationTest {
 
   private static final Belegempfaenger EMPFAENGER =
       new Belegempfaenger(
-          "Adler AG", new Anschrift("Hauptstrasse 1", "28195", "Bremen", "DE"), null);
+          "Adler AG",
+          new Anschrift("Hauptstrasse 1", "28195", "Bremen", "Deutschland"),
+          null,
+          "DE");
 
   private static final Belegabsender ABSENDER =
       new Belegabsender(
@@ -58,8 +61,11 @@ class RechnungPersistenceIT extends AbstractIntegrationTest {
           "0421 123456",
           "75/123/45678",
           "DE123456789",
-          "DE02 1203 0000 0000 2020 51",
-          "https://example.org");
+          null,
+          "https://example.org",
+          "DE02120300000000202051",
+          "BYLADEM1001",
+          "Manfred Wolff");
 
   private final RechnungRepository repository;
   private final TransactionTemplate transaktion;

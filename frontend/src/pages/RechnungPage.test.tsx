@@ -724,6 +724,8 @@ describe('RechnungPage — die Rechnung stellen (Kriterien 5 und 13, Issue #186)
       [WEG]: json(200, GESPEICHERT),
       [WEG_STELLEN]: problem(422, 'Fuer das Stellen fehlen Pflichtangaben.', {
         strasse: ['Diese Angabe ist fuer eine Rechnung noetig.'],
+        iban: ['Diese Angabe ist fuer eine Rechnung noetig.'],
+        kontoinhaber: ['Diese Angabe ist fuer eine Rechnung noetig.'],
         'firma.ort': ['Diese Angabe ist fuer eine Rechnung noetig.'],
         zukunft: ['Etwas Neues fehlt.'],
       }),
@@ -735,6 +737,9 @@ describe('RechnungPage — die Rechnung stellen (Kriterien 5 und 13, Issue #186)
     const hinweis = await screen.findByTestId('rechnung-pflichtangaben');
 
     expect(within(hinweis).getByText(/^Straße und Hausnummer —/u)).toBeInTheDocument();
+    // Die Bankverbindung in Feldern (Plan #461, E17): IBAN und Kontoinhaber mit ihrem Wort.
+    expect(within(hinweis).getByText(/^IBAN —/u)).toBeInTheDocument();
+    expect(within(hinweis).getByText(/^Kontoinhaber —/u)).toBeInTheDocument();
     expect(within(hinweis).getByText(/^Ort der Firma —/u)).toBeInTheDocument();
     // Ein Feld, das diese Oberflaeche nicht kennt, steht mit seinem Namen da statt zu fehlen.
     expect(within(hinweis).getByText('zukunft — Etwas Neues fehlt.')).toBeInTheDocument();

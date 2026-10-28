@@ -245,6 +245,7 @@ final class Rechnungsdoppel {
       new Belegempfaenger(
           "Adler Aktiengesellschaft",
           new Anschrift("Hauptstrasse 1", "28195", "Bremen", "DE"),
+          null,
           null);
 
   /** Die Kopie der eigenen Angaben an einer gestellten Rechnung. */
@@ -258,7 +259,10 @@ final class Rechnungsdoppel {
           "75/123/45678",
           "DE123456789",
           "DE02 1203 0000 0000 2020 51",
-          "https://example.org");
+          "https://example.org",
+          null,
+          null,
+          null);
 
   /** Eine gestellte Rechnung auf {@link #ANGEBOT}, festgeschrieben mit ihrem eigenen Steuersatz. */
   static Rechnung gestellt(
@@ -398,9 +402,9 @@ final class Rechnungsdoppel {
         "https://example.org",
         "75/123/45678",
         "DE123456789",
-        null,
-        null,
-        null,
-        "DE02 1203 0000 0000 2020 51");
+        "DE02120300000000202051",
+        "BYLADEM1001",
+        "Manfred Wolff",
+        null);
   }
 }

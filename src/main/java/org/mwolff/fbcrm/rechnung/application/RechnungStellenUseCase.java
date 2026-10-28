@@ -7,6 +7,8 @@ import java.util.Objects;
 import org.mwolff.fbcrm.angebot.application.AngebotNichtGefunden;
 import org.mwolff.fbcrm.angebot.domain.Angebot;
 import org.mwolff.fbcrm.angebot.domain.AngebotRepository;
+import org.mwolff.fbcrm.common.Anschrift;
+import org.mwolff.fbcrm.common.Laenderliste;
 import org.mwolff.fbcrm.eigeneangaben.domain.EigeneAngaben;
 import org.mwolff.fbcrm.eigeneangaben.domain.EigeneAngabenRepository;
 import org.mwolff.fbcrm.firma.application.FirmaNichtGefunden;
@@ -250,8 +252,21 @@ public class RechnungStellenUseCase {
     }
   }
 
+  /*
+   * Die Firma fuehrt das Land als Kuerzel. Gedruckt wird der deutsche Name, die E-Rechnung braucht
+   * das Kuerzel; die Kopie haelt beides (Plan #461, E10).
+   */
   private static Belegempfaenger empfaengerAus(final Firma firma) {
-    return new Belegempfaenger(firma.name(), firma.anschrift(), null);
+    final Anschrift anschrift = firma.anschrift();
+    return new Belegempfaenger(
+        firma.name(),
+        new Anschrift(
+            anschrift.strasse(),
+            anschrift.plz(),
+            anschrift.ort(),
+            Laenderliste.name(anschrift.land())),
+        null,
+        anschrift.land());
   }
 
   /*
@@ -267,8 +282,11 @@ public class RechnungStellenUseCase {
         eigene.telefon(),
         eigene.steuernummer(),
         eigene.umsatzsteuerId(),
-        // Bis zur Belegkopie mit Bankfeldern (#467) der bisherige Freitext.
-        eigene.bisherigeBankverbindung(),
-        eigene.webadresse());
+        // Die Bankzeile entsteht aus den Feldern; der alte Freitext bleibt alten Rechnungen (E16).
+        null,
+        eigene.webadresse(),
+        eigene.iban(),
+        eigene.bic(),
+        eigene.kontoinhaber());
   }
 }

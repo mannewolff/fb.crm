@@ -2,6 +2,7 @@ package org.mwolff.fbcrm.rechnung.web;
 
 import org.jspecify.annotations.Nullable;
 import org.mwolff.fbcrm.common.Anschrift;
+import org.mwolff.fbcrm.rechnung.application.Belegschreibweisen;
 import org.mwolff.fbcrm.rechnung.domain.Belegabsender;
 
 /**
@@ -21,7 +22,8 @@ import org.mwolff.fbcrm.rechnung.domain.Belegabsender;
  * @param telefon Telefonnummer, oder {@code null}
  * @param steuernummer Steuernummer, oder {@code null}
  * @param umsatzsteuerId Umsatzsteuer-Identifikationsnummer, oder {@code null}
- * @param bankverbindung Bankverbindung als Text, oder {@code null}
+ * @param bankzeile die Bankzeile im Wortlaut des Dokuments ({@link Belegschreibweisen#bankzeile}),
+ *     oder {@code null}
  * @param webadresse Adresse des eigenen Webauftritts, oder {@code null}
  */
 public record BelegabsenderResponse(
@@ -35,7 +37,7 @@ public record BelegabsenderResponse(
     @Nullable String telefon,
     @Nullable String steuernummer,
     @Nullable String umsatzsteuerId,
-    @Nullable String bankverbindung,
+    @Nullable String bankzeile,
     @Nullable String webadresse) {
 
   /**
@@ -59,7 +61,7 @@ public record BelegabsenderResponse(
         absender.telefon(),
         absender.steuernummer(),
         absender.umsatzsteuerId(),
-        absender.bankverbindung(),
+        Belegschreibweisen.bankzeile(absender),
         absender.webadresse());
   }
 }
