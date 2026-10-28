@@ -230,13 +230,25 @@ und kann den Probedruck holen.
 
 1. Die Felder ausfüllen: „Name", „Berufsbezeichnung", „Straße und Hausnummer", „Postleitzahl",
    „Ort", „Land", „E-Mail-Adresse", „Telefon", „Webadresse", „Steuernummer",
-   „Umsatzsteuer-Identifikationsnummer" und „Bankverbindung".
+   „Umsatzsteuer-Identifikationsnummer", „Kontoinhaber", „IBAN" und „BIC (optional)".
 2. „Speichern" wählen.
 
 Kein Feld ist Pflicht beim Speichern: Die Angaben lassen sich nach und nach vervollständigen.
 Nach dem Speichern steht „Die Angaben sind gespeichert." über dem Formular. Ist ein Wert zu lang,
 steht die Meldung am betroffenen Feld. „Abbrechen" nimmt alle ungespeicherten Änderungen zurück
 auf den zuletzt gespeicherten Stand.
+
+**Bankverbindung:** Die Bankverbindung steht in drei Feldern: „Kontoinhaber", „IBAN" und „BIC".
+Die BIC darf leer bleiben. Die IBAN darf mit oder ohne Leerzeichen eingetragen werden; fb.crm
+prüft sie beim Speichern. Ist sie ungültig, etwa weil die Prüfziffer nicht stimmt, steht die
+Meldung am Feld „IBAN", und nichts wird gespeichert. Ebenso wird eine BIC in falscher Form
+abgewiesen.
+
+Früher war die Bankverbindung ein einziges Textfeld. Bei der Umstellung hat fb.crm daraus eine
+gültige IBAN und BIC übernommen, wo es eine fand, und als Kontoinhaber den eigenen Namen
+eingetragen. Solange IBAN oder Kontoinhaber nicht gespeichert sind, steht unter den Feldern der
+Hinweis „Bisherige Bankverbindung: … Bitte in die Felder oben übernehmen." mit dem früheren Text.
+Die Angaben daraus in die Felder übertragen und speichern; danach verschwindet der Hinweis.
 
 **Briefpapier:** Die Karte „Briefpapier" legt fest, worauf eine Rechnung gedruckt wird. Ohne
 Briefpapier steht dort „Noch kein Briefpapier hinterlegt. Rechnungen tragen die Gestaltung von

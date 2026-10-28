@@ -405,7 +405,10 @@ describe('App', () => {
         webadresse: null,
         steuernummer: null,
         umsatzsteuerId: null,
-        bankverbindung: null,
+        iban: null,
+        bic: null,
+        kontoinhaber: null,
+        bisherigeBankverbindung: null,
       }),
     });
 
