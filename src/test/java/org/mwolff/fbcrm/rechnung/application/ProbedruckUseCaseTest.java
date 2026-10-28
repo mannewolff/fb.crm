@@ -185,12 +185,13 @@ class ProbedruckUseCaseTest {
           .contains("Briefkopf Blatt zwei")
           .doesNotContain("Briefkopf Blatt eins");
     }
-    // Then — jede Seite traegt das schraege „Muster" in Hellgrau.
+    // Then — jede Seite traegt das schraege „Muster" in Hellgrau. Die Schrift ist eingebettet, ihre
+    // Zeichen stehen als Glyphennummern im Strom; das Wort selbst liest der Textleser.
     for (int seite = 1; seite <= seiten; seite++) {
       assertThat(inhaltsstrom(pdf, seite))
           .contains(HELLGRAU)
-          .contains("(Muster) Tj")
-          .containsPattern("0\\.\\d+ 0\\.\\d+ -0\\.\\d+ 0\\.\\d+ \\d+ \\d+ Tm");
+          .containsPattern("0\\.\\d+ 0\\.\\d+ -0\\.\\d+ 0\\.\\d+ \\d+ \\d+ Tm\n.* Tj");
+      assertThat(ausgelesen(pdf, seite)).contains("Muster");
     }
     assertThat(
             drucker.elemente.stream()

@@ -1,17 +1,19 @@
 package org.mwolff.fbcrm.rechnung.infrastructure;
 
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Objects;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.PDPageContentStream;
 import org.apache.pdfbox.pdmodel.common.PDRectangle;
 import org.apache.pdfbox.pdmodel.font.PDFont;
-import org.apache.pdfbox.pdmodel.font.PDType1Font;
-import org.apache.pdfbox.pdmodel.font.Standard14Fonts;
+import org.apache.pdfbox.pdmodel.font.PDType0Font;
 import org.apache.pdfbox.pdmodel.graphics.form.PDFormXObject;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.fbcrm.common.ExcludeFromJacocoGeneratedReport;
@@ -31,12 +33,20 @@ import org.springframework.stereotype.Component;
  * als erstes im Inhaltsstrom jeder Seite (Plan #363, E3). So liegt er ohne weiteres Zutun unter
  * allem, was der Satz gerechnet hat, und der Beleg wird in einem Durchgang geschrieben.
  *
- * <p>Geschrieben wird mit Helvetica aus den 14 Standardschriften: keine Schriftdatei im Abbild,
- * kein Einbetten, und die Umlaute und das Eurozeichen des deutschen Belegs deckt ihre
- * WinAnsi-Kodierung ab (siehe {@link WinAnsiText}).
+ * <p>Geschrieben wird mit Liberation Sans Regular und Bold, als Teilmenge eingebettet (Plan #461,
+ * E2): PDF/A und damit die E-Rechnung verlangen eingebettete Schriften. Die Schrift ist metrisch
+ * gleich zu Helvetica, deshalb bleiben Breiten und Umbrueche des Satzes, wie sie sind. Die Dateien
+ * liegen mit ihrer Lizenz (SIL OFL 1.1) unter {@code beleg/}. Was die Schrift nicht schreiben soll,
+ * ersetzt weiter {@link WinAnsiText}.
  */
 @Component
 class PdfBoxDrucker implements Belegdrucker {
+
+  /** Der Lauftext des Belegs. */
+  static final String SCHRIFT_NORMAL = "/beleg/LiberationSans-Regular.ttf";
+
+  /** Der fette Schnitt fuer Hervorhebungen. */
+  static final String SCHRIFT_FETT = "/beleg/LiberationSans-Bold.ttf";
 
   /*
    * Ausgenommen ist allein dieser Rahmen, nicht die Arbeit darin: Der IOException-Zweig ist mit
@@ -61,10 +71,10 @@ class PdfBoxDrucker implements Belegdrucker {
     try (PDDocument dokument = new PDDocument();
         @Nullable PDDocument vorlage = Briefpapieruntergrund.geoeffnet(briefpapier)) {
       final Briefpapieruntergrund untergrund = Briefpapieruntergrund.aus(dokument, vorlage);
-      // Einmal je Dokument und nicht je Element: Der erste Zugriff auf eine Standardschrift baut
-      // den Schriftzwischenspeicher von PDFBox auf, und das dauert.
-      final PDFont normal = new PDType1Font(Standard14Fonts.FontName.HELVETICA);
-      final PDFont fett = new PDType1Font(Standard14Fonts.FontName.HELVETICA_BOLD);
+      // Einmal je Dokument und nicht je Element: Eine eingebettete Schrift gehoert zu genau einem
+      // Dokument, und eingebettet wird beim Speichern nur die Teilmenge, die der Beleg benutzt.
+      final PDFont normal = geladen(dokument, SCHRIFT_NORMAL);
+      final PDFont fett = geladen(dokument, SCHRIFT_FETT);
       final int seiten = elemente.stream().mapToInt(Druckelement::seite).max().orElse(1);
       for (int seite = 1; seite <= seiten; seite++) {
         schreibeSeite(
@@ -74,6 +84,23 @@ class PdfBoxDrucker implements Belegdrucker {
       dokument.save(ausgabe);
       return ausgabe.toByteArray();
     }
+  }
+
+  /**
+   * Laedt eine Schrift aus den Ressourcen fuer dieses Dokument, als Teilmenge einzubetten.
+   *
+   * @param dokument das Dokument, in das die Schrift eingebettet wird
+   * @param ressource der Pfad der Schriftdatei im Klassenpfad
+   * @return die Schrift, gebunden an das Dokument
+   * @throws IOException wenn die Schriftdatei nicht zu lesen ist
+   */
+  static PDFont geladen(final PDDocument dokument, final String ressource) throws IOException {
+    final byte[] datei;
+    try (InputStream strom =
+        Objects.requireNonNull(PdfBoxDrucker.class.getResourceAsStream(ressource), ressource)) {
+      datei = strom.readAllBytes();
+    }
+    return PDType0Font.load(dokument, new ByteArrayInputStream(datei), true);
   }
 
   /**

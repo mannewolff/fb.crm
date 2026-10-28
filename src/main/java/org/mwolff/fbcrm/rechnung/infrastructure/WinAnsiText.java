@@ -4,17 +4,19 @@ import java.nio.charset.Charset;
 import java.nio.charset.CharsetEncoder;
 
 /**
- * Bringt einen Text in die Zeichen, die die Standardschrift des Belegs schreiben kann.
+ * Bringt einen Text in die Zeichen, die der Beleg schreibt: die der WinAnsi-Kodierung.
  *
- * <p>Geschrieben wird mit Helvetica aus den 14 Standardschriften; ihre WinAnsi-Kodierung deckt die
+ * <p>Geschrieben wird mit Liberation Sans, eingebettet (Plan #461, E2). Der Beleg bleibt dabei bei
+ * dem Zeichenvorrat, den er mit Helvetica aus den 14 Standardschriften hatte: WinAnsi deckt die
  * Umlaute und das Eurozeichen des deutschen Belegs ab, ein Emoji oder ein chinesisches Zeichen aber
- * nicht. Ohne Ersatz liesse ein solches Zeichen in einem Positionstext das Schreiben scheitern —
- * und ein Beleg, der wegen eines Zeichens gar nicht entsteht, waere schlechter als einer mit einem
- * Fragezeichen darin. Steuerzeichen haben auf dem Blatt ebenso keine Gestalt.
+ * nicht, und fuer die hat die Schrift auch keine Gestalt. Ohne Ersatz liesse ein solches Zeichen in
+ * einem Positionstext das Schreiben scheitern — und ein Beleg, der wegen eines Zeichens gar nicht
+ * entsteht, waere schlechter als einer mit einem Fragezeichen darin. Steuerzeichen haben auf dem
+ * Blatt ebenso keine Gestalt.
  */
 final class WinAnsiText {
 
-  /** Die Kodierung, mit der Helvetica aus den Standardschriften geschrieben wird. */
+  /** Der Zeichenvorrat des Belegs, seit er mit Helvetica aus den Standardschriften entstand. */
   private static final Charset WIN_ANSI = Charset.forName("windows-1252");
 
   /** Steht fuer jedes Zeichen, das die Kodierung nicht darstellen kann. */

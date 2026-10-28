@@ -8,10 +8,16 @@ import static org.assertj.core.api.Assertions.within;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
+import java.util.HexFormat;
 import java.util.List;
+import java.util.Objects;
+import java.util.regex.Pattern;
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.contentstream.operator.Operator;
+import org.apache.pdfbox.cos.COSName;
 import org.apache.pdfbox.pdfparser.PDFStreamParser;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
@@ -58,6 +64,21 @@ class PdfBoxDruckerTest {
           text(1, 70, 760, Schrift.NORMAL, 10, "Posten 01"),
           text(2, 70, 760, Schrift.NORMAL, 10, "Posten 40"));
 
+  /** Eine eingebettete Teilmenge traegt ein Praefix aus sechs Grossbuchstaben und „+“. */
+  private static final String TEILMENGE_NORMAL = "[A-Z]{6}\\+LiberationSans";
+
+  private static final String TEILMENGE_FETT = "[A-Z]{6}\\+LiberationSans-Bold";
+
+  /**
+   * Umlaute, Eurozeichen und Ziffern — was ein deutscher Beleg schreibt. Ohne Mittelpunkt „·“: Den
+   * zeichnet Liberation Sans so breit wie Arial, nicht wie Helvetica.
+   */
+  private static final String MUSTERTEXT =
+      "Rechnung R26-0003, Gültig bis 20.10.2026, Müller, Straße 7: 2.500,03 € ÄÖÜäöüß 0123456789";
+
+  /** Die Abweichung der Breite, die den Umbruch eines Absatzes noch nicht verschiebt. */
+  private static final double HOECHSTE_ABWEICHUNG = 0.005;
+
   private final PdfBoxDrucker drucker = new PdfBoxDrucker();
 
   private static Druckelement text(
@@ -91,6 +112,13 @@ class PdfBoxDruckerTest {
     }
   }
 
+  /**
+   * Die Zeichen einer eingebetteten Schrift stehen als Glyphennummern im Inhaltsstrom; gelesen wird
+   * der Text darum mit {@link PDFTextStripper}, und im Strom steht statt der Zeichen ein
+   * Platzhalter.
+   */
+  private static final Pattern TEXTOPERAND = Pattern.compile("^.* Tj$", Pattern.MULTILINE);
+
   /** Der Inhaltsstrom der Seite, entpackt — dort stehen Flaeche, Linie und die Reihenfolge. */
   private static String inhaltsstrom(final byte[] pdf, final int seite) throws IOException {
     try (PDDocument dokument = Loader.loadPDF(pdf);
@@ -104,6 +132,29 @@ class PdfBoxDruckerTest {
     try (PDDocument dokument = Loader.loadPDF(pdf)) {
       final PDResources mittel = dokument.getPage(0).getResources();
       return mittel.getFont(mittel.getFontNames().iterator().next()).getName();
+    }
+  }
+
+  /** Jede Schrift, die der Drucker auf eine Seite des Dokuments geschrieben hat. */
+  private static List<PDFont> schriften(final byte[] pdf) throws IOException {
+    final List<PDFont> gefunden = new ArrayList<>();
+    try (PDDocument dokument = Loader.loadPDF(pdf)) {
+      for (final PDPage seite : dokument.getPages()) {
+        final PDResources mittel = seite.getResources();
+        for (final COSName name : mittel.getFontNames()) {
+          gefunden.add(mittel.getFont(name));
+        }
+      }
+      return gefunden;
+    }
+  }
+
+  private static String pruefsumme(final String ressource)
+      throws IOException, NoSuchAlgorithmException {
+    try (InputStream strom =
+        Objects.requireNonNull(PdfBoxDrucker.class.getResourceAsStream(ressource), ressource)) {
+      return HexFormat.of()
+          .formatHex(MessageDigest.getInstance("SHA-256").digest(strom.readAllBytes()));
     }
   }
 
@@ -321,7 +372,7 @@ class PdfBoxDruckerTest {
     final byte[] pdf = drucker.drucke(List.of(text(1, 70, 700, Schrift.FETT, 12, "Summe")), null);
 
     // When / Then — die Hervorhebung ist der fette Schnitt und nicht der Lauftext.
-    assertThat(schriftname(pdf)).isEqualTo("Helvetica-Bold");
+    assertThat(schriftname(pdf)).matches(TEILMENGE_FETT);
   }
 
   @Test
@@ -331,7 +382,7 @@ class PdfBoxDruckerTest {
         drucker.drucke(List.of(text(1, 70, 700, Schrift.NORMAL, 12, "Posten")), null);
 
     // When / Then
-    assertThat(schriftname(pdf)).isEqualTo("Helvetica");
+    assertThat(schriftname(pdf)).matches(TEILMENGE_NORMAL);
   }
 
   /**
@@ -431,8 +482,9 @@ class PdfBoxDruckerTest {
             null);
 
     // When / Then — Wort fuer Wort der Inhaltsstrom, den der Drucker vor dem Untergrund schrieb,
-    // und kein Formular in den Ressourcen der Seite.
-    assertThat(inhaltsstrom(pdf, 1))
+    // bis auf die Zeichen selbst, und kein Formular in den Ressourcen der Seite. Der Versatz des
+    // rechtsbuendigen Betrags ist derselbe wie mit Helvetica: Liberation Sans misst gleich breit.
+    assertThat(TEXTOPERAND.matcher(inhaltsstrom(pdf, 1)).replaceAll("<Text> Tj"))
         .isEqualTo(
             """
             0.6902 0.41569 0.26667 rg
@@ -447,15 +499,16 @@ class PdfBoxDruckerTest {
             BT
             /F1 16 Tf
             70 760 Td
-            (Rechnung R26-0003) Tj
+            <Text> Tj
             ET
             0 0 0 rg
             BT
             /F2 10 Tf
             352.73999 730 Td
-            <322E3530302C30332080> Tj
+            <Text> Tj
             ET
             """);
+    assertThat(ausgelesen(pdf)).contains("Rechnung R26-0003").contains("2.500,03 €");
     assertThat(seiten(pdf)).isOne();
     try (PDDocument dokument = Loader.loadPDF(pdf)) {
       assertThat(dokument.getPage(0).getResources().getXObjectNames()).isEmpty();
@@ -483,7 +536,9 @@ class PdfBoxDruckerTest {
     assertThat(strom)
         .contains("0.70711 0.70711 -0.70711 0.70711 150 300 Tm")
         .contains("0.82353 0.82353 0.82353 rg")
-        .contains("(Muster) Tj");
+        .contains(" Tj");
+    // Den gedrehten Text liest der Textleser in Stuecken; die Folge der Zeichen bleibt.
+    assertThat(ausgelesen(pdf).replaceAll("\\s", "")).contains("Muster");
     assertThat(strom.indexOf(" Tm")).isGreaterThan(strom.indexOf(" re"));
     assertThat(strom.indexOf(" Tm")).isGreaterThan(strom.indexOf(" m"));
     assertThat(strom.indexOf(" Tm")).isGreaterThan(strom.indexOf(" Td"));
@@ -500,7 +555,7 @@ class PdfBoxDruckerTest {
             null);
 
     // When / Then
-    assertThat(schriftname(pdf)).isEqualTo("Helvetica");
+    assertThat(schriftname(pdf)).matches(TEILMENGE_NORMAL);
   }
 
   @Test
@@ -529,6 +584,86 @@ class PdfBoxDruckerTest {
     assertThat(operatoren.subList(zeige + 1, operatoren.size())).contains("ET");
     assertThat(operatoren.stream().filter("BT"::equals).count())
         .isEqualTo(operatoren.stream().filter("ET"::equals).count());
+  }
+
+  @Test
+  void drucke_thenEveryFontIsAnEmbeddedSubsetOfLiberationSans() throws IOException {
+    // Given — beide Schnitte auf einer Seite, ohne Briefpapier.
+    final byte[] pdf = drucker.drucke(EINE_SEITE, null);
+
+    // When
+    final List<PDFont> schriften = schriften(pdf);
+
+    // Then — PDF/A verlangt eingebettete Schriften (Plan #461, E2).
+    assertThat(schriften).hasSize(2).allMatch(PDFont::isEmbedded);
+    assertThat(schriften)
+        .extracting(PDFont::getName)
+        .anyMatch(name -> name.matches(TEILMENGE_NORMAL))
+        .anyMatch(name -> name.matches(TEILMENGE_FETT));
+  }
+
+  @Test
+  void drucke_givenUntergrund_thenEveryFontOfTheDruckerIsAnEmbeddedSubsetOfLiberationSans()
+      throws IOException {
+    // Given — beide Schnitte auf zwei Seiten, jede mit einem Blatt des Briefpapiers darunter.
+    final List<Druckelement> zweiSeiten =
+        List.of(
+            text(1, 70, 760, Schrift.FETT, 16, "Rechnung R26-0003"),
+            text(1, 70, 730, Schrift.NORMAL, 10, "Gültig bis: 20.10.2026"),
+            text(2, 70, 760, Schrift.FETT, 10, "Summe"),
+            text(2, 70, 730, Schrift.NORMAL, 10, "2.500,03 €"));
+    final byte[] pdf =
+        drucker.drucke(zweiSeiten, briefpapier("Briefkopf Blatt eins", "Briefkopf Blatt zwei"));
+
+    // When
+    final List<PDFont> schriften = schriften(pdf);
+
+    // Then — die Schriften des Briefpapiers stehen in seinen Formularen, nicht auf der Seite.
+    assertThat(schriften).hasSize(4).allMatch(PDFont::isEmbedded);
+    assertThat(schriften)
+        .extracting(PDFont::getName)
+        .allMatch(name -> name.matches(TEILMENGE_NORMAL) || name.matches(TEILMENGE_FETT));
+  }
+
+  @Test
+  void schrift_givenRegular_thenItIsAsWideAsHelvetica() throws IOException {
+    // Given
+    try (PDDocument dokument = new PDDocument()) {
+      final PDFont liberation = PdfBoxDrucker.geladen(dokument, PdfBoxDrucker.SCHRIFT_NORMAL);
+      final PDFont helvetica = new PDType1Font(Standard14Fonts.FontName.HELVETICA);
+
+      // When
+      final float breite = liberation.getStringWidth(MUSTERTEXT);
+      final float vorbild = helvetica.getStringWidth(MUSTERTEXT);
+
+      // Then — metrisch gleich: Breiten und Umbrueche des Satzes bleiben, wie sie sind.
+      assertThat((double) breite).isCloseTo(vorbild, within(vorbild * HOECHSTE_ABWEICHUNG));
+    }
+  }
+
+  @Test
+  void schrift_givenBold_thenItIsAsWideAsHelveticaBold() throws IOException {
+    // Given
+    try (PDDocument dokument = new PDDocument()) {
+      final PDFont liberation = PdfBoxDrucker.geladen(dokument, PdfBoxDrucker.SCHRIFT_FETT);
+      final PDFont helvetica = new PDType1Font(Standard14Fonts.FontName.HELVETICA_BOLD);
+
+      // When
+      final float breite = liberation.getStringWidth(MUSTERTEXT);
+      final float vorbild = helvetica.getStringWidth(MUSTERTEXT);
+
+      // Then
+      assertThat((double) breite).isCloseTo(vorbild, within(vorbild * HOECHSTE_ABWEICHUNG));
+    }
+  }
+
+  @Test
+  void schriftdateien_thenTheyAreTheFilesOfRelease215() throws Exception {
+    // When / Then — die Pruefsummen aus der Entscheidung des Pakets #468.
+    assertThat(pruefsumme(PdfBoxDrucker.SCHRIFT_NORMAL))
+        .isEqualTo("76d04c18ea243f426b7de1f3ad208e927008f961dc5945e5aad352d0dfde8ee8");
+    assertThat(pruefsumme(PdfBoxDrucker.SCHRIFT_FETT))
+        .isEqualTo("788abee4c806d660e8aee46689dd8540cd4bb98da03dcc9d171ce3efd99a9173");
   }
 
   /** Sammelt die Zeichen mit ihrer Lage, um Ausrichtung nachzumessen. */
