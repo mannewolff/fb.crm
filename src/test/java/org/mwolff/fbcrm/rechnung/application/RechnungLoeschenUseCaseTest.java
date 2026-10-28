@@ -2,6 +2,10 @@ package org.mwolff.fbcrm.rechnung.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
@@ -88,6 +92,23 @@ class RechnungLoeschenUseCaseTest {
     // When / Then
     assertThatThrownBy(() -> useCase.loesche(RECHNUNG, GELESEN, MANFRED))
         .isInstanceOf(RechnungszustandPasstNicht.class);
+    verify(rechnungen).findById(RECHNUNG);
+    verifyNoMoreInteractions(rechnungen);
+  }
+
+  @Test
+  void loesche_aGestellteRechnung_thenTheUseCaseDecidesBeforeAskingTheDomain() {
+    // Given — eine gestellte Rechnung, deren eigene Grenze nicht greift: Die Grenze steht im
+    // Anwendungsfall, nicht erst im Bestand oder in der Rechnung.
+    final Rechnung gestellt = mock(Rechnung.class);
+    when(gestellt.version()).thenReturn(GELESEN);
+    when(gestellt.zustand()).thenReturn(Rechnungszustand.GESTELLT);
+    when(rechnungen.findById(RECHNUNG)).thenReturn(Optional.of(gestellt));
+
+    // When / Then
+    assertThatThrownBy(() -> useCase.loesche(RECHNUNG, GELESEN, MANFRED))
+        .isInstanceOf(RechnungszustandPasstNicht.class);
+    verify(gestellt, never()).geloescht(anyLong(), any());
     verify(rechnungen).findById(RECHNUNG);
     verifyNoMoreInteractions(rechnungen);
   }
