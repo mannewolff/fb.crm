@@ -48,7 +48,8 @@ final class Belegpflichtangaben {
     sammle(fehlend, "strasse", meine.strasse());
     sammle(fehlend, "plz", meine.plz());
     sammle(fehlend, "ort", meine.ort());
-    sammle(fehlend, "bankverbindung", eigene.bankverbindung());
+    // Bis zur Belegkopie mit Bankfeldern (#467) zaehlt hier der bisherige Freitext.
+    sammle(fehlend, "bankverbindung", eigene.bisherigeBankverbindung());
     if (fehlt(eigene.steuernummer()) && fehlt(eigene.umsatzsteuerId())) {
       fehlend.put("steuernummer", List.of(STEUERANGABE_FEHLT));
     }

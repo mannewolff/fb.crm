@@ -398,6 +398,9 @@ final class Rechnungsdoppel {
         "https://example.org",
         "75/123/45678",
         "DE123456789",
+        null,
+        null,
+        null,
         "DE02 1203 0000 0000 2020 51");
   }
 }

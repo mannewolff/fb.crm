@@ -24,7 +24,11 @@ import org.mwolff.fbcrm.eigeneangaben.domain.EigeneAngaben;
  * @param webadresse Webadresse als Text, oder {@code null}
  * @param steuernummer Steuernummer, oder {@code null}
  * @param umsatzsteuerId Umsatzsteuer-Identifikationsnummer, oder {@code null}
- * @param bankverbindung Bankverbindung, oder {@code null}
+ * @param iban IBAN ohne Leerzeichen, oder {@code null}
+ * @param bic BIC, oder {@code null}
+ * @param kontoinhaber Inhaber des Kontos, oder {@code null}
+ * @param bisherigeBankverbindung die Bankverbindung als Freitext, nur zum Lesen, oder {@code null},
+ *     sobald IBAN und Kontoinhaber gefuellt sind (Plan #461, E13)
  * @param version der Stand der Zeile, den das Speichern als {@code If-Match} vorlegt (Plan #415,
  *     E2)
  */
@@ -40,7 +44,10 @@ public record EigeneAngabenResponse(
     @Nullable String webadresse,
     @Nullable String steuernummer,
     @Nullable String umsatzsteuerId,
-    @Nullable String bankverbindung,
+    @Nullable String iban,
+    @Nullable String bic,
+    @Nullable String kontoinhaber,
+    @Nullable String bisherigeBankverbindung,
     long version) {
 
   /** Die Sicht der Oberflaeche auf die eigenen Angaben samt ihrem Stand. */
@@ -58,7 +65,10 @@ public record EigeneAngabenResponse(
         angaben.webadresse(),
         angaben.steuernummer(),
         angaben.umsatzsteuerId(),
-        angaben.bankverbindung(),
+        angaben.iban(),
+        angaben.bic(),
+        angaben.kontoinhaber(),
+        angaben.bisherigeBankverbindung(),
         gespeichert.version());
   }
 }

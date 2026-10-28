@@ -267,7 +267,8 @@ public class RechnungStellenUseCase {
         eigene.telefon(),
         eigene.steuernummer(),
         eigene.umsatzsteuerId(),
-        eigene.bankverbindung(),
+        // Bis zur Belegkopie mit Bankfeldern (#467) der bisherige Freitext.
+        eigene.bisherigeBankverbindung(),
         eigene.webadresse());
   }
 }

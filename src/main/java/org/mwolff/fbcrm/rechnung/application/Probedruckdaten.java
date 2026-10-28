@@ -83,7 +83,9 @@ record Probedruckdaten(@Nullable String name, RechnungDruckdaten druckdaten) {
             eigene.telefon(),
             eigene.steuernummer(),
             eigene.umsatzsteuerId(),
-            eigene.bankverbindung(),
+            // Bis zur Belegkopie mit Bankfeldern (#467) der bisherige Freitext.
+            // Bis zur Belegkopie mit Bankfeldern (#467) der bisherige Freitext.
+            eigene.bisherigeBankverbindung(),
             eigene.webadresse());
     return new Probedruckdaten(eigene.name(), beleg(absender, ANZAHL_POSITIONEN));
   }

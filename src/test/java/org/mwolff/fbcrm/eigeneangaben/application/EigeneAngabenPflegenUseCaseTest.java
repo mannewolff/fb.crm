@@ -3,6 +3,7 @@ package org.mwolff.fbcrm.eigeneangaben.application;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.catchThrowableOfType;
+import static org.assertj.core.api.Assertions.entry;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
@@ -13,6 +14,8 @@ import static org.mockito.Mockito.verify;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.List;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -66,11 +69,68 @@ class EigeneAngabenPflegenUseCaseTest {
     lenient()
         .when(bestand.speichere(any(), any(), anyLong(), anyLong()))
         .thenReturn(new EigeneAngabenStand(STAND + 1, KONTO, JETZT));
+    // Ohne bisherige Bankverbindung; die Faelle zum Freitext setzen sie mit bisher().
+    lenient().when(bestand.lies()).thenReturn(angaben(null));
   }
 
-  private static EigeneAngaben angaben(final String wert) {
+  /* IBAN und BIC bleiben leer: Sie haben eine Form, die ein beliebiger Wert nicht erfuellt. */
+  private static EigeneAngaben angaben(final @Nullable String wert) {
     return new EigeneAngaben(
-        wert, wert, new Anschrift(wert, wert, wert, wert), wert, wert, wert, wert, wert, wert);
+        wert,
+        wert,
+        new Anschrift(wert, wert, wert, wert),
+        wert,
+        wert,
+        wert,
+        wert,
+        wert,
+        null,
+        null,
+        wert,
+        null);
+  }
+
+  /** Dieselben Angaben mit den drei Bankfeldern, wie die Maske sie schickt. */
+  private static EigeneAngaben mitBank(
+      final @Nullable String iban,
+      final @Nullable String bic,
+      final @Nullable String kontoinhaber) {
+    return new EigeneAngaben(
+        "Manfred Wolff",
+        null,
+        new Anschrift(null, null, null, null),
+        null,
+        null,
+        null,
+        null,
+        null,
+        iban,
+        bic,
+        kontoinhaber,
+        null);
+  }
+
+  /**
+   * Der Bestand traegt die bisherige Bankverbindung als Freitext. Nachsichtig: Stehen IBAN und
+   * Kontoinhaber, braucht der Anwendungsfall den alten Text gar nicht erst.
+   */
+  private void bisher(final @Nullable String freitext) {
+    lenient()
+        .when(bestand.lies())
+        .thenReturn(
+            new EigeneAngaben(
+                "Manfred Wolff",
+                null,
+                new Anschrift(null, null, null, null),
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                freitext));
   }
 
   private EigeneAngaben pflegeUndFange(final EigeneAngaben eingereicht) {
@@ -92,13 +152,151 @@ class EigeneAngabenPflegenUseCaseTest {
             "https://mwolff.org",
             "75/123/45678",
             "DE123456789",
-            "DE02120300000000202051");
+            "DE89370400440532013000",
+            "COBADEFFXXX",
+            "Manfred Wolff",
+            null);
 
     // When
     final EigeneAngaben gespeichert = pflegeUndFange(eingereicht);
 
     // Then
     assertThat(gespeichert).isEqualTo(eingereicht);
+  }
+
+  @Test
+  void pflege_givenAWrongCheckDigit_thenRefusesAtTheFieldAndWritesNothing() {
+    // When — Kriterium 7.
+    final BankverbindungUngueltig fehler =
+        catchThrowableOfType(
+            BankverbindungUngueltig.class,
+            () ->
+                useCase.pflege(
+                    mitBank("DE89 3704 0044 0532 0130 01", null, "Manfred Wolff"), STAND, KONTO));
+
+    // Then
+    assertThat(fehler).isNotNull();
+    assertThat(fehler.felder())
+        .containsExactly(entry("iban", List.of(BankverbindungUngueltig.IBAN_UNGUELTIG)));
+    verify(bestand, never()).speichere(any(), any(), anyLong(), anyLong());
+  }
+
+  @Test
+  void pflege_givenAnIbanWithSpacesInLowercase_thenStoresTheElectronicForm() {
+    // When — E15: gespeichert wird ohne Leerzeichen in Grossbuchstaben.
+    final EigeneAngaben gespeichert =
+        pflegeUndFange(mitBank("  de89 3704 0044 0532 0130 00 ", null, "Manfred Wolff"));
+
+    // Then
+    assertThat(gespeichert.iban()).isEqualTo("DE89370400440532013000");
+  }
+
+  @Test
+  void pflege_givenABicInLowercase_thenStoresItInCapitals() {
+    // When
+    final EigeneAngaben gespeichert =
+        pflegeUndFange(mitBank("DE89370400440532013000", " cobadeffxxx ", "Manfred Wolff"));
+
+    // Then
+    assertThat(gespeichert.bic()).isEqualTo("COBADEFFXXX");
+  }
+
+  @Test
+  void pflege_givenABicOfTheWrongForm_thenRefusesAtTheField() {
+    // When — E15: die BIC wird nur auf ihre Form geprueft.
+    final BankverbindungUngueltig fehler =
+        catchThrowableOfType(
+            BankverbindungUngueltig.class,
+            () ->
+                useCase.pflege(
+                    mitBank("DE89370400440532013000", "COBADEFFXX", "Manfred Wolff"),
+                    STAND,
+                    KONTO));
+
+    // Then
+    assertThat(fehler).isNotNull();
+    assertThat(fehler.felder())
+        .containsExactly(entry("bic", List.of(BankverbindungUngueltig.BIC_UNGUELTIG)));
+    verify(bestand, never()).speichere(any(), any(), anyLong(), anyLong());
+  }
+
+  @Test
+  void pflege_givenAnInvalidIbanAndBic_thenNamesBothFields() {
+    // When — wer beides falsch eingibt, soll beides auf einmal sehen.
+    final BankverbindungUngueltig fehler =
+        catchThrowableOfType(
+            BankverbindungUngueltig.class,
+            () -> useCase.pflege(mitBank("DE00", "BIC", null), STAND, KONTO));
+
+    // Then
+    assertThat(fehler).isNotNull();
+    assertThat(fehler.felder()).containsOnlyKeys("iban", "bic");
+    assertThat(fehler.felder().keySet()).containsExactly("iban", "bic");
+  }
+
+  @Test
+  void pflege_withoutAnIban_thenTheBisherigeBankverbindungStays() {
+    // Given — E13: das erste Speichern ohne IBAN loescht den alten Text nicht.
+    bisher("Sparkasse Bremen, Konto 1234567");
+
+    // When
+    final EigeneAngaben gespeichert = pflegeUndFange(mitBank(null, null, "Manfred Wolff"));
+
+    // Then
+    assertThat(gespeichert.bisherigeBankverbindung()).isEqualTo("Sparkasse Bremen, Konto 1234567");
+  }
+
+  @Test
+  void pflege_withAnIbanButWithoutKontoinhaber_thenTheBisherigeBankverbindungStays() {
+    // Given
+    bisher("Sparkasse Bremen, Konto 1234567");
+
+    // When
+    final EigeneAngaben gespeichert =
+        pflegeUndFange(mitBank("DE89370400440532013000", null, "   "));
+
+    // Then
+    assertThat(gespeichert.kontoinhaber()).isNull();
+    assertThat(gespeichert.bisherigeBankverbindung()).isEqualTo("Sparkasse Bremen, Konto 1234567");
+  }
+
+  @Test
+  void pflege_withIbanAndKontoinhaber_thenTheBisherigeBankverbindungIsCleared() {
+    // Given — E13: stehen beide, hat der Freitext ausgedient.
+    bisher("Sparkasse Bremen, Konto 1234567");
+
+    // When
+    final EigeneAngaben gespeichert =
+        pflegeUndFange(mitBank("DE89370400440532013000", null, "Manfred Wolff"));
+
+    // Then
+    assertThat(gespeichert.bisherigeBankverbindung()).isNull();
+  }
+
+  @Test
+  void pflege_givenABisherigeBankverbindungInTheRequest_thenOnlyTheStoredOneCounts() {
+    // Given — der Freitext ist nur noch zum Lesen; was hereinkommt, schreibt ihn nicht.
+    bisher(null);
+    final EigeneAngaben eingereicht =
+        new EigeneAngaben(
+            null,
+            null,
+            new Anschrift(null, null, null, null),
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            "untergeschoben");
+
+    // When
+    final EigeneAngaben gespeichert = pflegeUndFange(eingereicht);
+
+    // Then
+    assertThat(gespeichert.bisherigeBankverbindung()).isNull();
   }
 
   @Test

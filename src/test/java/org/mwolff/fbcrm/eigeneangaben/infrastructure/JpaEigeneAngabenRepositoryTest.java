@@ -50,12 +50,26 @@ class JpaEigeneAngabenRepositoryTest {
         "https://mwolff.org",
         "75/123/45678",
         "DE123456789",
-        "DE02120300000000202051");
+        "DE89370400440532013000",
+        "COBADEFFXXX",
+        "Manfred Wolff",
+        "Sparkasse Bremen, Konto 1234567");
   }
 
   private static EigeneAngaben leer() {
     return new EigeneAngaben(
-        null, null, new Anschrift(null, null, null, null), null, null, null, null, null, null);
+        null,
+        null,
+        new Anschrift(null, null, null, null),
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null);
   }
 
   @Test
@@ -121,7 +135,11 @@ class JpaEigeneAngabenRepositoryTest {
             zeile -> assertThat(zeile.getWebadresse()).isEqualTo("https://mwolff.org"),
             zeile -> assertThat(zeile.getSteuernummer()).isEqualTo("75/123/45678"),
             zeile -> assertThat(zeile.getUmsatzsteuerId()).isEqualTo("DE123456789"),
-            zeile -> assertThat(zeile.getBankverbindung()).isEqualTo("DE02120300000000202051"),
+            zeile -> assertThat(zeile.getIban()).isEqualTo("DE89370400440532013000"),
+            zeile -> assertThat(zeile.getBic()).isEqualTo("COBADEFFXXX"),
+            zeile -> assertThat(zeile.getKontoinhaber()).isEqualTo("Manfred Wolff"),
+            zeile ->
+                assertThat(zeile.getBankverbindung()).isEqualTo("Sparkasse Bremen, Konto 1234567"),
             zeile -> assertThat(zeile.getUpdatedAt()).isEqualTo(GEAENDERT),
             zeile -> assertThat(zeile.getVersion()).isEqualTo(3L),
             zeile -> assertThat(zeile.getGeaendertVon()).isEqualTo(31L));
@@ -149,6 +167,9 @@ class JpaEigeneAngabenRepositoryTest {
             zeile -> assertThat(zeile.getWebadresse()).isNull(),
             zeile -> assertThat(zeile.getSteuernummer()).isNull(),
             zeile -> assertThat(zeile.getUmsatzsteuerId()).isNull(),
+            zeile -> assertThat(zeile.getIban()).isNull(),
+            zeile -> assertThat(zeile.getBic()).isNull(),
+            zeile -> assertThat(zeile.getKontoinhaber()).isNull(),
             zeile -> assertThat(zeile.getBankverbindung()).isNull());
   }
 }

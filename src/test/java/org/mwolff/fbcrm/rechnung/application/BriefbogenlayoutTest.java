@@ -123,6 +123,9 @@ class BriefbogenlayoutTest {
         null,
         "12/345/67890",
         null,
+        null,
+        null,
+        null,
         "MLP Bank Heidelberg");
   }
 

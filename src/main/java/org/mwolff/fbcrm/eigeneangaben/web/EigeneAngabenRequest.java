@@ -11,7 +11,12 @@ import org.mwolff.fbcrm.eigeneangaben.domain.EigeneAngaben;
  * <p>Keine Pflichtangabe: Die Angaben werden nach und nach vervollstaendigt, und eine Instanz ohne
  * Steuernummer soll trotzdem einen Namen speichern koennen. Die Laengengrenzen sind dieselben wie
  * in {@code V5__eigene_angaben.sql}; ohne sie antwortete die Anwendung auf eine zu lange Eingabe
- * mit einem Datenbankfehler statt mit einer Meldung am Feld.
+ * mit einem Datenbankfehler statt mit einer Meldung am Feld. IBAN und BIC duerfen hier laenger sein
+ * als ihre Spalte: Die IBAN darf Leerzeichen tragen, und ob beide gueltig sind, sagt der
+ * Anwendungsfall mit einer eigenen Meldung am Feld.
+ *
+ * <p>Die bisherige Bankverbindung fehlt mit Absicht (Plan #461, E13): Sie ist nur noch zum Lesen
+ * da, und ein Feld {@code bankverbindung} in der Anfrage bleibt ohne Wirkung.
  *
  * @param name Name, oder {@code null}
  * @param berufsbezeichnung Berufsbezeichnung, oder {@code null}
@@ -24,7 +29,10 @@ import org.mwolff.fbcrm.eigeneangaben.domain.EigeneAngaben;
  * @param webadresse Webadresse als Text, oder {@code null}
  * @param steuernummer Steuernummer, oder {@code null}
  * @param umsatzsteuerId Umsatzsteuer-Identifikationsnummer, oder {@code null}
- * @param bankverbindung Bankverbindung, oder {@code null}
+ * @param iban IBAN, mit oder ohne Leerzeichen, oder {@code null}; gueltig prueft sie der
+ *     Anwendungsfall (Plan #461, E15)
+ * @param bic BIC, oder {@code null}
+ * @param kontoinhaber Inhaber des Kontos, oder {@code null}
  */
 public record EigeneAngabenRequest(
     @Size(max = 200) @Nullable String name,
@@ -38,7 +46,9 @@ public record EigeneAngabenRequest(
     @Size(max = 200) @Nullable String webadresse,
     @Size(max = 50) @Nullable String steuernummer,
     @Size(max = 50) @Nullable String umsatzsteuerId,
-    @Size(max = 200) @Nullable String bankverbindung) {
+    @Size(max = 50) @Nullable String iban,
+    @Size(max = 50) @Nullable String bic,
+    @Size(max = 200) @Nullable String kontoinhaber) {
 
   /** Dieselben Angaben in der Sprache der Fachschicht. */
   public EigeneAngaben angaben() {
@@ -51,6 +61,9 @@ public record EigeneAngabenRequest(
         webadresse,
         steuernummer,
         umsatzsteuerId,
-        bankverbindung);
+        iban,
+        bic,
+        kontoinhaber,
+        null);
   }
 }

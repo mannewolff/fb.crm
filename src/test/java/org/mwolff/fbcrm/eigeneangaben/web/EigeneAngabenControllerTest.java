@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -12,11 +14,13 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -27,11 +31,14 @@ import org.mwolff.fbcrm.common.Anschrift;
 import org.mwolff.fbcrm.common.Urheber;
 import org.mwolff.fbcrm.common.web.Bedingungskopf;
 import org.mwolff.fbcrm.common.web.GlobalExceptionHandler;
+import org.mwolff.fbcrm.eigeneangaben.application.BankverbindungUngueltig;
 import org.mwolff.fbcrm.eigeneangaben.application.EigeneAngabenGeaendert;
 import org.mwolff.fbcrm.eigeneangaben.application.EigeneAngabenLesenUseCase;
 import org.mwolff.fbcrm.eigeneangaben.application.EigeneAngabenPflegenUseCase;
 import org.mwolff.fbcrm.eigeneangaben.application.GespeicherteEigeneAngaben;
 import org.mwolff.fbcrm.eigeneangaben.domain.EigeneAngaben;
+import org.mwolff.fbcrm.eigeneangaben.domain.EigeneAngabenRepository;
+import org.mwolff.fbcrm.eigeneangaben.domain.EigeneAngabenStand;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -120,12 +127,26 @@ class EigeneAngabenControllerTest {
         WEBADRESSE,
         "75/123/45678",
         "DE123456789",
-        "DE02120300000000202051");
+        "DE89370400440532013000",
+        "COBADEFFXXX",
+        "Manfred Wolff",
+        null);
   }
 
   private static EigeneAngaben leer() {
     return new EigeneAngaben(
-        null, null, new Anschrift(null, null, null, null), null, null, null, null, null, null);
+        null,
+        null,
+        new Anschrift(null, null, null, null),
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null);
   }
 
   private static String rumpf(final String name) {
@@ -159,8 +180,92 @@ class EigeneAngabenControllerTest {
                 WEBADRESSE,
                 "75/123/45678",
                 "DE123456789",
-                "DE02120300000000202051",
+                "DE89370400440532013000",
+                "COBADEFFXXX",
+                "Manfred Wolff",
+                null,
                 STAND));
+  }
+
+  @Test
+  void lesen_givenABisherigeBankverbindung_thenAnswersWithItForReading() throws Exception {
+    // Given — Plan #461, E13: der Freitext steht da, bis IBAN und Kontoinhaber gefuellt sind.
+    final EigeneAngaben bisher =
+        new EigeneAngaben(
+            null,
+            null,
+            new Anschrift(null, null, null, null),
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            "Sparkasse Bremen, Konto 1234567");
+    when(lesen.lese()).thenReturn(new GespeicherteEigeneAngaben(bisher, STAND));
+
+    // When / Then
+    mockMvc
+        .perform(get(PFAD))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.bisherigeBankverbindung").value("Sparkasse Bremen, Konto 1234567"))
+        .andExpect(jsonPath("$.iban").isEmpty())
+        .andExpect(jsonPath("$.bankverbindung").doesNotExist());
+  }
+
+  @Test
+  @DisplayName("Szenario: Eine ungültige IBAN wird abgewiesen")
+  void szenarioEineUngueltigeIbanWirdAbgewiesen() throws Exception {
+    // Given — ich pflege die eigenen Angaben; der Weg laeuft durch den echten Anwendungsfall, nur
+    // der Bestand ist gemockt. Er traegt die bisherige Bankverbindung auf Stand 3.
+    final EigeneAngabenRepository bestand = mock(EigeneAngabenRepository.class);
+    final EigeneAngaben bisher =
+        new EigeneAngaben(
+            "Manfred Wolff",
+            null,
+            new Anschrift(null, null, null, null),
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            "Sparkasse Bremen, Konto 1234567");
+    when(bestand.lies()).thenReturn(bisher);
+    when(bestand.stand()).thenReturn(new EigeneAngabenStand(STAND, ANNA, ANNAS_AENDERUNG));
+    final MockMvc echt =
+        MockMvcBuilders.standaloneSetup(
+                new EigeneAngabenController(
+                    new EigeneAngabenLesenUseCase(bestand),
+                    new EigeneAngabenPflegenUseCase(bestand, Clock.systemUTC())))
+            .setControllerAdvice(new GlobalExceptionHandler(konto -> Optional.empty()))
+            .setCustomArgumentResolvers(
+                new Bedingungskopf.Leser(), new AuthenticationPrincipalArgumentResolver())
+            .build();
+
+    // When — eine IBAN mit falscher Pruefziffer wird gespeichert.
+    echt.perform(
+            put(PFAD)
+                .header(HttpHeaders.IF_MATCH, VORGELEGT)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    "{\"name\":\"Manfred Wolff\",\"iban\":\"DE89 3704 0044 0532 0130 01\","
+                        + "\"kontoinhaber\":\"Manfred Wolff\"}"))
+        // Then — am Feld steht die Meldung, dass die IBAN ungueltig ist.
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.fieldErrors.iban[0]").value(BankverbindungUngueltig.IBAN_UNGUELTIG));
+
+    // Und die bisher hinterlegte Bankverbindung bleibt samt Version unveraendert.
+    verify(bestand, never()).speichere(any(), any(), anyLong(), anyLong());
+    echt.perform(get(PFAD))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.bisherigeBankverbindung").value("Sparkasse Bremen, Konto 1234567"))
+        .andExpect(jsonPath("$.iban").isEmpty())
+        .andExpect(jsonPath("$.version").value(STAND));
   }
 
   @Test
@@ -201,11 +306,17 @@ class EigeneAngabenControllerTest {
                 WEBADRESSE,
                 "75/123/45678",
                 "DE123456789",
-                "DE02120300000000202051"));
+                "DE89 3704 0044 0532 0130 00",
+                "COBADEFFXXX",
+                "Manfred Wolff"));
 
-    // Then
+    // Then — die IBAN geht so weiter, wie sie kam; pruefen und schreiben ist Sache der Fachschicht.
     verify(pflegen).pflege(eingereichte.capture(), eq(STAND), eq(ANGEMELDET));
-    assertThat(eingereichte.getValue()).isEqualTo(gepflegt());
+    assertThat(eingereichte.getValue())
+        .usingRecursiveComparison()
+        .ignoringFields("iban")
+        .isEqualTo(gepflegt());
+    assertThat(eingereichte.getValue().iban()).isEqualTo("DE89 3704 0044 0532 0130 00");
     assertThat(antwort.version()).isEqualTo(STAND + 1);
   }
 
@@ -219,7 +330,7 @@ class EigeneAngabenControllerTest {
         new Bedingungskopf(STAND),
         ANGEMELDET,
         new EigeneAngabenRequest(
-            null, null, null, null, null, null, null, null, null, null, null, null));
+            null, null, null, null, null, null, null, null, null, null, null, null, null, null));
 
     // Then
     verify(pflegen).pflege(eingereichte.capture(), eq(STAND), eq(ANGEMELDET));

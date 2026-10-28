@@ -129,7 +129,7 @@ class RechnungStellenUseCaseTest {
   private static final Anschrift LEER = new Anschrift(null, null, null, null);
 
   private static final EigeneAngaben OHNE_ANGABEN =
-      new EigeneAngaben(null, null, LEER, null, null, null, null, null, null);
+      new EigeneAngaben(null, null, LEER, null, null, null, null, null, null, null, null, null);
 
   @Mock private RechnungRepository rechnungen;
   @Mock private AngebotRepository angebote;
@@ -184,7 +184,10 @@ class RechnungStellenUseCaseTest {
         voll.webadresse(),
         steuernummer,
         umsatzsteuerId,
-        voll.bankverbindung());
+        null,
+        null,
+        null,
+        voll.bisherigeBankverbindung());
   }
 
   private static EigeneAngaben ohneBankverbindung() {
@@ -198,6 +201,9 @@ class RechnungStellenUseCaseTest {
         voll.webadresse(),
         voll.steuernummer(),
         voll.umsatzsteuerId(),
+        null,
+        null,
+        null,
         null);
   }
 
@@ -773,6 +779,9 @@ class RechnungStellenUseCaseTest {
         voll.webadresse(),
         voll.steuernummer(),
         voll.umsatzsteuerId(),
+        null,
+        null,
+        null,
         NEUE_BANK);
   }
 }

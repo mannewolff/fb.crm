@@ -221,7 +221,6 @@ class RechnungStellenIT extends AbstractIntegrationTest {
     rumpf.put("webadresse", "https://example.org");
     rumpf.put("steuernummer", steuernummer);
     rumpf.put("umsatzsteuerId", umsatzsteuerId);
-    rumpf.put("bankverbindung", bankverbindung);
     // Auf dem aktuellen Stand der eigenen Angaben, wie die Maske (Plan #415, E2).
     assertThat(
             rest.exchange(
@@ -231,6 +230,9 @@ class RechnungStellenIT extends AbstractIntegrationTest {
                     String.class)
                 .getStatusCode())
         .isEqualTo(HttpStatus.OK);
+    // Den bisherigen Freitext fuehrt die Anfrage nicht mehr (Plan #461, E13); bis zur
+    // Belegkopie mit Bankfeldern (#467) verlangt das Stellen aber genau ihn.
+    jdbc.update("UPDATE eigene_angaben SET bankverbindung = ?", bankverbindung);
   }
 
   private long firmaAnlegen(

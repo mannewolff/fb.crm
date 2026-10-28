@@ -83,12 +83,26 @@ class ProbedruckUseCaseTest {
         "mmuster.org",
         "12/345/67890",
         "DE 01010101010",
+        null,
+        null,
+        null,
         "MLP Bank Heidelberg");
   }
 
   private static EigeneAngaben leer() {
     return new EigeneAngaben(
-        null, null, new Anschrift(null, null, null, null), null, null, null, null, null, null);
+        null,
+        null,
+        new Anschrift(null, null, null, null),
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null);
   }
 
   private void hinterlegt(final EigeneAngaben angaben) throws IOException {

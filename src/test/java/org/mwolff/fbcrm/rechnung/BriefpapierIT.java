@@ -450,7 +450,6 @@ class BriefpapierIT extends AbstractIntegrationTest {
     eigene.put("plz", "28199");
     eigene.put("ort", "Bremen");
     eigene.put("steuernummer", "75/123/45678");
-    eigene.put("bankverbindung", "DE02 1203 0000 0000 2020 51");
     // Auf dem aktuellen Stand der eigenen Angaben, wie die Maske (Plan #415, E2).
     assertThat(
             rest.exchange(
@@ -460,6 +459,9 @@ class BriefpapierIT extends AbstractIntegrationTest {
                     String.class)
                 .getStatusCode())
         .isEqualTo(HttpStatus.OK);
+    // Den bisherigen Freitext fuehrt die Anfrage nicht mehr (Plan #461, E13); bis zur
+    // Belegkopie mit Bankfeldern (#467) verlangt das Stellen aber genau ihn.
+    jdbc.update("UPDATE eigene_angaben SET bankverbindung = ?", "DE02 1203 0000 0000 2020 51");
     final Map<String, Object> firma = new LinkedHashMap<>();
     firma.put("name", "Adler AG");
     firma.put("strasse", "Hauptstrasse 1");
