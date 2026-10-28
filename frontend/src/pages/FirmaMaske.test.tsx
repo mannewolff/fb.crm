@@ -17,13 +17,24 @@ const FIRMA: Firma = {
   strasse: 'Hauptstraße 1',
   plz: '28195',
   ort: 'Bremen',
-  land: 'Österreich',
+  land: 'FR',
+  landName: 'Frankreich',
   steuernummer: '75/123/45678',
   umsatzsteuerId: 'DE123456789',
   aktiv: true,
   ansprechpartner: [],
   version: 3,
 };
+
+/** Die Laenderliste, wie `GET /api/laender` sie liefert — sortiert nach dem deutschen Namen. */
+const LAENDER = [
+  { kuerzel: 'DE', name: 'Deutschland' },
+  { kuerzel: 'FR', name: 'Frankreich' },
+  { kuerzel: 'AT', name: 'Österreich' },
+];
+
+/** Der Weg der Laenderliste, den jede Maske beim Aufbau geht. */
+const LAENDER_WEG = { 'GET /api/laender': json(200, LAENDER) };
 
 /** Die Adresse, an der sich ablesen laesst, wohin die Maske gefuehrt hat. */
 function Adresse() {
@@ -70,20 +81,35 @@ function feld(name: string | RegExp) {
   return screen.getByRole('textbox', { name });
 }
 
+function landAuswahl() {
+  return screen.getByRole('combobox', { name: 'Land' });
+}
+
+/** Wartet, bis das Formular steht — die Maske laedt vorher die Laenderliste. */
+async function formularBereit() {
+  await screen.findByRole('textbox', { name: 'Name' });
+}
+
 afterEach(() => {
   vi.restoreAllMocks();
 });
 
 describe('FirmaMaske — Anlegen', () => {
-  it('legt das Land mit „DE" vor und schickt nur die ausgefuellten Angaben', async () => {
+  it('Szenario: Das Land eines neuen Kunden', async () => {
     const nutzer = userEvent.setup();
-    const fetchMock = fetchNachPfad({ 'POST /api/firmen': json(200, FIRMA) });
+    const fetchMock = fetchNachPfad({ ...LAENDER_WEG, 'POST /api/firmen': json(200, FIRMA) });
 
+    // Angenommen ich lege einen neuen Kunden an, wenn ich das Formular oeffne …
     renderMaske('/firmen/neu');
+    await formularBereit();
 
+    // … dann ist das Land mit Deutschland vorbelegt …
     expect(screen.getByRole('heading', { name: 'Neue Firma' })).toBeInTheDocument();
-    expect(feld('Land')).toHaveValue('DE');
+    expect(landAuswahl()).toHaveValue('Deutschland');
 
+    // … und ich kann ein anderes Land aus der Liste waehlen.
+    await nutzer.click(landAuswahl());
+    await nutzer.click(screen.getByRole('option', { name: 'Österreich' }));
     await nutzer.type(feld('Name'), 'Neue GmbH');
     await nutzer.click(screen.getByRole('button', { name: 'Anlegen' }));
 
@@ -96,7 +122,7 @@ describe('FirmaMaske — Anlegen', () => {
           strasse: null,
           plz: null,
           ort: null,
-          land: 'DE',
+          land: 'AT',
           steuernummer: null,
           umsatzsteuerId: null,
         }),
@@ -107,24 +133,82 @@ describe('FirmaMaske — Anlegen', () => {
     expect(adresse()).toBe('/firmen/7');
   });
 
-  it('meldet den fehlenden Namen am Feld und ruft die Schnittstelle nicht auf', async () => {
+  it('schickt die Vorgabe „DE" und nur die ausgefuellten Angaben', async () => {
     const nutzer = userEvent.setup();
-    const fetchMock = fetchNachPfad({});
+    const fetchMock = fetchNachPfad({ ...LAENDER_WEG, 'POST /api/firmen': json(200, FIRMA) });
 
     renderMaske('/firmen/neu');
+    await formularBereit();
+    await nutzer.type(feld('Name'), 'Neue GmbH');
+    await nutzer.click(screen.getByRole('button', { name: 'Anlegen' }));
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/firmen',
+      expect.objectContaining({
+        body: JSON.stringify({
+          name: 'Neue GmbH',
+          strasse: null,
+          plz: null,
+          ort: null,
+          land: 'DE',
+          steuernummer: null,
+          umsatzsteuerId: null,
+        }),
+      }),
+    );
+  });
+
+  it('faellt ohne Laenderliste auf das Textfeld mit dem Kuerzel zurueck', async () => {
+    const nutzer = userEvent.setup();
+    const fetchMock = fetchNachPfad({
+      'GET /api/laender': leer(500),
+      'POST /api/firmen': json(200, FIRMA),
+    });
+
+    renderMaske('/firmen/neu');
+    await formularBereit();
+
+    expect(feld('Land')).toHaveValue('DE');
+    expect(screen.queryByRole('combobox', { name: 'Land' })).not.toBeInTheDocument();
+    await nutzer.type(feld('Name'), 'Neue GmbH');
+    await nutzer.click(screen.getByRole('button', { name: 'Anlegen' }));
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/firmen',
+      expect.objectContaining({ body: expect.stringContaining('"land":"DE"') as unknown }),
+    );
+  });
+
+  it('zeigt den Ladehinweis, bis die Laenderliste da ist', () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(() => new Promise(() => {}));
+
+    renderMaske('/firmen/neu');
+
+    expect(screen.getByText(/wird geladen/)).toBeInTheDocument();
+    expect(screen.queryByRole('textbox', { name: 'Name' })).not.toBeInTheDocument();
+  });
+
+  it('meldet den fehlenden Namen am Feld und ruft die Schnittstelle nicht auf', async () => {
+    const nutzer = userEvent.setup();
+    const fetchMock = fetchNachPfad(LAENDER_WEG);
+
+    renderMaske('/firmen/neu');
+    await formularBereit();
     await nutzer.click(screen.getByRole('button', { name: 'Anlegen' }));
 
     expect(feld('Name')).toHaveAccessibleDescription('Bitte einen Namen angeben.');
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalledWith('/api/firmen', expect.anything());
   });
 
   it('haengt die Meldung des Servers an ihr Feld', async () => {
     const nutzer = userEvent.setup();
     fetchNachPfad({
+      ...LAENDER_WEG,
       'POST /api/firmen': problem(400, 'Ungültig', { name: ['Dieser Name ist schon vergeben.'] }),
     });
 
     renderMaske('/firmen/neu');
+    await formularBereit();
     await nutzer.type(feld('Name'), 'Beispiel GmbH');
     await nutzer.click(screen.getByRole('button', { name: 'Anlegen' }));
 
@@ -135,9 +219,10 @@ describe('FirmaMaske — Anlegen', () => {
 
   it('zeigt beim Ausfall eine Meldung und bleibt in der Maske', async () => {
     const nutzer = userEvent.setup();
-    fetchNachPfad({ 'POST /api/firmen': leer(500) });
+    fetchNachPfad({ ...LAENDER_WEG, 'POST /api/firmen': leer(500) });
 
     renderMaske('/firmen/neu');
+    await formularBereit();
     await nutzer.type(feld('Name'), 'Neue GmbH');
     await nutzer.click(screen.getByRole('button', { name: 'Anlegen' }));
 
@@ -150,24 +235,26 @@ describe('FirmaMaske — Anlegen', () => {
     // gesperrte Taste `pointer-events: none` traegt — gemessen werden soll aber, dass auch ein
     // durchgereichter zweiter Klick keinen zweiten Aufruf ausloest.
     const nutzer = userEvent.setup({ pointerEventsCheck: 0 });
-    // Der Aufruf antwortet nie — genau die Lage, in der ein offener Knopf ein zweites Mal traefe.
-    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(() => new Promise(() => {}));
+    // Das Anlegen antwortet nie — genau die Lage, in der ein offener Knopf ein zweites Mal traefe.
+    const fetchMock = fetchNachPfad({ ...LAENDER_WEG, 'POST /api/firmen': () => new Promise(() => {}) });
 
     renderMaske('/firmen/neu');
+    await formularBereit();
     await nutzer.type(feld('Name'), 'Neue GmbH');
     const knopf = screen.getByRole('button', { name: 'Anlegen' });
     await nutzer.click(knopf);
     await nutzer.click(knopf);
 
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(vorgelegteStaende(fetchMock, 'POST', '/api/firmen')).toHaveLength(1);
     expect(knopf).toBeDisabled();
   });
 
   it('fuehrt „Abbrechen" als weiche Taste zurueck auf die Uebersicht', async () => {
     const nutzer = userEvent.setup();
-    fetchNachPfad({});
+    fetchNachPfad(LAENDER_WEG);
 
     renderMaske('/firmen/neu');
+    await formularBereit();
     const abbrechen = screen.getByRole('link', { name: 'Abbrechen' });
     // Weiche Taste neben der Kupfertaste, kein Textlink (CLAUDE-design.md, „Tasten").
     expect(abbrechen).toHaveClass('MuiButton-root');
@@ -182,6 +269,7 @@ describe('FirmaMaske — Ändern', () => {
   it('fuellt die gespeicherten Werte und kehrt nach dem Speichern zurueck', async () => {
     const nutzer = userEvent.setup();
     const fetchMock = fetchNachPfad({
+      ...LAENDER_WEG,
       'GET /api/firmen/7': json(200, FIRMA),
       'PUT /api/firmen/7': json(200, { ...FIRMA, version: 4 }),
     });
@@ -189,12 +277,13 @@ describe('FirmaMaske — Ändern', () => {
     renderMaske('/firmen/7/bearbeiten');
 
     expect(await screen.findByRole('heading', { name: 'Firma bearbeiten' })).toBeInTheDocument();
+    await formularBereit();
     expect(feld('Name')).toHaveValue('Beispiel GmbH');
     expect(feld(/^Straße/)).toHaveValue('Hauptstraße 1');
     expect(feld('Postleitzahl')).toHaveValue('28195');
     expect(feld('Ort')).toHaveValue('Bremen');
-    // Nicht vorbelegt, sondern uebernommen: beim Aendern gilt der gespeicherte Wert.
-    expect(feld('Land')).toHaveValue('Österreich');
+    // Nicht vorbelegt, sondern uebernommen: beim Aendern ist das gespeicherte Land gewaehlt.
+    expect(landAuswahl()).toHaveValue('Frankreich');
     expect(feld('Steuernummer')).toHaveValue('75/123/45678');
     expect(feld(/^Umsatzsteuer/)).toHaveValue('DE123456789');
 
@@ -211,7 +300,7 @@ describe('FirmaMaske — Ändern', () => {
           strasse: 'Hauptstraße 1',
           plz: '28195',
           ort: 'Oldenburg',
-          land: 'Österreich',
+          land: 'FR',
           steuernummer: '75/123/45678',
           umsatzsteuerId: 'DE123456789',
         }),
@@ -224,12 +313,13 @@ describe('FirmaMaske — Ändern', () => {
   it('laesst leere Angaben als „keine Angabe" stehen statt als Leerstring', async () => {
     const nutzer = userEvent.setup();
     const fetchMock = fetchNachPfad({
+      ...LAENDER_WEG,
       'GET /api/firmen/7': json(200, { ...FIRMA, strasse: null }),
       'PUT /api/firmen/7': json(200, { ...FIRMA, version: 4 }),
     });
 
     renderMaske('/firmen/7/bearbeiten');
-    await screen.findByRole('heading', { name: 'Firma bearbeiten' });
+    await formularBereit();
     // Eine fehlende Angabe wird zum leeren Feld, nicht zu einem Platzhalter im Eingabefeld.
     expect(feld(/^Straße/)).toHaveValue('');
     await nutzer.clear(feld('Steuernummer'));
@@ -243,7 +333,7 @@ describe('FirmaMaske — Ändern', () => {
           strasse: null,
           plz: '28195',
           ort: 'Bremen',
-          land: 'Österreich',
+          land: 'FR',
           steuernummer: null,
           umsatzsteuerId: 'DE123456789',
         }),
@@ -253,27 +343,30 @@ describe('FirmaMaske — Ändern', () => {
 
   it('fuehrt „Abbrechen" zurueck auf die Detailansicht', async () => {
     const nutzer = userEvent.setup();
-    fetchNachPfad({ 'GET /api/firmen/7': json(200, FIRMA) });
+    fetchNachPfad({ ...LAENDER_WEG, 'GET /api/firmen/7': json(200, FIRMA) });
 
     renderMaske('/firmen/7/bearbeiten');
-    await screen.findByRole('heading', { name: 'Firma bearbeiten' });
+    await formularBereit();
     await nutzer.click(screen.getByRole('link', { name: 'Abbrechen' }));
 
     expect(adresse()).toBe('/firmen/7');
   });
 
   it('faengt eine unsinnige Kennung ab, bevor sie an die Schnittstelle geht', async () => {
-    const fetchMock = fetchNachPfad({});
+    const fetchMock = fetchNachPfad(LAENDER_WEG);
 
     renderMaske('/firmen/keine-zahl/bearbeiten');
 
     expect(await screen.findByRole('alert')).toHaveTextContent('gibt es nicht');
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      expect.stringMatching(/^\/api\/firmen/),
+      expect.anything(),
+    );
     expect(screen.queryByRole('textbox', { name: 'Name' })).not.toBeInTheDocument();
   });
 
   it('meldet eine unbekannte Firma statt eines leeren Formulars', async () => {
-    fetchNachPfad({ 'GET /api/firmen/7': leer(404) });
+    fetchNachPfad({ ...LAENDER_WEG, 'GET /api/firmen/7': leer(404) });
 
     renderMaske('/firmen/7/bearbeiten');
 
@@ -281,7 +374,7 @@ describe('FirmaMaske — Ändern', () => {
   });
 
   it('meldet den Ausfall beim Lesen', async () => {
-    fetchNachPfad({ 'GET /api/firmen/7': leer(500) });
+    fetchNachPfad({ ...LAENDER_WEG, 'GET /api/firmen/7': leer(500) });
 
     renderMaske('/firmen/7/bearbeiten');
 
@@ -303,7 +396,10 @@ describe('FirmaMaske — nur mit Schreibrecht (Kriterium 10 von #409, Plan #414,
   });
 
   it('zeigt einem Employee die Maske, denn er darf fachlich schreiben', async () => {
-    appAlsRolle('EMPLOYEE', '/firmen/7/bearbeiten', { 'GET /api/firmen/7': json(200, FIRMA) });
+    appAlsRolle('EMPLOYEE', '/firmen/7/bearbeiten', {
+      ...LAENDER_WEG,
+      'GET /api/firmen/7': json(200, FIRMA),
+    });
 
     expect(await screen.findByRole('heading', { name: 'Firma bearbeiten' })).toBeInTheDocument();
     expect(screen.queryByText(new RegExp(NICHT_OFFEN))).not.toBeInTheDocument();
@@ -315,7 +411,7 @@ describe('FirmaMaske — der Pfad im Kopf (E6)', () => {
     ['/firmen/neu', 'Neue Firma'],
     ['/firmen/7/bearbeiten', 'Firma bearbeiten'],
   ])('meldet unter %s den Pfad „Firmen › %s"', async (start, endstufe) => {
-    fetchNachPfad({ 'GET /api/firmen/7': json(200, FIRMA) });
+    fetchNachPfad({ ...LAENDER_WEG, 'GET /api/firmen/7': json(200, FIRMA) });
 
     renderMitKopf(start);
 
@@ -328,16 +424,17 @@ describe('FirmaMaske — der Pfad im Kopf (E6)', () => {
 describe('FirmaMaske — Tastatur und Benennung', () => {
   it('fuehrt mit dem Tabulator ueber alle Felder, die Taste und den Weg zurueck', async () => {
     const nutzer = userEvent.setup();
-    fetchNachPfad({});
+    fetchNachPfad(LAENDER_WEG);
 
     renderMaske('/firmen/neu');
+    await formularBereit();
 
     const reihe = [
       feld('Name'),
       feld(/^Straße/),
       feld('Postleitzahl'),
       feld('Ort'),
-      feld('Land'),
+      landAuswahl(),
       feld('Steuernummer'),
       feld(/^Umsatzsteuer/),
       screen.getByRole('button', { name: 'Anlegen' }),
@@ -395,12 +492,13 @@ describe('FirmaMaske — gleichzeitig arbeiten (#411, Kriterien 1 bis 4; Plan #4
   it('legt beim Speichern den gelesenen Stand vor', async () => {
     const nutzer = userEvent.setup();
     const fetchMock = fetchNachPfad({
+      ...LAENDER_WEG,
       'GET /api/firmen/7': json(200, FIRMA),
       'PUT /api/firmen/7': json(200, { ...FIRMA, version: 4 }),
     });
 
     renderMaske('/firmen/7/bearbeiten');
-    await screen.findByRole('heading', { name: 'Firma bearbeiten' });
+    await formularBereit();
     await nutzer.click(screen.getByRole('button', { name: 'Speichern' }));
 
     await screen.findByText('Detailansicht');
@@ -409,9 +507,10 @@ describe('FirmaMaske — gleichzeitig arbeiten (#411, Kriterien 1 bis 4; Plan #4
 
   it('legt beim Anlegen keinen Stand vor (Kriterium 7)', async () => {
     const nutzer = userEvent.setup();
-    const fetchMock = fetchNachPfad({ 'POST /api/firmen': json(201, FIRMA) });
+    const fetchMock = fetchNachPfad({ ...LAENDER_WEG, 'POST /api/firmen': json(201, FIRMA) });
 
     renderMaske('/firmen/neu');
+    await formularBereit();
     await nutzer.type(feld('Name'), 'Neue GmbH');
     await nutzer.click(screen.getByRole('button', { name: 'Anlegen' }));
 
@@ -422,12 +521,13 @@ describe('FirmaMaske — gleichzeitig arbeiten (#411, Kriterien 1 bis 4; Plan #4
   it('Szenario: abgewiesenes Speichern — die Eingaben bleiben, Neu laden stellt sie daneben', async () => {
     const nutzer = userEvent.setup();
     const fetchMock = fetchNachPfad({
+      ...LAENDER_WEG,
       'GET /api/firmen/7': nacheinander(json(200, FIRMA), json(200, ANNAS_STAND)),
       'PUT /api/firmen/7': nacheinander(abweisung('Anna'), json(200, { ...ANNAS_STAND, version: 5 })),
     });
 
     renderMaske('/firmen/7/bearbeiten');
-    await screen.findByRole('heading', { name: 'Firma bearbeiten' });
+    await formularBereit();
     await nutzer.clear(feld('Ort'));
     await nutzer.type(feld('Ort'), 'Oldenburg');
     await nutzer.click(screen.getByRole('button', { name: 'Speichern' }));
@@ -461,12 +561,13 @@ describe('FirmaMaske — gleichzeitig arbeiten (#411, Kriterien 1 bis 4; Plan #4
   it('raeumt die eigenen Eingaben mit „Verwerfen" ab', async () => {
     const nutzer = userEvent.setup();
     fetchNachPfad({
+      ...LAENDER_WEG,
       'GET /api/firmen/7': nacheinander(json(200, FIRMA), json(200, ANNAS_STAND)),
       'PUT /api/firmen/7': abweisung('Anna'),
     });
 
     renderMaske('/firmen/7/bearbeiten');
-    await screen.findByRole('heading', { name: 'Firma bearbeiten' });
+    await formularBereit();
     await nutzer.click(screen.getByRole('button', { name: 'Speichern' }));
     await nutzer.click(await screen.findByRole('button', { name: 'Neu laden' }));
     const eigene = await screen.findByRole('region', { name: 'Deine Eingaben' });
@@ -479,12 +580,13 @@ describe('FirmaMaske — gleichzeitig arbeiten (#411, Kriterien 1 bis 4; Plan #4
   it('meldet einen Ausfall beim Neu laden und laesst die Konfliktmeldung stehen', async () => {
     const nutzer = userEvent.setup();
     fetchNachPfad({
+      ...LAENDER_WEG,
       'GET /api/firmen/7': nacheinander(json(200, FIRMA), problem(503, 'kaputt')),
       'PUT /api/firmen/7': abweisung('Anna'),
     });
 
     renderMaske('/firmen/7/bearbeiten');
-    await screen.findByRole('heading', { name: 'Firma bearbeiten' });
+    await formularBereit();
     await nutzer.click(screen.getByRole('button', { name: 'Speichern' }));
     await nutzer.click(await screen.findByRole('button', { name: 'Neu laden' }));
 

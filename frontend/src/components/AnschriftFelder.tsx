@@ -1,7 +1,9 @@
+import Autocomplete from '@mui/material/Autocomplete';
 import TextField from '@mui/material/TextField';
 import type { Dispatch, SetStateAction } from 'react';
 
 import type { FieldErrors } from '../api/client';
+import type { Land } from '../api/laender';
 import { meldungAm } from '../lib/feldmeldung';
 
 /** Die vier Werte einer Anschrift, wie die Masken sie in ihren Feldwerten tragen. */
@@ -24,6 +26,54 @@ interface AnschriftFelderProps<W extends Anschriftwerte> {
   readonly werte: W;
   readonly setzeWerte: Dispatch<SetStateAction<W>>;
   readonly feldFehler: FieldErrors;
+  /**
+   * Die Laenderliste; mit ihr wird das Land eine Auswahl statt eines Textfelds (Issue #463).
+   * Ohne sie bleibt das Textfeld — die eigenen Angaben fragen das Land weiter frei ab (Plan #461, E9).
+   */
+  readonly laender?: readonly Land[];
+}
+
+interface LandAuswahlProps {
+  readonly kuerzel: string;
+  readonly laender: readonly Land[];
+  readonly onWahl: (kuerzel: string) => void;
+  readonly meldung: string | undefined;
+}
+
+/**
+ * Das Land als Auswahl: Sie zeigt den Namen und gibt das Kuerzel weiter.
+ *
+ * Ein Kuerzel ausserhalb der Liste steht als leere Auswahl da; das Leeren gibt den Leerstring
+ * weiter, und dass das Land fehlt, meldet der Server am Feld. Die Texte der Bedienelemente stehen
+ * hier, weil das Theme keine deutsche Sprachfassung von MUI laedt.
+ */
+function LandAuswahl({ kuerzel, laender, onWahl, meldung }: LandAuswahlProps) {
+  const gewaehlt = laender.find((land) => land.kuerzel === kuerzel) ?? null;
+  return (
+    <Autocomplete
+      options={laender}
+      value={gewaehlt}
+      onChange={(_ereignis, land) => {
+        onWahl(land?.kuerzel ?? '');
+      }}
+      getOptionLabel={(land) => land.name}
+      isOptionEqualToValue={(option, wert) => option.kuerzel === wert.kuerzel}
+      autoHighlight
+      clearText="Leeren"
+      openText="Liste öffnen"
+      closeText="Liste schließen"
+      noOptionsText="Kein Land gefunden"
+      fullWidth
+      renderInput={(eingabe) => (
+        <TextField
+          {...eingabe}
+          label="Land"
+          error={meldung !== undefined}
+          helperText={meldung}
+        />
+      )}
+    />
+  );
 }
 
 /**
@@ -37,11 +87,25 @@ export default function AnschriftFelder<W extends Anschriftwerte>({
   werte,
   setzeWerte,
   feldFehler,
+  laender,
 }: AnschriftFelderProps<W>) {
   return (
     <>
       {FELDER.map(({ feld, label }) => {
         const meldung = meldungAm(feldFehler, feld);
+        if (feld === 'land' && laender !== undefined) {
+          return (
+            <LandAuswahl
+              key={feld}
+              kuerzel={werte.land}
+              laender={laender}
+              onWahl={(kuerzel) => {
+                setzeWerte((alt) => ({ ...alt, land: kuerzel }));
+              }}
+              meldung={meldung}
+            />
+          );
+        }
         return (
           <TextField
             key={feld}

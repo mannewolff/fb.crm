@@ -44,7 +44,8 @@ const FIRMA: Firma = {
   strasse: 'Hauptstraße 1',
   plz: '28195',
   ort: 'Bremen',
-  land: 'Deutschland',
+  land: 'AT',
+  landName: 'Österreich',
   steuernummer: '75/123/45678',
   umsatzsteuerId: 'DE123456789',
   aktiv: true,
@@ -234,7 +235,9 @@ describe('FirmaPage — die Kopfkarte', () => {
     ).toBeInTheDocument();
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
     const kopf = within(kopfkarte());
-    expect(kopf.getByText('Hauptstraße 1 · 28195 Bremen · Deutschland')).toBeInTheDocument();
+    // Der Name des Landes, nicht sein Kuerzel (Issue #463).
+    expect(kopf.getByText('Hauptstraße 1 · 28195 Bremen · Österreich')).toBeInTheDocument();
+    expect(kopf.queryByText(/· AT$/)).not.toBeInTheDocument();
     // Genau ein Zustands-Chip: keine Kennzahlen, fuer die es keine Daten gibt (Plan A3).
     expect(kopf.getAllByTestId('chip')).toHaveLength(1);
     expect(kopf.getByText('Aktiv')).toBeInTheDocument();
@@ -252,7 +255,7 @@ describe('FirmaPage — die Kopfkarte', () => {
   });
 
   it('laesst leere Teile der Adresszeile weg — ohne Platzhalter', async () => {
-    firmaDoppel({ ...FIRMA, strasse: null, plz: null, land: null });
+    firmaDoppel({ ...FIRMA, strasse: null, plz: null, land: null, landName: null });
 
     renderSeite();
 
@@ -262,7 +265,7 @@ describe('FirmaPage — die Kopfkarte', () => {
   });
 
   it('bleibt ohne jede Adressangabe eine Kopfkarte ohne Zeile', async () => {
-    firmaDoppel({ ...FIRMA, strasse: null, plz: null, ort: null, land: null });
+    firmaDoppel({ ...FIRMA, strasse: null, plz: null, ort: null, land: null, landName: null });
 
     renderSeite();
 

@@ -88,6 +88,7 @@ const FIRMA = {
   plz: null,
   ort: null,
   land: null,
+  landName: null,
   steuernummer: null,
   umsatzsteuerId: null,
   aktiv: true,

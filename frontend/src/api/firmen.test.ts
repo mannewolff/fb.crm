@@ -37,7 +37,8 @@ const FIRMA = {
   strasse: 'Hauptstraße 1',
   plz: '28195',
   ort: 'Bremen',
-  land: 'Deutschland',
+  land: 'DE',
+  landName: 'Deutschland',
   steuernummer: null,
   umsatzsteuerId: null,
   aktiv: true,
@@ -53,7 +54,7 @@ const FIRMA_EINGABE = {
   strasse: 'Hauptstraße 1',
   plz: '28195',
   ort: 'Bremen',
-  land: 'Deutschland',
+  land: 'DE',
   steuernummer: null,
   umsatzsteuerId: null,
 };
@@ -101,14 +102,22 @@ describe('parseFirma', () => {
   });
 
   it('nimmt die leeren optionalen Angaben als null', () => {
-    const leereAngaben = { ...FIRMA, strasse: null, plz: null, ort: null, land: null };
-    expect(parseFirma(leereAngaben).strasse).toBeNull();
+    const leereAngaben = {
+      ...FIRMA,
+      strasse: null,
+      plz: null,
+      ort: null,
+      land: null,
+      landName: null,
+    };
+    expect(parseFirma(leereAngaben)).toMatchObject({ strasse: null, land: null, landName: null });
   });
 
   it.each([
     ['ohne id', { ...FIRMA, id: undefined }],
     ['ohne name', { ...FIRMA, name: null }],
     ['mit falscher strasse', { ...FIRMA, strasse: 7 }],
+    ['mit falschem landName', { ...FIRMA, landName: 7 }],
     ['ohne aktiv', { ...FIRMA, aktiv: undefined }],
     ['ohne Liste der Ansprechpartner', { ...FIRMA, ansprechpartner: undefined }],
     ['ohne version', { ...FIRMA, version: undefined }],

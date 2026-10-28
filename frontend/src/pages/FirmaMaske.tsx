@@ -8,6 +8,8 @@ import { useNavigate, useParams } from 'react-router-dom';
 
 import { firmaAendern, firmaAnlegen, firmaLesen } from '../api/firmen';
 import type { Firma } from '../api/firmen';
+import { laenderLaden } from '../api/laender';
+import type { Land } from '../api/laender';
 import type { FieldErrors } from '../api/client';
 import EigeneEingaben from '../components/EigeneEingaben';
 import type { EigeneEingabe } from '../components/EigeneEingaben';
@@ -51,7 +53,7 @@ import { ABSTAND_BUEHNE } from '../theme';
 
 /**
  * Beim Anlegen vorbelegt; beim Aendern gilt der gespeicherte Wert (Kriterium 4). Das Land ist ein
- * Kuerzel der Laenderliste (Plan #461, E11); die Auswahl folgt mit Issue #463.
+ * Kuerzel der Laenderliste (Plan #461, E11) und wird aus ihr gewaehlt (Issue #463).
  */
 const LAND_VORGABE = 'DE';
 
@@ -89,6 +91,14 @@ const NEUE_WERTE: Werte = {
 
 /** Was die Maske gerade weiss. */
 type Stand = 'laedt' | 'bereit' | 'unbekannt' | 'ausfall';
+
+/**
+ * Die Laenderliste der Maske: noch unterwegs, geladen oder nicht zu haben.
+ *
+ * Ist sie nicht zu haben, fragt die Maske das Land als Kuerzel im Textfeld ab, statt das Anlegen
+ * ganz zu sperren — der Server prueft das Kuerzel ohnehin gegen dieselbe Liste.
+ */
+type Laender = 'laedt' | readonly Land[] | 'ausfall';
 
 /** Eine fehlende Angabe wird zum leeren Feld — nie zu einem Platzhalter im Eingabefeld. */
 function alsText(wert: string | null): string {
@@ -195,6 +205,15 @@ export default function FirmaMaske() {
   const [abweisung, setzeAbweisung] = useState<unknown>(null);
   // Die eigenen Werte nach „Neu laden", bis „Verwerfen" gewaehlt wird (#411, Kriterium 3).
   const [eigene, setzeEigene] = useState<readonly EigeneEingabe[] | null>(null);
+  const [laender, setzeLaender] = useState<Laender>('laedt');
+
+  useEffect(() => {
+    laenderLaden()
+      .then(setzeLaender)
+      .catch(() => {
+        setzeLaender('ausfall');
+      });
+  }, []);
 
   useEffect(() => {
     if (!aendern) {
@@ -288,6 +307,9 @@ export default function FirmaMaske() {
   useKopfPfad(ZU_FIRMEN, titel);
   const zurueck = kennung === null ? '/firmen' : `/firmen/${String(kennung)}`;
   const nameMeldung = nameFehlt ? NAME_FEHLT : meldungAm(feldFehler, 'name');
+  // Das Formular steht erst mit der Laenderliste, damit das Land nicht vom Textfeld zur Auswahl
+  // springt, waehrend schon jemand tippt.
+  const sichtbar: Stand = stand === 'bereit' && laender === 'laedt' ? 'laedt' : stand;
 
   return (
     <Box
@@ -300,7 +322,7 @@ export default function FirmaMaske() {
       }}
     >
       <Karte titel={titel}>
-        {stand === 'bereit' ? (
+        {sichtbar === 'bereit' ? (
           <Box
             component="form"
             noValidate
@@ -335,7 +357,12 @@ export default function FirmaMaske() {
               meldung={nameMeldung}
               pflicht
             />
-            <AnschriftFelder werte={werte} setzeWerte={setzeWerte} feldFehler={feldFehler} />
+            <AnschriftFelder
+              werte={werte}
+              setzeWerte={setzeWerte}
+              feldFehler={feldFehler}
+              laender={typeof laender === 'string' ? undefined : laender}
+            />
             <Eingabe
               label="Steuernummer"
               feld="steuernummer"
@@ -356,7 +383,7 @@ export default function FirmaMaske() {
             </Box>
           </Box>
         ) : (
-          nichtBereit(stand)
+          nichtBereit(sichtbar)
         )}
       </Karte>
     </Box>
