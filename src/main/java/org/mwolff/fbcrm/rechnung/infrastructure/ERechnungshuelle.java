@@ -124,9 +124,10 @@ final class ERechnungshuelle {
 
     final PDEmbeddedFilesNameTreeNode baum = new PDEmbeddedFilesNameTreeNode();
     baum.setNames(Map.of(DATEINAME, beschreibung));
+    // Der Konstruktor traegt das Namenswoerterbuch selbst unter /Names in den Katalog ein; ein
+    // weiteres katalog.setNames waere wirkungslos.
     final PDDocumentNameDictionary namen = new PDDocumentNameDictionary(katalog);
     namen.setEmbeddedFiles(baum);
-    katalog.setNames(namen);
 
     final COSArray anlagen = new COSArray();
     anlagen.add(beschreibung);
