@@ -269,6 +269,23 @@ Traefik und startet Caddy nicht. Aufruf:
 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
 ```
 
+**Nicht ohne Overlay starten.** Ein `docker compose up -d --build` ohne `-f` liest nur
+`docker-compose.yml`: Die Anwendung hängt dann nicht am Netz `web`, trägt keine Traefik-Labels und
+läuft mit `FBCRM_DEV_MODE=true`; Traefik antwortet auf die Domain mit 404, und Caddy startet mit.
+Wer den kurzen Aufruf gewohnt ist, trägt beide Dateien in die Server-`.env` ein — Compose liest sie
+dann bei jedem Aufruf in diesem Verzeichnis, auch bei `ps`, `logs` und `stop`:
+
+```
+COMPOSE_FILE=docker-compose.yml:docker-compose.prod.yml
+```
+
+Lief der Stack doch einmal ohne Overlay, erst Caddy entfernen, dann mit Overlay neu starten:
+
+```bash
+docker compose rm -sf caddy
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+```
+
 Pflicht in der Server-`.env` sind `FBCRM_SESSION_SECRET` (`openssl rand -base64 48`),
 `FBCRM_BASE_URL` und `FBCRM_DOMAIN`; ohne sie bricht schon `docker compose config` ab. Das
 Overlay setzt `FBCRM_DEV_MODE` fest auf `false` — mit dem voreingestellten Secret startet die
