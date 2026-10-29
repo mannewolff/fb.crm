@@ -230,6 +230,13 @@ class RechnungStellenUseCaseTest {
         .thenReturn(Optional.of(angebotMitBeratung()));
     when(firmen.findById(Rechnungsdoppel.FIRMA)).thenReturn(Optional.of(firma));
     when(eigeneAngaben.lies()).thenReturn(eigene);
+    // Gelesen werden die Einstellungen schon vor den Pflichtangaben (Plan #461, E18); wer bis zum
+    // Nummernkreis kommt, legt sie mit nummerWirdGezogen neu fest.
+    lenient()
+        .when(einstellungen.lies())
+        .thenReturn(
+            new Rechnungseinstellungen(
+                new Nummernmuster(MUSTER_MIT_JAHR), STEUERSATZ, ZAHLUNGSZIEL));
   }
 
   private void nummerWirdGezogen(final String muster, final int laufend) {
@@ -387,7 +394,7 @@ class RechnungStellenUseCaseTest {
         new Firma(
             Long.valueOf(Rechnungsdoppel.FIRMA),
             " ",
-            LEER,
+            new Anschrift(null, null, null, "DE"),
             null,
             null,
             true,
@@ -416,6 +423,83 @@ class RechnungStellenUseCaseTest {
             "firma.strasse",
             "firma.plz",
             "firma.ort");
+  }
+
+  @Test
+  void stelle_givenAKundeOutsideDeutschland_thenOutOfScopeWithoutANummer() {
+    // Given — #460, Kriterium 13: fb.crm stellt E-Rechnungen nur im Inland.
+    entwurfLiegt(entwurfUeber("80.00"));
+    angabenSind(firmaIn("AT"), Rechnungsdoppel.eigeneAngaben());
+
+    // When / Then
+    assertThatThrownBy(() -> useCase.stelle(ENTWURF, GELESEN, MANFRED))
+        .isInstanceOf(RechnungAusserhalbDesUmfangs.class)
+        .hasMessage(
+            "Diese Rechnung kann fb.crm nicht als E-Rechnung stellen: "
+                + "Der Kunde sitzt nicht in Deutschland.");
+    verifyNoInteractions(nummernkreis, rechnungsnummern, drucker, dokumente, briefboegen);
+    verify(rechnungen, never()).saveAndFlush(any());
+    verify(rechnungen, never()).save(any());
+    verify(angebote, never()).save(any());
+  }
+
+  @Test
+  void stelle_givenASteuersatzOfZero_thenOutOfScopeWithoutANummer() {
+    // Given — steuerfreie Leistungen deckt fb.crm nicht ab (#460, Kriterium 13).
+    entwurfLiegt(entwurfUeber("80.00"));
+    angabenSind(Rechnungsdoppel.firma(), Rechnungsdoppel.eigeneAngaben());
+    when(einstellungen.lies())
+        .thenReturn(
+            new Rechnungseinstellungen(
+                new Nummernmuster(MUSTER_MIT_JAHR), new BigDecimal("0.00"), ZAHLUNGSZIEL));
+
+    // When / Then
+    assertThatThrownBy(() -> useCase.stelle(ENTWURF, GELESEN, MANFRED))
+        .isInstanceOf(RechnungAusserhalbDesUmfangs.class)
+        .hasMessage(
+            "Diese Rechnung kann fb.crm nicht als E-Rechnung stellen: "
+                + "Der Steuersatz beträgt 0 %.");
+    verifyNoInteractions(nummernkreis, rechnungsnummern, drucker, dokumente, briefboegen);
+    verify(rechnungen, never()).saveAndFlush(any());
+    verify(rechnungen, never()).save(any());
+  }
+
+  @Test
+  void stelle_givenAKundeOutsideDeutschlandAndMissingPflichtangaben_thenOutOfScopeComesFirst() {
+    // Given — wer im Ausland abrechnet, soll nicht erst Angaben nachtragen (Plan #461, E18).
+    entwurfLiegt(entwurfUeber("80.00"));
+    angabenSind(firmaIn("AT"), OHNE_ANGABEN);
+
+    // When / Then
+    assertThatThrownBy(() -> useCase.stelle(ENTWURF, GELESEN, MANFRED))
+        .isInstanceOf(RechnungAusserhalbDesUmfangs.class);
+    verifyNoInteractions(nummernkreis);
+  }
+
+  @Test
+  void stelle_givenAKundeInDeutschlandWithASteuersatzAboveZero_thenTheEinstellungenAreReadOnce() {
+    // Given / When
+    derWegGelingt(entwurfUeber("80.00"), List.of(gestelltUeber("80.00")));
+
+    // Then — gelesen vor der Pruefung, weitergereicht an die Festschreibung (E18).
+    verify(einstellungen).lies();
+  }
+
+  /** Die Firma mit vollstaendiger Anschrift in einem anderen Land. */
+  private static Firma firmaIn(final String land) {
+    final Firma inland = Rechnungsdoppel.firma();
+    final Anschrift anschrift = inland.anschrift();
+    return new Firma(
+        inland.id(),
+        inland.name(),
+        new Anschrift(anschrift.strasse(), anschrift.plz(), anschrift.ort(), land),
+        null,
+        null,
+        true,
+        Rechnungsdoppel.ANGELEGT,
+        Rechnungsdoppel.ANGELEGT,
+        0L,
+        null);
   }
 
   @Test

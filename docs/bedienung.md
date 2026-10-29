@@ -467,7 +467,10 @@ Ein Entwurf, aus dem nichts werden soll, verschwindet über das Menü ⋯ mit �
 3. Die Rückfrage mit „Rechnung stellen" bestätigen.
 
 Fehlen dafür noch eigene Angaben oder Angaben der Firma, nennt fb.crm sie in einer Liste unter
-„Für das Stellen fehlen noch Angaben:", und die Rechnung bleibt Entwurf. Beim Stellen bekommt die
+„Für das Stellen fehlen noch Angaben:", und die Rechnung bleibt Entwurf. Eine Rechnung an einen
+Kunden außerhalb Deutschlands oder mit 0 % Steuer stellt fb.crm nicht: Die Meldung nennt den Grund,
+etwa „Der Kunde sitzt nicht in Deutschland." oder „Der Steuersatz beträgt 0 %.", und die Rechnung
+bleibt ein Entwurf. Diese Meldung kommt vor der Liste fehlender Angaben. Beim Stellen bekommt die
 Rechnung die nächste Nummer aus dem Nummernkreis der Rechnungseinstellungen; keine Nummer wird
 doppelt vergeben. Nummer, Beträge, Steuersatz und Zahlungsziel sind damit festgeschrieben.
 

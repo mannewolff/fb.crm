@@ -932,6 +932,31 @@ class RechnungStellenIT extends AbstractIntegrationTest {
   }
 
   @Test
+  void stellen_givenAKundeOutsideDeutschland_thenUnprocessableWithTheGrundAndStillAnEntwurf() {
+    // Given — fb.crm stellt E-Rechnungen nur im Inland (#460, Kriterium 13; Plan #461, E18).
+    final long angebotId = bestelltesAngebot("160.00");
+    final RechnungResponse entwurf = entwurfUeber(angebotId, "80.00");
+    jdbc.update("UPDATE firma SET land = 'AT' WHERE id = ?", Long.valueOf(firmaId));
+    final int vorher = objekteZu(entwurf.id());
+
+    // When
+    final ResponseEntity<String> antwort = stelle(entwurf.id());
+
+    // Then — 422 mit dem Grund, kein Dokument, keine Nummer, und der Entwurf bleibt ein Entwurf.
+    assertThat(antwort.getStatusCode()).isEqualTo(HttpStatus.UNPROCESSABLE_ENTITY);
+    assertThat(antwort.getBody())
+        .contains(
+            "\"detail\":\"Diese Rechnung kann fb.crm nicht als E-Rechnung stellen: "
+                + "Der Kunde sitzt nicht in Deutschland.\"");
+    final RechnungResponse danach = lese(entwurf.id());
+    assertThat(danach.zustand()).isEqualTo(Rechnungszustand.ENTWURF);
+    assertThat(danach.nummer()).isNull();
+    assertThat(pdfSchluessel(entwurf.id())).isNull();
+    assertThat(objekteZu(entwurf.id())).isEqualTo(vorher);
+    assertThat(naechsteNummer()).isEqualTo(1);
+  }
+
+  @Test
   void stellen_twiceInARow_thenConflict() {
     // Given — eine zweite Nummer auf derselben Rechnung risse ein Loch in den Nummernkreis.
     final long angebotId = bestelltesAngebot("160.00");

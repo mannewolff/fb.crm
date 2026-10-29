@@ -769,6 +769,23 @@ describe('RechnungPage — die Rechnung stellen (Kriterien 5 und 13, Issue #186)
     );
   });
 
+  it('zeigt bei 422 ausserhalb des Umfangs den Grund des Servers (Plan #461, E18)', async () => {
+    const nutzer = userEvent.setup();
+    const grund =
+      'Diese Rechnung kann fb.crm nicht als E-Rechnung stellen: Der Kunde sitzt nicht in Deutschland.';
+    fetchNachPfad({
+      [WEG]: json(200, GESPEICHERT),
+      [WEG_STELLEN]: problem(422, grund),
+    });
+
+    renderSeite();
+    await screen.findByRole('table', { name: 'Positionen' });
+    await stelle(nutzer);
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(grund);
+    expect(screen.queryByTestId('rechnung-pflichtangaben')).not.toBeInTheDocument();
+  });
+
   it('meldet einen Ausfall des Weges beim Stellen', async () => {
     const nutzer = userEvent.setup();
     fetchNachPfad({

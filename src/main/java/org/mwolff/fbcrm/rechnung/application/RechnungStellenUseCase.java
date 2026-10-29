@@ -51,9 +51,12 @@ import org.springframework.transaction.annotation.Transactional;
  *       nicht gesehen hat. Es zaehlt allein der Entwurf: Einstellungen, Eigene Angaben, Briefbogen
  *       und das Angebot gelten, wie sie im Augenblick des Stellens sind, und weisen nicht ab.
  *   <li><b>Abgewiesen wird vor dem Zug aus dem Nummernkreis.</b> Ein veralteter Stand, eine
- *       unbekannte Rechnung, eine schon gestellte, ein Entwurf ohne Position und fehlende
- *       Pflichtangaben — all das kostet keine Nummer, auch wenn ein Ruecklauf sie ohnehin wieder
- *       freigaebe.
+ *       unbekannte Rechnung, eine schon gestellte, ein Entwurf ohne Position, eine Rechnung
+ *       ausserhalb des Umfangs ({@link RechnungAusserhalbDesUmfangs}: Kunde nicht in Deutschland
+ *       oder Steuersatz 0 %; Plan #461, E18) und fehlende Pflichtangaben — all das kostet keine
+ *       Nummer, auch wenn ein Ruecklauf sie ohnehin wieder freigaebe. Der Umfang kommt vor den
+ *       Pflichtangaben: Wer im Ausland abrechnet, soll nicht erst Angaben nachtragen und dann
+ *       trotzdem abgewiesen werden.
  *   <li><b>Erst die gestellte Rechnung, dann ihr Dokument.</b> Entstuende das Dokument vorher,
  *       muesste die Nummer danach geschrieben werden, und ein fehlgeschlagener Druck risse eine
  *       Luecke in den Nummernkreis. So liegt im schlechten Fall ein Objekt ohne Rechnung im
@@ -85,6 +88,9 @@ import org.springframework.transaction.annotation.Transactional;
  */
 @SuppressWarnings("PMD.CouplingBetweenObjects")
 public class RechnungStellenUseCase {
+
+  /** Das Laenderkuerzel des einzigen Landes, in dem fb.crm E-Rechnungen stellt. */
+  private static final String INLAND = "DE";
 
   private final RechnungRepository rechnungen;
   private final AngebotRepository angebote;
@@ -152,6 +158,8 @@ public class RechnungStellenUseCase {
    * @throws RechnungOhnePosition wenn der Entwurf keine Position traegt
    * @throws AngebotNichtGefunden wenn es das Angebot der Rechnung nicht gibt
    * @throws FirmaNichtGefunden wenn es die Firma des Angebots nicht gibt
+   * @throws RechnungAusserhalbDesUmfangs wenn der Kunde nicht in Deutschland sitzt oder der
+   *     Steuersatz 0 % betraegt
    * @throws PflichtangabenFehlen wenn eine Angabe fehlt, die auf einem Beleg stehen muss
    * @throws RechnungsnummerSchonVergeben wenn die gezogene Nummer schon eine Rechnung traegt, auch
    *     eine nachgetragene
@@ -169,13 +177,28 @@ public class RechnungStellenUseCase {
     final Angebot angebot =
         angebote.findByIdMitSperre(entwurf.angebotId()).orElseThrow(AngebotNichtGefunden::new);
     final Firma firma = firmen.findById(angebot.firmaId()).orElseThrow(FirmaNichtGefunden::new);
+    final Rechnungseinstellungen satz = einstellungen.lies();
     final EigeneAngaben eigene = eigeneAngaben.lies();
+    pruefeUmfang(firma, satz);
     Belegpflichtangaben.pruefe(eigene, firma);
 
-    final Rechnung festgeschrieben = schreibeFest(entwurf, eigene, firma, konto);
+    final Rechnung festgeschrieben = schreibeFest(entwurf, satz, eigene, firma, konto);
     final Rechnung gestellt = mitDokument(festgeschrieben);
     schliesseAngebotAbWennNichtsOffenIst(angebot, konto);
     return gestellt;
+  }
+
+  /*
+   * fb.crm stellt E-Rechnungen nur im Inland mit einem Steuersatz ueber 0 % (#460, Kriterium 13;
+   * Plan #461, E18). Ein gewoehnliches Dokument als Ersatz gibt es nicht.
+   */
+  private static void pruefeUmfang(final Firma firma, final Rechnungseinstellungen satz) {
+    if (!INLAND.equals(firma.anschrift().land())) {
+      throw new RechnungAusserhalbDesUmfangs(RechnungAusserhalbDesUmfangs.AUSLAND);
+    }
+    if (satz.steuersatz().signum() == 0) {
+      throw new RechnungAusserhalbDesUmfangs(RechnungAusserhalbDesUmfangs.OHNE_STEUER);
+    }
   }
 
   /*
@@ -185,8 +208,11 @@ public class RechnungStellenUseCase {
    * Serverfehler und kein 409.
    */
   private Rechnung schreibeFest(
-      final Rechnung entwurf, final EigeneAngaben eigene, final Firma firma, final long konto) {
-    final Rechnungseinstellungen satz = einstellungen.lies();
+      final Rechnung entwurf,
+      final Rechnungseinstellungen satz,
+      final EigeneAngaben eigene,
+      final Firma firma,
+      final long konto) {
     final Nummernmuster muster = satz.nummerMuster();
     final int jahr = entwurf.rechnungDatum().getYear();
     final String nummer =
