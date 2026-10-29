@@ -11,6 +11,14 @@ bleibt stehen, auch wenn nichts darunter steht.
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-10-29
+
+- chore: v1.6.1
+- Dokumentation sichtbar gliedern: Abschnittskarten, Zwischentitel, mitlaufendes Inhaltsverzeichnis (Issue #474)
+- Wirkungslose addNamespace-Aufrufe der E-Rechnungsmetadaten entfernen (Issue #473)
+- Wirkungslosen setNames-Aufruf der E-Rechnungshuelle entfernen (Issue #472)
+- Start ohne Produktions-Overlay in der Betriebsdoku erklären
+
 ## [1.6.0] - 2026-10-29
 
 - chore: v1.5.1
