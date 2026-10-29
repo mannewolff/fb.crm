@@ -6,30 +6,94 @@ import { renderMitTheme } from '../test/render';
 import Dokumenttext from './Dokumenttext';
 
 describe('Dokumenttext', () => {
-  it('setzt eine Ueberschrift der Ebene 2 als h2 mit Anker und tabIndex -1 (E8)', () => {
+  it('setzt jeden ##-Abschnitt in eine eigene Karte mit h2 als Sprungziel (F1, E8)', () => {
+    renderMitTheme(
+      <Dokumenttext
+        bloecke={[
+          { art: 'ueberschrift', ebene: 2, text: 'Sicherung', anker: 'sicherung' },
+          { art: 'text', inhalt: [{ art: 'klartext', text: 'Erst sichern.' }] },
+          { art: 'ueberschrift', ebene: 2, text: 'Wiederherstellung', anker: 'wiederherstellung' },
+          { art: 'text', inhalt: [{ art: 'klartext', text: 'Dann zurueckspielen.' }] },
+        ]}
+      />,
+    );
+
+    const karten = screen.getAllByTestId('dokumenttext-abschnitt');
+    expect(karten).toHaveLength(2);
+    const ueberschrift = within(karten[0]).getByRole('heading', { level: 2, name: 'Sicherung' });
+    expect(ueberschrift.tagName).toBe('H2');
+    expect(ueberschrift).toHaveAttribute('id', 'sicherung');
+    expect(ueberschrift).toHaveAttribute('tabindex', '-1');
+    expect(within(karten[0]).getByText('Erst sichern.')).toBeInTheDocument();
+    expect(within(karten[1]).getByRole('heading', { level: 2 })).toHaveAttribute(
+      'id',
+      'wiederherstellung',
+    );
+    expect(within(karten[1]).getByText('Dann zurueckspielen.')).toBeInTheDocument();
+    // Die Karte ist als Abschnitt nach ihrer Ueberschrift benannt.
+    expect(screen.getByRole('region', { name: 'Sicherung' })).toBe(karten[0]);
+  });
+
+  it('setzt ### als h3 mit Anker und tabIndex -1 in die Karte seines ## (F1)', () => {
+    renderMitTheme(
+      <Dokumenttext
+        bloecke={[
+          { art: 'ueberschrift', ebene: 2, text: 'Sicherung', anker: 'sicherung' },
+          { art: 'ueberschrift', ebene: 3, text: 'Datenbank', anker: 'datenbank' },
+          { art: 'ueberschrift', ebene: 2, text: 'Wiederherstellung', anker: 'wiederherstellung' },
+        ]}
+      />,
+    );
+
+    const [erste, zweite] = screen.getAllByTestId('dokumenttext-abschnitt');
+    const ueberschrift = within(erste).getByRole('heading', { level: 3, name: 'Datenbank' });
+    expect(ueberschrift.tagName).toBe('H3');
+    expect(ueberschrift).toHaveAttribute('id', 'datenbank');
+    expect(ueberschrift).toHaveAttribute('tabindex', '-1');
+    expect(within(zweite).queryByRole('heading', { level: 3 })).not.toBeInTheDocument();
+  });
+
+  it('gibt ### die Gestalt „Name in Liste": 15 px, 700, oben mehr Abstand als unten (F1)', () => {
+    renderMitTheme(
+      <Dokumenttext
+        bloecke={[
+          { art: 'text', inhalt: [{ art: 'klartext', text: 'Vorab.' }] },
+          { art: 'ueberschrift', ebene: 3, text: 'Datenbank', anker: 'datenbank' },
+        ]}
+      />,
+    );
+
+    const stil = getComputedStyle(screen.getByRole('heading', { level: 3 }));
+    expect(stil.fontSize).toBe('15px');
+    expect(stil.fontWeight).toBe('700');
+    expect(stil.marginTop).toBe('28px');
+    expect(stil.marginBottom).toBe('6px');
+  });
+
+  it('setzt die Bloecke vor dem ersten ## in eine Karte ohne Titel', () => {
+    renderMitTheme(
+      <Dokumenttext
+        bloecke={[
+          { art: 'text', inhalt: [{ art: 'klartext', text: 'Vorab.' }] },
+          { art: 'ueberschrift', ebene: 2, text: 'Sicherung', anker: 'sicherung' },
+        ]}
+      />,
+    );
+
+    const [vorab, sicherung] = screen.getAllByTestId('dokumenttext-abschnitt');
+    expect(within(vorab).queryByRole('heading')).not.toBeInTheDocument();
+    expect(within(vorab).getByText('Vorab.')).toBeInTheDocument();
+    expect(within(sicherung).getByRole('heading', { level: 2 })).toHaveTextContent('Sicherung');
+  });
+
+  it('legt ohne Bloecke vor dem ersten ## keine leere Karte an', () => {
     renderMitTheme(
       <Dokumenttext
         bloecke={[{ art: 'ueberschrift', ebene: 2, text: 'Sicherung', anker: 'sicherung' }]}
       />,
     );
 
-    const ueberschrift = screen.getByRole('heading', { level: 2, name: 'Sicherung' });
-    expect(ueberschrift.tagName).toBe('H2');
-    expect(ueberschrift).toHaveAttribute('id', 'sicherung');
-    expect(ueberschrift).toHaveAttribute('tabindex', '-1');
-  });
-
-  it('setzt eine Ueberschrift der Ebene 3 als h3 mit Anker und tabIndex -1 (E8)', () => {
-    renderMitTheme(
-      <Dokumenttext
-        bloecke={[{ art: 'ueberschrift', ebene: 3, text: 'Datenbank', anker: 'datenbank' }]}
-      />,
-    );
-
-    const ueberschrift = screen.getByRole('heading', { level: 3, name: 'Datenbank' });
-    expect(ueberschrift.tagName).toBe('H3');
-    expect(ueberschrift).toHaveAttribute('id', 'datenbank');
-    expect(ueberschrift).toHaveAttribute('tabindex', '-1');
+    expect(screen.getAllByTestId('dokumenttext-abschnitt')).toHaveLength(1);
   });
 
   it('setzt Fliesstext als Absatz in der Lesebreite, mit allen Inline-Formen', () => {
@@ -55,7 +119,7 @@ describe('Dokumenttext', () => {
     expect(absatz).toHaveTextContent('Erst sichern, dann docker compose up, siehe Betrieb');
     expect(within(absatz).getByText('sichern').tagName).toBe('STRONG');
     expect(within(absatz).getByText('docker compose up').tagName).toBe('CODE');
-    expect(getComputedStyle(screen.getByTestId('dokumenttext')).maxWidth).toBe('70ch');
+    expect(getComputedStyle(screen.getByTestId('dokumenttext-lesespalte')).maxWidth).toBe('70ch');
   });
 
   it('setzt einen Verweis als Link mit seinem Ziel', () => {

@@ -12,9 +12,9 @@ import { leseMarkdown } from '../lib/markdown';
 import { renderMitTheme } from '../test/render';
 
 /**
- * Ein Ersatz fuer einen Teil, solange ein Fall ihn setzt. Die echten Texte unter `docs/` tragen
- * heute keine `###`-Ueberschrift; die Untereintraege des Inhaltsverzeichnisses (E8) braucht darum
- * ein eigener Text. Ohne Ersatz liest die Seite die echten Teile.
+ * Ein Ersatz fuer einen Teil, solange ein Fall ihn setzt: ein kleiner Text, an dem sich die
+ * Gliederung (Issue #474, F2) Eintrag fuer Eintrag pruefen laesst. Ohne Ersatz liest die Seite die
+ * echten Teile.
  */
 const ersatz = vi.hoisted(() => ({ teil: null as Teil | null }));
 
@@ -65,9 +65,9 @@ function renderSeite(adresse = '/dokumentation') {
   );
 }
 
-/** Die Ueberschriften des Dokuments — ohne die `h1` der Kopfkarte und ohne die Kartentitel. */
+/** Die `##`-Ueberschriften des Dokuments — die Titel der Abschnittskarten, ohne „Inhalt". */
 function abschnitte(): HTMLElement[] {
-  return within(screen.getByTestId('dokumenttext')).queryAllByRole('heading');
+  return within(screen.getByTestId('dokumenttext')).queryAllByRole('heading', { level: 2 });
 }
 
 function inhalt() {
@@ -78,10 +78,10 @@ function umschalter() {
   return within(screen.getByRole('navigation', { name: 'Teile der Dokumentation' }));
 }
 
-/** Die Abschnittsnamen eines echten Teils, aus dem Leser — nichts abgeschrieben (E16). */
+/** Die `##`-Abschnittsnamen eines echten Teils, aus dem Leser — nichts abgeschrieben (E16). */
 function abschnittsnamen(kennung: Kennung): string[] {
   return teilNach(kennung).dokument.bloecke.flatMap((block) =>
-    block.art === 'ueberschrift' ? [block.text] : [],
+    block.art === 'ueberschrift' && block.ebene === 2 ? [block.text] : [],
   );
 }
 
@@ -159,7 +159,7 @@ describe('DokumentationPage', () => {
   });
 
   it.each(['/dokumentation', '/dokumentation/betrieb'])(
-    'fuehrt auf %s jede Ueberschrift im Inhalt und jeden Verweis auf eine Ueberschrift (E8)',
+    'fuehrt auf %s jede ##-Ueberschrift im Inhalt und jeden Verweis auf eine (E8, F2)',
     (adresse) => {
       renderSeite(adresse);
 
@@ -174,32 +174,56 @@ describe('DokumentationPage', () => {
     },
   );
 
-  it('stellt die `###`-Ueberschriften eingerueckt unter ihre `##`-Ueberschrift (E8)', () => {
+  it('fuehrt im Inhalt nur die ##-Ebene, ohne ###-Eintraege (F2)', () => {
     ersatz.teil = { kennung: 'betrieb', name: 'Betrieb', dokument: leseMarkdown(MIT_UNTERABSCHNITTEN) };
 
     renderSeite('/dokumentation/betrieb');
 
-    /** Die Verweise eines Eintrags, seine Untereintraege eingeschlossen. */
-    const verweiseIn = (element: HTMLElement) =>
-      within(element)
-        .getAllByRole('link')
-        .map((link) => link.getAttribute('href'));
-    // Eine Liste fuer die `##`-Ebene und eine fuer die Untereintraege von „Sicherung".
-    const listen = inhalt().getAllByRole('list');
-    expect(listen).toHaveLength(2);
-    expect(verweiseIn(listen[1])).toEqual(['#datenbank', '#dokumente']);
-    // Eine `###` ohne `##` darueber geht nicht verloren: Sie steht als eigener Eintrag.
-    const eintraege = within(listen[0])
-      .getAllByRole('listitem')
-      .filter((eintrag) => !within(listen[1]).queryAllByRole('listitem').includes(eintrag));
-    expect(eintraege.map(verweiseIn)).toEqual([
-      ['#vorab'],
-      ['#sicherung', '#datenbank', '#dokumente'],
-      ['#wiederherstellung'],
+    expect(inhalt().getAllByRole('list')).toHaveLength(1);
+    expect(inhalt().getAllByRole('link').map((link) => link.getAttribute('href'))).toEqual([
+      '#sicherung',
+      '#wiederherstellung',
     ]);
-    const ziele = abschnitte().map((element) => `#${element.id}`);
-    expect(inhalt().getAllByRole('link').map((link) => link.getAttribute('href'))).toEqual(ziele);
+    // Die `###` stehen trotzdem im Text: als h3 in der Karte ihres `##`, die vor dem ersten `##`
+    // in einer Karte ohne Titel.
+    const [vorab, sicherung] = screen.getAllByTestId('dokumenttext-abschnitt');
+    expect(within(vorab).getByRole('heading', { level: 3, name: 'Vorab' })).toBeInTheDocument();
+    expect(within(vorab).queryByRole('heading', { level: 2 })).not.toBeInTheDocument();
+    expect(
+      within(sicherung)
+        .getAllByRole('heading', { level: 3 })
+        .map((element) => element.id),
+    ).toEqual(['datenbank', 'dokumente']);
   });
+
+  it('springt mit einem Verweis im Inhalt auf die Ueberschrift der Abschnittskarte (E8)', () => {
+    renderSeite('/dokumentation/betrieb');
+
+    const verweis = inhalt().getByRole('link', { name: 'Sicherung' });
+    const karte = screen.getByRole('region', { name: 'Sicherung' });
+    const ziel = within(karte).getByRole('heading', { level: 2, name: 'Sicherung' });
+    expect(verweis).toHaveAttribute('href', `#${ziel.id}`);
+    expect(ziel).toHaveAttribute('tabindex', '-1');
+  });
+
+  it.each(['/dokumentation', '/dokumentation/betrieb'])(
+    'setzt auf %s jeden ##-Abschnitt in eine eigene Karte (F1)',
+    (adresse) => {
+      renderSeite(adresse);
+
+      const kennung = adresse.endsWith('betrieb') ? 'betrieb' : 'bedienung';
+      // Der einleitende Text vor dem ersten `##` steht in einer Karte ohne Titel.
+      const [vorab, ...karten] = screen.getAllByTestId('dokumenttext-abschnitt');
+      expect(within(vorab).queryByRole('heading')).not.toBeInTheDocument();
+      expect(karten).toHaveLength(abschnittsnamen(kennung).length);
+      karten.forEach((karte, index) => {
+        expect(within(karte).getAllByRole('heading', { level: 2 })).toHaveLength(1);
+        expect(within(karte).getByRole('heading', { level: 2 })).toHaveTextContent(
+          abschnittsnamen(kennung)[index],
+        );
+      });
+    },
+  );
 
   it.each(['/dokumentation', '/dokumentation/betrieb'])(
     'traegt auf %s genau eine h1 und springt in den Ebenen nicht',

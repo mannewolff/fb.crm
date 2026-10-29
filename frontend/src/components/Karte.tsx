@@ -27,6 +27,10 @@ import { KARTE_INNENABSTAND, RADIUS_GROSS, RADIUS_RUND } from '../theme';
  * gibt es sonst gar keine `h1` — dann hebt `titelEbene={1}` den Kartentitel auf die erste Ebene.
  * Nur die Ebene wechselt, nicht die Gestalt: Der Kartenkopf sieht in beiden Faellen gleich aus, und
  * die Vorlage kennt an dieser Stelle nur eine Groesse (`.karte h2` Z. 79).
+ *
+ * Mit `titelId` wird der Titel ein Sprungziel: Er traegt die `id` und `tabIndex={-1}`, damit ein
+ * Ankerverweis auf ihn rollt und der Tastaturnutzer hinter ihm landet — so traegt etwa der
+ * Dokumenttext je Abschnitt eine Karte mit dem Abschnittsnamen als Titel.
  */
 export interface KarteProps {
   readonly children: ReactNode;
@@ -40,6 +44,8 @@ export interface KarteProps {
   readonly werkzeug?: ReactNode;
   /** Die Ebene des Titels. Vorgabe 2; `1`, wo die Karte die ganze Ansicht ist. */
   readonly titelEbene?: 1 | 2;
+  /** Macht den Titel zum Sprungziel: `id` und `tabIndex={-1}` an der Ueberschrift. */
+  readonly titelId?: string;
 }
 
 /** Abstand zwischen Kartenkopf und Inhalt (Vorlage `.kopfzeile` Z. 79). */
@@ -52,6 +58,7 @@ export default function Karte({
   notiz,
   werkzeug,
   titelEbene = 2,
+  titelId,
 }: KarteProps) {
   return (
     <Paper
@@ -75,7 +82,12 @@ export default function Karte({
             marginBottom: `${String(KOPF_ABSTAND)}px`,
           }}
         >
-          <Typography variant="h2" component={titelEbene === 1 ? 'h1' : 'h2'}>
+          <Typography
+            variant="h2"
+            component={titelEbene === 1 ? 'h1' : 'h2'}
+            id={titelId}
+            tabIndex={titelId === undefined ? undefined : -1}
+          >
             {titel}
           </Typography>
           {anzahl === undefined ? null : (
