@@ -47,6 +47,12 @@
          des Enforcers an zwei Versionen derselben Krypto-Bibliothek, und die aeltere zu nehmen
          waere ein Rueckschritt in einer Sicherheitsbibliothek. -->
     <pdfbox.version>3.0.8</pdfbox.version>
+    <!-- Der Validator der KoSIT, nur im Testbereich (Plan #461, E20). Er ruft
+         org.apache.commons.lang3.Strings, das es erst ab commons-lang3 3.18 gibt; das
+         Spring-Boot-BOM managt 3.17.0. Die Version steht darum auf der, die der Validator selbst
+         angibt — ohne das scheitert schon das Laden seiner Konfiguration mit NoClassDefFoundError. -->
+    <kosit-validator.version>1.6.3</kosit-validator.version>
+    <commons-lang3.version>3.20.0</commons-lang3.version>
 
     <jacoco.version>0.8.15</jacoco.version>
     <maven-enforcer-plugin.version>3.6.3</maven-enforcer-plugin.version>
@@ -206,6 +212,15 @@
       <groupId>com.tngtech.archunit</groupId>
       <artifactId>archunit</artifactId>
       <version>${archunit.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <!-- Die Pruefung der E-Rechnung (Plan #461, E20): der Validator der KoSIT mit einer eigenen
+         Szenario-Konfiguration unter src/test/resources/kosit/, nur im Test. Ins
+         Produktionsabbild kommt er nicht; der Schreiber der XML braucht ihn nicht. -->
+    <dependency>
+      <groupId>org.kosit</groupId>
+      <artifactId>validator</artifactId>
+      <version>${kosit-validator.version}</version>
       <scope>test</scope>
     </dependency>
   </dependencies>

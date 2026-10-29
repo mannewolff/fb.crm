@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Szenario-Konfiguration des KoSIT-Validators fuer die Tests der E-Rechnung (Plan #461, E20).
+
+  Genau ein Szenario: EN 16931 in der Syntax CII, ohne die Regeln von XRechnung. Die
+  XRechnung-Konfiguration der KoSIT verlangt die Leitweg-ID (BR-DE-15) und geht damit ueber
+  EN 16931 hinaus. Herkunft, Versionen und Pruefsummen der uebrigen Dateien nennt README.md.
+-->
+<scenarios xmlns="http://www.xoev.de/de/validator/framework/1/scenarios" frameworkVersion="1.0.0">
+  <name>fb.crm E-Rechnung EN 16931 (CII)</name>
+  <author>fb.crm</author>
+  <date>2026-10-29</date>
+  <description>
+    <p>Prueft eine Rechnung in CII D16B gegen das XML-Schema und die Schematron-Regeln der CEN
+      fuer EN 16931 (en16931-cii-1.3.17).</p>
+  </description>
+
+  <scenario>
+    <name>EN16931 CII</name>
+    <description>
+      <p>Schema CII D16B aus der Konfiguration XRechnung 3.0.2 der KoSIT (2026-08-31),
+        Schematron EN16931-CII-validation.xslt der CEN, Version 1.3.17.</p>
+    </description>
+    <namespace prefix="rsm">urn:un:unece:uncefact:data:standard:CrossIndustryInvoice:100</namespace>
+    <namespace prefix="ram">urn:un:unece:uncefact:data:standard:ReusableAggregateBusinessInformationEntity:100</namespace>
+    <namespace prefix="rep">http://www.xoev.de/de/validator/varl/1</namespace>
+
+    <match>exists(/rsm:CrossIndustryInvoice[rsm:ExchangedDocumentContext/ram:GuidelineSpecifiedDocumentContextParameter/ram:ID/text() = 'urn:cen.eu:en16931:2017'])</match>
+    <validateWithXmlSchema>
+      <resource>
+        <name>XML Schema CII D16B</name>
+        <location>cii/16b/xsd/CrossIndustryInvoice_100pD16B.xsd</location>
+      </resource>
+    </validateWithXmlSchema>
+    <validateWithSchematron>
+      <resource>
+        <name>Schematron EN 16931 (CII)</name>
+        <location>EN16931-CII-validation.xslt</location>
+      </resource>
+    </validateWithSchematron>
+    <createReport>
+      <resource>
+        <name>Pruefbericht</name>
+        <location>default-report.xsl</location>
+      </resource>
+    </createReport>
+    <acceptMatch>/rep:report/rep:assessment[1]/rep:accept[1]</acceptMatch>
+  </scenario>
+
+  <noScenarioReport>
+    <resource>
+      <name>Pruefbericht ohne Szenario</name>
+      <location>default-report.xsl</location>
+    </resource>
+  </noScenarioReport>
+</scenarios>
