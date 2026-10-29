@@ -105,9 +105,9 @@ final class ERechnungsmetadaten {
   /** Die Beschreibung des Schemas {@code fx}, die PDF/A fuer jedes fremde Schema verlangt. */
   private static void erweiterung(final XMPMetadata xmp) {
     final TypeMapping typen = xmp.getTypeMapping();
+    // Die Praefixe pdfaSchema und pdfaProperty erklaert der Serialisierer selbst an rdf:RDF, weil
+    // jede Eigenschaft ihren Namensraum mitbringt; ein addNamespace am Schema waere wirkungslos.
     final PDFAExtensionSchema erweiterung = xmp.createAndAddPDFAExtensionSchemaWithDefaultNS();
-    erweiterung.addNamespace(SCHEMA_NS, SCHEMA_PREFIX);
-    erweiterung.addNamespace(PROPERTY_NS, PROPERTY_PREFIX);
     final ArrayProperty schemata =
         erweiterung.createArrayProperty(PDFAExtensionSchema.SCHEMAS, Cardinality.Bag);
     final DefinedStructuredType schema =
