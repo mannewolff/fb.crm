@@ -99,6 +99,7 @@ class RechnungStellenUseCaseTest {
   private static final String MUSTER_OHNE_JAHR = "R-{NNN}";
   private static final String NUMMER = "0001-2026";
   private static final byte[] PDF = "%PDF-1.7 Rechnung".getBytes(UTF_8);
+  private static final byte[] CII = "<rsm:CrossIndustryInvoice/>".getBytes(UTF_8);
   private static final String SCHLUESSEL = "rechnung/2/beleg.pdf";
 
   /** Der Stand, auf dem Manfred den Entwurf geoeffnet hat — der des frischen Entwurfs. */
@@ -112,8 +113,8 @@ class RechnungStellenUseCaseTest {
 
   private static final Instant ANNAS_AENDERUNG = Instant.parse("2026-09-30T09:42:00Z");
 
-  /** Die Bankverbindung, die Anna inzwischen in den Eigenen Angaben hinterlegt hat. */
-  private static final String NEUE_BANK = "DE89 3704 0044 0532 0130 00";
+  /** Die IBAN, die Anna inzwischen in den Eigenen Angaben hinterlegt hat. */
+  private static final String NEUE_IBAN = "DE89370400440532013000";
 
   /** Die Raender aus Kriterium 15 in Zehntel-Millimetern. */
   private static final Randmasse VORGABE = new Randmasse(250, 200, 985, 200, 200, 200);
@@ -129,7 +130,7 @@ class RechnungStellenUseCaseTest {
   private static final Anschrift LEER = new Anschrift(null, null, null, null);
 
   private static final EigeneAngaben OHNE_ANGABEN =
-      new EigeneAngaben(null, null, LEER, null, null, null, null, null, null);
+      new EigeneAngaben(null, null, LEER, null, null, null, null, null, null, null, null, null);
 
   @Mock private RechnungRepository rechnungen;
   @Mock private AngebotRepository angebote;
@@ -139,6 +140,7 @@ class RechnungStellenUseCaseTest {
   @Mock private Nummernkreis nummernkreis;
   @Mock private Rechnungsnummern rechnungsnummern;
   @Mock private Belegdrucker drucker;
+  @Mock private ERechnungsschreiber schreiber;
   @Mock private DokumentSpeicher dokumente;
   @Mock private BriefbogenRepository briefboegen;
   @Mock private Briefpapierspeicher briefpapier;
@@ -161,6 +163,7 @@ class RechnungStellenUseCaseTest {
             nummernkreis,
             rechnungsnummern,
             drucker,
+            schreiber,
             dokumente,
             briefboegen,
             briefpapier,
@@ -184,9 +187,13 @@ class RechnungStellenUseCaseTest {
         voll.webadresse(),
         steuernummer,
         umsatzsteuerId,
-        voll.bankverbindung());
+        voll.iban(),
+        voll.bic(),
+        voll.kontoinhaber(),
+        voll.bisherigeBankverbindung());
   }
 
+  /** Ohne IBAN und Kontoinhaber; der bisherige Freitext steht noch, zaehlt aber nicht (E17). */
   private static EigeneAngaben ohneBankverbindung() {
     final EigeneAngaben voll = Rechnungsdoppel.eigeneAngaben();
     return new EigeneAngaben(
@@ -198,7 +205,10 @@ class RechnungStellenUseCaseTest {
         voll.webadresse(),
         voll.steuernummer(),
         voll.umsatzsteuerId(),
-        null);
+        null,
+        voll.bic(),
+        null,
+        "MLP Bank Heidelberg");
   }
 
   /** Das bestellte Angebot mit nur der Beratung: 160 Stunden zu 100,00 €. */
@@ -223,6 +233,13 @@ class RechnungStellenUseCaseTest {
         .thenReturn(Optional.of(angebotMitBeratung()));
     when(firmen.findById(Rechnungsdoppel.FIRMA)).thenReturn(Optional.of(firma));
     when(eigeneAngaben.lies()).thenReturn(eigene);
+    // Gelesen werden die Einstellungen schon vor den Pflichtangaben (Plan #461, E18); wer bis zum
+    // Nummernkreis kommt, legt sie mit nummerWirdGezogen neu fest.
+    lenient()
+        .when(einstellungen.lies())
+        .thenReturn(
+            new Rechnungseinstellungen(
+                new Nummernmuster(MUSTER_MIT_JAHR), STEUERSATZ, ZAHLUNGSZIEL));
   }
 
   private void nummerWirdGezogen(final String muster, final int laufend) {
@@ -240,7 +257,8 @@ class RechnungStellenUseCaseTest {
     when(briefboegen.lies()).thenReturn(bogen);
     when(rechnungen.saveAndFlush(any())).thenAnswer(aufruf -> aufruf.getArgument(0));
     when(rechnungen.save(any())).thenAnswer(aufruf -> aufruf.getArgument(0));
-    when(drucker.drucke(any(), any())).thenReturn(PDF);
+    when(schreiber.cii(any())).thenReturn(CII);
+    when(drucker.druckeERechnung(any(), any(), eq(CII))).thenReturn(PDF);
     when(dokumente.lege(ENTWURF, PDF)).thenReturn(SCHLUESSEL);
   }
 
@@ -327,8 +345,8 @@ class RechnungStellenUseCaseTest {
   }
 
   @Test
-  void stelle_withoutTheBankverbindung_thenTheFieldIsNamed() {
-    // Given — ohne Bankverbindung kann der Kunde nicht zahlen (Kriterium 13).
+  void stelle_withoutIbanAndKontoinhaber_thenBothFieldsAreNamed() {
+    // Given — ohne Bankverbindung kann der Kunde nicht zahlen (#460, Kriterium 12).
     entwurfLiegt(entwurfUeber("80.00"));
     angabenSind(Rechnungsdoppel.firma(), ohneBankverbindung());
 
@@ -338,7 +356,7 @@ class RechnungStellenUseCaseTest {
             PflichtangabenFehlen.class, () -> useCase.stelle(ENTWURF, GELESEN, MANFRED));
 
     // Then
-    assertThat(fehler.felder()).containsOnlyKeys("bankverbindung");
+    assertThat(fehler.felder()).containsOnlyKeys("iban", "kontoinhaber");
     verifyNoInteractions(nummernkreis, drucker, dokumente);
   }
 
@@ -380,7 +398,7 @@ class RechnungStellenUseCaseTest {
         new Firma(
             Long.valueOf(Rechnungsdoppel.FIRMA),
             " ",
-            LEER,
+            new Anschrift(null, null, null, "DE"),
             null,
             null,
             true,
@@ -402,12 +420,90 @@ class RechnungStellenUseCaseTest {
             "strasse",
             "plz",
             "ort",
-            "bankverbindung",
+            "iban",
+            "kontoinhaber",
             "steuernummer",
             "firma.name",
             "firma.strasse",
             "firma.plz",
             "firma.ort");
+  }
+
+  @Test
+  void stelle_givenAKundeOutsideDeutschland_thenOutOfScopeWithoutANummer() {
+    // Given — #460, Kriterium 13: fb.crm stellt E-Rechnungen nur im Inland.
+    entwurfLiegt(entwurfUeber("80.00"));
+    angabenSind(firmaIn("AT"), Rechnungsdoppel.eigeneAngaben());
+
+    // When / Then
+    assertThatThrownBy(() -> useCase.stelle(ENTWURF, GELESEN, MANFRED))
+        .isInstanceOf(RechnungAusserhalbDesUmfangs.class)
+        .hasMessage(
+            "Diese Rechnung kann fb.crm nicht als E-Rechnung stellen: "
+                + "Der Kunde sitzt nicht in Deutschland.");
+    verifyNoInteractions(nummernkreis, rechnungsnummern, drucker, dokumente, briefboegen);
+    verify(rechnungen, never()).saveAndFlush(any());
+    verify(rechnungen, never()).save(any());
+    verify(angebote, never()).save(any());
+  }
+
+  @Test
+  void stelle_givenASteuersatzOfZero_thenOutOfScopeWithoutANummer() {
+    // Given — steuerfreie Leistungen deckt fb.crm nicht ab (#460, Kriterium 13).
+    entwurfLiegt(entwurfUeber("80.00"));
+    angabenSind(Rechnungsdoppel.firma(), Rechnungsdoppel.eigeneAngaben());
+    when(einstellungen.lies())
+        .thenReturn(
+            new Rechnungseinstellungen(
+                new Nummernmuster(MUSTER_MIT_JAHR), new BigDecimal("0.00"), ZAHLUNGSZIEL));
+
+    // When / Then
+    assertThatThrownBy(() -> useCase.stelle(ENTWURF, GELESEN, MANFRED))
+        .isInstanceOf(RechnungAusserhalbDesUmfangs.class)
+        .hasMessage(
+            "Diese Rechnung kann fb.crm nicht als E-Rechnung stellen: "
+                + "Der Steuersatz beträgt 0 %.");
+    verifyNoInteractions(nummernkreis, rechnungsnummern, drucker, dokumente, briefboegen);
+    verify(rechnungen, never()).saveAndFlush(any());
+    verify(rechnungen, never()).save(any());
+  }
+
+  @Test
+  void stelle_givenAKundeOutsideDeutschlandAndMissingPflichtangaben_thenOutOfScopeComesFirst() {
+    // Given — wer im Ausland abrechnet, soll nicht erst Angaben nachtragen (Plan #461, E18).
+    entwurfLiegt(entwurfUeber("80.00"));
+    angabenSind(firmaIn("AT"), OHNE_ANGABEN);
+
+    // When / Then
+    assertThatThrownBy(() -> useCase.stelle(ENTWURF, GELESEN, MANFRED))
+        .isInstanceOf(RechnungAusserhalbDesUmfangs.class);
+    verifyNoInteractions(nummernkreis);
+  }
+
+  @Test
+  void stelle_givenAKundeInDeutschlandWithASteuersatzAboveZero_thenTheEinstellungenAreReadOnce() {
+    // Given / When
+    derWegGelingt(entwurfUeber("80.00"), List.of(gestelltUeber("80.00")));
+
+    // Then — gelesen vor der Pruefung, weitergereicht an die Festschreibung (E18).
+    verify(einstellungen).lies();
+  }
+
+  /** Die Firma mit vollstaendiger Anschrift in einem anderen Land. */
+  private static Firma firmaIn(final String land) {
+    final Firma inland = Rechnungsdoppel.firma();
+    final Anschrift anschrift = inland.anschrift();
+    return new Firma(
+        inland.id(),
+        inland.name(),
+        new Anschrift(anschrift.strasse(), anschrift.plz(), anschrift.ort(), land),
+        null,
+        null,
+        true,
+        Rechnungsdoppel.ANGELEGT,
+        Rechnungsdoppel.ANGELEGT,
+        0L,
+        null);
   }
 
   @Test
@@ -498,7 +594,7 @@ class RechnungStellenUseCaseTest {
     // Then — scheitert der Druck, ist keine Nummer verbraucht.
     final InOrder reihenfolge = inOrder(rechnungen, drucker, dokumente);
     reihenfolge.verify(rechnungen).saveAndFlush(any());
-    reihenfolge.verify(drucker).drucke(any(), isNull());
+    reihenfolge.verify(drucker).druckeERechnung(any(), isNull(), eq(CII));
     reihenfolge.verify(dokumente).lege(anyLong(), any());
     reihenfolge.verify(rechnungen).save(any());
   }
@@ -521,7 +617,10 @@ class RechnungStellenUseCaseTest {
                 assertThat(rechnung.empfaenger())
                     .isEqualTo(
                         new Belegempfaenger(
-                            Rechnungsdoppel.FIRMENNAME, Rechnungsdoppel.firma().anschrift(), null)),
+                            Rechnungsdoppel.FIRMENNAME,
+                            new Anschrift("Hauptstrasse 1", "28195", "Bremen", "Deutschland"),
+                            null,
+                            "DE")),
             rechnung ->
                 assertThat(rechnung.absender())
                     .isEqualTo(
@@ -533,8 +632,11 @@ class RechnungStellenUseCaseTest {
                             "0421 123456",
                             "75/123/45678",
                             "DE123456789",
-                            "DE02 1203 0000 0000 2020 51",
-                            "https://example.org")));
+                            null,
+                            "https://example.org",
+                            "DE02120300000000202051",
+                            "BYLADEM1001",
+                            "Manfred Wolff")));
   }
 
   @Test
@@ -603,12 +705,13 @@ class RechnungStellenUseCaseTest {
 
     // Then — der Briefbogen wird erst im Schritt „Dokument" gelesen, nach der Festschreibung.
     final InOrder reihenfolge =
-        inOrder(rechnungen, nummernkreis, briefboegen, drucker, dokumente, angebote);
+        inOrder(rechnungen, nummernkreis, schreiber, briefboegen, drucker, dokumente, angebote);
     reihenfolge.verify(rechnungen).findByIdMitSperre(ENTWURF);
     reihenfolge.verify(nummernkreis).ziehe(anyInt());
     reihenfolge.verify(rechnungen).saveAndFlush(any());
+    reihenfolge.verify(schreiber).cii(any());
     reihenfolge.verify(briefboegen).lies();
-    reihenfolge.verify(drucker).drucke(any(), any());
+    reihenfolge.verify(drucker).druckeERechnung(any(), any(), any());
     reihenfolge.verify(dokumente).lege(anyLong(), any());
     reihenfolge.verify(rechnungen).save(any());
     reihenfolge.verify(angebote).save(any());
@@ -624,7 +727,7 @@ class RechnungStellenUseCaseTest {
 
     // Then — gesetzt auf dem Briefbogen, das Briefpapier Byte fuer Byte als Untergrund.
     verify(rechnungen).saveAndFlush(festgeschrieben.capture());
-    verify(drucker).drucke(gesetzt.capture(), eq(BRIEFPAPIER));
+    verify(drucker).druckeERechnung(gesetzt.capture(), eq(BRIEFPAPIER), eq(CII));
     assertThat(gesetzt.getValue())
         .isEqualTo(
             Briefbogenlayout.setze(
@@ -638,10 +741,46 @@ class RechnungStellenUseCaseTest {
 
     // Then — der Satz der Kupferwolke wie bisher, kein Untergrund, kein Griff in den Speicher.
     verify(rechnungen).saveAndFlush(festgeschrieben.capture());
-    verify(drucker).drucke(gesetzt.capture(), isNull());
+    verify(drucker).druckeERechnung(gesetzt.capture(), isNull(), eq(CII));
     assertThat(gesetzt.getValue())
         .isEqualTo(Rechnungslayout.setze(Rechnungsbeleg.druckdaten(festgeschrieben.getValue())));
     verifyNoInteractions(briefpapier);
+  }
+
+  @Test
+  void stelle_thenTheERechnungIsWrittenFromTheFestgeschriebeneRechnung() {
+    // Given / When — Plan #461, E19: die XML aus derselben festgeschriebenen Rechnung wie der Satz.
+    derWegGelingt(entwurfUeber("80.00"), List.of(gestelltUeber("80.00")));
+
+    // Then
+    verify(rechnungen).saveAndFlush(festgeschrieben.capture());
+    verify(schreiber).cii(Rechnungsbeleg.erechnungsdaten(festgeschrieben.getValue()));
+  }
+
+  @Test
+  void stelle_thenTheDocumentIsAnERechnungAndNeverAnOrdinaryPdf() {
+    // Given / When — #460, Kriterium 4: das Dokument der gestellten Rechnung ist die E-Rechnung.
+    derWegGelingt(entwurfUeber("80.00"), List.of(gestelltUeber("80.00")));
+
+    // Then — ein gewoehnliches Dokument entsteht nicht.
+    verify(drucker, never()).drucke(any(), any());
+    verify(dokumente).lege(ENTWURF, PDF);
+  }
+
+  @Test
+  void stelle_whenTheERechnungCannotBeWritten_thenNothingIsPrintedOrStored() {
+    // Given — scheitert die XML, rollt die Transaktion zurueck; gedruckt und abgelegt wird nichts.
+    entwurfLiegt(entwurfUeber("80.00"));
+    angabenSind(Rechnungsdoppel.firma(), Rechnungsdoppel.eigeneAngaben());
+    nummerWirdGezogen(MUSTER_MIT_JAHR, 1);
+    when(rechnungen.saveAndFlush(any())).thenAnswer(aufruf -> aufruf.getArgument(0));
+    when(schreiber.cii(any())).thenThrow(new IllegalStateException("XML kaputt"));
+
+    // When / Then
+    assertThatThrownBy(() -> useCase.stelle(ENTWURF, GELESEN, MANFRED))
+        .isInstanceOf(IllegalStateException.class);
+    verifyNoInteractions(drucker, dokumente);
+    verify(rechnungen, never()).save(any());
   }
 
   @Test
@@ -742,7 +881,7 @@ class RechnungStellenUseCaseTest {
     // Then — gestellt mit den Angaben von jetzt, und das Angebot traegt den Stellenden.
     assertThat(gestellt.nummer()).isEqualTo("R-007");
     assertThat(gestellt.absender())
-        .satisfies(absender -> assertThat(absender.bankverbindung()).isEqualTo(NEUE_BANK));
+        .satisfies(absender -> assertThat(absender.iban()).isEqualTo(NEUE_IBAN));
     verify(angebote).save(fortgeschrieben.capture());
     assertThat(fortgeschrieben.getValue())
         .satisfies(
@@ -773,6 +912,9 @@ class RechnungStellenUseCaseTest {
         voll.webadresse(),
         voll.steuernummer(),
         voll.umsatzsteuerId(),
-        NEUE_BANK);
+        NEUE_IBAN,
+        voll.bic(),
+        voll.kontoinhaber(),
+        null);
   }
 }

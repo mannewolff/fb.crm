@@ -13,13 +13,17 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.IntStream;
 import org.apache.pdfbox.Loader;
+import org.apache.pdfbox.cos.COSName;
 import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.pdmodel.PDDocumentNameDictionary;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.PDPageContentStream;
+import org.apache.pdfbox.pdmodel.common.PDMetadata;
 import org.apache.pdfbox.pdmodel.common.PDRectangle;
 import org.apache.pdfbox.pdmodel.font.PDType1Font;
 import org.apache.pdfbox.pdmodel.font.Standard14Fonts;
 import org.apache.pdfbox.text.PDFTextStripper;
+import org.apache.xmpbox.xml.DomXmpParser;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -83,12 +87,26 @@ class ProbedruckUseCaseTest {
         "mmuster.org",
         "12/345/67890",
         "DE 01010101010",
-        "MLP Bank Heidelberg");
+        "DE89370400440532013000",
+        "COBADEFFXXX",
+        "Max Mustermann",
+        null);
   }
 
   private static EigeneAngaben leer() {
     return new EigeneAngaben(
-        null, null, new Anschrift(null, null, null, null), null, null, null, null, null, null);
+        null,
+        null,
+        new Anschrift(null, null, null, null),
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null);
   }
 
   private void hinterlegt(final EigeneAngaben angaben) throws IOException {
@@ -171,12 +189,13 @@ class ProbedruckUseCaseTest {
           .contains("Briefkopf Blatt zwei")
           .doesNotContain("Briefkopf Blatt eins");
     }
-    // Then — jede Seite traegt das schraege „Muster" in Hellgrau.
+    // Then — jede Seite traegt das schraege „Muster" in Hellgrau. Die Schrift ist eingebettet, ihre
+    // Zeichen stehen als Glyphennummern im Strom; das Wort selbst liest der Textleser.
     for (int seite = 1; seite <= seiten; seite++) {
       assertThat(inhaltsstrom(pdf, seite))
           .contains(HELLGRAU)
-          .contains("(Muster) Tj")
-          .containsPattern("0\\.\\d+ 0\\.\\d+ -0\\.\\d+ 0\\.\\d+ \\d+ \\d+ Tm");
+          .containsPattern("0\\.\\d+ 0\\.\\d+ -0\\.\\d+ 0\\.\\d+ \\d+ \\d+ Tm\n.* Tj");
+      assertThat(ausgelesen(pdf, seite)).contains("Muster");
     }
     assertThat(
             drucker.elemente.stream()
@@ -226,7 +245,9 @@ class ProbedruckUseCaseTest {
     final byte[] pdf = useCase.drucke();
 
     // Then — die echten eigenen Angaben; die USt-IdNr. steht vor der Steuernummer.
-    final String zeile = "USt-IdNr. DE 01010101010 · Bankverbindung: MLP Bank Heidelberg";
+    final String zeile =
+        "USt-IdNr. DE 01010101010 · Bankverbindung: Max Mustermann"
+            + " · IBAN DE89 3704 0044 0532 0130 00 · BIC COBADEFFXXX";
     assertThat(ausgelesen(pdf, 1))
         .contains("Max Mustermann · Muster Str. 34a · 28197 Bremen")
         .contains(zeile);
@@ -234,6 +255,27 @@ class ProbedruckUseCaseTest {
       assertThat(ausgelesen(pdf, seite)).contains(zeile);
     }
     assertThat(drucker.briefpapier).isNotNull();
+  }
+
+  @Test
+  void probedruck_thenKeinPdfaidUndKeineEingebetteteDatei() throws Exception {
+    // Given — #460, Kriterium 6: der Probedruck bleibt ein gewoehnliches Dokument.
+    hinterlegt(vollstaendig());
+
+    // When
+    final byte[] pdf = useCase.drucke();
+
+    // Then — keine Metadaten nach PDF/A, keine eingebettete Datei, kein Eintrag unter /AF.
+    try (PDDocument dokument = Loader.loadPDF(pdf)) {
+      final PDMetadata metadaten = dokument.getDocumentCatalog().getMetadata();
+      if (metadaten != null) {
+        assertThat(new DomXmpParser().parse(metadaten.toByteArray()).getPDFAIdentificationSchema())
+            .isNull();
+      }
+      final PDDocumentNameDictionary namen = dokument.getDocumentCatalog().getNames();
+      assertThat(namen == null || namen.getEmbeddedFiles() == null).isTrue();
+      assertThat(dokument.getDocumentCatalog().getCOSObject().containsKey(COSName.AF)).isFalse();
+    }
   }
 
   /** Der echte Drucker, der mitschreibt, was er bekam. */
@@ -248,6 +290,15 @@ class ProbedruckUseCaseTest {
       this.elemente.addAll(elemente);
       this.briefpapier = briefpapier;
       return echt.drucke(elemente, briefpapier);
+    }
+
+    /**
+     * Der Probedruck ist keine E-Rechnung (#460, Kriterium 6); kommt er hier an, ist das falsch.
+     */
+    @Override
+    public byte[] druckeERechnung(
+        final List<Druckelement> elemente, final byte @Nullable [] briefpapier, final byte[] cii) {
+      throw new AssertionError("Der Probedruck darf keine E-Rechnung schreiben.");
     }
   }
 }

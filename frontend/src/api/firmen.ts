@@ -61,7 +61,10 @@ export interface Firma {
   readonly strasse: string | null;
   readonly plz: string | null;
   readonly ort: string | null;
+  /** Das Kuerzel nach ISO 3166-1 alpha-2 (Plan #461, E11). */
   readonly land: string | null;
+  /** Der deutsche Name des Landes — was die Oberflaeche zeigt, statt des Kuerzels. */
+  readonly landName: string | null;
   readonly steuernummer: string | null;
   readonly umsatzsteuerId: string | null;
   readonly aktiv: boolean;
@@ -138,6 +141,7 @@ export function parseFirma(wert: unknown): Firma {
     plz: textOderNull(firma.plz),
     ort: textOderNull(firma.ort),
     land: textOderNull(firma.land),
+    landName: textOderNull(firma.landName),
     steuernummer: textOderNull(firma.steuernummer),
     umsatzsteuerId: textOderNull(firma.umsatzsteuerId),
     aktiv: jaNein(firma.aktiv),

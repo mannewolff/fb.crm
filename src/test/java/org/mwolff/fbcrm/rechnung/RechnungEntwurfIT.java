@@ -97,7 +97,7 @@ class RechnungEntwurfIT extends AbstractIntegrationTest {
         "Hauptstrasse 1",
         "28195",
         "Bremen",
-        "Deutschland");
+        "DE");
     firmaId =
         Objects.requireNonNull(
                 jdbc.queryForObject("SELECT id FROM firma WHERE name = ?", Long.class, "Adler AG"))
@@ -304,13 +304,14 @@ class RechnungEntwurfIT extends AbstractIntegrationTest {
     rumpf.put("strasse", "Am Deich 2");
     rumpf.put("plz", "28199");
     rumpf.put("ort", "Bremen");
-    rumpf.put("land", "Deutschland");
+    rumpf.put("land", "DE");
     rumpf.put("email", "post@example.org");
     rumpf.put("telefon", "0421 123456");
     rumpf.put("webadresse", "https://example.org");
     rumpf.put("steuernummer", "75/123/45678");
     rumpf.put("umsatzsteuerId", null);
-    rumpf.put("bankverbindung", "DE02 1203 0000 0000 2020 51");
+    rumpf.put("iban", "DE02120300000000202051");
+    rumpf.put("kontoinhaber", "Manfred Wolff");
     // Auf dem aktuellen Stand der eigenen Angaben, wie die Maske (Plan #415, E2).
     assertThat(
             rest.exchange(

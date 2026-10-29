@@ -8,10 +8,14 @@ import { objekt, textOderNull, zahl } from './verengen';
  * aendert es sich hier mit (CLAUDE-react.md). Die Antwort geht durch einen Parser: Was ueber das
  * Netz kommt, ist `unknown`, bis es geprueft ist — kein `as`.
  *
- * **Ein Typ fuer die zwoelf Felder beider Richtungen.** `EigeneAngabenRequest` und
- * `EigeneAngabenResponse` tragen dieselben zwoelf Felder; die Antwort traegt dazu nur den Stand
- * (`version`), den {@link GespeicherteEigeneAngaben} ergaenzt — weder eine Kennung noch den
- * Zeitpunkt der letzten Aenderung.
+ * **Ein Typ fuer die vierzehn Felder beider Richtungen.** `EigeneAngabenRequest` und
+ * `EigeneAngabenResponse` tragen dieselben vierzehn Felder; die Antwort traegt dazu den Stand
+ * (`version`) und die bisherige Bankverbindung, die {@link GespeicherteEigeneAngaben} ergaenzt —
+ * weder eine Kennung noch den Zeitpunkt der letzten Aenderung.
+ *
+ * **Die Bankverbindung steht in drei Feldern** (Plan #461, E13): IBAN, BIC und Kontoinhaber. Der
+ * fruehere Freitext kommt nur noch als `bisherigeBankverbindung` zurueck, zum Abschreiben, und wird
+ * nicht mehr gesendet.
  *
  * Kein Anlegen und kein Loeschen: Die eine Zeile gibt es von der Migration an, und sie
  * verschwindet nicht wieder.
@@ -38,11 +42,18 @@ export interface EigeneAngaben {
   readonly webadresse: string | null;
   readonly steuernummer: string | null;
   readonly umsatzsteuerId: string | null;
-  readonly bankverbindung: string | null;
+  readonly iban: string | null;
+  readonly bic: string | null;
+  readonly kontoinhaber: string | null;
 }
 
 /** Die Angaben, wie der Server sie liefert: samt dem Stand, den das Speichern vorlegt. */
 export interface GespeicherteEigeneAngaben extends EigeneAngaben {
+  /**
+   * Der Freitext von vor der Umstellung, nur zum Lesen — der Server fuehrt ihn, solange IBAN oder
+   * Kontoinhaber leer ist (#460, Kriterium 11).
+   */
+  readonly bisherigeBankverbindung: string | null;
   /** Der Stand der Zeile (Plan #415, E1). */
   readonly version: number;
 }
@@ -62,7 +73,10 @@ export function parseEigeneAngaben(wert: unknown): GespeicherteEigeneAngaben {
     webadresse: textOderNull(angaben.webadresse),
     steuernummer: textOderNull(angaben.steuernummer),
     umsatzsteuerId: textOderNull(angaben.umsatzsteuerId),
-    bankverbindung: textOderNull(angaben.bankverbindung),
+    iban: textOderNull(angaben.iban),
+    bic: textOderNull(angaben.bic),
+    kontoinhaber: textOderNull(angaben.kontoinhaber),
+    bisherigeBankverbindung: textOderNull(angaben.bisherigeBankverbindung),
     version: zahl(angaben.version),
   };
 }

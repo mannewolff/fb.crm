@@ -132,14 +132,15 @@ function StuetzSymbol({ children }: { readonly children: ReactNode }) {
 }
 
 /**
- * Die Adresszeile der Kopfkarte: „Straße · PLZ Ort · Land", leere Teile entfallen.
+ * Die Adresszeile der Kopfkarte: „Straße · PLZ Ort · Land", leere Teile entfallen. Das Land
+ * steht mit seinem Namen, nicht mit dem Kuerzel (Issue #463).
  *
  * `undefined`, wo keine einzige Angabe steht — die Kopfkarte laesst ihre Zeile dann ganz weg,
  * statt eine leere Zeile mit Symbol zu zeigen (Kriterium 5).
  */
 function adressZeile(firma: Firma): ReactNode {
   const ortsteil = [firma.plz, firma.ort].filter((teil): teil is string => teil !== null).join(' ');
-  const teile = [firma.strasse, ortsteil === '' ? null : ortsteil, firma.land].filter(
+  const teile = [firma.strasse, ortsteil === '' ? null : ortsteil, firma.landName].filter(
     (teil): teil is string => teil !== null,
   );
   if (teile.length === 0) {

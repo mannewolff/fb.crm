@@ -113,6 +113,7 @@
   },
   "reviewCommand": "codex exec --model gpt-6-astra -c model_reasoning_effort=\"high\"",
   "formatFixCommand": "mvn spotless:apply",
+  "installCommand": "npm --prefix frontend ci --cache \"${TMPDIR:-/tmp}/npm-cache\" --no-audit --no-fund",
   "github": {
     "projectNumber": 13
   },

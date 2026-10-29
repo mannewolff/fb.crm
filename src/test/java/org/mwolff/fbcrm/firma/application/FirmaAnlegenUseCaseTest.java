@@ -13,6 +13,9 @@ import java.time.ZoneOffset;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.NullSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.Mock;
@@ -45,10 +48,7 @@ class FirmaAnlegenUseCaseTest {
 
   private static FirmaDaten daten(final String name) {
     return new FirmaDaten(
-        name,
-        new Anschrift("Am Wall 1", "28195", "Bremen", "Deutschland"),
-        "75/123/45678",
-        "DE123456789");
+        name, new Anschrift("Am Wall 1", "28195", "Bremen", "DE"), "75/123/45678", "DE123456789");
   }
 
   private Firma speichereUndFange(final FirmaDaten daten) {
@@ -95,7 +95,7 @@ class FirmaAnlegenUseCaseTest {
         .extracting(Firma::name, Firma::anschrift, Firma::steuernummer, Firma::umsatzsteuerId)
         .containsExactly(
             "Adler AG",
-            new Anschrift("Am Wall 1", "28195", "Bremen", "Deutschland"),
+            new Anschrift("Am Wall 1", "28195", "Bremen", "DE"),
             "75/123/45678",
             "DE123456789");
   }
@@ -137,25 +137,40 @@ class FirmaAnlegenUseCaseTest {
   void anlegen_givenOptionalFieldsOfWhitespaceOnly_thenStoresThemAsNull() {
     // When — E9: es gibt genau eine Schreibweise fuer „nicht angegeben".
     final Firma gespeichert =
-        speichereUndFange(new FirmaDaten("Adler AG", new Anschrift("  ", "", "\t", " "), "  ", ""));
+        speichereUndFange(
+            new FirmaDaten("Adler AG", new Anschrift("  ", "", "\t", "DE"), "  ", ""));
 
     // Then
     assertThat(gespeichert)
         .extracting(Firma::anschrift, Firma::steuernummer, Firma::umsatzsteuerId)
-        .containsExactly(new Anschrift(null, null, null, null), null, null);
+        .containsExactly(new Anschrift(null, null, null, "DE"), null, null);
   }
 
   @Test
   void anlegen_givenNoOptionalValuesAtAll_thenKeepsThemAbsent() {
-    // When — Kriterium 4: eine Firma darf mit nichts als ihrem Namen entstehen.
+    // When — Kriterium 4: eine Firma darf mit nichts als ihrem Namen und dem vorgelegten Land
+    // entstehen (Plan #461, E11).
     final Firma gespeichert =
         speichereUndFange(
-            new FirmaDaten("Adler AG", new Anschrift(null, null, null, null), null, null));
+            new FirmaDaten("Adler AG", new Anschrift(null, null, null, "DE"), null, null));
 
     // Then
     assertThat(gespeichert)
         .extracting(Firma::anschrift, Firma::steuernummer, Firma::umsatzsteuerId)
-        .containsExactly(new Anschrift(null, null, null, null), null, null);
+        .containsExactly(new Anschrift(null, null, null, "DE"), null, null);
+  }
+
+  @ParameterizedTest(name = "Land „{0}\" wird abgewiesen")
+  @ValueSource(strings = {"XX", "de", "Deutschland", "  "})
+  @NullSource
+  void anlegen_givenNoCodeOfTheCountryList_thenIsRefusedAndStoresNothing(final String land) {
+    final FirmaDaten eingabe =
+        new FirmaDaten("Adler AG", new Anschrift(null, null, null, land), null, null);
+
+    // When / Then — Plan #461, E11: was die Schnittstelle am Feld land abweist, weist auch die
+    // Transaktionsgrenze ab.
+    assertThatThrownBy(() -> useCase.anlegen(eingabe)).isInstanceOf(IllegalArgumentException.class);
+    verifyNoInteractions(firmen);
   }
 
   @Test
@@ -165,7 +180,7 @@ class FirmaAnlegenUseCaseTest {
         speichereUndFange(
             new FirmaDaten(
                 "Adler AG",
-                new Anschrift(" Am Wall 1 ", " 28195 ", " Bremen ", " Deutschland "),
+                new Anschrift(" Am Wall 1 ", " 28195 ", " Bremen ", " AT "),
                 " 75/123/45678 ",
                 " DE123456789 "));
 
@@ -173,9 +188,7 @@ class FirmaAnlegenUseCaseTest {
     assertThat(gespeichert)
         .extracting(Firma::anschrift, Firma::steuernummer, Firma::umsatzsteuerId)
         .containsExactly(
-            new Anschrift("Am Wall 1", "28195", "Bremen", "Deutschland"),
-            "75/123/45678",
-            "DE123456789");
+            new Anschrift("Am Wall 1", "28195", "Bremen", "AT"), "75/123/45678", "DE123456789");
   }
 
   @Test

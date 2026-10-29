@@ -56,6 +56,7 @@ class BriefbogenlayoutTest {
       new Belegempfaenger(
           "Franz Mustermann GmbH",
           new Anschrift("Muster-Str. 24", "28217", "Bremen", "Deutschland"),
+          null,
           null);
 
   private static Belegabsender absender(
@@ -71,7 +72,10 @@ class BriefbogenlayoutTest {
         steuernummer,
         umsatzsteuerId,
         bankverbindung,
-        "mmuster.org");
+        "mmuster.org",
+        null,
+        null,
+        null);
   }
 
   private static RechnungDruckdaten daten(final Belegabsender absender, final int positionen) {
@@ -122,6 +126,9 @@ class BriefbogenlayoutTest {
         null,
         null,
         "12/345/67890",
+        null,
+        null,
+        null,
         null,
         "MLP Bank Heidelberg");
   }
@@ -337,6 +344,35 @@ class BriefbogenlayoutTest {
   }
 
   @Test
+  void setze_givenIbanUndKontoinhaber_thenStehtDieBankzeileAusDenFeldern() {
+    // Given — eine Rechnung nach den Bankfeldern: kein Freitext mehr (Plan #461, E16).
+    final Belegabsender mitFeldern =
+        new Belegabsender(
+            "Max Mustermann",
+            null,
+            new Anschrift(null, null, null, null),
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            "DE89370400440532013000",
+            null,
+            "Max Mustermann");
+
+    // When
+    final List<Druckelement> elemente =
+        Briefbogenlayout.setze(daten(mitFeldern, 1), bogen(VORGABE));
+
+    // Then — ohne BIC endet die Zeile nach der IBAN.
+    assertThat(texte(elemente))
+        .filteredOn(text -> text.groesse() == 8)
+        .extracting(Druckelement.Text::text)
+        .containsExactly("Bankverbindung: Max Mustermann · IBAN DE89 3704 0044 0532 0130 00");
+  }
+
+  @Test
   void setze_givenNurDieSteuernummer_thenStehtNurSieInDerZeile() {
     // When
     final List<Druckelement> elemente =
@@ -512,6 +548,9 @@ class BriefbogenlayoutTest {
             null,
             null,
             "12/345/67890",
+            null,
+            null,
+            null,
             null,
             null,
             null);

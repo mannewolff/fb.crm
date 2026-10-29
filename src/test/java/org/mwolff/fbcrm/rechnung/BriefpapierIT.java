@@ -450,7 +450,8 @@ class BriefpapierIT extends AbstractIntegrationTest {
     eigene.put("plz", "28199");
     eigene.put("ort", "Bremen");
     eigene.put("steuernummer", "75/123/45678");
-    eigene.put("bankverbindung", "DE02 1203 0000 0000 2020 51");
+    eigene.put("iban", "DE02120300000000202051");
+    eigene.put("kontoinhaber", "Manfred Wolff");
     // Auf dem aktuellen Stand der eigenen Angaben, wie die Maske (Plan #415, E2).
     assertThat(
             rest.exchange(
@@ -465,6 +466,7 @@ class BriefpapierIT extends AbstractIntegrationTest {
     firma.put("strasse", "Hauptstrasse 1");
     firma.put("plz", "28195");
     firma.put("ort", "Bremen");
+    firma.put("land", "DE");
     ruf("/api/firmen", HttpMethod.POST, firma, String.class);
   }
 

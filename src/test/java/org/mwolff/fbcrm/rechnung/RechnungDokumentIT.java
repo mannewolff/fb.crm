@@ -90,7 +90,7 @@ class RechnungDokumentIT extends AbstractIntegrationTest {
     leereKonten(jdbc);
     accounts.save(Konten.neu(MAIL, ANGELEGT));
     sitzung = Anmeldung.perCode(rest, jdbc, hasher, MAIL);
-    eigeneAngabenSetzen("75/123/45678", "DE02 1203 0000 0000 2020 51");
+    eigeneAngabenSetzen("75/123/45678", "DE02120300000000202051");
     firmaId = firmaAnlegen(FIRMENNAME, "Hauptstrasse 1", "28195", "Bremen");
   }
 
@@ -119,20 +119,21 @@ class RechnungDokumentIT extends AbstractIntegrationTest {
         typ);
   }
 
-  private void eigeneAngabenSetzen(final String steuernummer, final String bankverbindung) {
+  private void eigeneAngabenSetzen(final String steuernummer, final String iban) {
     final Map<String, Object> rumpf = new LinkedHashMap<>();
     rumpf.put("name", "Manfred Wolff");
     rumpf.put("berufsbezeichnung", "Softwarearchitekt");
     rumpf.put("strasse", "Am Deich 2");
     rumpf.put("plz", "28199");
     rumpf.put("ort", "Bremen");
-    rumpf.put("land", "Deutschland");
+    rumpf.put("land", "DE");
     rumpf.put("email", "post@example.org");
     rumpf.put("telefon", "0421 123456");
     rumpf.put("webadresse", "https://example.org");
     rumpf.put("steuernummer", steuernummer);
     rumpf.put("umsatzsteuerId", "DE123456789");
-    rumpf.put("bankverbindung", bankverbindung);
+    rumpf.put("iban", iban);
+    rumpf.put("kontoinhaber", "Manfred Wolff");
     // Auf dem aktuellen Stand der eigenen Angaben, wie die Maske (Plan #415, E2).
     assertThat(
             rest.exchange(
@@ -164,7 +165,7 @@ class RechnungDokumentIT extends AbstractIntegrationTest {
     rumpf.put("strasse", strasse);
     rumpf.put("plz", plz);
     rumpf.put("ort", ort);
-    rumpf.put("land", "Deutschland");
+    rumpf.put("land", "DE");
     rumpf.put("steuernummer", null);
     rumpf.put("umsatzsteuerId", null);
     return rumpf;
@@ -327,7 +328,7 @@ class RechnungDokumentIT extends AbstractIntegrationTest {
     firmaSetzen("Adler Holding SE", "Neue Strasse 9", "20095", "Hamburg");
     positionSetzen(
         angebotId, Long.valueOf(positionId), "Beratung, neu benannt", "160.00", "120.00");
-    eigeneAngabenSetzen("99/999/99999", "DE99 9999 9999 9999 9999 99");
+    eigeneAngabenSetzen("99/999/99999", "DE89370400440532013000");
     einstellungenSetzen(2, "7.00");
 
     // Then — gelesen und nicht nachgedruckt: derselbe Beleg, Byte fuer Byte.

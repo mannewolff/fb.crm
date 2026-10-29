@@ -96,7 +96,11 @@ class EigeneAngabenPersistenceIT extends AbstractIntegrationTest {
     felder.put("webadresse", wert);
     felder.put("steuernummer", wert);
     felder.put("umsatzsteuerId", wert);
-    felder.put("bankverbindung", wert);
+    // IBAN und BIC haben eine Form, die ein beliebiger Wert nicht erfuellt; die Faelle dazu setzen
+    // sie selbst.
+    felder.put("iban", null);
+    felder.put("bic", null);
+    felder.put("kontoinhaber", wert);
     return felder;
   }
 
@@ -127,6 +131,7 @@ class EigeneAngabenPersistenceIT extends AbstractIntegrationTest {
             + " OR plz IS NOT NULL OR ort IS NOT NULL OR land IS NOT NULL"
             + " OR email IS NOT NULL OR telefon IS NOT NULL OR steuernummer IS NOT NULL"
             + " OR umsatzsteuer_id IS NOT NULL OR bankverbindung IS NOT NULL"
+            + " OR iban IS NOT NULL OR bic IS NOT NULL OR kontoinhaber IS NOT NULL"
             + " OR berufsbezeichnung IS NOT NULL OR webadresse IS NOT NULL",
         Integer.class);
   }
@@ -140,7 +145,8 @@ class EigeneAngabenPersistenceIT extends AbstractIntegrationTest {
     assertThat(antwort)
         .isEqualTo(
             new EigeneAngabenResponse(
-                null, null, null, null, null, null, null, null, null, null, null, null, 0L));
+                null, null, null, null, null, null, null, null, null, null, null, null, null, null,
+                null, 0L));
   }
 
   @Test
@@ -227,7 +233,8 @@ class EigeneAngabenPersistenceIT extends AbstractIntegrationTest {
     assertThat(gelesen())
         .isEqualTo(
             new EigeneAngabenResponse(
-                null, null, null, null, null, null, null, null, null, null, null, null, 2L));
+                null, null, null, null, null, null, null, null, null, null, null, null, null, null,
+                null, 2L));
   }
 
   @Test
@@ -269,5 +276,48 @@ class EigeneAngabenPersistenceIT extends AbstractIntegrationTest {
 
   private @Nullable String spalte(final String name) {
     return jdbc.queryForObject("SELECT " + name + " FROM eigene_angaben", String.class);
+  }
+
+  @Test
+  void pflegen_givenAnInvalidIban_thenBadRequestAndNothingChanges() {
+    // Given — Kriterium 7: die bisherige Bankverbindung steht auf Stand 0.
+    jdbc.update("UPDATE eigene_angaben SET bankverbindung = 'Sparkasse Bremen, Konto 1234567'");
+    final Map<String, Object> felder = rumpf("Wert");
+    felder.put("iban", "DE89 3704 0044 0532 0130 01");
+
+    // When
+    final ResponseEntity<String> antwort = gepflegtAuf(felder, 0L);
+
+    // Then — die Meldung steht am Feld, und weder Angaben noch Stand haben sich bewegt.
+    assertThat(antwort.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    assertThat(antwort.getBody()).contains("\"iban\"").contains("Diese IBAN ist ungültig.");
+    assertThat(gelesen())
+        .extracting(
+            EigeneAngabenResponse::name,
+            EigeneAngabenResponse::bisherigeBankverbindung,
+            EigeneAngabenResponse::version)
+        .containsExactly(null, "Sparkasse Bremen, Konto 1234567", 0L);
+  }
+
+  @Test
+  void pflegen_withIbanBicAndKontoinhaber_thenTheFieldsAreStoredAndTheOldTextIsCleared() {
+    // Given — E13 und E15.
+    jdbc.update("UPDATE eigene_angaben SET bankverbindung = 'Sparkasse Bremen, Konto 1234567'");
+    final Map<String, Object> felder = rumpf(null);
+    felder.put("iban", "de89 3704 0044 0532 0130 00");
+    felder.put("bic", "cobadeffxxx");
+
+    // When — zuerst ohne Kontoinhaber, dann mit.
+    gepflegt(felder);
+    final String nachDemErsten = spalte("bankverbindung");
+    felder.put("kontoinhaber", "Manfred Wolff");
+    gepflegt(felder);
+
+    // Then
+    assertThat(nachDemErsten).isEqualTo("Sparkasse Bremen, Konto 1234567");
+    assertThat(spalte("iban")).isEqualTo("DE89370400440532013000");
+    assertThat(spalte("bic")).isEqualTo("COBADEFFXXX");
+    assertThat(spalte("kontoinhaber")).isEqualTo("Manfred Wolff");
+    assertThat(spalte("bankverbindung")).isNull();
   }
 }

@@ -24,7 +24,13 @@ import org.mwolff.fbcrm.common.Anschrift;
  * @param webadresse Webadresse als Text fuer den Belegkopf, oder {@code null}
  * @param steuernummer Steuernummer, oder {@code null}
  * @param umsatzsteuerId Umsatzsteuer-Identifikationsnummer, oder {@code null}
- * @param bankverbindung Bankverbindung als Text, oder {@code null}
+ * @param iban IBAN ohne Leerzeichen in Grossbuchstaben, oder {@code null}; gueltig prueft sie der
+ *     Anwendungsfall (Plan #461, E15)
+ * @param bic BIC in Grossbuchstaben, oder {@code null}
+ * @param kontoinhaber Inhaber des Kontos, oder {@code null}
+ * @param bisherigeBankverbindung die Bankverbindung als Freitext, wie sie vor den drei Feldern
+ *     gepflegt wurde, oder {@code null}; nur noch zum Lesen und nur, bis IBAN und Kontoinhaber
+ *     gefuellt sind (E13)
  */
 public record EigeneAngaben(
     @Nullable String name,
@@ -35,4 +41,7 @@ public record EigeneAngaben(
     @Nullable String webadresse,
     @Nullable String steuernummer,
     @Nullable String umsatzsteuerId,
-    @Nullable String bankverbindung) {}
+    @Nullable String iban,
+    @Nullable String bic,
+    @Nullable String kontoinhaber,
+    @Nullable String bisherigeBankverbindung) {}

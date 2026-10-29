@@ -218,8 +218,9 @@ gegangen.
 
 **Zweck:** Die eigenen Angaben sind der Absender von fb.crm: Name, Anschrift, Kontakt, Steuer- und
 Bankangaben. Sie erscheinen auf jeder Rechnung. Ohne sie lässt sich keine Rechnung stellen —
-fb.crm verlangt dafür den Namen, Straße und Hausnummer, Postleitzahl, Ort, die Bankverbindung und
-die Steuernummer oder die Umsatzsteuer-Identifikationsnummer.
+fb.crm verlangt dafür den Namen, Straße und Hausnummer, Postleitzahl, Ort, IBAN und Kontoinhaber
+und die Steuernummer oder die Umsatzsteuer-Identifikationsnummer. Die bisherige Bankverbindung als
+Text genügt dafür nicht mehr; die BIC darf fehlen.
 
 **Einstieg:** In der Schiene im Block „Stammdaten" den Eintrag „Eigene Angaben" wählen. Die
 Ansicht zeigt oben das Formular „Eigene Angaben" und darunter die Karte „Briefpapier". Speichern,
@@ -230,13 +231,26 @@ und kann den Probedruck holen.
 
 1. Die Felder ausfüllen: „Name", „Berufsbezeichnung", „Straße und Hausnummer", „Postleitzahl",
    „Ort", „Land", „E-Mail-Adresse", „Telefon", „Webadresse", „Steuernummer",
-   „Umsatzsteuer-Identifikationsnummer" und „Bankverbindung".
+   „Umsatzsteuer-Identifikationsnummer", „Kontoinhaber", „IBAN" und „BIC (optional)".
 2. „Speichern" wählen.
 
 Kein Feld ist Pflicht beim Speichern: Die Angaben lassen sich nach und nach vervollständigen.
 Nach dem Speichern steht „Die Angaben sind gespeichert." über dem Formular. Ist ein Wert zu lang,
 steht die Meldung am betroffenen Feld. „Abbrechen" nimmt alle ungespeicherten Änderungen zurück
 auf den zuletzt gespeicherten Stand.
+
+**Bankverbindung:** Die Bankverbindung steht in drei Feldern: „Kontoinhaber", „IBAN" und „BIC".
+Die BIC darf leer bleiben. Die IBAN darf mit oder ohne Leerzeichen eingetragen werden; fb.crm
+prüft sie beim Speichern. Ist sie ungültig, etwa weil die Prüfziffer nicht stimmt, steht die
+Meldung am Feld „IBAN", und nichts wird gespeichert. Ebenso wird eine BIC in falscher Form
+abgewiesen.
+
+Früher war die Bankverbindung ein einziges Textfeld. Bei der Umstellung hat fb.crm daraus eine
+gültige IBAN und BIC übernommen, wo es eine fand, und als Kontoinhaber den eigenen Namen
+eingetragen. Solange IBAN oder Kontoinhaber nicht gespeichert sind, steht unter den Feldern der
+Hinweis „Bisherige Bankverbindung: … Bitte in die Felder oben übernehmen." mit dem früheren Text.
+Die Angaben daraus in die Felder übertragen und speichern; danach verschwindet der Hinweis.
+Rechnungen, die vor der Umstellung gestellt wurden, behalten ihre damalige Bankzeile.
 
 **Briefpapier:** Die Karte „Briefpapier" legt fest, worauf eine Rechnung gedruckt wird. Ohne
 Briefpapier steht dort „Noch kein Briefpapier hinterlegt. Rechnungen tragen die Gestaltung von
@@ -317,10 +331,12 @@ Klick auf den Namen öffnet die Seite der Firma.
 **Firma anlegen:**
 
 1. In der Übersicht „Neue Firma" wählen.
-2. Die Felder ausfüllen: „Name" ist Pflicht, dazu „Straße und Hausnummer", „Postleitzahl", „Ort",
-   „Land" (vorbelegt mit „Deutschland"), „Steuernummer" und
-   „Umsatzsteuer-Identifikationsnummer".
-3. „Anlegen" wählen. fb.crm öffnet die Seite der neuen Firma.
+2. Die Felder ausfüllen: „Name" und „Land" sind Pflicht, dazu „Straße und Hausnummer",
+   „Postleitzahl", „Ort", „Steuernummer" und „Umsatzsteuer-Identifikationsnummer". „Land" ist
+   eine Auswahl aus der Länderliste und beim Anlegen mit Deutschland vorbelegt. Ein anderes Land
+   lässt sich aus der Liste wählen oder durch Tippen seines Namens suchen, etwa „Österreich".
+3. „Anlegen" wählen. fb.crm öffnet die Seite der neuen Firma. Ihre Adresszeile nennt das Land mit
+   seinem Namen.
 
 Eine Rechnung an die Firma lässt sich erst stellen, wenn Name, Straße und Hausnummer, Postleitzahl
 und Ort eingetragen sind. „Bearbeiten" auf der Seite der Firma öffnet dieselben Felder, „Speichern"
@@ -451,7 +467,10 @@ Ein Entwurf, aus dem nichts werden soll, verschwindet über das Menü ⋯ mit �
 3. Die Rückfrage mit „Rechnung stellen" bestätigen.
 
 Fehlen dafür noch eigene Angaben oder Angaben der Firma, nennt fb.crm sie in einer Liste unter
-„Für das Stellen fehlen noch Angaben:", und die Rechnung bleibt Entwurf. Beim Stellen bekommt die
+„Für das Stellen fehlen noch Angaben:", und die Rechnung bleibt Entwurf. Eine Rechnung an einen
+Kunden außerhalb Deutschlands oder mit 0 % Steuer stellt fb.crm nicht: Die Meldung nennt den Grund,
+etwa „Der Kunde sitzt nicht in Deutschland." oder „Der Steuersatz beträgt 0 %.", und die Rechnung
+bleibt ein Entwurf. Diese Meldung kommt vor der Liste fehlender Angaben. Beim Stellen bekommt die
 Rechnung die nächste Nummer aus dem Nummernkreis der Rechnungseinstellungen; keine Nummer wird
 doppelt vergeben. Nummer, Beträge, Steuersatz und Zahlungsziel sind damit festgeschrieben.
 
@@ -461,6 +480,36 @@ hinterlegten Briefpapier, sonst in der Gestaltung von fb.crm. In der Übersicht 
 das Symbol in der Spalte „Dokument" dasselbe PDF herunter. Neben „Herunterladen" stehen „Als bezahlt
 markieren" und „Abschreiben" für den Ausgang der Forderung; „Zurück auf gestellt" nimmt beides
 zurück.
+
+**Die Bankzeile:** Im Fuß des Rechnungsdokuments, auf eigenem Briefpapier in der Zeile über dem
+unteren Rand, steht die Bankverbindung aus den eigenen Angaben im Wortlaut
+„Bankverbindung: <Kontoinhaber> · IBAN <IBAN> · BIC <BIC>", etwa „Bankverbindung: Manfred Wolff ·
+IBAN DE89 3704 0044 0532 0130 00 · BIC COBADEFFXXX". Die IBAN steht in Vierergruppen; ohne BIC
+endet die Zeile nach der IBAN. Ein Bankname steht dort nicht. Die Zeile gilt, wie sie beim Stellen
+war: Eine spätere Änderung der eigenen Angaben ändert eine gestellte Rechnung nicht.
+
+**E-Rechnung:** Jede Rechnung, die fb.crm stellt, ist zugleich eine E-Rechnung im Format ZUGFeRD,
+Profil EN 16931. Eine E-Rechnung ist ein PDF, in dem die Rechnungsdaten zusätzlich maschinenlesbar
+stecken: Nummer, Datum, Leistungszeitraum, Absender und Kunde mit Anschrift, die Positionen, Netto,
+Steuer, Brutto, Zahlungsziel und Bankverbindung. Die Buchhaltung des Kunden übernimmt sie direkt aus
+der Datei, statt sie abzutippen. Für Rechnungen zwischen Unternehmen im Inland ist die E-Rechnung
+Pflicht. Einen Schalter dafür gibt es nicht, und am Ablauf ändert sich nichts.
+
+Die E-Rechnung sieht aus wie das Rechnungsdokument bisher, mit und ohne eigenes Briefpapier; einen
+sichtbaren Hinweis auf die E-Rechnung trägt sie nicht. „Herunterladen" liefert genau diese Datei,
+einen zweiten Download gibt es nicht, und archiviert ist dieselbe Datei. Rechnungen, die vor der
+Einführung gestellt wurden, behalten ihr Dokument wie bisher, ohne E-Rechnungsdaten. Der Probedruck
+auf dem Briefpapier ist keine E-Rechnung, sondern ein gewöhnliches PDF.
+
+Mit eigenem Briefpapier sind die eingebetteten Rechnungsdaten immer vollständig. Ein vollständiges
+PDF/A, das Archivformat der E-Rechnung, entsteht aber nur, wenn das Briefpapier seine Schriften
+einbettet und seine Farben in RGB anlegt. Beim Export aus dem Grafik- oder Textprogramm also
+„Schriften einbetten" und den Farbraum RGB wählen. Ein Briefpapier in CMYK oder mit nicht
+eingebetteten Schriften liegt weiter unverändert unter der Rechnung; ein Prüfwerkzeug für PDF/A
+meldet dann Verstöße.
+
+Für die Begleitmail eignet sich etwa dieser Satz: „Die angehängte Rechnung ist eine E-Rechnung im
+Format ZUGFeRD (EN 16931); die Rechnungsdaten sind maschinenlesbar eingebettet."
 
 **Eine gestellte Rechnung ändert sich nicht mehr:** Sie lässt sich weder bearbeiten noch löschen.
 Der Weg zurück ist ein Storno; eine Taste dafür bietet fb.crm bisher nicht.

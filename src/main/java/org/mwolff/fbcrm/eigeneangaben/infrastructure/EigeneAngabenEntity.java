@@ -13,13 +13,19 @@ import org.mwolff.fbcrm.common.infrastructure.AnschriftSpalten;
 import org.mwolff.fbcrm.eigeneangaben.domain.EigeneAngaben;
 
 /**
- * Die eine Zeile der Tabelle {@code eigene_angaben} aus {@code V5__eigene_angaben.sql} und {@code
- * V33__version.sql}.
+ * Die eine Zeile der Tabelle {@code eigene_angaben} aus {@code V5__eigene_angaben.sql}, {@code
+ * V33__version.sql} und {@code V37__bankfelder.sql}.
  *
  * <p>Die Kennung wird nicht erzeugt, sondern gesetzt: Es gibt genau die Zeile {@link #ZEILE}, und
  * die Datenbank laesst ueber ihren CHECK keine zweite zu. Dass die Kennung von Anfang an steht,
  * macht aus jedem {@code save} ein UPDATE statt eines INSERT — genau das ist hier gewollt.
  */
+/*
+ * Sechzehn Felder, seit die Bankverbindung in drei Spalten steht (V37) und der bisherige Freitext
+ * daneben bleibt. Die Zeile ist die Zeile der Tabelle; sie in Teilzeilen zu zerlegen, nur um die
+ * Zahl zu druecken, klaerte nichts — wie bei RechnungEntity und BriefbogenEntity.
+ */
+@SuppressWarnings("PMD.TooManyFields")
 @Entity
 @Table(name = "eigene_angaben")
 class EigeneAngabenEntity {
@@ -59,6 +65,16 @@ class EigeneAngabenEntity {
   @Column(name = "umsatzsteuer_id", length = 50)
   private @Nullable String umsatzsteuerId;
 
+  @Column(name = "iban", length = 34)
+  private @Nullable String iban;
+
+  @Column(name = "bic", length = 11)
+  private @Nullable String bic;
+
+  @Column(name = "kontoinhaber", length = 200)
+  private @Nullable String kontoinhaber;
+
+  /* Die bisherige Bankverbindung als Freitext (V37, Plan #461, E13). */
   @Column(name = "bankverbindung", length = 200)
   private @Nullable String bankverbindung;
 
@@ -121,7 +137,10 @@ class EigeneAngabenEntity {
     this.webadresse = angaben.webadresse();
     this.steuernummer = angaben.steuernummer();
     this.umsatzsteuerId = angaben.umsatzsteuerId();
-    this.bankverbindung = angaben.bankverbindung();
+    this.iban = angaben.iban();
+    this.bic = angaben.bic();
+    this.kontoinhaber = angaben.kontoinhaber();
+    this.bankverbindung = angaben.bisherigeBankverbindung();
     this.updatedAt = geaendertAm;
     this.version = version;
     this.geaendertVon = geaendertVon;
@@ -161,6 +180,18 @@ class EigeneAngabenEntity {
 
   @Nullable String getUmsatzsteuerId() {
     return umsatzsteuerId;
+  }
+
+  @Nullable String getIban() {
+    return iban;
+  }
+
+  @Nullable String getBic() {
+    return bic;
+  }
+
+  @Nullable String getKontoinhaber() {
+    return kontoinhaber;
   }
 
   @Nullable String getBankverbindung() {

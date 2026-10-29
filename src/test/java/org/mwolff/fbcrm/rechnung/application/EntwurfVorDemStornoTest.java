@@ -55,6 +55,7 @@ class EntwurfVorDemStornoTest {
   private static final long ENTWURF = 2L;
   private static final Instant JETZT = Instant.parse("2026-10-05T09:00:00Z");
   private static final byte[] PDF = "%PDF-1.7 Rechnung".getBytes(StandardCharsets.UTF_8);
+  private static final byte[] CII = "<rsm:CrossIndustryInvoice/>".getBytes(StandardCharsets.UTF_8);
 
   private final Clock uhr = Clock.fixed(JETZT, ZoneOffset.UTC);
 
@@ -66,6 +67,7 @@ class EntwurfVorDemStornoTest {
   @Mock private Nummernkreis nummernkreis;
   @Mock private Rechnungsnummern rechnungsnummern;
   @Mock private Belegdrucker drucker;
+  @Mock private ERechnungsschreiber schreiber;
   @Mock private DokumentSpeicher dokumente;
   @Mock private BriefbogenRepository briefboegen;
   @Mock private Briefpapierspeicher briefpapier;
@@ -123,7 +125,8 @@ class EntwurfVorDemStornoTest {
     when(rechnungen.save(any())).thenAnswer(aufruf -> aufruf.getArgument(0));
     when(briefboegen.lies())
         .thenReturn(new Briefbogen(null, true, true, new Randmasse(250, 200, 985, 200, 200, 200)));
-    when(drucker.drucke(any(), any())).thenReturn(PDF);
+    when(schreiber.cii(any())).thenReturn(CII);
+    when(drucker.druckeERechnung(any(), any(), any())).thenReturn(PDF);
     when(dokumente.lege(ENTWURF, PDF)).thenReturn("rechnungen/2.pdf");
 
     // When
@@ -137,6 +140,7 @@ class EntwurfVorDemStornoTest {
                 nummernkreis,
                 rechnungsnummern,
                 drucker,
+                schreiber,
                 dokumente,
                 briefboegen,
                 briefpapier,

@@ -25,9 +25,23 @@ const ANGABEN: GespeicherteEigeneAngaben = {
   webadresse: 'https://mwolff.org',
   steuernummer: '75/123/45678',
   umsatzsteuerId: 'DE123456789',
-  bankverbindung: 'DE02120300000000202051',
+  iban: 'DE02120300000000202051',
+  bic: 'BYLADEM1001',
+  kontoinhaber: 'Manfred Wolff',
+  bisherigeBankverbindung: null,
   version: 3,
 };
+
+/** Nach der Umstellung: Im Freitext fand sich keine gueltige IBAN (#460, Kriterium 11). */
+const UMGESTELLT: GespeicherteEigeneAngaben = {
+  ...ANGABEN,
+  iban: null,
+  bic: null,
+  bisherigeBankverbindung: 'Sparkasse Bremen, Konto 1234567',
+};
+
+const HINWEIS =
+  'Bisherige Bankverbindung: Sparkasse Bremen, Konto 1234567. Bitte in die Felder oben übernehmen.';
 
 /** Was Anna inzwischen gespeichert hat (#411, Kriterium 1). */
 const ANNAS_STAND: GespeicherteEigeneAngaben = { ...ANGABEN, ort: 'Hamburg', version: 4 };
@@ -45,7 +59,10 @@ const LEER: GespeicherteEigeneAngaben = {
   webadresse: null,
   steuernummer: null,
   umsatzsteuerId: null,
-  bankverbindung: null,
+  iban: null,
+  bic: null,
+  kontoinhaber: null,
+  bisherigeBankverbindung: null,
   version: 0,
 };
 
@@ -96,9 +113,16 @@ function speichern() {
   return screen.getByRole('button', { name: 'Speichern' });
 }
 
-/** Die Angaben ohne Stand — so, wie die Maske sie als Rumpf schickt. */
+/**
+ * Die Angaben ohne Stand und ohne die bisherige Bankverbindung — so, wie die Maske sie als Rumpf
+ * schickt (Plan #461, E13: die bisherige ist nur zum Lesen da).
+ */
 function rumpf(angaben: GespeicherteEigeneAngaben): Record<string, unknown> {
-  return Object.fromEntries(Object.entries(angaben).filter(([feld]) => feld !== 'version'));
+  return Object.fromEntries(
+    Object.entries(angaben).filter(
+      ([feld]) => feld !== 'version' && feld !== 'bisherigeBankverbindung',
+    ),
+  );
 }
 
 /** Heute um die genannte Uhrzeit in der Ortszeit — die Meldung nennt dann nur die Uhrzeit. */
@@ -154,7 +178,10 @@ describe('EigeneAngabenMaske', () => {
     expect(feld('Telefon')).toHaveValue('0421/1234');
     expect(feld('Steuernummer')).toHaveValue('75/123/45678');
     expect(feld('Umsatzsteuer-Identifikationsnummer')).toHaveValue('DE123456789');
-    expect(feld('Bankverbindung')).toHaveValue('DE02120300000000202051');
+    expect(feld('Kontoinhaber')).toHaveValue('Manfred Wolff');
+    expect(feld('IBAN')).toHaveValue('DE02120300000000202051');
+    expect(feld('BIC (optional)')).toHaveValue('BYLADEM1001');
+    expect(screen.queryByRole('textbox', { name: 'Bankverbindung' })).not.toBeInTheDocument();
     expect(feld('Berufsbezeichnung')).toHaveValue('Freiberuflicher Softwareentwickler');
     expect(feld('Webadresse')).toHaveValue('https://mwolff.org');
   });
@@ -208,9 +235,9 @@ describe('EigeneAngabenMaske', () => {
     await screen.findByRole('textbox', { name: 'Name' });
     await screen.findByRole('textbox', { name: 'Linker Rand (mm)' });
 
-    // Zwoelf Felder der eigenen Angaben, sechs Raender des Briefbogens.
+    // Vierzehn Felder der eigenen Angaben, sechs Raender des Briefbogens.
     const felder = screen.getAllByRole('textbox');
-    expect(felder).toHaveLength(18);
+    expect(felder).toHaveLength(20);
     for (const eingabe of felder) {
       expect(eingabe).toHaveAccessibleName();
     }
@@ -389,6 +416,119 @@ describe('EigeneAngabenMaske', () => {
     expect(feld('E-Mail-Adresse')).toHaveAccessibleDescription('Die Adresse ist zu lang.');
     // Eine feldweise Meldung steht am Feld und nicht zusaetzlich als Stoerung darueber.
     expect(screen.queryByText(/nicht gespeichert/)).not.toBeInTheDocument();
+  });
+
+  it('Szenario: Eine ungültige IBAN wird abgewiesen', async () => {
+    const nutzer = userEvent.setup();
+    fetchMaske({
+      [PFAD]: json(200, UMGESTELLT),
+      [SCHREIBEN]: problem(400, 'Die Eingabe ist nicht gültig.', {
+        iban: ['Die IBAN ist ungültig.'],
+      }),
+    });
+
+    renderMaske();
+    // Angenommen ich pflege die eigenen Angaben, wenn ich eine IBAN mit falscher Pruefziffer
+    // eintrage und speichere …
+    await nutzer.type(
+      await screen.findByRole('textbox', { name: 'IBAN' }),
+      'DE03120300000000202051',
+    );
+    await nutzer.click(speichern());
+
+    // … dann steht am Feld die Meldung, dass die IBAN ungueltig ist.
+    expect(await screen.findByText('Die IBAN ist ungültig.')).toBeInTheDocument();
+    expect(feld('IBAN')).toHaveAccessibleDescription('Die IBAN ist ungültig.');
+    expect(feld('IBAN')).toHaveAttribute('aria-invalid', 'true');
+    expect(screen.queryByText(/nicht gespeichert/u)).not.toBeInTheDocument();
+    // Und die bisher hinterlegte Bankverbindung bleibt unveraendert stehen.
+    expect(screen.getByText(HINWEIS)).toBeInTheDocument();
+  });
+
+  it('zeigt die bisherige Bankverbindung, solange die IBAN leer ist', async () => {
+    fetchMaske({ [PFAD]: json(200, UMGESTELLT) });
+
+    renderMaske();
+
+    expect(await screen.findByText(HINWEIS)).toBeInTheDocument();
+  });
+
+  it('zeigt die bisherige Bankverbindung, solange der Kontoinhaber leer ist', async () => {
+    fetchMaske({
+      [PFAD]: json(200, { ...UMGESTELLT, iban: ANGABEN.iban, kontoinhaber: null }),
+    });
+
+    renderMaske();
+
+    expect(await screen.findByText(HINWEIS)).toBeInTheDocument();
+  });
+
+  it('zeigt keine bisherige Bankverbindung, wenn IBAN und Kontoinhaber gefuellt sind', async () => {
+    fetchMaske({ [PFAD]: json(200, { ...UMGESTELLT, iban: ANGABEN.iban }) });
+
+    renderMaske();
+    await screen.findByRole('textbox', { name: 'IBAN' });
+
+    expect(screen.queryByText(/Bisherige Bankverbindung/u)).not.toBeInTheDocument();
+  });
+
+  it('zeigt keinen Hinweis ohne bisherige Bankverbindung, auch bei leerer IBAN', async () => {
+    fetchMaske({ [PFAD]: json(200, LEER) });
+
+    renderMaske();
+    await screen.findByRole('textbox', { name: 'IBAN' });
+
+    expect(screen.queryByText(/Bisherige Bankverbindung/u)).not.toBeInTheDocument();
+  });
+
+  it('nimmt den Hinweis weg, sobald gespeichert ist, was ihn ersetzt', async () => {
+    const nutzer = userEvent.setup();
+    fetchMaske({
+      [PFAD]: json(200, UMGESTELLT),
+      // Stehen IBAN und Kontoinhaber, fuehrt der Server den Freitext nicht mehr (Plan #461, E13).
+      [SCHREIBEN]: json(200, { ...ANGABEN, version: 4 }),
+    });
+
+    renderMaske();
+    await nutzer.type(
+      await screen.findByRole('textbox', { name: 'IBAN' }),
+      'DE02120300000000202051',
+    );
+    // Getippt ist noch nicht gespeichert: Der Hinweis bleibt bis zur Antwort des Servers.
+    expect(screen.getByText(HINWEIS)).toBeInTheDocument();
+    await nutzer.click(speichern());
+
+    await screen.findByText('Die Angaben sind gespeichert.');
+    expect(screen.queryByText(/Bisherige Bankverbindung/u)).not.toBeInTheDocument();
+  });
+
+  it('schickt IBAN, BIC und Kontoinhaber, aber keine Bankverbindung', async () => {
+    const nutzer = userEvent.setup();
+    const fetchMock = fetchMaske({
+      [PFAD]: json(200, UMGESTELLT),
+      [SCHREIBEN]: json(200, { ...ANGABEN, version: 4 }),
+    });
+
+    renderMaske();
+    await nutzer.type(
+      await screen.findByRole('textbox', { name: 'IBAN' }),
+      'DE02120300000000202051',
+    );
+    await nutzer.type(feld('BIC (optional)'), 'BYLADEM1001');
+    await nutzer.clear(feld('Kontoinhaber'));
+    await nutzer.type(feld('Kontoinhaber'), 'Manfred Wolff');
+    await nutzer.click(speichern());
+
+    await screen.findByText('Die Angaben sind gespeichert.');
+    // Genau dieser Rumpf: die drei Bankfelder, weder `bankverbindung` noch die bisherige.
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/eigene-angaben',
+      expect.objectContaining({
+        method: 'PUT',
+        body: JSON.stringify(rumpf(ANGABEN)),
+      }),
+    );
+    expect(Object.keys(rumpf(ANGABEN))).not.toContain('bankverbindung');
   });
 
   it('meldet einen Fehlschlag ohne Feldbezug als Stoerung ueber dem Formular', async () => {

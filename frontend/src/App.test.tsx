@@ -88,6 +88,7 @@ const FIRMA = {
   plz: null,
   ort: null,
   land: null,
+  landName: null,
   steuernummer: null,
   umsatzsteuerId: null,
   aktiv: true,
@@ -404,7 +405,10 @@ describe('App', () => {
         webadresse: null,
         steuernummer: null,
         umsatzsteuerId: null,
-        bankverbindung: null,
+        iban: null,
+        bic: null,
+        kontoinhaber: null,
+        bisherigeBankverbindung: null,
       }),
     });
 

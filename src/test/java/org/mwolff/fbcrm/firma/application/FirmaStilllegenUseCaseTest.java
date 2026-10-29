@@ -51,7 +51,7 @@ class FirmaStilllegenUseCaseTest {
     return new Firma(
         7L,
         "Adler AG",
-        new Anschrift("Am Wall 1", "28195", "Bremen", "Deutschland"),
+        new Anschrift("Am Wall 1", "28195", "Bremen", "DE"),
         "75/123/45678",
         "DE123456789",
         aktiv,

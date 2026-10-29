@@ -107,7 +107,7 @@ const ABSENDER = {
   telefon: null,
   steuernummer: null,
   umsatzsteuerId: null,
-  bankverbindung: null,
+  bankzeile: 'Bankverbindung: Manfred Wolff · IBAN DE02 1203 0000 0000 2020 51',
   webadresse: null,
 };
 

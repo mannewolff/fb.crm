@@ -320,7 +320,7 @@ public final class Briefbogenlayout {
         Belegschreibweisen.verbunden(
             " · ",
             Belegschreibweisen.steuerzeile(absender),
-            Belegschreibweisen.mit("Bankverbindung: ", absender.bankverbindung()));
+            Belegschreibweisen.bankzeile(absender));
     if (!bogen.steuerBankZeile() || zeile == null) {
       return;
     }

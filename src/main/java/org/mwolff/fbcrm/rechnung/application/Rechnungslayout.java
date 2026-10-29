@@ -321,7 +321,7 @@ public final class Rechnungslayout {
         Belegschreibweisen.gefuellt(
             Belegschreibweisen.verbunden(" · ", absender.name(), absender.webadresse()),
             Belegschreibweisen.steuerzeile(absender),
-            Belegschreibweisen.mit("Bankverbindung: ", absender.bankverbindung()));
+            Belegschreibweisen.bankzeile(absender));
     for (int blatt = 1; blatt <= tabelle.seite(); blatt++) {
       elemente.add(
           new Druckelement.Linie(

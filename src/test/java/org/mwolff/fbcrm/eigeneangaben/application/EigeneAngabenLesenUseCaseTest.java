@@ -34,12 +34,15 @@ class EigeneAngabenLesenUseCaseTest {
         new EigeneAngaben(
             "Manfred Wolff",
             "Freiberuflicher Softwareentwickler",
-            new Anschrift("Am Wall 1", "28195", "Bremen", "Deutschland"),
+            new Anschrift("Am Wall 1", "28195", "Bremen", "DE"),
             "manne@example.org",
             "0421 1234",
             "https://mwolff.org",
             "75/123/45678",
             "DE123456789",
+            null,
+            null,
+            null,
             "DE02120300000000202051");
     when(bestand.lies()).thenReturn(gespeichert);
     when(bestand.stand()).thenReturn(new EigeneAngabenStand(4L, 30L, Instant.EPOCH));
@@ -56,7 +59,18 @@ class EigeneAngabenLesenUseCaseTest {
     // Given — nach der Migration steht die eine Zeile mit lauter NULL da.
     final EigeneAngaben leer =
         new EigeneAngaben(
-            null, null, new Anschrift(null, null, null, null), null, null, null, null, null, null);
+            null,
+            null,
+            new Anschrift(null, null, null, null),
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null);
     when(bestand.lies()).thenReturn(leer);
     when(bestand.stand()).thenReturn(new EigeneAngabenStand(0L, null, Instant.EPOCH));
 

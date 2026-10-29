@@ -7,6 +7,8 @@ import java.util.Objects;
 import org.mwolff.fbcrm.angebot.application.AngebotNichtGefunden;
 import org.mwolff.fbcrm.angebot.domain.Angebot;
 import org.mwolff.fbcrm.angebot.domain.AngebotRepository;
+import org.mwolff.fbcrm.common.Anschrift;
+import org.mwolff.fbcrm.common.Laenderliste;
 import org.mwolff.fbcrm.eigeneangaben.domain.EigeneAngaben;
 import org.mwolff.fbcrm.eigeneangaben.domain.EigeneAngabenRepository;
 import org.mwolff.fbcrm.firma.application.FirmaNichtGefunden;
@@ -32,8 +34,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Das Stellen einer Rechnung: Nummer, Festschreibung, Dokument (#160, Kriterien 13 bis 16, 18 und
- * 27; Plan #169, E7).
+ * Das Stellen einer Rechnung: Nummer, Festschreibung, Dokument als E-Rechnung (#160, Kriterien 13
+ * bis 16, 18 und 27; Plan #169, E7; Plan #461, E19).
  *
  * <p>Der eine nicht umkehrbare Schritt dieses Moduls. Er laeuft <b>in einer Transaktion</b>, und
  * die Reihenfolge seiner Schritte ist nicht beliebig:
@@ -49,9 +51,12 @@ import org.springframework.transaction.annotation.Transactional;
  *       nicht gesehen hat. Es zaehlt allein der Entwurf: Einstellungen, Eigene Angaben, Briefbogen
  *       und das Angebot gelten, wie sie im Augenblick des Stellens sind, und weisen nicht ab.
  *   <li><b>Abgewiesen wird vor dem Zug aus dem Nummernkreis.</b> Ein veralteter Stand, eine
- *       unbekannte Rechnung, eine schon gestellte, ein Entwurf ohne Position und fehlende
- *       Pflichtangaben — all das kostet keine Nummer, auch wenn ein Ruecklauf sie ohnehin wieder
- *       freigaebe.
+ *       unbekannte Rechnung, eine schon gestellte, ein Entwurf ohne Position, eine Rechnung
+ *       ausserhalb des Umfangs ({@link RechnungAusserhalbDesUmfangs}: Kunde nicht in Deutschland
+ *       oder Steuersatz 0 %; Plan #461, E18) und fehlende Pflichtangaben — all das kostet keine
+ *       Nummer, auch wenn ein Ruecklauf sie ohnehin wieder freigaebe. Der Umfang kommt vor den
+ *       Pflichtangaben: Wer im Ausland abrechnet, soll nicht erst Angaben nachtragen und dann
+ *       trotzdem abgewiesen werden.
  *   <li><b>Erst die gestellte Rechnung, dann ihr Dokument.</b> Entstuende das Dokument vorher,
  *       muesste die Nummer danach geschrieben werden, und ein fehlgeschlagener Druck risse eine
  *       Luecke in den Nummernkreis. So liegt im schlechten Fall ein Objekt ohne Rechnung im
@@ -84,6 +89,9 @@ import org.springframework.transaction.annotation.Transactional;
 @SuppressWarnings("PMD.CouplingBetweenObjects")
 public class RechnungStellenUseCase {
 
+  /** Das Laenderkuerzel des einzigen Landes, in dem fb.crm E-Rechnungen stellt. */
+  private static final String INLAND = "DE";
+
   private final RechnungRepository rechnungen;
   private final AngebotRepository angebote;
   private final FirmaRepository firmen;
@@ -92,21 +100,22 @@ public class RechnungStellenUseCase {
   private final Nummernkreis nummernkreis;
   private final Rechnungsnummern rechnungsnummern;
   private final Belegdrucker drucker;
+  private final ERechnungsschreiber schreiber;
   private final DokumentSpeicher dokumente;
   private final BriefbogenRepository briefboegen;
   private final Briefpapierspeicher briefpapier;
   private final Clock clock;
 
   /*
-   * PMD.ExcessiveParameterList: Zwoelf Mitspieler, und keiner davon ist zu entbehren: der Bestand
-   * der Rechnungen, das Angebot und seine Firma fuer die Kopie des Empfaengers, die eigenen Angaben
-   * fuer die des Absenders, die Einstellungen, der Nummernkreis und die Rechnungsnummern fuer die
-   * Nummer (#254, Kriterium 5), Drucker und Speicher fuer das Dokument, das BriefbogenRepository
-   * fuer Schalter, Raender und das hinterlegte Blatt und der Briefpapierspeicher fuer dessen Bytes
-   * als Untergrund (Plan #363, E3) und die Uhr fuer den Zeitpunkt. Sie zu Gruppen zusammenzufassen
-   * verschoebe die Zahl, ohne etwas zu klaeren: Das Stellen ist der Schritt, an dem alle Angaben
-   * eines Belegs zusammenkommen. Die Ausnahme steht am Konstruktor, die Regel bleibt im Regelsatz
-   * scharf.
+   * PMD.ExcessiveParameterList: Dreizehn Mitspieler, und keiner davon ist zu entbehren: der
+   * Bestand der Rechnungen, das Angebot und seine Firma fuer die Kopie des Empfaengers, die eigenen
+   * Angaben fuer die des Absenders, die Einstellungen, der Nummernkreis und die Rechnungsnummern fuer
+   * die Nummer (#254, Kriterium 5), Drucker, Schreiber der E-Rechnung (Plan #461, E19) und Speicher
+   * fuer das Dokument, das BriefbogenRepository fuer Schalter, Raender und das hinterlegte Blatt und
+   * der Briefpapierspeicher fuer dessen Bytes als Untergrund (Plan #363, E3) und die Uhr fuer den
+   * Zeitpunkt. Sie zu Gruppen zusammenzufassen verschoebe die Zahl, ohne etwas zu klaeren: Das
+   * Stellen ist der Schritt, an dem alle Angaben eines Belegs zusammenkommen. Die Ausnahme steht am
+   * Konstruktor, die Regel bleibt im Regelsatz scharf.
    */
   @SuppressWarnings("PMD.ExcessiveParameterList")
   RechnungStellenUseCase(
@@ -118,6 +127,7 @@ public class RechnungStellenUseCase {
       final Nummernkreis nummernkreis,
       final Rechnungsnummern rechnungsnummern,
       final Belegdrucker drucker,
+      final ERechnungsschreiber schreiber,
       final DokumentSpeicher dokumente,
       final BriefbogenRepository briefboegen,
       final Briefpapierspeicher briefpapier,
@@ -130,6 +140,7 @@ public class RechnungStellenUseCase {
     this.nummernkreis = nummernkreis;
     this.rechnungsnummern = rechnungsnummern;
     this.drucker = drucker;
+    this.schreiber = schreiber;
     this.dokumente = dokumente;
     this.briefboegen = briefboegen;
     this.briefpapier = briefpapier;
@@ -150,6 +161,8 @@ public class RechnungStellenUseCase {
    * @throws RechnungOhnePosition wenn der Entwurf keine Position traegt
    * @throws AngebotNichtGefunden wenn es das Angebot der Rechnung nicht gibt
    * @throws FirmaNichtGefunden wenn es die Firma des Angebots nicht gibt
+   * @throws RechnungAusserhalbDesUmfangs wenn der Kunde nicht in Deutschland sitzt oder der
+   *     Steuersatz 0 % betraegt
    * @throws PflichtangabenFehlen wenn eine Angabe fehlt, die auf einem Beleg stehen muss
    * @throws RechnungsnummerSchonVergeben wenn die gezogene Nummer schon eine Rechnung traegt, auch
    *     eine nachgetragene
@@ -167,13 +180,28 @@ public class RechnungStellenUseCase {
     final Angebot angebot =
         angebote.findByIdMitSperre(entwurf.angebotId()).orElseThrow(AngebotNichtGefunden::new);
     final Firma firma = firmen.findById(angebot.firmaId()).orElseThrow(FirmaNichtGefunden::new);
+    final Rechnungseinstellungen satz = einstellungen.lies();
     final EigeneAngaben eigene = eigeneAngaben.lies();
+    pruefeUmfang(firma, satz);
     Belegpflichtangaben.pruefe(eigene, firma);
 
-    final Rechnung festgeschrieben = schreibeFest(entwurf, eigene, firma, konto);
+    final Rechnung festgeschrieben = schreibeFest(entwurf, satz, eigene, firma, konto);
     final Rechnung gestellt = mitDokument(festgeschrieben);
     schliesseAngebotAbWennNichtsOffenIst(angebot, konto);
     return gestellt;
+  }
+
+  /*
+   * fb.crm stellt E-Rechnungen nur im Inland mit einem Steuersatz ueber 0 % (#460, Kriterium 13;
+   * Plan #461, E18). Ein gewoehnliches Dokument als Ersatz gibt es nicht.
+   */
+  private static void pruefeUmfang(final Firma firma, final Rechnungseinstellungen satz) {
+    if (!INLAND.equals(firma.anschrift().land())) {
+      throw new RechnungAusserhalbDesUmfangs(RechnungAusserhalbDesUmfangs.AUSLAND);
+    }
+    if (satz.steuersatz().signum() == 0) {
+      throw new RechnungAusserhalbDesUmfangs(RechnungAusserhalbDesUmfangs.OHNE_STEUER);
+    }
   }
 
   /*
@@ -183,8 +211,11 @@ public class RechnungStellenUseCase {
    * Serverfehler und kein 409.
    */
   private Rechnung schreibeFest(
-      final Rechnung entwurf, final EigeneAngaben eigene, final Firma firma, final long konto) {
-    final Rechnungseinstellungen satz = einstellungen.lies();
+      final Rechnung entwurf,
+      final Rechnungseinstellungen satz,
+      final EigeneAngaben eigene,
+      final Firma firma,
+      final long konto) {
     final Nummernmuster muster = satz.nummerMuster();
     final int jahr = entwurf.rechnungDatum().getYear();
     final String nummer =
@@ -214,16 +245,22 @@ public class RechnungStellenUseCase {
    * E7, E18). Mit hinterlegtem Briefpapier setzt {@link Briefbogenlayout}, und das Briefpapier
    * liegt als Untergrund darunter; ohne setzt {@link Rechnungslayout} wie bisher, ohne Untergrund —
    * Schalter und Raender des Briefbogens wirken dann nicht (fachliche Quelle #361, Kriterium 11).
+   *
+   * <p>In beiden Faellen ist das Dokument die E-Rechnung (#460, Kriterium 4; Plan #461, E19): Die
+   * XML entsteht aus derselben festgeschriebenen Rechnung und steckt im PDF, das abgelegt und
+   * heruntergeladen wird. Ein gewoehnliches Dokument entsteht hier nicht mehr — das bleibt dem
+   * Probedruck.
    */
   private Rechnung mitDokument(final Rechnung festgeschrieben) {
     final RechnungDruckdaten daten = Rechnungsbeleg.druckdaten(festgeschrieben);
+    final byte[] cii = schreiber.cii(Rechnungsbeleg.erechnungsdaten(festgeschrieben));
     final Briefbogen bogen = briefboegen.lies();
     final Briefpapierblatt blatt = bogen.blatt();
     final byte[] pdf =
         blatt == null
-            ? drucker.drucke(Rechnungslayout.setze(daten), null)
-            : drucker.drucke(
-                Briefbogenlayout.setze(daten, bogen), briefpapier.lies(blatt.schluessel()));
+            ? drucker.druckeERechnung(Rechnungslayout.setze(daten), null, cii)
+            : drucker.druckeERechnung(
+                Briefbogenlayout.setze(daten, bogen), briefpapier.lies(blatt.schluessel()), cii);
     return rechnungen.save(
         festgeschrieben.mitDokument(dokumente.lege(festgeschrieben.requireId(), pdf)));
   }
@@ -250,8 +287,21 @@ public class RechnungStellenUseCase {
     }
   }
 
+  /*
+   * Die Firma fuehrt das Land als Kuerzel. Gedruckt wird der deutsche Name, die E-Rechnung braucht
+   * das Kuerzel; die Kopie haelt beides (Plan #461, E10).
+   */
   private static Belegempfaenger empfaengerAus(final Firma firma) {
-    return new Belegempfaenger(firma.name(), firma.anschrift(), null);
+    final Anschrift anschrift = firma.anschrift();
+    return new Belegempfaenger(
+        firma.name(),
+        new Anschrift(
+            anschrift.strasse(),
+            anschrift.plz(),
+            anschrift.ort(),
+            Laenderliste.name(anschrift.land())),
+        null,
+        anschrift.land());
   }
 
   /*
@@ -267,7 +317,11 @@ public class RechnungStellenUseCase {
         eigene.telefon(),
         eigene.steuernummer(),
         eigene.umsatzsteuerId(),
-        eigene.bankverbindung(),
-        eigene.webadresse());
+        // Die Bankzeile entsteht aus den Feldern; der alte Freitext bleibt alten Rechnungen (E16).
+        null,
+        eigene.webadresse(),
+        eigene.iban(),
+        eigene.bic(),
+        eigene.kontoinhaber());
   }
 }

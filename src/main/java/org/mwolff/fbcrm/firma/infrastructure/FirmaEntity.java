@@ -1,5 +1,6 @@
 package org.mwolff.fbcrm.firma.infrastructure;
 
+import jakarta.persistence.AttributeOverride;
 import jakarta.persistence.Column;
 import jakarta.persistence.Embedded;
 import jakarta.persistence.Entity;
@@ -15,8 +16,8 @@ import org.mwolff.fbcrm.common.infrastructure.AnschriftSpalten;
 import org.mwolff.fbcrm.firma.domain.Firma;
 
 /**
- * Die Zeile der Tabelle {@code firma} aus {@code V2__firma_und_ansprechpartner.sql} und {@code
- * V33__version.sql}.
+ * Die Zeile der Tabelle {@code firma} aus {@code V2__firma_und_ansprechpartner.sql}, {@code
+ * V33__version.sql} und {@code db.migration.LandAlsKuerzelMigration} (V36).
  */
 @Entity
 @Table(name = "firma")
@@ -32,9 +33,12 @@ class FirmaEntity {
   /*
    * Hibernate laesst das eingebettete Objekt weg, wenn jede seiner Spalten NULL ist — eine Firma
    * wird oft mit nichts als ihrem Namen angelegt. Darum liest getAnschrift() es ueber
-   * AnschriftSpalten.anschriftAus und nicht direkt.
+   * AnschriftSpalten.anschriftAus und nicht direkt. Das Land ist seit V36 ein Pflicht-Kuerzel aus
+   * zwei Buchstaben (Plan #461, E11); die eigenen Angaben fuehren es weiter als Freitext.
    */
-  @Embedded private @Nullable AnschriftSpalten anschrift;
+  @Embedded
+  @AttributeOverride(name = "land", column = @Column(name = "land", length = 2, nullable = false))
+  private @Nullable AnschriftSpalten anschrift;
 
   @Column(name = "steuernummer", length = 50)
   private @Nullable String steuernummer;

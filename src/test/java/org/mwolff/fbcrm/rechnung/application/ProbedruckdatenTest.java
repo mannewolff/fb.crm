@@ -35,6 +35,9 @@ class ProbedruckdatenTest {
         "mmuster.org",
         "12/345/67890",
         "DE 01010101010",
+        "DE89370400440532013000",
+        "COBADEFFXXX",
+        "Max Mustermann",
         "MLP Bank Heidelberg");
   }
 
@@ -60,7 +63,10 @@ class ProbedruckdatenTest {
                 "12/345/67890",
                 "DE 01010101010",
                 "MLP Bank Heidelberg",
-                "mmuster.org"));
+                "mmuster.org",
+                "DE89370400440532013000",
+                "COBADEFFXXX",
+                "Max Mustermann"));
   }
 
   @Test
@@ -82,7 +88,10 @@ class ProbedruckdatenTest {
     assertThat(daten.empfaenger())
         .isEqualTo(
             new Belegempfaenger(
-                "Beispiel GmbH", new Anschrift("Musterweg 1", "12345", "Musterstadt", null), null));
+                "Beispiel GmbH",
+                new Anschrift("Musterweg 1", "12345", "Musterstadt", null),
+                null,
+                null));
     assertThat(daten.nummer()).isEqualTo("Muster-001");
     assertThat(daten.rechnungDatum()).isEqualTo(LocalDate.of(2026, 9, 30));
     assertThat(daten.leistungszeitraum()).isEqualTo("September 2026");

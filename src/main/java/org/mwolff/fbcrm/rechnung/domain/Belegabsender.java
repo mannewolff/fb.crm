@@ -17,8 +17,13 @@ import org.mwolff.fbcrm.common.Anschrift;
  * @param telefon Telefonnummer, oder {@code null}
  * @param steuernummer Steuernummer, oder {@code null}
  * @param umsatzsteuerId Umsatzsteuer-Identifikationsnummer, oder {@code null}
- * @param bankverbindung Bankverbindung als Text, oder {@code null}
+ * @param bankverbindung die Bankverbindung als Freitext, oder {@code null}; nur an Rechnungen, die
+ *     vor den Bankfeldern gestellt wurden — eine neue Rechnung schreibt sie nicht mehr (Plan #461,
+ *     E16)
  * @param webadresse Adresse des eigenen Webauftritts, oder {@code null}
+ * @param iban IBAN ohne Leerzeichen in Grossbuchstaben, oder {@code null} an alten Rechnungen
+ * @param bic BIC, oder {@code null}
+ * @param kontoinhaber Inhaber des Kontos, oder {@code null} an alten Rechnungen
  */
 public record Belegabsender(
     String name,
@@ -29,4 +34,7 @@ public record Belegabsender(
     @Nullable String steuernummer,
     @Nullable String umsatzsteuerId,
     @Nullable String bankverbindung,
-    @Nullable String webadresse) {}
+    @Nullable String webadresse,
+    @Nullable String iban,
+    @Nullable String bic,
+    @Nullable String kontoinhaber) {}

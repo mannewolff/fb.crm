@@ -79,20 +79,24 @@ final class Webdoppel {
       new Belegempfaenger(
           "Adler Aktiengesellschaft",
           new Anschrift("Hauptstrasse 1", "28195", "Bremen", "Deutschland"),
-          null);
+          null,
+          "DE");
 
   /** Die Kopie der eigenen Angaben an einer gestellten Rechnung. */
   static final Belegabsender ABSENDER_KOPIE =
       new Belegabsender(
           "Manfred Wolff",
           "Softwarearchitekt",
-          new Anschrift("Am Deich 2", "28199", "Bremen", "Deutschland"),
+          new Anschrift("Am Deich 2", "28199", "Bremen", "DE"),
           "post@example.org",
           "0421 123456",
           "75/123/45678",
           "DE123456789",
-          "DE02 1203 0000 0000 2020 51",
-          "https://example.org");
+          null,
+          "https://example.org",
+          "DE02120300000000202051",
+          "BYLADEM1001",
+          "Manfred Wolff");
 
   private Webdoppel() {}
 

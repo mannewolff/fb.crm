@@ -124,7 +124,7 @@ class FirmaControllerTest {
     return new Firma(
         7L,
         "Adler AG",
-        new Anschrift("Am Wall 1", "28195", "Bremen", "Deutschland"),
+        new Anschrift("Am Wall 1", "28195", "Bremen", "DE"),
         "75/123/45678",
         "DE123456789",
         aktiv,
@@ -153,15 +153,12 @@ class FirmaControllerTest {
 
   private static FirmaRequest anfrage(final String name) {
     return new FirmaRequest(
-        name, "Am Wall 1", "28195", "Bremen", "Deutschland", "75/123/45678", "DE123456789");
+        name, "Am Wall 1", "28195", "Bremen", "DE", "75/123/45678", "DE123456789");
   }
 
   private static FirmaDaten erwarteteDaten(final String name) {
     return new FirmaDaten(
-        name,
-        new Anschrift("Am Wall 1", "28195", "Bremen", "Deutschland"),
-        "75/123/45678",
-        "DE123456789");
+        name, new Anschrift("Am Wall 1", "28195", "Bremen", "DE"), "75/123/45678", "DE123456789");
   }
 
   @Test
@@ -212,6 +209,7 @@ class FirmaControllerTest {
                 "Am Wall 1",
                 "28195",
                 "Bremen",
+                "DE",
                 "Deutschland",
                 "75/123/45678",
                 "DE123456789",
@@ -400,11 +398,77 @@ class FirmaControllerTest {
     mockMvc.perform(get("/api/firmen/4711")).andExpect(status().isNotFound());
   }
 
+  @Test
+  void anlegen_givenAnUnknownCountryCode_thenNamesTheFieldLand() throws Exception {
+    // When / Then — Plan #461, E11: nur ein Kuerzel der Laenderliste.
+    mockMvc
+        .perform(
+            post("/api/firmen")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(rumpf("Adler AG", "\"XX\"")))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.fieldErrors.land").isArray());
+    verifyNoInteractions(anlegen);
+  }
+
+  @Test
+  void anlegen_givenNoCountry_thenNamesTheFieldLand() throws Exception {
+    // When / Then — das Land ist Pflicht.
+    mockMvc
+        .perform(
+            post("/api/firmen")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(rumpf("Adler AG", "null")))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.fieldErrors.land").isArray());
+    verifyNoInteractions(anlegen);
+  }
+
+  @Test
+  void anlegen_givenAustria_thenAnswersWithTheCodeAndTheGermanName() throws Exception {
+    // Given
+    final FirmaDaten inOesterreich =
+        new FirmaDaten(
+            "Adler AG",
+            new Anschrift("Am Wall 1", "28195", "Bremen", "AT"),
+            "75/123/45678",
+            "DE123456789");
+    when(anlegen.anlegen(inOesterreich))
+        .thenReturn(
+            new Firma(
+                7L,
+                "Adler AG",
+                inOesterreich.anschrift(),
+                "75/123/45678",
+                "DE123456789",
+                true,
+                ANGELEGT,
+                ANGELEGT,
+                0L,
+                null));
+
+    // When / Then
+    mockMvc
+        .perform(
+            post("/api/firmen")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(rumpf("Adler AG", "\"AT\"")))
+        .andExpect(status().isCreated())
+        .andExpect(jsonPath("$.land").value("AT"))
+        .andExpect(jsonPath("$.landName").value("Österreich"));
+  }
+
   private static String rumpf(final String name) {
+    return rumpf(name, "\"DE\"");
+  }
+
+  private static String rumpf(final String name, final String land) {
     return "{\"name\":\""
         + name
         + "\",\"strasse\":\"Am Wall 1\",\"plz\":\"28195\","
-        + "\"ort\":\"Bremen\",\"land\":\"Deutschland\",\"steuernummer\":\"75/123/45678\","
+        + "\"ort\":\"Bremen\",\"land\":"
+        + land
+        + ",\"steuernummer\":\"75/123/45678\","
         + "\"umsatzsteuerId\":\"DE123456789\"}";
   }
 }

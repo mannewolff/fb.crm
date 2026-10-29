@@ -13,9 +13,17 @@ import org.mwolff.fbcrm.common.Anschrift;
  * <p>Ein Ansprechpartner ist nicht noetig — Kriterium 12 verlangt die Firmenanschrift, nicht eine
  * Person.
  *
+ * <p>Das Land steht zweifach (Plan #461, E10): In der Anschrift der gedruckte Name, an neuen
+ * Rechnungen der deutsche Name aus der Laenderliste, an alten der damalige Freitext; als {@code
+ * landKuerzel} das Kuerzel fuer die E-Rechnung, an alten Rechnungen {@code null}.
+ *
  * @param firma Name der Firma; Pflicht, sobald ein Beleg festgeschrieben ist
  * @param anschrift Postanschrift der Firma; jede ihrer Angaben darf fehlen
  * @param ansprechpartner Anrede und Name der Person, oder {@code null}
+ * @param landKuerzel Kuerzel des Landes nach ISO 3166-1 alpha-2, oder {@code null}
  */
 public record Belegempfaenger(
-    String firma, Anschrift anschrift, @Nullable String ansprechpartner) {}
+    String firma,
+    Anschrift anschrift,
+    @Nullable String ansprechpartner,
+    @Nullable String landKuerzel) {}

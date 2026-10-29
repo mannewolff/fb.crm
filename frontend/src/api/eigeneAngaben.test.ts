@@ -15,10 +15,12 @@ const EINGABE = {
   webadresse: 'https://mwolff.org',
   steuernummer: '75/123/45678',
   umsatzsteuerId: 'DE123456789',
-  bankverbindung: 'DE02120300000000202051',
+  iban: 'DE02120300000000202051',
+  bic: 'BYLADEM1001',
+  kontoinhaber: 'Manfred Wolff',
 };
 
-const ANGABEN = { ...EINGABE, version: 3 };
+const ANGABEN = { ...EINGABE, bisherigeBankverbindung: null, version: 3 };
 
 /** Die frische Instanz: die Zeile steht, aber kein Feld ist gepflegt. */
 const LEERE_ANGABEN = {
@@ -33,7 +35,10 @@ const LEERE_ANGABEN = {
   webadresse: null,
   steuernummer: null,
   umsatzsteuerId: null,
-  bankverbindung: null,
+  iban: null,
+  bic: null,
+  kontoinhaber: null,
+  bisherigeBankverbindung: null,
   version: 0,
 };
 
@@ -50,6 +55,12 @@ describe('parseEigeneAngaben', () => {
     expect(parseEigeneAngaben(LEERE_ANGABEN)).toEqual(LEERE_ANGABEN);
   });
 
+  it('liest die bisherige Bankverbindung mit, solange der Server sie fuehrt', () => {
+    const umgestellt = { ...LEERE_ANGABEN, bisherigeBankverbindung: 'Sparkasse Bremen' };
+
+    expect(parseEigeneAngaben(umgestellt)).toEqual(umgestellt);
+  });
+
   it.each([
     ['kein Objekt', 42],
     ['null', null],
@@ -62,7 +73,10 @@ describe('parseEigeneAngaben', () => {
     ['name als Zahl', { ...ANGABEN, name: 7 }],
     ['plz als Zahl', { ...ANGABEN, plz: 28195 }],
     ['email als Objekt', { ...ANGABEN, email: {} }],
-    ['bankverbindung als Wahrheitswert', { ...ANGABEN, bankverbindung: false }],
+    ['iban als Wahrheitswert', { ...ANGABEN, iban: false }],
+    ['ohne bic', { ...ANGABEN, bic: undefined }],
+    ['kontoinhaber als Zahl', { ...ANGABEN, kontoinhaber: 7 }],
+    ['ohne bisherigeBankverbindung', { ...ANGABEN, bisherigeBankverbindung: undefined }],
     ['ohne version', { ...ANGABEN, version: undefined }],
     ['version als Text', { ...ANGABEN, version: '3' }],
   ])('weist %s ab', (_fall, wert) => {
@@ -96,6 +110,7 @@ describe('eigeneAngabenPflegen', () => {
       '/api/eigene-angaben',
       expect.objectContaining({
         method: 'PUT',
+        // Die bisherige Bankverbindung ist nur zum Lesen da (Plan #461, E13).
         body: JSON.stringify(EINGABE),
         headers: expect.objectContaining({ 'If-Match': '"3"' }) as unknown,
       }),

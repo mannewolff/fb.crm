@@ -244,7 +244,8 @@ final class Rechnungsdoppel {
   static final Belegempfaenger EMPFAENGER_KOPIE =
       new Belegempfaenger(
           "Adler Aktiengesellschaft",
-          new Anschrift("Hauptstrasse 1", "28195", "Bremen", "Deutschland"),
+          new Anschrift("Hauptstrasse 1", "28195", "Bremen", "DE"),
+          null,
           null);
 
   /** Die Kopie der eigenen Angaben an einer gestellten Rechnung. */
@@ -252,13 +253,16 @@ final class Rechnungsdoppel {
       new Belegabsender(
           "Manfred Wolff",
           "Softwarearchitekt",
-          new Anschrift("Am Deich 2", "28199", "Bremen", "Deutschland"),
+          new Anschrift("Am Deich 2", "28199", "Bremen", "DE"),
           "post@example.org",
           "0421 123456",
           "75/123/45678",
           "DE123456789",
           "DE02 1203 0000 0000 2020 51",
-          "https://example.org");
+          "https://example.org",
+          null,
+          null,
+          null);
 
   /** Eine gestellte Rechnung auf {@link #ANGEBOT}, festgeschrieben mit ihrem eigenen Steuersatz. */
   static Rechnung gestellt(
@@ -377,7 +381,7 @@ final class Rechnungsdoppel {
     return new Firma(
         Long.valueOf(id),
         name,
-        new Anschrift("Hauptstrasse 1", "28195", "Bremen", "Deutschland"),
+        new Anschrift("Hauptstrasse 1", "28195", "Bremen", "DE"),
         null,
         null,
         true,
@@ -392,12 +396,15 @@ final class Rechnungsdoppel {
     return new EigeneAngaben(
         "Manfred Wolff",
         "Softwarearchitekt",
-        new Anschrift("Am Deich 2", "28199", "Bremen", "Deutschland"),
+        new Anschrift("Am Deich 2", "28199", "Bremen", "DE"),
         "post@example.org",
         "0421 123456",
         "https://example.org",
         "75/123/45678",
         "DE123456789",
-        "DE02 1203 0000 0000 2020 51");
+        "DE02120300000000202051",
+        "BYLADEM1001",
+        "Manfred Wolff",
+        null);
   }
 }

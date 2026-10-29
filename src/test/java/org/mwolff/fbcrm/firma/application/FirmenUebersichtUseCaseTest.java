@@ -43,7 +43,7 @@ class FirmenUebersichtUseCaseTest {
     return new Firma(
         id,
         name,
-        new Anschrift("Am Wall 1", "28195", ort, "Deutschland"),
+        new Anschrift("Am Wall 1", "28195", ort, "DE"),
         null,
         null,
         aktiv,

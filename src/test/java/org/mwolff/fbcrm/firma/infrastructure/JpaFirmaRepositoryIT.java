@@ -53,7 +53,7 @@ class JpaFirmaRepositoryIT extends AbstractIntegrationTest {
     return new Firma(
         null,
         name,
-        new Anschrift("Am Wall 1", "28195", "Bremen", "Deutschland"),
+        new Anschrift("Am Wall 1", "28195", "Bremen", "DE"),
         "75/123/45678",
         "DE123456789",
         true,
@@ -67,7 +67,7 @@ class JpaFirmaRepositoryIT extends AbstractIntegrationTest {
     return new Firma(
         null,
         name,
-        new Anschrift(null, null, null, null),
+        new Anschrift(null, null, null, "DE"),
         null,
         null,
         false,
@@ -114,7 +114,7 @@ class JpaFirmaRepositoryIT extends AbstractIntegrationTest {
     assertThat(gefunden)
         .hasValueSatisfying(
             firma -> {
-              assertThat(firma.anschrift()).isEqualTo(new Anschrift(null, null, null, null));
+              assertThat(firma.anschrift()).isEqualTo(new Anschrift(null, null, null, "DE"));
               assertThat(firma.steuernummer()).isNull();
               assertThat(firma.umsatzsteuerId()).isNull();
               assertThat(firma.aktiv()).isFalse();
@@ -139,7 +139,7 @@ class JpaFirmaRepositoryIT extends AbstractIntegrationTest {
     repository.save(
         gesichert.geaendert(
             "Adler GmbH",
-            new Anschrift("Moenckebergstrasse 2", "20095", "Hamburg", "Deutschland"),
+            new Anschrift("Moenckebergstrasse 2", "20095", "Hamburg", "DE"),
             "75/999/00000",
             "DE999999999",
             GEAENDERT));

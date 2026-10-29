@@ -150,13 +150,14 @@ class RechnungNummerIT extends AbstractIntegrationTest {
     rumpf.put("strasse", "Am Deich 2");
     rumpf.put("plz", "28199");
     rumpf.put("ort", "Bremen");
-    rumpf.put("land", "Deutschland");
+    rumpf.put("land", "DE");
     rumpf.put("email", "post@example.org");
     rumpf.put("telefon", "0421 123456");
     rumpf.put("webadresse", "https://example.org");
     rumpf.put("steuernummer", steuernummer);
     rumpf.put("umsatzsteuerId", null);
-    rumpf.put("bankverbindung", "DE02 1203 0000 0000 2020 51");
+    rumpf.put("iban", "DE02120300000000202051");
+    rumpf.put("kontoinhaber", "Manfred Wolff");
     // Auf dem aktuellen Stand der eigenen Angaben, wie die Maske (Plan #415, E2).
     assertThat(
             rest.exchange(
@@ -174,7 +175,7 @@ class RechnungNummerIT extends AbstractIntegrationTest {
     rumpf.put("strasse", "Hauptstrasse 1");
     rumpf.put("plz", "28195");
     rumpf.put("ort", "Bremen");
-    rumpf.put("land", "Deutschland");
+    rumpf.put("land", "DE");
     rumpf.put("steuernummer", null);
     rumpf.put("umsatzsteuerId", null);
     ruf("/api/firmen", HttpMethod.POST, rumpf, String.class);

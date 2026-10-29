@@ -69,8 +69,12 @@ class PositionstabelleTest {
             null,
             null,
             null,
+            null,
+            null,
+            null,
             null),
-        new Belegempfaenger("Franz Mustermann GmbH", new Anschrift(null, null, null, null), null),
+        new Belegempfaenger(
+            "Franz Mustermann GmbH", new Anschrift(null, null, null, null), null, null),
         "0003-2026",
         LocalDate.of(2026, 9, 28),
         null,

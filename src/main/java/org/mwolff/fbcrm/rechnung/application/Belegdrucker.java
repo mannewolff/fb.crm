@@ -20,15 +20,10 @@ import org.jspecify.annotations.Nullable;
  * <p>Eine Rechnung kennt der Drucker nicht. Was auf dem Beleg steht, hat der Satz entschieden; hier
  * wird nur noch geschrieben.
  *
- * <p>Genau eine abstrakte Methode, aber bewusst kein funktionales Interface: Ein Port beschreibt
- * eine Rolle, die ein benannter Adapter uebernimmt, und wird nie als Lambda geschrieben. Ebenso
- * gehalten wie {@code mail.domain.MailGateway}.
+ * <p>Zwei Ausgaben: {@link #drucke} schreibt ein gewoehnliches PDF, wie es der Probedruck braucht;
+ * {@link #druckeERechnung} schreibt dieselben Seiten als E-Rechnung, PDF/A-3b mit eingebetteter XML
+ * (Plan #461, E4, E19). Welche Ausgabe ein Beleg bekommt, entscheidet der Anwendungsfall.
  */
-/*
- * PMD.ImplicitFunctionalInterface: {@code @FunctionalInterface} behauptete eine Absicht, die nicht
- * besteht — siehe den letzten Absatz des Klassenkommentars.
- */
-@SuppressWarnings("PMD.ImplicitFunctionalInterface")
 public interface Belegdrucker {
 
   /**
@@ -42,4 +37,21 @@ public interface Belegdrucker {
    * @return das vollstaendige PDF als Bytefolge
    */
   byte[] drucke(List<Druckelement> elemente, byte @Nullable [] briefpapier);
+
+  /**
+   * Schreibt die Elementfolge als E-Rechnung: dieselben Seiten wie {@link #drucke}, dazu der
+   * OutputIntent sRGB, die Metadaten nach PDF/A-3b und Factur-X und die XML als eingebettete Datei
+   * {@code factur-x.xml}.
+   *
+   * <p>Volles PDF/A entsteht ohne Briefpapier und mit einem Briefpapier, das seine Schriften
+   * einbettet und in RGB vorliegt. Ein anderes Briefpapier liegt unveraendert darunter; die XML ist
+   * in jedem Fall dieselbe (E5).
+   *
+   * @param elemente die gesetzten Elemente, wie bei {@link #drucke}
+   * @param briefpapier das hinterlegte Briefpapier, oder {@code null}, wie bei {@link #drucke}
+   * @param cii die XML der E-Rechnung in UTF-8, aus der auch die Rechnungsnummer fuer den Titel des
+   *     Dokuments stammt
+   * @return das vollstaendige PDF als Bytefolge
+   */
+  byte[] druckeERechnung(List<Druckelement> elemente, byte @Nullable [] briefpapier, byte[] cii);
 }

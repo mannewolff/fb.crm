@@ -61,6 +61,9 @@ class JpaEigeneAngabenRepository implements EigeneAngabenRepository {
         zeile.getWebadresse(),
         zeile.getSteuernummer(),
         zeile.getUmsatzsteuerId(),
+        zeile.getIban(),
+        zeile.getBic(),
+        zeile.getKontoinhaber(),
         zeile.getBankverbindung());
   }
 }

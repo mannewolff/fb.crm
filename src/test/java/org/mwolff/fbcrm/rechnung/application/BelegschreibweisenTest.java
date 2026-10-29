@@ -25,7 +25,83 @@ class BelegschreibweisenTest {
         steuernummer,
         umsatzsteuerId,
         null,
+        null,
+        null,
+        null,
         null);
+  }
+
+  private static Belegabsender bank(
+      final @Nullable String bankverbindung,
+      final @Nullable String iban,
+      final @Nullable String bic,
+      final @Nullable String kontoinhaber) {
+    return new Belegabsender(
+        "Max Mustermann",
+        null,
+        new Anschrift(null, null, null, null),
+        null,
+        null,
+        null,
+        null,
+        bankverbindung,
+        null,
+        iban,
+        bic,
+        kontoinhaber);
+  }
+
+  @Test
+  void bankzeile_givenKontoinhaberIbanUndBic_thenStehtDieIbanInVierergruppen() {
+    // When
+    final String zeile =
+        Belegschreibweisen.bankzeile(
+            bank(null, "DE89370400440532013000", "COBADEFFXXX", "Manfred Wolff"));
+
+    // Then — Kriterium 8 von #460 im Wortlaut.
+    assertThat(zeile)
+        .isEqualTo(
+            "Bankverbindung: Manfred Wolff · IBAN DE89 3704 0044 0532 0130 00 · BIC COBADEFFXXX");
+  }
+
+  @Test
+  void bankzeile_givenKeineBic_thenEndetDieZeileNachDerIban() {
+    // When
+    final String zeile =
+        Belegschreibweisen.bankzeile(bank(null, "DE89370400440532013000", null, "Manfred Wolff"));
+
+    // Then
+    assertThat(zeile).isEqualTo("Bankverbindung: Manfred Wolff · IBAN DE89 3704 0044 0532 0130 00");
+  }
+
+  @Test
+  void bankzeile_givenIbanUndAltenText_thenZaehltDieIban() {
+    // When
+    final String zeile =
+        Belegschreibweisen.bankzeile(
+            bank("MLP Bank Heidelberg", "DE89370400440532013000", null, "Manfred Wolff"));
+
+    // Then — eine Quelle fuer die Zeile (E16).
+    assertThat(zeile).isEqualTo("Bankverbindung: Manfred Wolff · IBAN DE89 3704 0044 0532 0130 00");
+  }
+
+  @Test
+  void bankzeile_givenKeineIbanAberAltenText_thenStehtDerAlteText() {
+    // When
+    final String zeile =
+        Belegschreibweisen.bankzeile(bank("MLP Bank Heidelberg", null, null, null));
+
+    // Then — eine Rechnung von vor den Bankfeldern bleibt, wie sie war.
+    assertThat(zeile).isEqualTo("Bankverbindung: MLP Bank Heidelberg");
+  }
+
+  @Test
+  void bankzeile_givenWederIbanNochAltenText_thenEntstehtKeineZeile() {
+    // When
+    final String zeile = Belegschreibweisen.bankzeile(bank(null, null, null, null));
+
+    // Then
+    assertThat(zeile).isNull();
   }
 
   @ParameterizedTest

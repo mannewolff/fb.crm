@@ -39,7 +39,18 @@ final class Randgrenzen {
    */
   private static final EigeneAngaben KEINE_ANGABEN =
       new EigeneAngaben(
-          null, null, new Anschrift(null, null, null, null), null, null, null, null, null, null);
+          null,
+          null,
+          new Anschrift(null, null, null, null),
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null);
 
   /** Steht beim Messen fuer einen fehlenden Namen; seine Laenge bewegt nichts. */
   private static final String NAMENSZEILE = "Name";

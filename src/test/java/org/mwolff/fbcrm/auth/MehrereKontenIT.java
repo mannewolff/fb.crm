@@ -603,7 +603,7 @@ class MehrereKontenIT extends AbstractIntegrationTest {
 
   private long angebot(final HttpHeaders sitzung) {
     final ResponseEntity<String> firma =
-        ruf(sitzung, "/api/firmen", HttpMethod.POST, Map.of("name", "Adler AG"));
+        ruf(sitzung, "/api/firmen", HttpMethod.POST, Map.of("name", "Adler AG", "land", "DE"));
     final ResponseEntity<String> angebot =
         ruf(
             sitzung,
