@@ -99,6 +99,7 @@ class RechnungStellenUseCaseTest {
   private static final String MUSTER_OHNE_JAHR = "R-{NNN}";
   private static final String NUMMER = "0001-2026";
   private static final byte[] PDF = "%PDF-1.7 Rechnung".getBytes(UTF_8);
+  private static final byte[] CII = "<rsm:CrossIndustryInvoice/>".getBytes(UTF_8);
   private static final String SCHLUESSEL = "rechnung/2/beleg.pdf";
 
   /** Der Stand, auf dem Manfred den Entwurf geoeffnet hat — der des frischen Entwurfs. */
@@ -139,6 +140,7 @@ class RechnungStellenUseCaseTest {
   @Mock private Nummernkreis nummernkreis;
   @Mock private Rechnungsnummern rechnungsnummern;
   @Mock private Belegdrucker drucker;
+  @Mock private ERechnungsschreiber schreiber;
   @Mock private DokumentSpeicher dokumente;
   @Mock private BriefbogenRepository briefboegen;
   @Mock private Briefpapierspeicher briefpapier;
@@ -161,6 +163,7 @@ class RechnungStellenUseCaseTest {
             nummernkreis,
             rechnungsnummern,
             drucker,
+            schreiber,
             dokumente,
             briefboegen,
             briefpapier,
@@ -254,7 +257,8 @@ class RechnungStellenUseCaseTest {
     when(briefboegen.lies()).thenReturn(bogen);
     when(rechnungen.saveAndFlush(any())).thenAnswer(aufruf -> aufruf.getArgument(0));
     when(rechnungen.save(any())).thenAnswer(aufruf -> aufruf.getArgument(0));
-    when(drucker.drucke(any(), any())).thenReturn(PDF);
+    when(schreiber.cii(any())).thenReturn(CII);
+    when(drucker.druckeERechnung(any(), any(), eq(CII))).thenReturn(PDF);
     when(dokumente.lege(ENTWURF, PDF)).thenReturn(SCHLUESSEL);
   }
 
@@ -590,7 +594,7 @@ class RechnungStellenUseCaseTest {
     // Then — scheitert der Druck, ist keine Nummer verbraucht.
     final InOrder reihenfolge = inOrder(rechnungen, drucker, dokumente);
     reihenfolge.verify(rechnungen).saveAndFlush(any());
-    reihenfolge.verify(drucker).drucke(any(), isNull());
+    reihenfolge.verify(drucker).druckeERechnung(any(), isNull(), eq(CII));
     reihenfolge.verify(dokumente).lege(anyLong(), any());
     reihenfolge.verify(rechnungen).save(any());
   }
@@ -701,12 +705,13 @@ class RechnungStellenUseCaseTest {
 
     // Then — der Briefbogen wird erst im Schritt „Dokument" gelesen, nach der Festschreibung.
     final InOrder reihenfolge =
-        inOrder(rechnungen, nummernkreis, briefboegen, drucker, dokumente, angebote);
+        inOrder(rechnungen, nummernkreis, schreiber, briefboegen, drucker, dokumente, angebote);
     reihenfolge.verify(rechnungen).findByIdMitSperre(ENTWURF);
     reihenfolge.verify(nummernkreis).ziehe(anyInt());
     reihenfolge.verify(rechnungen).saveAndFlush(any());
+    reihenfolge.verify(schreiber).cii(any());
     reihenfolge.verify(briefboegen).lies();
-    reihenfolge.verify(drucker).drucke(any(), any());
+    reihenfolge.verify(drucker).druckeERechnung(any(), any(), any());
     reihenfolge.verify(dokumente).lege(anyLong(), any());
     reihenfolge.verify(rechnungen).save(any());
     reihenfolge.verify(angebote).save(any());
@@ -722,7 +727,7 @@ class RechnungStellenUseCaseTest {
 
     // Then — gesetzt auf dem Briefbogen, das Briefpapier Byte fuer Byte als Untergrund.
     verify(rechnungen).saveAndFlush(festgeschrieben.capture());
-    verify(drucker).drucke(gesetzt.capture(), eq(BRIEFPAPIER));
+    verify(drucker).druckeERechnung(gesetzt.capture(), eq(BRIEFPAPIER), eq(CII));
     assertThat(gesetzt.getValue())
         .isEqualTo(
             Briefbogenlayout.setze(
@@ -736,10 +741,46 @@ class RechnungStellenUseCaseTest {
 
     // Then — der Satz der Kupferwolke wie bisher, kein Untergrund, kein Griff in den Speicher.
     verify(rechnungen).saveAndFlush(festgeschrieben.capture());
-    verify(drucker).drucke(gesetzt.capture(), isNull());
+    verify(drucker).druckeERechnung(gesetzt.capture(), isNull(), eq(CII));
     assertThat(gesetzt.getValue())
         .isEqualTo(Rechnungslayout.setze(Rechnungsbeleg.druckdaten(festgeschrieben.getValue())));
     verifyNoInteractions(briefpapier);
+  }
+
+  @Test
+  void stelle_thenTheERechnungIsWrittenFromTheFestgeschriebeneRechnung() {
+    // Given / When — Plan #461, E19: die XML aus derselben festgeschriebenen Rechnung wie der Satz.
+    derWegGelingt(entwurfUeber("80.00"), List.of(gestelltUeber("80.00")));
+
+    // Then
+    verify(rechnungen).saveAndFlush(festgeschrieben.capture());
+    verify(schreiber).cii(Rechnungsbeleg.erechnungsdaten(festgeschrieben.getValue()));
+  }
+
+  @Test
+  void stelle_thenTheDocumentIsAnERechnungAndNeverAnOrdinaryPdf() {
+    // Given / When — #460, Kriterium 4: das Dokument der gestellten Rechnung ist die E-Rechnung.
+    derWegGelingt(entwurfUeber("80.00"), List.of(gestelltUeber("80.00")));
+
+    // Then — ein gewoehnliches Dokument entsteht nicht.
+    verify(drucker, never()).drucke(any(), any());
+    verify(dokumente).lege(ENTWURF, PDF);
+  }
+
+  @Test
+  void stelle_whenTheERechnungCannotBeWritten_thenNothingIsPrintedOrStored() {
+    // Given — scheitert die XML, rollt die Transaktion zurueck; gedruckt und abgelegt wird nichts.
+    entwurfLiegt(entwurfUeber("80.00"));
+    angabenSind(Rechnungsdoppel.firma(), Rechnungsdoppel.eigeneAngaben());
+    nummerWirdGezogen(MUSTER_MIT_JAHR, 1);
+    when(rechnungen.saveAndFlush(any())).thenAnswer(aufruf -> aufruf.getArgument(0));
+    when(schreiber.cii(any())).thenThrow(new IllegalStateException("XML kaputt"));
+
+    // When / Then
+    assertThatThrownBy(() -> useCase.stelle(ENTWURF, GELESEN, MANFRED))
+        .isInstanceOf(IllegalStateException.class);
+    verifyNoInteractions(drucker, dokumente);
+    verify(rechnungen, never()).save(any());
   }
 
   @Test

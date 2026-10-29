@@ -5,6 +5,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
+import java.time.Clock;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
@@ -38,6 +39,11 @@ import org.springframework.stereotype.Component;
  * gleich zu Helvetica, deshalb bleiben Breiten und Umbrueche des Satzes, wie sie sind. Die Dateien
  * liegen mit ihrer Lizenz (SIL OFL 1.1) unter {@code beleg/}. Was die Schrift nicht schreiben soll,
  * ersetzt weiter {@link WinAnsiText}.
+ *
+ * <p>Die gestellte Rechnung schreibt {@link #druckeERechnung} auf genau demselben Weg und legt
+ * danach die Huelle der E-Rechnung um das Dokument (Plan #461, E4, E19): OutputIntent, Metadaten
+ * und die eingebettete XML aus {@link ERechnungshuelle}. Die Seiten sind dieselben wie bei {@link
+ * #drucke}; der Probedruck bleibt ohne Huelle.
  */
 @Component
 class PdfBoxDrucker implements Belegdrucker {
@@ -47,6 +53,17 @@ class PdfBoxDrucker implements Belegdrucker {
 
   /** Der fette Schnitt fuer Hervorhebungen. */
   static final String SCHRIFT_FETT = "/beleg/LiberationSans-Bold.ttf";
+
+  private final Clock clock;
+
+  /**
+   * Ein Drucker mit seiner Uhr.
+   *
+   * @param clock die Uhr fuer das Aenderungsdatum der eingebetteten XML
+   */
+  PdfBoxDrucker(final Clock clock) {
+    this.clock = clock;
+  }
 
   /*
    * Ausgenommen ist allein dieser Rahmen, nicht die Arbeit darin: Der IOException-Zweig ist mit
@@ -58,14 +75,36 @@ class PdfBoxDrucker implements Belegdrucker {
   @ExcludeFromJacocoGeneratedReport
   public byte[] drucke(final List<Druckelement> elemente, final byte @Nullable [] briefpapier) {
     try {
-      return geschrieben(elemente, briefpapier);
+      return geschrieben(elemente, briefpapier, null);
     } catch (final IOException nichtErreichbar) {
       throw new UncheckedIOException("Das Beleg-PDF liess sich nicht schreiben.", nichtErreichbar);
     }
   }
 
-  private static byte[] geschrieben(
-      final List<Druckelement> elemente, final byte @Nullable [] briefpapier) throws IOException {
+  /*
+   * Ausgenommen aus demselben Grund wie drucke: Nur der IOException-Zweig bleibt draussen, die
+   * Huelle selbst pruefen PdfBoxDruckerTest und PdfaPruefung.
+   */
+  @Override
+  @ExcludeFromJacocoGeneratedReport
+  public byte[] druckeERechnung(
+      final List<Druckelement> elemente, final byte @Nullable [] briefpapier, final byte[] cii) {
+    try {
+      return geschrieben(elemente, briefpapier, cii);
+    } catch (final IOException nichtErreichbar) {
+      throw new UncheckedIOException("Die E-Rechnung liess sich nicht schreiben.", nichtErreichbar);
+    }
+  }
+
+  /*
+   * Mit cii wird das Dokument vor dem Speichern zur E-Rechnung; ohne bleibt es ein gewoehnliches
+   * PDF. Die Seiten entstehen in beiden Faellen gleich.
+   */
+  private byte[] geschrieben(
+      final List<Druckelement> elemente,
+      final byte @Nullable [] briefpapier,
+      final byte @Nullable [] cii)
+      throws IOException {
     // Das Briefpapier bleibt offen, bis der Beleg geschrieben ist: Seine Blaetter sind als
     // Formulare in den Beleg uebernommen.
     try (PDDocument dokument = new PDDocument();
@@ -79,6 +118,9 @@ class PdfBoxDrucker implements Belegdrucker {
       for (int seite = 1; seite <= seiten; seite++) {
         schreibeSeite(
             dokument, untergrund.fuer(seite), elementeDerSeite(elemente, seite), normal, fett);
+      }
+      if (cii != null) {
+        ERechnungshuelle.umhuelle(dokument, cii, clock.instant());
       }
       final ByteArrayOutputStream ausgabe = new ByteArrayOutputStream();
       dokument.save(ausgabe);

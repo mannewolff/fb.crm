@@ -1,5 +1,6 @@
 package org.mwolff.fbcrm.rechnung.infrastructure;
 
+import java.time.Clock;
 import org.mwolff.fbcrm.rechnung.application.Belegdrucker;
 
 /**
@@ -19,6 +20,6 @@ public final class EchterDrucker {
    * @return der PDFBox-Drucker hinter seinem Port
    */
   public static Belegdrucker pdfBox() {
-    return new PdfBoxDrucker();
+    return new PdfBoxDrucker(Clock.systemUTC());
   }
 }

@@ -53,6 +53,9 @@
          angibt — ohne das scheitert schon das Laden seiner Konfiguration mit NoClassDefFoundError. -->
     <kosit-validator.version>1.6.3</kosit-validator.version>
     <commons-lang3.version>3.20.0</commons-lang3.version>
+    <!-- Die Pruefung auf PDF/A-3B (Plan #461, E20), nur im Testbereich: veraPDF, weil PDFBox
+         Preflight nur PDF/A-1b kennt. -->
+    <verapdf.version>1.30.3</verapdf.version>
 
     <jacoco.version>0.8.15</jacoco.version>
     <maven-enforcer-plugin.version>3.6.3</maven-enforcer-plugin.version>
@@ -180,6 +183,20 @@
         </exclusion>
       </exclusions>
     </dependency>
+    <!-- Die Metadaten der E-Rechnung (Plan #461, E4): XMP mit pdfaid und dem Erweiterungsschema
+         von Factur-X. Aus derselben Familie wie PDFBox und mit derselben Ausnahme fuer
+         commons-logging. -->
+    <dependency>
+      <groupId>org.apache.pdfbox</groupId>
+      <artifactId>xmpbox</artifactId>
+      <version>${pdfbox.version}</version>
+      <exclusions>
+        <exclusion>
+          <groupId>commons-logging</groupId>
+          <artifactId>commons-logging</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
 
     <dependency>
       <groupId>org.springframework.boot</groupId>
@@ -221,6 +238,20 @@
       <groupId>org.kosit</groupId>
       <artifactId>validator</artifactId>
       <version>${kosit-validator.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <!-- Die Pruefung auf PDF/A-3B (Plan #461, E20): das Validierungsmodell von veraPDF samt dem
+         Kern, der es ausfuehrt, nur im Test. -->
+    <dependency>
+      <groupId>org.verapdf</groupId>
+      <artifactId>validation-model-jakarta</artifactId>
+      <version>${verapdf.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.verapdf</groupId>
+      <artifactId>core-jakarta</artifactId>
+      <version>${verapdf.version}</version>
       <scope>test</scope>
     </dependency>
   </dependencies>

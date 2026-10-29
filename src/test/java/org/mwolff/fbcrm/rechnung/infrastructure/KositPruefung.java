@@ -34,7 +34,7 @@ import net.sf.saxon.s9api.XdmItem;
  * kein Szenario passt — ist ebenfalls ein Fehler: Eine Pruefung, die nichts geprueft hat, darf
  * nicht als bestanden gelten.
  */
-final class KositPruefung {
+public final class KositPruefung {
 
   private static final String BERICHT = "http://www.xoev.de/de/validator/varl/1";
 
@@ -58,7 +58,7 @@ final class KositPruefung {
    * @param xml die XML als Bytefolge
    * @return je Fehler eine Zeile „Code: Text"; leer, wenn die XML die Pruefung besteht
    */
-  static List<String> fehler(final byte[] xml) {
+  public static List<String> fehler(final byte[] xml) {
     final Result ergebnis = PRUEFUNG.checkInput(InputFactory.read(xml, "e-rechnung.xml"));
     final List<String> fehler = new ArrayList<>(ergebnis.getProcessingErrors());
     try {

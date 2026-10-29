@@ -120,9 +120,6 @@ class RechnungStellenIT extends AbstractIntegrationTest {
   /** Eine Farbe im Inhaltsstrom: drei Anteile und der Operator fuer Fuellung oder Strich. */
   private static final Pattern FARBE = Pattern.compile("(\\S+ \\S+ \\S+) (?:rg|RG)\\n");
 
-  /** Die Kennung im Trailer: PDFBox bildet sie bei jedem Schreiben aus der Uhrzeit. */
-  private static final Pattern KENNUNG = Pattern.compile("/ID \\[<([0-9A-F]+)> <([0-9A-F]+)>\\]");
-
   private final TestRestTemplate rest;
   private final AccountRepository accounts;
   private final SecretHasher hasher;
@@ -660,21 +657,17 @@ class RechnungStellenIT extends AbstractIntegrationTest {
     return zeilen;
   }
 
-  /**
-   * Der Beleg mit genullter Kennung im Trailer. Die Kennung behaelt ihre Laenge, damit alle
-   * Verweise im Dokument stehen bleiben; verglichen wird jedes andere Byte.
-   */
-  private static byte[] ohneKennung(final byte[] pdf) {
-    final Matcher kennung = KENNUNG.matcher(new String(pdf, ISO_8859_1));
-    final byte[] genullt = pdf.clone();
-    while (kennung.find()) {
-      for (int gruppe = 1; gruppe <= 2; gruppe++) {
-        for (int stelle = kennung.start(gruppe); stelle < kennung.end(gruppe); stelle++) {
-          genullt[stelle] = '0';
+  /** Die Inhaltsstroeme aller Seiten, in ihrer Reihenfolge: das, was auf dem Beleg zu sehen ist. */
+  private static List<String> seitenstroeme(final byte[] pdf) throws IOException {
+    final List<String> stroeme = new ArrayList<>();
+    try (PDDocument dokument = Loader.loadPDF(pdf)) {
+      for (final PDPage seite : dokument.getPages()) {
+        try (InputStream strom = seite.getContents()) {
+          stroeme.add(new String(strom.readAllBytes(), ISO_8859_1));
         }
       }
     }
-    return genullt;
+    return stroeme;
   }
 
   /** Zwei wirklich gleichzeitige Stellen-Aufrufe auf denselben Entwurf. */
@@ -822,18 +815,19 @@ class RechnungStellenIT extends AbstractIntegrationTest {
   }
 
   @Test
-  void stelle_givenKeinBriefpapier_thenOhneBriefpapierWieHeute() {
+  void stelle_givenKeinBriefpapier_thenOhneBriefpapierWieHeute() throws IOException {
     // Given — Szenario „Ohne Briefpapier": der Briefbogen steht auf dem Stand der Migration.
     final RechnungResponse entwurf = entwurfUeber(bestelltesAngebot("160.00"), "80.00");
 
     // When
     final long rechnungId = gestellt(entwurf.id()).id();
 
-    // Then — Kriterium 11: derselbe Beleg wie der Druck der Kupferwolke ohne Untergrund, Byte fuer
-    // Byte bis auf die Kennung im Trailer, die PDFBox bei jedem Schreiben neu bildet.
+    // Then — Kriterium 11: dieselben Seiten wie der Druck der Kupferwolke ohne Untergrund, Seite
+    // fuer Seite derselbe Inhaltsstrom. Die Huelle der E-Rechnung (Plan #461, E4) kommt dazu, ist
+    // aber nicht zu sehen; darum zaehlen die Seiten und nicht mehr die ganze Datei.
     final Rechnung gestellt = rechnungen.findById(rechnungId).orElseThrow();
     final byte[] heute = drucker.drucke(Kupferwolkensatz.von(gestellt), null);
-    assertThat(ohneKennung(beleg(rechnungId))).isEqualTo(ohneKennung(heute));
+    assertThat(seitenstroeme(beleg(rechnungId))).isEqualTo(seitenstroeme(heute)).isNotEmpty();
   }
 
   @Test

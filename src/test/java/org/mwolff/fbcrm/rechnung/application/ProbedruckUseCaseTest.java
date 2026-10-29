@@ -13,13 +13,17 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.IntStream;
 import org.apache.pdfbox.Loader;
+import org.apache.pdfbox.cos.COSName;
 import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.pdmodel.PDDocumentNameDictionary;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.PDPageContentStream;
+import org.apache.pdfbox.pdmodel.common.PDMetadata;
 import org.apache.pdfbox.pdmodel.common.PDRectangle;
 import org.apache.pdfbox.pdmodel.font.PDType1Font;
 import org.apache.pdfbox.pdmodel.font.Standard14Fonts;
 import org.apache.pdfbox.text.PDFTextStripper;
+import org.apache.xmpbox.xml.DomXmpParser;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -253,6 +257,27 @@ class ProbedruckUseCaseTest {
     assertThat(drucker.briefpapier).isNotNull();
   }
 
+  @Test
+  void probedruck_thenKeinPdfaidUndKeineEingebetteteDatei() throws Exception {
+    // Given — #460, Kriterium 6: der Probedruck bleibt ein gewoehnliches Dokument.
+    hinterlegt(vollstaendig());
+
+    // When
+    final byte[] pdf = useCase.drucke();
+
+    // Then — keine Metadaten nach PDF/A, keine eingebettete Datei, kein Eintrag unter /AF.
+    try (PDDocument dokument = Loader.loadPDF(pdf)) {
+      final PDMetadata metadaten = dokument.getDocumentCatalog().getMetadata();
+      if (metadaten != null) {
+        assertThat(new DomXmpParser().parse(metadaten.toByteArray()).getPDFAIdentificationSchema())
+            .isNull();
+      }
+      final PDDocumentNameDictionary namen = dokument.getDocumentCatalog().getNames();
+      assertThat(namen == null || namen.getEmbeddedFiles() == null).isTrue();
+      assertThat(dokument.getDocumentCatalog().getCOSObject().containsKey(COSName.AF)).isFalse();
+    }
+  }
+
   /** Der echte Drucker, der mitschreibt, was er bekam. */
   private static final class Mitschrift implements Belegdrucker {
 
@@ -265,6 +290,15 @@ class ProbedruckUseCaseTest {
       this.elemente.addAll(elemente);
       this.briefpapier = briefpapier;
       return echt.drucke(elemente, briefpapier);
+    }
+
+    /**
+     * Der Probedruck ist keine E-Rechnung (#460, Kriterium 6); kommt er hier an, ist das falsch.
+     */
+    @Override
+    public byte[] druckeERechnung(
+        final List<Druckelement> elemente, final byte @Nullable [] briefpapier, final byte[] cii) {
+      throw new AssertionError("Der Probedruck darf keine E-Rechnung schreiben.");
     }
   }
 }

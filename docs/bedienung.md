@@ -488,6 +488,29 @@ IBAN DE89 3704 0044 0532 0130 00 · BIC COBADEFFXXX". Die IBAN steht in Vierergr
 endet die Zeile nach der IBAN. Ein Bankname steht dort nicht. Die Zeile gilt, wie sie beim Stellen
 war: Eine spätere Änderung der eigenen Angaben ändert eine gestellte Rechnung nicht.
 
+**E-Rechnung:** Jede Rechnung, die fb.crm stellt, ist zugleich eine E-Rechnung im Format ZUGFeRD,
+Profil EN 16931. Eine E-Rechnung ist ein PDF, in dem die Rechnungsdaten zusätzlich maschinenlesbar
+stecken: Nummer, Datum, Leistungszeitraum, Absender und Kunde mit Anschrift, die Positionen, Netto,
+Steuer, Brutto, Zahlungsziel und Bankverbindung. Die Buchhaltung des Kunden übernimmt sie direkt aus
+der Datei, statt sie abzutippen. Für Rechnungen zwischen Unternehmen im Inland ist die E-Rechnung
+Pflicht. Einen Schalter dafür gibt es nicht, und am Ablauf ändert sich nichts.
+
+Die E-Rechnung sieht aus wie das Rechnungsdokument bisher, mit und ohne eigenes Briefpapier; einen
+sichtbaren Hinweis auf die E-Rechnung trägt sie nicht. „Herunterladen" liefert genau diese Datei,
+einen zweiten Download gibt es nicht, und archiviert ist dieselbe Datei. Rechnungen, die vor der
+Einführung gestellt wurden, behalten ihr Dokument wie bisher, ohne E-Rechnungsdaten. Der Probedruck
+auf dem Briefpapier ist keine E-Rechnung, sondern ein gewöhnliches PDF.
+
+Mit eigenem Briefpapier sind die eingebetteten Rechnungsdaten immer vollständig. Ein vollständiges
+PDF/A, das Archivformat der E-Rechnung, entsteht aber nur, wenn das Briefpapier seine Schriften
+einbettet und seine Farben in RGB anlegt. Beim Export aus dem Grafik- oder Textprogramm also
+„Schriften einbetten" und den Farbraum RGB wählen. Ein Briefpapier in CMYK oder mit nicht
+eingebetteten Schriften liegt weiter unverändert unter der Rechnung; ein Prüfwerkzeug für PDF/A
+meldet dann Verstöße.
+
+Für die Begleitmail eignet sich etwa dieser Satz: „Die angehängte Rechnung ist eine E-Rechnung im
+Format ZUGFeRD (EN 16931); die Rechnungsdaten sind maschinenlesbar eingebettet."
+
 **Eine gestellte Rechnung ändert sich nicht mehr:** Sie lässt sich weder bearbeiten noch löschen.
 Der Weg zurück ist ein Storno; eine Taste dafür bietet fb.crm bisher nicht.
 

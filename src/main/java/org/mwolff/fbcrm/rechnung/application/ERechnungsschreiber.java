@@ -10,7 +10,7 @@ package org.mwolff.fbcrm.rechnung.application;
  *
  * <p>Genau eine abstrakte Methode, aber bewusst kein funktionales Interface: Ein Port beschreibt
  * eine Rolle, die ein benannter Adapter uebernimmt, und wird nie als Lambda geschrieben. Ebenso
- * gehalten wie {@link Belegdrucker}.
+ * gehalten wie {@code mail.domain.MailGateway}.
  */
 /*
  * PMD.ImplicitFunctionalInterface: {@code @FunctionalInterface} behauptete eine Absicht, die nicht
