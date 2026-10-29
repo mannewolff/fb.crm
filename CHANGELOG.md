@@ -11,6 +11,22 @@ bleibt stehen, auch wenn nichts darunter steht.
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-10-29
+
+- chore: v1.5.1
+- Rechnung als PDF/A-3 mit eingebetteter E-Rechnung stellen (Issue #471)
+- Stellen außerhalb des Umfangs abweisen (Issue #470)
+- CII-Schreiber nach EN 16931 mit KoSIT-Pruefung (Issue #469)
+- Eingebettete Schrift Liberation Sans im Belegdruck (Issue #468)
+- Belegkopie mit Bankfeldern und Länderkürzel, neue Bankzeile (Issue #467)
+- Bankfelder in der Maske der eigenen Angaben (Issue #466)
+- Bankverbindung in Feldern: IBAN, BIC, Kontoinhaber (Issue #465)
+- Länderauswahl in der Firmenmaske (Issue #463)
+- Länderliste und Land der Firma als Kürzel (Issue #462)
+- installCommand fuer den Release-Worktree setzen (Issue #458)
+- Mutant in RechnungLoeschenUseCase getoetet (Issue #457)
+- Dateien aus Installer 5.4.8
+
 ## [1.5.0] - 2026-10-24
 
 - chore: v1.4.1
