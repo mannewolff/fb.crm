@@ -52,6 +52,30 @@ describe('Karte', () => {
     expect(screen.queryByRole('button')).not.toBeInTheDocument();
   });
 
+  it('macht den Titel mit titelId zum Sprungziel: id und tabIndex -1', () => {
+    renderMitTheme(
+      <Karte titel="Sicherung" titelId="sicherung">
+        <p>Inhalt</p>
+      </Karte>,
+    );
+
+    const titel = screen.getByRole('heading', { level: 2, name: 'Sicherung' });
+    expect(titel).toHaveAttribute('id', 'sicherung');
+    expect(titel).toHaveAttribute('tabindex', '-1');
+  });
+
+  it('setzt ohne titelId weder id noch tabIndex am Titel', () => {
+    renderMitTheme(
+      <Karte titel="Firmen">
+        <p>Inhalt</p>
+      </Karte>,
+    );
+
+    const titel = screen.getByRole('heading', { name: 'Firmen' });
+    expect(titel).not.toHaveAttribute('id');
+    expect(titel).not.toHaveAttribute('tabindex');
+  });
+
   it('zeigt den Zaehler auch bei null Eintraegen', () => {
     renderMitTheme(
       <Karte titel="Ansprechpartner" anzahl={0}>

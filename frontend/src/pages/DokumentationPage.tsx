@@ -26,10 +26,16 @@ import { ABSTAND_BUEHNE } from '../theme';
  * Seine Gestalt ist die der weichen Taste ({@link weichSx}); der aktive Teil liegt auf Pfirsich wie
  * der aktive Eintrag der Schiene.
  *
- * **Das Inhaltsverzeichnis** (E8) fuehrt die `##`-Ueberschriften als gewoehnliche Ankerverweise und
- * die `###`-Ueberschriften eingerueckt darunter. Den Sprung macht der Browser; die Ueberschrift
+ * **Das Inhaltsverzeichnis** fuehrt nur die `##`-Ueberschriften als gewoehnliche Ankerverweise
+ * (Issue #474, F2; hebt die eingerueckten `###`-Eintraege aus E8 auf — mit den Zwischentiteln
+ * waeren es sonst rund 60 Eintraege). Den Sprung macht der Browser; der Titel der Abschnittskarte
  * traegt dafuer `id` und `tabIndex={-1}` aus dem {@link Dokumenttext}. Die Gestalt folgt der
- * Angabenliste: 13,5 px, Zeilenabstand 10 px, die tiefere Ebene in Text matt.
+ * Angabenliste: 13,5 px, Zeilenabstand 10 px.
+ *
+ * **Die mitlaufende Spalte** (F3): Ab dem Umbruchpunkt `lg` (1200 px) steht die Karte „Inhalt"
+ * links neben den Abschnittskarten und klebt beim Rollen oben (`position: sticky`), um den
+ * Aussenabstand des Rahmens versetzt wie die Schiene; was nicht in die Hoehe passt, rollt in ihr.
+ * Darunter steht sie wie zuvor als Karte ueber dem Text.
  */
 
 const KEIN_WEG: readonly PfadVerweis[] = [];
@@ -54,34 +60,23 @@ function kennungZu(teil: string | undefined): Kennung | null {
   return TEILE.find((t) => t.kennung !== VORGABE && t.kennung === teil)?.kennung ?? null;
 }
 
-/** Ein Eintrag im Inhalt: eine `##`-Ueberschrift mit den `###`-Ueberschriften darunter. */
+/** Ein Eintrag im Inhalt: eine `##`-Ueberschrift (F2). */
 interface Eintrag {
   readonly text: string;
   readonly anker: string;
-  readonly unter: { readonly text: string; readonly anker: string }[];
 }
 
-/**
- * Die Gliederung aus den Ueberschriften. Eine `###` ohne `##` davor geht nicht verloren — sie
- * steht als eigener Eintrag, wie der Leser nichts verschluckt (E4).
- */
+/** Die Gliederung aus den `##`-Ueberschriften; die `###` stehen nur im Text (F2). */
 function gliederung(bloecke: readonly Block[]): Eintrag[] {
-  const eintraege: Eintrag[] = [];
-  for (const block of bloecke) {
-    if (block.art !== 'ueberschrift') {
-      continue;
-    }
-    const letzter = eintraege.at(-1);
-    if (block.ebene === 3 && letzter !== undefined) {
-      letzter.unter.push({ text: block.text, anker: block.anker });
-    } else {
-      eintraege.push({ text: block.text, anker: block.anker, unter: [] });
-    }
-  }
-  return eintraege;
+  return bloecke.flatMap((block) =>
+    block.art === 'ueberschrift' && block.ebene === 2 ? [{ text: block.text, anker: block.anker }] : [],
+  );
 }
 
 const LISTE = { listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: '10px' } as const;
+
+/** Der Abstand der mitlaufenden Spalte zum oberen Rand, wie bei der Schiene. */
+const SPALTE_OBEN = 20;
 
 function Inhalt({ bloecke }: { readonly bloecke: readonly Block[] }) {
   return (
@@ -92,21 +87,6 @@ function Inhalt({ bloecke }: { readonly bloecke: readonly Block[] }) {
             <Link href={`#${eintrag.anker}`} underline="hover" sx={{ fontWeight: 500 }}>
               {eintrag.text}
             </Link>
-            {eintrag.unter.length === 0 ? null : (
-              <Box component="ul" sx={{ ...LISTE, paddingLeft: '18px', marginTop: '10px' }}>
-                {eintrag.unter.map((unter) => (
-                  <li key={unter.anker}>
-                    <Link
-                      href={`#${unter.anker}`}
-                      underline="hover"
-                      sx={(theme) => ({ color: theme.vars.palette.kupferwolke.textMatt })}
-                    >
-                      {unter.text}
-                    </Link>
-                  </li>
-                ))}
-              </Box>
-            )}
           </li>
         ))}
       </Box>
@@ -162,12 +142,34 @@ export default function DokumentationPage() {
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: ABSTAND_BUEHNE }}>
       <Kopfkarte malName={dokument.titel} titel={dokument.titel} aktionen={<Umschalter />} />
-      <Karte titel="Inhalt">
-        <Inhalt bloecke={dokument.bloecke} />
-      </Karte>
-      <Karte>
+      <Box
+        sx={(theme) => ({
+          display: 'flex',
+          flexDirection: 'column',
+          gap: ABSTAND_BUEHNE,
+          [theme.breakpoints.up('lg')]: {
+            display: 'grid',
+            gridTemplateColumns: '240px minmax(0, 1fr)',
+            alignItems: 'start',
+          },
+        })}
+      >
+        <Box
+          sx={(theme) => ({
+            [theme.breakpoints.up('lg')]: {
+              position: 'sticky',
+              top: `${String(SPALTE_OBEN)}px`,
+              maxHeight: `calc(100vh - ${String(2 * SPALTE_OBEN)}px)`,
+              overflowY: 'auto',
+            },
+          })}
+        >
+          <Karte titel="Inhalt">
+            <Inhalt bloecke={dokument.bloecke} />
+          </Karte>
+        </Box>
         <Dokumenttext bloecke={dokument.bloecke} />
-      </Karte>
+      </Box>
     </Box>
   );
 }

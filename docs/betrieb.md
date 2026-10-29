@@ -36,7 +36,9 @@ openssl rand -hex 24
 Das Ergebnis in `.env` als `FBCRM_BOOTSTRAP_ADMIN_TOKEN=` eintragen. Alle übrigen Werte haben
 Defaults für den lokalen Betrieb; was sie bewirken, steht je Variable in `.env.example`.
 
-**Datenbank- und MinIO-Zugangsdaten:** Leer gelassen gelten bekannte Vorgaben (`fbcrm` für Name,
+### Datenbank- und MinIO-Zugangsdaten
+
+Leer gelassen gelten bekannte Vorgaben (`fbcrm` für Name,
 Nutzer und Passwort der Datenbank, `fbcrm` und `fbcrm-minio` für MinIO). Auf einem Rechner, der aus
 dem Internet erreichbar ist, eigene Werte setzen:
 
@@ -67,7 +69,7 @@ Der erste Lauf baut das Image und spielt die Datenbankmigrationen ein; das dauer
 Caddy startet erst, wenn die Anwendung gesund meldet; bis dahin zeigt `docker compose ps` sie als
 `starting`.
 
-**Gesundheitsprobe:**
+### Gesundheitsprobe
 
 ```bash
 docker compose ps
@@ -103,7 +105,9 @@ weiteren Konten legt ein C-Level in fb.crm selbst an (Abschnitt „Weitere Konte
 4. Den Code in das Feld „Code" eintippen und „Einrichten" wählen. Erst jetzt entsteht das Konto,
    und man ist angemeldet.
 
-**Code aus dem Protokoll:** Ist der Mailversand ausgeschaltet, schreibt fb.crm jeden Code in das
+### Code aus dem Protokoll
+
+Ist der Mailversand ausgeschaltet, schreibt fb.crm jeden Code in das
 Protokoll des Servers, bei der Einrichtung wie bei jeder späteren Anmeldung. Die Zeile lautet
 „Mailversand ausgeschaltet — Einmalcode … gilt bis …" und zeigt sich mit:
 
@@ -122,7 +126,9 @@ unter „Erste Schritte" beschrieben.
 
 Der Schlüssel wirkt nur, solange es noch kein Konto gibt — ein zweiter Aufruf wird abgewiesen.
 
-**Verlorenes Postfach:** Jede Anmeldung braucht einen Code an die Adresse des Kontos. Wer den
+### Verlorenes Postfach
+
+Jede Anmeldung braucht einen Code an die Adresse des Kontos. Wer den
 Zugang zu diesem Postfach verliert, kommt mit eingeschaltetem Mailversand nicht mehr hinein, und der
 Einmal-Schlüssel greift nicht mehr, sobald ein Konto existiert. Der Weg zurück ist, die Adresse des
 Kontos auf ein Postfach umzusetzen, das man erreicht:
@@ -146,7 +152,9 @@ Weitere Konten entstehen nicht über die Einrichtungsseite, sondern in fb.crm: E
 Fuß der Schiene „Mitarbeitende" und dort „Neues Konto" (Teil „Bedienung", Abschnitt
 „Mitarbeitende und Rollen"). Eine Registrierung gibt es nicht.
 
-**Mailversand im Betrieb mit mehreren Personen:** Sobald mehr als eine Person mit fb.crm arbeitet,
+### Mailversand im Betrieb mit mehreren Personen
+
+Sobald mehr als eine Person mit fb.crm arbeitet,
 muss der Mailversand eingerichtet sein (Abschnitt „Mailversand einrichten"). Jede Person meldet
 sich mit einem Code an, den fb.crm an ihre eigene Adresse schickt, und erfährt beim Anlegen ihres
 Kontos per Begrüßungsmail, unter welcher Adresse fb.crm erreichbar ist. Diese Adresse ist
@@ -154,7 +162,9 @@ Kontos per Begrüßungsmail, unter welcher Adresse fb.crm erreichbar ist. Diese 
 dem Anlegen; jeder Code steht dann weiterhin im Protokoll des Servers (Abschnitt „Konto
 einrichten", „Code aus dem Protokoll"), wo ihn nur der Betreiber liest.
 
-**Stillgelegte Konten:** Ein stillgelegtes Konto bleibt in der Datenbank, mit seiner Adresse und
+### Stillgelegte Konten
+
+Ein stillgelegtes Konto bleibt in der Datenbank, mit seiner Adresse und
 seinen Kommentaren. Seine Adresse lässt sich darum keinem neuen Konto geben; ein C-Level aktiviert
 stattdessen das bisherige Konto wieder.
 
@@ -242,7 +252,9 @@ Ob der Versand klappt, zeigt die Anmeldung per Code (Teil „Bedienung", „Erst
 die Mail mit dem Code an, ist der Mailversand eingerichtet. Ab dann steht kein Code mehr im
 Protokoll.
 
-**Lokal ausprobieren mit Mailpit:** Lokal gibt es keinen Mailserver. Den Auffangserver Mailpit
+### Lokal ausprobieren mit Mailpit
+
+Lokal gibt es keinen Mailserver. Den Auffangserver Mailpit
 bringt das Profil `dev-mail` mit; er nimmt jede Mail an, stellt keine zu und zeigt sie unter
 `http://localhost:8025`. Dafür in der `.env`:
 
@@ -269,13 +281,32 @@ Traefik und startet Caddy nicht. Aufruf:
 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
 ```
 
+**Nicht ohne Overlay starten.** Ein `docker compose up -d --build` ohne `-f` liest nur
+`docker-compose.yml`: Die Anwendung hängt dann nicht am Netz `web`, trägt keine Traefik-Labels und
+läuft mit `FBCRM_DEV_MODE=true`; Traefik antwortet auf die Domain mit 404, und Caddy startet mit.
+Wer den kurzen Aufruf gewohnt ist, trägt beide Dateien in die Server-`.env` ein — Compose liest sie
+dann bei jedem Aufruf in diesem Verzeichnis, auch bei `ps`, `logs` und `stop`:
+
+```
+COMPOSE_FILE=docker-compose.yml:docker-compose.prod.yml
+```
+
+Lief der Stack doch einmal ohne Overlay, erst Caddy entfernen, dann mit Overlay neu starten:
+
+```bash
+docker compose rm -sf caddy
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+```
+
 Pflicht in der Server-`.env` sind `FBCRM_SESSION_SECRET` (`openssl rand -base64 48`),
 `FBCRM_BASE_URL` und `FBCRM_DOMAIN`; ohne sie bricht schon `docker compose config` ab. Das
 Overlay setzt `FBCRM_DEV_MODE` fest auf `false` — mit dem voreingestellten Secret startet die
 Anwendung dort nicht. Auch hier wirkt eine Änderung der `.env` erst nach dem Aufruf oben, nicht
 nach `docker compose restart`.
 
-**Prüfschritt `X-Forwarded-For`.** Die Anwendung zählt Fehlversuche bei der Anmeldung je
+### Prüfschritt X-Forwarded-For
+
+Die Anwendung zählt Fehlversuche bei der Anmeldung je
 Absenderadresse. Hinter einem Proxy kennt sie die Adresse nur aus `X-Forwarded-For` — und glaubt
 dem Kopf ausschließlich, wenn die Gegenstelle in `FBCRM_TRUSTED_PROXIES` steht. Traefiks
 Vertrauenskonfiguration liegt nicht in diesem Repository. Vor dem Eintrag der Traefik-Adresse
@@ -292,7 +323,9 @@ Dokumenten (Anlagen am Angebot, gestellte Rechnungen, Briefpapier) und der Konfi
 Zugangsdaten. Nur alle drei zusammen lassen sich zurückspielen. Die Befehle laufen im Verzeichnis
 des Checkouts, fb.crm läuft zu Beginn.
 
-**Schritt 1: Verzeichnis anlegen und Version vermerken.** Die Wiederherstellung braucht dieselbe
+### Schritt 1: Verzeichnis anlegen und Version vermerken
+
+Die Wiederherstellung braucht dieselbe
 Version, auf der fb.crm beim Sichern läuft.
 
 ```bash
@@ -300,14 +333,16 @@ mkdir -p sicherung
 git describe --tags > sicherung/version.txt
 ```
 
-**Schritt 2: Anwendung anhalten**, damit sich während der Sicherung nichts ändert. Datenbank und
+### Schritt 2: Anwendung anhalten
+
+Die Anwendung anhalten, damit sich während der Sicherung nichts ändert. Datenbank und
 Objektspeicher laufen weiter.
 
 ```bash
 docker compose stop caddy fbcrm-api
 ```
 
-**Schritt 3: Datenbank in eine Datei schreiben.**
+### Schritt 3: Datenbank in eine Datei schreiben
 
 ```bash
 docker compose exec -T postgres pg_dump -U fbcrm -d fbcrm > sicherung/datenbank.sql
@@ -315,7 +350,9 @@ docker compose exec -T postgres pg_dump -U fbcrm -d fbcrm > sicherung/datenbank.
 
 Wer `POSTGRES_USER` oder `POSTGRES_DB` in der `.env` geändert hat, setzt dort die eigenen Werte ein.
 
-**Schritt 4: Abgelegte Dokumente kopieren.** Sie liegen im Band `minio_data`, dem Datenverzeichnis
+### Schritt 4: Abgelegte Dokumente kopieren
+
+Sie liegen im Band `minio_data`, dem Datenverzeichnis
 des Objektspeichers. Den Objektspeicher anhalten und das Verzeichnis herauskopieren:
 
 ```bash
@@ -323,19 +360,23 @@ docker compose stop minio
 docker compose cp minio:/data sicherung/minio_data
 ```
 
-**Schritt 5: Konfiguration sichern** — die `.env` mit allen Zugangsdaten:
+### Schritt 5: Konfiguration sichern
+
+Die `.env` mit allen Zugangsdaten:
 
 ```bash
 cp .env sicherung/env
 ```
 
-**Schritt 6: fb.crm wieder starten.**
+### Schritt 6: fb.crm wieder starten
 
 ```bash
 docker compose up -d
 ```
 
-**Wo die Sicherung landet.** Die Dateien liegen danach im Verzeichnis `sicherung` des Checkouts:
+### Wo die Sicherung landet
+
+Die Dateien liegen danach im Verzeichnis `sicherung` des Checkouts:
 `version.txt`, `datenbank.sql`, das Verzeichnis `minio_data` und `env`. Dort darf die Sicherung
 nicht bleiben, denn fällt der Rechner aus, ist sie mit ihm verloren. Das Verzeichnis gehört auf
 einen anderen Rechner oder ein externes Medium, am einfachsten als Archiv:
@@ -344,7 +385,9 @@ einen anderen Rechner oder ein externes Medium, am einfachsten als Archiv:
 tar czf fbcrm-sicherung-$(date +%F).tar.gz sicherung
 ```
 
-**Die Sicherung enthält die Geheimnisse.** In ihr stehen das Signaturgeheimnis der Sitzungen, die
+### Die Sicherung enthält die Geheimnisse
+
+In ihr stehen das Signaturgeheimnis der Sitzungen, die
 Passwörter von Datenbank, Objektspeicher und Mailserver und alle Kundendaten. Sie liegt darum nur
 dort, wo auch die `.env` liegen dürfte: verschlüsselt oder an einem Ort, auf den außer dem
 Betreiber niemand Zugriff hat. Nach dem Wegkopieren das Verzeichnis `sicherung` und das Archiv vom
@@ -361,7 +404,9 @@ sind nur die Dateien aus dem Abschnitt „Sicherung" und ein Rechner, der die Vo
 Abschnitt „Voraussetzungen" erfüllt. Unter eigenem Namen zeigt der DNS-Eintrag der Domain vorher
 auf den neuen Rechner.
 
-**Schritt 1: Projekt auschecken, dieselbe Versionsmarke.** Die Marke steht in `version.txt` der
+### Schritt 1: Projekt auschecken, dieselbe Versionsmarke
+
+Die Marke steht in `version.txt` der
 Sicherung, etwa `v1.2.0`. `ADRESSE` ist die Adresse, unter der das Projekt bezogen wird:
 
 ```bash
@@ -370,21 +415,27 @@ cd fb-crm
 git checkout v1.2.0
 ```
 
-**Schritt 2: Sicherung hineinlegen.** Im Verzeichnis des Checkouts liegt danach ein Verzeichnis
+### Schritt 2: Sicherung hineinlegen
+
+Im Verzeichnis des Checkouts liegt danach ein Verzeichnis
 `sicherung` mit `datenbank.sql`, `minio_data` und `env`. Ein Archiv wird dort ausgepackt, etwa:
 
 ```bash
 tar xzf fbcrm-sicherung-2026-10-20.tar.gz
 ```
 
-**Schritt 3: `.env` zurücklegen** — vor dem ersten Start, denn PostgreSQL übernimmt Name, Nutzer
+### Schritt 3: .env zurücklegen
+
+Die `.env` gehört vor dem ersten Start zurück, denn PostgreSQL übernimmt Name, Nutzer
 und Passwort der Datenbank nur beim ersten Anlegen seiner Daten:
 
 ```bash
 cp sicherung/env .env
 ```
 
-**Schritt 4: Bänder anlegen.** Datenbank und Objektspeicher starten, die Anwendung noch nicht;
+### Schritt 4: Bänder anlegen
+
+Datenbank und Objektspeicher starten, die Anwendung noch nicht;
 Compose legt dabei die Bänder `postgres_data` und `minio_data` leer an:
 
 ```bash
@@ -393,7 +444,7 @@ docker compose up -d postgres minio
 
 Weiter, wenn `docker compose ps` beide als `healthy` zeigt.
 
-**Schritt 5: Datenbank einspielen.**
+### Schritt 5: Datenbank einspielen
 
 ```bash
 docker compose exec -T postgres psql -U fbcrm -d fbcrm -v ON_ERROR_STOP=1 < sicherung/datenbank.sql
@@ -402,7 +453,9 @@ docker compose exec -T postgres psql -U fbcrm -d fbcrm -v ON_ERROR_STOP=1 < sich
 Der Befehl muss ohne Fehlermeldung durchlaufen. Wer `POSTGRES_USER` oder `POSTGRES_DB` geändert
 hat, setzt die eigenen Werte ein.
 
-**Schritt 6: Dokumente zurückschreiben.** Den Objektspeicher anhalten, das Datenverzeichnis in das
+### Schritt 6: Dokumente zurückschreiben
+
+Den Objektspeicher anhalten, das Datenverzeichnis in das
 Band `minio_data` kopieren und den Dateien den Eigentümer geben, unter dem MinIO läuft:
 
 ```bash
@@ -411,7 +464,7 @@ docker compose cp sicherung/minio_data/. minio:/data
 docker compose run --rm --user 0:0 --entrypoint /usr/bin/chown minio -R 65532:65532 /data
 ```
 
-**Schritt 7: Starten.**
+### Schritt 7: Starten
 
 ```bash
 docker compose up -d --build
@@ -420,7 +473,7 @@ docker compose up -d --build
 Der Start dauert wie beim ersten Mal einige Minuten. Weiter, wenn `docker compose ps` die Zeile von
 `fbcrm-api` als `healthy` zeigt.
 
-**Schritt 8: Prüfen.**
+### Schritt 8: Prüfen
 
 - Mit dem bisherigen Konto anmelden; die Seite „Einrichten" erscheint nicht.
 - Kunden, Angebote mit ihren Anlagen, Rechnungen samt Rechnungsdokument und das Briefpapier
@@ -438,17 +491,21 @@ Eine **veröffentlichte Version** von fb.crm ist ein Stand mit einer Versionsmar
 auf die neue, indem der Checkout auf die Marke der neuen Version geht. Die Datenbank passt fb.crm
 beim Start selbst an.
 
-**Schritt 1: Ausgangsversion vermerken.**
+### Schritt 1: Ausgangsversion vermerken
 
 ```bash
 git describe --tags
 ```
 
-**Schritt 2: Sichern.** Eine Sicherung anlegen, wie im Abschnitt „Sicherung" beschrieben, und vom
+### Schritt 2: Sichern
+
+Eine Sicherung anlegen, wie im Abschnitt „Sicherung" beschrieben, und vom
 Rechner wegkopieren. Ohne Sicherung nicht aktualisieren: Sie ist der Weg zurück, falls die neue
 Version nicht hochkommt.
 
-**Schritt 3: Neue Marke auschecken.** Die Marken holen und den Checkout auf die Marke `vX.Y.Z` der
+### Schritt 3: Neue Marke auschecken
+
+Die Marken holen und den Checkout auf die Marke `vX.Y.Z` der
 neuen Version bringen, etwa `v1.3.0`:
 
 ```bash
@@ -456,7 +513,7 @@ git fetch --tags
 git checkout v1.3.0
 ```
 
-**Schritt 4: Neu bauen und starten.**
+### Schritt 4: Neu bauen und starten
 
 ```bash
 docker compose up -d --build
@@ -465,7 +522,7 @@ docker compose up -d --build
 Weiter, wenn `docker compose ps` die Zeile von `fbcrm-api` als `healthy` zeigt. Kommt die Anwendung
 nicht hoch, nennt `docker compose logs fbcrm-api` den Grund.
 
-**Schritt 5: Prüfen.**
+### Schritt 5: Prüfen
 
 - Unter der Marke in der Seitenleiste steht die neue Versionsnummer.
 - Kunden, Angebote und Rechnungen sind unverändert da.
@@ -479,5 +536,7 @@ nicht hoch, nennt `docker compose logs fbcrm-api` den Grund.
   unveränderter E-Mail-Adresse und unverändertem Anzeigenamen; die nächste Anmeldung läuft wie
   gewohnt per Code.
 
-**Schritt 6: Ausgangs- und Zielversion vermerken**, etwa „am 2026-10-20 von v1.2.0 auf v1.3.0
+### Schritt 6: Ausgangs- und Zielversion vermerken
+
+Den Wechsel vermerken, etwa „am 2026-10-20 von v1.2.0 auf v1.3.0
 aktualisiert". Der Vermerk sagt beim nächsten Mal, von welcher Version aus aktualisiert wird.

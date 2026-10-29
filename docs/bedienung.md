@@ -13,7 +13,9 @@ man diese Dokumentation in fb.crm findet.
 **Einstieg:** Im Browser die Adresse der eigenen Instanz öffnen, etwa `https://localhost` oder die
 eigene Domain. Wer nicht angemeldet ist, landet auf der Seite „Anmelden".
 
-**Anmelden:** Jede Person hat ein eigenes Konto und meldet sich mit ihrer eigenen E-Mail-Adresse
+### Anmelden
+
+Jede Person hat ein eigenes Konto und meldet sich mit ihrer eigenen E-Mail-Adresse
 an. Angemeldet wird man mit einem Code, den fb.crm per Mail an diese Adresse schickt. Wer neu ist,
 bekommt vorher eine Begrüßungsmail mit der Adresse von fb.crm, sobald ein C-Level das Konto
 angelegt hat.
@@ -30,7 +32,9 @@ schon benutzt. Bitte einen neuen Code anfordern." Über „Andere Adresse" geht 
 Schritt, dort fordert man einen neuen Code an oder korrigiert die Adresse. Ist der Mailversand
 ausgeschaltet, steht der Code im Protokoll des Servers (siehe Teil „Betrieb").
 
-**Aufbau der Oberfläche:** Links steht die Schiene mit der Marke oben, rechts der Inhaltsbereich
+### Aufbau der Oberfläche
+
+Links steht die Schiene mit der Marke oben, rechts der Inhaltsbereich
 mit der gewählten Ansicht. Die Schiene trägt zwei Blöcke:
 
 - „Geschäft" mit „Angebote", „Arbeitszeit", „Rechnungen" und „Jahresabschlüsse" — das
@@ -48,7 +52,9 @@ beide. „Mitarbeitende" sieht nur ein C-Level. Ruft man eine Ansicht, die der e
 offensteht, über ihre Adresse direkt auf, erscheint die Meldung „Diese Ansicht steht deiner Rolle
 nicht offen" mit einem Weg zur Startseite. Welche Rolle das eigene Konto hat, steht auf der Karte im Fuß der Schiene.
 
-**Diese Dokumentation in fb.crm:** Im Fuß der Schiene „Dokumentation" wählen. Die Dokumentation
+### Diese Dokumentation in fb.crm
+
+Im Fuß der Schiene „Dokumentation" wählen. Die Dokumentation
 ist nur nach der Anmeldung erreichbar; wer nicht angemeldet ist, kommt zuerst auf die Seite
 „Anmelden". Zuerst erscheint der Teil „Bedienung"; oben rechts wechselt man zum Teil „Betrieb"
 und zurück. Die Karte „Inhalt" führt jeden Abschnitt des gezeigten Teils auf, ein Klick springt zu
@@ -61,23 +67,28 @@ ihm. Im Projekt liegt derselbe Text als Datei unter `docs/`.
 **Zweck:** Mehrere Personen arbeiten mit fb.crm, und manchmal haben zwei dasselbe Angebot offen.
 Speichern beide nacheinander, überschreibt fb.crm die Änderung des Ersten nicht still: Es weist
 das zweite Speichern ab, sagt, wer wann geändert hat, und niemand verliert seine Eingaben. Dieser
-Abschnitt zeigt, was dann geschieht und wie man weitermacht. Bisher gilt das beim Speichern in der
-Maske „Angebot bearbeiten" und in der Ansicht eines Angebots bei „Status weiter", „Status zurück",
-„Abschließen", „Wieder öffnen", „Stornieren" und „Storno zurücknehmen", dazu beim Bearbeiten und
-Löschen eines Kommentars und beim Löschen einer Anlage. An einer Rechnung gilt es beim Speichern
-und Löschen des Entwurfs, bei „Rechnung stellen" und bei „Als bezahlt markieren", „Abschreiben" und
-„Zurück auf gestellt". An einer nachgetragenen Rechnung gilt es in jedem Zustand beim Speichern in
-der Maske „Nachgetragene Rechnung bearbeiten", beim Ersetzen oder Entfernen ihres PDFs, beim Löschen
-und bei „Als bezahlt markieren", „Abschreiben" und „Zurück auf gestellt". Unter „Administration"
-gilt es beim Speichern der Einstellungen zur Rechnung. Bei den Eigenen Angaben gilt es beim
-Speichern der Angaben und in der Karte „Briefpapier" beim Hochladen, Ersetzen und Entfernen des Briefpapiers und bei „Einstellungen
-speichern". Bei Firmen und Ansprechpartnern gilt es beim Speichern in den Masken „Firma
-bearbeiten" und „Ansprechpartner bearbeiten" und bei „Stilllegen" und „Wieder aktivieren". In der
-Arbeitszeit gilt es beim Speichern im Dialog „Arbeitszeit ändern" und beim Löschen eines Eintrags.
-Unter „Mitarbeitende" gilt es beim Speichern in der Maske „Konto bearbeiten" und bei „Stilllegen"
-und „Wieder aktivieren".
-Das
-Angebot zählt dabei als Ganzes, mit seinen Positionen und seinem Status; jeder Kommentar ist ein
+Abschnitt zeigt, was dann geschieht und wie man weitermacht. Bisher gilt das an diesen Stellen:
+
+- Bei Angeboten gilt es beim Speichern in der Maske „Angebot bearbeiten" und in der Ansicht eines
+  Angebots bei „Status weiter", „Status zurück", „Abschließen", „Wieder öffnen", „Stornieren" und
+  „Storno zurücknehmen", dazu beim Bearbeiten und Löschen eines Kommentars und beim Löschen einer
+  Anlage.
+- An einer Rechnung gilt es beim Speichern und Löschen des Entwurfs, bei „Rechnung stellen" und bei
+  „Als bezahlt markieren", „Abschreiben" und „Zurück auf gestellt".
+- An einer nachgetragenen Rechnung gilt es in jedem Zustand beim Speichern in der Maske
+  „Nachgetragene Rechnung bearbeiten", beim Ersetzen oder Entfernen ihres PDFs, beim Löschen und bei
+  „Als bezahlt markieren", „Abschreiben" und „Zurück auf gestellt".
+- Unter „Administration" gilt es beim Speichern der Einstellungen zur Rechnung.
+- Bei den Eigenen Angaben gilt es beim Speichern der Angaben und in der Karte „Briefpapier" beim
+  Hochladen, Ersetzen und Entfernen des Briefpapiers und bei „Einstellungen speichern".
+- Bei Firmen und Ansprechpartnern gilt es beim Speichern in den Masken „Firma bearbeiten" und
+  „Ansprechpartner bearbeiten" und bei „Stilllegen" und „Wieder aktivieren".
+- In der Arbeitszeit gilt es beim Speichern im Dialog „Arbeitszeit ändern" und beim Löschen eines
+  Eintrags.
+- Unter „Mitarbeitende" gilt es beim Speichern in der Maske „Konto bearbeiten" und bei „Stilllegen"
+  und „Wieder aktivieren".
+
+Das Angebot zählt dabei als Ganzes, mit seinen Positionen und seinem Status; jeder Kommentar ist ein
 Eintrag für sich.
 
 **Einstieg:** Die Abweisung erscheint von selbst, wenn man „Speichern" wählt und jemand anderes
@@ -98,11 +109,15 @@ Schutz nichts.
 5. „Verwerfen" unter „Deine Eingaben" nimmt die eigenen Werte weg, sobald man sie nicht mehr
    braucht.
 
+### Angebot
+
 In der Ansicht eines Angebots steht dieselbe Meldung über der Karte, wenn ein Statuswechsel, ein
 Storno oder die Rücknahme eines Stornos abgewiesen wird. Die Ansicht zeigt dann weiter den Stand,
 den man gesehen hat. „Neu laden" holt den aktuellen Stand samt Status; danach wählt man die Taste
 erneut, wenn der Wechsel auf dem neuen Stand noch passt. Einen Grund für das Storno trägt man dabei
 im Dialog neu ein.
+
+### Kommentare
 
 In der Karte „Kommentare" steht die Meldung über dem Feld „Neuer Kommentar", wenn ein anderer den
 Kommentar inzwischen bearbeitet hat. Der eigene Text bleibt im Feld. „Neu laden" setzt den
@@ -112,11 +127,15 @@ inzwischen gelöscht, nennt die Meldung, wer ihn wann gelöscht hat. Statt „Ne
 Kommentar schreibt man immer ohne Rückfrage, auch wenn ein anderer das Angebot gerade bearbeitet;
 dessen Speichern wird dadurch nicht abgewiesen.
 
+### Anlagen
+
 In der Karte „Anlagen" steht die Meldung über der Liste, wenn man eine Anlage löschen will, die
 inzwischen gelöscht ist — von einem anderen oder von einem selbst in einem anderen Fenster. Sie
 nennt, wer die Anlage wann gelöscht hat, und „Zur Übersicht" führt zur Liste der Angebote. Eine
 Anlage ändert sich nie; darum gibt es bei ihr nichts neu zu laden. Eine neue Anlage lädt man immer
 ohne Rückfrage hoch.
+
+### Rechnung
 
 An einer Rechnung steht die Meldung oben über der Kopfkarte. Wird das Speichern des Entwurfs
 abgewiesen, bleiben die eigenen Mengen und Texte in der Maske; „Neu laden" zeigt den aktuellen
@@ -137,6 +156,8 @@ wer ihn wann gelöscht hat, „Zur Übersicht" führt zur Liste der Rechnungen, 
 stehen weiter in der Maske und unter „Deine Eingaben" zum Kopieren. Ein gelöschter Entwurf zählt
 nirgends mehr mit: Seine Mengen sind am Angebot wieder offen.
 
+### Nachgetragene Rechnung
+
 In der Maske „Nachgetragene Rechnung bearbeiten" steht die Meldung oben im Formular, wenn ein
 anderer die Rechnung seit dem Öffnen geändert hat — ihre Angaben, ihren Zustand oder ihr PDF.
 Kunde, Nummer, Datum und Beträge bleiben in der Maske stehen. „Neu laden" zeigt den aktuellen Stand
@@ -155,10 +176,14 @@ im Formular und unter „Deine Eingaben" zum Kopieren. Eine gelöschte nachgetra
 nirgends mehr mit, weder in der Übersicht noch auf der Startseite oder im Jahresabschluss, und ihre
 Nummer ist wieder frei.
 
+### Administration
+
 Unter „Administration" steht die Meldung oben in der Karte „Rechnung", wenn ein anderer die
 Einstellungen zur Rechnung seit dem Öffnen gespeichert hat. Muster, nächste Nummer, Steuersatz und
 Zahlungsziel bleiben in den Feldern; „Neu laden" zeigt den aktuellen Stand und die eigenen Werte
 unter „Deine Eingaben".
+
+### Eigene Angaben
 
 Bei den Eigenen Angaben steht die Meldung oben in der Karte „Eigene Angaben", wenn ein anderer
 die Angaben seit dem Öffnen gespeichert hat. Die eigenen Werte bleiben in den Feldern; „Neu laden"
@@ -166,12 +191,16 @@ zeigt den aktuellen Stand und die eigenen Werte unter „Deine Eingaben". Beim S
 Rechnung gelten die Eigenen Angaben, wie sie in diesem Augenblick sind; eine Änderung daran weist
 das Stellen nicht ab.
 
+### Briefpapier
+
 In der Karte „Briefpapier" steht die Meldung über dem Briefpapier. Der Briefbogen zählt als ein
 Eintrag: Hat ein anderer inzwischen ein Briefpapier hochgeladen, ersetzt oder entfernt, wird auch
 „Einstellungen speichern" für Schalter und Ränder abgewiesen, und umgekehrt. Schalter und Ränder
 bleiben in den Feldern; „Neu laden" zeigt den aktuellen Briefbogen und die eigenen Werte unter
 „Deine Eingaben", nach einem abgewiesenen Hochladen auch den Namen der gewählten Datei. Das eigene
 Hochladen weist das eigene Speichern danach nicht ab.
+
+### Firmen und Ansprechpartner
 
 In den Masken „Firma bearbeiten" und „Ansprechpartner bearbeiten" steht die Meldung oben im
 Formular, wenn ein anderer die Firma beziehungsweise den Ansprechpartner seit dem Öffnen geändert
@@ -183,6 +212,8 @@ aktuellen Stand, danach wählt man den Eintrag erneut, wenn er noch passt. Firma
 Ansprechpartner sind getrennte Einträge: Wer die Firma ändert, weist das Speichern eines
 Ansprechpartners nicht ab. Eine neue Firma und einen neuen Ansprechpartner legt man immer ohne
 Rückfrage an.
+
+### Arbeitszeit
 
 Im Dialog „Arbeitszeit ändern" steht die Meldung oben im Dialog, wenn ein anderer den Eintrag seit
 dem Laden der Monatsliste geändert hat — auch dann, wenn ein C-Level den Eintrag einer anderen
@@ -202,6 +233,8 @@ Löschen, und es entsteht nichts neu. Die Meldung nennt, wer ihn wann gelöscht 
 „Arbeitszeit ändern" schließt sich der Dialog dabei. Ein gelöschter Eintrag zählt nirgends mehr
 mit — weder in der Monatsliste noch in den Stunden am Angebot, im Vorschlag einer Rechnung, auf der
 Startseite oder im Jahresabschluss —, und seine Zeit ist für einen neuen Eintrag wieder frei.
+
+### Mitarbeitende
 
 In der Maske „Konto bearbeiten" steht die Meldung oben im Formular, wenn ein anderer C-Level das
 Konto seit dem Öffnen geändert, stillgelegt oder wieder aktiviert hat. Adresse, Name und Rolle
@@ -227,7 +260,7 @@ Ansicht zeigt oben das Formular „Eigene Angaben" und darunter die Karte „Bri
 Briefpapier hochladen, ersetzen und entfernen kann nur ein C-Level; ReadOnly liest die Angaben nur
 und kann den Probedruck holen.
 
-**Angaben speichern:**
+### Angaben speichern
 
 1. Die Felder ausfüllen: „Name", „Berufsbezeichnung", „Straße und Hausnummer", „Postleitzahl",
    „Ort", „Land", „E-Mail-Adresse", „Telefon", „Webadresse", „Steuernummer",
@@ -239,7 +272,9 @@ Nach dem Speichern steht „Die Angaben sind gespeichert." über dem Formular. I
 steht die Meldung am betroffenen Feld. „Abbrechen" nimmt alle ungespeicherten Änderungen zurück
 auf den zuletzt gespeicherten Stand.
 
-**Bankverbindung:** Die Bankverbindung steht in drei Feldern: „Kontoinhaber", „IBAN" und „BIC".
+### Bankverbindung
+
+Die Bankverbindung steht in drei Feldern: „Kontoinhaber", „IBAN" und „BIC".
 Die BIC darf leer bleiben. Die IBAN darf mit oder ohne Leerzeichen eingetragen werden; fb.crm
 prüft sie beim Speichern. Ist sie ungültig, etwa weil die Prüfziffer nicht stimmt, steht die
 Meldung am Feld „IBAN", und nichts wird gespeichert. Ebenso wird eine BIC in falscher Form
@@ -252,7 +287,9 @@ Hinweis „Bisherige Bankverbindung: … Bitte in die Felder oben übernehmen." 
 Die Angaben daraus in die Felder übertragen und speichern; danach verschwindet der Hinweis.
 Rechnungen, die vor der Umstellung gestellt wurden, behalten ihre damalige Bankzeile.
 
-**Briefpapier:** Die Karte „Briefpapier" legt fest, worauf eine Rechnung gedruckt wird. Ohne
+### Briefpapier
+
+Die Karte „Briefpapier" legt fest, worauf eine Rechnung gedruckt wird. Ohne
 Briefpapier steht dort „Noch kein Briefpapier hinterlegt. Rechnungen tragen die Gestaltung von
 fb.crm."
 
@@ -289,7 +326,7 @@ Mehrwertsteuersatz und das Zahlungsziel in Tagen.
 **Einstieg:** Im Fuß der Schiene „Administration" wählen. Die Seite zeigt den Bereich „Rechnung".
 Speichern kann hier nur ein C-Level; ReadOnly liest die Einstellungen nur.
 
-**Einstellungen setzen:**
+### Einstellungen setzen
 
 1. Im Feld „Muster der Rechnungsnummer" das Muster eintragen. `{NNNN}` steht für die laufende
    Nummer, die Zahl der N ist ihre Mindestbreite; `{JJJJ}` steht für das vierstellige und `{JJ}`
@@ -310,7 +347,9 @@ Nach dem Speichern steht „Die Einstellungen sind gespeichert." über dem Formu
 stimmt, meldet die Seite am betroffenen Feld, und es wird nichts gespeichert. „Abbrechen" nimmt
 alle ungespeicherten Änderungen zurück auf den zuletzt gespeicherten Stand.
 
-**Gestellte Rechnungen bleiben, wie sie sind:** Eine gestellte Rechnung hält ihre Nummer, ihren
+### Gestellte Rechnungen bleiben, wie sie sind
+
+Eine gestellte Rechnung hält ihre Nummer, ihren
 Steuersatz und ihr Zahlungsziel fest. Eine spätere Änderung der Rechnungseinstellungen berührt sie
 nicht mehr; sie gilt erst für die nächste Rechnung, die gestellt wird.
 
@@ -328,7 +367,7 @@ zeigt die Firmen mit „Firma", „Ort" und „Ansprechpartner". Das Feld „Fir
 schränkt die Liste ein, der Schalter „auch stillgelegte" zeigt auch stillgelegte Firmen an. Ein
 Klick auf den Namen öffnet die Seite der Firma.
 
-**Firma anlegen:**
+### Firma anlegen
 
 1. In der Übersicht „Neue Firma" wählen.
 2. Die Felder ausfüllen: „Name" und „Land" sind Pflicht, dazu „Straße und Hausnummer",
@@ -342,7 +381,7 @@ Eine Rechnung an die Firma lässt sich erst stellen, wenn Name, Straße und Haus
 und Ort eingetragen sind. „Bearbeiten" auf der Seite der Firma öffnet dieselben Felder, „Speichern"
 übernimmt die Änderung.
 
-**Ansprechpartner anlegen und bearbeiten:**
+### Ansprechpartner anlegen und bearbeiten
 
 1. Auf der Seite der Firma „Neuer Ansprechpartner" wählen.
 2. Die Felder ausfüllen: „Vorname", „Nachname", „Rolle", „E-Mail-Adresse", „Telefon Festnetz" und
@@ -353,13 +392,17 @@ und Ort eingetragen sind. „Bearbeiten" auf der Seite der Firma öffnet dieselb
 steht auch „Stilllegen". Ein stillgelegter Ansprechpartner steht bei neuen Angeboten nicht mehr
 zur Wahl, seine Angaben bleiben erhalten, und „Wieder aktivieren" holt ihn zurück.
 
-**Firma stilllegen:** Auf der Seite der Firma das Menü ⋯ öffnen und „Stilllegen" wählen. fb.crm
+### Firma stilllegen
+
+Auf der Seite der Firma das Menü ⋯ öffnen und „Stilllegen" wählen. fb.crm
 fragt vorher nach: Eine stillgelegte Firma steht nicht mehr zur Auswahl, ihre Angebote bleiben
 erhalten. Die Firma trägt danach den Zustand „Stillgelegt" und erscheint in der Übersicht nur noch
 mit dem Schalter „auch stillgelegte". An einer stillgelegten Firma entsteht kein neues Angebot.
 „Wieder aktivieren" im selben Menü macht den Schritt rückgängig.
 
-**Die Seite der Firma:** Oben stehen Name, Anschrift und Zustand mit den Tasten „Bearbeiten",
+### Die Seite der Firma
+
+Oben stehen Name, Anschrift und Zustand mit den Tasten „Bearbeiten",
 „Neuer Ansprechpartner" und „Angebot anlegen". Darunter folgen die Karten „Ansprechpartner",
 „Stammdaten" mit den Steuerangaben und „Angebote" mit allen Angeboten an diese Firma, jeweils mit
 Titel, Datum, Summe und Status.
@@ -378,7 +421,7 @@ anlegen" wählen. Alle Angebote zeigt die Übersicht in der Schiene unter „Ges
 mit „Titel", „Datum", „Firma", „Status" und „Summe", neueste zuerst. Das Feld „Filter" zeigt nur
 die Angebote eines Status oder die stornierten. Ein Klick auf den Titel öffnet das Angebot.
 
-**Angebot anlegen:**
+### Angebot anlegen
 
 1. Auf der Seite der Firma „Angebot anlegen" wählen.
 2. Den „Titel" eintragen — er ist Pflicht und höchstens 200 Zeichen lang.
@@ -386,7 +429,7 @@ die Angebote eines Status oder die stornierten. Ein Klick auf den Titel öffnet 
 4. Das Kästchen „Internes Projekt" bleibt für ein Angebot an den Kunden leer.
 5. „Anlegen" wählen. fb.crm öffnet die Maske „Angebot bearbeiten".
 
-**Positionen erfassen:**
+### Positionen erfassen
 
 1. In der Maske „Angebotsdatum" und wahlweise eine „Beschreibung" eintragen.
 2. In der Karte „Positionen" „Position hinzufügen" wählen.
@@ -402,7 +445,9 @@ Karte „Positionen" mit Menge, Einzelpreis, Betrag und der Nettosumme, die Kart
 die Karten „Anlagen" und „Kommentare". „Bearbeiten" führt zurück in die Maske; Positionen lassen
 sich in jedem Status ändern.
 
-**Der Status und sein Weg:** Ein Angebot an den Kunden geht durch die Status „Angelegt",
+### Der Status und sein Weg
+
+Ein Angebot an den Kunden geht durch die Status „Angelegt",
 „Abgegeben", „Bestellt", „Erledigt" und „Abgerechnet". „Status weiter" setzt es eine Stufe weiter,
 „Status zurück" eine zurück; an den Enden fehlt die jeweilige Taste. Eine Rechnung lässt sich
 schreiben, sobald das Angebot „Bestellt" ist. In „Angelegt", „Abgegeben" und „Bestellt" steht
@@ -411,12 +456,16 @@ Angebot den Zustand „Storniert" und zählt weder im Forecast noch unter „Ang
 bleibt mit Positionen, Kommentaren und Anlagen nachlesbar, und „Storno zurücknehmen" stellt es
 wieder her.
 
-**Kommentare:** In der Karte „Kommentare" den Text in das Feld „Neuer Kommentar" schreiben und
+### Kommentare
+
+In der Karte „Kommentare" den Text in das Feld „Neuer Kommentar" schreiben und
 „Kommentar speichern" wählen. Ein Kommentar hat höchstens 2.000 Zeichen und steht danach oben in
 der Liste. Jeder Kommentar nennt über seinem Zeitpunkt den Namen seines Verfassers. Über das Menü
 ⋯ am Kommentar lässt er sich bearbeiten oder nach einer Rückfrage löschen.
 
-**Anlagen:** In der Karte „Anlagen" „Datei hochladen" wählen und eine Datei auswählen; sie darf
+### Anlagen
+
+In der Karte „Anlagen" „Datei hochladen" wählen und eine Datei auswählen; sie darf
 höchstens 25 MB groß sein. Die Anlage steht danach mit Dateiname und Zeitpunkt in der Liste. Das
 Augensymbol zeigt ein Bild oder ein PDF in einem Fenster an, das Pfeilsymbol lädt die Datei
 herunter, und über das Menü ⋯ lässt sich die Anlage nach einer Rückfrage löschen.
@@ -436,20 +485,22 @@ steht, sobald das Angebot „Bestellt" ist und noch etwas offen hat. Alle Rechnu
 „Rechnungsdatum", „Betrag", „Zustand" und „Dokument". Dort führt „Neue Rechnung" ebenfalls zum
 Entwurf: Sie zeigt die abrechenbaren Angebote zur Wahl.
 
-**Entwurf anlegen:**
+### Entwurf anlegen
 
 1. „Rechnung schreiben" am Angebot oder „Neue Rechnung" in der Übersicht wählen.
 2. Unter „Monat der Arbeitszeit" einen Monat wählen, dessen erfasste Stunden die Mengen vorbelegen,
    oder „ohne Arbeitszeit" — dann übernimmt der Entwurf an jeder Position die offene Menge.
 3. „Anlegen" wählen (in der Übersicht das Angebot wählen). fb.crm öffnet den Entwurf.
 
-**Teilabrechnung gegen die Angebotspositionen:** Der Entwurf zeigt in der Karte „Positionen" jede
+### Teilabrechnung gegen die Angebotspositionen
+
+Der Entwurf zeigt in der Karte „Positionen" jede
 Position des Angebots mit „Leistung", „Einheit", „Einzelpreis", „Angeboten", „Abgerechnet" und
 „Offen". In der Spalte „Jetzt abrechnen" steht, welche Menge diese Rechnung berechnet; eine Menge
 0 lässt die Position aus der Rechnung heraus. So lässt sich ein Angebot über mehrere Rechnungen
 abrechnen. Eine Menge über dem Offenen ist erlaubt und wird an der Zeile als Hinweis gezeigt.
 
-**Beträge prüfen:**
+### Beträge prüfen
 
 1. In der Karte „Angaben zur Rechnung" „Rechnungsdatum" und „Leistungszeitraum" prüfen; beide sind
    vorbelegt und Pflicht.
@@ -459,7 +510,7 @@ abrechnen. Eine Menge über dem Offenen ist erlaubt und wird an der Zeile als Hi
 
 Ein Entwurf, aus dem nichts werden soll, verschwindet über das Menü ⋯ mit „Entwurf löschen".
 
-**Rechnung stellen:**
+### Rechnung stellen
 
 1. „Rechnung stellen" wählen. Die Taste ist gesperrt, solange keine Position eine Menge über 0
    hat.
@@ -474,21 +525,27 @@ bleibt ein Entwurf. Diese Meldung kommt vor der Liste fehlender Angaben. Beim St
 Rechnung die nächste Nummer aus dem Nummernkreis der Rechnungseinstellungen; keine Nummer wird
 doppelt vergeben. Nummer, Beträge, Steuersatz und Zahlungsziel sind damit festgeschrieben.
 
-**Das Rechnungsdokument:** Die gestellte Rechnung zeigt ihren Beleg mit Nummer, Angaben,
+### Das Rechnungsdokument
+
+Die gestellte Rechnung zeigt ihren Beleg mit Nummer, Angaben,
 Positionen und Summen. „Herunterladen" gibt das Rechnungsdokument als PDF heraus, auf dem
 hinterlegten Briefpapier, sonst in der Gestaltung von fb.crm. In der Übersicht „Rechnungen" lädt
 das Symbol in der Spalte „Dokument" dasselbe PDF herunter. Neben „Herunterladen" stehen „Als bezahlt
 markieren" und „Abschreiben" für den Ausgang der Forderung; „Zurück auf gestellt" nimmt beides
 zurück.
 
-**Die Bankzeile:** Im Fuß des Rechnungsdokuments, auf eigenem Briefpapier in der Zeile über dem
+### Die Bankzeile
+
+Im Fuß des Rechnungsdokuments, auf eigenem Briefpapier in der Zeile über dem
 unteren Rand, steht die Bankverbindung aus den eigenen Angaben im Wortlaut
 „Bankverbindung: <Kontoinhaber> · IBAN <IBAN> · BIC <BIC>", etwa „Bankverbindung: Manfred Wolff ·
 IBAN DE89 3704 0044 0532 0130 00 · BIC COBADEFFXXX". Die IBAN steht in Vierergruppen; ohne BIC
 endet die Zeile nach der IBAN. Ein Bankname steht dort nicht. Die Zeile gilt, wie sie beim Stellen
 war: Eine spätere Änderung der eigenen Angaben ändert eine gestellte Rechnung nicht.
 
-**E-Rechnung:** Jede Rechnung, die fb.crm stellt, ist zugleich eine E-Rechnung im Format ZUGFeRD,
+### E-Rechnung
+
+Jede Rechnung, die fb.crm stellt, ist zugleich eine E-Rechnung im Format ZUGFeRD,
 Profil EN 16931. Eine E-Rechnung ist ein PDF, in dem die Rechnungsdaten zusätzlich maschinenlesbar
 stecken: Nummer, Datum, Leistungszeitraum, Absender und Kunde mit Anschrift, die Positionen, Netto,
 Steuer, Brutto, Zahlungsziel und Bankverbindung. Die Buchhaltung des Kunden übernimmt sie direkt aus
@@ -511,7 +568,9 @@ meldet dann Verstöße.
 Für die Begleitmail eignet sich etwa dieser Satz: „Die angehängte Rechnung ist eine E-Rechnung im
 Format ZUGFeRD (EN 16931); die Rechnungsdaten sind maschinenlesbar eingebettet."
 
-**Eine gestellte Rechnung ändert sich nicht mehr:** Sie lässt sich weder bearbeiten noch löschen.
+### Eine gestellte Rechnung ändert sich nicht mehr
+
+Sie lässt sich weder bearbeiten noch löschen.
 Der Weg zurück ist ein Storno; eine Taste dafür bietet fb.crm bisher nicht.
 
 **Ergebnis:** Die Rechnung steht mit Nummer, Betrag und Zustand „Gestellt" in der Übersicht
@@ -526,7 +585,7 @@ sie an diesen Stellen, die Startseite zeigt sie nur.
 
 **Einstieg:** Nach der Anmeldung landet man auf der Startseite „Start" unter der Adresse `/`.
 
-**Geschäftsstand lesen:**
+### Geschäftsstand lesen
 
 1. Oben einen Zeitraum wählen, einen Monat oder ein ganzes Jahr. Der Zeitraum steht danach in der
    Adresse.
@@ -551,25 +610,31 @@ Rechnung vor.
 **Einstieg:** In der Schiene unter „Geschäft" „Arbeitszeit" wählen. Die Ansicht zeigt den
 laufenden Monat; „Vorheriger Monat" und „Nächster Monat" neben dem Namen des Monats wechseln ihn.
 
-**Eintrag anlegen:**
+### Eintrag anlegen
 
 1. „Zeit erfassen" wählen.
 2. „Tag", „von", „bis" und die „Position" des Angebots angeben, an der gearbeitet wurde.
 3. „Speichern" wählen.
 
-**Eintrag ändern:** In der Zeile des Eintrags die Zeitspanne wählen; es öffnet sich dieselbe Maske
+### Eintrag ändern
+
+In der Zeile des Eintrags die Zeitspanne wählen; es öffnet sich dieselbe Maske
 mit den bisherigen Werten. Löschen steht im Menü ⋯ der Zeile unter „Löschen".
 
 **Ergebnis:** Der Eintrag steht unter seinem Tag mit „Zeit", „Dauer" und „Position"; Tagessumme
 und Monatssumme rechnen ihn mit.
 
-**Wer welche Zeiten sieht:** Jeder Eintrag gehört einer Person. Ein Employee sieht und pflegt nur
+### Wer welche Zeiten sieht
+
+Jeder Eintrag gehört einer Person. Ein Employee sieht und pflegt nur
 die eigenen Zeiten. Ein C-Level sieht zunächst die eigenen Zeiten, schaltet oben in der Ansicht auf
 eine andere Person oder auf „Alle" um, ändert und löscht jeden Eintrag und wählt beim Erfassen die
 Person, für die die Zeit gilt. ReadOnly sieht beim Öffnen „Alle", kann ebenso umschalten und ändert
 nichts. Bei „Alle" steht an jedem Eintrag der Name der Person.
 
-**Überschneidungen:** Überschneidungen prüft fb.crm je Person: Dieselbe Zeit für zwei Personen ist
+### Überschneidungen
+
+Überschneidungen prüft fb.crm je Person: Dieselbe Zeit für zwei Personen ist
 erlaubt, für eine Person nicht. Dann speichert fb.crm den Eintrag nicht und nennt den
 kollidierenden Eintrag.
 
@@ -583,7 +648,7 @@ Jahr „Einnahmen netto", „Rechnungen" und „Annahmequote", das jüngste Jahr
 trägt den Hinweis „läuft noch". Ein Jahr erscheint, sobald es eine gestellte Rechnung oder ein
 abgegebenes Angebot hat.
 
-**Abschluss eines Jahres ansehen:**
+### Abschluss eines Jahres ansehen
 
 1. In der Übersicht das Jahr wählen.
 2. Oben stehen „Einnahmen netto", „Einnahmen brutto" und „Enthaltene Umsatzsteuer". Gezählt wird
@@ -605,7 +670,7 @@ und in den Jahresabschlüssen.
 
 **Einstieg:** In der Schiene unter „Geschäft" „Rechnungen" wählen, dort „Rechnung nachtragen".
 
-**Rechnung nachtragen:**
+### Rechnung nachtragen
 
 1. Unter „Kunde suchen" die Firma suchen und unter „Kunde" wählen; auch eine stillgelegte Firma
    steht zur Wahl.
@@ -614,7 +679,9 @@ und in den Jahresabschlüssen.
 3. Optional unter „Originalrechnung (PDF)" das PDF der Rechnung wählen.
 4. „Anlegen" wählen.
 
-**Bearbeiten:** In der Ansicht der nachgetragenen Rechnung „Bearbeiten" wählen, Angaben ändern und
+### Bearbeiten
+
+In der Ansicht der nachgetragenen Rechnung „Bearbeiten" wählen, Angaben ändern und
 „Speichern" wählen. Eine neue Datei ersetzt das hinterlegte PDF, „Hinterlegtes PDF entfernen"
 nimmt es heraus. Anders als eine gestellte Rechnung bleibt eine nachgetragene in jedem Zustand
 änderbar und lässt sich über das Menü ⋯ mit „Löschen" entfernen. „Als bezahlt markieren",
@@ -633,7 +700,7 @@ C-Level in der Ansicht „Mitarbeitende".
 offen. Sie listet jedes Konto mit Namen, E-Mail-Adresse, Rolle und Zustand, „Aktiv" oder
 „Stillgelegt".
 
-**Konto anlegen:**
+### Konto anlegen
 
 1. „Neues Konto" wählen.
 2. „E-Mail-Adresse" und „Name" angeben und unter „Rolle" C-Level, Employee oder ReadOnly wählen.
@@ -647,19 +714,25 @@ hinausging; dann gibt man der Person selbst Bescheid. Eine Adresse, die schon ei
 trägt, auch ein stillgelegtes, weist die Maske am Feld „E-Mail-Adresse" ab, gleich in welcher
 Schreibweise.
 
-**Konto ändern:** In der Zeile des Kontos über das Menü ⋯ „Bearbeiten" wählen, Adresse, Namen oder
+### Konto ändern
+
+In der Zeile des Kontos über das Menü ⋯ „Bearbeiten" wählen, Adresse, Namen oder
 Rolle ändern und „Speichern" wählen. Die Änderung wirkt sofort, auch für eine Person, die gerade
 angemeldet ist. Nach einer neuen Adresse ist die Person abgemeldet und meldet sich mit der neuen
 Adresse wieder an.
 
-**Stilllegen:** Wer ausscheidet, dessen Konto wird stillgelegt, nicht gelöscht. Über das Menü ⋯
+### Stilllegen
+
+Wer ausscheidet, dessen Konto wird stillgelegt, nicht gelöscht. Über das Menü ⋯
 „Stilllegen" wählen und die Rückfrage bestätigen. Die Person ist sofort abgemeldet und kann sich
 nicht mehr anmelden; ihre Kommentare am Angebot bleiben mit ihrem Namen stehen.
 
-**Wieder aktivieren:** Über das Menü ⋯ eines stillgelegten Kontos „Wieder aktivieren" wählen. Die
+### Wieder aktivieren
+
+Über das Menü ⋯ eines stillgelegten Kontos „Wieder aktivieren" wählen. Die
 Person meldet sich danach wieder mit ihrer Adresse an.
 
-**Was jede Rolle darf:**
+### Was jede Rolle darf
 
 - C-Level darf alles: Kunden, Angebote, Rechnungen und Arbeitszeit bearbeiten, die eigenen Angaben
   und die Rechnungseinstellungen ändern und in „Mitarbeitende" Konten verwalten.
@@ -672,7 +745,9 @@ Person meldet sich danach wieder mit ihrer Adresse an.
   Kommentieren und „Zeit erfassen"; Anlagen und Rechnungen lassen sich weiter ansehen und
   herunterladen.
 
-**Der letzte C-Level:** Es bleibt immer mindestens ein aktiver C-Level. Das letzte aktive
+### Der letzte C-Level
+
+Es bleibt immer mindestens ein aktiver C-Level. Das letzte aktive
 C-Level-Konto lässt sich weder stilllegen noch auf eine andere Rolle setzen; fb.crm sagt dann „Es
 muss mindestens ein aktiver C-Level bleiben." Das gilt auch für das eigene Konto: Ein C-Level darf
 sich selbst stilllegen oder herabstufen, solange ein anderer aktiver C-Level bleibt.
