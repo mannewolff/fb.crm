@@ -34,9 +34,10 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
  * Die Uebersetzung zwischen dem Forecast und HTTP (Issue #308; Plan #303, E1, E9).
  *
  * <p>Gegenstand ist die Abbildung jedes Feldes des {@link Forecast} auf die Antwort: je Jahr die
- * drei Betraege und die Positionen mit Kennung, Firma, Angebotsdatum, Bezeichnung und Restbetrag.
- * Das Jahr ist schon hier Text, weil dieser Layer es als Text baut (E9); wie das Datum geschrieben
- * wird, entscheidet der ObjectMapper von Spring Boot, und das belegt {@link ForecastControllerIT}.
+ * drei Betraege und die Positionen mit den Kennungen von Angebot und Position, Firma,
+ * Angebotsdatum, Bezeichnung und Restbetrag. Das Jahr ist schon hier Text, weil dieser Layer es als
+ * Text baut (E9); wie das Datum geschrieben wird, entscheidet der ObjectMapper von Spring Boot, und
+ * das belegt {@link ForecastControllerIT}.
  */
 @ExtendWith(MockitoExtension.class)
 class ForecastControllerTest {
@@ -45,6 +46,7 @@ class ForecastControllerTest {
   private static final Instant ANGELEGT = Instant.parse("2026-10-15T08:00:00Z");
   private static final LocalDate ANGEBOTSDATUM = LocalDate.of(2026, 10, 15);
   private static final long ANGEBOT_ID = 21L;
+  private static final long POSITION_ID = 301L;
   private static final String FIRMA = "IT Bildungshaus";
 
   @Mock private ForecastUseCase useCase;
@@ -64,7 +66,7 @@ class ForecastControllerTest {
       final @Nullable String titel, final String bezeichnung, final String netto) {
     final Angebotsposition position =
         new Angebotsposition(
-            Long.valueOf(301L),
+            Long.valueOf(POSITION_ID),
             bezeichnung,
             Abrechnungsmodus.AUFWAND,
             new BigDecimal("135.00"),
@@ -145,6 +147,8 @@ class ForecastControllerTest {
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.jahre[0].positionen.length()").value(2))
         .andExpect(jsonPath("$.jahre[0].positionen[0].angebotId").value(Long.valueOf(ANGEBOT_ID)))
+        .andExpect(
+            jsonPath("$.jahre[0].positionen[0].angebotPositionId").value(Long.valueOf(POSITION_ID)))
         .andExpect(jsonPath("$.jahre[0].positionen[0].firmaName").value(FIRMA))
         .andExpect(jsonPath("$.jahre[0].positionen[0].angebotDatum").exists())
         .andExpect(jsonPath("$.jahre[0].positionen[0].angebotTitel").value("Website-Relaunch"))

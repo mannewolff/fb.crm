@@ -76,8 +76,8 @@ public record WaehlbareZeitraeume(List<Year> jahre, List<YearMonth> monate) {
    */
   public boolean enthaelt(final Zeitraum zeitraum) {
     return switch (zeitraum) {
-      case Zeitraum.Monat monat -> monate.contains(monat.monat());
-      case Zeitraum.Jahr jahr -> jahre.contains(jahr.jahr());
+      case Zeitraum.Monat(final YearMonth monat) -> monate.contains(monat);
+      case Zeitraum.Jahr(final Year jahr) -> jahre.contains(jahr);
     };
   }
 }

@@ -404,6 +404,47 @@ const UEBERSICHT = '/firmen';
 /** Ueber jeder Firmen-Ansicht steht die Uebersicht (E6). */
 const ZU_FIRMEN: readonly PfadVerweis[] = [{ titel: 'Firmen', ziel: '/firmen' }];
 
+/**
+ * Die Aktionen der Kopfkarte fuer ein Konto mit Schreibrecht; „Angebot anlegen" steht nur an
+ * einer aktiven Firma.
+ */
+function firmenAktionen(firma: Firma, schalten: () => void): ReactNode {
+  return (
+    <>
+      <WeicheTaste
+        to={`/firmen/${String(firma.id)}/bearbeiten`}
+        symbol={<IconPencil size={SYMBOL_TASTE} stroke={1.8} />}
+      >
+        Bearbeiten
+      </WeicheTaste>
+      <WeicheTaste
+        to={`/firmen/${String(firma.id)}/ansprechpartner/neu`}
+        symbol={<IconUserPlus size={SYMBOL_TASTE} stroke={1.8} />}
+      >
+        Neuer Ansprechpartner
+      </WeicheTaste>
+      {firma.aktiv ? (
+        <KupferTaste
+          to={`/firmen/${String(firma.id)}/angebote/neu`}
+          symbol={<IconFilePlus size={SYMBOL_TASTE} stroke={1.8} />}
+        >
+          Angebot anlegen
+        </KupferTaste>
+      ) : null}
+      <AktionsMenue
+        name={`Aktionen für ${firma.name}`}
+        objekt={firma.name}
+        eintraege={[schaltEintrag(firma.aktiv, FIRMA_FRAGE, schalten)]}
+      />
+    </>
+  );
+}
+
+/** Die Zahl an der Karte „Angebote" — erst, wenn die Angebote gelesen sind. */
+function angebotAnzahl(stand: AngebotStand): number | undefined {
+  return stand.art === 'daten' ? stand.angebote.length : undefined;
+}
+
 export default function FirmaPage() {
   const { darfFachlichSchreiben } = useRechte();
   const { id } = useParams();
@@ -517,39 +558,11 @@ export default function FirmaPage() {
           zeile={adressZeile(firma)}
           chips={zustandsChip(firma.aktiv)}
           aktionen={
-            darfFachlichSchreiben ? (
-              <>
-                <WeicheTaste
-                  to={`/firmen/${String(firma.id)}/bearbeiten`}
-                  symbol={<IconPencil size={SYMBOL_TASTE} stroke={1.8} />}
-                >
-                  Bearbeiten
-                </WeicheTaste>
-                <WeicheTaste
-                  to={`/firmen/${String(firma.id)}/ansprechpartner/neu`}
-                  symbol={<IconUserPlus size={SYMBOL_TASTE} stroke={1.8} />}
-                >
-                  Neuer Ansprechpartner
-                </WeicheTaste>
-                {firma.aktiv ? (
-                  <KupferTaste
-                    to={`/firmen/${String(firma.id)}/angebote/neu`}
-                    symbol={<IconFilePlus size={SYMBOL_TASTE} stroke={1.8} />}
-                  >
-                    Angebot anlegen
-                  </KupferTaste>
-                ) : null}
-                <AktionsMenue
-                  name={`Aktionen für ${firma.name}`}
-                  objekt={firma.name}
-                  eintraege={[
-                    schaltEintrag(firma.aktiv, FIRMA_FRAGE, () => {
-                      void schalten(firma);
-                    }),
-                  ]}
-                />
-              </>
-            ) : undefined
+            darfFachlichSchreiben
+              ? firmenAktionen(firma, () => {
+                  void schalten(firma);
+                })
+              : undefined
           }
         />
         <Ansprechpartnerkarte
@@ -565,7 +578,7 @@ export default function FirmaPage() {
         <Stammdatenkarte firma={firma} />
         <Karte
           titel="Angebote"
-          anzahl={angebotStand.art === 'daten' ? angebotStand.angebote.length : undefined}
+          anzahl={angebotAnzahl(angebotStand)}
         >
           <Angebotekarte stand={angebotStand} />
         </Karte>

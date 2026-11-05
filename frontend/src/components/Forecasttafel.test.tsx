@@ -18,6 +18,7 @@ const FORECAST: Forecast = {
       positionen: [
         {
           angebotId: 9,
+          angebotPositionId: 31,
           firmaName: 'Werkstatt Nord',
           angebotDatum: '2026-08-03',
           angebotTitel: null,
@@ -34,6 +35,7 @@ const FORECAST: Forecast = {
       positionen: [
         {
           angebotId: 14,
+          angebotPositionId: 41,
           firmaName: 'IT Bildungshaus',
           angebotDatum: '2026-10-15',
           angebotTitel: null,
@@ -42,6 +44,7 @@ const FORECAST: Forecast = {
         },
         {
           angebotId: 14,
+          angebotPositionId: 42,
           firmaName: 'IT Bildungshaus',
           angebotDatum: '2026-10-15',
           angebotTitel: null,
@@ -75,6 +78,7 @@ const ZWEI_AM_SELBEN_TAG: Forecast = {
       positionen: [
         {
           angebotId: 21,
+          angebotPositionId: 51,
           firmaName: 'IT Bildungshaus',
           angebotDatum: '2026-10-15',
           angebotTitel: 'Java-Grundkurs',
@@ -83,6 +87,7 @@ const ZWEI_AM_SELBEN_TAG: Forecast = {
         },
         {
           angebotId: 22,
+          angebotPositionId: 61,
           firmaName: 'IT Bildungshaus',
           angebotDatum: '2026-10-15',
           angebotTitel: 'Spring-Aufbaukurs',

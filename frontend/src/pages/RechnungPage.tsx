@@ -1094,6 +1094,48 @@ export default function RechnungPage() {
     );
   }
 
+  /** Die Tasten, die den Zustand einer gestellten Rechnung wechseln — ohne Schreibrecht keine. */
+  function zustandstasten(rechnung: Rechnung): ReactNode {
+    if (!darfFachlichSchreiben) {
+      return null;
+    }
+    if (rechnung.zustand === 'GESTELLT') {
+      return (
+        <>
+          <WeicheTaste
+            onClick={() => {
+              void umstellen(rechnung, 'BEZAHLT');
+            }}
+            disabled={laeuft}
+            symbol={<IconCircleCheck size={SYMBOL_TASTE} stroke={1.8} />}
+          >
+            {BEZAHLT}
+          </WeicheTaste>
+          <WeicheTaste
+            onClick={() => {
+              setzeAbschreibfrage(true);
+            }}
+            disabled={laeuft}
+            symbol={<IconCircleX size={SYMBOL_TASTE} stroke={1.8} />}
+          >
+            {ABSCHREIBEN}
+          </WeicheTaste>
+        </>
+      );
+    }
+    return (
+      <WeicheTaste
+        onClick={() => {
+          void umstellen(rechnung, 'GESTELLT');
+        }}
+        disabled={laeuft}
+        symbol={<IconRotate2 size={SYMBOL_TASTE} stroke={1.8} />}
+      >
+        {ZURUECK}
+      </WeicheTaste>
+    );
+  }
+
   /**
    * Die Aktionen der gestellten Rechnung: „Herunterladen" als die eine Kupfertaste, der Ausgang der
    * Forderung weich daneben (Issue #253).
@@ -1112,38 +1154,7 @@ export default function RechnungPage() {
         data-testid="rechnung-aktionen"
         sx={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}
       >
-        {!darfFachlichSchreiben ? null : rechnung.zustand === 'GESTELLT' ? (
-          <>
-            <WeicheTaste
-              onClick={() => {
-                void umstellen(rechnung, 'BEZAHLT');
-              }}
-              disabled={laeuft}
-              symbol={<IconCircleCheck size={SYMBOL_TASTE} stroke={1.8} />}
-            >
-              {BEZAHLT}
-            </WeicheTaste>
-            <WeicheTaste
-              onClick={() => {
-                setzeAbschreibfrage(true);
-              }}
-              disabled={laeuft}
-              symbol={<IconCircleX size={SYMBOL_TASTE} stroke={1.8} />}
-            >
-              {ABSCHREIBEN}
-            </WeicheTaste>
-          </>
-        ) : (
-          <WeicheTaste
-            onClick={() => {
-              void umstellen(rechnung, 'GESTELLT');
-            }}
-            disabled={laeuft}
-            symbol={<IconRotate2 size={SYMBOL_TASTE} stroke={1.8} />}
-          >
-            {ZURUECK}
-          </WeicheTaste>
-        )}
+        {zustandstasten(rechnung)}
         <Button component="a" href={rechnungDokumentPfad(rechnung.id)} download sx={kupferSx}>
           <TastenSymbol>
             <IconDownload size={SYMBOL_TASTE} stroke={1.8} />

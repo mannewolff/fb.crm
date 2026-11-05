@@ -68,6 +68,9 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 @EnableWebSecurity
 public class SecurityConfig {
 
+  /** Alle Wege der API. */
+  private static final String API = "/api/**";
+
   /** Die Einstellungen (A2, Stufe 2; E1 rechnet den Briefbogen dazu). */
   private static final String[] EINSTELLUNGEN = {
     "/api/eigene-angaben", "/api/briefpapier/**", "/api/rechnung/einstellungen"
@@ -128,13 +131,13 @@ public class SecurityConfig {
                     .hasAnyRole(Role.C_LEVEL.name(), Role.READ_ONLY.name())
                     .requestMatchers(EINSTELLUNGEN)
                     .hasRole(Role.C_LEVEL.name())
-                    .requestMatchers(HttpMethod.POST, "/api/**")
+                    .requestMatchers(HttpMethod.POST, API)
                     .hasAnyRole(Role.C_LEVEL.name(), Role.EMPLOYEE.name())
-                    .requestMatchers(HttpMethod.PUT, "/api/**")
+                    .requestMatchers(HttpMethod.PUT, API)
                     .hasAnyRole(Role.C_LEVEL.name(), Role.EMPLOYEE.name())
-                    .requestMatchers(HttpMethod.DELETE, "/api/**")
+                    .requestMatchers(HttpMethod.DELETE, API)
                     .hasAnyRole(Role.C_LEVEL.name(), Role.EMPLOYEE.name())
-                    .requestMatchers("/api/**", "/actuator/info")
+                    .requestMatchers(API, "/actuator/info")
                     .authenticated()
                     .anyRequest()
                     .permitAll())

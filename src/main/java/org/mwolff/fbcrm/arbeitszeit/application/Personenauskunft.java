@@ -100,8 +100,20 @@ public class Personenauskunft {
             .map(Personenauswahl::aus)
             .orElseGet(
                 () -> anfragend.role() == Role.READ_ONLY ? new Personenauswahl.Alle() : eigene);
-    if (auswahl instanceof final Personenauswahl.Einzeln einzeln
-        && !personen.containsKey(einzeln.accountId())) {
+    /*
+     * Pattern-Variable und nicht das zerlegende Record-Pattern (Sonar java:S6878, als Ausnahme in
+     * sonar-project.properties begruendet, Issue #480): javac legt fuer die Zerlegung einen
+     * Rueckfall in den typeSwitch (`iconst_1; ifeq`), der nie genommen wird. JaCoCo zaehlt ihn als
+     * Zweig, und die Schwelle von 100 % Zweigabdeckung waere damit unerreichbar. Der switch bleibt
+     * dagegen stehen: Im `instanceof` meldet SpotBugs die Pattern-Variable als DLS_DEAD_LOCAL_STORE
+     * (Issue #477).
+     */
+    final boolean unbekannt =
+        switch (auswahl) {
+          case Personenauswahl.Alle _ -> false;
+          case Personenauswahl.Einzeln einzeln -> !personen.containsKey(einzeln.accountId());
+        };
+    if (unbekannt) {
       throw new PersonenauswahlUngueltig();
     }
     return auswahl;

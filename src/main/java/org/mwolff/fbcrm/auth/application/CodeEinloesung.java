@@ -89,7 +89,7 @@ class CodeEinloesung {
     if (!warten.isZero()) {
       throw new TooManyLoginAttempts(warten);
     }
-    limiter.record(HERKUNFT, clientIp);
+    limiter.zaehle(HERKUNFT, clientIp);
   }
 
   /**

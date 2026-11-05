@@ -252,7 +252,7 @@ class LoginUseCaseTest {
 
     // Then — geloescht wird nur die Herkunft; die Adresszaehler bleiben stehen (E3).
     verify(zaehler).recordSuccess(IP);
-    verify(zaehler, never()).record(eq(ADRESSE_STUNDE), anyString());
+    verify(zaehler, never()).zaehle(eq(ADRESSE_STUNDE), anyString());
   }
 
   @Test
@@ -348,7 +348,7 @@ class LoginUseCaseTest {
     assertThatThrownBy(() -> useCase.login(MAIL, CODE, IP)).isInstanceOf(LoginFailed.class);
 
     // Then
-    reihenfolge.verify(zaehler).record(HERKUNFT, IP);
+    reihenfolge.verify(zaehler).zaehle(HERKUNFT, IP);
     reihenfolge.verify(loginCodes).findByEmail(MAIL);
   }
 
@@ -425,9 +425,9 @@ class LoginUseCaseTest {
     final ArgumentCaptor<LoginCode> zeilen = ArgumentCaptor.forClass(LoginCode.class);
     verify(loginCodes).save(zeilen.capture());
     assertThat(zeilen.getAllValues()).extracting(LoginCode::email).containsExactly(MAIL);
-    verify(zaehler, times(2)).record(HERKUNFT, IP);
-    verify(zaehler).record(ADRESSE_STUNDE, FREMD);
-    verify(zaehler).record(ADRESSE_TAG, FREMD);
+    verify(zaehler, times(2)).zaehle(HERKUNFT, IP);
+    verify(zaehler).zaehle(ADRESSE_STUNDE, FREMD);
+    verify(zaehler).zaehle(ADRESSE_TAG, FREMD);
   }
 
   @Test
@@ -534,9 +534,9 @@ class LoginUseCaseTest {
     anforderung.codeAnfordern(MAIL, IP);
 
     // Then
-    reihenfolge.verify(zaehler).record(HERKUNFT, IP);
-    reihenfolge.verify(zaehler).record(ADRESSE_STUNDE, MAIL);
-    reihenfolge.verify(zaehler).record(ADRESSE_TAG, MAIL);
+    reihenfolge.verify(zaehler).zaehle(HERKUNFT, IP);
+    reihenfolge.verify(zaehler).zaehle(ADRESSE_STUNDE, MAIL);
+    reihenfolge.verify(zaehler).zaehle(ADRESSE_TAG, MAIL);
     reihenfolge.verify(accounts).findByEmail(MAIL);
   }
 

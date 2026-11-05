@@ -298,7 +298,7 @@ class CodeEinloesungTest {
     einloesung.bremse(IP);
 
     // Then — Kriterium 5: Anforderungen und Eingaben zaehlen zusammen.
-    verify(zaehler).record(HERKUNFT, IP);
+    verify(zaehler).zaehle(HERKUNFT, IP);
   }
 
   @Test
@@ -323,7 +323,7 @@ class CodeEinloesungTest {
     assertThatExceptionOfType(TooManyLoginAttempts.class).isThrownBy(() -> einloesung.bremse(IP));
 
     // Then
-    verify(zaehler, never()).record(HERKUNFT, IP);
+    verify(zaehler, never()).zaehle(HERKUNFT, IP);
   }
 
   @Test
@@ -339,6 +339,6 @@ class CodeEinloesungTest {
     mitBremse.bremse(IP);
 
     // Then
-    verify(bremse).record(HERKUNFT, IP);
+    verify(bremse).zaehle(HERKUNFT, IP);
   }
 }

@@ -423,7 +423,7 @@ export default function BriefbogenKarte() {
           disabled={laeuft}
           symbol={<IconUpload size={SYMBOL} stroke={1.8} />}
         >
-          {stand.papier === null ? 'Briefpapier hochladen' : 'Briefpapier ersetzen'}
+          {hochladenWort(stand)}
         </WeicheTaste>
       )}
     </>
@@ -443,9 +443,7 @@ export default function BriefbogenKarte() {
   } else {
     inhalt = (
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-        {meldung === null ? null : <Alert severity="error">{meldung}</Alert>}
-        {hinweis ? <Alert severity="info">{HINWEIS_STEUER}</Alert> : null}
-        {erfolg ? <Alert severity="success">{GESPEICHERT}</Alert> : null}
+        <Meldungen meldung={meldung} hinweis={hinweis} erfolg={erfolg} />
         <Konfliktmeldung
           ursache={abweisung}
           onNeuLaden={() => {
@@ -539,6 +537,30 @@ export default function BriefbogenKarte() {
       {inhalt}
     </Karte>
   );
+}
+
+/** Die Meldungen ueber den Feldern: ein Ausfall, der Hinweis zur Steuerzeile, der Erfolg. */
+function Meldungen({
+  meldung,
+  hinweis,
+  erfolg,
+}: {
+  readonly meldung: string | null;
+  readonly hinweis: boolean;
+  readonly erfolg: boolean;
+}) {
+  return (
+    <>
+      {meldung === null ? null : <Alert severity="error">{meldung}</Alert>}
+      {hinweis ? <Alert severity="info">{HINWEIS_STEUER}</Alert> : null}
+      {erfolg ? <Alert severity="success">{GESPEICHERT}</Alert> : null}
+    </>
+  );
+}
+
+/** Die Beschriftung der Taste zum Hochladen: Ein hinterlegtes PDF wird ersetzt. */
+function hochladenWort(stand: Briefbogen): string {
+  return stand.papier === null ? 'Briefpapier hochladen' : 'Briefpapier ersetzen';
 }
 
 /**

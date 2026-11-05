@@ -228,5 +228,6 @@
     "location": "buildDienst",
     "branch": "kit-pruefung"
   },
-  "scenariosFrom": 303
+  "scenariosFrom": 303,
+  "strictness": "normal"
 }

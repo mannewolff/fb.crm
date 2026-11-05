@@ -265,7 +265,7 @@ class SetupAccountUseCaseTest {
         .isThrownBy(() -> einrichtung.initialize(MAIL, NAME, CODE, FALSCH, IP));
 
     // Then
-    verify(zaehler).record(HERKUNFT, IP);
+    verify(zaehler).zaehle(HERKUNFT, IP);
   }
 
   @Test
@@ -649,9 +649,9 @@ class SetupAccountUseCaseTest {
         .isThrownBy(() -> einrichtung.requestCode(MAIL, NAME, FALSCH, IP));
 
     // Then
-    reihenfolge.verify(zaehler).record(HERKUNFT, IP);
-    reihenfolge.verify(zaehler).record(ADRESSE_STUNDE, MAIL);
-    reihenfolge.verify(zaehler).record(ADRESSE_TAG, MAIL);
+    reihenfolge.verify(zaehler).zaehle(HERKUNFT, IP);
+    reihenfolge.verify(zaehler).zaehle(ADRESSE_STUNDE, MAIL);
+    reihenfolge.verify(zaehler).zaehle(ADRESSE_TAG, MAIL);
   }
 
   @Test

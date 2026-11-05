@@ -80,14 +80,14 @@ function blockform(block: Block): string {
     case 'text':
       return quellform(block.inhalt);
     case 'liste':
-      return block.eintraege.map(quellform).join('\n');
+      return block.eintraege.map((eintrag) => quellform(eintrag.inhalt)).join('\n');
     case 'befehl':
       return block.inhalt;
   }
 }
 
 function klartexte(block: Block): string[] {
-  const inhalte = block.art === 'text' ? [block.inhalt] : block.art === 'liste' ? block.eintraege : [];
+  const inhalte = block.art === 'text' ? [block.inhalt] : block.art === 'liste' ? block.eintraege.map((eintrag) => eintrag.inhalt) : [];
   return inhalte.flat().flatMap((stueck) => (stueck.art === 'klartext' ? [stueck.text] : []));
 }
 

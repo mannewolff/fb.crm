@@ -295,9 +295,9 @@ describe('parseFirmaAngebote', () => {
   });
 
   it('liest eine Zeile ohne Titel als null (Issue #318)', () => {
-    expect(parseFirmaAngebote({ angebote: [{ ...ZEILE, titel: null }] }).angebote[0].titel).toBe(
-      null,
-    );
+    expect(
+      parseFirmaAngebote({ angebote: [{ ...ZEILE, titel: null }] }).angebote[0].titel,
+    ).toBeNull();
   });
 
   it('verengt die leere Liste', () => {

@@ -64,7 +64,7 @@ public class LoginAttemptLimiter {
   }
 
   /** Vermerkt einen Versuch unter dieser Zaehlart und diesem Schluessel. */
-  public void record(final Zaehlart art, final String schluessel) {
+  public void zaehle(final Zaehlart art, final String schluessel) {
     eintraege.compute(
         zaehler(art, schluessel),
         (unbenutzt, bisher) -> {
@@ -100,9 +100,9 @@ public class LoginAttemptLimiter {
                 sperre(Zaehlart.ADRESSE_STUNDE, email),
                 sperre(Zaehlart.ADRESSE_TAG, email)));
     if (warten.isZero()) {
-      record(Zaehlart.HERKUNFT, clientIp);
-      record(Zaehlart.ADRESSE_STUNDE, email);
-      record(Zaehlart.ADRESSE_TAG, email);
+      zaehle(Zaehlart.HERKUNFT, clientIp);
+      zaehle(Zaehlart.ADRESSE_STUNDE, email);
+      zaehle(Zaehlart.ADRESSE_TAG, email);
     }
     return warten;
   }

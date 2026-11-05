@@ -182,11 +182,12 @@ class ZeiteintragUseCaseTest {
   private Zeiteintrag anlegen(final long angebotPositionId, final String von, final String bis) {
     return useCase.anlegen(
         ANNA,
-        Optional.empty(),
-        angebotPositionId,
-        Zeitdoppel.TAG,
-        LocalTime.parse(von),
-        LocalTime.parse(bis));
+        new ZeiteintragAngaben(
+            Optional.empty(),
+            angebotPositionId,
+            Zeitdoppel.TAG,
+            LocalTime.parse(von),
+            LocalTime.parse(bis)));
   }
 
   private Zeiteintrag aendern(final long angebotPositionId, final String von, final String bis) {
@@ -199,11 +200,12 @@ class ZeiteintragUseCaseTest {
         anfragend,
         EINTRAG,
         STAND,
-        Optional.empty(),
-        angebotPositionId,
-        Zeitdoppel.TAG,
-        LocalTime.parse(von),
-        LocalTime.parse(bis));
+        new ZeiteintragAngaben(
+            Optional.empty(),
+            angebotPositionId,
+            Zeitdoppel.TAG,
+            LocalTime.parse(von),
+            LocalTime.parse(bis)));
   }
 
   private static Zeiteintrag konzeption(final String von, final String bis) {
@@ -707,11 +709,12 @@ class ZeiteintragUseCaseTest {
             ANNA,
             EINTRAG,
             STAND,
-            Optional.empty(),
-            Zeitdoppel.KONZEPTION_ID,
-            andererTag,
-            LocalTime.of(10, 0),
-            LocalTime.of(12, 0));
+            new ZeiteintragAngaben(
+                Optional.empty(),
+                Zeitdoppel.KONZEPTION_ID,
+                andererTag,
+                LocalTime.of(10, 0),
+                LocalTime.of(12, 0)));
 
     // Then
     assertThat(geaendert.tag()).isEqualTo(andererTag);
@@ -914,11 +917,8 @@ class ZeiteintragUseCaseTest {
       final String bis) {
     return anwendungsfall.anlegen(
         anfragend,
-        person,
-        Zeitdoppel.KONZEPTION_ID,
-        tag,
-        LocalTime.parse(von),
-        LocalTime.parse(bis));
+        new ZeiteintragAngaben(
+            person, Zeitdoppel.KONZEPTION_ID, tag, LocalTime.parse(von), LocalTime.parse(bis)));
   }
 
   private static Zeiteintrag aendernIn(
@@ -932,11 +932,12 @@ class ZeiteintragUseCaseTest {
         anfragend,
         eintrag.requireId(),
         eintrag.version(),
-        person,
-        eintrag.angebotPositionId(),
-        eintrag.tag(),
-        LocalTime.parse(von),
-        LocalTime.parse(bis));
+        new ZeiteintragAngaben(
+            person,
+            eintrag.angebotPositionId(),
+            eintrag.tag(),
+            LocalTime.parse(von),
+            LocalTime.parse(bis)));
   }
 
   private BigDecimal angefallenAnDerKonzeption(final Zeitbestand bestand) {

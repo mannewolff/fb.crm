@@ -42,6 +42,7 @@ import org.mwolff.fbcrm.arbeitszeit.application.PositionNichtBuchbar;
 import org.mwolff.fbcrm.arbeitszeit.application.UhrzeitNichtImRaster;
 import org.mwolff.fbcrm.arbeitszeit.application.WaehlbarePerson;
 import org.mwolff.fbcrm.arbeitszeit.application.Zeitbuchung;
+import org.mwolff.fbcrm.arbeitszeit.application.ZeiteintragAngaben;
 import org.mwolff.fbcrm.arbeitszeit.application.ZeiteintragGeaendert;
 import org.mwolff.fbcrm.arbeitszeit.application.ZeiteintragGeloescht;
 import org.mwolff.fbcrm.arbeitszeit.application.ZeiteintragNichtGefunden;
@@ -124,7 +125,7 @@ class ArbeitszeitControllerTest {
   @Mock private BuchbarePositionenUseCase buchbare;
   @Mock private Personenauskunft personen;
 
-  @Captor private ArgumentCaptor<LocalTime> von;
+  @Captor private ArgumentCaptor<ZeiteintragAngaben> angaben;
 
   private MockMvc mockMvc;
 
@@ -187,7 +188,9 @@ class ArbeitszeitControllerTest {
   void anlegen_thenAnswers201WithTheEntryAndItsCalculatedHours() throws Exception {
     // Given — die Dauer steht nicht in der Anfrage; sie wird gerechnet (Plan #194, A3).
     when(useCase.anlegen(
-            ANGEMELDET, OHNE_PERSON, POSITION, TAG, LocalTime.of(9, 0), LocalTime.of(10, 45)))
+            ANGEMELDET,
+            new ZeiteintragAngaben(
+                OHNE_PERSON, POSITION, TAG, LocalTime.of(9, 0), LocalTime.of(10, 45))))
         .thenReturn(eintrag());
 
     // When / Then
@@ -205,14 +208,7 @@ class ArbeitszeitControllerTest {
   @Test
   void anlegen_thenPassesTheSubmittedTimesToTheUseCase() throws Exception {
     // Given
-    when(useCase.anlegen(
-            eq(ANGEMELDET),
-            eq(OHNE_PERSON),
-            eq(POSITION),
-            eq(TAG),
-            von.capture(),
-            eq(LocalTime.of(10, 45))))
-        .thenReturn(eintrag());
+    when(useCase.anlegen(eq(ANGEMELDET), angaben.capture())).thenReturn(eintrag());
 
     // When
     mockMvc
@@ -220,7 +216,10 @@ class ArbeitszeitControllerTest {
         .andExpect(status().isCreated());
 
     // Then
-    assertThat(von.getValue()).isEqualTo(LocalTime.of(9, 0));
+    assertThat(angaben.getValue())
+        .isEqualTo(
+            new ZeiteintragAngaben(
+                OHNE_PERSON, POSITION, TAG, LocalTime.of(9, 0), LocalTime.of(10, 45)));
   }
 
   @Test
@@ -255,7 +254,9 @@ class ArbeitszeitControllerTest {
   void anlegen_whenTheTimeIsOutsideTheGrid_thenAnswers422WithAFieldErrorAtVon() throws Exception {
     // Given — A19: die Meldung kommt am Feld an und nicht als Serverfehler.
     when(useCase.anlegen(
-            ANGEMELDET, OHNE_PERSON, POSITION, TAG, LocalTime.of(9, 0), LocalTime.of(10, 45)))
+            ANGEMELDET,
+            new ZeiteintragAngaben(
+                OHNE_PERSON, POSITION, TAG, LocalTime.of(9, 0), LocalTime.of(10, 45))))
         .thenThrow(UhrzeitNichtImRaster.anVon());
 
     // When / Then
@@ -270,7 +271,9 @@ class ArbeitszeitControllerTest {
       throws Exception {
     // Given — Antworten 2, 3 und 5.
     when(useCase.anlegen(
-            ANGEMELDET, OHNE_PERSON, POSITION, TAG, LocalTime.of(9, 0), LocalTime.of(10, 45)))
+            ANGEMELDET,
+            new ZeiteintragAngaben(
+                OHNE_PERSON, POSITION, TAG, LocalTime.of(9, 0), LocalTime.of(10, 45))))
         .thenThrow(PositionNichtBuchbar.amKundenangebot());
 
     // When / Then
@@ -287,11 +290,8 @@ class ArbeitszeitControllerTest {
             ANGEMELDET,
             EINTRAG,
             STAND,
-            OHNE_PERSON,
-            POSITION,
-            TAG,
-            LocalTime.of(9, 0),
-            LocalTime.of(10, 45)))
+            new ZeiteintragAngaben(
+                OHNE_PERSON, POSITION, TAG, LocalTime.of(9, 0), LocalTime.of(10, 45))))
         .thenReturn(eintrag());
 
     // When / Then
@@ -313,11 +313,8 @@ class ArbeitszeitControllerTest {
             ANGEMELDET,
             EINTRAG,
             STAND,
-            OHNE_PERSON,
-            POSITION,
-            TAG,
-            LocalTime.of(9, 0),
-            LocalTime.of(10, 45)))
+            new ZeiteintragAngaben(
+                OHNE_PERSON, POSITION, TAG, LocalTime.of(9, 0), LocalTime.of(10, 45))))
         .thenThrow(new ZeiteintragNichtGefunden());
 
     // When / Then
@@ -337,11 +334,8 @@ class ArbeitszeitControllerTest {
             ANGEMELDET,
             EINTRAG,
             STAND,
-            OHNE_PERSON,
-            POSITION,
-            TAG,
-            LocalTime.of(9, 0),
-            LocalTime.of(10, 45)))
+            new ZeiteintragAngaben(
+                OHNE_PERSON, POSITION, TAG, LocalTime.of(9, 0), LocalTime.of(10, 45))))
         .thenReturn(eintragMitStand(STAND + 1));
 
     // When / Then
@@ -375,11 +369,8 @@ class ArbeitszeitControllerTest {
             ANGEMELDET,
             EINTRAG,
             STAND,
-            OHNE_PERSON,
-            POSITION,
-            TAG,
-            LocalTime.of(9, 0),
-            LocalTime.of(10, 45)))
+            new ZeiteintragAngaben(
+                OHNE_PERSON, POSITION, TAG, LocalTime.of(9, 0), LocalTime.of(10, 45))))
         .thenThrow(new ZeiteintragGeaendert(ANNA, ANGEMELDET, VORHIN));
 
     // When / Then
@@ -400,7 +391,9 @@ class ArbeitszeitControllerTest {
   void anlegen_withoutIfMatch_thenCreatesTheEntry() throws Exception {
     // Given — #411, Kriterium 7: ein neuer Zeiteintrag entsteht ohne Rueckfrage nach dem Stand.
     when(useCase.anlegen(
-            ANGEMELDET, OHNE_PERSON, POSITION, TAG, LocalTime.of(9, 0), LocalTime.of(10, 45)))
+            ANGEMELDET,
+            new ZeiteintragAngaben(
+                OHNE_PERSON, POSITION, TAG, LocalTime.of(9, 0), LocalTime.of(10, 45))))
         .thenReturn(eintragMitStand(0L));
 
     // When / Then
@@ -471,11 +464,8 @@ class ArbeitszeitControllerTest {
             ANGEMELDET,
             EINTRAG,
             STAND,
-            OHNE_PERSON,
-            POSITION,
-            TAG,
-            LocalTime.of(9, 0),
-            LocalTime.of(10, 45)))
+            new ZeiteintragAngaben(
+                OHNE_PERSON, POSITION, TAG, LocalTime.of(9, 0), LocalTime.of(10, 45))))
         .thenThrow(new ZeiteintragGeloescht(ANNA, ANGEMELDET, VORHIN));
 
     // When / Then
@@ -495,11 +485,12 @@ class ArbeitszeitControllerTest {
     // Anwendungsfall und nicht der Controller (E6).
     when(useCase.anlegen(
             ANGEMELDET,
-            Optional.of(Long.valueOf(BEN)),
-            POSITION,
-            TAG,
-            LocalTime.of(9, 0),
-            LocalTime.of(10, 45)))
+            new ZeiteintragAngaben(
+                Optional.of(Long.valueOf(BEN)),
+                POSITION,
+                TAG,
+                LocalTime.of(9, 0),
+                LocalTime.of(10, 45))))
         .thenReturn(eintragVon(BEN));
 
     // When / Then — die Antwort nennt die Person des gespeicherten Eintrags.
@@ -513,7 +504,9 @@ class ArbeitszeitControllerTest {
   void anlegen_thenTheAnswerNamesThePersonOfTheEntry() throws Exception {
     // Given — ohne Feld gehoert der Eintrag dem angemeldeten Konto (E12).
     when(useCase.anlegen(
-            ANGEMELDET, OHNE_PERSON, POSITION, TAG, LocalTime.of(9, 0), LocalTime.of(10, 45)))
+            ANGEMELDET,
+            new ZeiteintragAngaben(
+                OHNE_PERSON, POSITION, TAG, LocalTime.of(9, 0), LocalTime.of(10, 45))))
         .thenReturn(eintrag());
 
     // When / Then
@@ -529,11 +522,12 @@ class ArbeitszeitControllerTest {
     // Given — E12: die Meldung gehoert an das Feld, an dem ein C-Level die Person waehlt.
     when(useCase.anlegen(
             ANGEMELDET,
-            Optional.of(Long.valueOf(BEN)),
-            POSITION,
-            TAG,
-            LocalTime.of(9, 0),
-            LocalTime.of(10, 45)))
+            new ZeiteintragAngaben(
+                Optional.of(Long.valueOf(BEN)),
+                POSITION,
+                TAG,
+                LocalTime.of(9, 0),
+                LocalTime.of(10, 45))))
         .thenThrow(new PersonNichtWaehlbar());
 
     // When / Then
@@ -551,11 +545,12 @@ class ArbeitszeitControllerTest {
             ANGEMELDET,
             EINTRAG,
             STAND,
-            Optional.of(Long.valueOf(BEN)),
-            POSITION,
-            TAG,
-            LocalTime.of(9, 0),
-            LocalTime.of(10, 45)))
+            new ZeiteintragAngaben(
+                Optional.of(Long.valueOf(BEN)),
+                POSITION,
+                TAG,
+                LocalTime.of(9, 0),
+                LocalTime.of(10, 45))))
         .thenReturn(eintragVon(BEN));
 
     // When / Then

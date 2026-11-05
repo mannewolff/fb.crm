@@ -120,14 +120,7 @@ public class ArbeitszeitController {
   public ZeiteintragResponse anlegen(
       @AuthenticationPrincipal final Long accountId,
       @Valid @RequestBody final ZeiteintragRequest anfrage) {
-    return ZeiteintragResponse.of(
-        useCase.anlegen(
-            accountId,
-            Optional.ofNullable(anfrage.accountId()),
-            anfrage.angebotPositionId(),
-            anfrage.tag(),
-            anfrage.von(),
-            anfrage.bis()));
+    return ZeiteintragResponse.of(useCase.anlegen(accountId, anfrage.angaben()));
   }
 
   /**
@@ -145,15 +138,7 @@ public class ArbeitszeitController {
       final Bedingungskopf stand,
       @Valid @RequestBody final ZeiteintragRequest anfrage) {
     return ZeiteintragResponse.of(
-        useCase.aendern(
-            accountId,
-            id,
-            stand.version(),
-            Optional.ofNullable(anfrage.accountId()),
-            anfrage.angebotPositionId(),
-            anfrage.tag(),
-            anfrage.von(),
-            anfrage.bis()));
+        useCase.aendern(accountId, id, stand.version(), anfrage.angaben()));
   }
 
   /**

@@ -61,6 +61,9 @@ class CiiSchreiber implements ERechnungsschreiber {
   /** Handelsrechnung (BT-3). */
   private static final String RECHNUNG = "380";
 
+  /** Das Element, das in CII einen Code aus einer Codeliste traegt. */
+  private static final String TYPE_CODE = "TypeCode";
+
   /** SEPA-Ueberweisung (BT-81, E8). */
   private static final String SEPA_UEBERWEISUNG = "58";
 
@@ -136,7 +139,7 @@ class CiiSchreiber implements ERechnungsschreiber {
       throws XMLStreamException {
     xml.writeStartElement("rsm", "ExchangedDocument", RSM);
     element(xml, "ID", daten.nummer());
-    element(xml, "TypeCode", RECHNUNG);
+    element(xml, TYPE_CODE, RECHNUNG);
     zeitpunkt(xml, "IssueDateTime", daten.rechnungDatum());
     final String leistungszeitraum = daten.leistungszeitraum();
     if (leistungszeitraum != null) {
@@ -170,7 +173,7 @@ class CiiSchreiber implements ERechnungsschreiber {
     xml.writeEndElement();
     beginne(xml, "SpecifiedLineTradeSettlement");
     beginne(xml, "ApplicableTradeTax");
-    element(xml, "TypeCode", UMSATZSTEUER);
+    element(xml, TYPE_CODE, UMSATZSTEUER);
     element(xml, "CategoryCode", NORMALSATZ);
     element(xml, "RateApplicablePercent", satz.toPlainString());
     xml.writeEndElement();
@@ -241,7 +244,7 @@ class CiiSchreiber implements ERechnungsschreiber {
     zahlungsart(xml, daten.verkaeufer());
     beginne(xml, "ApplicableTradeTax");
     element(xml, "CalculatedAmount", betrag(daten.steuer()));
-    element(xml, "TypeCode", UMSATZSTEUER);
+    element(xml, TYPE_CODE, UMSATZSTEUER);
     element(xml, "BasisAmount", betrag(daten.netto()));
     element(xml, "CategoryCode", NORMALSATZ);
     element(xml, "RateApplicablePercent", daten.steuersatz().toPlainString());
@@ -257,7 +260,7 @@ class CiiSchreiber implements ERechnungsschreiber {
   private static void zahlungsart(final XMLStreamWriter xml, final Verkaeufer verkaeufer)
       throws XMLStreamException {
     beginne(xml, "SpecifiedTradeSettlementPaymentMeans");
-    element(xml, "TypeCode", SEPA_UEBERWEISUNG);
+    element(xml, TYPE_CODE, SEPA_UEBERWEISUNG);
     beginne(xml, "PayeePartyCreditorFinancialAccount");
     element(xml, "IBANID", verkaeufer.iban().elektronisch());
     element(xml, "AccountName", verkaeufer.kontoinhaber());

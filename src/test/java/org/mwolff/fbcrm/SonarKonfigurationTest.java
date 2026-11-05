@@ -49,16 +49,33 @@ class SonarKonfigurationTest {
   private static final String MULTICRITERIA = "sonar.issue.ignore.multicriteria";
 
   /**
-   * Die bewusst zugelassenen Ausnahmen — genau diese und keine weitere (Plan #238, A2 und A3).
+   * Die Namensregeln, die der deutschen Benennung im Code widersprechen (Entscheidung Manne,
+   * 2026-11-05). Sie treffen keine Datei, sondern eine Konvention, und tragen darum als einzige
+   * Eintraege ein Muster mit {@code *}.
+   */
+  private static final List<String> NAMENSREGEL_AUSNAHMEN =
+      List.of("typescript:S6754 an frontend/src/**/*", "typescript:S7718 an frontend/src/**/*");
+
+  /**
+   * Die bewusst zugelassenen Ausnahmen — genau diese und keine weitere (Plan #238, A2 und A3, dazu
+   * die Namensregeln nach Entscheidung Manne vom 2026-11-05 und die beiden Record-Pattern-Stellen
+   * aus Issue #480).
    *
-   * <p>Je Eintrag trifft eine Regel genau eine Datei. Wer hier etwas ergaenzt, hat sich fuer eine
-   * Ausnahme entschieden und begruendet sie in {@code sonar-project.properties}; wer etwas
-   * weglaesst, nimmt eine zurueck. Beides soll auffallen, darum steht die Liste hier fest.
+   * <p>Je Einzelbefund trifft eine Regel genau eine Datei; nur die {@link #NAMENSREGEL_AUSNAHMEN}
+   * gelten fuer das ganze Frontend. Wer hier etwas ergaenzt, hat sich fuer eine Ausnahme
+   * entschieden und begruendet sie in {@code sonar-project.properties}; wer etwas weglaesst, nimmt
+   * eine zurueck. Beides soll auffallen, darum steht die Liste hier fest.
    */
   private static final List<String> ZUGELASSENE_AUSNAHMEN =
       List.of(
           "java:S4502 an src/main/java/org/mwolff/fbcrm/auth/web/SecurityConfig.java",
-          "java:S5693 an src/main/resources/application.yml");
+          "java:S5693 an src/main/resources/application.yml",
+          "typescript:S6754 an frontend/src/**/*",
+          "typescript:S7718 an frontend/src/**/*",
+          "java:S6878 an"
+              + " src/main/java/org/mwolff/fbcrm/arbeitszeit/application/Personenauskunft.java",
+          "java:S6878 an"
+              + " src/main/java/org/mwolff/fbcrm/arbeitszeit/application/ArbeitszeitMonatUseCase.java");
 
   private static String lies(final String datei) throws IOException {
     return Files.readString(WURZEL.resolve(datei), StandardCharsets.UTF_8);
@@ -137,6 +154,14 @@ class SonarKonfigurationTest {
     return wert.strip();
   }
 
+  /** Die Eintraege mit {@code *}, die keine zugelassene Namensregel-Ausnahme sind. */
+  private static List<String> unzulaessigeMuster(final List<String> eintraege) {
+    return eintraege.stream()
+        .filter(eintrag -> eintrag.contains("*"))
+        .filter(eintrag -> !NAMENSREGEL_AUSNAHMEN.contains(eintrag))
+        .toList();
+  }
+
   @Test
   void multicriteria_givenTheSonarFile_thenCarriesExactlyTheDeliberateExceptions()
       throws IOException {
@@ -150,11 +175,24 @@ class SonarKonfigurationTest {
 
   @Test
   void multicriteria_givenTheSonarFile_thenNoEntryCarriesAWildcard() throws IOException {
-    // When / Then — eine Ausnahme trifft genau eine Regel an genau einer Datei. Ein Muster mit *
-    // deckte still mehr ab, als jemand entschieden hat, und bliebe beim naechsten Fund stumm.
-    assertThat(ausnahmen())
-        .as("kein ruleKey und kein resourceKey enthaelt *")
-        .noneMatch(eintrag -> eintrag.contains("*"));
+    // When / Then — eine Ausnahme fuer einen Einzelbefund trifft genau eine Regel an genau einer
+    // Datei. Ein Muster mit * deckte still mehr ab, als jemand entschieden hat, und bliebe beim
+    // naechsten Fund stumm. Ausgenommen sind allein die festen Namensregel-Eintraege.
+    assertThat(unzulaessigeMuster(ausnahmen()))
+        .as("kein ruleKey und kein resourceKey ausser den Namensregeln enthaelt *")
+        .isEmpty();
+  }
+
+  @Test
+  void unzulaessigeMuster_givenAWildcardEntryOutsideTheNamingRules_thenRejectsIt() {
+    // Given
+    final String fremd = "typescript:S3776 an frontend/src/**/*";
+    final List<String> eintraege = new ArrayList<>(NAMENSREGEL_AUSNAHMEN);
+    eintraege.add(fremd);
+    eintraege.add("java:S4502 an src/main/java/org/mwolff/fbcrm/auth/web/SecurityConfig.java");
+
+    // When / Then — nur die dritte Wildcard-Ausnahme faellt auf, die Namensregeln nicht.
+    assertThat(unzulaessigeMuster(eintraege)).containsExactly(fremd);
   }
 
   @Test
