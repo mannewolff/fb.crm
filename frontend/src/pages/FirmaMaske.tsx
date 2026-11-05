@@ -188,6 +188,19 @@ function nichtBereit(stand: Exclude<Stand, 'bereit'>): ReactNode {
   return <Alert severity="error">{stand === 'unbekannt' ? NICHT_GEFUNDEN : AUSFALL_LESEN}</Alert>;
 }
 
+/**
+ * Der Stand, den die Maske zeigt. Das Formular steht erst mit der Laenderliste, damit das Land
+ * nicht vom Textfeld zur Auswahl springt, waehrend schon jemand tippt.
+ */
+function sichtbarerStand(stand: Stand, laender: Laender): Stand {
+  return stand === 'bereit' && laender === 'laedt' ? 'laedt' : stand;
+}
+
+/** Die gelesene Laenderliste; ohne sie bleibt das Land ein Textfeld. */
+function laenderListe(laender: Laender): readonly Land[] | undefined {
+  return typeof laender === 'string' ? undefined : laender;
+}
+
 export default function FirmaMaske() {
   const { id } = useParams();
   const aendern = id !== undefined;
@@ -307,9 +320,7 @@ export default function FirmaMaske() {
   useKopfPfad(ZU_FIRMEN, titel);
   const zurueck = kennung === null ? '/firmen' : `/firmen/${String(kennung)}`;
   const nameMeldung = nameFehlt ? NAME_FEHLT : meldungAm(feldFehler, 'name');
-  // Das Formular steht erst mit der Laenderliste, damit das Land nicht vom Textfeld zur Auswahl
-  // springt, waehrend schon jemand tippt.
-  const sichtbar: Stand = stand === 'bereit' && laender === 'laedt' ? 'laedt' : stand;
+  const sichtbar = sichtbarerStand(stand, laender);
 
   return (
     <Box
@@ -361,7 +372,7 @@ export default function FirmaMaske() {
               werte={werte}
               setzeWerte={setzeWerte}
               feldFehler={feldFehler}
-              laender={typeof laender === 'string' ? undefined : laender}
+              laender={laenderListe(laender)}
             />
             <Eingabe
               label="Steuernummer"

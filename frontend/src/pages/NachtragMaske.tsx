@@ -232,20 +232,25 @@ function eigeneEingabenAus(
   datei: File | null,
   entfernen: boolean,
 ): readonly EigeneEingabe[] {
-  const original =
-    datei === null
-      ? entfernen
-        ? [{ bezeichnung: 'Originalrechnung (PDF)', wert: 'Hinterlegtes PDF entfernen' }]
-        : []
-      : [{ bezeichnung: 'Originalrechnung (PDF)', wert: datei.name }];
   return [
     { bezeichnung: 'Kunde', wert: gewaehlt?.wort ?? '' },
     { bezeichnung: 'Rechnungsnummer', wert: werte.nummer },
     { bezeichnung: 'Rechnungsdatum', wert: tagWort(werte.rechnungDatum) },
     { bezeichnung: 'Nettobetrag', wert: werte.netto },
     { bezeichnung: 'Bruttobetrag', wert: werte.brutto },
-    ...original,
+    ...originalEingabe(datei, entfernen),
   ];
+}
+
+/** Was die Maske mit dem Original vorhatte, als eigene Eingabe — oder nichts. */
+function originalEingabe(datei: File | null, entfernen: boolean): readonly EigeneEingabe[] {
+  if (datei !== null) {
+    return [{ bezeichnung: 'Originalrechnung (PDF)', wert: datei.name }];
+  }
+  if (entfernen) {
+    return [{ bezeichnung: 'Originalrechnung (PDF)', wert: 'Hinterlegtes PDF entfernen' }];
+  }
+  return [];
 }
 
 /** Die Eintraege der Kundenwahl: die Treffer, und davor der gewaehlte, wenn er keiner ist. */
@@ -409,6 +414,62 @@ function nichtBereit(stand: Exclude<Stand, 'bereit'>): ReactNode {
     );
   }
   return <Alert severity="error">{stand === 'unbekannt' ? NICHT_GEFUNDEN : AUSFALL_LESEN}</Alert>;
+}
+
+/** Was ueber dem Original steht: ob eines hinterlegt ist, und wenn ja, das Feld zum Entfernen. */
+function HinterlegtesOriginal({
+  hinterlegt,
+  entfernen,
+  setzeEntfernen,
+}: {
+  readonly hinterlegt: boolean;
+  readonly entfernen: boolean;
+  readonly setzeEntfernen: (entfernen: boolean) => void;
+}) {
+  return (
+    <>
+      <Typography
+        sx={(theme) => ({ fontSize: 12.5, color: theme.vars.palette.kupferwolke.textMatt })}
+      >
+        {hinterlegt ? MIT_ORIGINAL : OHNE_ORIGINAL}
+      </Typography>
+      {hinterlegt ? (
+        <FormControlLabel
+          control={
+            <Checkbox
+              checked={entfernen}
+              onChange={(ereignis) => {
+                setzeEntfernen(ereignis.target.checked);
+              }}
+            />
+          }
+          label="Hinterlegtes PDF entfernen"
+        />
+      ) : null}
+    </>
+  );
+}
+
+/** Die Meldung am Original, unter der Kennung, auf die das Dateifeld verweist. */
+function DateiMeldung({ id, meldung }: { readonly id: string; readonly meldung?: string }) {
+  if (meldung === undefined) {
+    return null;
+  }
+  return (
+    <FormHelperText error id={id}>
+      {meldung}
+    </FormHelperText>
+  );
+}
+
+/** Wohin „Abbrechen" fuehrt: zur Rechnung, die bearbeitet wird, sonst zur Uebersicht. */
+function zurueckPfad(kennung: number | null): string {
+  return kennung === null ? '/rechnungen' : `/rechnungen/nachgetragen/${String(kennung)}`;
+}
+
+/** Die Beschriftung der Kupfertaste: Eine vorhandene Rechnung wird gespeichert, sonst angelegt. */
+function speichernWort(vorhanden: number | null): string {
+  return vorhanden === null ? 'Anlegen' : 'Speichern';
 }
 
 export default function NachtragMaske() {
@@ -589,7 +650,7 @@ export default function NachtragMaske() {
 
   const titel = bearbeiten ? 'Nachgetragene Rechnung bearbeiten' : 'Rechnung nachtragen';
   useKopfPfad(ZU_RECHNUNGEN, titel);
-  const zurueck = kennung === null ? '/rechnungen' : `/rechnungen/nachgetragen/${String(kennung)}`;
+  const zurueck = zurueckPfad(kennung);
   const zeilen = wahlzeilen(treffer, gewaehlt);
   const kundenMeldung = meldungAm(feldFehler, 'firmaId');
   const dateiMeldung = meldungAm(feldFehler, DATEI);
@@ -727,37 +788,18 @@ export default function NachtragMaske() {
                 )}
                 <Typography sx={{ fontSize: 13 }}>{datei?.name ?? KEINE_DATEI}</Typography>
               </Box>
-              <Typography
-                sx={(theme) => ({ fontSize: 12.5, color: theme.vars.palette.kupferwolke.textMatt })}
-              >
-                {hinterlegt ? MIT_ORIGINAL : OHNE_ORIGINAL}
-              </Typography>
-              {hinterlegt ? (
-                <FormControlLabel
-                  control={
-                    <Checkbox
-                      checked={entfernen}
-                      onChange={(ereignis) => {
-                        setzeEntfernen(ereignis.target.checked);
-                      }}
-                    />
-                  }
-                  label="Hinterlegtes PDF entfernen"
-                />
-              ) : null}
-              {dateiMeldung === undefined ? null : (
-                <FormHelperText error id={dateiMeldungId}>
-                  {dateiMeldung}
-                </FormHelperText>
-              )}
+              <HinterlegtesOriginal
+                hinterlegt={hinterlegt}
+                entfernen={entfernen}
+                setzeEntfernen={setzeEntfernen}
+              />
+              <DateiMeldung id={dateiMeldungId} meldung={dateiMeldung} />
             </Box>
             {/* Das Tastenpaar der Vorlage: die weiche Taste links vor der Kupfertaste
                 (`.aktionen`, Z. 144–148). */}
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, flexWrap: 'wrap' }}>
               <WeicheTaste to={zurueck}>Abbrechen</WeicheTaste>
-              <KupferTaste disabled={laeuft}>
-                {vorhanden === null ? 'Anlegen' : 'Speichern'}
-              </KupferTaste>
+              <KupferTaste disabled={laeuft}>{speichernWort(vorhanden)}</KupferTaste>
             </Box>
           </Box>
         ) : (

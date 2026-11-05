@@ -75,90 +75,138 @@ export function ankerName(text: string, schonBelegt: readonly string[]): string 
   return `${grund}-${nummer}`;
 }
 
-export function leseMarkdown(quelle: string): Dokument {
-  const zeilen = quelle.split(ZEILENENDE);
-  const bloecke: Block[] = [];
-  const belegt: string[] = [];
-  let titel = '';
+/** Der Stand des Lesers zwischen zwei Zeilen. */
+interface Lesestand {
+  readonly zeilen: readonly string[];
+  /** Die naechste noch nicht gelesene Zeile. */
+  i: number;
+  readonly bloecke: Block[];
+  readonly belegt: string[];
+  titel: string;
   // Hoechstens eines von beiden ist offen: Wer das eine beginnt, schliesst vorher das andere.
-  let absatz: string[] = [];
-  let liste: { numeriert: boolean; eintraege: string[] } | null = null;
+  absatz: string[];
+  liste: { numeriert: boolean; eintraege: string[] } | null;
+}
 
-  const schliesse = (): void => {
-    if (absatz.length > 0) {
-      bloecke.push({ art: 'text', inhalt: leseInline(absatz.join(' ')) });
-      absatz = [];
-    }
-    if (liste !== null) {
-      bloecke.push({ art: 'liste', numeriert: liste.numeriert, eintraege: liste.eintraege.map(leseInline) });
-      liste = null;
-    }
+export function leseMarkdown(quelle: string): Dokument {
+  const stand: Lesestand = {
+    zeilen: quelle.split(ZEILENENDE),
+    i: 0,
+    bloecke: [],
+    belegt: [],
+    titel: '',
+    absatz: [],
+    liste: null,
   };
-
-  let i = 0;
-  while (i < zeilen.length) {
-    const zeile = zeilen[i];
-    i += 1;
-
-    if (ZAUN_AUF.test(zeile)) {
-      schliesse();
-      const inhalt: string[] = [];
-      while (i < zeilen.length && !ZAUN_ZU.test(zeilen[i])) {
-        inhalt.push(zeilen[i]);
-        i += 1;
-      }
-      // Ueber den schliessenden Zaun hinweg; ohne ihn steht `i` danach hinter dem Dateiende.
-      i += 1;
-      bloecke.push({ art: 'befehl', inhalt: inhalt.join('\n') });
-      continue;
-    }
-
-    if (LEERZEILE.test(zeile)) {
-      schliesse();
-      continue;
-    }
-
-    // Nur die erste `#`-Ueberschrift ist der Titel (E7); jede weitere bleibt Fliesstext (E4).
-    const titelTreffer = TITEL.exec(zeile);
-    if (titelTreffer !== null && titel === '') {
-      schliesse();
-      titel = titelTreffer[1].trim();
-      continue;
-    }
-
-    const abschnitt = ABSCHNITT.exec(zeile);
-    if (abschnitt !== null) {
-      schliesse();
-      const text = abschnitt[2].trim();
-      const anker = ankerName(text, belegt);
-      belegt.push(anker);
-      bloecke.push({ art: 'ueberschrift', ebene: abschnitt[1] === '##' ? 2 : 3, text, anker });
-      continue;
-    }
-
-    const eintrag = listenEintrag(zeile);
-    if (eintrag !== null) {
-      if (liste === null || liste.numeriert !== eintrag.numeriert) {
-        schliesse();
-        liste = { numeriert: eintrag.numeriert, eintraege: [] };
-      }
-      liste.eintraege.push(eintrag.text);
-      continue;
-    }
-
-    if (liste !== null && FORTSETZUNG.test(zeile)) {
-      liste.eintraege[liste.eintraege.length - 1] += ` ${zeile.trim()}`;
-      continue;
-    }
-
-    if (liste !== null) {
-      schliesse();
-    }
-    absatz.push(zeile.trim());
+  while (stand.i < stand.zeilen.length) {
+    const zeile = stand.zeilen[stand.i];
+    stand.i += 1;
+    leseZeile(stand, zeile);
   }
-  schliesse();
+  schliesse(stand);
 
-  return { titel, bloecke };
+  return { titel: stand.titel, bloecke: stand.bloecke };
+}
+
+/** Die Zeile in den Stand: Die erste Blockart, die sie nimmt, gilt; sonst ist sie Fliesstext. */
+function leseZeile(stand: Lesestand, zeile: string): void {
+  if (
+    leseBefehl(stand, zeile) ||
+    leseLeerzeile(stand, zeile) ||
+    leseTitel(stand, zeile) ||
+    leseAbschnitt(stand, zeile) ||
+    leseListenzeile(stand, zeile)
+  ) {
+    return;
+  }
+  if (stand.liste !== null) {
+    schliesse(stand);
+  }
+  stand.absatz.push(zeile.trim());
+}
+
+/** Schliesst den offenen Absatz oder die offene Liste ab. */
+function schliesse(stand: Lesestand): void {
+  if (stand.absatz.length > 0) {
+    stand.bloecke.push({ art: 'text', inhalt: leseInline(stand.absatz.join(' ')) });
+    stand.absatz = [];
+  }
+  if (stand.liste !== null) {
+    stand.bloecke.push({
+      art: 'liste',
+      numeriert: stand.liste.numeriert,
+      eintraege: stand.liste.eintraege.map(leseInline),
+    });
+    stand.liste = null;
+  }
+}
+
+function leseBefehl(stand: Lesestand, zeile: string): boolean {
+  if (!ZAUN_AUF.test(zeile)) {
+    return false;
+  }
+  schliesse(stand);
+  const inhalt: string[] = [];
+  while (stand.i < stand.zeilen.length && !ZAUN_ZU.test(stand.zeilen[stand.i])) {
+    inhalt.push(stand.zeilen[stand.i]);
+    stand.i += 1;
+  }
+  // Ueber den schliessenden Zaun hinweg; ohne ihn steht `i` danach hinter dem Dateiende.
+  stand.i += 1;
+  stand.bloecke.push({ art: 'befehl', inhalt: inhalt.join('\n') });
+  return true;
+}
+
+function leseLeerzeile(stand: Lesestand, zeile: string): boolean {
+  if (!LEERZEILE.test(zeile)) {
+    return false;
+  }
+  schliesse(stand);
+  return true;
+}
+
+/** Nur die erste `#`-Ueberschrift ist der Titel (E7); jede weitere bleibt Fliesstext (E4). */
+function leseTitel(stand: Lesestand, zeile: string): boolean {
+  const titelTreffer = TITEL.exec(zeile);
+  if (titelTreffer === null || stand.titel !== '') {
+    return false;
+  }
+  schliesse(stand);
+  stand.titel = titelTreffer[1].trim();
+  return true;
+}
+
+function leseAbschnitt(stand: Lesestand, zeile: string): boolean {
+  const abschnitt = ABSCHNITT.exec(zeile);
+  if (abschnitt === null) {
+    return false;
+  }
+  schliesse(stand);
+  const text = abschnitt[2].trim();
+  const anker = ankerName(text, stand.belegt);
+  stand.belegt.push(anker);
+  stand.bloecke.push({ art: 'ueberschrift', ebene: abschnitt[1] === '##' ? 2 : 3, text, anker });
+  return true;
+}
+
+/** Ein Listeneintrag oder die eingerueckte Fortsetzung des letzten. */
+function leseListenzeile(stand: Lesestand, zeile: string): boolean {
+  const eintrag = listenEintrag(zeile);
+  if (eintrag !== null) {
+    let liste = stand.liste;
+    if (liste?.numeriert !== eintrag.numeriert) {
+      schliesse(stand);
+      liste = { numeriert: eintrag.numeriert, eintraege: [] };
+      stand.liste = liste;
+    }
+    liste.eintraege.push(eintrag.text);
+    return true;
+  }
+  if (stand.liste !== null && FORTSETZUNG.test(zeile)) {
+    stand.liste.eintraege[stand.liste.eintraege.length - 1] += ` ${zeile.trim()}`;
+    return true;
+  }
+  return false;
 }
 
 function listenEintrag(zeile: string): { numeriert: boolean; text: string } | null {

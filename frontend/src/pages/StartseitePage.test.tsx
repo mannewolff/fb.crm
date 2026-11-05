@@ -680,8 +680,8 @@ describe('StartseitePage: Zeitraumwahl (Issue #281; #273 Kriterien 1, 2, 5 bis 9
     expect((await kachel(IN_ARBEIT)).textContent).toBe(imMonat.inArbeit);
     expect(within(await kachel(OFFEN)).getByText('1.800,00 €').textContent).toBe(imMonat.offen);
     expect(
-      within(screen.getByRole('table', { name: 'Angebote in Arbeit' })).getAllByRole('row').length,
-    ).toBe(imMonat.tafel);
+      within(screen.getByRole('table', { name: 'Angebote in Arbeit' })).getAllByRole('row'),
+    ).toHaveLength(imMonat.tafel);
   });
 });
 

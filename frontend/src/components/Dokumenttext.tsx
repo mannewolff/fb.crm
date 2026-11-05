@@ -46,7 +46,7 @@ function abschnitte(bloecke: readonly Block[]): Abschnitt[] {
     if (block.art === 'ueberschrift' && block.ebene === 2) {
       gruppen.push({ kopf: { text: block.text, anker: block.anker }, bloecke: [] });
     } else {
-      gruppen[gruppen.length - 1].bloecke.push(block);
+      gruppen.at(-1)?.bloecke.push(block);
     }
   }
   return gruppen.filter((gruppe) => gruppe.kopf !== null || gruppe.bloecke.length > 0);
