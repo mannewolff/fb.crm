@@ -67,7 +67,7 @@ function Jahrestaste({
   readonly offen: boolean;
   readonly umschalten: () => void;
 }) {
-  const Symbol = offen ? IconChevronDown : IconChevronRight;
+  const Pfeil = offen ? IconChevronDown : IconChevronRight;
   return (
     <Box
       component="button"
@@ -90,7 +90,7 @@ function Jahrestaste({
         '&:hover': { color: theme.vars.palette.kupferwolke.kupfer },
       })}
     >
-      <Symbol size={SYMBOL_TASTE} stroke={1.8} aria-hidden />
+      <Pfeil size={SYMBOL_TASTE} stroke={1.8} aria-hidden />
       {jahr}
     </Box>
   );

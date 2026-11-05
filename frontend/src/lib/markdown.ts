@@ -59,10 +59,10 @@ export function ankerName(text: string, schonBelegt: readonly string[]): string 
   const grund =
     text
       .toLowerCase()
-      .replace(/ä/gu, 'ae')
-      .replace(/ö/gu, 'oe')
-      .replace(/ü/gu, 'ue')
-      .replace(/ß/gu, 'ss')
+      .replaceAll('ä', 'ae')
+      .replaceAll('ö', 'oe')
+      .replaceAll('ü', 'ue')
+      .replaceAll('ß', 'ss')
       .replace(/[^\p{L}\p{N}]+/gu, '-')
       .replace(/^-|-$/gu, '') || ANKER_OHNE_TEXT;
   if (!schonBelegt.includes(grund)) {
