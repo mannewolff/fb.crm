@@ -1,8 +1,12 @@
 package org.mwolff.fbcrm.startseite.application;
 
+import static java.util.Comparator.naturalOrder;
+import static java.util.Comparator.nullsLast;
+
 import java.math.BigDecimal;
 import java.time.Year;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.SortedMap;
@@ -48,12 +52,19 @@ import org.springframework.transaction.annotation.Transactional;
  * Spaltensummen entstehen nach {@link Geldrechnung}, je Position gerundet und dann addiert.
  *
  * <p>Die Jahre stehen aufsteigend, aeltestes zuerst (E6); ein Jahr ohne offene Position entsteht
- * nicht (Kriterium 6). Unter einem Jahr stehen die Positionen in der Folge der Uebersicht und
- * innerhalb eines Angebots in dessen Reihenfolge.
+ * nicht (Kriterium 6). Unter einem Jahr stehen die Positionen nach ihrem Leistungsmonat, der
+ * frueheste zuerst, und die Positionen ohne Monat zuletzt (#483, Kriterien 4 und 7; Plan #484, A5).
+ * Bei Gleichstand bleibt die bisherige Folge — die der Uebersicht, das juengste Angebot zuerst, und
+ * innerhalb eines Angebots dessen Reihenfolge —, denn {@link List#sort} sortiert stabil. Die
+ * Jahreszeile rechnet ueber dieselben Positionen; der Monat aendert an ihren Betraegen nichts (A6).
  */
 @Service
 @Transactional(readOnly = true)
 public class ForecastUseCase {
+
+  /* Frueheste zuerst, ohne Monat zuletzt (A5). */
+  private static final Comparator<Forecastposition> NACH_MONAT =
+      Comparator.comparing(zeile -> zeile.position().leistungsmonat(), nullsLast(naturalOrder()));
 
   private final AngeboteUebersichtUseCase angebote;
   private final Rechnungsauskunft rechnungen;
@@ -98,6 +109,7 @@ public class ForecastUseCase {
 
   /* Eine Jahreszeile: die Restbetraege ihrer Positionen, nach Spalte getrennt summiert. */
   private static Forecastjahr jahr(final Year jahr, final List<Forecastposition> positionen) {
+    positionen.sort(NACH_MONAT);
     final Predicate<Forecastposition> zugesagt =
         zeile -> zugesagt(zeile.angebot().angebot().status());
     return new Forecastjahr(

@@ -22,6 +22,7 @@ const ANTWORT = {
           angebotDatum: '2026-08-03',
           angebotTitel: null,
           bezeichnung: 'Schulung',
+          leistungsmonat: null,
           netto: 1200,
         },
       ],
@@ -39,6 +40,7 @@ const ANTWORT = {
           angebotDatum: '2026-10-15',
           angebotTitel: 'Java-Grundkurs',
           bezeichnung: 'Aufwände Mai 2027',
+          leistungsmonat: 5,
           netto: 8100.25,
         },
         {
@@ -48,6 +50,7 @@ const ANTWORT = {
           angebotDatum: '2026-10-15',
           angebotTitel: 'Java-Grundkurs',
           bezeichnung: 'Aufwände Juni 2027',
+          leistungsmonat: null,
           netto: 8100.25,
         },
       ],
@@ -77,6 +80,7 @@ describe('parseForecast', () => {
           angebotDatum: '2026-10-15',
           angebotTitel: 'Java-Grundkurs',
           bezeichnung: 'Aufwände Mai 2027',
+          leistungsmonat: 5,
           nettoInCent: 810025,
         },
         {
@@ -86,6 +90,7 @@ describe('parseForecast', () => {
           angebotDatum: '2026-10-15',
           angebotTitel: 'Java-Grundkurs',
           bezeichnung: 'Aufwände Juni 2027',
+          leistungsmonat: null,
           nettoInCent: 810025,
         },
       ],
@@ -93,6 +98,8 @@ describe('parseForecast', () => {
     expect(gelesen.jahre[0]?.zugesagtInCent).toBe(120000);
     // Issue #324: das Angebot von vor #316 traegt keinen Titel.
     expect(gelesen.jahre[0]?.positionen[0]?.angebotTitel).toBeNull();
+    // #483, Kriterium 5: eine Position ohne Monat traegt null.
+    expect(gelesen.jahre[0]?.positionen[0]?.leistungsmonat).toBeNull();
   });
 
   it('liest „gar nichts offen" als leere Liste (Kriterium 6)', () => {
@@ -145,6 +152,7 @@ describe('parseForecast', () => {
     ['das Angebotsdatum keine Zeichenkette ist', { angebotDatum: 20260803 }],
     ['der Titel des Angebots weder Text noch null ist', { angebotTitel: 42 }],
     ['die Bezeichnung fehlt', { bezeichnung: undefined }],
+    ['der Leistungsmonat weder Zahl noch null ist', { leistungsmonat: '5' }],
     ['der Restbetrag drei Nachkommastellen traegt', { netto: 1.005 }],
   ])('scheitert, wo an einer Position %s', (_, aenderung) => {
     const jahr = ANTWORT.jahre[0];

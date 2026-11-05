@@ -4,7 +4,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it } from 'vitest';
 
 import Forecasttafel from './Forecasttafel';
-import type { Forecast } from '../api/forecast';
+import type { Forecast, Forecastposition } from '../api/forecast';
 import { renderMitTheme } from '../test/render';
 
 /** Zwei Jahre: 2026 zugesagt, 2027 angeboten — das Angebot an IT Bildungshaus aus #302. */
@@ -23,6 +23,7 @@ const FORECAST: Forecast = {
           angebotDatum: '2026-08-03',
           angebotTitel: null,
           bezeichnung: 'Schulung',
+          leistungsmonat: null,
           nettoInCent: 120000,
         },
       ],
@@ -40,6 +41,7 @@ const FORECAST: Forecast = {
           angebotDatum: '2026-10-15',
           angebotTitel: null,
           bezeichnung: 'Aufwände Mai 2027',
+          leistungsmonat: 5,
           nettoInCent: 810000,
         },
         {
@@ -49,8 +51,47 @@ const FORECAST: Forecast = {
           angebotDatum: '2026-10-15',
           angebotTitel: null,
           bezeichnung: 'Aufwände Juni 2027',
+          leistungsmonat: null,
           nettoInCent: 810000,
         },
+      ],
+    },
+  ],
+};
+
+/** Die beiden Workshops aus dem Anlass von #483, in der Folge, die das Backend liefert. */
+function workshopposition(
+  angebotPositionId: number,
+  angebotTitel: string,
+  bezeichnung: string,
+  leistungsmonat: number | null,
+  nettoInCent: number,
+): Forecastposition {
+  return {
+    angebotId: angebotPositionId < 20 ? 1 : 2,
+    angebotPositionId,
+    firmaName: 'IT Bildungshaus',
+    angebotDatum: '2026-10-15',
+    angebotTitel,
+    bezeichnung,
+    leistungsmonat,
+    nettoInCent,
+  };
+}
+
+const WORKSHOPS: Forecast = {
+  jahre: [
+    {
+      jahr: '2027',
+      zugesagtInCent: 300000,
+      angebotenInCent: 1200000,
+      summeInCent: 1500000,
+      positionen: [
+        workshopposition(11, 'KI Workshop I', 'Aufwände Februar 2027', 2, 100000),
+        workshopposition(12, 'KI Workshop I', 'Aufwände März 2027', 3, 200000),
+        workshopposition(21, 'KI-Workshop II', 'Aufwände Mai 2027', 5, 300000),
+        workshopposition(22, 'KI-Workshop II', 'Aufwände Juni 2027', 6, 400000),
+        workshopposition(23, 'KI-Workshop II', 'Aufwände 3 Tage Rest', null, 500000),
       ],
     },
   ],
@@ -83,6 +124,7 @@ const ZWEI_AM_SELBEN_TAG: Forecast = {
           angebotDatum: '2026-10-15',
           angebotTitel: 'Java-Grundkurs',
           bezeichnung: 'Schulungstage',
+          leistungsmonat: null,
           nettoInCent: 150000,
         },
         {
@@ -92,6 +134,7 @@ const ZWEI_AM_SELBEN_TAG: Forecast = {
           angebotDatum: '2026-10-15',
           angebotTitel: 'Spring-Aufbaukurs',
           bezeichnung: 'Schulungstage',
+          leistungsmonat: null,
           nettoInCent: 150000,
         },
       ],
@@ -156,13 +199,14 @@ describe('Forecasttafel', () => {
       within(positionen)
         .getAllByRole('columnheader')
         .map((kopf) => kopf.textContent),
-    ).toEqual(['Firma', 'Angebot', 'Position', 'Restbetrag']);
+    ).toEqual(['Firma', 'Angebot', 'Monat', 'Position', 'Restbetrag']);
     const zeilen = within(positionen).getAllByRole('row').slice(1);
     expect(zeilen).toHaveLength(2);
     const erste = within(zeilen[0]).getAllByRole('cell');
     expect(erste.map((zelle) => zelle.textContent)).toEqual([
       'IT Bildungshaus',
       '15.10.2026',
+      'Mai',
       'Aufwände Mai 2027',
       '8.100,00 €',
     ]);
@@ -170,6 +214,33 @@ describe('Forecasttafel', () => {
       'href',
       '/angebote/14',
     );
+  });
+
+  it('Szenario: Forecast in der Reihenfolge der Monate', async () => {
+    zeige(WORKSHOPS);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Positionen 2027 anzeigen' }));
+
+    const positionen = screen.getByRole('table', { name: 'Positionen 2027' });
+    const zellen = within(positionen)
+      .getAllByRole('row')
+      .slice(1)
+      .map((zeile) => within(zeile).getAllByRole('cell'));
+    expect(zellen.map((zeile) => [zeile[2]?.textContent, zeile[3]?.textContent])).toEqual([
+      ['Februar', 'Aufwände Februar 2027'],
+      ['März', 'Aufwände März 2027'],
+      ['Mai', 'Aufwände Mai 2027'],
+      ['Juni', 'Aufwände Juni 2027'],
+      ['', 'Aufwände 3 Tage Rest'],
+    ]);
+    // Jede Position zeigt weiter ihren Restbetrag.
+    expect(zellen.map((zeile) => zeile[4]?.textContent)).toEqual([
+      '1.000,00 €',
+      '2.000,00 €',
+      '3.000,00 €',
+      '4.000,00 €',
+      '5.000,00 €',
+    ]);
   });
 
   it('Szenario: Forecast aufgeklappt', async () => {

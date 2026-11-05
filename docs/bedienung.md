@@ -599,6 +599,9 @@ sie an diesen Stellen, die Startseite zeigt sie nur.
    „Netto", „Brutto" und „Offen". „Zu den Rechnungen" führt zur Übersicht „Rechnungen".
 4. Die Karte „Forecast" zeigt je Jahr, was „Zugesagt" und was „Angeboten" ist, mit der „Summe".
    Ein Jahr lässt sich aufklappen und nennt dann die noch offenen Positionen mit ihrem Restbetrag.
+   Aufgeklappt stehen die Positionen nach Monat, der früheste zuerst, und Positionen ohne Monat
+   am Ende des Jahres. Die Spalte „Monat“ vor „Position“ nennt den Monat und bleibt bei einer
+   Position ohne Monat leer.
 
 **Ergebnis:** Man sieht ohne weiteren Weg, wie das Geschäft im gewählten Zeitraum steht und was
 noch zu erwarten ist.

@@ -9,6 +9,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.Month;
 import java.time.Year;
 import java.util.List;
 import org.jspecify.annotations.Nullable;
@@ -59,11 +60,24 @@ class ForecastControllerTest {
   }
 
   private static Forecastposition position(final String bezeichnung, final String netto) {
-    return position("Website-Relaunch", bezeichnung, netto);
+    return position("Website-Relaunch", bezeichnung, netto, null);
+  }
+
+  private static Forecastposition position(
+      final String bezeichnung, final String netto, final @Nullable Month leistungsmonat) {
+    return position("Website-Relaunch", bezeichnung, netto, leistungsmonat);
   }
 
   private static Forecastposition position(
       final @Nullable String titel, final String bezeichnung, final String netto) {
+    return position(titel, bezeichnung, netto, null);
+  }
+
+  private static Forecastposition position(
+      final @Nullable String titel,
+      final String bezeichnung,
+      final String netto,
+      final @Nullable Month leistungsmonat) {
     final Angebotsposition position =
         new Angebotsposition(
             Long.valueOf(POSITION_ID),
@@ -73,7 +87,7 @@ class ForecastControllerTest {
             Einheit.STUNDE,
             new BigDecimal("60.00"),
             Year.of(2027),
-            null);
+            leistungsmonat);
     final AngebotMitFirma angebot =
         new AngebotMitFirma(
             new Angebot(
@@ -139,8 +153,9 @@ class ForecastControllerTest {
                         new BigDecimal("0.00"),
                         new BigDecimal("9720.00"),
                         List.of(
-                            position("Aufwände Mai 2027", "8100.00"),
-                            position("Aufwände 3 Tage Rest", "1620.00"))))));
+                            position("Aufwände Mai 2027", "8100.00", Month.MAY),
+                            position(
+                                "Website-Relaunch", "Aufwände 3 Tage Rest", "1620.00", null))))));
 
     // When / Then
     mockMvc
@@ -154,8 +169,10 @@ class ForecastControllerTest {
         .andExpect(jsonPath("$.jahre[0].positionen[0].angebotDatum").exists())
         .andExpect(jsonPath("$.jahre[0].positionen[0].angebotTitel").value("Website-Relaunch"))
         .andExpect(jsonPath("$.jahre[0].positionen[0].bezeichnung").value("Aufwände Mai 2027"))
+        .andExpect(jsonPath("$.jahre[0].positionen[0].leistungsmonat").value(5))
         .andExpect(jsonPath("$.jahre[0].positionen[0].netto").value(8100.00))
         .andExpect(jsonPath("$.jahre[0].positionen[1].bezeichnung").value("Aufwände 3 Tage Rest"))
+        .andExpect(jsonPath("$.jahre[0].positionen[1].leistungsmonat").value(nullValue()))
         .andExpect(jsonPath("$.jahre[0].positionen[1].netto").value(1620.00));
   }
 
