@@ -3,7 +3,9 @@ package org.mwolff.fbcrm.arbeitszeit.web;
 import jakarta.validation.constraints.NotNull;
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.util.Optional;
 import org.jspecify.annotations.Nullable;
+import org.mwolff.fbcrm.arbeitszeit.application.ZeiteintragAngaben;
 
 /**
  * Die Eingaben des Dialogs — beim Erfassen und beim Aendern derselbe Rumpf (Issue #193, Kriterien 1
@@ -37,4 +39,12 @@ public record ZeiteintragRequest(
     @NotNull LocalDate tag,
     @NotNull LocalTime von,
     @NotNull LocalTime bis,
-    @Nullable Long accountId) {}
+    @Nullable Long accountId) {
+
+  /**
+   * Die Angaben fuer den Anwendungsfall — beim Erfassen und beim Aendern dieselben (Issue #477).
+   */
+  ZeiteintragAngaben angaben() {
+    return new ZeiteintragAngaben(Optional.ofNullable(accountId), angebotPositionId, tag, von, bis);
+  }
+}

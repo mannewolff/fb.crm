@@ -100,8 +100,12 @@ public class Personenauskunft {
             .map(Personenauswahl::aus)
             .orElseGet(
                 () -> anfragend.role() == Role.READ_ONLY ? new Personenauswahl.Alle() : eigene);
-    if (auswahl instanceof final Personenauswahl.Einzeln einzeln
-        && !personen.containsKey(einzeln.accountId())) {
+    final boolean unbekannt =
+        switch (auswahl) {
+          case Personenauswahl.Alle _ -> false;
+          case Personenauswahl.Einzeln(final long accountId) -> !personen.containsKey(accountId);
+        };
+    if (unbekannt) {
       throw new PersonenauswahlUngueltig();
     }
     return auswahl;

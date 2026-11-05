@@ -2,7 +2,6 @@ package org.mwolff.fbcrm.arbeitszeit.application;
 
 import java.time.Clock;
 import java.time.Instant;
-import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.Objects;
 import java.util.Optional;
@@ -109,12 +108,8 @@ public class ZeiteintragUseCase {
    * E12). Fuer eine andere Person erfasst nur ein C-Level, und nur fuer eine aktive.
    *
    * @param accountId Kennung des anfragenden Kontos
-   * @param person Kennung der Person, der der Eintrag gehoeren soll, oder leer fuer das anfragende
-   *     Konto
-   * @param angebotPositionId Kennung der Position, auf die gebucht wird
-   * @param tag der Tag, an dem gearbeitet wurde
-   * @param von Beginn, auf einer Viertelstunde
-   * @param bis Ende, auf einer Viertelstunde und nach {@code von}
+   * @param angaben Person, Position, Tag und Zeiten des Eintrags; ohne Person gehoert er dem
+   *     anfragenden Konto
    * @throws UnknownAccount wenn es das anfragende Konto nicht mehr gibt
    * @throws PersonNichtWaehlbar wenn das anfragende Konto ReadOnly ist oder fuer die genannte
    *     Person nicht erfassen darf
@@ -125,23 +120,25 @@ public class ZeiteintragUseCase {
    * @throws ZeitenUeberschneidenSich wenn am selben Tag schon ein Eintrag dieser Person in diesem
    *     Zeitraum liegt
    */
-  public Zeiteintrag anlegen(
-      final long accountId,
-      final Optional<Long> person,
-      final long angebotPositionId,
-      final LocalDate tag,
-      final LocalTime von,
-      final LocalTime bis) {
+  public Zeiteintrag anlegen(final long accountId, final ZeiteintragAngaben angaben) {
     final Account anfragend = aktuellesKonto.byId(accountId);
     if (anfragend.role() == Role.READ_ONLY) {
       throw new PersonNichtWaehlbar();
     }
-    final long eigentuemer = person(anfragend, person, anfragend.requireId());
-    pruefeZeiten(von, bis);
-    pruefeBuchungZulaessig(angebotPositionId);
+    final long eigentuemer = person(anfragend, angaben.person(), anfragend.requireId());
+    pruefeZeiten(angaben.von(), angaben.bis());
+    pruefeBuchungZulaessig(angaben.angebotPositionId());
     final Instant jetzt = clock.instant();
     return gespeichert(
-        new Zeiteintrag(null, eigentuemer, angebotPositionId, tag, von, bis, jetzt, jetzt));
+        new Zeiteintrag(
+            null,
+            eigentuemer,
+            angaben.angebotPositionId(),
+            angaben.tag(),
+            angaben.von(),
+            angaben.bis(),
+            jetzt,
+            jetzt));
   }
 
   /**
@@ -157,12 +154,8 @@ public class ZeiteintragUseCase {
    *     #415, E14)
    * @param id Kennung des Eintrags
    * @param version der vorgelegte Stand aus {@code If-Match} (Plan #415, E2)
-   * @param person Kennung der Person, der der Eintrag kuenftig gehoeren soll, oder leer fuer die
-   *     bisherige
-   * @param angebotPositionId Kennung der Position, auf die gebucht wird
-   * @param tag der Tag, an dem gearbeitet wurde
-   * @param von Beginn, auf einer Viertelstunde
-   * @param bis Ende, auf einer Viertelstunde und nach {@code von}
+   * @param angaben Person, Position, Tag und Zeiten des Eintrags; ohne Person bleibt er bei der
+   *     bisherigen
    * @throws UnknownAccount wenn es das anfragende Konto nicht mehr gibt
    * @throws ZeiteintragNichtGefunden wenn es den Eintrag nicht gibt, er dem anfragenden Konto nicht
    *     gehoert und dieses nicht C-Level ist, oder das anfragende Konto ReadOnly ist
@@ -178,29 +171,22 @@ public class ZeiteintragUseCase {
    *     diesem Zeitraum liegt
    */
   public Zeiteintrag aendern(
-      final long accountId,
-      final long id,
-      final long version,
-      final Optional<Long> person,
-      final long angebotPositionId,
-      final LocalDate tag,
-      final LocalTime von,
-      final LocalTime bis) {
+      final long accountId, final long id, final long version, final ZeiteintragAngaben angaben) {
     final Account anfragend = aktuellesKonto.byId(accountId);
     final Zeiteintrag vorhandener = offener(anfragend, id, version);
-    final long eigentuemer = person(anfragend, person, vorhandener.accountId());
-    pruefeZeiten(von, bis);
-    if (angebotPositionId != vorhandener.angebotPositionId()) {
-      pruefeBuchungZulaessig(angebotPositionId);
+    final long eigentuemer = person(anfragend, angaben.person(), vorhandener.accountId());
+    pruefeZeiten(angaben.von(), angaben.bis());
+    if (angaben.angebotPositionId() != vorhandener.angebotPositionId()) {
+      pruefeBuchungZulaessig(angaben.angebotPositionId());
     }
     return gespeichert(
         new Zeiteintrag(
                 vorhandener.id(),
                 eigentuemer,
-                angebotPositionId,
-                tag,
-                von,
-                bis,
+                angaben.angebotPositionId(),
+                angaben.tag(),
+                angaben.von(),
+                angaben.bis(),
                 vorhandener.createdAt(),
                 clock.instant(),
                 vorhandener.version(),

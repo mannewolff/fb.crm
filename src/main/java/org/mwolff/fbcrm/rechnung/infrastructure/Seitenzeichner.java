@@ -96,9 +96,10 @@ final class Seitenzeichner {
     final PDFont schrift = schnitt(schraeg.schrift());
     setzeFuellfarbe(schraeg.farbe());
     inhalt.beginText();
-    inhalt.setFont(schrift, schraeg.groesse());
+    inhalt.setFont(schrift, (float) schraeg.groesse());
     inhalt.setTextMatrix(
-        Matrix.getRotateInstance(Math.toRadians(schraeg.winkel()), schraeg.x(), schraeg.y()));
+        Matrix.getRotateInstance(
+            Math.toRadians(schraeg.winkel()), (float) schraeg.x(), (float) schraeg.y()));
     inhalt.showText(WinAnsiText.darstellbar(schraeg.text()));
     inhalt.endText();
   }

@@ -2,6 +2,7 @@ package org.mwolff.fbcrm.rechnung.application;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.Month;
 import java.util.List;
 import java.util.Objects;
 import java.util.stream.IntStream;
@@ -47,7 +48,7 @@ record Probedruckdaten(@Nullable String name, RechnungDruckdaten druckdaten) {
   private static final String NUMMER = "Muster-001";
 
   /** Das erfundene Rechnungsdatum. */
-  private static final LocalDate DATUM = LocalDate.of(2026, 9, 30);
+  private static final LocalDate DATUM = LocalDate.of(2026, Month.SEPTEMBER, 30);
 
   /** Der erfundene Leistungszeitraum. */
   private static final String LEISTUNGSZEITRAUM = "September 2026";

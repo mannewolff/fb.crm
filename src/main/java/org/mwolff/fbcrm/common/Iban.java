@@ -18,7 +18,7 @@ import java.util.regex.Pattern;
  */
 public record Iban(String elektronisch) {
 
-  private static final Pattern FORMAT = Pattern.compile("[A-Z]{2}[0-9]{2}[A-Z0-9]{1,30}");
+  private static final Pattern FORMAT = Pattern.compile("[A-Z]{2}\\d{2}[A-Z0-9]{1,30}");
 
   private static final Pattern LEERRAUM = Pattern.compile("\\s+");
 

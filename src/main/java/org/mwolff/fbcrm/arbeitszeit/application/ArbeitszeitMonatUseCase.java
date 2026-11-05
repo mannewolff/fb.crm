@@ -120,8 +120,8 @@ public class ArbeitszeitMonatUseCase {
       final Personenauswahl auswahl, final LocalDate von, final LocalDate bis) {
     return switch (auswahl) {
       case Personenauswahl.Alle _ -> zeiten.findImZeitraum(von, bis);
-      case Personenauswahl.Einzeln einzeln ->
-          zeiten.findImZeitraumFuerKonto(von, bis, einzeln.accountId());
+      case Personenauswahl.Einzeln(final long accountId) ->
+          zeiten.findImZeitraumFuerKonto(von, bis, accountId);
     };
   }
 

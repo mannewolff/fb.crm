@@ -79,7 +79,7 @@ public class EigeneAngabenPflegenUseCase {
     if (eingegeben != null) {
       try {
         iban = Iban.aus(eingegeben).elektronisch();
-      } catch (final IllegalArgumentException keineIban) {
+      } catch (IllegalArgumentException _) {
         ungueltig.put("iban", List.of(BankverbindungUngueltig.IBAN_UNGUELTIG));
       }
     }

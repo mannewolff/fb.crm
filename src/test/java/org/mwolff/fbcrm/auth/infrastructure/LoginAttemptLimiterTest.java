@@ -62,7 +62,7 @@ class LoginAttemptLimiterTest {
   }
 
   private void zaehle(final int anzahl, final Zaehlart art, final String schluessel) {
-    IntStream.range(0, anzahl).forEach(unbenutzt -> limiter.record(art, schluessel));
+    IntStream.range(0, anzahl).forEach(unbenutzt -> limiter.zaehle(art, schluessel));
   }
 
   @Test
@@ -78,7 +78,7 @@ class LoginAttemptLimiterTest {
     // Given
     zaehle(JE_HERKUNFT - 1, HERKUNFT, IP);
     uhr.springe(HERKUNFT_FENSTER.minusMinutes(1));
-    limiter.record(HERKUNFT, IP);
+    limiter.zaehle(HERKUNFT, IP);
 
     // When / Then — Kriterium 5: zehn Versuche in 15 Minuten, der elfte wartet.
     assertThat(limiter.isAllowed(HERKUNFT, IP)).isFalse();
@@ -98,7 +98,7 @@ class LoginAttemptLimiterTest {
     // Given — Kriterium 5: fuenf Anforderungen je Adresse und Stunde.
     zaehle(JE_STUNDE - 1, ADRESSE_STUNDE, MAIL);
     uhr.springe(STUNDEN_FENSTER.minusMinutes(1));
-    limiter.record(ADRESSE_STUNDE, MAIL);
+    limiter.zaehle(ADRESSE_STUNDE, MAIL);
 
     // When / Then
     assertThat(limiter.isAllowed(ADRESSE_STUNDE, MAIL)).isFalse();
@@ -119,7 +119,7 @@ class LoginAttemptLimiterTest {
     IntStream.range(0, JE_TAG)
         .forEach(
             unbenutzt -> {
-              limiter.record(ADRESSE_TAG, MAIL);
+              limiter.zaehle(ADRESSE_TAG, MAIL);
               uhr.springe(Duration.ofHours(2));
             });
 
@@ -258,7 +258,7 @@ class LoginAttemptLimiterTest {
     uhr.springe(HERKUNFT_FENSTER.plusSeconds(1));
 
     // When
-    limiter.record(HERKUNFT, IP);
+    limiter.zaehle(HERKUNFT, IP);
 
     // Then
     assertThat(limiter.isAllowed(HERKUNFT, IP)).isTrue();
@@ -273,7 +273,7 @@ class LoginAttemptLimiterTest {
   @Test
   void restwartezeit_givenAnAttemptJustNow_thenTheWholeWindow() {
     // Given
-    limiter.record(HERKUNFT, IP);
+    limiter.zaehle(HERKUNFT, IP);
 
     // When / Then — genau 15 Minuten, nicht auf 16 aufgerundet.
     assertThat(limiter.restwartezeit(HERKUNFT, IP)).isEqualTo(HERKUNFT_FENSTER);
@@ -282,7 +282,7 @@ class LoginAttemptLimiterTest {
   @Test
   void restwartezeit_givenARemainderBetweenTwoMinutes_thenRoundsUpToTheNextWholeMinute() {
     // Given
-    limiter.record(HERKUNFT, IP);
+    limiter.zaehle(HERKUNFT, IP);
 
     // When — es bleiben 11 Minuten und 50 Sekunden.
     uhr.springe(Duration.ofMinutes(3).plusSeconds(10));
@@ -294,7 +294,7 @@ class LoginAttemptLimiterTest {
   @Test
   void restwartezeit_givenOneNanosecondLeft_thenOneWholeMinute() {
     // Given
-    limiter.record(ADRESSE_STUNDE, MAIL);
+    limiter.zaehle(ADRESSE_STUNDE, MAIL);
 
     // When
     uhr.springe(STUNDEN_FENSTER.minusNanos(1));
@@ -306,9 +306,9 @@ class LoginAttemptLimiterTest {
   @Test
   void restwartezeit_givenSeveralEntries_thenFollowsTheOldestOne() {
     // Given
-    limiter.record(ADRESSE_STUNDE, MAIL);
+    limiter.zaehle(ADRESSE_STUNDE, MAIL);
     uhr.springe(Duration.ofMinutes(20));
-    limiter.record(ADRESSE_STUNDE, MAIL);
+    limiter.zaehle(ADRESSE_STUNDE, MAIL);
 
     // When
     uhr.springe(Duration.ofMinutes(10));
@@ -320,7 +320,7 @@ class LoginAttemptLimiterTest {
   @Test
   void restwartezeit_givenTheDailyKind_thenMeasuresAgainstTheDailyWindow() {
     // Given
-    limiter.record(ADRESSE_TAG, MAIL);
+    limiter.zaehle(ADRESSE_TAG, MAIL);
 
     // When
     uhr.springe(Duration.ofHours(1));
@@ -394,10 +394,10 @@ class LoginAttemptLimiterTest {
   @Test
   void trackedCounters_givenFreshEntries_thenOneCounterPerKindAndKey() {
     // Given
-    limiter.record(HERKUNFT, IP);
-    limiter.record(ADRESSE_STUNDE, MAIL);
-    limiter.record(ADRESSE_TAG, MAIL);
-    limiter.record(ADRESSE_TAG, MAIL);
+    limiter.zaehle(HERKUNFT, IP);
+    limiter.zaehle(ADRESSE_STUNDE, MAIL);
+    limiter.zaehle(ADRESSE_TAG, MAIL);
+    limiter.zaehle(ADRESSE_TAG, MAIL);
 
     // When / Then
     assertThat(limiter.trackedCounters()).isEqualTo(3);
@@ -406,8 +406,8 @@ class LoginAttemptLimiterTest {
   @Test
   void trackedCounters_givenEntriesThatFellOutOfTheWindow_thenAReadDropsTheirCounter() {
     // Given — sonst legte jede durchprobierte Adresse einen Schluessel an, der nie verschwindet.
-    limiter.record(HERKUNFT, IP);
-    limiter.record(ADRESSE_STUNDE, MAIL);
+    limiter.zaehle(HERKUNFT, IP);
+    limiter.zaehle(ADRESSE_STUNDE, MAIL);
     uhr.springe(STUNDEN_FENSTER.plusSeconds(1));
 
     // When
@@ -421,8 +421,8 @@ class LoginAttemptLimiterTest {
   @Test
   void trackedCounters_givenOnlyOneKindExpired_thenKeepsTheOther() {
     // Given
-    limiter.record(HERKUNFT, IP);
-    limiter.record(ADRESSE_TAG, MAIL);
+    limiter.zaehle(HERKUNFT, IP);
+    limiter.zaehle(ADRESSE_TAG, MAIL);
     uhr.springe(HERKUNFT_FENSTER.plusSeconds(1));
 
     // When
