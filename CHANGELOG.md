@@ -11,6 +11,16 @@ bleibt stehen, auch wenn nichts darunter steht.
 
 ## [Unreleased]
 
+## [1.8.0] - 2026-11-05
+
+- Kartenprüfung rot: Record-Pattern macht 100 % Zweigabdeckung unerreichbar (Issue #480)
+- Sonar: stabile Schlüssel statt Index in Dokumenttext und Forecasttafel (Issue #479)
+- Sonar: Komplexität und Kleinbefunde im Frontend abräumen (Issue #478)
+- Sonar: Maintainability-Befunde im Backend abräumen (Issue #477)
+- Sonar: Namensregeln S6754 und S7718 als begründete Ausnahmen (Issue #476)
+- Sonar-Reliability-Befunde abräumen: Symbol-Überdeckung und Regex-Ersetzungen (Issue #475)
+- install version 5.4.14
+
 ## [1.7.0] - 2026-10-29
 
 - chore: v1.6.1
