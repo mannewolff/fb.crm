@@ -55,7 +55,7 @@ import Tafel, { type TafelSpalte } from '../components/Tafel';
 import Ueberschreitungshinweis from '../components/Ueberschreitungshinweis';
 import WeicheTaste from '../components/WeicheTaste';
 import { istBearbeitungskonflikt, nichtGefunden, serverMeldung } from '../lib/apifehler';
-import { stundenWort } from '../lib/arbeitszeit';
+import { monatsname, stundenWort } from '../lib/arbeitszeit';
 import { dezimal, euro } from '../lib/geld';
 import { kennungAus } from '../lib/kennung';
 import { tagWort } from '../lib/tag';
@@ -183,7 +183,8 @@ const SPALTEN_NACH: readonly TafelSpalte[] = [
   { beschriftung: 'Einzelpreis', zahl: true },
   { beschriftung: 'Betrag', zahl: true },
   // Das Leistungsjahr, nur am Kundenangebot (Issue #311, E12) — ein Jahr, kein weiterer Betrag.
-  'Jahr',
+  // Seit #483 mit dem Monat davor, darum „Zeitraum": „Februar 2027" oder nur „2027" (Plan #484, A10).
+  'Zeitraum',
 ];
 
 /** Die Zusatzspalte „Angefallen" (siehe {@link Zusatzspalten}). */
@@ -476,7 +477,9 @@ function Positionszeile({
         {euro(position.betragInCent)}
       </Box>
       <Box component="td" className={ZAHLEN_KLASSE}>
-        {position.leistungsjahr}
+        {position.leistungsmonat === null
+          ? position.leistungsjahr
+          : `${monatsname(position.leistungsmonat)} ${position.leistungsjahr}`}
       </Box>
     </Box>
   );

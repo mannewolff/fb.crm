@@ -4,6 +4,7 @@ import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { IconArrowDown, IconArrowUp, IconTrash } from '@tabler/icons-react';
 import type { Abrechnungsmodus, Einheit } from '../api/angebote';
+import { monatsname } from '../lib/arbeitszeit';
 import { betrag, euro, hundertstel } from '../lib/geld';
 import { RADIUS_MITTEL, RADIUS_RUND, ZAHLEN_KLASSE } from '../theme';
 
@@ -32,6 +33,10 @@ import { RADIUS_MITTEL, RADIUS_RUND, ZAHLEN_KLASSE } from '../theme';
  * kein Jahr zwischen 2000 und 2099 ist. Vorbelegt wird es beim Anlegen der Zeile mit dem Jahr des
  * Angebotsdatums ({@link frischePosition}), danach gehoert es dem Menschen (Kriterium 4).
  *
+ * <b>Der Leistungsmonat ist freiwillig</b> (#483; Plan #484, A9, E3): eine Auswahl „Monat" direkt
+ * hinter dem Jahr, voreingestellt auf „ohne Monat", danach Januar bis Dezember. Ein gewaehlter
+ * Monat laesst sich dort auch wieder zuruecknehmen.
+ *
  * <b>Die Vorbelegung der Einheit ist ein Vorschlag</b> (E26, F7): Ein Wechsel auf „Festpreis"
  * setzt „Pauschal", einer auf „Aufwand" „Personentag" — aber nur, solange niemand die Einheit
  * selbst gewaehlt hat. Wer „Stunde" gewaehlt hat, hat entschieden; ein Vorschlag nimmt eine
@@ -40,7 +45,7 @@ import { RADIUS_MITTEL, RADIUS_RUND, ZAHLEN_KLASSE } from '../theme';
  * nicht zu beantworten.
  *
  * <b>Am internen Angebot bleibt die Bezeichnung allein</b> (Issue #207, Kriterium 3): „Abrechnung",
- * „Menge", „Einheit", „Einzelpreis", „Leistungsjahr" und die Betragszeile entfallen, die drei Griffe und die Gruppe
+ * „Menge", „Einheit", „Einzelpreis", „Leistungsjahr", „Monat" und die Betragszeile entfallen, die drei Griffe und die Gruppe
  * mit ihrer Nummer bleiben. Der Zustand wird dabei nicht beschnitten — verborgen ist nicht
  * geloescht, und wer das Kennzeichen wieder abwaehlt, findet seine Angaben unveraendert vor.
  *
@@ -76,6 +81,11 @@ export interface Maskenposition {
   readonly einzelpreis: string;
   /** Das Jahr der Leistung, wie es im Feld steht — leer heisst „keine Angabe" (Plan #303, E16). */
   readonly leistungsjahr: string;
+  /**
+   * Der Monat der Leistung, wie die Auswahl ihn fuehrt — `''` fuer „ohne Monat", sonst `'1'` bis
+   * `'12'` (#483; Plan #484, A9).
+   */
+  readonly leistungsmonat: string;
   /** Wahr, sobald ein Mensch die Einheit selbst gewaehlt hat (F7). */
   readonly einheitVonHand: boolean;
 }
@@ -126,6 +136,8 @@ export function frischePosition(schluessel: string, leistungsjahr: string): Mask
     einheit: 'PERSONENTAG',
     einzelpreis: '0',
     leistungsjahr,
+    // Der Monat ist freiwillig: „ohne Monat" ist voreingestellt (#483; Plan #484, A9).
+    leistungsmonat: '',
     einheitVonHand: false,
   };
 }
@@ -176,7 +188,7 @@ export interface PositionsmaskeProps {
   /**
    * Ob die Zeile zu einem internen Angebot gehoert (Issue #207, Kriterium 3).
    *
-   * Dann entfallen „Abrechnung", „Menge", „Einheit", „Einzelpreis", „Leistungsjahr" und die
+   * Dann entfallen „Abrechnung", „Menge", „Einheit", „Einzelpreis", „Leistungsjahr", „Monat" und die
    * Betragszeile; die Bezeichnung und die drei Griffe bleiben. Die {@link Maskenposition} behaelt
    * dabei alle Felder:
    * Wer das Kennzeichen wieder abwaehlt, findet seine Angaben wieder, und was gespeichert ist,
@@ -186,6 +198,9 @@ export interface PositionsmaskeProps {
 }
 
 const SYMBOL = 17;
+
+/** Die Nummern der zwoelf Monate, in der Reihenfolge der Auswahl „Monat" (#483). */
+const MONATSNUMMERN: readonly number[] = Array.from({ length: 12 }, (_, stelle) => stelle + 1);
 
 export default function Positionsmaske({
   nummer,
@@ -249,7 +264,8 @@ export default function Positionsmaske({
             gridTemplateColumns: {
               xs: 'minmax(0, 1fr)',
               sm: 'repeat(2, minmax(0, 1fr))',
-              lg: 'repeat(5, minmax(0, 1fr))',
+              // Bei `sm` teilen Leistungsjahr und Monat eine Reihe (#483; Plan #484, A9).
+              lg: 'repeat(6, minmax(0, 1fr))',
             },
           }}
         >
@@ -331,6 +347,23 @@ export default function Positionsmaske({
             fullWidth
             slotProps={{ htmlInput: { inputMode: 'numeric', className: ZAHLEN_KLASSE } }}
           />
+          <TextField
+            select
+            label="Monat"
+            value={position.leistungsmonat}
+            onChange={(ereignis) => {
+              aendere({ ...position, leistungsmonat: ereignis.target.value });
+            }}
+            fullWidth
+            slotProps={{ select: { native: true }, inputLabel: { shrink: true } }}
+          >
+            <option value="">ohne Monat</option>
+            {MONATSNUMMERN.map((nummer) => (
+              <option key={nummer} value={String(nummer)}>
+                {monatsname(nummer)}
+              </option>
+            ))}
+          </TextField>
         </Box>
         )}
       </Box>

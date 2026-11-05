@@ -434,8 +434,10 @@ die Angebote eines Status oder die stornierten. Ein Klick auf den Titel öffnet 
 1. In der Maske „Angebotsdatum" und wahlweise eine „Beschreibung" eintragen.
 2. In der Karte „Positionen" „Position hinzufügen" wählen.
 3. Je Position „Bezeichnung", „Abrechnung" (Aufwand oder Festpreis), „Menge", „Einheit" (Stunde,
-   Personentag oder Pauschal), „Einzelpreis (netto)" und „Leistungsjahr" eintragen. Die Pfeile an
-   der Position verschieben sie nach oben oder unten, das Papierkorbsymbol löscht sie.
+   Personentag oder Pauschal), „Einzelpreis (netto)" und „Leistungsjahr" eintragen, daneben
+   wahlweise „Monat" (Voreinstellung „ohne Monat"). Die Tafel „Positionen" zeigt beides in der
+   Spalte „Zeitraum", etwa „Februar 2027" oder ohne Monat nur „2027". Die Pfeile an der Position
+   verschieben sie nach oben oder unten, das Papierkorbsymbol löscht sie.
 4. Unter den Positionen rechnet „Summe (netto)" beim Tippen mit.
 5. „Speichern" wählen. Danach steht „Gespeichert." oben in der Maske, und Beträge und Summe stehen
    so da, wie fb.crm sie gespeichert hat. „Zum Angebot" öffnet die Ansicht des Angebots.

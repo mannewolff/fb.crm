@@ -20,6 +20,7 @@ const POSITION = {
   einzelpreis: 1000.01,
   betrag: 2500.03,
   leistungsjahr: '2026',
+  leistungsmonat: null,
 };
 
 const ANGEBOT = {
@@ -89,6 +90,7 @@ const STUNDEN_POSITION = {
   einzelpreis: 120,
   betrag: 2400,
   leistungsjahr: '2026',
+  leistungsmonat: null,
 };
 
 /** Dasselbe Angebot, dessen eine Position Stunden traegt. */
@@ -292,7 +294,7 @@ describe('AngebotPage — was das Angebot zeigt (Issue #127)', () => {
       'Einheit',
       'Einzelpreis',
       'Betrag',
-      'Jahr',
+      'Zeitraum',
     ]);
     const zeile = within(screen.getAllByRole('row')[1]);
     expect(zeile.getByText('Konzeption')).toBeInTheDocument();
@@ -302,6 +304,44 @@ describe('AngebotPage — was das Angebot zeigt (Issue #127)', () => {
     expect(zeile.getByText('1.000,01 €')).toBeInTheDocument();
     expect(zeile.getByText('2.500,03 €')).toBeInTheDocument();
     // Die letzte Zelle traegt das Leistungsjahr, und nur das — kein neuer Betrag (Issue #311).
+    expect(zeile.getAllByRole('cell').at(-1)).toHaveTextContent(/^2026$/);
+  });
+
+  it('Szenario: Monat an einer Position wählen', async () => {
+    fetchNachPfad({
+      ...LEERE_BEREICHE,
+      'GET /api/angebote/9': json(200, {
+        ...ANGEBOT,
+        positionen: [
+          {
+            ...POSITION,
+            bezeichnung: 'Aufwände Februar 2027',
+            leistungsjahr: '2027',
+            leistungsmonat: 2,
+          },
+        ],
+      }),
+    });
+
+    renderSeite();
+    await screen.findByRole('heading', { level: 1, name: UEBERSCHRIFT });
+
+    // Monat und Jahr in der Spalte „Zeitraum", die Tafel bekommt keine weitere (#483, A10).
+    expect(screen.getAllByRole('columnheader').at(-1)).toHaveTextContent(/^Zeitraum$/);
+    const zeile = within(screen.getAllByRole('row')[1]);
+    expect(zeile.getAllByRole('cell').at(-1)).toHaveTextContent(/^Februar 2027$/);
+  });
+
+  it('Szenario: Neue Position ohne Monat — „Zeitraum" zeigt nur das Jahr', async () => {
+    fetchNachPfad({
+      ...LEERE_BEREICHE,
+      'GET /api/angebote/9': json(200, ANGEBOT),
+    });
+
+    renderSeite();
+    await screen.findByRole('heading', { level: 1, name: UEBERSCHRIFT });
+
+    const zeile = within(screen.getAllByRole('row')[1]);
     expect(zeile.getAllByRole('cell').at(-1)).toHaveTextContent(/^2026$/);
   });
 
@@ -669,7 +709,7 @@ describe('AngebotPage — der Abrechnungsstand an den Positionen (Issue #187, Kr
       'Einheit',
       'Einzelpreis',
       'Betrag',
-      'Jahr',
+      'Zeitraum',
     ]);
     const zeile = within(tafel.getAllByRole('row')[1]);
     // 80 von 160: beide Zahlen stehen gleich da, abgerechnet und offen.
@@ -692,7 +732,7 @@ describe('AngebotPage — der Abrechnungsstand an den Positionen (Issue #187, Kr
       'Einheit',
       'Einzelpreis',
       'Betrag',
-      'Jahr',
+      'Zeitraum',
     ]);
     expect(screen.queryByText('Abgerechnet')).not.toBeInTheDocument();
   });
@@ -759,7 +799,7 @@ describe('AngebotPage — die Spalte „Angefallen" (Issue #193, Kriterien 7, 8,
       'Einheit',
       'Einzelpreis',
       'Betrag',
-      'Jahr',
+      'Zeitraum',
     ]);
     expect(within(tafel.getAllByRole('row')[1]).getByText('8,00')).toBeInTheDocument();
   });
@@ -781,7 +821,7 @@ describe('AngebotPage — die Spalte „Angefallen" (Issue #193, Kriterien 7, 8,
       'Einheit',
       'Einzelpreis',
       'Betrag',
-      'Jahr',
+      'Zeitraum',
     ]);
     expect(screen.queryByText('Angefallen')).not.toBeInTheDocument();
   });
@@ -1328,7 +1368,8 @@ describe('AngebotPage — das interne Angebot (Issue #235, Plan #218, E15)', () 
     expect(tafel.queryByText('Stunde')).not.toBeInTheDocument();
     expect(tafel.queryByText('120,00 €')).not.toBeInTheDocument();
     expect(tafel.queryByText('2.400,00 €')).not.toBeInTheDocument();
-    // Die Spalte „Jahr" gehoert allein dem Kundenangebot (Issue #311, E12).
+    // Die Spalte „Zeitraum" gehoert allein dem Kundenangebot (Issue #311, E12; #483).
+    expect(tafel.queryByRole('columnheader', { name: 'Zeitraum' })).not.toBeInTheDocument();
     expect(tafel.queryByRole('columnheader', { name: 'Jahr' })).not.toBeInTheDocument();
   });
 

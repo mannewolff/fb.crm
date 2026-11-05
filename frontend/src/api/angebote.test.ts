@@ -26,6 +26,7 @@ const POSITION = {
   einzelpreis: 1000.01,
   betrag: 2500.03,
   leistungsjahr: '2026',
+  leistungsmonat: null,
 };
 
 const ANGEBOT = {
@@ -57,6 +58,7 @@ const POSITION_VERENGT = {
   einzelpreisInCent: 100001,
   betragInCent: 250003,
   leistungsjahr: '2026',
+  leistungsmonat: null,
 };
 
 const ANGEBOT_VERENGT = {
@@ -103,6 +105,7 @@ const EINGABE = {
       einheit: 'PERSONENTAG' as const,
       einzelpreis: '1000.01',
       leistungsjahr: '2026',
+      leistungsmonat: 2,
     },
   ],
 };
@@ -121,6 +124,8 @@ const EINGABE_MIT_NEUER_POSITION = {
       einzelpreis: '0.00',
       // Kein Jahr heisst „keine Angabe": Der Server belegt es vor (Plan #303, E2).
       leistungsjahr: null,
+      // „ohne Monat" geht als `null` hinaus (#483; Plan #484, A7).
+      leistungsmonat: null,
     },
   ],
 };
@@ -206,6 +211,13 @@ describe('parseAngebot', () => {
     ).toBe('2027');
   });
 
+  it('liest den Leistungsmonat als Zahl (#483; Plan #484, A7)', () => {
+    expect(
+      parseAngebot({ ...ANGEBOT, positionen: [{ ...POSITION, leistungsmonat: 2 }] })
+        .positionen[0].leistungsmonat,
+    ).toBe(2);
+  });
+
   it.each([['STUNDE'], ['PERSONENTAG'], ['PAUSCHAL']])('nimmt die Einheit %s an', (einheit) => {
     expect(
       parseAngebot({ ...ANGEBOT, positionen: [{ ...POSITION, einheit }] }).positionen[0].einheit,
@@ -265,6 +277,14 @@ describe('parseAngebot', () => {
     [
       'Position mit Leistungsjahr als Zahl',
       { ...ANGEBOT, positionen: [{ ...POSITION, leistungsjahr: 2026 }] },
+    ],
+    [
+      'Position ohne Leistungsmonat',
+      { ...ANGEBOT, positionen: [{ ...POSITION, leistungsmonat: undefined }] },
+    ],
+    [
+      'Position mit Leistungsmonat als Text',
+      { ...ANGEBOT, positionen: [{ ...POSITION, leistungsmonat: '2' }] },
     ],
   ])('weist eine Antwort ab: %s', (_fall, rumpf) => {
     expect(() => parseAngebot(rumpf)).toThrow(TypeError);
