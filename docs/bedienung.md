@@ -434,8 +434,10 @@ die Angebote eines Status oder die stornierten. Ein Klick auf den Titel öffnet 
 1. In der Maske „Angebotsdatum" und wahlweise eine „Beschreibung" eintragen.
 2. In der Karte „Positionen" „Position hinzufügen" wählen.
 3. Je Position „Bezeichnung", „Abrechnung" (Aufwand oder Festpreis), „Menge", „Einheit" (Stunde,
-   Personentag oder Pauschal), „Einzelpreis (netto)" und „Leistungsjahr" eintragen. Die Pfeile an
-   der Position verschieben sie nach oben oder unten, das Papierkorbsymbol löscht sie.
+   Personentag oder Pauschal), „Einzelpreis (netto)" und „Leistungsjahr" eintragen, daneben
+   wahlweise „Monat" (Voreinstellung „ohne Monat"). Die Tafel „Positionen" zeigt beides in der
+   Spalte „Zeitraum", etwa „Februar 2027" oder ohne Monat nur „2027". Die Pfeile an der Position
+   verschieben sie nach oben oder unten, das Papierkorbsymbol löscht sie.
 4. Unter den Positionen rechnet „Summe (netto)" beim Tippen mit.
 5. „Speichern" wählen. Danach steht „Gespeichert." oben in der Maske, und Beträge und Summe stehen
    so da, wie fb.crm sie gespeichert hat. „Zum Angebot" öffnet die Ansicht des Angebots.
@@ -597,6 +599,9 @@ sie an diesen Stellen, die Startseite zeigt sie nur.
    „Netto", „Brutto" und „Offen". „Zu den Rechnungen" führt zur Übersicht „Rechnungen".
 4. Die Karte „Forecast" zeigt je Jahr, was „Zugesagt" und was „Angeboten" ist, mit der „Summe".
    Ein Jahr lässt sich aufklappen und nennt dann die noch offenen Positionen mit ihrem Restbetrag.
+   Aufgeklappt stehen die Positionen nach Monat, der früheste zuerst, und Positionen ohne Monat
+   am Ende des Jahres. Die Spalte „Monat“ vor „Position“ nennt den Monat und bleibt bei einer
+   Position ohne Monat leer.
 
 **Ergebnis:** Man sieht ohne weiteren Weg, wie das Geschäft im gewählten Zeitraum steht und was
 noch zu erwarten ist.

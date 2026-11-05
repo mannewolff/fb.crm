@@ -819,6 +819,50 @@ class AngebotIT extends AbstractIntegrationTest {
   }
 
   @Test
+  void aendern_changingOnlyTheLeistungsmonat_thenTheStandOfTheAngebotMovesOn() {
+    // Given — #411, Kriterium 1; Plan #415, E9: Das Angebot zaehlt als Ganzes. Eine Position ohne
+    // Monat ist gespeichert.
+    final long angebotId = angebot().id();
+    rest.exchange(
+        "/api/angebote/" + angebotId,
+        HttpMethod.PUT,
+        new HttpEntity<>(
+            rumpf(List.of(position("Aufwaende Februar 2027", "AUFWAND", "135", "PERSONENTAG"))),
+            Stand.aktuell(sitzung, jdbc, "angebot", angebotId)),
+        AngebotResponse.class);
+    final AngebotResponse angelegt = lies(angebotId);
+    final long kennung = Objects.requireNonNull(angelegt.positionen().get(0).id()).longValue();
+    final Long vorher =
+        jdbc.queryForObject(
+            "SELECT version FROM angebot WHERE id = ?", Long.class, Long.valueOf(angebotId));
+
+    // When — dieselbe Position, nur der Monat kommt dazu (#483).
+    final Map<String, Object> imFebruar =
+        positionMitKennung(kennung, "Aufwaende Februar 2027", "AUFWAND", "135");
+    imFebruar.put("leistungsmonat", Integer.valueOf(2));
+    final ResponseEntity<AngebotResponse> antwort =
+        rest.exchange(
+            "/api/angebote/" + angebotId,
+            HttpMethod.PUT,
+            new HttpEntity<>(
+                rumpf(List.of(imFebruar)), Stand.aktuell(sitzung, jdbc, "angebot", angebotId)),
+            AngebotResponse.class);
+
+    // Then — der neue Stand steht an der Zeile, und der Monat ist geschrieben.
+    assertThat(antwort.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT version FROM angebot WHERE id = ?", Long.class, Long.valueOf(angebotId)))
+        .isEqualTo(Objects.requireNonNull(vorher).longValue() + 1);
+    assertThat(angelegt.positionen())
+        .extracting(AngebotPositionResponse::leistungsmonat)
+        .containsExactly((Integer) null);
+    assertThat(lies(angebotId).positionen())
+        .extracting(AngebotPositionResponse::id, AngebotPositionResponse::leistungsmonat)
+        .containsExactly(tuple(Long.valueOf(kennung), Integer.valueOf(2)));
+  }
+
+  @Test
   void aendern_withALeistungsjahrOutsideTheBounds_thenAnswers400AndWritesNothing() {
     // Given — E10: Die Grenze steht an der Anfrage; die Datenbank sieht den Tippfehler nie.
     final long angebotId = angebot().id();

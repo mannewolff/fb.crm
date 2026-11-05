@@ -9,11 +9,14 @@ import java.lang.reflect.Modifier;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.Month;
 import java.time.Year;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -83,6 +86,16 @@ class ForecastUseCaseTest {
       final String menge,
       final String einzelpreis,
       final Year leistungsjahr) {
+    return position(id, bezeichnung, menge, einzelpreis, leistungsjahr, null);
+  }
+
+  private static Angebotsposition position(
+      final long id,
+      final String bezeichnung,
+      final String menge,
+      final String einzelpreis,
+      final Year leistungsjahr,
+      final @Nullable Month leistungsmonat) {
     return new Angebotsposition(
         Long.valueOf(id),
         bezeichnung,
@@ -90,7 +103,8 @@ class ForecastUseCaseTest {
         new BigDecimal(menge),
         Einheit.STUNDE,
         new BigDecimal(einzelpreis),
-        leistungsjahr);
+        leistungsjahr,
+        leistungsmonat);
   }
 
   private static AngebotMitFirma angebot(
@@ -436,6 +450,92 @@ class ForecastUseCaseTest {
     assertThat(forecast.jahre())
         .extracting(Forecastjahr::jahr)
         .containsExactly(J2026, J2027, J2028);
+  }
+
+  /*
+   * Die beiden Workshops aus dem Anlass von #483. Die Uebersicht liefert das juengste Angebot
+   * zuerst — „KI-Workshop II" (Kennung 2) steht darum vor „KI Workshop I" (Kennung 1).
+   */
+  private static List<AngebotMitFirma> workshops(
+      final @Nullable Month februar,
+      final @Nullable Month maerz,
+      final @Nullable Month mai,
+      final @Nullable Month juni) {
+    return List.of(
+        angebot(
+            2L,
+            Angebotsstatus.ABGEGEBEN,
+            BILDUNGSHAUS,
+            position(21L, "Aufwände Mai 2027", "1.00", "300.00", J2027, mai),
+            position(22L, "Aufwände Juni 2027", "1.00", "400.00", J2027, juni),
+            position(23L, "Aufwände 3 Tage Rest", "1.00", "500.00", J2027, null)),
+        angebot(
+            1L,
+            Angebotsstatus.BESTELLT,
+            BILDUNGSHAUS,
+            position(11L, "Aufwände Februar 2027", "1.00", "100.00", J2027, februar),
+            position(12L, "Aufwände März 2027", "1.00", "200.00", J2027, maerz)));
+  }
+
+  private List<Long> positionenVon2027() {
+    return useCase.forecast().jahre().getFirst().positionen().stream()
+        .map(zeile -> zeile.position().requireId())
+        .toList();
+  }
+
+  @Test
+  @DisplayName("Szenario: Forecast in der Reihenfolge der Monate")
+  void forecast_thenPositionsOfAYearStandByMonthAndThoseWithoutMonthLast() {
+    // Given
+    gegeben(workshops(Month.FEBRUARY, Month.MARCH, Month.MAY, Month.JUNE), Map.of());
+
+    // When / Then — Februar, Maerz, Mai, Juni, ohne Monat.
+    assertThat(positionenVon2027()).containsExactly(11L, 12L, 21L, 22L, 23L);
+  }
+
+  @Test
+  @DisplayName("Szenario: Monat an einer Position wählen")
+  void forecast_thenAPositionWithMonthStandsBeforeThoseWithoutEvenFromAnOlderAngebot() {
+    // Given — nur „Aufwände Februar 2027" am aelteren Angebot traegt einen Monat.
+    gegeben(workshops(Month.FEBRUARY, null, null, null), Map.of());
+
+    // When / Then
+    assertThat(positionenVon2027()).containsExactly(11L, 21L, 22L, 23L, 12L);
+  }
+
+  @Test
+  @DisplayName("Szenario: Bestehende Positionen nach der Änderung")
+  void forecast_thenWithoutAnyMonthTheOrderOfTheUebersichtStays() {
+    // Given
+    gegeben(workshops(null, null, null, null), Map.of());
+
+    // When / Then — juengstes Angebot zuerst, je Angebot in der Folge seiner Positionen.
+    assertThat(positionenVon2027()).containsExactly(21L, 22L, 23L, 11L, 12L);
+  }
+
+  @Test
+  void forecast_thenPositionsOfTheSameMonthKeepTheirOrder() {
+    // Given — alle im Februar: Gleichstand haelt die bisherige Folge.
+    gegeben(workshops(Month.FEBRUARY, Month.FEBRUARY, Month.FEBRUARY, Month.FEBRUARY), Map.of());
+
+    // When / Then
+    assertThat(positionenVon2027()).containsExactly(21L, 22L, 11L, 12L, 23L);
+  }
+
+  @Test
+  void forecast_thenTheAmountsOfAYearDoNotDependOnMonths() {
+    // Given
+    gegeben(workshops(null, null, null, null), Map.of());
+    final Forecastjahr ohne = useCase.forecast().jahre().getFirst();
+    gegeben(workshops(Month.FEBRUARY, Month.MARCH, Month.MAY, Month.JUNE), Map.of());
+
+    // When
+    final Forecastjahr mit = useCase.forecast().jahre().getFirst();
+
+    // Then — zugesagt 300,00 (KI Workshop I), angeboten 1.200,00 (KI-Workshop II).
+    assertThat(List.of(mit.zugesagt(), mit.angeboten(), mit.summe()))
+        .containsExactly(ohne.zugesagt(), ohne.angeboten(), ohne.summe())
+        .containsExactly(geld("300.00"), geld("1200.00"), geld("1500.00"));
   }
 
   @Test

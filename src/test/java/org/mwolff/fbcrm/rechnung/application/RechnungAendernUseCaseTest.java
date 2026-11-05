@@ -381,6 +381,7 @@ class RechnungAendernUseCaseTest {
                 new BigDecimal("160.00"),
                 Rechnungsdoppel.BERATUNG.einheit(),
                 new BigDecimal("120.00"),
-                Year.of(2026))));
+                Year.of(2026),
+                null)));
   }
 }

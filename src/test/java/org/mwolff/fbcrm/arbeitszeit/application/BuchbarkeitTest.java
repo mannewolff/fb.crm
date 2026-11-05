@@ -38,7 +38,8 @@ class BuchbarkeitTest {
         new BigDecimal("20.00"),
         einheit,
         new BigDecimal("120.00"),
-        Year.of(2026));
+        Year.of(2026),
+        null);
   }
 
   /** Das interne Angebot — seine Positionen sind die von {@link Zeitdoppel}. */

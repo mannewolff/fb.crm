@@ -6,6 +6,7 @@ import { useState } from 'react';
 import Angebotsweg from './Angebotsweg';
 import Tafel, { type TafelSpalte } from './Tafel';
 import type { Forecast, Forecastjahr, Forecastposition } from '../api/forecast';
+import { monatsname } from '../lib/arbeitszeit';
 import { euro } from '../lib/geld';
 import { ZAHLEN_KLASSE } from '../theme';
 
@@ -35,7 +36,7 @@ const SPALTEN: readonly TafelSpalte[] = [
 ];
 
 /** Die Innentabelle: ihre Koepfe, in der Reihenfolge ihrer Zellen. */
-const SPALTEN_POSITIONEN = ['Firma', 'Angebot', 'Position'] as const;
+const SPALTEN_POSITIONEN = ['Firma', 'Angebot', 'Monat', 'Position'] as const;
 const SPALTE_RESTBETRAG = 'Restbetrag';
 
 /** Die Gestalt einer Betragszelle — wie die Betraege der uebrigen Tafeln der Startseite. */
@@ -96,7 +97,10 @@ function Jahrestaste({
   );
 }
 
-/** Eine Position unter ihrem Jahr: Firma, Angebot als Weg, Bezeichnung, Restbetrag (Kriterium 5). */
+/**
+ * Eine Position unter ihrem Jahr: Firma, Angebot als Weg, Monat, Bezeichnung, Restbetrag (Kriterium
+ * 5). Ohne Monat bleibt dessen Zelle leer, ohne Strich (#483, Kriterium 5; Plan #484, A11).
+ */
 function Positionszeile({ position }: { readonly position: Forecastposition }) {
   return (
     <Box component="tr">
@@ -109,6 +113,9 @@ function Positionszeile({ position }: { readonly position: Forecastposition }) {
           tag={position.angebotDatum}
           titel={position.angebotTitel}
         />
+      </Box>
+      <Box component="td">
+        {position.leistungsmonat === null ? null : monatsname(position.leistungsmonat)}
       </Box>
       <Box component="td">{position.bezeichnung}</Box>
       <Betrag cent={position.nettoInCent} />

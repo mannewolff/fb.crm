@@ -12,6 +12,7 @@ import static org.mockito.Mockito.when;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.Month;
 import java.time.Year;
 import java.util.Collection;
 import java.util.List;
@@ -68,7 +69,8 @@ class JpaAngebotRepositoryTest {
           new BigDecimal("2.50"),
           Einheit.PERSONENTAG,
           new BigDecimal("1000.01"),
-          LEISTUNGSJAHR);
+          LEISTUNGSJAHR,
+          null);
 
   private static final Angebotsposition SCHULUNG =
       new Angebotsposition(
@@ -78,7 +80,8 @@ class JpaAngebotRepositoryTest {
           BigDecimal.ONE,
           Einheit.PAUSCHAL,
           new BigDecimal("1200.00"),
-          Year.of(2026));
+          Year.of(2026),
+          null);
 
   /** Dieselbe Position wie {@link #KONZEPTION}, umbenannt — fuer das Fortschreiben einer Zeile. */
   private static final Angebotsposition UMBENANNT =
@@ -89,7 +92,8 @@ class JpaAngebotRepositoryTest {
           new BigDecimal("2.50"),
           Einheit.PERSONENTAG,
           new BigDecimal("1000.01"),
-          Year.of(2026));
+          Year.of(2026),
+          null);
 
   @Mock private SpringDataAngebotRepository angebote;
 
@@ -161,7 +165,8 @@ class JpaAngebotRepositoryTest {
         position.menge(),
         position.einheit(),
         position.einzelpreis(),
-        position.leistungsjahr());
+        position.leistungsjahr(),
+        position.leistungsmonat());
   }
 
   private static Angebotsposition mitJahr(final Angebotsposition position, final Year jahr) {
@@ -172,7 +177,21 @@ class JpaAngebotRepositoryTest {
         position.menge(),
         position.einheit(),
         position.einzelpreis(),
-        jahr);
+        jahr,
+        position.leistungsmonat());
+  }
+
+  private static Angebotsposition mitMonat(
+      final Angebotsposition position, final @Nullable Month monat) {
+    return new Angebotsposition(
+        position.id(),
+        position.bezeichnung(),
+        position.abrechnungsmodus(),
+        position.menge(),
+        position.einheit(),
+        position.einzelpreis(),
+        position.leistungsjahr(),
+        monat);
   }
 
   private static AngebotEntity zeile() {
@@ -378,6 +397,86 @@ class JpaAngebotRepositoryTest {
 
     // Then
     assertThat(vorhandene.getLeistungsjahr()).isEqualTo((short) 2028);
+  }
+
+  @Test
+  void save_thenWritesTheLeistungsmonatAsItsNumber() {
+    // Given — #483, Kriterium 1: der Februar als 2, wie in
+    // V40__angebot_position_leistungsmonat.sql.
+    erwarteSchreibenDerZeile(zeile());
+
+    // When
+    repository.save(angebot(List.of(mitMonat(KONZEPTION, Month.FEBRUARY))));
+
+    // Then
+    verify(positionen).saveAll(gespeichertePositionen.capture());
+    assertThat(gespeichertePositionen.getValue())
+        .singleElement()
+        .satisfies(zeile -> assertThat(zeile.getLeistungsmonat()).isEqualTo((short) 2));
+  }
+
+  @Test
+  void save_givenAPositionWithoutMonth_thenWritesNull() {
+    // Given — #483, Kriterium 2: „ohne Monat" ist NULL in der Spalte.
+    erwarteSchreibenDerZeile(zeile());
+
+    // When
+    repository.save(angebot(List.of(KONZEPTION)));
+
+    // Then
+    verify(positionen).saveAll(gespeichertePositionen.capture());
+    assertThat(gespeichertePositionen.getValue())
+        .singleElement()
+        .satisfies(zeile -> assertThat(zeile.getLeistungsmonat()).isNull());
+  }
+
+  @Test
+  void save_givenAPositionWithAKnownId_thenCarriesItsNewLeistungsmonatOn() {
+    // Given — die vorhandene Zeile uebernimmt den Monat wie jede andere Angabe.
+    final AngebotPositionEntity vorhandene = positionszeile((short) 1, mitKennung(KONZEPTION, 71L));
+    erwarteSchreibenDerZeile(zeile(), List.of(vorhandene));
+
+    // When
+    repository.save(angebot(List.of(mitMonat(mitKennung(KONZEPTION, 71L), Month.MARCH))));
+
+    // Then
+    assertThat(vorhandene.getLeistungsmonat()).isEqualTo((short) 3);
+  }
+
+  @Test
+  void save_givenAPositionWithAKnownIdAndNoMonthAnymore_thenClearsTheLeistungsmonat() {
+    // Given — #483, Kriterium 2: Ein gewaehlter Monat laesst sich auf „ohne Monat" zuruecksetzen.
+    final AngebotPositionEntity vorhandene =
+        positionszeile((short) 1, mitMonat(mitKennung(KONZEPTION, 71L), Month.MARCH));
+    erwarteSchreibenDerZeile(zeile(), List.of(vorhandene));
+
+    // When
+    repository.save(angebot(List.of(mitKennung(KONZEPTION, 71L))));
+
+    // Then
+    assertThat(vorhandene.getLeistungsmonat()).isNull();
+  }
+
+  @Test
+  void findById_thenReadsTheLeistungsmonatOfAPositionAsMonth() {
+    // Given — die Spalte ist ein smallint; am Fachobjekt steht der Monat als Month (Plan #484, A2).
+    when(angebote.findById(11L)).thenReturn(Optional.of(zeile()));
+    when(positionen.findByAngebot(11L))
+        .thenReturn(
+            List.of(
+                positionszeile((short) 1, mitMonat(mitKennung(KONZEPTION, 71L), Month.FEBRUARY)),
+                positionszeile((short) 2, mitKennung(SCHULUNG, 72L))));
+
+    // When
+    final Optional<Angebot> gefunden = repository.findById(11L);
+
+    // Then — NULL bleibt „ohne Monat".
+    assertThat(gefunden)
+        .hasValueSatisfying(
+            angebot ->
+                assertThat(angebot.positionen())
+                    .extracting(Angebotsposition::leistungsmonat)
+                    .containsExactly(Month.FEBRUARY, null));
   }
 
   @Test
@@ -712,7 +811,8 @@ class JpaAngebotRepositoryTest {
                 assertThat(gelesen.getEinzelpreis()).isEqualByComparingTo(position.einzelpreis()),
             gelesen ->
                 assertThat(gelesen.getLeistungsjahr())
-                    .isEqualTo((short) position.leistungsjahr().getValue()));
+                    .isEqualTo((short) position.leistungsjahr().getValue()),
+            gelesen -> assertThat(gelesen.getLeistungsmonat()).isNull());
   }
 
   @Test

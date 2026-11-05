@@ -9,6 +9,7 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.math.BigDecimal;
+import java.time.Month;
 import java.time.Year;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.fbcrm.angebot.domain.Angebotsposition;
@@ -67,6 +68,14 @@ class AngebotPositionEntity {
   private short leistungsjahr;
 
   /*
+   * Der Monat als smallint 1 bis 12 wie in V40__angebot_position_leistungsmonat.sql, NULL fuer
+   * „ohne Monat" (Plan #484, A1); den Month des Fachobjekts bildet JpaAngebotRepository beim Lesen
+   * daraus.
+   */
+  @Column(name = "leistungsmonat")
+  private @Nullable Short leistungsmonat;
+
+  /*
    * JPA verlangt einen parameterlosen Konstruktor und fuellt die Felder danach selbst; NullAway
    * sieht diesen Weg nicht und meldete sonst nicht initialisierte Felder.
    */
@@ -104,6 +113,7 @@ class AngebotPositionEntity {
     this.einheit = position.einheit();
     this.einzelpreis = position.einzelpreis();
     this.leistungsjahr = (short) position.leistungsjahr().getValue();
+    this.leistungsmonat = spalte(position.leistungsmonat());
   }
 
   /**
@@ -116,6 +126,7 @@ class AngebotPositionEntity {
    * @param einheit Einheit der Menge
    * @param einzelpreis Netto-Preis je Einheit
    * @param leistungsjahr das Jahr der Leistung
+   * @param leistungsmonat der Monat der Leistung, oder {@code null} fuer „ohne Monat"
    */
   void uebernehme(
       final short position,
@@ -124,7 +135,8 @@ class AngebotPositionEntity {
       final BigDecimal menge,
       final Einheit einheit,
       final BigDecimal einzelpreis,
-      final Year leistungsjahr) {
+      final Year leistungsjahr,
+      final @Nullable Month leistungsmonat) {
     this.position = position;
     this.bezeichnung = bezeichnung;
     this.abrechnungsmodus = abrechnungsmodus;
@@ -132,6 +144,12 @@ class AngebotPositionEntity {
     this.einheit = einheit;
     this.einzelpreis = einzelpreis;
     this.leistungsjahr = (short) leistungsjahr.getValue();
+    this.leistungsmonat = spalte(leistungsmonat);
+  }
+
+  /* Der Monat als Wert der Spalte: 1 bis 12, oder NULL fuer „ohne Monat". */
+  private static @Nullable Short spalte(final @Nullable Month monat) {
+    return monat == null ? null : (short) monat.getValue();
   }
 
   @Nullable Long getId() {
@@ -168,5 +186,9 @@ class AngebotPositionEntity {
 
   short getLeistungsjahr() {
     return leistungsjahr;
+  }
+
+  @Nullable Short getLeistungsmonat() {
+    return leistungsmonat;
   }
 }

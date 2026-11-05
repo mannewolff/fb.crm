@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.tuple;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.Objects;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mwolff.fbcrm.AbstractIntegrationTest;
@@ -126,6 +127,21 @@ class ForecastControllerIT extends AbstractIntegrationTest {
   }
 
   @Test
+  void forecast_thenEachPositionCarriesItsLeistungsmonatOrNull() {
+    // Given — Mai und Juni mit Monat, der Rest ohne (#483, Kriterium 5).
+    beispielDesFachplans();
+
+    // When
+    final ForecastResponse forecast = Objects.requireNonNull(ruf(ForecastResponse.class).getBody());
+
+    // Then
+    assertThat(forecast.jahre().get(0).positionen())
+        .extracting(ForecastResponse.Positionszeile::leistungsmonat)
+        .containsExactly(5, 6, null);
+    assertThat(ruf(String.class).getBody()).contains("\"leistungsmonat\":null");
+  }
+
+  @Test
   void forecast_givenAnEmptyStock_thenAnswersWithAnEmptyListOfYears() {
     // Given — Kriterium 6: ohne eine offene Position gibt es kein Jahr, und die Liste ist leer.
     // When
@@ -155,23 +171,28 @@ class ForecastControllerIT extends AbstractIntegrationTest {
             """,
             Long.class,
             firmaId);
-    position(angebotId, 1, "Aufwände Mai 2027", "135");
-    position(angebotId, 2, "Aufwände Juni 2027", "135");
-    position(angebotId, 3, "Aufwände 3 Tage Rest", "27");
+    position(angebotId, 1, "Aufwände Mai 2027", "135", 5);
+    position(angebotId, 2, "Aufwände Juni 2027", "135", 6);
+    position(angebotId, 3, "Aufwände 3 Tage Rest", "27", null);
   }
 
   private void position(
-      final Long angebotId, final int nummer, final String bezeichnung, final String stunden) {
+      final Long angebotId,
+      final int nummer,
+      final String bezeichnung,
+      final String stunden,
+      final @Nullable Integer leistungsmonat) {
     jdbc.update(
         """
         INSERT INTO angebot_position
             (angebot_id, position, bezeichnung, abrechnungsmodus, menge, einheit, einzelpreis,
-             leistungsjahr)
-        VALUES (?, ?, ?, 'AUFWAND', CAST(? AS numeric), 'STUNDE', 60.00, 2027)
+             leistungsjahr, leistungsmonat)
+        VALUES (?, ?, ?, 'AUFWAND', CAST(? AS numeric), 'STUNDE', 60.00, 2027, CAST(? AS smallint))
         """,
         angebotId,
         nummer,
         bezeichnung,
-        stunden);
+        stunden,
+        leistungsmonat);
   }
 }

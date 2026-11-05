@@ -110,6 +110,7 @@ const FORECAST_STAND = {
           angebotDatum: '2026-10-15',
           angebotTitel: null,
           bezeichnung: 'Aufwände Mai 2027',
+          leistungsmonat: 5,
           netto: 8100,
         },
       ],

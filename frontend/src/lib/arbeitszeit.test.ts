@@ -6,6 +6,7 @@ import {
   imRaster,
   laufenderMonat,
   monatWort,
+  monatsname,
   alsMonat,
   stundenWort,
   uhrzeitFeld,
@@ -145,6 +146,20 @@ describe('monatWort', () => {
     // Zwei Formen von „kein Monat": die falsche Gestalt und eine Zahl ausserhalb der zwoelf.
     expect(monatWort('November 2026')).toBe('November 2026');
     expect(monatWort('2026-13')).toBe('2026-13');
+  });
+});
+
+describe('monatsname (#483; Plan #484, A8)', () => {
+  it.each([
+    [1, 'Januar'],
+    [3, 'März'],
+    [12, 'Dezember'],
+  ])('nennt den Monat %i beim Namen', (nummer, name) => {
+    expect(monatsname(nummer)).toBe(name);
+  });
+
+  it.each([[0], [13]])('gibt %i als Zahl heraus — wie `monatWort`', (nummer) => {
+    expect(monatsname(nummer)).toBe(String(nummer));
   });
 });
 

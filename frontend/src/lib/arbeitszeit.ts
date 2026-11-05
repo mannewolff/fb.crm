@@ -229,6 +229,15 @@ export function folgemonat(monat: string): string {
   return nummer === MONATE_JE_JAHR ? alsText(jahr + 1, 1) : alsText(jahr, nummer + 1);
 }
 
+/**
+ * Der Name zur Nummer eines Monats — 2 ist „Februar" (#483; Plan #484, A8). Was keine Nummer
+ * von 1 bis 12 ist, geht als Zahl heraus, dieselbe Regel wie bei {@link monatWort}.
+ */
+export function monatsname(nummer: number): string {
+  const name = MONATSNAMEN[nummer - 1];
+  return name === undefined ? String(nummer) : name;
+}
+
 /** Der Monat als Name mit Jahr — „November 2026"; was kein Monat ist, geht unveraendert heraus. */
 export function monatWort(monat: string): string {
   const treffer = MONAT.exec(monat);

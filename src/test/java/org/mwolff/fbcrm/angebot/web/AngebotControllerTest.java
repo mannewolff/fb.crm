@@ -17,6 +17,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.Month;
 import java.time.Year;
 import java.util.List;
 import java.util.Optional;
@@ -122,7 +123,8 @@ class AngebotControllerTest {
           new BigDecimal("2.50"),
           Einheit.PERSONENTAG,
           new BigDecimal("1000.01"),
-          Year.of(2026));
+          Year.of(2026),
+          null);
 
   /**
    * Dieselbe Position, wie die Maske sie einreicht — alle vier Angaben besetzt (Issue #227, E7).
@@ -135,6 +137,7 @@ class AngebotControllerTest {
           new BigDecimal("2.50"),
           Einheit.PERSONENTAG,
           new BigDecimal("1000.01"),
+          null,
           null);
 
   /** Der Stand, den die Maske vorlegt (Plan #415, E2). */
@@ -724,6 +727,7 @@ class AngebotControllerTest {
                     null,
                     Einheit.STUNDE,
                     BigDecimal.TEN,
+                    null,
                     null)));
     final String ohneMenge =
         """
@@ -827,6 +831,128 @@ class AngebotControllerTest {
     assertThat(daten.getValue().positionen())
         .singleElement()
         .satisfies(position -> assertThat(position.leistungsjahr()).isNull());
+  }
+
+  /** Ein Rumpf mit einer neuen Position, die den angegebenen Leistungsmonat als JSON mitschickt. */
+  private static String mitLeistungsmonat(final String monat) {
+    return """
+        {"titel":"Wartung","angebotDatum":"2026-09-25","positionen":[{"bezeichnung":"Konzeption",
+          "abrechnungsmodus":"AUFWAND","menge":"2.50","einheit":"PERSONENTAG",
+          "einzelpreis":"1000.01","leistungsmonat":%s}]}
+        """
+        .formatted(monat);
+  }
+
+  @ParameterizedTest
+  @ValueSource(ints = {1, 12})
+  void aendern_withALeistungsmonatWithinTheBounds_thenPassesItOn(final int monat) throws Exception {
+    // Given — Plan #484, A7: 1 bis 12 sind gueltig, die Grenzen eingeschlossen.
+    aendernAntwortet();
+
+    // When
+    mockMvc
+        .perform(
+            put("/api/angebote/{id}", Long.valueOf(ANGEBOT))
+                .header(HttpHeaders.IF_MATCH, VORGELEGT)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(mitLeistungsmonat(Integer.toString(monat))))
+        .andExpect(status().isOk());
+
+    // Then
+    assertThat(daten.getValue().positionen())
+        .singleElement()
+        .satisfies(position -> assertThat(position.leistungsmonat()).isEqualTo(monat));
+  }
+
+  @ParameterizedTest
+  @ValueSource(ints = {0, 13})
+  void aendern_withALeistungsmonatOutsideTheBounds_thenAnswers400AtTheField(final int monat)
+      throws Exception {
+    // Given — Plan #484, A7: Einen Monat 0 oder 13 gibt es nicht; die Bean-Validation weist ab,
+    // bevor der Anwendungsfall gefragt wird, und die Meldung steht am Feld der Position.
+
+    // When / Then
+    mockMvc
+        .perform(
+            put("/api/angebote/{id}", Long.valueOf(ANGEBOT))
+                .header(HttpHeaders.IF_MATCH, VORGELEGT)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(mitLeistungsmonat(Integer.toString(monat))))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.fieldErrors['positionen[0].leistungsmonat']").isNotEmpty());
+    verifyNoInteractions(aendern);
+  }
+
+  @Test
+  void aendern_withoutALeistungsmonat_thenStaysValidAndPassesNull() throws Exception {
+    // Given — #483, Kriterium 2: Der Monat ist freiwillig; null heisst „ohne Monat".
+    aendernAntwortet();
+
+    // When
+    mockMvc
+        .perform(
+            put("/api/angebote/{id}", Long.valueOf(ANGEBOT))
+                .header(HttpHeaders.IF_MATCH, VORGELEGT)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(mitLeistungsmonat("null")))
+        .andExpect(status().isOk());
+
+    // Then
+    assertThat(daten.getValue().positionen())
+        .singleElement()
+        .satisfies(position -> assertThat(position.leistungsmonat()).isNull());
+  }
+
+  @Test
+  void lesen_thenAnswersWithTheLeistungsmonatAsNumber() throws Exception {
+    // Given — Plan #484, A7: der Monat als Zahl 1 bis 12.
+    final Angebot angebot = angebot(Angebotsstatus.ANGELEGT);
+    final Angebotsposition februar =
+        new Angebotsposition(
+            POSITION,
+            "Konzeption",
+            Abrechnungsmodus.AUFWAND,
+            new BigDecimal("2.50"),
+            Einheit.PERSONENTAG,
+            new BigDecimal("1000.01"),
+            Year.of(2027),
+            Month.FEBRUARY);
+    when(lesen.lese(ANGEBOT))
+        .thenReturn(
+            new Angebot(
+                angebot.id(),
+                angebot.firmaId(),
+                angebot.ansprechpartnerId(),
+                angebot.intern(),
+                angebot.status(),
+                angebot.storniert(),
+                angebot.stornoGrund(),
+                angebot.angebotDatum(),
+                angebot.titel(),
+                angebot.beschreibung(),
+                List.of(februar),
+                angebot.createdAt(),
+                angebot.updatedAt(),
+                angebot.version(),
+                angebot.geaendertVon()));
+
+    // When / Then
+    mockMvc
+        .perform(get("/api/angebote/{id}", Long.valueOf(ANGEBOT)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.positionen[0].leistungsmonat").value(2));
+  }
+
+  @Test
+  void lesen_givenAPositionWithoutMonth_thenAnswersWithLeistungsmonatNull() throws Exception {
+    // Given — #483, Kriterium 7: Bestehende Positionen tragen keinen Monat.
+    when(lesen.lese(ANGEBOT)).thenReturn(angebot(Angebotsstatus.ANGELEGT));
+
+    // When / Then
+    mockMvc
+        .perform(get("/api/angebote/{id}", Long.valueOf(ANGEBOT)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.positionen[0].leistungsmonat").value(nullValue()));
   }
 
   @Test

@@ -503,6 +503,10 @@ Eine Sicherung anlegen, wie im Abschnitt „Sicherung" beschrieben, und vom
 Rechner wegkopieren. Ohne Sicherung nicht aktualisieren: Sie ist der Weg zurück, falls die neue
 Version nicht hochkommt.
 
+Der Weg zurück auf die Ausgangsversion führt über den Abschnitt „Wiederherstellung" mit genau
+dieser Sicherung: Die Datenbank passt fb.crm nur vorwärts an, die alte Version startet nicht auf dem
+neueren Datenstand.
+
 ### Schritt 3: Neue Marke auschecken
 
 Die Marken holen und den Checkout auf die Marke `vX.Y.Z` der

@@ -3,6 +3,7 @@ package org.mwolff.fbcrm.angebot.domain;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.math.BigDecimal;
+import java.time.Month;
 import java.time.Year;
 import org.junit.jupiter.api.Test;
 import org.mwolff.fbcrm.common.Abrechnungsmodus;
@@ -26,7 +27,8 @@ class AngebotspositionTest {
         new BigDecimal(menge),
         Einheit.PERSONENTAG,
         new BigDecimal(einzelpreis),
-        Year.of(2026));
+        Year.of(2026),
+        null);
   }
 
   @Test
@@ -89,12 +91,46 @@ class AngebotspositionTest {
             new BigDecimal("135.00"),
             Einheit.STUNDE,
             new BigDecimal("60.00"),
-            Year.of(2027));
+            Year.of(2027),
+            null);
 
     // When
     final Year jahr = position.leistungsjahr();
 
     // Then
     assertThat(jahr).isEqualTo(Year.of(2027));
+  }
+
+  @Test
+  void leistungsmonat_thenCarriesTheMonthGivenAtConstruction() {
+    // Given — #483, Kriterium 1: „Aufwände Februar 2027" traegt neben dem Jahr den Februar.
+    final Angebotsposition position =
+        new Angebotsposition(
+            null,
+            "Aufwände Februar 2027",
+            Abrechnungsmodus.AUFWAND,
+            new BigDecimal("135.00"),
+            Einheit.STUNDE,
+            new BigDecimal("60.00"),
+            Year.of(2027),
+            Month.FEBRUARY);
+
+    // When
+    final Month monat = position.leistungsmonat();
+
+    // Then
+    assertThat(monat).isEqualTo(Month.FEBRUARY);
+  }
+
+  @Test
+  void leistungsmonat_givenNoMonth_thenNull() {
+    // Given — #483, Kriterium 2: Der Monat ist freiwillig; null heisst „ohne Monat".
+    final Angebotsposition position = position("135.00", "60.00");
+
+    // When
+    final Month monat = position.leistungsmonat();
+
+    // Then
+    assertThat(monat).isNull();
   }
 }

@@ -1,5 +1,5 @@
 import { apiJson } from './client';
-import { inHundertsteln, liste, objekt, text, textOderNull, zahl } from './verengen';
+import { inHundertsteln, liste, objekt, text, textOderNull, zahl, zahlOderNull } from './verengen';
 
 /**
  * Der Forecast der Startseite: was aus Angeboten noch an Umsatz bevorsteht, je Jahr der Leistung
@@ -29,6 +29,8 @@ export interface Forecastposition {
   /** Titel des Angebots; `null` beim Angebot von vor #316 — dann traegt das Datum den Weg. */
   readonly angebotTitel: string | null;
   readonly bezeichnung: string;
+  /** Monat der Leistung, 1 bis 12; `null` fuer eine Position ohne Monat (#483, Kriterium 5). */
+  readonly leistungsmonat: number | null;
   /** Ihr Restbetrag, netto und in ganzen Cent. */
   readonly nettoInCent: number;
 }
@@ -61,6 +63,7 @@ function parsePosition(wert: unknown): Forecastposition {
     angebotDatum: text(zeile.angebotDatum),
     angebotTitel: textOderNull(zeile.angebotTitel),
     bezeichnung: text(zeile.bezeichnung),
+    leistungsmonat: zahlOderNull(zeile.leistungsmonat),
     nettoInCent: inHundertsteln(zeile.netto),
   };
 }

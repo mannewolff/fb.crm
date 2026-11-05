@@ -22,6 +22,7 @@ const POSITION = {
   einzelpreis: 1000.01,
   betrag: 2500.03,
   leistungsjahr: '2026',
+  leistungsmonat: null,
 };
 
 const ANGEBOT = {
@@ -284,6 +285,7 @@ const BETREUUNG = {
   einzelpreis: 500,
   betrag: 500,
   leistungsjahr: '2027',
+  leistungsmonat: null,
 };
 
 /**
@@ -308,6 +310,7 @@ const KONZEPTION_EINGABE = {
   einheit: 'PERSONENTAG',
   einzelpreis: '1000.01',
   leistungsjahr: '2026',
+  leistungsmonat: null,
 };
 
 describe('AngebotMaske — das Angebot bearbeiten (Issue #127, Kriterium 5)', () => {
@@ -508,6 +511,7 @@ describe('AngebotMaske — das Angebot bearbeiten (Issue #127, Kriterium 5)', ()
               einzelpreis: '0.00',
               // Vorbelegt mit dem Jahr des Datumsfeldes beim Hinzufuegen (Kriterium 4).
               leistungsjahr: '2026',
+              leistungsmonat: null,
             },
             KONZEPTION_EINGABE,
           ],
@@ -1152,6 +1156,103 @@ describe('AngebotMaske — das Leistungsjahr der Positionen (Plan #303, Kriteriu
   });
 });
 
+/** Die Position „Aufwände Februar 2027" aus #483 — mit Jahr, noch ohne Monat. */
+const AUFWAENDE_FEBRUAR = {
+  ...POSITION,
+  bezeichnung: 'Aufwände Februar 2027',
+  leistungsjahr: '2027',
+};
+
+/** „KI Workshop I" mit dieser einen Position. */
+const KI_WORKSHOP_I = {
+  ...ANGEBOT,
+  titel: 'KI Workshop I',
+  positionen: [AUFWAENDE_FEBRUAR],
+};
+
+describe('AngebotMaske — der Leistungsmonat der Positionen (#483; Plan #484, A4, A9)', () => {
+  it('Szenario: Monat an einer Position wählen', async () => {
+    const nutzer = userEvent.setup();
+    const fetchMock = lesen(KI_WORKSHOP_I, {
+      'PUT /api/angebote/9': json(200, KI_WORKSHOP_I),
+    });
+
+    renderMaske('/angebote/9/bearbeiten');
+    await bereit();
+    const monat = gruppe(1).getByRole('combobox', { name: 'Monat' });
+    expect(monat).toHaveValue('');
+    await nutzer.selectOptions(monat, 'Februar');
+    await nutzer.click(screen.getByRole('button', { name: 'Speichern' }));
+
+    await screen.findByRole('status');
+    expect(speicherAufrufe(fetchMock)[0].rumpf.positionen).toEqual([
+      {
+        ...KONZEPTION_EINGABE,
+        bezeichnung: 'Aufwände Februar 2027',
+        leistungsjahr: '2027',
+        leistungsmonat: 2,
+      },
+    ]);
+  });
+
+  it('zeigt den Monat einer gespeicherten Position', async () => {
+    lesen({ ...ANGEBOT, positionen: [{ ...POSITION, leistungsmonat: 3 }, BETREUUNG] });
+
+    renderMaske('/angebote/9/bearbeiten');
+    await bereit();
+
+    expect(gruppe(1).getByRole('combobox', { name: 'Monat' })).toHaveValue('3');
+    expect(gruppe(2).getByRole('combobox', { name: 'Monat' })).toHaveValue('');
+  });
+
+  it('schickt einen zurueckgesetzten Monat als `null` hinaus (A4)', async () => {
+    const nutzer = userEvent.setup();
+    const mitMonat = { ...ANGEBOT, positionen: [{ ...POSITION, leistungsmonat: 2 }] };
+    const fetchMock = lesen(mitMonat, { 'PUT /api/angebote/9': json(200, ANGEBOT) });
+
+    renderMaske('/angebote/9/bearbeiten');
+    await bereit();
+    await nutzer.selectOptions(gruppe(1).getByRole('combobox', { name: 'Monat' }), 'ohne Monat');
+    await nutzer.click(screen.getByRole('button', { name: 'Speichern' }));
+
+    await screen.findByRole('status');
+    expect(speicherAufrufe(fetchMock)[0].rumpf.positionen).toEqual([KONZEPTION_EINGABE]);
+  });
+
+  it('Szenario: Neue Position ohne Monat', async () => {
+    const nutzer = userEvent.setup();
+    const workshop = {
+      ...ANGEBOT,
+      titel: 'KI-Workshop II',
+      angebotDatum: '2026-10-15',
+      positionen: [],
+      summe: 0,
+    };
+    const fetchMock = lesen(workshop, { 'PUT /api/angebote/9': json(200, workshop) });
+
+    renderMaske('/angebote/9/bearbeiten');
+    await bereit();
+    await nutzer.click(screen.getByRole('button', { name: 'Position hinzufügen' }));
+    await nutzer.type(gruppe(1).getByRole('textbox', { name: 'Bezeichnung' }), 'Workshop');
+    expect(gruppe(1).getByRole('combobox', { name: 'Monat' })).toHaveValue('');
+    await nutzer.click(screen.getByRole('button', { name: 'Speichern' }));
+
+    await screen.findByText('Gespeichert.');
+    expect(speicherAufrufe(fetchMock)[0].rumpf.positionen).toEqual([
+      {
+        id: null,
+        bezeichnung: 'Workshop',
+        abrechnungsmodus: 'AUFWAND',
+        menge: '1.00',
+        einheit: 'PERSONENTAG',
+        einzelpreis: '0.00',
+        leistungsjahr: '2026',
+        leistungsmonat: null,
+      },
+    ]);
+  });
+});
+
 /** Steht `vorne` im Dokument vor `hinten`? */
 function steht(vorne: HTMLElement, hinten: HTMLElement): boolean {
   return (vorne.compareDocumentPosition(hinten) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
@@ -1601,6 +1702,26 @@ describe('AngebotMaske — gleichzeitig arbeiten (#411, Plan #415)', () => {
     await nutzer.click(await screen.findByRole('button', { name: 'Verwerfen' }));
 
     expect(screen.queryByRole('region', { name: 'Deine Eingaben' })).not.toBeInTheDocument();
+  });
+
+  it('nennt in „Deine Eingaben" den gewaehlten Monat vor dem Jahr (#483; Plan #484, A12)', async () => {
+    const nutzer = userEvent.setup();
+    fetchNachPfad({
+      'GET /api/angebote/9': nacheinander(json(200, KI_WORKSHOP_I), json(200, ANNAS_STAND)),
+      'GET /api/firmen/5': json(200, FIRMA),
+      'PUT /api/angebote/9': abweisung({ geaendertVon: 'Anna' }),
+    });
+
+    renderMaske('/angebote/9/bearbeiten');
+    await bereit();
+    await nutzer.selectOptions(gruppe(1).getByRole('combobox', { name: 'Monat' }), 'Februar');
+    await nutzer.click(screen.getByRole('button', { name: 'Speichern' }));
+    await nutzer.click(await screen.findByRole('button', { name: 'Neu laden' }));
+
+    const eigene = await screen.findByRole('region', { name: 'Deine Eingaben' });
+    expect(eigene).toHaveTextContent(
+      'Position 1Aufwände Februar 2027 · Aufwand · 2,50 Personentag · 1000,01 € · Februar 2027',
+    );
   });
 
   it('zeigt am internen Angebot Ansprechpartner, Art und nur die Bezeichnung der Position', async () => {

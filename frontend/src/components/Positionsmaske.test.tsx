@@ -16,6 +16,7 @@ const POSITION: Maskenposition = {
   einheit: 'PERSONENTAG',
   einzelpreis: '1000,01',
   leistungsjahr: '2026',
+  leistungsmonat: '',
   einheitVonHand: false,
 };
 
@@ -81,9 +82,9 @@ describe('Positionsmaske — die Felder (Kriterium 4)', () => {
   it('zeigt die Kennung nirgends und macht kein Feld daraus (Plan #169)', () => {
     renderMitTheme(<Halter />);
 
-    // Sechs Felder, nicht sieben: Die Kennung wird mitgefuehrt, nicht bedient.
+    // Sieben Felder, nicht acht: Die Kennung wird mitgefuehrt, nicht bedient.
     expect(gruppe().getAllByRole('textbox')).toHaveLength(4);
-    expect(gruppe().getAllByRole('combobox')).toHaveLength(2);
+    expect(gruppe().getAllByRole('combobox')).toHaveLength(3);
     expect(gruppe().queryByText('3')).not.toBeInTheDocument();
   });
 
@@ -226,6 +227,92 @@ describe('Positionsmaske — das Leistungsjahr (Plan #303, Kriterium 4, E16)', (
   });
 });
 
+describe('Positionsmaske — der Leistungsmonat (#483; Plan #484, A9, E3)', () => {
+  it('Szenario: Neue Position ohne Monat', () => {
+    renderMitTheme(<Halter start={frischePosition('neu-1', '2026')} />);
+
+    const monat = gruppe().getByRole('combobox', { name: 'Monat' });
+    expect(monat).toHaveValue('');
+    expect(within(monat).getByRole('option', { name: 'ohne Monat' })).toHaveProperty(
+      'selected',
+      true,
+    );
+  });
+
+  it('bietet „ohne Monat" und die zwoelf Monate beim Namen an', () => {
+    renderMitTheme(<Halter />);
+
+    const monat = gruppe().getByRole('combobox', { name: 'Monat' });
+    expect(within(monat).getAllByRole('option').map((wahl) => wahl.textContent)).toEqual([
+      'ohne Monat',
+      'Januar',
+      'Februar',
+      'März',
+      'April',
+      'Mai',
+      'Juni',
+      'Juli',
+      'August',
+      'September',
+      'Oktober',
+      'November',
+      'Dezember',
+    ]);
+    expect(
+      within(monat)
+        .getAllByRole('option')
+        .map((wahl) => wahl.getAttribute('value')),
+    ).toEqual(['', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12']);
+  });
+
+  it('steht direkt hinter dem Leistungsjahr', () => {
+    renderMitTheme(<Halter />);
+
+    const jahr = gruppe().getByRole('textbox', { name: 'Leistungsjahr' });
+    const monat = gruppe().getByRole('combobox', { name: 'Monat' });
+    const folgt = (vorne: HTMLElement, hinten: HTMLElement) =>
+      (vorne.compareDocumentPosition(hinten) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
+    const felder = [...gruppe().getAllByRole('textbox'), ...gruppe().getAllByRole('combobox')];
+    expect(folgt(jahr, monat)).toBe(true);
+    // Kein Feld dazwischen: Der Monat folgt dem Jahr unmittelbar.
+    expect(felder.filter((feld) => folgt(jahr, feld) && folgt(feld, monat))).toEqual([]);
+  });
+
+  it('nimmt einen Monat an und setzt ihn wieder auf „ohne Monat" zurueck', async () => {
+    const nutzer = userEvent.setup();
+    renderMitTheme(<Halter />);
+
+    const monat = gruppe().getByRole('combobox', { name: 'Monat' });
+    await nutzer.selectOptions(monat, 'Februar');
+    expect(monat).toHaveValue('2');
+
+    await nutzer.selectOptions(monat, 'ohne Monat');
+    expect(monat).toHaveValue('');
+  });
+
+  it('reicht den gewaehlten Monat als Text weiter', async () => {
+    const nutzer = userEvent.setup();
+    const aendere = vi.fn();
+    renderMitTheme(
+      <Positionsmaske
+        nummer={1}
+        position={POSITION}
+        aendere={aendere}
+        loesche={vi.fn()}
+        nachOben={vi.fn()}
+        nachUnten={vi.fn()}
+        erste={false}
+        letzte={false}
+        intern={false}
+      />,
+    );
+
+    await nutzer.selectOptions(gruppe().getByRole('combobox', { name: 'Monat' }), 'Dezember');
+
+    expect(aendere).toHaveBeenCalledWith({ ...POSITION, leistungsmonat: '12' });
+  });
+});
+
 describe('Positionsmaske — die Einheit zum Modus (Kriterium 4, F7)', () => {
   it('belegt die Einheit mit „Pauschal", wenn auf Festpreis gewechselt wird', async () => {
     const nutzer = userEvent.setup();
@@ -341,6 +428,8 @@ describe('frischePosition und betragDerPosition', () => {
       einzelpreis: '0',
       // Vorbelegt mit dem Jahr, das die Maske uebergibt (Kriterium 4).
       leistungsjahr: '2026',
+      // „ohne Monat" ist voreingestellt (#483; Plan #484, A9).
+      leistungsmonat: '',
       einheitVonHand: false,
     });
     expect(betragDerPosition(frischePosition('neu-1', '2026'))).toBe(0);
@@ -368,6 +457,8 @@ describe('Positionsmaske — das interne Angebot (Issue #207, Kriterium 3)', () 
     expect(gruppe().queryByRole('combobox', { name: 'Einheit' })).not.toBeInTheDocument();
     expect(gruppe().queryByRole('textbox', { name: 'Einzelpreis (netto)' })).not.toBeInTheDocument();
     expect(gruppe().queryByRole('textbox', { name: 'Leistungsjahr' })).not.toBeInTheDocument();
+    // Mit dem Jahr entfaellt am internen Angebot auch der Monat (#483, Kriterium 1).
+    expect(gruppe().queryByRole('combobox', { name: 'Monat' })).not.toBeInTheDocument();
     expect(gruppe().queryByTestId('positions-betrag')).not.toBeInTheDocument();
     expect(gruppe().queryByText('Betrag')).not.toBeInTheDocument();
     // Ein einziges Feld, und die drei Griffe bleiben.
@@ -383,11 +474,11 @@ describe('Positionsmaske — das interne Angebot (Issue #207, Kriterium 3)', () 
     expect(screen.getByRole('group', { name: 'Position 1' })).toBeInTheDocument();
   });
 
-  it('zeigt ohne „intern" alle sechs Felder und den Betrag', () => {
+  it('zeigt ohne „intern" alle sieben Felder und den Betrag', () => {
     renderMitTheme(<Halter />);
 
     expect(gruppe().getAllByRole('textbox')).toHaveLength(4);
-    expect(gruppe().getAllByRole('combobox')).toHaveLength(2);
+    expect(gruppe().getAllByRole('combobox')).toHaveLength(3);
     expect(gruppe().getByTestId('positions-betrag')).toHaveTextContent('2.500,03 €');
   });
 

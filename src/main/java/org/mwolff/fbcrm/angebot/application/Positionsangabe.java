@@ -38,6 +38,9 @@ import org.mwolff.fbcrm.common.Identifiable;
  *     AngebotAendernUseCase}; eine mitgeschickte Angabe schlaegt die Vorbelegung.
  * @param einzelpreis Netto-Preis je Einheit, oder {@code null}
  * @param leistungsjahr das Jahr der Leistung, oder {@code null} fuer die Vorbelegung
+ * @param leistungsmonat der Monat der Leistung, 1 bis 12, oder {@code null} fuer „ohne Monat" —
+ *     anders als beim Jahr gibt es keine Vorbelegung: Was fehlt, bleibt ohne Monat (#483, Kriterium
+ *     2; Plan #484, A4)
  */
 public record Positionsangabe(
     @Nullable Long id,
@@ -46,5 +49,6 @@ public record Positionsangabe(
     @Nullable BigDecimal menge,
     @Nullable Einheit einheit,
     @Nullable BigDecimal einzelpreis,
-    @Nullable Integer leistungsjahr)
+    @Nullable Integer leistungsjahr,
+    @Nullable Integer leistungsmonat)
     implements Identifiable {}

@@ -244,7 +244,8 @@ class RechnungLesenUseCaseTest {
                     new BigDecimal("160.00"),
                     Einheit.STUNDE,
                     new BigDecimal("120.00"),
-                    Year.of(2026)))));
+                    Year.of(2026),
+                    null))));
 
     // When
     final Rechnungsansicht ansicht = useCase.lese(ENTWURF);

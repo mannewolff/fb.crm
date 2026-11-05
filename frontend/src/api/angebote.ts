@@ -84,6 +84,8 @@ export interface AngebotPosition {
   readonly betragInCent: number;
   /** Das Jahr der Leistung als Text `JJJJ`, wie der Server es schickt (Plan #303, E9). */
   readonly leistungsjahr: string;
+  /** Der Monat der Leistung, 1 bis 12, oder `null` fuer „ohne Monat" (#483; Plan #484, A7). */
+  readonly leistungsmonat: number | null;
 }
 
 /** Ein Angebot mit seinen Positionen (Issue #127). */
@@ -174,6 +176,11 @@ export interface PositionEingabe {
    * es vor (Plan #303, E2).
    */
   readonly leistungsjahr: string | null;
+  /**
+   * Der Monat der Leistung, 1 bis 12 — `null` heisst „ohne Monat" und setzt einen gewaehlten
+   * Monat zurueck (#483; Plan #484, A4, A7).
+   */
+  readonly leistungsmonat: number | null;
 }
 
 /** Das Angebot als Ganzes — die Felder von `AngebotRequest` (E8). */
@@ -239,6 +246,7 @@ function parsePosition(wert: unknown): AngebotPosition {
     einzelpreisInCent: inHundertsteln(position.einzelpreis),
     betragInCent: inHundertsteln(position.betrag),
     leistungsjahr: text(position.leistungsjahr),
+    leistungsmonat: zahlOderNull(position.leistungsmonat),
   };
 }
 

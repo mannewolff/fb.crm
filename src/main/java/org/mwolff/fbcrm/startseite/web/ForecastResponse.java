@@ -2,6 +2,7 @@ package org.mwolff.fbcrm.startseite.web;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.Month;
 import java.util.List;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.fbcrm.angebot.application.AngebotMitFirma;
@@ -19,7 +20,7 @@ import org.mwolff.fbcrm.startseite.application.Forecastposition;
  * <p><b>Das Jahr ist Text</b> {@code JJJJ} (Plan #303, E9): Ein {@code Year} schriebe Jackson als
  * Zahl, und die Startseite fuehrt Jahre schon in {@link StartseiteResponse} als Text.
  *
- * <p><b>Von Angebot und Position kommen sieben Angaben mit, nicht beide ganz</b> — aus demselben
+ * <p><b>Von Angebot und Position kommen acht Angaben mit, nicht beide ganz</b> — aus demselben
  * Grund wie bei {@link StartseiteResponse.Angebotszeile}: Die Zeile zeigt Firma, Angebot, Position
  * und Restbetrag, die Kennung des Angebots ist der Weg dorthin, und die Kennung der Position ist
  * der Schluessel der Zeile in der Ansicht (Issue #479).
@@ -72,6 +73,9 @@ public record ForecastResponse(List<Jahreszeile> jahre) {
    * @param angebotTitel Titel des Angebots, oder {@code null} fuer ein Angebot von vor #316 — die
    *     Ansicht zeigt dann das Datum (Issue #324)
    * @param bezeichnung Bezeichnung der Position
+   * @param leistungsmonat der Monat ihrer Leistung als Zahl 1 bis 12, oder {@code null} fuer eine
+   *     Position ohne Monat — die Ansicht laesst die Spalte „Monat" dann leer (#483, Kriterium 5;
+   *     Plan #484, A7)
    * @param netto ihr Restbetrag, netto und auf den Cent
    */
   public record Positionszeile(
@@ -81,6 +85,7 @@ public record ForecastResponse(List<Jahreszeile> jahre) {
       LocalDate angebotDatum,
       @Nullable String angebotTitel,
       String bezeichnung,
+      @Nullable Integer leistungsmonat,
       BigDecimal netto) {
 
     static Positionszeile of(final Forecastposition position) {
@@ -92,7 +97,12 @@ public record ForecastResponse(List<Jahreszeile> jahre) {
           zeile.angebot().angebotDatum(),
           zeile.angebot().titel(),
           position.position().bezeichnung(),
+          monat(position.position().leistungsmonat()),
           position.netto());
+    }
+
+    private static @Nullable Integer monat(final @Nullable Month leistungsmonat) {
+      return leistungsmonat == null ? null : leistungsmonat.getValue();
     }
   }
 }

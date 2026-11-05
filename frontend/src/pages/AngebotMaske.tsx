@@ -33,6 +33,7 @@ import Positionsmaske, {
 import type { Maskenposition } from '../components/Positionsmaske';
 import WeicheTaste from '../components/WeicheTaste';
 import { feldMeldungen, istBearbeitungskonflikt, nichtGefunden } from '../lib/apifehler';
+import { monatsname } from '../lib/arbeitszeit';
 import { meldungAm } from '../lib/feldmeldung';
 import { dezimal, euro, hundertstel } from '../lib/geld';
 import { kennungAus } from '../lib/kennung';
@@ -215,6 +216,8 @@ function alsZeilen(angebot: Angebot): readonly Maskenposition[] {
     einheit: position.einheit,
     einzelpreis: dezimal(position.einzelpreisInCent, ','),
     leistungsjahr: position.leistungsjahr,
+    // Die Auswahl fuehrt den Monat als Text, „ohne Monat" ist leer (#483; Plan #484, A9).
+    leistungsmonat: position.leistungsmonat === null ? '' : String(position.leistungsmonat),
     // Was gespeichert ist, hat jemand so gewollt: Ein Modus-Wechsel setzt es nicht um (F7).
     einheitVonHand: true,
   }));
@@ -275,6 +278,9 @@ function alsEingabe(position: Maskenposition): PositionEingabe | null {
     einheit: position.einheit,
     einzelpreis: dezimal(preis, '.'),
     leistungsjahr: oderNull(position.leistungsjahr),
+    // Immer mit, auch „ohne Monat" als `null`: Am Kundenangebot gilt allein der eingereichte
+    // Monat, und `null` setzt einen gewaehlten zurueck (#483; Plan #484, A4).
+    leistungsmonat: position.leistungsmonat === '' ? null : Number(position.leistungsmonat),
   };
 }
 
@@ -304,6 +310,7 @@ const OHNE_ZAHLEN = {
   einheit: 'PERSONENTAG',
   einzelpreis: '0.00',
   leistungsjahr: null,
+  leistungsmonat: null,
 } as const;
 
 /**
@@ -352,6 +359,19 @@ function verschoben(
 /** Die Beschriftung des Kennzeichens — in beiden Schritten dieselbe (Kriterium 1). */
 const INTERN_WORT = 'Internes Projekt';
 
+/**
+ * Der Zeitraum einer Zeile — „Februar 2027" mit Monat, sonst nur das Jahr (#483; Plan #484, A12).
+ * Ohne den Monat fehlte nach „Neu laden" ein gewaehlter Monat in den eigenen Eingaben.
+ */
+function zeitraumWort(position: Maskenposition): string {
+  if (position.leistungsmonat === '') {
+    return position.leistungsjahr;
+  }
+  return [monatsname(Number(position.leistungsmonat)), position.leistungsjahr]
+    .filter((teil) => teil !== '')
+    .join(' ');
+}
+
 /** Wie eine Position in den eigenen Eingaben steht — am internen Angebot nur ihre Bezeichnung. */
 function positionWort(position: Maskenposition, intern: boolean): string {
   if (intern) {
@@ -362,7 +382,7 @@ function positionWort(position: Maskenposition, intern: boolean): string {
     MODUS_WORT[position.abrechnungsmodus],
     `${position.menge} ${EINHEIT_WORT[position.einheit]}`,
     `${position.einzelpreis} €`,
-    position.leistungsjahr,
+    zeitraumWort(position),
   ].join(' · ');
 }
 

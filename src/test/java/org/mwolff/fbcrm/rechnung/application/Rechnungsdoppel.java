@@ -72,7 +72,8 @@ final class Rechnungsdoppel {
           new BigDecimal("160.00"),
           Einheit.STUNDE,
           STUNDENSATZ,
-          Year.of(2026));
+          Year.of(2026),
+          null);
 
   static final Angebotsposition WARTUNG =
       new Angebotsposition(
@@ -82,7 +83,8 @@ final class Rechnungsdoppel {
           new BigDecimal("10.00"),
           Einheit.STUNDE,
           new BigDecimal("130.00"),
-          Year.of(2026));
+          Year.of(2026),
+          null);
 
   static final Angebotsposition PAUSCHALE =
       new Angebotsposition(
@@ -92,7 +94,8 @@ final class Rechnungsdoppel {
           BigDecimal.ONE,
           Einheit.PAUSCHAL,
           PAUSCHALPREIS,
-          Year.of(2026));
+          Year.of(2026),
+          null);
 
   private Rechnungsdoppel() {}
 
@@ -319,7 +322,8 @@ final class Rechnungsdoppel {
         new BigDecimal(menge),
         Einheit.STUNDE,
         STUNDENSATZ,
-        Year.of(2026));
+        Year.of(2026),
+        null);
   }
 
   /** Eine Rechnungsposition zur Beratung ueber die angegebene Menge. */

@@ -11,6 +11,14 @@ bleibt stehen, auch wenn nichts darunter steht.
 
 ## [Unreleased]
 
+## [1.9.0] - 2026-11-05
+
+- chore: v1.8.1
+- Forecast nach Leistungsmonat sortieren, Spalte „Monat“ (Issue #488)
+- Leistungsmonat in Angebotsmaske und Tafel „Positionen“ (Issue #487)
+- Leistungsmonat an der Angebotsposition im Backend (Issue #485)
+- RELEASING.md: Abschnitt rollback production ergänzen (Issue #481)
+
 ## [1.8.0] - 2026-11-05
 
 - Kartenprüfung rot: Record-Pattern macht 100 % Zweigabdeckung unerreichbar (Issue #480)

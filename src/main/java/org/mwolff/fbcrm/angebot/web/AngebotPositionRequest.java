@@ -51,6 +51,9 @@ import org.mwolff.fbcrm.common.Einheit;
  * @param einheit Einheit der Menge, oder {@code null}
  * @param einzelpreis Netto-Preis je Einheit, nicht negativ, oder {@code null}
  * @param leistungsjahr das Jahr der Leistung, 2000 bis 2099, oder {@code null} fuer die Vorbelegung
+ * @param leistungsmonat der Monat der Leistung, 1 bis 12, oder {@code null} fuer „ohne Monat"
+ *     (#483; Plan #484, A7) — dieselbe Grenze wie der CHECK in {@code
+ *     V40__angebot_position_leistungsmonat.sql}, hier mit der Meldung am Feld der Position
  */
 public record AngebotPositionRequest(
     @Nullable Long id,
@@ -59,7 +62,8 @@ public record AngebotPositionRequest(
     @Nullable @DecimalMin("0") @Digits(integer = 10, fraction = 2) BigDecimal menge,
     @Nullable Einheit einheit,
     @Nullable @DecimalMin("0") @Digits(integer = 10, fraction = 2) BigDecimal einzelpreis,
-    @Nullable @Min(2000) @Max(2099) Integer leistungsjahr) {
+    @Nullable @Min(2000) @Max(2099) Integer leistungsjahr,
+    @Nullable @Min(1) @Max(12) Integer leistungsmonat) {
 
   /** Die Meldung am Feld, wenn die Bezeichnung fehlt oder nur aus Leerzeichen besteht. */
   static final String BEZEICHNUNG_FEHLT = "Jede Position braucht eine Bezeichnung.";
@@ -67,6 +71,13 @@ public record AngebotPositionRequest(
   /** Dieselbe Position als Angabe in der Sprache der Anwendungsschicht. */
   Positionsangabe angabe() {
     return new Positionsangabe(
-        id, bezeichnung, abrechnungsmodus, menge, einheit, einzelpreis, leistungsjahr);
+        id,
+        bezeichnung,
+        abrechnungsmodus,
+        menge,
+        einheit,
+        einzelpreis,
+        leistungsjahr,
+        leistungsmonat);
   }
 }
