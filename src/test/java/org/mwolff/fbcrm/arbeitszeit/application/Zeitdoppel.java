@@ -69,7 +69,8 @@ final class Zeitdoppel {
           new BigDecimal("20.00"),
           Einheit.STUNDE,
           new BigDecimal("120.00"),
-          Year.of(2026));
+          Year.of(2026),
+          null);
 
   static final Angebotsposition WARTUNG =
       new Angebotsposition(
@@ -79,7 +80,8 @@ final class Zeitdoppel {
           new BigDecimal("10.00"),
           Einheit.STUNDE,
           new BigDecimal("130.00"),
-          Year.of(2026));
+          Year.of(2026),
+          null);
 
   static final Angebotsposition SCHULUNG =
       new Angebotsposition(
@@ -89,7 +91,8 @@ final class Zeitdoppel {
           BigDecimal.ONE,
           Einheit.PAUSCHAL,
           new BigDecimal("1200.00"),
-          Year.of(2026));
+          Year.of(2026),
+          null);
 
   private Zeitdoppel() {}
 

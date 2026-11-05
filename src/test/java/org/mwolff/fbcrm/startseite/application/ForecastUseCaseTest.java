@@ -90,7 +90,8 @@ class ForecastUseCaseTest {
         new BigDecimal(menge),
         Einheit.STUNDE,
         new BigDecimal(einzelpreis),
-        leistungsjahr);
+        leistungsjahr,
+        null);
   }
 
   private static AngebotMitFirma angebot(

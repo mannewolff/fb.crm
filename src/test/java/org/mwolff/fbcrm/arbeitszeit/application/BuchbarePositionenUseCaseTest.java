@@ -82,7 +82,8 @@ class BuchbarePositionenUseCaseTest {
         new BigDecimal("5.00"),
         einheit,
         new BigDecimal("100.00"),
-        Year.of(2026));
+        Year.of(2026),
+        null);
   }
 
   private static Angebot angebot(

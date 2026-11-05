@@ -1,6 +1,7 @@
 package org.mwolff.fbcrm.angebot.domain;
 
 import java.math.BigDecimal;
+import java.time.Month;
 import java.time.Year;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.fbcrm.common.Abrechnungsmodus;
@@ -40,6 +41,9 @@ import org.mwolff.fbcrm.common.Identifiable;
  * @param leistungsjahr das Jahr der Leistung, in dem der Rest dieser Position im Forecast steht
  *     (#302, Kriterium 4) — nie {@code null}; nicht das Jahr des Angebotsdatums, auch wenn eine
  *     neue Position damit vorbelegt wird (Plan #303, E2, E9)
+ * @param leistungsmonat der Monat der Leistung innerhalb ihres Jahres, nach dem der Forecast die
+ *     Positionen eines Jahres ordnet (#483, Kriterium 4) — {@code null} heisst „ohne Monat"; der
+ *     Monat ist freiwillig und wird nicht vorbelegt (Plan #484, A2)
  */
 public record Angebotsposition(
     @Nullable Long id,
@@ -48,7 +52,8 @@ public record Angebotsposition(
     BigDecimal menge,
     Einheit einheit,
     BigDecimal einzelpreis,
-    Year leistungsjahr)
+    Year leistungsjahr,
+    @Nullable Month leistungsmonat)
     implements Identifiable {
 
   /** Der Netto-Betrag der Position, kaufmaennisch auf den Cent gerundet (Kriterium 5). */

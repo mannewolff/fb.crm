@@ -43,7 +43,8 @@ class AbrechnungsstandTest {
           new BigDecimal("160.00"),
           Einheit.STUNDE,
           new BigDecimal("100.00"),
-          Year.of(2026));
+          Year.of(2026),
+          null);
 
   /** Eine Pauschale — an ihr zeigt sich, dass Bruchteile genau rechnen (Frage 1 aus #160). */
   private static final Angebotsposition PAUSCHALE =
@@ -54,7 +55,8 @@ class AbrechnungsstandTest {
           BigDecimal.ONE,
           Einheit.PAUSCHAL,
           new BigDecimal("1200.00"),
-          Year.of(2026));
+          Year.of(2026),
+          null);
 
   private static Rechnung rechnung(
       final long id, final Rechnungszustand zustand, final List<Rechnungsposition> positionen) {
@@ -274,7 +276,8 @@ class AbrechnungsstandTest {
         new BigDecimal(menge),
         Einheit.STUNDE,
         BERATUNG.einzelpreis(),
-        BERATUNG.leistungsjahr());
+        BERATUNG.leistungsjahr(),
+        null);
   }
 
   @Test
@@ -322,7 +325,8 @@ class AbrechnungsstandTest {
             new BigDecimal("10.00"),
             Einheit.STUNDE,
             new BigDecimal("1000.01"),
-            Year.of(2026));
+            Year.of(2026),
+            null);
     final Positionsstand stand = new Positionsstand(teuer, BigDecimal.ZERO);
 
     // When / Then — kaufmaennisch aufgerundet, wie jeder Betrag dieses Projekts.

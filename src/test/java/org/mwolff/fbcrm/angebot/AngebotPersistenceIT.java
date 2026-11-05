@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.tuple;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.Month;
 import java.time.Year;
 import java.util.List;
 import java.util.Optional;
@@ -57,7 +58,8 @@ class AngebotPersistenceIT extends AbstractIntegrationTest {
           new BigDecimal("2.50"),
           Einheit.PERSONENTAG,
           new BigDecimal("1000.01"),
-          Year.of(2027));
+          Year.of(2027),
+          null);
 
   private static final Angebotsposition SCHULUNG =
       new Angebotsposition(
@@ -67,7 +69,8 @@ class AngebotPersistenceIT extends AbstractIntegrationTest {
           new BigDecimal("1.00"),
           Einheit.PAUSCHAL,
           new BigDecimal("1200.00"),
-          Year.of(2026));
+          Year.of(2026),
+          null);
 
   private static final Angebotsposition BETREUUNG =
       new Angebotsposition(
@@ -77,7 +80,8 @@ class AngebotPersistenceIT extends AbstractIntegrationTest {
           new BigDecimal("8.00"),
           Einheit.STUNDE,
           new BigDecimal("95.00"),
-          Year.of(2026));
+          Year.of(2026),
+          null);
 
   private final AngebotRepository repository;
   private final TransactionTemplate transaktion;
@@ -180,7 +184,8 @@ class AngebotPersistenceIT extends AbstractIntegrationTest {
         position.menge(),
         position.einheit(),
         position.einzelpreis(),
-        position.leistungsjahr());
+        position.leistungsjahr(),
+        position.leistungsmonat());
   }
 
   @Test
@@ -397,7 +402,8 @@ class AngebotPersistenceIT extends AbstractIntegrationTest {
             new BigDecimal("1.00"),
             Einheit.STUNDE,
             new BigDecimal("0.00"),
-            Year.of(2026));
+            Year.of(2026),
+            null);
     final Angebot gespeichert = geschrieben(angebot(List.of(ohneBezeichnung)));
 
     // Then
@@ -429,6 +435,72 @@ class AngebotPersistenceIT extends AbstractIntegrationTest {
   }
 
   @Test
+  void save_thenStoresTheLeistungsmonatInItsColumnAndNullStaysNull() {
+    // Given — #483: die Konzeption im Februar, die Schulung ohne Monat.
+    final Angebotsposition imFebruar =
+        new Angebotsposition(
+            KONZEPTION.id(),
+            KONZEPTION.bezeichnung(),
+            KONZEPTION.abrechnungsmodus(),
+            KONZEPTION.menge(),
+            KONZEPTION.einheit(),
+            KONZEPTION.einzelpreis(),
+            KONZEPTION.leistungsjahr(),
+            Month.FEBRUARY);
+    final Angebot gespeichert = geschrieben(angebot(List.of(imFebruar, SCHULUNG)));
+
+    // When
+    final List<Short> spalte =
+        jdbc.queryForList(
+            "SELECT leistungsmonat FROM angebot_position WHERE angebot_id = ? ORDER BY position",
+            Short.class,
+            Long.valueOf(gespeichert.requireId()));
+
+    // Then
+    assertThat(spalte).containsExactly((short) 2, null);
+    assertThat(positionenVon(gespeichert.requireId()))
+        .extracting(Angebotsposition::leistungsmonat)
+        .containsExactly(Month.FEBRUARY, null);
+  }
+
+  @Test
+  void save_givenAMonthThatIsReset_thenTheSameRowCarriesNoMonth() {
+    // Given — #483, Kriterium 2: ein gewaehlter Monat laesst sich zuruecksetzen.
+    final Angebotsposition imMaerz =
+        new Angebotsposition(
+            KONZEPTION.id(),
+            KONZEPTION.bezeichnung(),
+            KONZEPTION.abrechnungsmodus(),
+            KONZEPTION.menge(),
+            KONZEPTION.einheit(),
+            KONZEPTION.einzelpreis(),
+            KONZEPTION.leistungsjahr(),
+            Month.MARCH);
+    final Angebot gespeichert = geschrieben(angebot(List.of(imMaerz)));
+    final Angebotsposition gefuehrt = positionenVon(gespeichert.requireId()).getFirst();
+
+    // When
+    geschriebenMit(
+        gespeichert,
+        List.of(
+            new Angebotsposition(
+                gefuehrt.id(),
+                gefuehrt.bezeichnung(),
+                gefuehrt.abrechnungsmodus(),
+                gefuehrt.menge(),
+                gefuehrt.einheit(),
+                gefuehrt.einzelpreis(),
+                gefuehrt.leistungsjahr(),
+                null)));
+
+    // Then — dieselbe Kennung, kein Monat mehr.
+    assertThat(gefuehrt.leistungsmonat()).isEqualTo(Month.MARCH);
+    assertThat(positionenVon(gespeichert.requireId()))
+        .extracting(Angebotsposition::id, Angebotsposition::leistungsmonat)
+        .containsExactly(tuple(gefuehrt.id(), null));
+  }
+
+  @Test
   void save_givenAChangedLeistungsjahr_thenCarriesItOnInTheSameRow() {
     // Given
     final Angebot gespeichert = geschrieben(angebot(List.of(KONZEPTION)));
@@ -445,7 +517,8 @@ class AngebotPersistenceIT extends AbstractIntegrationTest {
                 gefuehrt.menge(),
                 gefuehrt.einheit(),
                 gefuehrt.einzelpreis(),
-                Year.of(2028))));
+                Year.of(2028),
+                null)));
 
     // Then — dieselbe Kennung, das neue Jahr.
     assertThat(positionenVon(gespeichert.requireId()))

@@ -51,7 +51,8 @@ class AngebotTest {
           new BigDecimal("2.50"),
           Einheit.PERSONENTAG,
           new BigDecimal("1000.01"),
-          Year.of(2026));
+          Year.of(2026),
+          null);
 
   /** 1,5 × 0,01 € = 0,015 € und damit gerundet 0,02 €. */
   private static final Angebotsposition KLEINKRAM =
@@ -62,7 +63,8 @@ class AngebotTest {
           new BigDecimal("1.50"),
           Einheit.STUNDE,
           new BigDecimal("0.01"),
-          Year.of(2026));
+          Year.of(2026),
+          null);
 
   private static final Angebotsposition PAUSCHALE =
       new Angebotsposition(
@@ -72,7 +74,8 @@ class AngebotTest {
           BigDecimal.ONE,
           Einheit.PAUSCHAL,
           new BigDecimal("1200.00"),
-          Year.of(2026));
+          Year.of(2026),
+          null);
 
   private static Angebot angebot(final Angebotsstatus status) {
     return angebot(status, List.of(KONZEPTION));

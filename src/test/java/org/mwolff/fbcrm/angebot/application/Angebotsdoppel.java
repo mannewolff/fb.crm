@@ -58,7 +58,8 @@ final class Angebotsdoppel {
           new BigDecimal("2.50"),
           Einheit.PERSONENTAG,
           new BigDecimal("1000.01"),
-          Year.of(2026));
+          Year.of(2026),
+          null);
 
   static final Angebotsposition SCHULUNG =
       new Angebotsposition(
@@ -68,7 +69,8 @@ final class Angebotsdoppel {
           BigDecimal.ONE,
           Einheit.PAUSCHAL,
           new BigDecimal("1200.00"),
-          Year.of(2026));
+          Year.of(2026),
+          null);
 
   /** Dieselbe erste Position als Angabe der Maske — alle vier Angaben besetzt. */
   static final Positionsangabe KONZEPTION_ANGABE = angabe(KONZEPTION);
@@ -92,6 +94,7 @@ final class Angebotsdoppel {
         position.menge(),
         position.einheit(),
         position.einzelpreis(),
+        null,
         null);
   }
 

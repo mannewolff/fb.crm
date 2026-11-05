@@ -465,6 +465,59 @@ class AngebotSchemaIT extends AbstractIntegrationTest {
   }
 
   @Test
+  void migration_thenTheLeistungsmonatIsAnOptionalSmallint() {
+    // When — #483, Kriterium 2; Plan #484, A1: Der Monat ist freiwillig, ohne Vorbelegung.
+    final Map<String, Object> spalte =
+        jdbc.queryForMap(
+            "SELECT data_type, is_nullable, column_default FROM information_schema.columns"
+                + " WHERE table_schema = 'public' AND table_name = 'angebot_position'"
+                + " AND column_name = 'leistungsmonat'");
+
+    // Then
+    assertThat(spalte)
+        .containsEntry("data_type", "smallint")
+        .containsEntry("is_nullable", "YES")
+        .containsEntry("column_default", null);
+  }
+
+  @ParameterizedTest
+  @CsvSource({"0", "13"})
+  void positionLeistungsmonat_givenAMonthOutsideOneToTwelve_thenRejectedByTheDatabase(
+      final int monat) {
+    // Given
+    final Long angebotId = angebotId();
+    jdbc.update(INSERT_POSITION, angebotId, 1, "Konzeption", "AUFWAND", "1.00", "STUNDE", "95.00");
+
+    // When / Then
+    assertThatThrownBy(
+            () ->
+                jdbc.update(
+                    "UPDATE angebot_position SET leistungsmonat = ? WHERE angebot_id = ?",
+                    Integer.valueOf(monat),
+                    angebotId))
+        .isInstanceOf(DataIntegrityViolationException.class)
+        .hasMessageContaining("angebot_position_leistungsmonat");
+  }
+
+  @ParameterizedTest
+  @CsvSource({"1", "12"})
+  void positionLeistungsmonat_givenAMonthWithinOneToTwelve_thenAccepted(final int monat) {
+    // Given
+    final Long angebotId = angebotId();
+    jdbc.update(INSERT_POSITION, angebotId, 1, "Konzeption", "AUFWAND", "1.00", "STUNDE", "95.00");
+
+    // When
+    final int betroffen =
+        jdbc.update(
+            "UPDATE angebot_position SET leistungsmonat = ? WHERE angebot_id = ?",
+            Integer.valueOf(monat),
+            angebotId);
+
+    // Then
+    assertThat(betroffen).isEqualTo(1);
+  }
+
+  @Test
   void angebotStorniert_whenTheColumnsAreOmitted_thenTheRowIsNotStornoedAndHasNoReason() {
     // Given — jeder Weg ohne Angabe fuehrt zu einem Angebot ohne Storno (V25, DEFAULT false).
     angebot("BESTELLT");

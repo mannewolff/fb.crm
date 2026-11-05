@@ -15,6 +15,7 @@ import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.Month;
 import java.time.Year;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
@@ -29,6 +30,7 @@ import java.util.stream.Stream;
 import org.assertj.core.api.InstanceOfAssertFactories;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -212,7 +214,8 @@ class AngebotAendernUseCaseTest {
         angabe.menge(),
         einheit,
         angabe.einzelpreis(),
-        angabe.leistungsjahr());
+        angabe.leistungsjahr(),
+        angabe.leistungsmonat());
   }
 
   private static Positionsangabe mitModus(
@@ -224,7 +227,8 @@ class AngebotAendernUseCaseTest {
         angabe.menge(),
         angabe.einheit(),
         angabe.einzelpreis(),
-        angabe.leistungsjahr());
+        angabe.leistungsjahr(),
+        angabe.leistungsmonat());
   }
 
   private static Positionsangabe mitKennung(final Positionsangabe angabe, final @Nullable Long id) {
@@ -235,7 +239,8 @@ class AngebotAendernUseCaseTest {
         angabe.menge(),
         angabe.einheit(),
         angabe.einzelpreis(),
-        angabe.leistungsjahr());
+        angabe.leistungsjahr(),
+        angabe.leistungsmonat());
   }
 
   private static Positionsangabe ohneKennung(final Positionsangabe angabe) {
@@ -323,7 +328,8 @@ class AngebotAendernUseCaseTest {
         position.menge(),
         position.einheit(),
         position.einzelpreis(),
-        Year.of(jahr));
+        Year.of(jahr),
+        position.leistungsmonat());
   }
 
   /** Dasselbe Angebot mit anderen gespeicherten Positionen. */
@@ -724,6 +730,7 @@ class AngebotAendernUseCaseTest {
             new BigDecimal("4.00"),
             Angebotsdoppel.KONZEPTION.einheit(),
             new BigDecimal("999.00"),
+            null,
             null);
 
     // When — und zugleich umgeordnet: die Reihenfolge ist ebenfalls frei.
@@ -835,7 +842,7 @@ class AngebotAendernUseCaseTest {
     mitErfassterZeit(Angebotsdoppel.KONZEPTION_ID);
     final Positionsangabe unvollstaendig =
         new Positionsangabe(
-            Angebotsdoppel.FREMDE_POSITION, "Ohne Menge", null, null, null, null, null);
+            Angebotsdoppel.FREMDE_POSITION, "Ohne Menge", null, null, null, null, null, null);
 
     final AngebotDaten aenderung = daten(ANDERE_PERSON, true, List.of(unvollstaendig));
 
@@ -938,7 +945,7 @@ class AngebotAendernUseCaseTest {
     angebotIst(Angebotsdoppel.ohneAnsprechpartner(Angebotsdoppel.angebot(ANGEBOT)));
     final Positionsangabe nurBezeichnung =
         new Positionsangabe(
-            Angebotsdoppel.KONZEPTION_ID, "Konzeption", null, null, null, null, null);
+            Angebotsdoppel.KONZEPTION_ID, "Konzeption", null, null, null, null, null, null);
 
     // When
     final Angebot geaendert = aendere(daten(null, true, List.of(nurBezeichnung)));
@@ -954,7 +961,7 @@ class AngebotAendernUseCaseTest {
     angebotIst(
         Angebotsdoppel.ohneAnsprechpartner(Angebotsdoppel.angebot(ANGEBOT, Angebotsstatus.LAEUFT)));
     final Positionsangabe neue =
-        new Positionsangabe(null, NEUE_ARBEIT, null, null, null, null, null);
+        new Positionsangabe(null, NEUE_ARBEIT, null, null, null, null, null, null);
 
     // When
     final Angebot geaendert = aendere(daten(null, true, List.of(neue)));
@@ -969,7 +976,8 @@ class AngebotAendernUseCaseTest {
                 BigDecimal.ZERO,
                 Einheit.STUNDE,
                 BigDecimal.ZERO,
-                Year.of(2026)));
+                Year.of(2026),
+                null));
   }
 
   @Test
@@ -1023,6 +1031,7 @@ class AngebotAendernUseCaseTest {
                 null,
                 Einheit.STUNDE,
                 BigDecimal.TEN,
+                null,
                 null),
             "positionen[0].menge"),
         arguments(
@@ -1033,6 +1042,7 @@ class AngebotAendernUseCaseTest {
                 BigDecimal.ONE,
                 null,
                 BigDecimal.TEN,
+                null,
                 null),
             "positionen[0].einheit"),
         arguments(
@@ -1043,11 +1053,19 @@ class AngebotAendernUseCaseTest {
                 BigDecimal.ONE,
                 Einheit.STUNDE,
                 null,
+                null,
                 null),
             "positionen[0].einzelpreis"),
         arguments(
             new Positionsangabe(
-                null, NEUE_ARBEIT, null, BigDecimal.ONE, Einheit.STUNDE, BigDecimal.TEN, null),
+                null,
+                NEUE_ARBEIT,
+                null,
+                BigDecimal.ONE,
+                Einheit.STUNDE,
+                BigDecimal.TEN,
+                null,
+                null),
             "positionen[0].abrechnungsmodus"));
   }
 
@@ -1084,7 +1102,7 @@ class AngebotAendernUseCaseTest {
     final List<Positionsangabe> liste =
         List.of(
             Angebotsdoppel.KONZEPTION_ANGABE,
-            new Positionsangabe(null, NEUE_ARBEIT, null, null, null, null, null));
+            new Positionsangabe(null, NEUE_ARBEIT, null, null, null, null, null, null));
 
     final AngebotDaten aenderung = daten(null, false, liste);
 
@@ -1252,7 +1270,8 @@ class AngebotAendernUseCaseTest {
         Angebotsdoppel.ohneAnsprechpartner(Angebotsdoppel.angebot(ANGEBOT, Angebotsstatus.LAEUFT)));
     mitErfassterZeit(Angebotsdoppel.KONZEPTION_ID);
     final Positionsangabe umbenannt =
-        new Positionsangabe(Angebotsdoppel.KONZEPTION_ID, "Umbau", null, null, null, null, null);
+        new Positionsangabe(
+            Angebotsdoppel.KONZEPTION_ID, "Umbau", null, null, null, null, null, null);
 
     // When
     final Angebot geaendert = aendere(daten(null, true, List.of(umbenannt)));
@@ -1290,7 +1309,8 @@ class AngebotAendernUseCaseTest {
     angebotIst(
         Angebotsdoppel.ohneAnsprechpartner(Angebotsdoppel.angebot(ANGEBOT, Angebotsstatus.LAEUFT)));
     final Positionsangabe umbenannt =
-        new Positionsangabe(Angebotsdoppel.KONZEPTION_ID, "Umbau", null, null, null, null, null);
+        new Positionsangabe(
+            Angebotsdoppel.KONZEPTION_ID, "Umbau", null, null, null, null, null, null);
 
     // When
     final Angebot geaendert = aendere(daten(null, true, List.of(umbenannt)));
@@ -1365,7 +1385,7 @@ class AngebotAendernUseCaseTest {
             imJahr(Angebotsdoppel.KONZEPTION, 2027)));
     final Positionsangabe nurBezeichnung =
         new Positionsangabe(
-            Angebotsdoppel.KONZEPTION_ID, "Konzeption", null, null, null, null, null);
+            Angebotsdoppel.KONZEPTION_ID, "Konzeption", null, null, null, null, null, null);
     final Angebot intern = aendere(daten(null, true, List.of(nurBezeichnung)));
 
     // When — zurueck nach aussen, mit allen vier Angaben.
@@ -1390,7 +1410,8 @@ class AngebotAendernUseCaseTest {
         angabe.menge(),
         angabe.einheit(),
         angabe.einzelpreis(),
-        Integer.valueOf(jahr));
+        Integer.valueOf(jahr),
+        angabe.leistungsmonat());
   }
 
   @ParameterizedTest
@@ -1428,5 +1449,130 @@ class AngebotAendernUseCaseTest {
     assertThat(geaendert.positionen())
         .extracting(Angebotsposition::id, Angebotsposition::leistungsjahr)
         .containsExactly(tuple(Angebotsdoppel.KONZEPTION_ID, Year.of(2028)));
+  }
+
+  /** Dieselbe Position mit einem Leistungsmonat (#483). */
+  private static Angebotsposition imMonat(final Angebotsposition position, final Month monat) {
+    return new Angebotsposition(
+        position.id(),
+        position.bezeichnung(),
+        position.abrechnungsmodus(),
+        position.menge(),
+        position.einheit(),
+        position.einzelpreis(),
+        position.leistungsjahr(),
+        monat);
+  }
+
+  /** Dieselbe Angabe mit einem eingereichten Leistungsmonat, oder ohne Monat bei {@code null}. */
+  private static Positionsangabe mitMonat(
+      final Positionsangabe angabe, final @Nullable Integer monat) {
+    return new Positionsangabe(
+        angabe.id(),
+        angabe.bezeichnung(),
+        angabe.abrechnungsmodus(),
+        angabe.menge(),
+        angabe.einheit(),
+        angabe.einzelpreis(),
+        angabe.leistungsjahr(),
+        monat);
+  }
+
+  @Test
+  @DisplayName("Szenario: Neue Position ohne Monat")
+  void aendere_withANewPositionWithoutYearAndMonth_thenCarriesTheYearOfTheDateAndNoMonth() {
+    // Given — #483, Kriterien 1 und 2: Das Angebot „KI-Workshop II" vom 15.10.2026 bekommt eine
+    // neue Position; die Auswahl „Monat" bleibt auf „ohne Monat", ein Jahr kommt nicht mit.
+    angebotIst(Angebotsdoppel.ohneAnsprechpartner(Angebotsdoppel.angebot(ANGEBOT)));
+    final AngebotDaten aenderung =
+        new AngebotDaten(
+            LocalDate.of(2026, 10, 15),
+            null,
+            "KI-Workshop II",
+            NEUER_TEXT,
+            false,
+            List.of(ohneKennung(Angebotsdoppel.KONZEPTION_ANGABE)),
+            GELESEN,
+            BEN);
+
+    // When
+    final Angebot geaendert = aendere(aenderung);
+
+    // Then — das Jahr des Angebotsdatums und kein Monat: Anders als beim Jahr gibt es keine
+    // Vorbelegung (Plan #484, A4).
+    assertThat(geaendert.positionen())
+        .extracting(Angebotsposition::leistungsjahr, Angebotsposition::leistungsmonat)
+        .containsExactly(tuple(Year.of(2026), null));
+  }
+
+  @Test
+  void aendere_withAMonthAtACustomerAngebot_thenThePositionCarriesIt() {
+    // Given — #483, Kriterium 1: Februar gewaehlt an einer gespeicherten Position.
+    angebotIst(Angebotsdoppel.ohneAnsprechpartner(Angebotsdoppel.angebot(ANGEBOT)));
+    final Positionsangabe februar = mitMonat(Angebotsdoppel.KONZEPTION_ANGABE, Integer.valueOf(2));
+
+    // When
+    final Angebot geaendert = aendere(daten(null, List.of(februar)));
+
+    // Then
+    assertThat(geaendert.positionen())
+        .extracting(Angebotsposition::id, Angebotsposition::leistungsmonat)
+        .containsExactly(tuple(Angebotsdoppel.KONZEPTION_ID, Month.FEBRUARY));
+  }
+
+  @Test
+  void aendere_withoutAMonthAtAPositionThatHadOne_thenResetsItToNoMonth() {
+    // Given — #483, Kriterium 2: Ein gewaehlter Monat laesst sich auf „ohne Monat" zuruecksetzen.
+    // Anders als beim Jahr behaelt die gespeicherte Position ihren Wert darum nicht.
+    angebotIst(
+        mitPositionen(
+            Angebotsdoppel.ohneAnsprechpartner(Angebotsdoppel.angebot(ANGEBOT)),
+            imMonat(Angebotsdoppel.KONZEPTION, Month.FEBRUARY)));
+
+    // When
+    final Angebot geaendert =
+        aendere(daten(null, List.of(mitMonat(Angebotsdoppel.KONZEPTION_ANGABE, null))));
+
+    // Then
+    assertThat(geaendert.positionen())
+        .extracting(Angebotsposition::id, Angebotsposition::leistungsmonat)
+        .containsExactly(tuple(Angebotsdoppel.KONZEPTION_ID, null));
+  }
+
+  @Test
+  void aendere_withANewPositionAtAnInternalAngebot_thenItCarriesNoMonth() {
+    // Given — #483, Kriterium 1: Am internen Angebot gibt es keine Auswahl „Monat"; ein dennoch
+    // eingereichter Monat bleibt draussen (Plan #484, A4).
+    angebotIst(Angebotsdoppel.ohneAnsprechpartner(Angebotsdoppel.angebot(ANGEBOT)));
+    final Positionsangabe neue =
+        mitMonat(ohneKennung(Angebotsdoppel.KONZEPTION_ANGABE), Integer.valueOf(5));
+
+    // When
+    final Angebot geaendert = aendere(daten(null, true, List.of(neue)));
+
+    // Then
+    assertThat(geaendert.positionen())
+        .singleElement()
+        .satisfies(position -> assertThat(position.leistungsmonat()).isNull());
+  }
+
+  @Test
+  void aendere_withAStoredPositionAtAnInternalAngebot_thenItKeepsItsMonth() {
+    // Given — Plan #484, A4: Eine vorhandene interne Position behaelt ihren Monat wie ihre Zahlen,
+    // damit ein Angebot, das nach innen und zurueck gestellt wird, ihn wiederfindet. Die Angabe
+    // schickt einen anderen Monat und wird uebergangen.
+    angebotIst(
+        mitPositionen(
+            Angebotsdoppel.ohneAnsprechpartner(Angebotsdoppel.angebot(ANGEBOT)),
+            imMonat(Angebotsdoppel.KONZEPTION, Month.FEBRUARY)));
+    final Positionsangabe juni = mitMonat(Angebotsdoppel.KONZEPTION_ANGABE, Integer.valueOf(6));
+
+    // When
+    final Angebot geaendert = aendere(daten(null, true, List.of(juni)));
+
+    // Then
+    assertThat(geaendert.positionen())
+        .extracting(Angebotsposition::id, Angebotsposition::leistungsmonat)
+        .containsExactly(tuple(Angebotsdoppel.KONZEPTION_ID, Month.FEBRUARY));
   }
 }

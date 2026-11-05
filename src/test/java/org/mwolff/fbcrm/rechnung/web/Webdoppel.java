@@ -72,7 +72,8 @@ final class Webdoppel {
           new BigDecimal("160.00"),
           Einheit.STUNDE,
           STUNDENSATZ,
-          Year.of(2026));
+          Year.of(2026),
+          null);
 
   /** Die Kopie des Empfaengers an einer gestellten Rechnung — die Firma hiess damals anders. */
   static final Belegempfaenger EMPFAENGER_KOPIE =

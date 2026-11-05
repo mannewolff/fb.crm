@@ -3,6 +3,7 @@ package org.mwolff.fbcrm.angebot.application;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
+import java.time.Month;
 import java.time.Year;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -78,6 +79,13 @@ import org.springframework.transaction.annotation.Transactional;
  * eingereichten Angebotsdatums vorbelegt. Die Vorbelegung gilt nur beim Anlegen: Wer spaeter das
  * Angebotsdatum aendert, verschiebt kein Jahr. Die Regel gilt fuer beide Zielarten gleichermassen,
  * damit ein Angebot, das nach innen und zurueck gestellt wird, sein Jahr wiederfindet.
+ *
+ * <p><b>Der Leistungsmonat ist freiwillig</b> (#483, Kriterien 1 und 2; Plan #484, A4). Am Angebot
+ * an einen Kunden gilt allein der eingereichte Monat: Fehlt er, steht die Position ohne Monat —
+ * auch eine gespeicherte, damit sich ein gewaehlter Monat zuruecksetzen laesst. Eine Vorbelegung
+ * wie beim Jahr gibt es nicht. Die interne Arbeit zeigt keinen Monat: Eine neue Position bekommt
+ * keinen, eine vorhandene behaelt ihren gespeicherten, und ein eingereichter Monat wird dort
+ * uebergangen — so findet ein Angebot, das nach innen und zurueck gestellt wird, ihn wieder.
  *
  * <p><b>Am stornierten Angebot aendert sich nichts</b> (#330, Kriterium 10; Issue #334):
  * Positionen, Titel und Beschreibung bleiben, wie sie zum Storno standen, und die Aenderung weist
@@ -360,7 +368,7 @@ public class AngebotAendernUseCase {
   /*
    * Ein Angebot an einen Kunden braucht alle vier Angaben. Die Ausnahme nennt jede fehlende auf
    * einmal — welche das sind, liest sie selbst aus der Angabe ab. Das Leistungsjahr kommt von der
-   * gespeicherten Position, sofern es eine gibt.
+   * gespeicherten Position, sofern es eine gibt; der Leistungsmonat allein aus der Angabe.
    */
   private static Angebotsposition fuerKunden(
       final Positionsangabe angabe,
@@ -374,6 +382,10 @@ public class AngebotAendernUseCase {
     if (modus == null || menge == null || einheit == null || einzelpreis == null) {
       throw Positionsangaben.fehlendeAngaben(platz, angabe);
     }
+    // Der Monat allein aus der Angabe (Plan #484, A4): Anders als beim Jahr springt weder eine
+    // Vorbelegung noch der gespeicherte Wert ein — nur so laesst sich ein gewaehlter Monat wieder
+    // auf „ohne Monat" zuruecksetzen. Die Grenzen 1 bis 12 prueft die Bean-Validation (A7).
+    final Integer monat = angabe.leistungsmonat();
     return new Angebotsposition(
         angabe.id(),
         angabe.bezeichnung(),
@@ -381,13 +393,15 @@ public class AngebotAendernUseCase {
         menge,
         einheit,
         einzelpreis,
-        leistungsjahr(angabe, gespeichert.get(angabe.id()), vorbelegt));
+        leistungsjahr(angabe, gespeichert.get(angabe.id()), vorbelegt),
+        monat == null ? null : Month.of(monat));
   }
 
   /*
    * Eine neue Position der internen Arbeit: AUFWAND, STUNDE und zweimal 0 (E8). Werte, die nichts
    * behaupten — die Maske zeigt sie bei interner Arbeit nicht, und die vier Spalten bleiben
-   * pflichtig. Das Leistungsjahr folgt der Regel jeder neuen Position.
+   * pflichtig. Das Leistungsjahr folgt der Regel jeder neuen Position; einen Monat bekommt sie
+   * nicht, weil die Maske ihn bei interner Arbeit nicht zeigt (Plan #484, A4).
    */
   private static Angebotsposition neueInterne(final Positionsangabe angabe, final Year vorbelegt) {
     return new Angebotsposition(
@@ -397,14 +411,16 @@ public class AngebotAendernUseCase {
         OHNE_ZAHL,
         Einheit.STUNDE,
         OHNE_ZAHL,
-        leistungsjahr(angabe, null, vorbelegt));
+        leistungsjahr(angabe, null, vorbelegt),
+        null);
   }
 
   /*
    * Eine vorhandene Position der internen Arbeit behaelt ihre gespeicherten vier Werte (Kriterium
    * 8): Nur so findet ein Angebot, das nach innen und zurueck gestellt wird, seine Zahlen wieder.
-   * Dasselbe gilt fuer ihr Leistungsjahr, solange die Angabe keines mitschickt. Aenderbar bleibt
-   * sonst allein die Bezeichnung — mehr zeigt die Maske dort nicht.
+   * Dasselbe gilt fuer ihr Leistungsjahr, solange die Angabe keines mitschickt, und fuer ihren
+   * Leistungsmonat in jedem Fall — ein mitgeschickter Monat wird uebergangen (Plan #484, A4).
+   * Aenderbar bleibt sonst allein die Bezeichnung — mehr zeigt die Maske dort nicht.
    */
   private static Angebotsposition uebernommen(
       final Positionsangabe angabe, final Angebotsposition bisher, final Year vorbelegt) {
@@ -415,7 +431,8 @@ public class AngebotAendernUseCase {
         bisher.menge(),
         bisher.einheit(),
         bisher.einzelpreis(),
-        leistungsjahr(angabe, bisher, vorbelegt));
+        leistungsjahr(angabe, bisher, vorbelegt),
+        bisher.leistungsmonat());
   }
 
   /*

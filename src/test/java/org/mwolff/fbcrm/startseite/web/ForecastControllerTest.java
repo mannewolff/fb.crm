@@ -72,7 +72,8 @@ class ForecastControllerTest {
             new BigDecimal("135.00"),
             Einheit.STUNDE,
             new BigDecimal("60.00"),
-            Year.of(2027));
+            Year.of(2027),
+            null);
     final AngebotMitFirma angebot =
         new AngebotMitFirma(
             new Angebot(

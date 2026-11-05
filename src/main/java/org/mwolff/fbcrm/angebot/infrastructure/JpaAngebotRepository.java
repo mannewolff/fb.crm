@@ -1,5 +1,6 @@
 package org.mwolff.fbcrm.angebot.infrastructure;
 
+import java.time.Month;
 import java.time.Year;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -160,7 +161,8 @@ class JpaAngebotRepository implements AngebotRepository {
         position.menge(),
         position.einheit(),
         position.einzelpreis(),
-        position.leistungsjahr());
+        position.leistungsjahr(),
+        position.leistungsmonat());
     return zeile;
   }
 
@@ -185,6 +187,8 @@ class JpaAngebotRepository implements AngebotRepository {
   }
 
   private static Angebotsposition toDomain(final AngebotPositionEntity zeile) {
+    // NULL in der Spalte heisst „ohne Monat" (Plan #484, A2).
+    final Short monat = zeile.getLeistungsmonat();
     return new Angebotsposition(
         zeile.getId(),
         zeile.getBezeichnung(),
@@ -192,6 +196,7 @@ class JpaAngebotRepository implements AngebotRepository {
         zeile.getMenge(),
         zeile.getEinheit(),
         zeile.getEinzelpreis(),
-        Year.of(zeile.getLeistungsjahr()));
+        Year.of(zeile.getLeistungsjahr()),
+        monat == null ? null : Month.of(monat));
   }
 }

@@ -1,6 +1,7 @@
 package org.mwolff.fbcrm.angebot.web;
 
 import java.math.BigDecimal;
+import java.time.Month;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.fbcrm.angebot.domain.Angebotsposition;
 import org.mwolff.fbcrm.common.Abrechnungsmodus;
@@ -31,6 +32,8 @@ import org.mwolff.fbcrm.common.Einheit;
  * @param einzelpreis Netto-Preis je Einheit
  * @param betrag Netto-Betrag der Position, gerechnet
  * @param leistungsjahr das Jahr der Leistung als Text {@code JJJJ}
+ * @param leistungsmonat der Monat der Leistung als Zahl 1 bis 12, oder {@code null} fuer „ohne
+ *     Monat" (#483; Plan #484, A7)
  */
 public record AngebotPositionResponse(
     @Nullable Long id,
@@ -40,10 +43,12 @@ public record AngebotPositionResponse(
     Einheit einheit,
     BigDecimal einzelpreis,
     BigDecimal betrag,
-    String leistungsjahr) {
+    String leistungsjahr,
+    @Nullable Integer leistungsmonat) {
 
   /** Die Sicht der Oberflaeche auf eine Position. */
   static AngebotPositionResponse of(final Angebotsposition position) {
+    final Month monat = position.leistungsmonat();
     return new AngebotPositionResponse(
         position.id(),
         position.bezeichnung(),
@@ -52,6 +57,7 @@ public record AngebotPositionResponse(
         position.einheit(),
         position.einzelpreis(),
         position.betrag(),
-        position.leistungsjahr().toString());
+        position.leistungsjahr().toString(),
+        monat == null ? null : monat.getValue());
   }
 }
