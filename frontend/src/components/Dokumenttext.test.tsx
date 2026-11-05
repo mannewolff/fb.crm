@@ -10,10 +10,10 @@ describe('Dokumenttext', () => {
     renderMitTheme(
       <Dokumenttext
         bloecke={[
-          { art: 'ueberschrift', ebene: 2, text: 'Sicherung', anker: 'sicherung' },
-          { art: 'text', inhalt: [{ art: 'klartext', text: 'Erst sichern.' }] },
-          { art: 'ueberschrift', ebene: 2, text: 'Wiederherstellung', anker: 'wiederherstellung' },
-          { art: 'text', inhalt: [{ art: 'klartext', text: 'Dann zurueckspielen.' }] },
+          { schluessel: 's1', art: 'ueberschrift', ebene: 2, text: 'Sicherung', anker: 'sicherung' },
+          { schluessel: 's2', art: 'text', inhalt: [{ schluessel: 's3', art: 'klartext', text: 'Erst sichern.' }] },
+          { schluessel: 's4', art: 'ueberschrift', ebene: 2, text: 'Wiederherstellung', anker: 'wiederherstellung' },
+          { schluessel: 's5', art: 'text', inhalt: [{ schluessel: 's6', art: 'klartext', text: 'Dann zurueckspielen.' }] },
         ]}
       />,
     );
@@ -38,9 +38,9 @@ describe('Dokumenttext', () => {
     renderMitTheme(
       <Dokumenttext
         bloecke={[
-          { art: 'ueberschrift', ebene: 2, text: 'Sicherung', anker: 'sicherung' },
-          { art: 'ueberschrift', ebene: 3, text: 'Datenbank', anker: 'datenbank' },
-          { art: 'ueberschrift', ebene: 2, text: 'Wiederherstellung', anker: 'wiederherstellung' },
+          { schluessel: 's7', art: 'ueberschrift', ebene: 2, text: 'Sicherung', anker: 'sicherung' },
+          { schluessel: 's8', art: 'ueberschrift', ebene: 3, text: 'Datenbank', anker: 'datenbank' },
+          { schluessel: 's9', art: 'ueberschrift', ebene: 2, text: 'Wiederherstellung', anker: 'wiederherstellung' },
         ]}
       />,
     );
@@ -57,8 +57,8 @@ describe('Dokumenttext', () => {
     renderMitTheme(
       <Dokumenttext
         bloecke={[
-          { art: 'text', inhalt: [{ art: 'klartext', text: 'Vorab.' }] },
-          { art: 'ueberschrift', ebene: 3, text: 'Datenbank', anker: 'datenbank' },
+          { schluessel: 's10', art: 'text', inhalt: [{ schluessel: 's11', art: 'klartext', text: 'Vorab.' }] },
+          { schluessel: 's12', art: 'ueberschrift', ebene: 3, text: 'Datenbank', anker: 'datenbank' },
         ]}
       />,
     );
@@ -74,8 +74,8 @@ describe('Dokumenttext', () => {
     renderMitTheme(
       <Dokumenttext
         bloecke={[
-          { art: 'text', inhalt: [{ art: 'klartext', text: 'Vorab.' }] },
-          { art: 'ueberschrift', ebene: 2, text: 'Sicherung', anker: 'sicherung' },
+          { schluessel: 's13', art: 'text', inhalt: [{ schluessel: 's14', art: 'klartext', text: 'Vorab.' }] },
+          { schluessel: 's15', art: 'ueberschrift', ebene: 2, text: 'Sicherung', anker: 'sicherung' },
         ]}
       />,
     );
@@ -89,7 +89,7 @@ describe('Dokumenttext', () => {
   it('legt ohne Bloecke vor dem ersten ## keine leere Karte an', () => {
     renderMitTheme(
       <Dokumenttext
-        bloecke={[{ art: 'ueberschrift', ebene: 2, text: 'Sicherung', anker: 'sicherung' }]}
+        bloecke={[{ schluessel: 's16', art: 'ueberschrift', ebene: 2, text: 'Sicherung', anker: 'sicherung' }]}
       />,
     );
 
@@ -101,14 +101,15 @@ describe('Dokumenttext', () => {
       <Dokumenttext
         bloecke={[
           {
+            schluessel: 's36',
             art: 'text',
             inhalt: [
-              { art: 'klartext', text: 'Erst ' },
-              { art: 'betont', text: 'sichern' },
-              { art: 'klartext', text: ', dann ' },
-              { art: 'schnipsel', text: 'docker compose up' },
-              { art: 'klartext', text: ', siehe ' },
-              { art: 'verweis', text: 'Betrieb', ziel: '#betrieb' },
+              { schluessel: 's17', art: 'klartext', text: 'Erst ' },
+              { schluessel: 's18', art: 'betont', text: 'sichern' },
+              { schluessel: 's19', art: 'klartext', text: ', dann ' },
+              { schluessel: 's20', art: 'schnipsel', text: 'docker compose up' },
+              { schluessel: 's21', art: 'klartext', text: ', siehe ' },
+              { schluessel: 's22', art: 'verweis', text: 'Betrieb', ziel: '#betrieb' },
             ],
           },
         ]}
@@ -127,8 +128,9 @@ describe('Dokumenttext', () => {
       <Dokumenttext
         bloecke={[
           {
+            schluessel: 's37',
             art: 'text',
-            inhalt: [{ art: 'verweis', text: 'zur Sicherung', ziel: '#sicherung' }],
+            inhalt: [{ schluessel: 's23', art: 'verweis', text: 'zur Sicherung', ziel: '#sicherung' }],
           },
         ]}
       />,
@@ -145,14 +147,18 @@ describe('Dokumenttext', () => {
       <Dokumenttext
         bloecke={[
           {
+            schluessel: 's38',
             art: 'liste',
             numeriert: false,
             eintraege: [
-              [{ art: 'klartext', text: 'Datenbank' }],
-              [
-                { art: 'klartext', text: 'Dokumente in ' },
-                { art: 'betont', text: 'MinIO' },
-              ],
+              { schluessel: 'e1', inhalt: [{ schluessel: 's24', art: 'klartext', text: 'Datenbank' }] },
+              {
+                schluessel: 'e2',
+                inhalt: [
+                  { schluessel: 's25', art: 'klartext', text: 'Dokumente in ' },
+                  { schluessel: 's26', art: 'betont', text: 'MinIO' },
+                ],
+              },
             ],
           },
         ]}
@@ -172,9 +178,13 @@ describe('Dokumenttext', () => {
       <Dokumenttext
         bloecke={[
           {
+            schluessel: 's39',
             art: 'liste',
             numeriert: true,
-            eintraege: [[{ art: 'klartext', text: 'Sichern' }], [{ art: 'klartext', text: 'Aktualisieren' }]],
+            eintraege: [
+              { schluessel: 'e3', inhalt: [{ schluessel: 's27', art: 'klartext', text: 'Sichern' }] },
+              { schluessel: 'e4', inhalt: [{ schluessel: 's28', art: 'klartext', text: 'Aktualisieren' }] },
+            ],
           },
         ]}
       />,
@@ -187,7 +197,7 @@ describe('Dokumenttext', () => {
 
   it('behaelt im Befehlsblock die Zeilenumbrueche (E5)', () => {
     const befehl = 'cd fb-crm\ngit fetch --tags\ngit checkout v1.2.0';
-    renderMitTheme(<Dokumenttext bloecke={[{ art: 'befehl', inhalt: befehl }]} />);
+    renderMitTheme(<Dokumenttext bloecke={[{ schluessel: 's29', art: 'befehl', inhalt: befehl }]} />);
 
     const block = screen.getByTestId('dokumenttext-befehl');
     expect(block.textContent).toBe(befehl);
@@ -196,7 +206,7 @@ describe('Dokumenttext', () => {
 
   it('zeigt <script> im Fliesstext als Wortlaut und legt keinen Skriptknoten an', () => {
     const bloecke: Block[] = [
-      { art: 'text', inhalt: [{ art: 'klartext', text: '<script>alert(1)</script>' }] },
+      { schluessel: 's30', art: 'text', inhalt: [{ schluessel: 's31', art: 'klartext', text: '<script>alert(1)</script>' }] },
     ];
     renderMitTheme(<Dokumenttext bloecke={bloecke} />);
 
@@ -211,9 +221,9 @@ describe('Dokumenttext', () => {
     renderMitTheme(
       <Dokumenttext
         bloecke={[
-          { art: 'ueberschrift', ebene: 2, text: 'Eins', anker: 'eins' },
-          { art: 'text', inhalt: [{ art: 'klartext', text: 'Zwei' }] },
-          { art: 'befehl', inhalt: 'drei' },
+          { schluessel: 's32', art: 'ueberschrift', ebene: 2, text: 'Eins', anker: 'eins' },
+          { schluessel: 's33', art: 'text', inhalt: [{ schluessel: 's34', art: 'klartext', text: 'Zwei' }] },
+          { schluessel: 's35', art: 'befehl', inhalt: 'drei' },
         ]}
       />,
     );

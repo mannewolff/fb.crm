@@ -17,6 +17,7 @@ const ANTWORT = {
       positionen: [
         {
           angebotId: 9,
+          angebotPositionId: 31,
           firmaName: 'Werkstatt Nord',
           angebotDatum: '2026-08-03',
           angebotTitel: null,
@@ -33,6 +34,7 @@ const ANTWORT = {
       positionen: [
         {
           angebotId: 14,
+          angebotPositionId: 41,
           firmaName: 'IT Bildungshaus',
           angebotDatum: '2026-10-15',
           angebotTitel: 'Java-Grundkurs',
@@ -41,6 +43,7 @@ const ANTWORT = {
         },
         {
           angebotId: 14,
+          angebotPositionId: 42,
           firmaName: 'IT Bildungshaus',
           angebotDatum: '2026-10-15',
           angebotTitel: 'Java-Grundkurs',
@@ -69,6 +72,7 @@ describe('parseForecast', () => {
       positionen: [
         {
           angebotId: 14,
+          angebotPositionId: 41,
           firmaName: 'IT Bildungshaus',
           angebotDatum: '2026-10-15',
           angebotTitel: 'Java-Grundkurs',
@@ -77,6 +81,7 @@ describe('parseForecast', () => {
         },
         {
           angebotId: 14,
+          angebotPositionId: 42,
           firmaName: 'IT Bildungshaus',
           angebotDatum: '2026-10-15',
           angebotTitel: 'Java-Grundkurs',
@@ -134,6 +139,8 @@ describe('parseForecast', () => {
 
   it.each([
     ['die Kennung des Angebots keine Zahl ist', { angebotId: '9' }],
+    ['die Kennung der Angebotsposition fehlt', { angebotPositionId: undefined }],
+    ['die Kennung der Angebotsposition keine Zahl ist', { angebotPositionId: '31' }],
     ['der Name der Firma fehlt', { firmaName: null }],
     ['das Angebotsdatum keine Zeichenkette ist', { angebotDatum: 20260803 }],
     ['der Titel des Angebots weder Text noch null ist', { angebotTitel: 42 }],

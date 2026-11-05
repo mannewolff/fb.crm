@@ -21,6 +21,8 @@ import { inHundertsteln, liste, objekt, text, textOderNull, zahl } from './veren
 export interface Forecastposition {
   /** Kennung des Angebots — der Weg dorthin. */
   readonly angebotId: number;
+  /** Kennung der Angebotsposition — der Schluessel der Zeile (Issue #479). */
+  readonly angebotPositionId: number;
   readonly firmaName: string;
   /** Tag (`YYYY-MM-DD`), wie das Backend ein `LocalDate` liefert. */
   readonly angebotDatum: string;
@@ -54,6 +56,7 @@ function parsePosition(wert: unknown): Forecastposition {
   const zeile = objekt(wert);
   return {
     angebotId: zahl(zeile.angebotId),
+    angebotPositionId: zahl(zeile.angebotPositionId),
     firmaName: text(zeile.firmaName),
     angebotDatum: text(zeile.angebotDatum),
     angebotTitel: textOderNull(zeile.angebotTitel),

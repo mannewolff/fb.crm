@@ -105,6 +105,7 @@ const FORECAST_STAND = {
       positionen: [
         {
           angebotId: 14,
+          angebotPositionId: 41,
           firmaName: 'IT Bildungshaus',
           angebotDatum: '2026-10-15',
           angebotTitel: null,

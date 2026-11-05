@@ -16,19 +16,38 @@
  * **Der Leser verschluckt nie etwas** (E4): Was keiner bekannten Form entspricht — `####`, eine
  * Tabellenzeile, unvollstaendige Auszeichnung —, steht mit seinem Wortlaut im Fliesstext. Er wirft
  * auch nicht: Eine Ausnahme braeche die Ansicht.
+ *
+ * **Jeder Teil traegt einen `schluessel`** (Issue #479), im Dokument eindeutig und aus seiner Stelle
+ * in der Quelle gebildet — die Darstellung nimmt ihn als React-`key` statt des Listenindex:
+ *
+ * - ein Block: die Zeile (ab 1), an der er beginnt, etwa `7`,
+ * - ein Listeneintrag: die Zeile seiner Liste und seine eigene, etwa `7.9`,
+ * - ein Inline-Teil: der Schluessel seines Absatzes oder Eintrags und seine Stelle im Text dort,
+ *   etwa `7/12` oder `7.9/0`.
+ *
+ * Gezaehlt wird in Zeilen, nicht in Zeichen: So liefert eine Quelle mit Windows-Zeilenenden
+ * dieselben Schluessel wie dieselbe mit Unix-Zeilenenden.
  */
 
-export type Inline =
+export type Inline = { readonly schluessel: string } & (
   | { art: 'klartext'; text: string }
   | { art: 'betont'; text: string }
   | { art: 'schnipsel'; text: string }
-  | { art: 'verweis'; text: string; ziel: string };
+  | { art: 'verweis'; text: string; ziel: string }
+);
 
-export type Block =
+/** Ein Eintrag einer Aufzaehlung. */
+export interface Listeneintrag {
+  readonly schluessel: string;
+  inhalt: Inline[];
+}
+
+export type Block = { readonly schluessel: string } & (
   | { art: 'ueberschrift'; ebene: 2 | 3; text: string; anker: string }
   | { art: 'text'; inhalt: Inline[] }
-  | { art: 'liste'; numeriert: boolean; eintraege: Inline[][] }
-  | { art: 'befehl'; inhalt: string };
+  | { art: 'liste'; numeriert: boolean; eintraege: Listeneintrag[] }
+  | { art: 'befehl'; inhalt: string }
+);
 
 export interface Dokument {
   titel: string;
@@ -78,14 +97,20 @@ export function ankerName(text: string, schonBelegt: readonly string[]): string 
 /** Der Stand des Lesers zwischen zwei Zeilen. */
 interface Lesestand {
   readonly zeilen: readonly string[];
-  /** Die naechste noch nicht gelesene Zeile. */
+  /** Die naechste noch nicht gelesene Zeile; zugleich die Nummer (ab 1) der zuletzt gelesenen. */
   i: number;
   readonly bloecke: Block[];
   readonly belegt: string[];
   titel: string;
   // Hoechstens eines von beiden ist offen: Wer das eine beginnt, schliesst vorher das andere.
   absatz: string[];
-  liste: { numeriert: boolean; eintraege: string[] } | null;
+  /** Die Zeile, an der der offene Absatz beginnt. */
+  absatzAb: number;
+  liste: {
+    numeriert: boolean;
+    ab: number;
+    eintraege: { zeile: number; text: string }[];
+  } | null;
 }
 
 export function leseMarkdown(quelle: string): Dokument {
@@ -96,6 +121,7 @@ export function leseMarkdown(quelle: string): Dokument {
     belegt: [],
     titel: '',
     absatz: [],
+    absatzAb: 0,
     liste: null,
   };
   while (stand.i < stand.zeilen.length) {
@@ -122,20 +148,33 @@ function leseZeile(stand: Lesestand, zeile: string): void {
   if (stand.liste !== null) {
     schliesse(stand);
   }
+  if (stand.absatz.length === 0) {
+    stand.absatzAb = stand.i;
+  }
   stand.absatz.push(zeile.trim());
 }
 
 /** Schliesst den offenen Absatz oder die offene Liste ab. */
 function schliesse(stand: Lesestand): void {
   if (stand.absatz.length > 0) {
-    stand.bloecke.push({ art: 'text', inhalt: leseInline(stand.absatz.join(' ')) });
+    const schluessel = String(stand.absatzAb);
+    stand.bloecke.push({
+      schluessel,
+      art: 'text',
+      inhalt: leseInline(stand.absatz.join(' '), schluessel),
+    });
     stand.absatz = [];
   }
   if (stand.liste !== null) {
+    const ab = stand.liste.ab;
     stand.bloecke.push({
+      schluessel: String(ab),
       art: 'liste',
       numeriert: stand.liste.numeriert,
-      eintraege: stand.liste.eintraege.map(leseInline),
+      eintraege: stand.liste.eintraege.map(({ zeile, text }) => {
+        const schluessel = `${String(ab)}.${String(zeile)}`;
+        return { schluessel, inhalt: leseInline(text, schluessel) };
+      }),
     });
     stand.liste = null;
   }
@@ -146,6 +185,7 @@ function leseBefehl(stand: Lesestand, zeile: string): boolean {
     return false;
   }
   schliesse(stand);
+  const schluessel = String(stand.i);
   const inhalt: string[] = [];
   while (stand.i < stand.zeilen.length && !ZAUN_ZU.test(stand.zeilen[stand.i])) {
     inhalt.push(stand.zeilen[stand.i]);
@@ -153,7 +193,7 @@ function leseBefehl(stand: Lesestand, zeile: string): boolean {
   }
   // Ueber den schliessenden Zaun hinweg; ohne ihn steht `i` danach hinter dem Dateiende.
   stand.i += 1;
-  stand.bloecke.push({ art: 'befehl', inhalt: inhalt.join('\n') });
+  stand.bloecke.push({ schluessel, art: 'befehl', inhalt: inhalt.join('\n') });
   return true;
 }
 
@@ -185,7 +225,13 @@ function leseAbschnitt(stand: Lesestand, zeile: string): boolean {
   const text = abschnitt[2].trim();
   const anker = ankerName(text, stand.belegt);
   stand.belegt.push(anker);
-  stand.bloecke.push({ art: 'ueberschrift', ebene: abschnitt[1] === '##' ? 2 : 3, text, anker });
+  stand.bloecke.push({
+    schluessel: String(stand.i),
+    art: 'ueberschrift',
+    ebene: abschnitt[1] === '##' ? 2 : 3,
+    text,
+    anker,
+  });
   return true;
 }
 
@@ -196,14 +242,14 @@ function leseListenzeile(stand: Lesestand, zeile: string): boolean {
     let liste = stand.liste;
     if (liste?.numeriert !== eintrag.numeriert) {
       schliesse(stand);
-      liste = { numeriert: eintrag.numeriert, eintraege: [] };
+      liste = { numeriert: eintrag.numeriert, ab: stand.i, eintraege: [] };
       stand.liste = liste;
     }
-    liste.eintraege.push(eintrag.text);
+    liste.eintraege.push({ zeile: stand.i, text: eintrag.text });
     return true;
   }
   if (stand.liste !== null && FORTSETZUNG.test(zeile)) {
-    stand.liste.eintraege[stand.liste.eintraege.length - 1] += ` ${zeile.trim()}`;
+    stand.liste.eintraege[stand.liste.eintraege.length - 1].text += ` ${zeile.trim()}`;
     return true;
   }
   return false;
@@ -222,18 +268,26 @@ function listenEintrag(zeile: string): { numeriert: boolean; text: string } | nu
 }
 
 interface Treffer {
-  stueck: Inline;
+  /** Der gefundene Teil, noch ohne Schluessel — den vergibt {@link leseInline}. */
+  stueck: OhneSchluessel<Inline>;
   /** Die erste Stelle hinter der Auszeichnung. */
   ende: number;
 }
 
-/** Die Inline-Folge einer Zeile. Unvollstaendige Auszeichnung bleibt Klartext (E4). */
-function leseInline(text: string): Inline[] {
+/** Ein Inline-Teil ohne seinen Schluessel; das Verteilen ueber die Vereinigung erhaelt die Arten. */
+type OhneSchluessel<T> = T extends unknown ? Omit<T, 'schluessel'> : never;
+
+/**
+ * Die Inline-Folge einer Zeile. Unvollstaendige Auszeichnung bleibt Klartext (E4). `traeger` ist
+ * der Schluessel des Absatzes oder Eintrags; jeder Teil bekommt dazu seine Stelle im Text.
+ */
+function leseInline(text: string, traeger: string): Inline[] {
   const folge: Inline[] = [];
   let klartext = '';
+  let klartextAb = 0;
   const gibKlartext = (): void => {
     if (klartext !== '') {
-      folge.push({ art: 'klartext', text: klartext });
+      folge.push({ schluessel: `${traeger}/${String(klartextAb)}`, art: 'klartext', text: klartext });
       klartext = '';
     }
   };
@@ -242,11 +296,14 @@ function leseInline(text: string): Inline[] {
   while (i < text.length) {
     const treffer = schnipselAb(text, i) ?? betontAb(text, i) ?? verweisAb(text, i);
     if (treffer === null) {
+      if (klartext === '') {
+        klartextAb = i;
+      }
       klartext += text[i];
       i += 1;
     } else {
       gibKlartext();
-      folge.push(treffer.stueck);
+      folge.push({ schluessel: `${traeger}/${String(i)}`, ...treffer.stueck });
       i = treffer.ende;
     }
   }

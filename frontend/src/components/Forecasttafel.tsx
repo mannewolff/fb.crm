@@ -147,10 +147,10 @@ function Positionen({ jahr }: { readonly jahr: Forecastjahr }) {
             </Box>
           </Box>
           <Box component="tbody">
-            {jahr.positionen.map((position, stelle) => (
-              // Eine Position traegt keine eigene Kennung in der Antwort, und die Liste ist fest:
-              // Sie wird nur ersetzt, nie umsortiert.
-              <Positionszeile key={stelle} position={position} />
+            {jahr.positionen.map((position) => (
+              // Die Kennung der Angebotsposition ist eindeutig, auch wo zwei Positionen eines
+              // Angebots dieselbe Bezeichnung tragen (Issue #479).
+              <Positionszeile key={position.angebotPositionId} position={position} />
             ))}
           </Box>
         </Box>

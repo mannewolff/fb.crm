@@ -19,9 +19,10 @@ import org.mwolff.fbcrm.startseite.application.Forecastposition;
  * <p><b>Das Jahr ist Text</b> {@code JJJJ} (Plan #303, E9): Ein {@code Year} schriebe Jackson als
  * Zahl, und die Startseite fuehrt Jahre schon in {@link StartseiteResponse} als Text.
  *
- * <p><b>Von Angebot und Position kommen sechs Angaben mit, nicht beide ganz</b> — aus demselben
+ * <p><b>Von Angebot und Position kommen sieben Angaben mit, nicht beide ganz</b> — aus demselben
  * Grund wie bei {@link StartseiteResponse.Angebotszeile}: Die Zeile zeigt Firma, Angebot, Position
- * und Restbetrag, und die Kennung ist der Weg zum Angebot.
+ * und Restbetrag, die Kennung des Angebots ist der Weg dorthin, und die Kennung der Position ist
+ * der Schluessel der Zeile in der Ansicht (Issue #479).
  *
  * @param jahre die Jahre mit mindestens einer offenen Position, aeltestes zuerst; leer ohne jede
  *     offene Position
@@ -64,6 +65,8 @@ public record ForecastResponse(List<Jahreszeile> jahre) {
    * Eine offene Position unter einem Jahr (#302, Kriterium 5).
    *
    * @param angebotId Kennung des Angebots — der Weg dorthin
+   * @param angebotPositionId Kennung der Angebotsposition — eindeutig, auch wo zwei Positionen
+   *     eines Angebots dieselbe Bezeichnung tragen (Issue #479)
    * @param firmaName Name der Firma, an die das Angebot geht
    * @param angebotDatum Datum des Angebots
    * @param angebotTitel Titel des Angebots, oder {@code null} fuer ein Angebot von vor #316 — die
@@ -73,6 +76,7 @@ public record ForecastResponse(List<Jahreszeile> jahre) {
    */
   public record Positionszeile(
       long angebotId,
+      long angebotPositionId,
       String firmaName,
       LocalDate angebotDatum,
       @Nullable String angebotTitel,
@@ -83,6 +87,7 @@ public record ForecastResponse(List<Jahreszeile> jahre) {
       final AngebotMitFirma zeile = position.angebot();
       return new Positionszeile(
           zeile.angebot().requireId(),
+          position.position().requireId(),
           zeile.firmaName(),
           zeile.angebot().angebotDatum(),
           zeile.angebot().titel(),

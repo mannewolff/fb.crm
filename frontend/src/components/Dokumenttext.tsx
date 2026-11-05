@@ -59,16 +59,16 @@ export interface DokumenttextProps {
 function Zeile({ inhalt }: { readonly inhalt: readonly Inline[] }) {
   return (
     <>
-      {inhalt.map((teil, index) => {
+      {inhalt.map((teil) => {
         switch (teil.art) {
           case 'klartext':
             return teil.text;
           case 'betont':
-            return <strong key={index}>{teil.text}</strong>;
+            return <strong key={teil.schluessel}>{teil.text}</strong>;
           case 'schnipsel':
             return (
               <Box
-                key={index}
+                key={teil.schluessel}
                 component="code"
                 sx={(theme) => ({
                   // `code` bringt im Browser eine Monoschrift mit; hier gilt die eine Schrift (E5).
@@ -84,7 +84,7 @@ function Zeile({ inhalt }: { readonly inhalt: readonly Inline[] }) {
             );
           case 'verweis':
             return (
-              <Link key={index} href={teil.ziel} underline="hover">
+              <Link key={teil.schluessel} href={teil.ziel} underline="hover">
                 {teil.text}
               </Link>
             );
@@ -123,9 +123,9 @@ function Baustein({ block, erster }: { readonly block: Block; readonly erster: b
           component={block.numeriert ? 'ol' : 'ul'}
           sx={(theme) => ({ ...theme.typography.body1, margin: '0 0 12px', paddingLeft: '22px' })}
         >
-          {block.eintraege.map((eintrag, index) => (
-            <li key={index}>
-              <Zeile inhalt={eintrag} />
+          {block.eintraege.map((eintrag) => (
+            <li key={eintrag.schluessel}>
+              <Zeile inhalt={eintrag.inhalt} />
             </li>
           ))}
         </Box>
@@ -171,7 +171,7 @@ export default function Dokumenttext({ bloecke }: DokumenttextProps) {
               sx={{ maxWidth: LESEBREITE, '& > :last-child': { marginBottom: 0 } }}
             >
               {abschnitt.bloecke.map((block, nummer) => (
-                <Baustein key={nummer} block={block} erster={nummer === 0} />
+                <Baustein key={block.schluessel} block={block} erster={nummer === 0} />
               ))}
             </Box>
           </Karte>
