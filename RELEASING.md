@@ -44,6 +44,35 @@ lightweight, damit `git push --follow-tags` ihn mitnimmt — kein separater Tag-
 nächsten Release wiederum die Range-Untergrenze bildet. Ein `push main` (Patch-Bump) erzeugt
 bewusst weder Changelog-Block noch Tag.
 
+## rollback production
+
+Der Rückweg einer ausgelieferten Version auf die Version davor. Zurück heißt immer: Marke
+auschecken **und** die Sicherung von vor dem Update einspielen. Flyway migriert nur vorwärts —
+eine ältere Version bricht beim Start an einem neueren Schema mit unbekannter Migration ab.
+Die Einzelbefehle stehen in [`docs/betrieb.md`](docs/betrieb.md), Abschnitt „Wiederherstellung";
+hier steht nur die Reihenfolge:
+
+1. **Zielversion bestimmen** — die Marke `vX.Y.Z` der Version vor dem Update, vermerkt in
+   `sicherung/version.txt` bzw. in „Aktualisierung", Schritt 1.
+2. **Anwendung anhalten:**
+   ```
+   docker compose stop caddy fbcrm-api
+   ```
+3. **Marke auschecken:**
+   ```
+   git checkout vX.Y.Z
+   ```
+4. **Sicherung von vor dem Update einspielen** nach „Wiederherstellung", Schritte 2 bis 6. Auf
+   demselben Rechner tragen die Bänder `postgres_data` und `minio_data` noch das neuere Schema;
+   sie werden vor Schritt 4 dort mit `docker compose down -v` entfernt — erst, wenn die Sicherung
+   geprüft vorliegt, denn danach ist sie der einzige Datenstand.
+5. **Neu bauen und starten:**
+   ```
+   docker compose up -d --build
+   ```
+   Hinter Traefik mit `docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build`.
+6. **Prüfen** nach „Wiederherstellung", Schritt 8.
+
 ## Major-Version erhöhen
 
 **Nur auf Mannes explizite Anordnung** — er tippt im Chat genau die Phrase
