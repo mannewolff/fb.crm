@@ -118,10 +118,16 @@ public class ArbeitszeitMonatUseCase {
 
   private List<Zeiteintrag> eintraege(
       final Personenauswahl auswahl, final LocalDate von, final LocalDate bis) {
+    /*
+     * Pattern-Variable und nicht das zerlegende Record-Pattern (Sonar java:S6878, als Ausnahme in
+     * sonar-project.properties begruendet, Issue #480): javac legt fuer die Zerlegung einen
+     * Rueckfall in den typeSwitch (`iconst_1; ifeq`), der nie genommen wird. JaCoCo zaehlt ihn als
+     * Zweig, und die Schwelle von 100 % Zweigabdeckung waere damit unerreichbar.
+     */
     return switch (auswahl) {
       case Personenauswahl.Alle _ -> zeiten.findImZeitraum(von, bis);
-      case Personenauswahl.Einzeln(final long accountId) ->
-          zeiten.findImZeitraumFuerKonto(von, bis, accountId);
+      case Personenauswahl.Einzeln einzeln ->
+          zeiten.findImZeitraumFuerKonto(von, bis, einzeln.accountId());
     };
   }
 

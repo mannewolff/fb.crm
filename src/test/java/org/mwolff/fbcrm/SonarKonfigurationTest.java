@@ -58,7 +58,8 @@ class SonarKonfigurationTest {
 
   /**
    * Die bewusst zugelassenen Ausnahmen — genau diese und keine weitere (Plan #238, A2 und A3, dazu
-   * die Namensregeln nach Entscheidung Manne vom 2026-11-05).
+   * die Namensregeln nach Entscheidung Manne vom 2026-11-05 und die beiden Record-Pattern-Stellen
+   * aus Issue #480).
    *
    * <p>Je Einzelbefund trifft eine Regel genau eine Datei; nur die {@link #NAMENSREGEL_AUSNAHMEN}
    * gelten fuer das ganze Frontend. Wer hier etwas ergaenzt, hat sich fuer eine Ausnahme
@@ -70,7 +71,11 @@ class SonarKonfigurationTest {
           "java:S4502 an src/main/java/org/mwolff/fbcrm/auth/web/SecurityConfig.java",
           "java:S5693 an src/main/resources/application.yml",
           "typescript:S6754 an frontend/src/**/*",
-          "typescript:S7718 an frontend/src/**/*");
+          "typescript:S7718 an frontend/src/**/*",
+          "java:S6878 an"
+              + " src/main/java/org/mwolff/fbcrm/arbeitszeit/application/Personenauskunft.java",
+          "java:S6878 an"
+              + " src/main/java/org/mwolff/fbcrm/arbeitszeit/application/ArbeitszeitMonatUseCase.java");
 
   private static String lies(final String datei) throws IOException {
     return Files.readString(WURZEL.resolve(datei), StandardCharsets.UTF_8);
