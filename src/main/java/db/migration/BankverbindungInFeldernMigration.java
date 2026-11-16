@@ -5,9 +5,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
-import org.flywaydb.core.api.MigrationVersion;
 import org.flywaydb.core.api.migration.Context;
-import org.flywaydb.core.api.migration.JavaMigration;
 import org.mwolff.fbcrm.common.Bankverbindungszerlegung;
 import org.mwolff.fbcrm.common.Iban;
 
@@ -22,31 +20,14 @@ import org.mwolff.fbcrm.common.Iban;
  * jedem Fall unveraendert: Sie ist die „bisherige Bankverbindung", die die Maske zum Abschreiben
  * zeigt (E13).
  *
- * <p>Wie {@code LandAlsKuerzelMigration} implementiert sie {@link JavaMigration} direkt und
- * erweitert nicht {@code BaseJavaMigration}: Deren Konstruktor verlangt einen Klassennamen der Form
- * {@code V38__…}, den die Checkstyle-Regel {@code TypeName} abweist.
+ * <p>Wie {@code LandAlsKuerzelMigration} erweitert sie {@link EigeneJavaMigration}, die den Rahmen
+ * aus Version, Beschreibung, Pruefsumme und Transaktion traegt.
  */
-public class BankverbindungInFeldernMigration implements JavaMigration {
+public class BankverbindungInFeldernMigration extends EigeneJavaMigration {
 
-  @Override
-  public MigrationVersion getVersion() {
-    return MigrationVersion.fromVersion("38");
-  }
-
-  @Override
-  public String getDescription() {
-    return "bankverbindung in feldern";
-  }
-
-  /** Ohne Pruefsumme, wie bei {@code BaseJavaMigration}: Flyway prueft den Code nicht nach. */
-  @Override
-  public Integer getChecksum() {
-    return null;
-  }
-
-  @Override
-  public boolean canExecuteInTransaction() {
-    return true;
+  /** Version 38, Beschreibung wie in der Historientabelle der bereits migrierten Datenbanken. */
+  public BankverbindungInFeldernMigration() {
+    super("38", "bankverbindung in feldern");
   }
 
   @Override

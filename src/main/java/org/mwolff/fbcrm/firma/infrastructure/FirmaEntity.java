@@ -8,11 +8,10 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
-import jakarta.persistence.Version;
-import java.time.Instant;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.fbcrm.common.Anschrift;
 import org.mwolff.fbcrm.common.infrastructure.AnschriftSpalten;
+import org.mwolff.fbcrm.common.infrastructure.GefuehrteZeile;
 import org.mwolff.fbcrm.firma.domain.Firma;
 
 /**
@@ -21,7 +20,7 @@ import org.mwolff.fbcrm.firma.domain.Firma;
  */
 @Entity
 @Table(name = "firma")
-class FirmaEntity {
+class FirmaEntity extends GefuehrteZeile {
 
   @Id
   @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -49,32 +48,13 @@ class FirmaEntity {
   @Column(name = "aktiv", nullable = false)
   private boolean aktiv;
 
-  @Column(name = "created_at", nullable = false)
-  private Instant createdAt;
-
-  @Column(name = "updated_at", nullable = false)
-  private Instant updatedAt;
-
-  /*
-   * Der Stand der Zeile, gefuehrt von Hibernate (Plan #415, E1): Jedes Schreiben erhoeht ihn, und
-   * ein UPDATE mit einem anderen Stand als dem gelesenen trifft keine Zeile und scheitert. Er kommt
-   * aus dem Fachobjekt mit, damit eine Zeile, die auf einem alten Stand beruht, nicht still
-   * geschrieben wird. Ein long und kein Long: Ob die Zeile neu ist, entscheidet so weiter die
-   * Kennung, und eine neue Zeile beginnt bei 0 wie die Vorbelegung der Spalte (V33).
-   */
-  @Version
-  @Column(name = "version", nullable = false)
-  private long version;
-
-  @Column(name = "geaendert_von")
-  private @Nullable Long geaendertVon;
-
   /*
    * JPA verlangt einen parameterlosen Konstruktor und fuellt die Felder danach selbst; NullAway
    * sieht diesen Weg nicht und meldete sonst nicht initialisierte Felder.
    */
   @SuppressWarnings("NullAway.Init")
   protected FirmaEntity() {
+    super();
     // Von Hibernate benutzt.
   }
 
@@ -94,16 +74,13 @@ class FirmaEntity {
   }
 
   private FirmaEntity(final Firma firma) {
+    super(firma.createdAt(), firma.updatedAt(), firma.version(), firma.geaendertVon());
     this.id = firma.id();
     this.name = firma.name();
     this.anschrift = AnschriftSpalten.aus(firma.anschrift());
     this.steuernummer = firma.steuernummer();
     this.umsatzsteuerId = firma.umsatzsteuerId();
     this.aktiv = firma.aktiv();
-    this.createdAt = firma.createdAt();
-    this.updatedAt = firma.updatedAt();
-    this.version = firma.version();
-    this.geaendertVon = firma.geaendertVon();
   }
 
   @Nullable Long getId() {
@@ -128,21 +105,5 @@ class FirmaEntity {
 
   boolean isAktiv() {
     return aktiv;
-  }
-
-  Instant getCreatedAt() {
-    return createdAt;
-  }
-
-  Instant getUpdatedAt() {
-    return updatedAt;
-  }
-
-  long getVersion() {
-    return version;
-  }
-
-  @Nullable Long getGeaendertVon() {
-    return geaendertVon;
   }
 }

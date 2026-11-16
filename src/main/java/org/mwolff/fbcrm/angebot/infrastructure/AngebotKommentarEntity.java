@@ -6,10 +6,9 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
-import jakarta.persistence.Version;
-import java.time.Instant;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.fbcrm.angebot.domain.Angebotskommentar;
+import org.mwolff.fbcrm.common.infrastructure.LoeschbareZeile;
 
 /**
  * Die Zeile der Tabelle {@code angebot_kommentar} aus {@code V12__angebot_kommentar.sql}, mit
@@ -28,7 +27,7 @@ import org.mwolff.fbcrm.angebot.domain.Angebotskommentar;
  */
 @Entity
 @Table(name = "angebot_kommentar")
-class AngebotKommentarEntity {
+class AngebotKommentarEntity extends LoeschbareZeile {
 
   @Id
   @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -43,51 +42,29 @@ class AngebotKommentarEntity {
   @Column(name = "text", nullable = false, columnDefinition = "text")
   private String text;
 
-  @Column(name = "created_at", nullable = false)
-  private Instant createdAt;
-
-  @Column(name = "updated_at", nullable = false)
-  private Instant updatedAt;
-
-  /*
-   * Der Stand der Zeile, gefuehrt von Hibernate (Plan #415, E1, E8) — wie in AngebotEntity: Jedes
-   * Schreiben erhoeht ihn, und ein UPDATE auf einem anderen Stand als dem gelesenen scheitert. Ein
-   * long und kein Long, damit weiter die Kennung entscheidet, ob die Zeile neu ist.
-   */
-  @Version
-  @Column(name = "version", nullable = false)
-  private long version;
-
-  @Column(name = "geaendert_von")
-  private @Nullable Long geaendertVon;
-
-  @Column(name = "geloescht_am")
-  private @Nullable Instant geloeschtAm;
-
-  @Column(name = "geloescht_von")
-  private @Nullable Long geloeschtVon;
-
   /*
    * JPA verlangt einen parameterlosen Konstruktor und fuellt die Felder danach selbst; NullAway
    * sieht diesen Weg nicht und meldete sonst nicht initialisierte Felder.
    */
   @SuppressWarnings("NullAway.Init")
   protected AngebotKommentarEntity() {
+    super();
     // Von Hibernate benutzt.
   }
 
   /** Die Zeile zu einem Kommentar, mit allen Feldern. */
   AngebotKommentarEntity(final Angebotskommentar kommentar) {
+    super(
+        kommentar.createdAt(),
+        kommentar.updatedAt(),
+        kommentar.version(),
+        kommentar.geaendertVon(),
+        kommentar.geloeschtAm(),
+        kommentar.geloeschtVon());
     this.id = kommentar.id();
     this.angebotId = kommentar.angebotId();
     this.verfasserId = kommentar.verfasserId();
     this.text = kommentar.text();
-    this.createdAt = kommentar.createdAt();
-    this.updatedAt = kommentar.updatedAt();
-    this.version = kommentar.version();
-    this.geaendertVon = kommentar.geaendertVon();
-    this.geloeschtAm = kommentar.geloeschtAm();
-    this.geloeschtVon = kommentar.geloeschtVon();
   }
 
   @Nullable Long getId() {
@@ -104,29 +81,5 @@ class AngebotKommentarEntity {
 
   String getText() {
     return text;
-  }
-
-  Instant getCreatedAt() {
-    return createdAt;
-  }
-
-  Instant getUpdatedAt() {
-    return updatedAt;
-  }
-
-  long getVersion() {
-    return version;
-  }
-
-  @Nullable Long getGeaendertVon() {
-    return geaendertVon;
-  }
-
-  @Nullable Instant getGeloeschtAm() {
-    return geloeschtAm;
-  }
-
-  @Nullable Long getGeloeschtVon() {
-    return geloeschtVon;
   }
 }

@@ -6,12 +6,11 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
-import jakarta.persistence.Version;
-import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.fbcrm.arbeitszeit.domain.Zeiteintrag;
+import org.mwolff.fbcrm.common.infrastructure.LoeschbareZeile;
 
 /**
  * Die Zeile der Tabelle {@code arbeitszeit} aus {@code V19__arbeitszeit.sql}, ergaenzt um V32, um
@@ -30,7 +29,7 @@ import org.mwolff.fbcrm.arbeitszeit.domain.Zeiteintrag;
  */
 @Entity
 @Table(name = "arbeitszeit")
-class ZeiteintragEntity {
+class ZeiteintragEntity extends LoeschbareZeile {
 
   @Id
   @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -51,36 +50,13 @@ class ZeiteintragEntity {
   @Column(name = "bis", nullable = false)
   private LocalTime bis;
 
-  @Column(name = "created_at", nullable = false)
-  private Instant createdAt;
-
-  @Column(name = "updated_at", nullable = false)
-  private Instant updatedAt;
-
-  /*
-   * Der Stand der Zeile, gefuehrt von Hibernate (Plan #415, E1) — wie in AngebotKommentarEntity:
-   * Jedes Schreiben erhoeht ihn, und ein UPDATE auf einem anderen Stand als dem gelesenen
-   * scheitert. Ein long und kein Long, damit weiter die Kennung entscheidet, ob die Zeile neu ist.
-   */
-  @Version
-  @Column(name = "version", nullable = false)
-  private long version;
-
-  @Column(name = "geaendert_von")
-  private @Nullable Long geaendertVon;
-
-  @Column(name = "geloescht_am")
-  private @Nullable Instant geloeschtAm;
-
-  @Column(name = "geloescht_von")
-  private @Nullable Long geloeschtVon;
-
   /*
    * JPA verlangt einen parameterlosen Konstruktor und fuellt die Felder danach selbst; NullAway
    * sieht diesen Weg nicht und meldete sonst nicht initialisierte Felder.
    */
   @SuppressWarnings("NullAway.Init")
   protected ZeiteintragEntity() {
+    super();
     // Von Hibernate benutzt.
   }
 
@@ -102,18 +78,19 @@ class ZeiteintragEntity {
   }
 
   private ZeiteintragEntity(final Zeiteintrag eintrag) {
+    super(
+        eintrag.createdAt(),
+        eintrag.updatedAt(),
+        eintrag.version(),
+        eintrag.geaendertVon(),
+        eintrag.geloeschtAm(),
+        eintrag.geloeschtVon());
     this.id = eintrag.id();
     this.accountId = eintrag.accountId();
     this.angebotPositionId = eintrag.angebotPositionId();
     this.tag = eintrag.tag();
     this.von = eintrag.von();
     this.bis = eintrag.bis();
-    this.createdAt = eintrag.createdAt();
-    this.updatedAt = eintrag.updatedAt();
-    this.version = eintrag.version();
-    this.geaendertVon = eintrag.geaendertVon();
-    this.geloeschtAm = eintrag.geloeschtAm();
-    this.geloeschtVon = eintrag.geloeschtVon();
   }
 
   @Nullable Long getId() {
@@ -138,29 +115,5 @@ class ZeiteintragEntity {
 
   LocalTime getBis() {
     return bis;
-  }
-
-  Instant getCreatedAt() {
-    return createdAt;
-  }
-
-  Instant getUpdatedAt() {
-    return updatedAt;
-  }
-
-  long getVersion() {
-    return version;
-  }
-
-  @Nullable Long getGeaendertVon() {
-    return geaendertVon;
-  }
-
-  @Nullable Instant getGeloeschtAm() {
-    return geloeschtAm;
-  }
-
-  @Nullable Long getGeloeschtVon() {
-    return geloeschtVon;
   }
 }

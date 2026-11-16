@@ -8,12 +8,11 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
-import jakarta.persistence.Version;
-import java.time.Instant;
 import java.time.LocalDate;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.fbcrm.angebot.domain.Angebot;
 import org.mwolff.fbcrm.angebot.domain.Angebotsstatus;
+import org.mwolff.fbcrm.common.infrastructure.GefuehrteZeile;
 
 /**
  * Die Zeile der Tabelle {@code angebot} nach {@code V25__angebot_storno.sql} und {@code
@@ -39,7 +38,7 @@ import org.mwolff.fbcrm.angebot.domain.Angebotsstatus;
  */
 @Entity
 @Table(name = "angebot")
-class AngebotEntity {
+class AngebotEntity extends GefuehrteZeile {
 
   @Id
   @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -73,32 +72,13 @@ class AngebotEntity {
   @Column(name = "leistungsbeschreibung", columnDefinition = "text")
   private @Nullable String beschreibung;
 
-  @Column(name = "created_at", nullable = false)
-  private Instant createdAt;
-
-  @Column(name = "updated_at", nullable = false)
-  private Instant updatedAt;
-
-  /*
-   * Der Stand der Zeile, gefuehrt von Hibernate (Plan #415, E1, E9): Jedes Schreiben erhoeht ihn,
-   * und ein UPDATE mit einem anderen Stand als dem gelesenen trifft keine Zeile und scheitert. Er
-   * kommt aus dem Fachobjekt mit, damit eine Zeile, die auf einem alten Stand beruht, nicht still
-   * geschrieben wird. Ein long und kein Long: Ob die Zeile neu ist, entscheidet so weiter die
-   * Kennung, und ein neues Angebot beginnt bei 0 wie die Vorbelegung der Spalte (V33).
-   */
-  @Version
-  @Column(name = "version", nullable = false)
-  private long version;
-
-  @Column(name = "geaendert_von")
-  private @Nullable Long geaendertVon;
-
   /*
    * JPA verlangt einen parameterlosen Konstruktor und fuellt die Felder danach selbst; NullAway
    * sieht diesen Weg nicht und meldete sonst nicht initialisierte Felder.
    */
   @SuppressWarnings("NullAway.Init")
   protected AngebotEntity() {
+    super();
     // Von Hibernate benutzt.
   }
 
@@ -119,6 +99,7 @@ class AngebotEntity {
   }
 
   private AngebotEntity(final Angebot angebot) {
+    super(angebot.createdAt(), angebot.updatedAt(), angebot.version(), angebot.geaendertVon());
     this.id = angebot.id();
     this.firmaId = angebot.firmaId();
     this.ansprechpartnerId = angebot.ansprechpartnerId();
@@ -129,10 +110,6 @@ class AngebotEntity {
     this.angebotDatum = angebot.angebotDatum();
     this.titel = angebot.titel();
     this.beschreibung = angebot.beschreibung();
-    this.createdAt = angebot.createdAt();
-    this.updatedAt = angebot.updatedAt();
-    this.version = angebot.version();
-    this.geaendertVon = angebot.geaendertVon();
   }
 
   @Nullable Long getId() {
@@ -173,21 +150,5 @@ class AngebotEntity {
 
   @Nullable String getBeschreibung() {
     return beschreibung;
-  }
-
-  Instant getCreatedAt() {
-    return createdAt;
-  }
-
-  Instant getUpdatedAt() {
-    return updatedAt;
-  }
-
-  long getVersion() {
-    return version;
-  }
-
-  @Nullable Long getGeaendertVon() {
-    return geaendertVon;
   }
 }
