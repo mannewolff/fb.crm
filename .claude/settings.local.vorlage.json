@@ -2,6 +2,7 @@
   "required": [
     "env.DOCKER_HOST",
     "env.TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE",
-    "permissions.additionalDirectories"
+    "permissions.additionalDirectories",
+    "permissions.allow"
   ]
 }

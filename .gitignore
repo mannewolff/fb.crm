@@ -32,3 +32,5 @@ doctor.sh
 runner.sh
 update-all.sh
 update.sh
+# claude-workflow-kit (Issue #1854): Skripte im Projektordner, vom Installer erzeugt.
+/pacer.sh
