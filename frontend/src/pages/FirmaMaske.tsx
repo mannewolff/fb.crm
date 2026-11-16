@@ -11,13 +11,12 @@ import type { Firma } from '../api/firmen';
 import { laenderLaden } from '../api/laender';
 import type { Land } from '../api/laender';
 import type { FieldErrors } from '../api/client';
-import EigeneEingaben from '../components/EigeneEingaben';
 import type { EigeneEingabe } from '../components/EigeneEingaben';
 import { useKopfPfad } from '../components/KopfPfad';
 import type { PfadVerweis } from '../components/KopfPfad';
 import AnschriftFelder from '../components/AnschriftFelder';
 import Karte from '../components/Karte';
-import Konfliktmeldung from '../components/Konfliktmeldung';
+import Maskenmeldungen from '../components/Maskenmeldungen';
 import KupferTaste from '../components/KupferTaste';
 import WeicheTaste from '../components/WeicheTaste';
 import { feldMeldungen, istBearbeitungskonflikt, nichtGefunden } from '../lib/apifehler';
@@ -342,24 +341,23 @@ export default function FirmaMaske() {
             }}
             sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}
           >
-            {fehler === null ? null : <Alert severity="error">{fehler}</Alert>}
-            {kennung === null ? null : (
-              <Konfliktmeldung
-                ursache={abweisung}
-                onNeuLaden={() => {
-                  void neuLaden(kennung);
-                }}
-                uebersicht={UEBERSICHT}
-              />
-            )}
-            {eigene === null ? null : (
-              <EigeneEingaben
-                werte={eigene}
-                onVerwerfen={() => {
-                  setzeEigene(null);
-                }}
-              />
-            )}
+            <Maskenmeldungen
+              fehler={fehler}
+              abweisung={abweisung}
+              // Eine neue Firma hat noch keinen Stand auf dem Server, den „Neu laden" holen koennte.
+              onNeuLaden={
+                kennung === null
+                  ? null
+                  : () => {
+                      void neuLaden(kennung);
+                    }
+              }
+              uebersicht={UEBERSICHT}
+              eigene={eigene}
+              onVerwerfen={() => {
+                setzeEigene(null);
+              }}
+            />
             <Eingabe
               label="Name"
               feld="name"

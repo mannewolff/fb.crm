@@ -11,19 +11,18 @@ import {
   rechnungseinstellungenPflegen,
 } from '../api/rechnungseinstellungen';
 import type { Rechnungseinstellungen } from '../api/rechnungseinstellungen';
-import EigeneEingaben from '../components/EigeneEingaben';
 import type { EigeneEingabe } from '../components/EigeneEingaben';
 import Karte from '../components/Karte';
-import Konfliktmeldung from '../components/Konfliktmeldung';
+import Maskenmeldungen from '../components/Maskenmeldungen';
 import { useKopfPfad } from '../components/KopfPfad';
 import type { PfadVerweis } from '../components/KopfPfad';
 import { useRechte } from '../auth/rechte';
 import KupferTaste from '../components/KupferTaste';
 import WeicheTaste from '../components/WeicheTaste';
-import { feldMeldungen, istBearbeitungskonflikt } from '../lib/apifehler';
 import { meldungAm } from '../lib/feldmeldung';
 import { dezimal, hundertstel } from '../lib/geld';
 import { istGueltigesMuster, rechnungsnummer } from '../lib/nummernmuster';
+import { speicherabweisung } from '../lib/speicherabweisung';
 import { ABSTAND_BUEHNE } from '../theme';
 
 /**
@@ -288,15 +287,12 @@ export default function AdministrationPage() {
       setzeVersion(gesichert.version);
       setzeErfolg(true);
     } catch (ursache) {
-      const felder = feldMeldungen(ursache);
-      if (istBearbeitungskonflikt(ursache)) {
-        // Die Eingaben bleiben stehen; den Weg weiter zeigt die Konfliktmeldung (Kriterium 3).
-        setzeAbweisung(ursache);
-      } else if (Object.keys(felder).length > 0) {
-        setzeFeldFehler(felder);
-      } else {
-        setzeFehler(AUSFALL_SPEICHERN);
-      }
+      // Bei einem Konflikt bleiben die Eingaben stehen; den Weg weiter zeigt die Konfliktmeldung
+      // (Kriterium 3).
+      const abgewiesen = speicherabweisung(ursache, AUSFALL_SPEICHERN);
+      setzeAbweisung(abgewiesen.abweisung);
+      setzeFeldFehler(abgewiesen.feldFehler);
+      setzeFehler(abgewiesen.fehler);
     } finally {
       setzeLaeuft(false);
     }
@@ -377,23 +373,19 @@ export default function AdministrationPage() {
             }}
             sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}
           >
-            {fehler === null ? null : <Alert severity="error">{fehler}</Alert>}
-            {erfolg ? <Alert severity="success">{GESPEICHERT}</Alert> : null}
-            <Konfliktmeldung
-              ursache={abweisung}
+            <Maskenmeldungen
+              fehler={fehler}
+              erfolg={erfolg ? GESPEICHERT : null}
+              abweisung={abweisung}
               onNeuLaden={() => {
                 void neuLaden();
               }}
               uebersicht={UEBERSICHT}
+              eigene={eigene}
+              onVerwerfen={() => {
+                setzeEigene(null);
+              }}
             />
-            {eigene === null ? null : (
-              <EigeneEingaben
-                werte={eigene}
-                onVerwerfen={() => {
-                  setzeEigene(null);
-                }}
-              />
-            )}
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
               <TextField
                 label={BESCHRIFTUNG.nummerMuster}
