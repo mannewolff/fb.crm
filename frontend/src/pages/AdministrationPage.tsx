@@ -13,7 +13,7 @@ import {
 import type { Rechnungseinstellungen } from '../api/rechnungseinstellungen';
 import type { EigeneEingabe } from '../components/EigeneEingaben';
 import Karte from '../components/Karte';
-import Maskenmeldungen from '../components/Maskenmeldungen';
+import Maskenformular from '../components/Maskenformular';
 import { useKopfPfad } from '../components/KopfPfad';
 import type { PfadVerweis } from '../components/KopfPfad';
 import { useRechte } from '../auth/rechte';
@@ -364,28 +364,23 @@ export default function AdministrationPage() {
       </Typography>
       <Karte titel="Rechnung">
         {stand === 'bereit' ? (
-          <Box
-            component="form"
-            noValidate
+          <Maskenformular
             onSubmit={(ereignis: FormEvent<HTMLFormElement>) => {
               ereignis.preventDefault();
               void absenden();
             }}
-            sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}
+            fehler={fehler}
+            erfolg={erfolg ? GESPEICHERT : null}
+            abweisung={abweisung}
+            onNeuLaden={() => {
+              void neuLaden();
+            }}
+            uebersicht={UEBERSICHT}
+            eigene={eigene}
+            onVerwerfen={() => {
+              setzeEigene(null);
+            }}
           >
-            <Maskenmeldungen
-              fehler={fehler}
-              erfolg={erfolg ? GESPEICHERT : null}
-              abweisung={abweisung}
-              onNeuLaden={() => {
-                void neuLaden();
-              }}
-              uebersicht={UEBERSICHT}
-              eigene={eigene}
-              onVerwerfen={() => {
-                setzeEigene(null);
-              }}
-            />
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
               <TextField
                 label={BESCHRIFTUNG.nummerMuster}
@@ -447,7 +442,7 @@ export default function AdministrationPage() {
                 <WeicheTaste onClick={zuruecknehmen}>Abbrechen</WeicheTaste>
               </Box>
             ) : null}
-          </Box>
+          </Maskenformular>
         ) : (
           nichtBereit(stand)
         )}

@@ -22,7 +22,7 @@ import { rollenname } from '../auth/rechte';
 import type { EigeneEingabe } from '../components/EigeneEingaben';
 import EmailFeld from '../components/EmailFeld';
 import Karte from '../components/Karte';
-import Maskenmeldungen from '../components/Maskenmeldungen';
+import Maskenformular from '../components/Maskenformular';
 import { useKopfPfad } from '../components/KopfPfad';
 import type { PfadVerweis } from '../components/KopfPfad';
 import KupferTaste from '../components/KupferTaste';
@@ -34,7 +34,7 @@ import {
   serverMeldung,
 } from '../lib/apifehler';
 import { meldungAm } from '../lib/feldmeldung';
-import { kennungAus } from '../lib/kennung';
+import { kennungAus, neuLadenFuer } from '../lib/kennung';
 import { ABSTAND_BUEHNE } from '../theme';
 
 /**
@@ -276,31 +276,19 @@ export default function MitarbeiterMaske() {
   const rolleMeldung = meldungAm(feldFehler, 'role');
 
   const formular = (
-    <Box
-      component="form"
-      noValidate
+    <Maskenformular
       onSubmit={(ereignis: FormEvent<HTMLFormElement>) => {
         void absenden(ereignis);
       }}
-      sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}
+      fehler={fehler}
+      abweisung={abweisung}
+      onNeuLaden={neuLadenFuer(kennung, neuLaden)}
+      uebersicht={UEBERSICHT}
+      eigene={eigene}
+      onVerwerfen={() => {
+        setzeEigene(null);
+      }}
     >
-      <Maskenmeldungen
-        fehler={fehler}
-        abweisung={abweisung}
-        // Ein neues Konto hat noch keinen Stand auf dem Server, den „Neu laden" holen koennte.
-        onNeuLaden={
-          kennung === null
-            ? null
-            : () => {
-                void neuLaden(kennung);
-              }
-        }
-        uebersicht={UEBERSICHT}
-        eigene={eigene}
-        onVerwerfen={() => {
-          setzeEigene(null);
-        }}
-      />
       <EmailFeld
         wert={email}
         setzeWert={setzeEmail}
@@ -346,7 +334,7 @@ export default function MitarbeiterMaske() {
         <KupferTaste disabled={laeuft}>{aendern ? 'Speichern' : 'Anlegen'}</KupferTaste>
         <WeicheTaste to="/mitarbeitende">Abbrechen</WeicheTaste>
       </Box>
-    </Box>
+    </Maskenformular>
   );
 
   let inhalt: ReactNode;

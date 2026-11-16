@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
-import { kennungAus } from './kennung';
+import { kennungAus, neuLadenFuer } from './kennung';
 
 describe('kennungAus', () => {
   it('nimmt eine Folge aus Ziffern als Zahl', () => {
@@ -19,5 +19,17 @@ describe('kennungAus', () => {
 
   it('weist eine fehlende Kennung ab', () => {
     expect(kennungAus(undefined)).toBeNull();
+  });
+});
+
+describe('neuLadenFuer', () => {
+  it('gibt ohne Kennung nichts zum Neuladen', () => {
+    expect(neuLadenFuer(null, vi.fn())).toBeNull();
+  });
+
+  it('laedt den Eintrag mit seiner Kennung neu', () => {
+    const neuLaden = vi.fn(() => Promise.resolve());
+    neuLadenFuer(7, neuLaden)?.();
+    expect(neuLaden).toHaveBeenCalledWith(7);
   });
 });

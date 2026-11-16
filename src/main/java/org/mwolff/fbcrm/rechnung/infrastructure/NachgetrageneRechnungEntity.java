@@ -58,11 +58,11 @@ class NachgetrageneRechnungEntity extends LoeschbareZeile {
 
   /*
    * JPA verlangt einen parameterlosen Konstruktor und fuellt die Felder danach selbst; NullAway
-   * sieht diesen Weg nicht und meldete sonst nicht initialisierte Felder.
+   * sieht diesen Weg nicht und meldete sonst nicht initialisierte Felder. PMD schweigt zum fehlenden
+   * super(), weil Sonar an einem nicht leeren Konstruktor sonst S2637 meldet.
    */
-  @SuppressWarnings("NullAway.Init")
+  @SuppressWarnings({"NullAway.Init", "PMD.CallSuperInConstructor"})
   protected NachgetrageneRechnungEntity() {
-    super();
     // Von Hibernate benutzt.
   }
 

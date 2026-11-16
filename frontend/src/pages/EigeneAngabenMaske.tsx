@@ -13,7 +13,7 @@ import { useRechte } from '../auth/rechte';
 import BriefbogenKarte from '../components/BriefbogenKarte';
 import type { EigeneEingabe } from '../components/EigeneEingaben';
 import Karte from '../components/Karte';
-import Maskenmeldungen from '../components/Maskenmeldungen';
+import Maskenformular from '../components/Maskenformular';
 import { useKopfPfad } from '../components/KopfPfad';
 import type { PfadVerweis } from '../components/KopfPfad';
 import KupferTaste from '../components/KupferTaste';
@@ -360,27 +360,22 @@ export default function EigeneAngabenMaske() {
     >
       <Karte titel={TITEL} titelEbene={1}>
         {stand === 'bereit' ? (
-          <Box
-            component="form"
-            noValidate
+          <Maskenformular
             onSubmit={(ereignis: FormEvent<HTMLFormElement>) => {
               void absenden(ereignis);
             }}
-            sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}
+            fehler={fehler}
+            erfolg={erfolg ? GESPEICHERT : null}
+            abweisung={abweisung}
+            onNeuLaden={() => {
+              void neuLaden();
+            }}
+            uebersicht={UEBERSICHT}
+            eigene={eigene}
+            onVerwerfen={() => {
+              setzeEigene(null);
+            }}
           >
-            <Maskenmeldungen
-              fehler={fehler}
-              erfolg={erfolg ? GESPEICHERT : null}
-              abweisung={abweisung}
-              onNeuLaden={() => {
-                void neuLaden();
-              }}
-              uebersicht={UEBERSICHT}
-              eigene={eigene}
-              onVerwerfen={() => {
-                setzeEigene(null);
-              }}
-            />
             <Eingabe
               label={BESCHRIFTUNG.name}
               feld="name"
@@ -465,7 +460,7 @@ export default function EigeneAngabenMaske() {
                 <WeicheTaste onClick={zuruecknehmen}>Abbrechen</WeicheTaste>
               </Box>
             ) : null}
-          </Box>
+          </Maskenformular>
         ) : (
           nichtBereit(stand)
         )}
