@@ -17,6 +17,12 @@ Bei jedem `push main`: Patch-Teil erhöhen (Z+1).
 node scripts/bump-version.mjs patch
 ```
 
+Seit der Prüfung je Karte (claude-workflow-kit Pro mit Build-Dienst) steht dieser Schritt als
+`release.commands` in `.claude/workflow.config.json`: Die Prüfung legt den Bump im Commit
+`chore: release (Kartenprüfung)` auf den geprüften Stand, und `push main` veröffentlicht genau
+diesen Commit ohne eigenen Bump. Von Hand läuft der Befehl nur noch auf dem vollen Weg
+(`/push-main full`, Notfallweg).
+
 ## merge production
 
 Bei jedem `merge production`: Minor-Teil erhöhen (Y+1, Z→0), Changelog schreiben und den
@@ -45,6 +51,11 @@ nächsten Release wiederum die Range-Untergrenze bildet. Ein `push main` (Patch-
 bewusst weder Changelog-Block noch Tag.
 
 ## rollback production
+
+> **Anleitung für Menschen, nicht für die Phrase.** Die Kit-Phrase `rollback production` wird in
+> fb.crm nicht genutzt: Das Kit führte die Befehle in einem frischen Checkout auf dem eigenen
+> Rechner aus, die Instanz läuft aber auf dem Server, und der Rückweg braucht die Sicherung.
+> Die Schritte unten gibt man auf dem Server einzeln ein.
 
 Der Rückweg einer ausgelieferten Version auf die Version davor. Zurück heißt immer: Marke
 auschecken **und** die Sicherung von vor dem Update einspielen. Flyway migriert nur vorwärts —

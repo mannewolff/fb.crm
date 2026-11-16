@@ -210,6 +210,23 @@ class CiWorkflowTest {
     assertThat(abschnitt("on")).containsOnlyKeys("push", "pull_request");
   }
 
+  /**
+   * Ungepruefter Cast aus demselben Grund wie bei {@link #workflow()}: {@code push} ist in einem
+   * gueltigen Workflow eine Abbildung, {@code branches-ignore} eine Liste von Zeichenketten.
+   */
+  @SuppressWarnings("unchecked")
+  @Test
+  void workflow_givenThePushTrigger_thenSkipsMainAndProduction() throws IOException {
+    // Given — der Commit auf main und production traegt das Urteil vom Pruefzweig schon
+    // (claude-workflow-kit 6.1.0); ein zweiter Lauf dort pruefte ihn nur noch einmal.
+    final Map<String, Object> push = (Map<String, Object>) abschnitt("on").get("push");
+
+    // When / Then
+    assertThat(push).containsOnlyKeys("branches-ignore");
+    assertThat((List<String>) push.get("branches-ignore"))
+        .containsExactlyInAnyOrder("main", "production");
+  }
+
   @Test
   void verify_givenTheConfig_thenRunsExactlyTheBetriebAndBackendChecks() throws IOException {
     // Given — erst betrieb, dann backend, jeweils in der Reihenfolge der Config
