@@ -1,8 +1,10 @@
 # Betrieb
 
 Dieser Teil der Dokumentation beschreibt, wie man fb.crm auf einem eigenen Rechner einrichtet und
-betreibt: von den Voraussetzungen über den ersten Start und das Konto bis zum Betrieb unter eigenem
-Namen mit Zertifikat und zum Mailversand. Wie man mit fb.crm arbeitet, steht im Teil „Bedienung".
+betreibt: von den Voraussetzungen über den ersten Start bis zum Betrieb unter eigenem Namen mit
+Zertifikat und zum Mailversand. Bei der Einrichtung entsteht das erste Konto, und es ist ein
+C-Level-Konto. Alle weiteren Konten legt danach ein C-Level in fb.crm selbst an, wie im Abschnitt
+„Weitere Konten anlegen" beschrieben. Wie man mit fb.crm arbeitet, steht im Teil „Bedienung".
 
 ## Voraussetzungen
 
@@ -26,7 +28,7 @@ Vorlage:
 cp .env.example .env
 ```
 
-Für den lokalen Betrieb genügt ein einziger Wert: der Einmal-Schlüssel, mit dem das Konto
+Für den lokalen Betrieb genügt ein einziger Wert: der Einmal-Schlüssel, mit dem das erste Konto
 eingerichtet wird. Ohne ihn ist die Einrichtung abgeschaltet.
 
 ```bash
@@ -131,7 +133,11 @@ Der Schlüssel wirkt nur, solange es noch kein Konto gibt — ein zweiter Aufruf
 Jede Anmeldung braucht einen Code an die Adresse des Kontos. Wer den
 Zugang zu diesem Postfach verliert, kommt mit eingeschaltetem Mailversand nicht mehr hinein, und der
 Einmal-Schlüssel greift nicht mehr, sobald ein Konto existiert. Der Weg zurück ist, die Adresse des
-Kontos auf ein Postfach umzusetzen, das man erreicht:
+Kontos auf ein Postfach umzusetzen, das man erreicht. Das erledigt ein C-Level in fb.crm: unter
+„Mitarbeitende" in der Zeile des Kontos über „Bearbeiten" die Adresse ändern (Teil „Bedienung",
+„Konto ändern"). Die Person meldet sich danach mit der neuen Adresse an.
+
+Solange kein C-Level mehr hineinkommt, setzt man die Adresse direkt in der Datenbank um:
 
 ```bash
 docker compose exec postgres psql -U fbcrm -d fbcrm -c "UPDATE account SET email = 'neu@firma.de' WHERE lower(email) = lower('alt@firma.de');"
@@ -531,8 +537,8 @@ nicht hoch, nennt `docker compose logs fbcrm-api` den Grund.
 - Unter der Marke in der Seitenleiste steht die neue Versionsnummer.
 - Kunden, Angebote und Rechnungen sind unverändert da.
 - Beim Update auf die erste Version mit der Anmeldung per Code enden alle laufenden Sitzungen einmal;
-  E-Mail-Adresse und Anzeigename des Kontos bleiben, wie sie waren. Die nächste Anmeldung läuft
-  per Code an die Adresse des Kontos (Teil „Bedienung", „Erste Schritte"). Ist der Mailversand
+  E-Mail-Adresse und Anzeigename jedes Kontos bleiben, wie sie waren. Die nächste Anmeldung läuft
+  per Code an die Adresse des eigenen Kontos (Teil „Bedienung", „Erste Schritte"). Ist der Mailversand
   ausgeschaltet, steht der Code im Protokoll des Servers (Abschnitt „Konto einrichten", „Code aus
   dem Protokoll").
 - Beim Update auf die erste Version mit mehreren Konten und Rollen enden alle laufenden Sitzungen

@@ -152,6 +152,42 @@ function abschnittsnamen(kennung: Kennung): string[] {
   );
 }
 
+/** Die Bloecke vor der ersten `##`-Ueberschrift, in Quellform (Plan #493, E3). */
+function einleitung(dokument: Dokument): string {
+  const ende = dokument.bloecke.findIndex((b) => b.art === 'ueberschrift' && b.ebene === 2);
+  return dokument.bloecke
+    .slice(0, ende === -1 ? undefined : ende)
+    .map(blockform)
+    .join('\n');
+}
+
+const LISTENANFANG = /^- /u;
+const EINTRAGSENDE = /^(?:- |\s*$)/u;
+
+/**
+ * Der Listeneintrag zum Verweis: von seiner `- `-Zeile bis zur naechsten `- `-Zeile oder Leerzeile,
+ * die Fortsetzungszeilen zu einer Zeile zusammengefuehrt (Plan #493, E2). Die angehaengte Leerzeile
+ * ist das Ende eines Eintrags, der die letzte Zeile des Textes waere.
+ */
+function listeneintrag(text: string, verweis: string): string {
+  const zeilen = [...text.split(ZEILENENDE), ''];
+  const start = zeilen.findIndex((z) => LISTENANFANG.test(z) && z.includes(verweis));
+  expect(start, `Listeneintrag zu ${verweis}`).toBeGreaterThanOrEqual(0);
+  const ende = zeilen.findIndex((z, i) => i > start && EINTRAGSENDE.test(z));
+  return zeilen.slice(start, ende).join(' ').replace(/\s+/gu, ' ').trim();
+}
+
+/** Die in „…" gesetzten Namen eines Eintrags; schliessend gelten `"` und `“` (Plan #493, E10). */
+const GENANNT = /„([^"“]+)["“]/gu;
+
+function genannteAbschnitte(eintrag: string): string[] {
+  return [...eintrag.matchAll(GENANNT)].map((treffer) => treffer[1]);
+}
+
+function readme(): string {
+  return readFileSync(join(WURZEL, 'README.md'), 'utf8');
+}
+
 describe('TEILE und teilNach', () => {
   it('beginnt mit dem Teil „Bedienung", danach „Betrieb" (Kriterium 1)', () => {
     expect(TEILE.map((teil) => [teil.kennung, teil.name])).toEqual([
@@ -220,6 +256,17 @@ describe('Die Waechter selbst', () => {
       fehlend: ['3: Der Satz aus der Quelle.'],
       ungetroffen: 1,
     });
+  });
+
+  it('gibt ohne ##-Ueberschrift das ganze Dokument als Einleitung zurueck', () => {
+    const dokument = leseMarkdown(probe);
+
+    expect(einleitung(dokument)).toBe(dokument.bloecke.map(blockform).join('\n'));
+    expect(einleitung(dokument)).toContain('Punkt');
+  });
+
+  it('liest aus einer Zeile ohne Anfuehrungszeichen keinen Abschnittsnamen', () => {
+    expect(genannteAbschnitte('- Betrieb: Voraussetzungen, Starten und Sicherung.')).toEqual([]);
   });
 });
 
@@ -379,5 +426,57 @@ describe('Szenarien des Fachplans (E16)', () => {
     expect(text).toMatch(/C-Level sieht zunächst die eigenen Zeiten/u);
     expect(text).toMatch(/ReadOnly sieht beim Öffnen „Alle"/u);
     expect(text).toMatch(/Überschneidungen prüft fb\.crm je Person/u);
+  });
+
+  it('Szenario: Erster Blick auf das Projekt', () => {
+    const text = readme();
+    const einstieg = text.slice(0, text.indexOf('\n## '));
+
+    // Kriterium 1 (#492): Firma mit mehreren Personen, je ein Konto, drei Rollen, Verweis.
+    expect(text).toContain('Ein CRM für kleine Firmen');
+    expect(text).not.toContain('für eine Person');
+    expect(einstieg).toMatch(/Firma/u);
+    expect(einstieg).toMatch(/eigenen Konto/u);
+    for (const rolle of ['C-Level', 'Employee', 'ReadOnly']) {
+      expect(einstieg, rolle).toContain(rolle);
+    }
+    expect(einstieg).toContain('(docs/bedienung.md#was-jede-rolle-darf)');
+    const anker = teilNach('bedienung').dokument.bloecke.flatMap((b) => (b.art === 'ueberschrift' ? [b.anker] : []));
+    expect(anker).toContain('was-jede-rolle-darf');
+  });
+
+  it('Die Übersicht nennt je Teil genau dessen Abschnitte (Kriterium 2)', () => {
+    const text = readme();
+
+    expect(genannteAbschnitte(listeneintrag(text, 'docs/betrieb.md'))).toEqual(abschnittsnamen('betrieb'));
+    expect(genannteAbschnitte(listeneintrag(text, 'docs/bedienung.md'))).toEqual(abschnittsnamen('bedienung'));
+    expect(text).not.toMatch(/Passwort/u);
+  });
+
+  it('Szenario: Einrichten für ein Team', () => {
+    const einl = einleitung(teilNach('betrieb').dokument);
+
+    // Kriterium 3 (#492): erstes Konto C-Level, weitere in fb.crm, Abschnitt beim Namen.
+    expect(einl).toContain('C-Level');
+    expect(einl).toContain('in fb.crm');
+    expect(einl).toContain('„Weitere Konten anlegen"');
+    // Kriterium 5 (#492): Verlorenes Postfach nennt zuerst den Weg ueber einen C-Level.
+    const konto = abschnitt('betrieb', 'Konto einrichten');
+    const mitarbeitende = konto.indexOf('„Mitarbeitende"');
+    const bearbeiten = konto.indexOf('„Bearbeiten"');
+    const psql = konto.indexOf('UPDATE account');
+    expect(mitarbeitende).toBeGreaterThanOrEqual(0);
+    expect(bearbeiten).toBeGreaterThanOrEqual(0);
+    expect(psql).toBeGreaterThan(Math.max(mitarbeitende, bearbeiten));
+  });
+
+  it('Szenario: Einstieg in die Bedienung', () => {
+    const einl = einleitung(teilNach('bedienung').dokument);
+
+    // Kriterium 4 (#492): drei Rollen, Abschnitt beim Namen.
+    expect(einl).toContain('drei Rollen');
+    expect(einl).toContain('„Mitarbeitende und Rollen"');
+    const rollen = abschnitt('bedienung', 'Mitarbeitende und Rollen');
+    expect(rollen).toMatch(/„Eigene Angaben" und „Administration"\s+stehen einem Employee nicht offen/u);
   });
 });

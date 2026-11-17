@@ -3,7 +3,9 @@
 Dieser Teil der Dokumentation führt durch die Oberfläche von fb.crm. Er beginnt mit dem Einstieg,
 sagt, was geschieht, wenn zwei Personen dasselbe zugleich bearbeiten, und folgt dann den beiden
 Bereichen, die eine Rechnung voraussetzt: den eigenen Angaben und den Rechnungseinstellungen. Wie
-fb.crm eingerichtet, gesichert und aktualisiert wird, steht im Teil „Betrieb".
+fb.crm eingerichtet, gesichert und aktualisiert wird, steht im Teil „Betrieb". Mit fb.crm arbeiten
+mehrere Personen, jede mit einem eigenen Konto und einer von drei Rollen; was die Rolle bedeutet,
+steht unter „Mitarbeitende und Rollen".
 
 ## Erste Schritte
 
