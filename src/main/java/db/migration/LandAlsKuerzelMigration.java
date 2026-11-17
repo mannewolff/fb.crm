@@ -12,9 +12,7 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.List;
 import java.util.Objects;
-import org.flywaydb.core.api.MigrationVersion;
 import org.flywaydb.core.api.migration.Context;
-import org.flywaydb.core.api.migration.JavaMigration;
 import org.mwolff.fbcrm.common.Laenderliste;
 
 /**
@@ -35,34 +33,16 @@ import org.mwolff.fbcrm.common.Laenderliste;
  * ueber {@code classpath:db/migration} auch in den Migrations-ITs, die ein eigenes Flyway ohne
  * Spring bauen.
  *
- * <p>Sie implementiert {@link JavaMigration} direkt und erweitert nicht {@code BaseJavaMigration}:
- * Deren Konstruktor liest Version und Beschreibung aus dem Klassennamen ({@code V36__…}) und weist
- * jeden anderen Namen ab, auch wenn {@link #getVersion()} ueberschrieben ist. Der Name folgt so der
- * Checkstyle-Regel {@code TypeName}, und die Version steht hier.
+ * <p>Den Rahmen aus Version, Beschreibung, Pruefsumme und Transaktion traegt {@link
+ * EigeneJavaMigration}; dort steht auch, warum nicht {@code BaseJavaMigration}.
  */
-public class LandAlsKuerzelMigration implements JavaMigration {
+public class LandAlsKuerzelMigration extends EigeneJavaMigration {
 
   private static final String NAMENSLISTE = "/db/migration/laender-v36.csv";
 
-  @Override
-  public MigrationVersion getVersion() {
-    return MigrationVersion.fromVersion("36");
-  }
-
-  @Override
-  public String getDescription() {
-    return "land als kuerzel";
-  }
-
-  /** Ohne Pruefsumme, wie bei {@code BaseJavaMigration}: Flyway prueft den Code nicht nach. */
-  @Override
-  public Integer getChecksum() {
-    return null;
-  }
-
-  @Override
-  public boolean canExecuteInTransaction() {
-    return true;
+  /** Version 36, Beschreibung wie in der Historientabelle der bereits migrierten Datenbanken. */
+  public LandAlsKuerzelMigration() {
+    super("36", "land als kuerzel");
   }
 
   @Override

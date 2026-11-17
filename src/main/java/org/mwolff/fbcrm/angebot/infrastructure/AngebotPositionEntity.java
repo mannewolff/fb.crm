@@ -10,7 +10,6 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.math.BigDecimal;
 import java.time.Month;
-import java.time.Year;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.fbcrm.angebot.domain.Angebotsposition;
 import org.mwolff.fbcrm.common.Abrechnungsmodus;
@@ -119,32 +118,21 @@ class AngebotPositionEntity {
   /**
    * Nimmt den neuen Stand dieser Position auf — alles ausser Kennung und Angebot (Plan #169, E2).
    *
-   * @param position der Platz in der Reihenfolge, lueckenlos ab 1
-   * @param bezeichnung die Leistung
-   * @param abrechnungsmodus nach Aufwand oder zum Festpreis
-   * @param menge Menge in der angegebenen Einheit
-   * @param einheit Einheit der Menge
-   * @param einzelpreis Netto-Preis je Einheit
-   * @param leistungsjahr das Jahr der Leistung
-   * @param leistungsmonat der Monat der Leistung, oder {@code null} fuer „ohne Monat"
+   * <p>Die Zeile liest die Felder selbst aus dem Fachobjekt, wie {@link #aus} es tut; nur der Platz
+   * steht nicht an der Position und kommt darum dazu.
+   *
+   * @param position die Position mit ihrem neuen Stand
+   * @param platz der Platz in der Reihenfolge, lueckenlos ab 1
    */
-  void uebernehme(
-      final short position,
-      final String bezeichnung,
-      final Abrechnungsmodus abrechnungsmodus,
-      final BigDecimal menge,
-      final Einheit einheit,
-      final BigDecimal einzelpreis,
-      final Year leistungsjahr,
-      final @Nullable Month leistungsmonat) {
-    this.position = position;
-    this.bezeichnung = bezeichnung;
-    this.abrechnungsmodus = abrechnungsmodus;
-    this.menge = menge;
-    this.einheit = einheit;
-    this.einzelpreis = einzelpreis;
-    this.leistungsjahr = (short) leistungsjahr.getValue();
-    this.leistungsmonat = spalte(leistungsmonat);
+  void uebernehme(final Angebotsposition position, final short platz) {
+    this.position = platz;
+    this.bezeichnung = position.bezeichnung();
+    this.abrechnungsmodus = position.abrechnungsmodus();
+    this.menge = position.menge();
+    this.einheit = position.einheit();
+    this.einzelpreis = position.einzelpreis();
+    this.leistungsjahr = (short) position.leistungsjahr().getValue();
+    this.leistungsmonat = spalte(position.leistungsmonat());
   }
 
   /* Der Monat als Wert der Spalte: 1 bis 12, oder NULL fuer „ohne Monat". */

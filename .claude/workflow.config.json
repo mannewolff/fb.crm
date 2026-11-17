@@ -228,6 +228,15 @@
     "location": "buildDienst",
     "branch": "kit-pruefung"
   },
+  "release": {
+    "commands": [
+      "node scripts/bump-version.mjs patch"
+    ],
+    "publishCommands": [
+      "node scripts/bump-version.mjs <stage>",
+      "node scripts/gen-changelog.mjs"
+    ]
+  },
   "scenariosFrom": 303,
   "strictness": "normal"
 }

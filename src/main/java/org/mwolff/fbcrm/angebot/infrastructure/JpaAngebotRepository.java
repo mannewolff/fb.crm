@@ -154,15 +154,7 @@ class JpaAngebotRepository implements AngebotRepository {
       throw new IllegalArgumentException(
           "Position " + kennung + " gehoert nicht zu Angebot " + angebotId);
     }
-    zeile.uebernehme(
-        platz,
-        position.bezeichnung(),
-        position.abrechnungsmodus(),
-        position.menge(),
-        position.einheit(),
-        position.einzelpreis(),
-        position.leistungsjahr(),
-        position.leistungsmonat());
+    zeile.uebernehme(position, platz);
     return zeile;
   }
 

@@ -11,18 +11,17 @@ import type { Firma } from '../api/firmen';
 import { laenderLaden } from '../api/laender';
 import type { Land } from '../api/laender';
 import type { FieldErrors } from '../api/client';
-import EigeneEingaben from '../components/EigeneEingaben';
 import type { EigeneEingabe } from '../components/EigeneEingaben';
 import { useKopfPfad } from '../components/KopfPfad';
 import type { PfadVerweis } from '../components/KopfPfad';
 import AnschriftFelder from '../components/AnschriftFelder';
 import Karte from '../components/Karte';
-import Konfliktmeldung from '../components/Konfliktmeldung';
+import Maskenformular from '../components/Maskenformular';
 import KupferTaste from '../components/KupferTaste';
 import WeicheTaste from '../components/WeicheTaste';
 import { feldMeldungen, istBearbeitungskonflikt, nichtGefunden } from '../lib/apifehler';
 import { meldungAm } from '../lib/feldmeldung';
-import { kennungAus } from '../lib/kennung';
+import { kennungAus, neuLadenFuer } from '../lib/kennung';
 import { ABSTAND_BUEHNE } from '../theme';
 
 /**
@@ -334,32 +333,19 @@ export default function FirmaMaske() {
     >
       <Karte titel={titel}>
         {sichtbar === 'bereit' ? (
-          <Box
-            component="form"
-            noValidate
+          <Maskenformular
             onSubmit={(ereignis: FormEvent<HTMLFormElement>) => {
               void absenden(ereignis);
             }}
-            sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}
+            fehler={fehler}
+            abweisung={abweisung}
+            onNeuLaden={neuLadenFuer(kennung, neuLaden)}
+            uebersicht={UEBERSICHT}
+            eigene={eigene}
+            onVerwerfen={() => {
+              setzeEigene(null);
+            }}
           >
-            {fehler === null ? null : <Alert severity="error">{fehler}</Alert>}
-            {kennung === null ? null : (
-              <Konfliktmeldung
-                ursache={abweisung}
-                onNeuLaden={() => {
-                  void neuLaden(kennung);
-                }}
-                uebersicht={UEBERSICHT}
-              />
-            )}
-            {eigene === null ? null : (
-              <EigeneEingaben
-                werte={eigene}
-                onVerwerfen={() => {
-                  setzeEigene(null);
-                }}
-              />
-            )}
             <Eingabe
               label="Name"
               feld="name"
@@ -392,7 +378,7 @@ export default function FirmaMaske() {
               <KupferTaste disabled={laeuft}>{aendern ? 'Speichern' : 'Anlegen'}</KupferTaste>
               <WeicheTaste to={zurueck}>Abbrechen</WeicheTaste>
             </Box>
-          </Box>
+          </Maskenformular>
         ) : (
           nichtBereit(sichtbar)
         )}

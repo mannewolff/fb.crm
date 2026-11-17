@@ -11,6 +11,16 @@ bleibt stehen, auch wenn nichts darunter steht.
 
 ## [Unreleased]
 
+## [1.10.0] - 2026-11-16
+
+- claude-workflow-kit 6.2.4: .gitignore und Vorlage nachgezogen
+- claude-workflow-kit 6.2.4
+- chore: v1.9.2
+- Sonar-Gate wieder grün: S2637 an JPA-Konstruktoren, Maskenformular (Issue #491)
+- chore: v1.9.1
+- Sonar Frontend auf 0: Masken-Meldungen, Bereitschaftsrahmen, zwei Einzeiler (Issue #490)
+- Sonar Backend auf 0: Verwaltungsfelder, Migrationsrahmen, S107 (Issue #489)
+
 ## [1.9.0] - 2026-11-05
 
 - chore: v1.8.1

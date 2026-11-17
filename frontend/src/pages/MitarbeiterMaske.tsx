@@ -19,11 +19,10 @@ import type { FieldErrors } from '../api/client';
 import { mitarbeiterAendern, mitarbeiterAnlegen, mitarbeitendeListe } from '../api/mitarbeitende';
 import type { Mitarbeiter } from '../api/mitarbeitende';
 import { rollenname } from '../auth/rechte';
-import EigeneEingaben from '../components/EigeneEingaben';
 import type { EigeneEingabe } from '../components/EigeneEingaben';
 import EmailFeld from '../components/EmailFeld';
 import Karte from '../components/Karte';
-import Konfliktmeldung from '../components/Konfliktmeldung';
+import Maskenformular from '../components/Maskenformular';
 import { useKopfPfad } from '../components/KopfPfad';
 import type { PfadVerweis } from '../components/KopfPfad';
 import KupferTaste from '../components/KupferTaste';
@@ -35,7 +34,7 @@ import {
   serverMeldung,
 } from '../lib/apifehler';
 import { meldungAm } from '../lib/feldmeldung';
-import { kennungAus } from '../lib/kennung';
+import { kennungAus, neuLadenFuer } from '../lib/kennung';
 import { ABSTAND_BUEHNE } from '../theme';
 
 /**
@@ -277,32 +276,19 @@ export default function MitarbeiterMaske() {
   const rolleMeldung = meldungAm(feldFehler, 'role');
 
   const formular = (
-    <Box
-      component="form"
-      noValidate
+    <Maskenformular
       onSubmit={(ereignis: FormEvent<HTMLFormElement>) => {
         void absenden(ereignis);
       }}
-      sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}
+      fehler={fehler}
+      abweisung={abweisung}
+      onNeuLaden={neuLadenFuer(kennung, neuLaden)}
+      uebersicht={UEBERSICHT}
+      eigene={eigene}
+      onVerwerfen={() => {
+        setzeEigene(null);
+      }}
     >
-      {fehler === null ? null : <Alert severity="error">{fehler}</Alert>}
-      {kennung === null ? null : (
-        <Konfliktmeldung
-          ursache={abweisung}
-          onNeuLaden={() => {
-            void neuLaden(kennung);
-          }}
-          uebersicht={UEBERSICHT}
-        />
-      )}
-      {eigene === null ? null : (
-        <EigeneEingaben
-          werte={eigene}
-          onVerwerfen={() => {
-            setzeEigene(null);
-          }}
-        />
-      )}
       <EmailFeld
         wert={email}
         setzeWert={setzeEmail}
@@ -348,7 +334,7 @@ export default function MitarbeiterMaske() {
         <KupferTaste disabled={laeuft}>{aendern ? 'Speichern' : 'Anlegen'}</KupferTaste>
         <WeicheTaste to="/mitarbeitende">Abbrechen</WeicheTaste>
       </Box>
-    </Box>
+    </Maskenformular>
   );
 
   let inhalt: ReactNode;

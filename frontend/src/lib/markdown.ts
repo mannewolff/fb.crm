@@ -249,7 +249,11 @@ function leseListenzeile(stand: Lesestand, zeile: string): boolean {
     return true;
   }
   if (stand.liste !== null && FORTSETZUNG.test(zeile)) {
-    stand.liste.eintraege[stand.liste.eintraege.length - 1].text += ` ${zeile.trim()}`;
+    // Die Liste traegt hier immer einen Eintrag: Sie entsteht nur mit ihrem ersten.
+    const letzter = stand.liste.eintraege.at(-1);
+    if (letzter !== undefined) {
+      letzter.text += ` ${zeile.trim()}`;
+    }
     return true;
   }
   return false;

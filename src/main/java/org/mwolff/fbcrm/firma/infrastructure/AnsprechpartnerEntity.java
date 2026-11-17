@@ -6,9 +6,8 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
-import jakarta.persistence.Version;
-import java.time.Instant;
 import org.jspecify.annotations.Nullable;
+import org.mwolff.fbcrm.common.infrastructure.GefuehrteZeile;
 import org.mwolff.fbcrm.firma.domain.Ansprechpartner;
 
 /**
@@ -21,7 +20,7 @@ import org.mwolff.fbcrm.firma.domain.Ansprechpartner;
  */
 @Entity
 @Table(name = "ansprechpartner")
-class AnsprechpartnerEntity {
+class AnsprechpartnerEntity extends GefuehrteZeile {
 
   @Id
   @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -51,31 +50,12 @@ class AnsprechpartnerEntity {
   @Column(name = "aktiv", nullable = false)
   private boolean aktiv;
 
-  @Column(name = "created_at", nullable = false)
-  private Instant createdAt;
-
-  @Column(name = "updated_at", nullable = false)
-  private Instant updatedAt;
-
-  /*
-   * Der Stand der Zeile, gefuehrt von Hibernate (Plan #415, E1): Jedes Schreiben erhoeht ihn, und
-   * ein UPDATE mit einem anderen Stand als dem gelesenen trifft keine Zeile und scheitert. Er kommt
-   * aus dem Fachobjekt mit, damit eine Zeile, die auf einem alten Stand beruht, nicht still
-   * geschrieben wird. Ein long und kein Long: Ob die Zeile neu ist, entscheidet so weiter die
-   * Kennung, und eine neue Zeile beginnt bei 0 wie die Vorbelegung der Spalte (V33).
-   */
-  @Version
-  @Column(name = "version", nullable = false)
-  private long version;
-
-  @Column(name = "geaendert_von")
-  private @Nullable Long geaendertVon;
-
   /*
    * JPA verlangt einen parameterlosen Konstruktor und fuellt die Felder danach selbst; NullAway
-   * sieht diesen Weg nicht und meldete sonst nicht initialisierte Felder.
+   * sieht diesen Weg nicht und meldete sonst nicht initialisierte Felder. PMD schweigt zum fehlenden
+   * super(), weil Sonar an einem nicht leeren Konstruktor sonst S2637 meldet.
    */
-  @SuppressWarnings("NullAway.Init")
+  @SuppressWarnings({"NullAway.Init", "PMD.CallSuperInConstructor"})
   protected AnsprechpartnerEntity() {
     // Von Hibernate benutzt.
   }
@@ -96,6 +76,11 @@ class AnsprechpartnerEntity {
   }
 
   private AnsprechpartnerEntity(final Ansprechpartner ansprechpartner) {
+    super(
+        ansprechpartner.createdAt(),
+        ansprechpartner.updatedAt(),
+        ansprechpartner.version(),
+        ansprechpartner.geaendertVon());
     this.id = ansprechpartner.id();
     this.firmaId = ansprechpartner.firmaId();
     this.vorname = ansprechpartner.vorname();
@@ -105,10 +90,6 @@ class AnsprechpartnerEntity {
     this.telefonFestnetz = ansprechpartner.telefonFestnetz();
     this.telefonMobil = ansprechpartner.telefonMobil();
     this.aktiv = ansprechpartner.aktiv();
-    this.createdAt = ansprechpartner.createdAt();
-    this.updatedAt = ansprechpartner.updatedAt();
-    this.version = ansprechpartner.version();
-    this.geaendertVon = ansprechpartner.geaendertVon();
   }
 
   @Nullable Long getId() {
@@ -145,21 +126,5 @@ class AnsprechpartnerEntity {
 
   boolean isAktiv() {
     return aktiv;
-  }
-
-  Instant getCreatedAt() {
-    return createdAt;
-  }
-
-  Instant getUpdatedAt() {
-    return updatedAt;
-  }
-
-  long getVersion() {
-    return version;
-  }
-
-  @Nullable Long getGeaendertVon() {
-    return geaendertVon;
   }
 }

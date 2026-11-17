@@ -11,16 +11,15 @@ import type { FieldErrors } from '../api/client';
 import AnschriftFelder from '../components/AnschriftFelder';
 import { useRechte } from '../auth/rechte';
 import BriefbogenKarte from '../components/BriefbogenKarte';
-import EigeneEingaben from '../components/EigeneEingaben';
 import type { EigeneEingabe } from '../components/EigeneEingaben';
 import Karte from '../components/Karte';
-import Konfliktmeldung from '../components/Konfliktmeldung';
+import Maskenformular from '../components/Maskenformular';
 import { useKopfPfad } from '../components/KopfPfad';
 import type { PfadVerweis } from '../components/KopfPfad';
 import KupferTaste from '../components/KupferTaste';
 import WeicheTaste from '../components/WeicheTaste';
-import { feldMeldungen, istBearbeitungskonflikt } from '../lib/apifehler';
 import { meldungAm } from '../lib/feldmeldung';
+import { speicherabweisung } from '../lib/speicherabweisung';
 import { ABSTAND_BUEHNE } from '../theme';
 
 /**
@@ -303,15 +302,12 @@ export default function EigeneAngabenMaske() {
       setzeVersion(gesichert.version);
       setzeErfolg(true);
     } catch (ursache) {
-      const felder = feldMeldungen(ursache);
-      if (istBearbeitungskonflikt(ursache)) {
-        // Die Eingaben bleiben stehen; den Weg weiter zeigt die Konfliktmeldung (Kriterium 3).
-        setzeAbweisung(ursache);
-      } else if (Object.keys(felder).length > 0) {
-        setzeFeldFehler(felder);
-      } else {
-        setzeFehler(AUSFALL_SPEICHERN);
-      }
+      // Bei einem Konflikt bleiben die Eingaben stehen; den Weg weiter zeigt die Konfliktmeldung
+      // (Kriterium 3).
+      const abgewiesen = speicherabweisung(ursache, AUSFALL_SPEICHERN);
+      setzeAbweisung(abgewiesen.abweisung);
+      setzeFeldFehler(abgewiesen.feldFehler);
+      setzeFehler(abgewiesen.fehler);
     } finally {
       setzeLaeuft(false);
     }
@@ -364,31 +360,22 @@ export default function EigeneAngabenMaske() {
     >
       <Karte titel={TITEL} titelEbene={1}>
         {stand === 'bereit' ? (
-          <Box
-            component="form"
-            noValidate
+          <Maskenformular
             onSubmit={(ereignis: FormEvent<HTMLFormElement>) => {
               void absenden(ereignis);
             }}
-            sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}
+            fehler={fehler}
+            erfolg={erfolg ? GESPEICHERT : null}
+            abweisung={abweisung}
+            onNeuLaden={() => {
+              void neuLaden();
+            }}
+            uebersicht={UEBERSICHT}
+            eigene={eigene}
+            onVerwerfen={() => {
+              setzeEigene(null);
+            }}
           >
-            {fehler === null ? null : <Alert severity="error">{fehler}</Alert>}
-            {erfolg ? <Alert severity="success">{GESPEICHERT}</Alert> : null}
-            <Konfliktmeldung
-              ursache={abweisung}
-              onNeuLaden={() => {
-                void neuLaden();
-              }}
-              uebersicht={UEBERSICHT}
-            />
-            {eigene === null ? null : (
-              <EigeneEingaben
-                werte={eigene}
-                onVerwerfen={() => {
-                  setzeEigene(null);
-                }}
-              />
-            )}
             <Eingabe
               label={BESCHRIFTUNG.name}
               feld="name"
@@ -473,7 +460,7 @@ export default function EigeneAngabenMaske() {
                 <WeicheTaste onClick={zuruecknehmen}>Abbrechen</WeicheTaste>
               </Box>
             ) : null}
-          </Box>
+          </Maskenformular>
         ) : (
           nichtBereit(stand)
         )}

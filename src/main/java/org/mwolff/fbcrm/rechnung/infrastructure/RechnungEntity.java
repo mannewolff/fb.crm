@@ -8,12 +8,12 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
-import jakarta.persistence.Version;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.fbcrm.common.Anschrift;
+import org.mwolff.fbcrm.common.infrastructure.LoeschbareZeile;
 import org.mwolff.fbcrm.rechnung.domain.Belegabsender;
 import org.mwolff.fbcrm.rechnung.domain.Belegempfaenger;
 import org.mwolff.fbcrm.rechnung.domain.Rechnung;
@@ -53,7 +53,7 @@ import org.mwolff.fbcrm.rechnung.domain.Rechnungszustand;
 @SuppressWarnings("PMD.TooManyFields")
 @Entity
 @Table(name = "rechnung")
-class RechnungEntity {
+class RechnungEntity extends LoeschbareZeile {
 
   @Id
   @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -150,38 +150,12 @@ class RechnungEntity {
   @Column(name = "absender_kontoinhaber", length = 200)
   private @Nullable String absenderKontoinhaber;
 
-  @Column(name = "created_at", nullable = false)
-  private Instant createdAt;
-
-  @Column(name = "updated_at", nullable = false)
-  private Instant updatedAt;
-
-  /*
-   * Der Stand der Zeile, gefuehrt von Hibernate (Plan #415, E1): Jedes Schreiben erhoeht ihn, und
-   * ein UPDATE mit einem anderen Stand als dem gelesenen trifft keine Zeile und scheitert. Er kommt
-   * aus dem Fachobjekt mit, damit eine Zeile, die auf einem alten Stand beruht, nicht still
-   * geschrieben wird. Ein long und kein Long: Ob die Zeile neu ist, entscheidet so weiter die
-   * Kennung, und eine neue Rechnung beginnt bei 0 wie die Vorbelegung der Spalte (V33).
-   */
-  @Version
-  @Column(name = "version", nullable = false)
-  private long version;
-
-  @Column(name = "geaendert_von")
-  private @Nullable Long geaendertVon;
-
-  /* Das Kennzeichen der Loeschung (Plan #415, E17): NULL heisst „nicht geloescht" (V34). */
-  @Column(name = "geloescht_am")
-  private @Nullable Instant geloeschtAm;
-
-  @Column(name = "geloescht_von")
-  private @Nullable Long geloeschtVon;
-
   /*
    * JPA verlangt einen parameterlosen Konstruktor und fuellt die Felder danach selbst; NullAway
-   * sieht diesen Weg nicht und meldete sonst nicht initialisierte Felder.
+   * sieht diesen Weg nicht und meldete sonst nicht initialisierte Felder. PMD schweigt zum fehlenden
+   * super(), weil Sonar an einem nicht leeren Konstruktor sonst S2637 meldet.
    */
-  @SuppressWarnings("NullAway.Init")
+  @SuppressWarnings({"NullAway.Init", "PMD.CallSuperInConstructor"})
   protected RechnungEntity() {
     // Von Hibernate benutzt.
   }
@@ -202,6 +176,13 @@ class RechnungEntity {
   }
 
   private RechnungEntity(final Rechnung rechnung) {
+    super(
+        rechnung.createdAt(),
+        rechnung.updatedAt(),
+        rechnung.version(),
+        rechnung.geaendertVon(),
+        rechnung.geloeschtAm(),
+        rechnung.geloeschtVon());
     this.id = rechnung.id();
     this.angebotId = rechnung.angebotId();
     this.zustand = rechnung.zustand();
@@ -214,12 +195,6 @@ class RechnungEntity {
     this.pdfSchluessel = rechnung.pdfSchluessel();
     uebernehmeEmpfaenger(rechnung.empfaenger());
     uebernehmeAbsender(rechnung.absender());
-    this.createdAt = rechnung.createdAt();
-    this.updatedAt = rechnung.updatedAt();
-    this.version = rechnung.version();
-    this.geaendertVon = rechnung.geaendertVon();
-    this.geloeschtAm = rechnung.geloeschtAm();
-    this.geloeschtVon = rechnung.geloeschtVon();
   }
 
   private void uebernehmeEmpfaenger(final @Nullable Belegempfaenger empfaenger) {
@@ -327,29 +302,5 @@ class RechnungEntity {
         absenderIban,
         absenderBic,
         absenderKontoinhaber);
-  }
-
-  Instant getCreatedAt() {
-    return createdAt;
-  }
-
-  Instant getUpdatedAt() {
-    return updatedAt;
-  }
-
-  long getVersion() {
-    return version;
-  }
-
-  @Nullable Long getGeaendertVon() {
-    return geaendertVon;
-  }
-
-  @Nullable Instant getGeloeschtAm() {
-    return geloeschtAm;
-  }
-
-  @Nullable Long getGeloeschtVon() {
-    return geloeschtVon;
   }
 }

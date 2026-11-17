@@ -19,3 +19,18 @@ export function kennungAus(wert: string | undefined): number | null {
   }
   return Number(wert);
 }
+
+/**
+ * „Neu laden" fuer einen Eintrag mit dieser Kennung — oder `null`, solange er noch nicht angelegt
+ * ist: Dann gibt es keinen Stand auf dem Server, den „Neu laden" holen koennte (Issue #491).
+ */
+export function neuLadenFuer(
+  kennung: number | null,
+  neuLaden: (kennung: number) => Promise<void>,
+): (() => void) | null {
+  return kennung === null
+    ? null
+    : () => {
+        void neuLaden(kennung);
+      };
+}

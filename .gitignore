@@ -2,6 +2,9 @@
 # alles andere unter .claude/ ist lokaler Zustand.
 .claude/*
 !.claude/workflow.config.json
+!.claude/settings.json
+!.claude/settings.local.vorlage.json
+.claude/settings.local.json
 .claude/workflow.config.local.json
 .claude/board-meta-cache.json
 .DS_Store
@@ -29,3 +32,5 @@ doctor.sh
 runner.sh
 update-all.sh
 update.sh
+# claude-workflow-kit (Issue #1854): Skripte im Projektordner, vom Installer erzeugt.
+/pacer.sh

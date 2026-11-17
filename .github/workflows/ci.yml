@@ -9,8 +9,11 @@
 # "on" steht in Anfuehrungszeichen: YAML 1.1 liest ein nacktes on als true.
 name: CI
 
+# Auf main und production loest der Push nicht aus: Der Commit kommt vom Pruefzweig
+# (kit-pruefung, kit-pruefung-*) und traegt dessen Urteil schon (claude-workflow-kit 6.1.0).
 "on":
   push:
+    branches-ignore: [main, production]
   pull_request:
 
 # Die Jobs lesen nur. Ein Token mit mehr Rechten waere Angriffsflaeche ohne Nutzen.

@@ -25,6 +25,7 @@ import type { Nachtrag } from '../api/nachtraege';
 import { useRechte } from '../auth/rechte';
 import AktionsMenue from '../components/AktionsMenue';
 import type { AktionsEintrag } from '../components/AktionsMenue';
+import Bereitschaftsrahmen from '../components/Bereitschaftsrahmen';
 import Karte from '../components/Karte';
 import Kopfkarte from '../components/Kopfkarte';
 import Konfliktmeldung from '../components/Konfliktmeldung';
@@ -332,32 +333,16 @@ export default function NachgetrageneRechnungPage() {
     );
   }
 
-  /** Der Rahmen jeder Bereitschaft: der Abstand zwischen den Karten der Buehne. */
-  const spalten = { display: 'flex', flexDirection: 'column', gap: ABSTAND_BUEHNE } as const;
-
   if (stand.art === 'laedt') {
-    return (
-      <Box sx={spalten}>
-        <Karte>
-          <Typography
-            sx={(theme) => ({ fontSize: 12.5, color: theme.vars.palette.kupferwolke.textSchwach })}
-          >
-            {LAEDT}
-          </Typography>
-        </Karte>
-      </Box>
-    );
+    return <Bereitschaftsrahmen laedt={LAEDT} />;
   }
 
   if (stand.art !== 'daten') {
-    return (
-      <Box sx={spalten}>
-        <Karte>
-          <Alert severity="error">{stand.art === 'unbekannt' ? NICHT_GEFUNDEN : AUSFALL}</Alert>
-        </Karte>
-      </Box>
-    );
+    return <Bereitschaftsrahmen fehler={stand.art === 'unbekannt' ? NICHT_GEFUNDEN : AUSFALL} />;
   }
+
+  /** Der Rahmen der Ansicht: der Abstand zwischen den Karten der Buehne. */
+  const spalten = { display: 'flex', flexDirection: 'column', gap: ABSTAND_BUEHNE } as const;
 
   const { nachtrag } = stand;
   return (
